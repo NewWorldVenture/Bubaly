@@ -1,6 +1,6 @@
 # Bubaly — Final Audit
 
-Eleven audits of bubaly.com, kept in one file because one file is the record.
+Twelve audits of bubaly.com, kept in one file because one file is the record.
 
 They ran over **different surfaces** and none supersedes another:
 
@@ -17,6 +17,7 @@ They ran over **different surfaces** and none supersedes another:
 | **I — Role boundaries** | the question Pass D left open: not who is calling or which family, but which ROLE — can a child reach what a parent decides | 1 | `I-01` |
 | **J — What the AI may do** | the 94-tool registry: does a tool that declares it cannot write actually not write, given that the write gate believes the declaration | 0 | — |
 | **K — Tenant scope on the request path** | the step after D: a handler that has authenticated its caller and then takes an id out of the request body — is that id checked against the household the request is about | 2 | `K-01`, `K-02` |
+| **L — Offer versus gate** | the published plans in `lib/constants/plans.ts` against the catalog that opens a page and the allowance that meters a request: is a family served what it was sold | 3 | `L-01`–`L-03` |
 
 **Where they touch, stated plainly.** Passes A and B meet in only two places:
 
@@ -127,7 +128,7 @@ Nothing is left unexamined or unassigned.
 | F16 | 24 of 62 paid features were enforced only by the sidebar padlock — the URL was the bypass | High | **Fixed** |
 | F17 | The documented route→tier map disagreed with what is enforced on 19 of 55 routes | Medium | **Fixed** |
 | F18 | 20 endpoints behind feature-gated pages had no entitlement check — the fetch was the bypass, mostly on the surface that costs money per call | High | **Fixed** |
-| F19 | `AI_MONTHLY_ALLOWANCE` is enforced on 4 of the 39 AI routes; 35 run unmetered | Medium | **Open — a pricing decision, recorded** |
+| F19 | `AI_MONTHLY_ALLOWANCE` is enforced on 4 of the 39 AI routes; 35 run unmetered | Medium | **Partly closed by Pass L** — the assistant is metered (the plans had already decided it); the other 35 remain an owner decision |
 | F20 | A child could delete any chore on the family's board, and mint chores for a sibling | High | **Fixed** |
 | F21 | A child could self-approve a reward redemption — the third decision forgery, and the only one left unguarded | High | **Half fixed and live; the durable half awaits the F5 operator** |
 
@@ -3630,3 +3631,173 @@ second found by reverting rather than by luck.
 - Boundary probes **18/18** against a fresh replay of all **308** migrations
 - **No migration.** Both fixes are application filters over a policy that is
   already correct, so nothing here is waiting on the gated ledger.
+
+---
+
+# Pass L — What the plans sell versus what the gates serve (L-01, L-02, L-03)
+
+This one did not start as a sweep. The owner reported that
+`https://www.bubaly.com/dashboard/assistant` "is not working" — it answered
+`/dashboard/billing?upgrade=1&need=1`. That is `requireFeature` doing exactly
+what it was told, and what it was told disagreed with what the site sells.
+
+**Four statements of one offer, no two of them the same:**
+
+| where | what it says |
+|---|---|
+| `lib/constants/plans.ts` — the published Free plan | **"10 AI requests/month"** |
+| `components/app/nav-shared.tsx` — the pinned sidebar pill | "always one tap away **regardless of plan**" |
+| `app/(app)/dashboard/assistant/page.tsx` | "Free tier includes a metered AI assistant (10 requests/month); **the monthly quota is enforced at the request layer**" |
+| `lib/constants/feature-catalog.ts` | `defaultTier: 'basic'` |
+
+So every free family had an "AI Assistant" pill pinned permanently to the top of
+their sidebar — pinned on purpose, because `FIXED_SIDEBAR_ROUTES` is chrome and
+is never filtered by entitlement — and tapping it produced a billing upsell for
+something their plan already included.
+
+## Status summary
+
+| id | what it was | severity | state |
+|---|---|---|---|
+| L-01 | the assistant page gated at `basic` while Free is sold it | High | **fixed** |
+| L-02 | `AI_MONTHLY_ALLOWANCE` unlimited at every level, including Free | High | **fixed** |
+| L-03 | `/api/ai` enforced no plan gate at all, and the meter counted the wrong rows | High | **fixed** |
+
+## L-01 — A pinned button that could not work *(High, fixed)*
+
+`ai-assistant`'s `defaultTier` is now `free`. The concierge is untouched and
+stays `basic`: Free's copy names *AI requests*, and only Basic's names the
+*concierge* ("Unlimited AI assistant & concierge"), so opening one must not open
+the other. That required separating them — see L-03.
+
+## L-02 — The meter the plan was sold did not exist *(High, fixed)*
+
+```ts
+export const AI_MONTHLY_ALLOWANCE = { 0: null, 1: null, 2: null };
+```
+
+with a comment reading *"Numbers land here when the plans define them; the gate,
+the count query and the error copy are already wired for that day."*
+
+**The plans had defined them.** `lib/constants/plans.ts` has said "10 AI
+requests/month" for Free and "Unlimited AI assistant & concierge" for Basic all
+along. The seam was built, documented, and left at `null` — so `null` meant
+"unlimited for everyone", the exact opposite of the Free offer, and the count
+query, the 429 branch and the error copy below it **had never executed on any
+request ever made**.
+
+It is now `{ 0: 10, 1: null, 2: null }`, read straight off the plans. Turning a
+number on turns dead code on, so `tests/ai-monthly-allowance.test.ts` drives
+every branch of it for the first time: under the allowance, at it, the fail-closed
+path when the count cannot be read, the UTC month boundary, and the two levels
+that must not pay for a count at all.
+
+## L-03 — The gate was on the screen, and the screen is not what spends money *(High, fixed)*
+
+`/api/ai` is the assistant's transport. It calls the model, and **the Expo app
+posts to it directly with a bearer token and never loads the page.** It had no
+plan check of any kind — only `rateLimit`/`rateLimitDb` at 20/min, which bounds
+a burst and not a month.
+
+So the gate was backwards on both halves at once:
+
+- the **web page** refused a free family a feature their plan includes, and
+- the **transport** served any signed-in member unlimited AI on any plan.
+
+That is the failure mode `lib/server/feature-entitlement.ts` documents about
+itself — *"the gate was real on the screen and absent in the pipeline behind
+it"*, how Family Autopilot ran nightly for every family on the platform. The
+same shape, on the most-used AI surface in the product.
+
+`/api/ai` now calls `assertAIAccess` before it prepares a turn, and answers the
+denial. An unreadable plan answers **503**, never a refusal: a transient database
+failure must not lock out someone who has paid.
+
+**And the meter would not have counted anything.** `assertAIAccess` counted
+`ai_requests` rows `.eq('kind', 'concierge')` — but the assistant records its
+turns through `withAiRequest`, which leaves `kind` at its default `'feature'`
+(`lib/ai/assistant-engine.ts` says so explicitly, because `createRequest`
+coerces an unknown kind to `'concierge'` and filing assistant turns under the
+concierge planner would be wrong). A limit of ten that counts none of the
+requests it is limiting can never be reached. The count is now by family and
+calendar month with no kind filter, which is also what the copy says: "10 **AI
+requests**/month", not ten of one kind.
+
+`assertAIAccess` also gained a `featureKey`, defaulting to the concierge so that
+every existing caller is unchanged, and the assistant asks about `ai-assistant`.
+
+## A correction to F19
+
+**F19 is recorded in this file as *"a pricing decision the owner has to make"*,
+and it names `ai`, `ai/chat` — the assistant itself — among the routes
+deliberately left ungated, closing with *"The numbers an owner needs are here;
+the choice is theirs."***
+
+The owner had already made that choice and published it. It is the first line of
+the Free plan on the pricing page. F19 read `AI_MONTHLY_ALLOWANCE` and the route
+list and did not read `lib/constants/plans.ts`, so a decision that was already
+made and shipped was recorded as outstanding — and the feature stayed broken
+behind that framing.
+
+F19 is now **partly closed**: metering for the assistant is decided, wired and
+tested, because the plans decided it. The other **35** AI routes are still a
+genuine owner decision, and the three options F19 lays out for them still stand.
+
+## How Pass L is kept closed
+
+`tests/plans-and-gates-agree.test.ts` — **7 cases**, cross-referencing the
+published offer against the gates that serve it.
+
+| what it holds | how |
+|---|---|
+| Free is metered at the number Free is sold | the number is **parsed out of the plan copy**, not written down a second time |
+| Basic and Plus get the unlimited AI they are sold | asserted against the copy that says so |
+| A plan sold AI requests can open the page that spends them | `tierToLevel(ai-assistant) === 0` whenever the Free allowance is non-zero |
+| The concierge stays where it is sold | Free's copy names no concierge; Basic's does |
+| **Every pinned sidebar route is reachable on the lowest plan** | fixed chrome is never entitlement-filtered, so a gated pin is a permanent dead button |
+| The transport asks the gate and answers the denial | checked with the **imports stripped** — see below |
+| The meter counts every AI request, not one kind | a `kind` filter would exclude every assistant turn |
+
+`tests/ai-monthly-allowance.test.ts` — **12 cases** over the allowance path
+itself. `tests/api-ai-route.test.ts` gains **3**: a family over its allowance is
+refused before the engine is touched, the gate is asked about the assistant
+rather than the concierge, and an unreadable plan answers 503.
+
+Each of the four changes proved load-bearing by reverting it: `ai-assistant`
+back to `basic` fails 2 cases; the allowance back to `null` fails 1 here and 5 in
+the allowance suite; the `kind` filter returning fails 1 in each; removing the
+route's denial fails 1.
+
+### The seventh miscount, caught the same way as the sixth
+
+The transport case first read:
+
+```ts
+expect(route).toContain('accessDeniedResponse');
+```
+
+Deleting `return accessDeniedResponse(access)` from the route left the **import**
+in place, so the string still matched and **the case passed over a route that
+had stopped enforcing anything**. It was caught by the same discipline as Pass
+K's: reverting each change to check the guard was load-bearing, and noticing
+that this one stayed green. It now strips every `import … from '…'` line before
+asserting, and requires the call and the `return` rather than the identifier.
+
+Two vacuous guards in two consecutive passes, both found by reverting rather
+than by reading. Reverting the fix is the only check that has caught either.
+
+## Verification
+
+- Full suite: **1,186 files, 13,628 tests, all passing**
+- `tsc --noEmit` clean · `eslint` clean on every changed file
+- **No migration.** Every change is a constant, a gate call, or a query filter.
+
+## Still open from this report
+
+The owner is on the built-in super-admin allowlist
+(`lib/constants/super-admins.ts`), and `requireFeature` returns before any tier
+check for a super-admin — so the account that hit this redirect was either a
+different one, or one whose session carried no email. Production is at
+`fef35f1c`, which is **exactly `main`**, so it is not a stale deploy. Worth
+confirming which account was signed in; the defect above is real either way and
+affected every free family, super-admin or not.
