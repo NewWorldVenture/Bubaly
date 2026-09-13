@@ -713,3 +713,44 @@ Recorded so a later pass does not spend time here.
   finding above is derived from source that was read, not from a live page.
 - `npx vitest run` was not executed (≈3 min, and no finding here depends on it).
   `npx next lint` was run in full; its complete output is quoted in C2-14.
+
+---
+
+# Findings from the parallel audit session (merged 2026-09-13T23:51Z)
+
+Two audit sessions ran against this repository at the same time. Both
+wrote to this path, so git saw an add/add conflict. **Neither side is
+discarded** — the rule is that no worker's findings are deleted, and that
+applies across sessions as much as within one. The other session's file
+follows verbatim; it uses a different finding format, which is left as it
+was written rather than reformatted.
+
+# Claude-2 — Frontend / UI / UX / Responsive / Accessibility
+
+Owned by Claude-2. No other worker writes findings here.
+
+Created by Claude-1 as an empty template so the file exists for you; nothing
+below the line is authored by anyone but you.
+
+## Finding format
+
+    [CLAUDE-2][SEVERITY][AREA] Short title
+    - **File/path:**
+    - **Problem:**
+    - **Evidence:**            <- a command, output, probe or measurement
+    - **Impact:**
+    - **Recommended fix:**
+    - **Status:** OPEN | VERIFIED | FIXED | BLOCKED
+
+Severities: CRITICAL, HIGH, MEDIUM, LOW.
+Evidence means something reproducible. "Looks wrong" is not a finding.
+
+Before modifying any source file, check `audit/status.md` FILES-TOUCHED for
+every other worker. If someone else holds it, audit it and record a
+recommendation instead of editing.
+
+---
+
+## Findings
+
+_(none yet)_

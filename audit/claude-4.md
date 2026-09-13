@@ -865,3 +865,29 @@ being hit, could not exercise a real double-submit against C-4-08, and did not
 run the Playwright device matrix in `tests/e2e/`.
 
 **No source code was modified.**
+
+---
+
+# Findings from the parallel audit session (merged 2026-09-13T23:51Z)
+
+Two audit sessions ran against this repository at the same time. Both
+wrote to this path, so git saw an add/add conflict. **Neither side is
+discarded** — the rule is that no worker's findings are deleted, and that
+applies across sessions as much as within one. The other session's file
+follows verbatim; it uses a different finding format, which is left as it
+was written rather than reformatted.
+
+# Claude-4 — QA / Features / Flows / Performance / Edge Cases
+
+CURRENT: Survey of the test corpus for vacuous guards (the repository's defining defect class).
+COMPLETED: (none yet)
+NEXT: vacuous-test sweep → E2E flow trace → edge cases → performance.
+FILES-EXAMINED: (in progress)
+BLOCKERS: none
+LAST-UPDATE: 2026-09-13
+
+---
+
+## Findings
+
+_(in progress)_

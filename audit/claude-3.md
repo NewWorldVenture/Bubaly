@@ -555,3 +555,44 @@ sample. If a later pass wants to re-open one, the command is given.
   one-line curl with a child's anon-key JWT against
   `/rest/v1/family_credentials?select=*` would settle the CRITICAL finding
   empirically in production; I did not have a session to do it with.
+
+---
+
+# Findings from the parallel audit session (merged 2026-09-13T23:51Z)
+
+Two audit sessions ran against this repository at the same time. Both
+wrote to this path, so git saw an add/add conflict. **Neither side is
+discarded** — the rule is that no worker's findings are deleted, and that
+applies across sessions as much as within one. The other session's file
+follows verbatim; it uses a different finding format, which is left as it
+was written rather than reformatted.
+
+# Claude-3 — Backend / API / Database / Auth / Security
+
+Owned by Claude-3. No other worker writes findings here.
+
+Created by Claude-1 as an empty template so the file exists for you; nothing
+below the line is authored by anyone but you.
+
+## Finding format
+
+    [CLAUDE-3][SEVERITY][AREA] Short title
+    - **File/path:**
+    - **Problem:**
+    - **Evidence:**            <- a command, output, probe or measurement
+    - **Impact:**
+    - **Recommended fix:**
+    - **Status:** OPEN | VERIFIED | FIXED | BLOCKED
+
+Severities: CRITICAL, HIGH, MEDIUM, LOW.
+Evidence means something reproducible. "Looks wrong" is not a finding.
+
+Before modifying any source file, check `audit/status.md` FILES-TOUCHED for
+every other worker. If someone else holds it, audit it and record a
+recommendation instead of editing.
+
+---
+
+## Findings
+
+_(none yet)_

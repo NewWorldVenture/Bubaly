@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { checkRequiredEnv, buildHealthReport } from '@/lib/health/status';
+import { checkRequiredEnv, checkFeatureEnv, buildHealthReport } from '@/lib/health/status';
 import { probeDatabase, probeAuth, probeServiceRole } from '@/lib/health/probe';
 
 export const runtime = 'nodejs';
@@ -26,6 +26,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET() {
   const env = checkRequiredEnv(process.env);
+  const features = checkFeatureEnv(process.env);
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const [database, auth, serviceRole] = await Promise.all([
@@ -33,7 +34,7 @@ export async function GET() {
     probeAuth(url, anonKey),
     probeServiceRole(url, process.env.SUPABASE_SERVICE_ROLE_KEY),
   ]);
-  const report = buildHealthReport(env, database, auth, new Date(), serviceRole);
+  const report = buildHealthReport(env, database, auth, new Date(), serviceRole, features);
   return NextResponse.json(report, {
     status: report.httpStatus,
     headers: { 'Cache-Control': 'no-store, max-age=0' },
