@@ -40,9 +40,13 @@ LAST-UPDATE: 2026-09-14T00:20Z
 ---
 
 ## Claude-4
-CURRENT: sweep 3 — end-to-end flows (invite/onboarding, concierge, calendar sync) + edge cases on a live 310-migration replay
-COMPLETED: sweep 1 (feature gates that cannot fail — 2 findings); sweep 2 (money spine, raced on real PG — 3 findings)
-NEXT: (1) signup→family→invite→accept, (2) concierge run→approval→execution, (3) timezone/DST/month-end edges, (4) N+1 + unbounded reads, (5) vacuous-test census
-FILES-TOUCHED: audit/claude-4.md, audit/status.md (own section only) — AUDIT ONLY, no source edits. Throwaway PG running at /tmp/pgaudit_db:54399 (docs/audit/verify-pg.sh) — will tear down at the end.
+CURRENT: writing the INFO records for spines traced clean, then the closing summary
+COMPLETED: 17 findings across 7 sweeps. 1 CRITICAL (the in-app spend path overdraws two ways), 4 HIGH, 6 MEDIUM, 4 LOW, 2 INFO.
+NEXT: INFO records (run state machine, gift/pay spine, allowance date math, orphan-page census, nav href coverage) + closing summary
+FILES-TOUCHED: audit/claude-4.md, audit/status.md (own section only) — AUDIT ONLY, no source edits. Throwaway PG at /tmp/pgaudit_db:54399 (will tear down).
 BLOCKERS: none
-LAST-UPDATE: 2026-09-14T00:05Z
+FOR CLAUDE-1 — the two that most want your attention:
+  * CRITICAL: lib/wallet/server.ts:285/309. bucketBalanceCents reduces the whole ledger in JS with no row bound (PostgREST caps at db-max-rows: measured $92.00 reported against a real $40.00 on a 1,052-row bucket) and debitSpendBucket's no-approval branch is a check-then-insert with no lock (two simultaneous $8 spends against $10 both posted; balance -$6.00). Both raced on the 310-migration replay. F-019 proved the card-auth RPC safe; this is the third derivation of the same number and it is neither bounded nor locked.
+  * HIGH: tests/wallet-allowance-persistence.test.ts:13 asserts the EXACT text of the defective allowance update, so the one-line fix for the allowance double-pay turns the suite red. A guard that blocks its own fix.
+  * My earlier HIGH on /dashboard/vacations + /dashboard/weekend was patched in lib/constants/feature-catalog.ts by someone else this session; re-verified, both now resolve to `basic`. The companion test finding is still open.
+LAST-UPDATE: 2026-09-14T00:58Z

@@ -80,10 +80,31 @@ deliberately **not applied** to production.
 |---|---|---|
 | **O-01** | A child could read, change and delete the family's stored card PIN. `family_credentials` allows categories `card` and `pin`, stores `secret` as plain text, and all four policies were `is_family_member`. Proved: a `child` on an `aal1` session READ the PIN, UPDATED it, DELETED the row. | **Fixed** — `0297`, **not applied to production** |
 | **I-01** | A social restriction could be removed by the person it restricted. Deleting the override row restores the higher default, returning `publish_posts` to someone a parent deliberately stopped. | **Fixed** — `0296`, **not applied to production** |
+| **S-01** | **A guest could accept an invite as a parent.** `invites_update` was created with a `USING` clause and **no `WITH CHECK`**; Postgres then reuses `USING` as the write check, and that clause's invitee branch constrains exactly one column — `email`. So the invited person could rewrite `family_id` and `role` on their own row, and `accept_invite()` (SECURITY DEFINER) copies both straight into `family_members`. Found by **Claude-3**, reproduced end to end by Claude-1: a babysitter invited as `guest` issued one `update invites set role='parent'`, accepted through the ordinary flow, and **joined the household as a parent**. No second family, no guessed UUID — the `family_id` is in her own invite row, which `invites_select` lets her read. `authenticated` holds UPDATE on the table by Supabase's default privileges, so it is one PostgREST PATCH with no app code involved. | **Fixed** — `0298`, **not applied to production** |
 | **U-01** | **The family calendar put every event on the wrong day outside UTC.** Day columns were keyed from a *local-midnight* `Date` through `toISOString()`; events from their true instant, also through `toISOString()`. Those agree only at offset zero. Found by **Claude-2**, replayed by Claude-1: in `Europe/Amsterdam` and `Asia/Tokyo` **0 of 7** days matched their own column and the seventh day's events keyed to a date no column carried, so they **did not render at all**; in `America/New_York` events from 21:00 and in `America/Los_Angeles` from 19:00 landed a column late. Six of the eleven shipped locales are UTC+1/+2. | **Fixed** — `lib/time/local-day.ts` + 19 guard cases |
 
-Both fixes are authored, replay clean, and are gated behind **F5**. Until the
-ledger is repaired, **both defects are live in production.**
+**All three fixes are authored, replay clean, and are gated behind F5. Until the
+ledger is repaired, all three defects are live in production** — and S-01 is a
+remote privilege escalation to parent of a household, reachable by anyone who
+holds a pending invite.
+
+### The correction S-01 forces on this audit
+
+**Pass I examined this exact policy and recorded it as *"exactly right"*:**
+
+> | `invites` | `can_manage_family`, plus an update clause letting the invited person accept their **own** invite by matching their JWT email | exactly right |
+
+That row is wrong, and the reason it is wrong is worth more than the row. Pass I
+read the `USING` clause and asked whether its *predicate* was correct. It never
+asked whether `WITH CHECK` was **present**. An absent clause has no text to
+read, so a review that reads policy expressions cannot see it — and the whole of
+Pass I was conducted that way.
+
+`docs/audit/invite-cannot-rewrite-what-it-grants-check.sql` closes it
+behaviourally and pins the structural cause: a `w`-command policy with
+`polwithcheck IS NULL` fails the probe, whatever its `USING` says. The same
+question should be asked of every other UPDATE policy in the schema — recorded
+as the next task in `audit/claude-1.md`.
 
 ---
 
@@ -100,6 +121,11 @@ F20, C-01 … C-05, C-07, E-01, F-a, F-b, H-01, L-01, L-02, L-03, **P-01**.
 | **U-03** | `.focus-ring` (`app/globals.css:179`) emits `outline: 2px solid transparent` plus an unconditional ring and **no `:focus-visible` selector** — so the ring is always on and the native focus indicator is suppressed. 218 uses, **16 correct**, and all 16 are on the marketing surface plus kid login: the public site was fixed, the signed-in app was not. One-line fix, no call-site edits | **Claude-2** | OPEN |
 | **U-04** | The whole AI Call Guardian surface — five pages — discards every read error, and none appears in the 127 `*-read-boundary` guards. A failed read renders **"0 scams blocked"** on the safety dashboard | **Claude-2** | OPEN |
 | **U-05** | Calendar events, note cards and photo rows are bare `<div onClick>` — mouse-only, WCAG 2.1.1 | **Claude-2** | OPEN |
+
+| **S-02** | The child-PIN throttle is keyed on the **submitted** string while the lookup is `.ilike()`, and `_` is both a legal username character and a SQL wildcard. 16 distinct throttle buckets all resolved to one account — `2^(L-2)` per account, which exceeds the 10,000-PIN keyspace at L≥13 | **Claude-3** | OPEN |
+| **S-03** | `child_logins`' policy is *named* "Managers manage" and *predicated* on `is_family_member`. A child UPDATE'd and DELETE'd a sibling's login — permanent lockout with no UI recovery — and `resetChildPinAction` trusts that table's `user_id` for `admin.auth.admin.updateUserById` | **Claude-3** | OPEN |
+| **S-04** | `audit_logs` lets any member forge `actor_id` — a child filed a `delete wallet_transactions` row naming the parent — including `family_id IS NULL` rows the admin **Security** page renders with the service client. `0260_trust_ledger_lockdown.sql` fixed precisely this on `trust_audit_logs` and left `audit_logs` open | **Claude-3** | OPEN |
+| **S-05** | 163 CASCADE foreign keys with no supporting index. Measured on one of the 36 a family delete must resolve: **5,715 buffers / 52.9 ms → 4 buffers / 0.18 ms** | **Claude-3** | OPEN |
 
 **P-01 is the mirror of L-01.** L-01 gated a feature the plans sell; P-01 gave
 away two the plans never mention. Same file, opposite direction, and both
@@ -263,6 +289,20 @@ Passes D, F, G, I, K, N, O. The headline results:
   (**O-01**).
 - **Client bundle**: no server secret is reachable (**Pass N**). All eight
   `NEXT_PUBLIC_*` variables are public by construction.
+**Claude-3's sweep: 12 entries, 9 defects and 3 evidenced-clean**, every database
+claim made by `set_config('request.jwt.claim.sub', …)` + `set role authenticated`
+and reading back real rows, against a 310-migration replay with the 20 existing
+probes green. Detail in `audit/claude-3.md`.
+
+**Reported as loudly, the zeros:** 65/65 `SECURITY DEFINER` functions pin
+`search_path` · 7/7 unchecked-tenant privileged RPCs denied to both client roles
+· all 31 anon-executable definers read individually and each gated · 76/76
+body-reading route handlers bounded · 7/7 missing-secret branches fail closed ·
+all five webhook families verify and dedupe · 36 `.or()` sites non-injectable ·
+`family_members` write policies correct · no float money · `x-bubaly-family-id`,
+`active_family_id` and `next=` all re-derived server-side · MFA, sign-out, the
+OAuth callback and the SSRF guards each tried and did not yield.
+
 - **Tenancy**: `is_family_member(family_id)` is membership-WIDE by design, which
   is correct for a parent with two households — and means the application filter
   is what narrows a query to one. Two routes did not supply it (**K-01**,
@@ -406,6 +446,7 @@ only by reverting a fix to confirm the guard went red:
 | A probe granted itself privileges and left them, so the suite's answer depended on what ran before it (**F-015**) | running the suite twice |
 | The money-safety probe asserted a concurrency it never tested (**F-019**) | reading what it actually did |
 | `tests/route-plan-gate.test.ts` asserts each route's **source text** — that `refuseUnlessEntitled(` was typed, not that it refuses anyone. Three of its twenty rows named hrefs the catalog did not contain, so the gate they assert returned `allowed: true` for every family. Green on all three, and would stay green with the catalog emptied | **Claude-4**, from the behavioural side |
+| **The 20-probe boundary suite was green over S-01 the whole time.** It asserts default-deny — can family B reach family A's rows — and never that a *granted* branch pins the columns it does not intend to grant. An invitee legitimately reaching her own row is the granted branch; what she may then WRITE into it was never asked | **Claude-3**, from the exploit |
 | A route-level scan for cron idempotency reported **11 of 24 routes with none** — including `notifications`, the one route **F-014** already proved idempotent. It dedupes inside `generateFamilyNotifications` on `related_id`; the mechanism is not visible at the route's own level | reading the helper, before the number was written down |
 
 ---
@@ -452,8 +493,9 @@ inventing scope mid-pass is how an audit stops being checkable.
 
 1. **Repair the production migration ledger** (**F5**/**F-001**). Everything
    below it in this list is blocked by it, including two live Critical defects.
-2. **Apply `0296` and `0297`** the moment 1 is done — `I-01` and `O-01` are live
-   in production until then.
+2. **Apply `0298`, then `0296` and `0297`**, the moment 1 is done. `0298` first:
+   **S-01** is a remote privilege escalation to parent of a household and is live
+   in production right now. `I-01` and `O-01` are live too.
 3. **Decide O-02** (which credentials are family-wide) and implement it. A child
    reading the family's card numbers is not waiting on anything but a decision.
 4. **Decide O-03** and implement the `aal2`-or-no-factor helper.
@@ -476,8 +518,8 @@ npm run lint                           # 0 errors (4 pre-existing warnings)
 npx vitest run                         # 1,193 files / 13,703 tests
 npm run db:audit:queries               # 491 tables, 78 functions, 141 routes resolve
 npm run db:audit:migrations            # no version collisions
-bash docs/audit/pg-bootstrap.sh        # 310 migrations, 0 failed
-bash docs/audit/run-probes.sh          # 20/20 behavioural probes
+bash docs/audit/pg-bootstrap.sh        # 311 migrations, 0 failed
+bash docs/audit/run-probes.sh          # 21/21 behavioural probes
 npm run build                          # exits 0
 npm run test:e2e                       # includes the mobile device matrix
 ```

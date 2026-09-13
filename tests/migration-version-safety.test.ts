@@ -45,7 +45,7 @@ describe('Supabase migration filename safety', () => {
     // branches independently claimed 0295; stating the number rather than
     // deriving it is exactly what caught that, so a file that quietly reuses
     // one, or a rebase that drops one, fails here.
-    expect(audit.nextVersion).toBe('0298');
+    expect(audit.nextVersion).toBe('0299');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

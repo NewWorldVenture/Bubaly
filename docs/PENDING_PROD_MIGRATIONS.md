@@ -501,8 +501,8 @@ passed; production application of the atomic `0240-0254` release remains pending
 ## Migrations added since this document's stated baseline (2026-09-12)
 
 The status line at the top of this file is dated **2026-09-05** against main
-`01881fb2`. **Seventy-three** migration files have landed since, `0255` through
-`0297`, and none of them appear anywhere above. (This read "thirty-one, `0255`
+`01881fb2`. **Seventy-four** migration files have landed since, `0255` through
+`0298`, and none of them appear anywhere above. (This read "thirty-one, `0255`
 through `0285`" until 2026-09-13, then "seventy-two, `0255` through `0296`"
 earlier the same day; the range simply keeps growing past the sentence.)
 
@@ -516,6 +516,15 @@ change and delete the family's stored card PIN, proved behaviourally in
 three write verbs `can_manage_family`. Reads are deliberately unchanged (O-02 in
 `finalaudit.md` — a product decision), and the screen's step-up MFA still has
 nothing behind it in the database (O-03).
+
+**`0298_invites_update_pins_what_it_grants.sql` is the one to apply first.** It
+closes a remote privilege escalation that is live in production now: `invites_update`
+was created with `USING` and no `WITH CHECK`, so Postgres reuses `USING` as the
+write check and the invitee branch constrains only `email`. A guest invited to a
+household rewrites `role` on her own invite row — one PostgREST PATCH, no app code
+— and `accept_invite()` copies it into `family_members`. Proved end to end in
+`docs/audit/invite-cannot-rewrite-what-it-grants-check.sql`: she joins as a
+**parent**. Anyone holding a pending invite can do it.
 Nothing here authorizes applying any of them; this section exists so the gap is
 visible rather than inferred from the absence of a row.
 
