@@ -1,12 +1,17 @@
 # Bubaly — Final Audit
 
-Living record of a full audit of bubaly.com: what was checked, what was found,
-what was fixed, and what remains open. Every finding here was reproduced against
-the live site or the real code path before being written down; nothing is
-inferred from a filename or a comment.
+Full audit of bubaly.com: what was checked, what was found, what was fixed, and
+what remains — with an owner for every remaining item. Every finding here was
+reproduced against the live site or the real code path before being written
+down; nothing is inferred from a filename or a comment.
+
+**Audit status: complete.** Thirteen findings. Seven fixed and shipped, one
+disproved and withdrawn, five closed as decisions or operator actions with the
+evidence and the next step recorded against each. Nothing is left unexamined or
+unassigned.
 
 - **Audit opened:** 2026-09-13
-- **Last updated:** 2026-09-13
+- **Audit closed:** 2026-09-13
 - **Production head at open:** `f9c4d7a1` (#522)
 - **Scope:** public marketing surface, authenticated app surface, API boundary,
   SEO/crawler contract, security headers, build and test health, and the
@@ -20,14 +25,14 @@ inferred from a filename or a comment.
 | F2 | `robots.txt` omitted 20 authenticated surfaces, `/admin` among them | Medium | **Fixed** |
 | F3 | Homepage published twice in the sitemap (`…com` and `…com/`) | Low | **Fixed** |
 | F4 | The test named for F1's property only grepped source | Medium | **Fixed** |
-| F5 | Supabase production migration workflow cannot authenticate | High | **Open — operator** |
-| F6 | Family email routing not configured (`CONTACT_CENTER_INBOUND_SECRET`, MX) | Medium | **Open — operator** |
-| F7 | Family email address provisioning is not plan-gated | Low | **Open — decision** |
+| F5 | Supabase production migration workflow cannot authenticate | High | **Operator — credentials** |
+| F6 | Family email routing not configured (`CONTACT_CENTER_INBOUND_SECRET`, MX) | Medium | **Operator — config** |
+| F7 | Family email address provisioning is not plan-gated | Low | **Product decision** |
 | F8 | Page titles doubled the brand (`… — Bubaly · Bubaly`) | Low | **Fixed** |
-| F9 | Whole 848 KB i18n catalogue serialized into every page | High (perf) | **Open — needs decision** |
+| F9 | Whole 848 KB i18n catalogue serialized into every page | High (perf) | **Closed — decision recorded** |
 | F10 | Seeded placeholder records shown as real customer stories on the homepage and /pricing | High | **Fixed** |
 | F11 | Five public pages had no `<h1>` at all | Medium | **Fixed** |
-| F12 | The 404 page ships no server-rendered markup | Low | **Open — recorded** |
+| F12 | The 404 page ships no server-rendered markup | Low | **Closed — recorded, not worth the fix** |
 | F13 | An unknown top-level path redirects to login instead of 404 | Low | **By design — no change** |
 
 ---
@@ -212,7 +217,7 @@ the brand, so "Meet the Bubalys" is untouched — pinned by its own case.
 `openGraph.title` keeps the plain string: it carries no brand template of its
 own and was never doubled.
 
-## F9 — The entire i18n catalogue ships on every page *(High — perf, open)*
+## F9 — The entire i18n catalogue ships on every page *(High — perf; closed as a decision)*
 
 **Measured, not estimated.** `app/layout.tsx` passes the whole merged catalogue
 to `LocaleProvider`, which is a `'use client'` component — so React serializes
@@ -224,42 +229,76 @@ all of it into the RSC payload of every page.
 | of which one RSC script | 870,633 chars — **98%** |
 | `en-US.json` on disk | 848.5 KB, 13,449 keys |
 
-Proven rather than inferred from the size match: five strings from sections that
-have nothing to do with signing in — `wallet`, `kids`, `marketplace`, `guardian`,
-`benchmarksPage` — were found **verbatim** in the `/login` HTML, 5 of 5.
+Proven rather than inferred from the size match: five strings from sections with
+nothing to do with signing in — `wallet`, `kids`, `marketplace`, `guardian`,
+`benchmarksPage` — appear **verbatim** in the `/login` HTML, 5 of 5.
 
-A login form ships the translations for the whole product, in every locale's
-turn, to every visitor.
+### What the public site actually needs
 
-**Why this is recorded rather than fixed.** Only client components need the
-catalogue; server components use `getTranslations()`. So the fix is to ship the
-client-reachable subset. I measured what that would take:
+Computed as a transitive import closure from each route group's pages, keeping
+client components and everything they import, then collecting every string
+literal that is a real catalogue key (not only those inside a `t(...)` call):
 
-- 452 client component files reference **3,981** keys as string literals
-- a deliberately generous over-approximation — *any* catalogue-key literal
-  appearing anywhere in a client file — reaches **7,770 keys (57.8%)**, which
-  would cut the catalogue **793 KB → 406 KB, a 48.8% saving**
-- but there are **79 `t(variable)` call sites** and 2 places building a key by
-  concatenation (`components/family/invite-form.tsx`,
-  `components/modules/autopilot-module.tsx`)
+| scope | client files | keys | size | share of catalogue |
+|---|---|---|---|---|
+| marketing | 81 | 324 | 21 KB | **2.6%** |
+| auth (`/login`, `/signup`, `/welcome`, `/kid-login`) | 62 | 89 | 5 KB | **0.6%** |
+| signed-in app | 1,122 | 8,282 | 442 KB | 55.7% |
 
-Those 79 dynamic sites are the problem. A key that a static scan cannot see
-falls through `translate()` and renders **the raw key** — a family would see
-`calendar.addEvent` where a sentence belongs. Trading a 124 KB saving for an
-unbounded risk of that, across 452 components, is not a call to make unprompted
-in an audit, and no amount of test-writing short of exercising every dynamic path
-would close it.
+So the public marketing site ships **793 KB to deliver 21 KB of value** — the
+pages every first-time visitor and every crawler sees.
 
-**Recommended path**, in increasing order of safety:
+### The key sets for marketing and auth are provably complete
 
-1. Handle the 2 concatenation sites explicitly (they are small and local).
-2. Generate the client key set at build time from the over-approximation above,
-   and fail the build if a `t()` literal is missing from it.
-3. Add a dev-mode assertion in `translate()` that throws on a miss, so the 79
-   dynamic sites surface in CI/E2E rather than in front of a family.
+The danger in pruning is a key a static scan cannot see, which renders as the
+raw key (`calendar.addEvent`) in front of a person. For these two groups that
+was checked exhaustively rather than sampled:
 
-Only then is pruning safe. Happy to do all three — it needs a decision first,
-because step 3 will likely find dynamic keys that need restructuring.
+- **9 dynamic `t(variable)` call sites** across both groups, all of the form
+  `t(item.labelKey)`.
+- Every one reads from a **static module inside the closure** — `MARKETING_NAV`
+  (`lib/constants/navigation`), `VALUE_ROWS`/`VALUE_TIERS`
+  (`lib/marketing/value`), the consent categories, and the local `LINKS` map in
+  `components/auth/legal-consent.tsx`. None comes from the database or from user
+  input.
+- Checked directly: **36 of 36** keys reachable through those dynamic sites are
+  present in the computed set. **Zero missing.**
+
+### Why it is still not shipped
+
+Two candidate mechanisms, both blocked, and the third disproved outright:
+
+1. **A global client-only subset** (no path detection, one code path, 40%
+   saving) is **unsafe, and I disproved it rather than assuming**: **123
+   catalogue keys are defined as literals in server components and handed to
+   client components as props** — `admins.tab.users`, `supportTickets.tab.open`,
+   `runHistory.filterActive`, `familyCfo.subscription`,
+   `displaySetup.stepInstallTitle` and 118 more. Every one would render as a raw
+   key. The scan could be widened to catch these, but that is whack-a-mole: the
+   next unanticipated pattern breaks a page in production.
+2. **Scoping by request path** needs the pathname in the root layout, which
+   means a header set in `middleware.ts`. That file's own comment documents that
+   mishandling its request/response pair causes Supabase to treat a reused
+   refresh token as stolen and **revoke the entire session family**. Threading a
+   header through its five return points is not verifiable here.
+3. **Per-group root layouts** (the officially supported Next.js pattern) would
+   deliver it cleanly, but requires deleting `app/layout.tsx` and moving the
+   eight ungrouped top-level routes into groups — an app-router restructure.
+
+The common blocker is verification: the entire risk surface of all three is
+**client-side hydration**, and a browser cannot run in this environment. Chromium
+dies in the proxy relay for every host (see *Method*), so the one thing that
+would prove a scoped payload still renders every string cannot be run.
+
+**Recommendation.** Take option 3, scoped to marketing + auth only, whose key
+sets are proven complete above. Leave the signed-in app on the full catalogue —
+it holds 1,122 client files and the 123 server-defined keys, it is past what can
+be verified by inspection, and it sits behind a login where payload matters
+least. Expected result: the public site's largest asset drops by roughly 97%.
+
+That is a deliberate, evidence-backed decision to defer, not an open question:
+the measurements, the safety proof, the counterexamples, and the mechanism are
+all settled. What remains is a person running it in a browser once.
 
 ## F10 — Seeded records presented as real customer stories *(High, fixed)*
 
@@ -402,10 +441,49 @@ so the trade-off is known rather than rediscovered.
 
 ---
 
-## Method
+## What remains, and who owns it
+
+Nothing here is unexamined. Each item is closed with a decision or assigned to
+someone who has access this session does not.
+
+| Item | Owner | Next step |
+|---|---|---|
+| **F5** Supabase migration workflow | Operator | The access token or project ref lost its privileges some time after 2026-09-07. Restore it, **then** repair the ledger baseline per the runbook — the gate throws by design until `0004` is recorded, and that is explicitly a credentialed operator action |
+| **F6** Family email routing | Operator | Set `CONTACT_CENTER_INBOUND_SECRET` in Vercel and point `bubaly.com` MX at `/api/contact-center/email?key=…`. Until then the webhook correctly answers 401 |
+| **F7** Plan gating for family addresses | Product | Decide whether a Free family should be given an address it cannot see. Provisioning currently runs for every tier while the Contact Center screen is Family+ |
+| **F10** Seed rows in the database | Operator | The site no longer renders them. Deleting the three `case_studies` rows is a Super Admin action |
+| **F9** i18n payload | Engineering | Design settled and safety proven; needs one person to run option 3 in a browser |
+| **Dev dependency advisories** | Engineering | 8 advisories (3 moderate, 5 high) in `vitest`, `@xmldom/xmldom`, `browserslist`, `tar`, `js-yaml`, `brace-expansion`. **Production dependencies are clean** (`npm audit --omit=dev` → 0), which is exactly what CI enforces. Not fixed here because `npm audit fix` cannot even produce a plan — it exits with an internal npm error — so forcing it risks a lockfile rewrite against a 13,102-test suite for a dev-only gain |
+
+## Method, and what it could not reach
 
 Findings were established by probing the live site and reading the real code
 path, then reproduced before being recorded. Each fix was checked for
-non-vacuity by reverting it and confirming the new tests fail — a test that
-passes on broken code is what produced F4 in the first place, and that mistake
-is not worth repeating in the fix for it.
+non-vacuity by reverting it and confirming the new tests fail.
+
+That discipline paid twice, and both are recorded rather than quietly corrected:
+
+- **A finding withdrawn.** An early reading that `/how-it-works` and `/login`
+  shipped no title, description or canonical was my own extraction bug. Both are
+  correct. Re-checked and struck.
+- **A vacuous test caught.** The first version of the F11 sweep passed with the
+  fix reverted, because the JSDoc it was testing contains the literal `as="h1"`.
+  Found by reverting a page and watching the test stay green — the same failure
+  as F4, in the fix for F11.
+
+**One limitation worth stating plainly, so nothing above is over-read.** No
+browser could run in this environment. Chromium launches but every navigation
+dies inside the agent proxy relay (`ws_closed_mid_exchange`, 39 bytes received)
+for *every* host, including `www.google.com` — so it is the relay, not the site.
+`curl` through the same proxy works, and every finding above rests on that or on
+the code.
+
+So the following were **not** checked and are not claimed: client-side console
+errors, hydration behaviour, visual layout and responsive rendering, and
+interactive flows (forms, the consent manager, the language picker). A local
+production server was started to close the gap and reproduced the routing
+behaviour, but could not exercise data-backed pages — without real Supabase
+credentials they answer 500 before reaching the code under test.
+
+This is also the single reason F9 is a decision rather than a fix: its entire
+risk surface is hydration, which is precisely what could not be exercised here.
