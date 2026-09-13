@@ -6,7 +6,7 @@ They ran over **different surfaces** and neither supersedes the other:
 
 | Pass | Surface | Findings | Numbering |
 |---|---|---|---|
-| **A — Public surface** | marketing pages, SEO and crawler contract, robots/sitemap, headers, titles, i18n payload, plan entitlement | 17 | `F1`–`F17` |
+| **A — Public surface** | marketing pages, SEO and crawler contract, robots/sitemap, headers, titles, i18n payload, plan entitlement | 19 | `F1`–`F19` |
 | **B — Data layer** | Supabase reads and writes, RLS and grant boundaries, nightly jobs, the build/data-cache boundary, and the audit's own probes | 16 | `F-001`–`F-016` |
 
 **Where they touch, stated plainly.** Only two places:
@@ -15,8 +15,12 @@ They ran over **different surfaces** and neither supersedes the other:
   **F5** and Pass B's **F-001**. A reaches it from the CI workflow (the access
   token cannot link the project), B from the database (the ledger records only
   `0001–0003`, so the baseline guard halts the push). Both are true, both are
-  the same wall, and both need the same credentialed operator. It is the one
-  finding in this file that is still open.
+  the same wall, and both need the same credentialed operator.
+
+  Three findings in this file are still open, and only this one is a blocker:
+  the ledger (A's **F5** / B's **F-001**) and A's **F6** both need a
+  credentialed operator, and A's **F19** is a pricing decision for the owner
+  rather than a defect.
 - **The sitemap** appears in both, and they are *different defects*. Pass A's
   **F1**/**F3**/**F14** are about which URLs it listed — 435 that answered 404,
   the homepage twice, nine that canonicalise elsewhere — fixed on `main` by
@@ -29,7 +33,7 @@ Everything else is disjoint.
 
 ---
 
-# Pass A — Public surface (F1–F17)
+# Pass A — Public surface (F1–F19)
 
 Full audit of bubaly.com: what was checked, what was found, what was fixed, and
 what remains — with an owner for every remaining item. Every finding here was
@@ -54,10 +58,10 @@ Nothing is left unexamined or unassigned.
 - **Audit closed:** 2026-09-13
 - **Reopened:** 2026-09-13 — F7 was not a one-off but a *shape*: an entitlement
   stated where a user can see it and absent where it is enforced. Every paid
-  feature was re-checked for that shape. It recurred three more times: in a
+  feature was re-checked for that shape. It recurred four more times: in a
   nightly cron (F15), across 24 pages and their shared write path (F16), in the
-  documentation that describes the tiers (F17), and behind 14 AI endpoints
-  (F18)
+  documentation that describes the tiers (F17), and behind 20 endpoints — 14
+  under `/api/ai` and six outside it (F18)
 - **Production head at open:** `f9c4d7a1` (#522)
 - **Scope:** public marketing surface, authenticated app surface, API boundary,
   SEO/crawler contract, security headers, build and test health, and the
