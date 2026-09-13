@@ -1,6 +1,6 @@
 # Bubaly — Final Audit
 
-Eight audits of bubaly.com, kept in one file because one file is the record.
+Nine audits of bubaly.com, kept in one file because one file is the record.
 
 They ran over **different surfaces** and none supersedes another:
 
@@ -14,6 +14,7 @@ They ran over **different surfaces** and none supersedes another:
 | **F — Public API routes** | every `route.ts` under a PUBLIC middleware prefix, which reaches the handler with no session: does it authenticate itself, and does it only claim what it can support | 2 | `F-a`, `F-b` |
 | **G — RLS completeness** | all 491 tables in a real replayed catalogue: is RLS on, and is any policy a blanket `true` | 0 | — |
 | **H — Storage object paths** | the Storage buckets Passes A–G never looked at: which are public, and what protects an object in one | 1 | `H-01` |
+| **I — Role boundaries** | the question Pass D left open: not who is calling or which family, but which ROLE — can a child reach what a parent decides | 1 | `I-01` |
 
 **Where they touch, stated plainly.** Passes A and B meet in only two places:
 
@@ -2980,3 +2981,108 @@ built. The fix, when someone wants it, is one line: open the slow page in a
 **fresh context** (`browser.newContext()`) rather than `context.newPage()`, so
 the interception is deterministic. That strengthens the test rather than
 relaxing it, which is the only acceptable direction.
+
+---
+
+# Pass I — Role boundaries (I-01)
+
+Pass D asked two questions and said plainly that it was not asking a third. It
+established *who* is calling (`requireUserContext`) and *which family* they may
+write to (the cross-tenant sweep). It did not ask which **role**. For a family
+product that is the sharpest version of the question: can a child reach what a
+parent decides?
+
+- **Surface:** 487 exported server actions; **311** mutate a table; **213** of
+  those reach no role gate at all.
+- **Why 213 is not 213 findings:** most are participation, not governance — a
+  child adding a grocery item, logging a chore, writing their own
+  `user_preferences`. And the app layer is often not where the boundary lives.
+
+## The boundary is in the database, and mostly it is right
+
+Of the 130 distinct tables written without an app-layer role gate, **none** has
+a restrictive write policy — the money tables, which do, never appear, because
+their actions *are* role-gated. The 172 permissive write policies on the rest
+are `is_family_member(family_id)`: any member, a child included.
+
+So the question became which of those tables are governance rather than
+participation. Checked individually, the governance ones are gated in the
+database, and gated well:
+
+| table | write policy | verdict |
+|---|---|---|
+| `family_members` | `can_manage_family(family_id)` on insert, update **and** delete | a child cannot change membership or roles |
+| `invites` | `can_manage_family`, plus an update clause letting the invited person accept their **own** invite by matching their JWT email | exactly right |
+| `parent_approvals` | insert `is_family_member AND status='pending' AND decided_by IS NULL AND decided_at IS NULL`; update/delete `can_manage_family` | a child may **ask** but cannot **decide**, and cannot forge a pre-approved row |
+| `subscriptions` | `is_family_admin(family_id)` | plan changes are the parent's |
+
+`parent_approvals` is the one worth singling out: the insert policy does not
+merely check membership, it pins the *shape* of the row a member may create. That
+is the defense this pass went looking for, implemented one layer lower than the
+app.
+
+So the alarming-sounding number is mostly the app layer correctly declining to
+duplicate a check the database already enforces.
+
+## Status summary
+
+| # | Finding | Severity | Status |
+|---|---|---|---|
+| I-01 | A social restriction could be removed by the person it restricted | Medium | **Fixed** — `0295`, this branch |
+
+---
+
+## I-01 — The one table whose verbs disagreed *(Medium, fixed)*
+
+`social_access_permissions` is an **override** table. `lib/social/access.ts`
+resolves a caller's social role as *"an explicit row wins; otherwise fall back to
+a default derived from their household member role"*, and those defaults
+(`lib/social/roles.ts`) are:
+
+```
+parent -> admin              adult -> marketing_manager
+teen   -> content_creator    everyone else -> read_only
+```
+
+An override is therefore the mechanism for holding someone **below** their
+default. `0034` gated who may create one — and did not gate who may remove one:
+
+```
+insert / update : is_family_admin(family_id) OR social_has_permission(family_id,'manage_access')
+delete          : is_family_member(family_id)          ← any member
+```
+
+Deleting the row restores the higher default. So a member pinned to `read_only`
+could lift their own restriction: an adult back to `marketing_manager`, which
+carries `publish_posts`, `schedule_posts`, `approve_posts` and `manage_settings`
+— back to posting on the family's connected social accounts. A teen pinned to
+`read_only` returns to `content_creator`.
+
+**No application code deletes from this table**, which is why it is invisible
+from the app — and why it did not matter. Every member holds a JWT and can issue
+the delete straight to PostgREST. `access.ts` says as much in its own header:
+*"RLS is the backstop."*
+
+`0295_social_access_delete_matches_grant.sql` makes delete carry the same
+condition as insert and update. Nothing else changes: members keep `SELECT`, and
+an admin can still remove an override.
+
+**Not applied to production.** The migration is authored and replays clean in
+sequence, but production's ledger is gated (F5) and applying is the owner's.
+
+## How Pass I is kept closed
+
+`docs/audit/social-access-symmetry-check.sql` (**A-17**) — five assertions,
+behavioural rather than structural, picked up automatically by the glob in
+`run-probes.sh`.
+
+| what it holds | how |
+|---|---|
+| A restricted member cannot delete their own override | seeds a parent and an adult pinned to `read_only`, acts **as the adult**, and requires the delete to affect 0 rows |
+| An admin still can | the positive control — a guard that refuses everyone proves nothing about a boundary |
+| The three write verbs agree | compares the policy expressions directly, so a future change to one verb alone fails here |
+| **It detects the state it forbids** | restores `0034`'s permissive delete inside a transaction and requires the member's delete to succeed — if the old policy no longer lets them through, the probe says so and fails |
+| It leaves no trace | asserts the planted policy is gone after rollback |
+
+Verified on a **fresh** bootstrap rather than the database it was developed
+against: **308 migrations applied, 0 failed, 17/17 probes pass.**
