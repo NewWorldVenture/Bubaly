@@ -3,13 +3,42 @@ const fs = require('node:fs');
 const crypto = require('node:crypto');
 const path = require('node:path');
 const root = path.resolve(__dirname, '../..');
-const read = (name) => JSON.parse(fs.readFileSync(path.join(__dirname, name), 'utf8'));
+// The five generated inventories below are not carried in the working tree.
+// Together they were 982,328 lines — 91 percent of the audit branch's diff, and
+// enough that GitHub Actions created no check suite for the pull request at all,
+// so the branch could not be verified by CI. Git history is the archive; every
+// file is one `git show` away, and finalaudit.md's "Where the discovery dumps
+// live" records the command. Name the absent file and how to restore it, rather
+// than failing with a bare ENOENT that says only that a path does not exist.
+const ARCHIVED_AT = '79cf4230a08ee200cae0bc0e3d36d14f0d0f0cc9';
+const restoreHint = (name) =>
+  `docs/final-audit/${name} is not in the working tree.\nRestore it with:\n` +
+  `  git show ${ARCHIVED_AT}:docs/final-audit/${name} > docs/final-audit/${name}\n` +
+  `See "Where the discovery dumps live" in finalaudit.md.`;
+const read = (name) => {
+  const file = path.join(__dirname, name);
+  if (!fs.existsSync(file)) throw new Error(restoreHint(name));
+  return JSON.parse(fs.readFileSync(file, 'utf8'));
+};
 const ui = read('discovery/ui-inventory.json');
 const api = read('discovery/api-inventory.json');
 const ops = read('discovery/ops-inventory.json');
 const snapshot = read('discovery/repository-snapshot.json');
 const statePath = path.join(__dirname, 'audit-state.json');
-const state = fs.existsSync(statePath) ? read('audit-state.json') : { started: new Date().toISOString(), records: {} };
+// A missing audit-state.json is a legitimate first run, so it must not throw —
+// but on every run after the first it means the ID registry is gone, and the
+// rebuild mints fresh IDs for all ~14,000 records. Every identifier already
+// written into finalaudit.md would then name nothing. Warn loudly: silently
+// renumbering the document the audit is tracked in is the worse failure.
+const hasState = fs.existsSync(statePath);
+if (!hasState) {
+  console.warn(
+    `[render-audit] ${restoreHint('audit-state.json')}\n` +
+    '[render-audit] Continuing WITHOUT it assigns new IDs to every record and ' +
+    'breaks every ID already cited in finalaudit.md.',
+  );
+}
+const state = hasState ? read('audit-state.json') : { started: new Date().toISOString(), records: {} };
 const records = state.records;
 const add = (area, key, name, source, extra = {}) => {
   const id = extra.id || `${area}-${crypto.createHash('sha256').update(key).digest('hex').slice(0, 12).toUpperCase()}`;

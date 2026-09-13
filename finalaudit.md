@@ -13976,11 +13976,29 @@ PRODUCTION READY: NO
 
 ## Inventory and evidence rules
 
-Baseline: c7b56eff89de1054e41a8d206bf03b6541ea3848. Discovery covered 4059 tracked files. IDs persist in [audit-state.json](docs/final-audit/audit-state.json); additions never remove or renumber existing records.
+Baseline: c7b56eff89de1054e41a8d206bf03b6541ea3848. Discovery covered 4059 tracked files. IDs persist in `docs/final-audit/audit-state.json`; additions never remove or renumber existing records. That registry and the four discovery dumps below are no longer carried in the working tree — see the retrieval note under the mappings paragraph.
 
 Each interaction source site has a CONTROL ID. Repeated or data-generated controls require representative rendered instances, permissions and states. File, function, API, control and complete-workflow records are distinct verification scopes; passing a unit test does not pass the enclosing workflow. Counts measure these explicit audit obligations, not product-development completion. New discovery can increase the denominator.
 
-Source, import, table, RPC, role, provider, control and candidate-test mappings are retained in [UI discovery](docs/final-audit/discovery/ui-inventory.json), [API discovery](docs/final-audit/discovery/api-inventory.json), [operations discovery](docs/final-audit/discovery/ops-inventory.json), and [tracked-file snapshot](docs/final-audit/discovery/repository-snapshot.json). Historical declarations are not proof of the applied database catalog. No source marker is presumed broken without triage.
+Source, import, table, RPC, role, provider, control and candidate-test mappings were captured in `discovery/ui-inventory.json`, `discovery/api-inventory.json`, `discovery/ops-inventory.json` and `discovery/repository-snapshot.json`. Historical declarations are not proof of the applied database catalog. No source marker is presumed broken without triage.
+
+> **Where the discovery dumps live.** Five generated files — the four inventories named above plus
+> `audit-state.json` — were removed from the working tree at commit `79cf4230a08ee200cae0bc0e3d36d14f0d0f0cc9`, the last revision that
+> carried them. Together they were 982,328 lines: 91% of this branch's diff, and enough that GitHub
+> Actions created no check suite for the pull request at all, so the branch could not be verified by CI.
+> Nothing is lost. Git history is the archive, and each file is one command away:
+>
+> ```
+> git show 79cf4230a08ee200cae0bc0e3d36d14f0d0f0cc9:docs/final-audit/audit-state.json > docs/final-audit/audit-state.json
+> git show 79cf4230a08ee200cae0bc0e3d36d14f0d0f0cc9:docs/final-audit/discovery/ui-inventory.json > docs/final-audit/discovery/ui-inventory.json
+> git show 79cf4230a08ee200cae0bc0e3d36d14f0d0f0cc9:docs/final-audit/discovery/api-inventory.json > docs/final-audit/discovery/api-inventory.json
+> git show 79cf4230a08ee200cae0bc0e3d36d14f0d0f0cc9:docs/final-audit/discovery/ops-inventory.json > docs/final-audit/discovery/ops-inventory.json
+> git show 79cf4230a08ee200cae0bc0e3d36d14f0d0f0cc9:docs/final-audit/discovery/repository-snapshot.json > docs/final-audit/discovery/repository-snapshot.json
+> ```
+>
+> Restore them before running `docs/final-audit/render-audit.cjs`; it reads all five and now says so by
+> name when one is absent. Restore `audit-state.json` in particular, or the rebuild assigns fresh IDs to
+> every record and the identifiers in this document stop matching it.
 
 SQL/migration changes and shared navigation edits remain outside the earlier authorized implementation boundaries; read-only audit continues. No live financial transactions. Existing shared dependencies are not modified. External BLOCKED requires exhausted local verification and an exact demonstrated dependency; missing verification remains NOT STARTED or IN PROGRESS.
 
