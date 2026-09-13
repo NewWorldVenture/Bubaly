@@ -6,6 +6,7 @@ import { readUiSource } from './helpers/i18n-source';
 const ROOT = join(__dirname, '..');
 const posts = readFileSync(join(ROOT, 'lib/blog/posts.ts'), 'utf8');
 const page = readUiSource(join(ROOT, 'app/(marketing)/blog/page.tsx'));
+const searchIndexRoute = readFileSync(join(ROOT, 'app/api/blog/search-index/route.ts'), 'utf8');
 
 describe('blog performance', () => {
   it('list queries project card columns (no heavy body) — only getPost fetches *', () => {
@@ -24,6 +25,14 @@ describe('blog performance', () => {
   });
 
   it('trims the client search-index payload', () => {
-    expect(page).toMatch(/excerpt: p\.excerpt\.slice\(0, \d+\)/);
+    // The index moved OUT of the page: it was 1,048 posts serialised into the
+    // HTML as a prop, and is now fetched on first interaction. The trim that
+    // mattered still applies, one layer further back.
+    expect(searchIndexRoute).toMatch(/excerpt: p\.excerpt\.slice\(0, \d+\)/);
+  });
+
+  it('does not ship the search index with the page at all', () => {
+    expect(page).toContain('<BlogSearch />');
+    expect(page).not.toMatch(/<BlogSearch\s+posts=/);
   });
 });

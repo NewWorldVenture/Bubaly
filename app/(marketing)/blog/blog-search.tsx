@@ -13,11 +13,35 @@ type SearchablePost = {
   category: string;
 };
 
-export function BlogSearch({ posts }: { posts: SearchablePost[] }) {
+/**
+ * Typeahead over every published article.
+ *
+ * The index is FETCHED on first interaction, not passed in. As a prop it was
+ * 1,048 posts serialised into the /blog HTML — 446 KB of a 597 KB response —
+ * paid by every visitor so that the few who search could filter locally. Now
+ * the page ships nothing, and the first focus or keystroke pulls an index the
+ * CDN already has warm.
+ */
+export function BlogSearch() {
   const t = useTranslations();
   const [query, setQuery] = useState('');
   const [focused, setFocused] = useState(false);
+  const [posts, setPosts] = useState<SearchablePost[]>([]);
+  // Fetch once per mount, and never twice concurrently: focus fires before the
+  // first keystroke, and both want the index.
+  const requested = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const loadIndex = () => {
+    if (requested.current) return;
+    requested.current = true;
+    fetch('/api/blog/search-index')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: unknown) => { if (Array.isArray(data)) setPosts(data as SearchablePost[]); })
+      // A failed index means search finds nothing, which the empty state
+      // already says. It must never break the page around it.
+      .catch(() => {});
+  };
 
   const results = useMemo(() => {
     const q = query.toLowerCase().trim();
@@ -52,8 +76,8 @@ export function BlogSearch({ posts }: { posts: SearchablePost[] }) {
           className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-white/40 sm:text-base"
           placeholder={t('blogBlogSearch.searchArticles')}
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onFocus={() => setFocused(true)}
+          onChange={(e) => { loadIndex(); setQuery(e.target.value); }}
+          onFocus={() => { loadIndex(); setFocused(true); }}
         />
         {query && (
           <button onClick={() => setQuery('')} className="shrink-0 text-white/40 hover:text-white/70">
