@@ -19,16 +19,17 @@ against the broken state to prove it was not passing vacuously.
 |---|---|---|
 | Types | `tsc --noEmit` | ✅ clean |
 | Lint | `next lint` | ✅ 0 errors (4 pre-existing warnings) |
-| Unit tests | `vitest run` | ✅ 1,146 files / 13,074 tests |
+| Unit tests | `vitest run` | ✅ 1,146 files / 13,077 tests |
 | Build | `next build` | ✅ exits 0 |
 | Schema ↔ code | `db:audit:queries` | ✅ 491 tables, 77 functions, 140 routes resolve |
-| Migration names | `db:audit:migrations` | ✅ 302 files, no collisions |
-| Migration replay | fresh DB, 0 → 302 | ✅ all applied, 0 failed |
+| Migration names | `db:audit:migrations` | ✅ 304 files, no collisions |
+| Migration replay | fresh DB, 0 → 304 | ✅ all applied, 0 failed |
 | i18n | `i18n:gate` | ✅ all declared surfaces clean |
-| RLS boundaries | 11 probes, real Supabase | ✅ 11/11 (was 10/11 — see F-003) |
+| RLS boundaries | 13 probes, real Supabase | ✅ 13/13 (was 10/11 — F-003, F-006) |
 | Authenticated routes | 379-route crawl | ✅ 377 ok, 1 gate redirect, 0 failures |
 | Public content routes | unknown-slug probe | ✅ 404s (was one 500 — see F-005) |
 | API authorization | guard-vs-public-list sweep | ✅ 140/140 accounted for |
+| E2E | 108 specs + 2 gated journeys | ✅ all pass (a journey caught F-006) |
 | Production DB | migration ledger | ⚠️ **blocked — F-001** |
 
 ---
@@ -152,6 +153,53 @@ revalidation fails forever, so the page silently stops updating. All three are
 now `dynamic = 'force-dynamic'`, which is what a per-request locale actually
 means. A sweep confirms no other `revalidate` route reads cookies.
 
+### F-006 · Any signed-in user could claim another household's AI jobs
+
+**Severity:** high (cross-tenant) · **Status:** CLOSED — migration `0288`
+
+`claim_ai_runs` is `SECURITY DEFINER` and scoped to the whole platform, not to a
+family. `authenticated` held EXECUTE on it. Acting as an ordinary member of
+family A:
+
+```
+set role authenticated; set request.jwt.claim.sub = '<member of family A>';
+select * from public.claim_ai_runs(10, 60);
+-> claimed ids: 00000000-0000-4000-8000-00000000ab01   (a run owned by family B)
+```
+
+So any signed-in user could lease AI runs belonging to any other household,
+pull them out of the real worker's queue, drive the run state machine across
+tenants, and read back the run ids. The same grant was open on
+`claim_marketing_generation_jobs` (also to `anon`) and on the three
+`loyalty_*` ledger functions.
+
+**This had already been fixed twice.** `0253` revoked `claim_ai_runs` from
+public/anon/authenticated and *raised an exception* if the revoke had not taken;
+`0204` did the same for the loyalty trio. Both lockdowns were undone later in
+the chain: Supabase's default privileges grant EXECUTE on functions straight to
+anon and authenticated, so a later `create or replace` (`0263` re-creates
+`claim_ai_runs`) hands the grant back. `0253`'s check passed because it verified
+**its own moment**, not the final state — which is the only state a database
+runs in.
+
+`0288` re-asserts all five at the end of the chain. Verified after the fix: a
+member and anon both get `42501 permission denied` through PostgREST, and
+`service_role` still executes. The gated E2E journey that asserts exactly this
+(`authenticated.spec.ts:150`, "Only the server worker may claim AI jobs") now
+passes, having failed before.
+
+### F-007 · The additive-migrations guard flagged a revoke as destructive
+
+**Severity:** low · **Status:** CLOSED
+
+`tests/migrations-are-additive.test.ts` scans for a bare `\btruncate\b`, so
+`revoke insert, update, delete, truncate … from anon` in `0286` read as
+destructive DDL — though it *removes* the ability to truncate. The guard already
+masked one legitimate TRUNCATE (the trigger-event declaration); it now masks the
+privilege list of a GRANT/REVOKE too. Both directions are pinned: a revoke is
+allowed, and `REVOKE TRUNCATE … ; TRUNCATE TABLE public.history;` is still
+rejected, so the mask cannot launder a real statement.
+
 ---
 
 ## 4. Closed previously (regression-checked this pass)
@@ -194,13 +242,14 @@ means. A sweep confirms no other `revalidate` route reads cookies.
 |---|---|
 | `tsc --noEmit` | clean |
 | `next lint` | 0 errors, 4 warnings |
-| `vitest run` | 1,146 files / 13,074 tests passed |
+| `vitest run` | 1,146 files / 13,077 tests passed |
 | `next build` | exits 0 |
 | `db:audit:queries` | passed |
 | `db:audit:migrations` | passed, next version 0287 |
 | `i18n:gate` | clean |
 | fresh-DB migration replay | 302/302 applied, 0 failed |
-| `run-probes.sh` (real Supabase) | 11/11 after `0286` (10/11 before) |
+| `run-probes.sh` (real Supabase) | 13/13 after `0286`+`0288` (10/11 before) |
 | 379-route authenticated crawl | 377 ok · 1 gate redirect · 0 failures |
 | unknown-slug probe, 16 public routes | all degrade correctly after F-005 |
 | API guard sweep | 140/140 guarded or declared public |
+| `authenticated.spec.ts` + `concierge.spec.ts` | both pass (needed `E2E_PROVIDER_STUB=1`) |

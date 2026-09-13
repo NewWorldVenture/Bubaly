@@ -25,6 +25,19 @@ const TRUNCATE_TRIGGER_EVENT = new RegExp(
   , 'gi',
 );
 
+// Mask the TRUNCATE *privilege* where it is being granted or (far more to the
+// point) REVOKED. `revoke insert, update, delete, truncate on public.x from anon`
+// is the opposite of destructive DDL — it takes the ability to truncate AWAY —
+// but the bare \btruncate\b scan cannot tell the two apart. Only the privilege
+// list between the verb and its `on` is masked, so a real `TRUNCATE public.x;`
+// anywhere in the same file is still caught.
+const GRANT_REVOKE_PRIVILEGES = /\b(grant|revoke)\b([\s\S]*?)\bon\b/gi;
+
+function maskPrivilegeLists(sql: string): string {
+  return sql.replace(GRANT_REVOKE_PRIVILEGES, (match, verb, privileges) =>
+    `${verb}${privileges.replace(/\btruncate\b/gi, '__privilege__')}on`);
+}
+
 const DESTRUCTIVE: [string, RegExp][] = [
   ['DROP TABLE', /\bdrop\s+table\b/i],
   ['DROP COLUMN', /\bdrop\s+column\b/i],
@@ -34,12 +47,18 @@ const DESTRUCTIVE: [string, RegExp][] = [
 ];
 
 function destructiveLabels(source: string): string[] {
-  const sql = stripSql(source).replace(TRUNCATE_TRIGGER_EVENT, '$1__trigger_event__');
+  const sql = maskPrivilegeLists(
+    stripSql(source).replace(TRUNCATE_TRIGGER_EVENT, '$1__trigger_event__'),
+  );
   return DESTRUCTIVE.filter(([, expression]) => expression.test(sql)).map(([label]) => label);
 }
 
 describe('protective TRUNCATE trigger declarations', () => {
   it.each([
+    // Revoking the TRUNCATE privilege REMOVES the ability to truncate; it is the
+    // opposite of the destructive DDL this guard exists to catch (0286).
+    'revoke insert, update, delete, truncate on public.wallet_transactions from anon;',
+    'GRANT SELECT, TRUNCATE ON public.history TO service_role;',
     'CREATE TRIGGER guard BEFORE TRUNCATE ON public.history FOR EACH STATEMENT EXECUTE FUNCTION public.reject_mutation();',
     'CREATE OR REPLACE TRIGGER "Audit guard" AFTER TRUNCATE ON public."History" FOR EACH STATEMENT EXECUTE FUNCTION public."Reject mutation"();',
   ])('allows the event declaration: %s', (sql) => {
@@ -54,6 +73,9 @@ describe('protective TRUNCATE trigger declarations', () => {
     'CREATE FUNCTION bad() RETURNS void LANGUAGE plpgsql AS $$ BEGIN TRUNCATE TABLE public.history; END $$;',
     'CREATE TRIGGER guard BEFORE TRUNCATE ON public.history FOR EACH STATEMENT EXECUTE FUNCTION public.reject_mutation(); TRUNCATE TABLE public.history;',
     'CREATE TRIGGER incomplete BEFORE TRUNCATE ON public.history;',
+    // The privilege mask must not become a way to smuggle a real truncate in:
+    // a revoke in the same file cannot launder the statement after it.
+    'REVOKE TRUNCATE ON public.wallet_transactions FROM anon; TRUNCATE TABLE public.history;',
   ])('still rejects destructive or unrecognized SQL: %s', (sql) => {
     expect(destructiveLabels(sql)).toContain('TRUNCATE');
   });
