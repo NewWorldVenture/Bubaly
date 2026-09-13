@@ -1,6 +1,6 @@
 # Bubaly — Final Audit
 
-Six audits of bubaly.com, kept in one file because one file is the record.
+Seven audits of bubaly.com, kept in one file because one file is the record.
 
 They ran over **different surfaces** and none supersedes another:
 
@@ -12,6 +12,7 @@ They ran over **different surfaces** and none supersedes another:
 | **D — Server-action authorization** | every export of every `'use server'` module: whether it establishes who is calling, and whether authenticating a caller actually constrains which family they may write to | 0 | — |
 | **E — Read honesty** | the mirror of C: a read whose error is discarded, where something downstream then treats the absence it returns as a fact | 1 | `E-01` |
 | **F — Public API routes** | every `route.ts` under a PUBLIC middleware prefix, which reaches the handler with no session: does it authenticate itself, and does it only claim what it can support | 2 | `F-a`, `F-b` |
+| **G — RLS completeness** | all 491 tables in a real replayed catalogue: is RLS on, and is any policy a blanket `true` | 0 | — |
 
 **Where they touch, stated plainly.** Passes A and B meet in only two places:
 
@@ -2656,3 +2657,82 @@ that describe unchanged behaviour passing.
 elevation is arguably as worth recording as starting one, but that is a missing
 feature rather than a discarded result, and inventing scope mid-pass is how an
 audit stops being checkable. Recorded here instead.
+
+---
+
+# Pass G — RLS completeness (0 findings)
+
+RLS is the only thing standing between one family's rows and another's, because
+the grant layer deliberately does not: hosted Supabase ships
+`alter default privileges in schema public grant all on tables to anon,
+authenticated, service_role`, and `docs/audit/pg-bootstrap.sh` reproduces exactly
+that so the probes test the real posture. **488 of 491 tables grant `anon` full
+DML.** That is not a finding — it is the model — but it does mean a single table
+with RLS off, or one blanket policy, is the whole boundary gone.
+
+- **Method:** not a text scan. A real replay — Postgres 16.13, `pg-bootstrap.sh`,
+  **307 migrations applied, 0 failed** — then `pg_catalog` asked directly.
+- **Result:** **491 of 491** public tables have `relrowsecurity` set. Zero
+  exceptions. The repo's 15 existing boundary probes pass on that same fresh
+  replay, 15/15.
+
+## Why this pass is a replay and not a grep
+
+The first attempt counted `ALTER TABLE … ENABLE ROW LEVEL SECURITY` in the
+migrations and reported **129 tables unprotected**. The real answer is **zero**.
+Two reasons, both invisible to a pattern:
+
+- `0093_trust_engine.sql` writes `ALTER TABLE public.trust_policies     ENABLE
+  ROW LEVEL SECURITY;` — aligned with **multiple spaces**, which a
+  single-space pattern does not match.
+- Several migrations enable RLS dynamically:
+  `execute format('alter table public.%I enable row level security;', t)` over an
+  array of names. No static reader can follow that.
+
+CI's own comment already says this, about a different check: *"only a real
+catalog is trustworthy … `0261` drops a unique constraint through `execute
+format(...)`, which no static reader can follow."* This was the fourth
+pattern-based miscount in this audit — after Pass D's 33/48/52, Pass F's 43, and
+Pass C's blind sweep — and the one where a wrong number would have been most
+alarming. Recorded so the 129 is not mistaken later for something that was ever
+true.
+
+## What was newly checked, and what it found
+
+"RLS is on" is not the property anyone cares about: RLS with a policy whose
+`USING` or `WITH CHECK` is literally `true` permits everything. The existing
+`wallet-write-rls-check.sql` forbids that on the **money** tables. Nothing asked
+it of the other ~480.
+
+Asked now, across all 491, **six** policies are unconditional, and all six are
+correct:
+
+| policy | verdict |
+|---|---|
+| `admin_users`, `support_tickets` → `service_role` | `service_role` bypasses RLS anyway; a `true` policy naming only it grants nothing new |
+| `badges` → authenticated, read | the badge catalogue — identical for every family |
+| `feature_flags` → authenticated, read | flag names and states; no family column |
+| `meal_ideas` → PUBLIC, read | the seeded recipe catalogue |
+| `service_descriptions` → anon + authenticated, read | public marketing copy, served by the public `/api/services/descriptions` route |
+
+No family-scoped table has one. **No finding.**
+
+## How Pass G is kept closed
+
+`docs/audit/blanket-policy-check.sql` (**A-16**), picked up automatically —
+`run-probes.sh` globs `docs/audit/*-check.sql` precisely so a probe added today
+runs today without anyone registering it.
+
+| what it holds | how |
+|---|---|
+| No table outside a named reference-data allowlist carries an unconditional policy | one `pg_temp` function defines the rule, so the invariant and the self-test cannot drift apart |
+| The four exemptions stay visible | each is listed with the reason it is exempt, and the probe prints the count — adding a fifth is a decision made in this file, not a side effect of writing a policy elsewhere |
+| Service-role-only policies are not false positives | excluded explicitly, because `service_role` bypasses RLS regardless |
+| **It can detect what it forbids** | plants a blanket `to authenticated using (true)` policy on `calendar_events`, asserts the rule finds it, rolls back, then asserts the plant is gone |
+
+Probe suite after this addition: **16/16 passed.**
+
+The self-test is the part that matters. Every invariant in this pass currently
+reports clean, which is exactly the condition under which a broken check is
+indistinguishable from a healthy system — the same reason Pass D's guard carries
+four synthetic modules.
