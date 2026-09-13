@@ -947,6 +947,23 @@ production*. Needs an operator following `docs/runbooks/LB-016-…md` §4.
 F-001 is the only finding still open. Everything else in this file closed with a
 command, probe, or rendered page behind it.
 
+**What this means for what actually shipped.** The code for every fix here is on
+`main`. The four migrations are not, and cannot be until an operator runs them,
+so two closures are only half-live in production:
+
+| Fix | Code on `main` | Needs migration | State in production until an operator runs it |
+|---|---|---|---|
+| **F-010** `notifications.related_id` is a key, not a uuid | — | **`0293`** | The column is still `uuid`, so the generic notification pass still rejects every composite dedupe key |
+| **F-014** dedupe read batched | ✅ | depends on `0293` | The batching is live, but the read it protects cannot succeed until `0293` lands |
+| **F-003** `anon` write grant on the money tables | — | **`0290`** | Still open in production |
+| **F-006** privileged-RPC lockdown re-asserted | — | **`0292`** | `0253`/`0204` may still be undone later in the chain |
+| Everything else (F-002, F-005, F-007–F-009, F-011–F-013, F-015, F-016) | ✅ | none | Fully live |
+
+The `Supabase production migrations` workflow fails on every push for the reason
+Pass A's F5 records, so this is not a matter of waiting — it needs the operator
+action in both F5 and F-001. Agents must not apply migrations to production
+(`docs/PENDING_PROD_MIGRATIONS.md`), and this one did not.
+
 ---
 
 ## 3. Closed this pass
