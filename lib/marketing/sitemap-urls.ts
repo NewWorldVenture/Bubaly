@@ -16,13 +16,51 @@
 export const CANONICAL_ORIGIN = (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com').replace(/\/+$/, '');
 
 /**
- * Path prefixes robots.txt disallows.
+ * Path prefixes robots.txt disallows — every authenticated surface.
  *
  * Listing a disallowed URL in the sitemap is a direct contradiction: one file
- * asks for it to be indexed while the other forbids fetching it. Kept in step
- * with app/robots.ts.
+ * asks for it to be indexed while the other forbids fetching it. This constant
+ * is what app/robots.ts emits, so the two cannot disagree.
+ *
+ * This list held four entries while the authenticated route group held 22
+ * segments. Probing production found 20 gated surfaces missing from it —
+ * `/admin` and its 80 pages among them — each answering 307 to /login. That is
+ * not a data leak, and is not claimed as one: everything redirects while signed
+ * out. What was wrong is that the stated policy and the implementation
+ * disagreed, crawl budget was spent discovering them, and a route added later
+ * that answers 200 anonymously would have inherited no protection at all.
+ *
+ * Prefix matching below is `=== p` or `startsWith(p + '/')`, which is why
+ * `/family` and `/display` can sit here while the PUBLIC `/family-display`
+ * stays reachable. A looser `startsWith(p)` would take it down with them, and a
+ * test pins exactly that.
  */
-export const DISALLOWED_PREFIXES = ['/dashboard', '/onboarding', '/api', '/auth'] as const;
+export const DISALLOWED_PREFIXES = [
+  '/account',
+  '/admin',
+  '/api',
+  '/auth',
+  '/capture',
+  '/dashboard',
+  '/display',
+  '/economy',
+  '/family',
+  '/feedback',
+  '/guardian',
+  '/home',
+  '/kids',
+  '/library',
+  '/marketplace',
+  '/missions',
+  '/money',
+  '/onboarding',
+  '/parent',
+  '/pay',
+  '/referrals',
+  '/services',
+  '/settings',
+  '/wallet',
+] as const;
 
 /**
  * The path prefixes whose `[slug]` routes render FROM the marketing_pages
