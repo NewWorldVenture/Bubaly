@@ -1,5 +1,366 @@
 # Bubaly — Final Audit
 
+The single consolidated audit of bubaly.com. Sections 1–19 are the consolidated
+view; **Part II** below is the evidence, kept verbatim, pass by pass.
+
+**How this file is built.** Four workers audit in parallel and each writes only
+its own file under `audit/`. Claude-1 merges them here and is the only account
+that writes to this file. Worker findings are merged, deduplicated, and cited
+back to the worker that found them; nothing verified is ever dropped on a
+rebuild.
+
+| worker | area | source file |
+|---|---|---|
+| Claude-1 | coordinator · architecture · integrations | `audit/claude-1.md` |
+| Claude-2 | frontend · UI/UX · responsive · accessibility | `audit/claude-2.md` |
+| Claude-3 | backend · API · database · auth · security | `audit/claude-3.md` |
+| Claude-4 | QA · features · flows · performance · edge cases | `audit/claude-4.md` |
+
+**The rule this audit is built on:** nothing closes on reasoning. A finding
+closes when a command, a probe, a replayed database or a rendered page
+demonstrates it — and wherever a fix is claimed, the check was also run against
+the *broken* state to prove it was not passing vacuously. That discipline has
+caught nine defects in this audit's own instruments, four of them found only by
+deliberately breaking the thing being guarded.
+
+---
+
+# 1. Executive Summary
+
+Fifteen passes (A–O) over fifteen surfaces. **63 named findings.** The codebase
+is in good structural health; the defects cluster in one recognisable shape.
+
+**The shape.** Nearly every serious finding here is the same defect wearing
+different clothes: **a control that is real on the screen and absent behind it.**
+
+- Family Autopilot was a Plus feature on the sidebar and ran nightly for every
+  family on the platform (**F15**).
+- 24 of 62 paid features were enforced by a padlock icon; the URL was the bypass
+  (**F16**).
+- 20 endpoints behind feature-gated pages had no entitlement check — the `fetch`
+  was the bypass, mostly on the surface that costs money per call (**F18**).
+- A child could clear the family chore board, mint chores for a sibling, and
+  self-approve a reward (**F20**, **F21**) — manager-only on the screen, nothing
+  underneath.
+- The AI Assistant page was gated at `basic` while the published Free plan sells
+  it, *and* `/api/ai` behind it had no plan check at all — the gate backwards on
+  both halves at once (**L-01**, **L-03**).
+- The password vault demands step-up MFA on the page, and no policy in the schema
+  references `aal` (**O-03**); a child could read, change and delete the family's
+  stored card PIN (**O-01**).
+
+**The second shape** is silence: a write whose result is discarded, followed by
+something claiming it happened. Eight in Pass C, plus **E-01**, **F-a**, **F-b**.
+`logAudit`'s `catch` block could never run, so every caller lost audit rows and
+nothing said so. An emergency escalation recorded `push_sent: true` for a
+notification that was never written.
+
+**What is genuinely strong.** RLS is on for all 491 tables with no blanket
+policy (**Pass G**). Every export of every `'use server'` module authenticates
+its caller (**Pass D**, 0 findings). No `readOnly` AI tool can write (**Pass J**,
+0 findings). No server secret is reachable from the browser bundle (**Pass N**,
+0 findings). The money tables carry three manager-gated restrictive write guards
+and survive a concurrency probe. 310 migrations replay clean; 20 behavioural
+probes pass in CI.
+
+**What is left, and whose it is.** Nine items, none of them a code defect this
+audit can close: the production migration ledger (**F5**/**F-001**) needs a
+credentialed operator; **F6** needs config; **F19**'s remaining 35 unmetered AI
+routes, **O-02**'s credential reads and **SEC-001**'s public media bucket are
+product decisions; migrations `0296` and `0297` are authored, replay clean, and
+deliberately **not applied** to production.
+
+---
+
+# 2. Critical Issues
+
+| id | finding | state |
+|---|---|---|
+| **O-01** | A child could read, change and delete the family's stored card PIN. `family_credentials` allows categories `card` and `pin`, stores `secret` as plain text, and all four policies were `is_family_member`. Proved: a `child` on an `aal1` session READ the PIN, UPDATED it, DELETED the row. | **Fixed** — `0297`, **not applied to production** |
+| **I-01** | A social restriction could be removed by the person it restricted. Deleting the override row restores the higher default, returning `publish_posts` to someone a parent deliberately stopped. | **Fixed** — `0296`, **not applied to production** |
+
+Both fixes are authored, replay clean, and are gated behind **F5**. Until the
+ledger is repaired, **both defects are live in production.**
+
+---
+
+# 3. High Priority
+
+**Fixed and live:** F1, F9 (closed as a recorded decision), F10, F15, F16, F18,
+F20, C-01 … C-05, C-07, E-01, F-a, F-b, H-01, L-01, L-02, L-03.
+
+**Open, and owner-owned:**
+
+| id | finding | why it is still open |
+|---|---|---|
+| **F5 / F-001** | Production's migration ledger records only `0001–0003` against 439 tables and 957 policies, so every push halts at the baseline guard | needs a credentialed operator; the guard is correct and must not be disabled |
+| **F21** | A child could grant themselves a reward | app half fixed and live; the durable half is a migration waiting on F5 |
+| **O-02** | A child can still **read** every stored credential | a product decision — the page is called "Wi-Fi & Passwords" and `wifi` is a category. Three options are set out in Pass O |
+| **O-03** | The vault's step-up MFA has no RLS counterpart — zero policies across 491 tables reference `aal` | the naive fix is wrong: `requireAal2` skips families with no enrolled factor, so an `aal2` policy locks them out of their own vault |
+| **SEC-001** | The `family-media` bucket is public; signed URLs are tracked separately | owner's tracked work. **H-01** closed the part that needed no migration |
+
+---
+
+# 4. Medium Priority
+
+F2, F4, F6, F7, F11, F17, F19, C-06, C-08, K-01, K-02, M-01, and Pass B's
+F-002 … F-020. Each is recorded in full in Part II with its evidence.
+
+Two worth pulling forward because they are still open:
+
+- **F6** — family email routing is unconfigured (`CONTACT_CENTER_INBOUND_SECRET`,
+  MX records). Operator config, not code.
+- **F19** — 35 of 39 AI routes run unmetered. Pass L closed the assistant,
+  because the published plans had already decided it. The rest is a pricing
+  decision, and Pass F19 sets out the three options and their costs.
+
+---
+
+# 5. Low Priority
+
+F3, F8, F12, F13, F14. All either fixed or closed with the reason recorded —
+**F12** ("the 404 page ships no server-rendered markup") is deliberately *not*
+fixed, because the fix costs more risk than the defect.
+
+---
+
+# 6. Architecture
+
+Next.js App Router, Supabase Postgres with RLS as the tenancy boundary, Vercel
+hosting, an Expo mobile client sharing `design/tokens`, and an AI layer with a
+closed tool registry and a trust engine.
+
+**The boundary that carries the system.** Hosted Supabase grants `anon` and
+`authenticated` full DML on every table it creates — 488 of 491 here — so RLS is
+not one layer of defence, it is the only one. `docs/audit/pg-bootstrap.sh`
+reproduces that grant model deliberately, so the local harness is never *safer*
+than production. That decision is why Passes G, I, K and O could be answered at
+all.
+
+**The recurring architectural fault** is the one in §1: a policy expressed in the
+UI layer and not in the layer that enforces it.
+`lib/server/feature-entitlement.ts` is the corrective — one resolver that a
+page, a cron, a webhook and an API route all call, so "the gate was real on the
+screen and absent in the pipeline behind it" cannot recur by omission. It is not
+yet used everywhere.
+
+**Known structural debt:** `middleware.ts` carried a hand-maintained PUBLIC list
+until it was lifted into `lib/auth/route-access.ts` with a totality test; the
+migration ledger's baseline gate blocks all schema delivery; and the audit's own
+`docs/audit/*-check.sql` probes are now load-bearing infrastructure that CI runs
+by glob.
+
+---
+
+# 7. Frontend
+
+*Consolidated from `audit/claude-2.md` — worker running; findings merged as they land.*
+
+Already established: the whole 848 KB i18n catalogue was serialized into every
+page (**F9**, closed as a recorded decision); five public pages had no `<h1>`
+(**F11**); page titles doubled the brand (**F8**); seeded placeholder records
+were rendered as real customer testimonials (**F10**).
+
+---
+
+# 8. Backend
+
+*Consolidated from `audit/claude-3.md` — worker running; findings merged as they land.*
+
+Established: Pass D (every `'use server'` export authenticates its caller,
+0 findings), Pass F (public route handlers, 2), Pass K (caller-supplied tenant
+ids, 2), Pass C/E (discarded write results and read errors, 11).
+
+---
+
+# 9. Database
+
+Pass B covers the data layer in depth (F-001 … F-020): `anon` held INSERT/UPDATE/
+DELETE on all five money tables (**F-003**); six nightly jobs silently stopped at
+1,000 rows because PostgREST caps a response whatever `.limit()` asks for
+(**F-008**, and **F-011** records that the *fix* had the same defect); 59 reads
+asked for more rows than the server would ever return (**F-013**); nine
+family-scoped reads were sequential scans of whole tables (**F-018**); a family's
+"today" was Greenwich's today on every surface showing a day (**F-017**).
+
+310 migrations replay into a fresh database with 0 failures. 20 behavioural
+probes run in CI by glob, so a probe added tomorrow runs tomorrow.
+
+---
+
+# 10. Security / Auth
+
+Passes D, F, G, I, K, N, O. The headline results:
+
+- **RLS**: on for every one of 491 tables, no blanket `using (true)` outside four
+  named reference-data exemptions (**Pass G**, `blanket-policy-check.sql`).
+- **Role boundaries**: governance tables are gated well — `parent_approvals`
+  pins the *shape* of the row, not merely membership. Two tables disagreed with
+  themselves: `social_access_permissions` (**I-01**) and `family_credentials`
+  (**O-01**).
+- **Client bundle**: no server secret is reachable (**Pass N**). All eight
+  `NEXT_PUBLIC_*` variables are public by construction.
+- **Tenancy**: `is_family_member(family_id)` is membership-WIDE by design, which
+  is correct for a parent with two households — and means the application filter
+  is what narrows a query to one. Two routes did not supply it (**K-01**,
+  **K-02**).
+
+---
+
+# 11. UX / Accessibility
+
+*Consolidated from `audit/claude-2.md` — worker running.*
+
+---
+
+# 12. Performance
+
+**F9** — the i18n payload. **F-018** — nine family-scoped reads were full table
+scans at 700k rows; now index scans. **F-008**/**F-011**/**F-013** — the
+PostgREST row ceiling, which is a correctness *and* performance defect.
+**M-01** — shared-cache headers.
+
+*Further findings consolidated from `audit/claude-4.md` — worker running.*
+
+---
+
+# 13. Mobile / Responsive
+
+CI runs a mobile device matrix (iPhone SE / iPhone / Pixel / iPad, Chromium-
+emulated) gating every PR on no horizontal overflow and no sub-16px inputs.
+An Expo client lives under `mobile/` and shares `design/tokens`.
+
+*Further findings consolidated from `audit/claude-2.md` — worker running.*
+
+---
+
+# 14. Integrations
+
+Stripe (billing, Connect, Issuing, Treasury), Twilio (SMS, voice, WhatsApp,
+transcription), Resend (email), Google / Microsoft / Apple calendar sync,
+Alexa + Siri Shortcuts + Home Assistant via the assistant bridge, web push
+(VAPID), and the social publishing platforms.
+
+Established: provider webhooks each authenticate themselves — `hasCronAuthorization`,
+`validateTwilioSignature` (over the full signed URL, so a `familyId` in the query
+string is authenticated by the HMAC), `verifyAlexaRequest` (signature, chain to a
+trusted root, 150-second replay window), Stripe's `constructEvent`. The Contact
+Center's four inbound webhooks were unreachable until they were added to the
+public middleware prefixes — middleware answered the provider's POST with a 307
+to the HTML login page, so the route's own authentication never ran. The same
+defect had hidden the assistant bridge's two entry points.
+
+*Further findings consolidated from `audit/claude-1.md` as the architecture sweep proceeds.*
+
+---
+
+# 15. Testing / QA
+
+**1,191 test files · 13,677 tests**, plus 20 SQL boundary probes and a Playwright
+suite including the mobile matrix. CI gates on typecheck, lint, test, build,
+migration replay, `ON CONFLICT` inferability against a real catalogue, the RLS
+probes, and E2E.
+
+**The finding that matters most in this section is about the tests themselves.**
+Nine times this audit found a defect in its own instruments, and four were caught
+only by reverting a fix to confirm the guard went red:
+
+| what was wrong | how it was caught |
+|---|---|
+| A brace-matcher took the first `{` after the parameters as the body — and landed in the **return type**. Three formulations returned 33, then 48, then 52 "unguarded actions"; the compiler returns 12 | the count moved with the regex |
+| A sweep required `.from('t')` on the same line as its `await`, so it read clean over two live defects | a reverted fix still passed |
+| A request-shape rule anchored at `^` read `typeof body.memberId === 'string' ? …` as *derived* — passing over the exact defect it was written for | a reverted fix left the general case green |
+| `expect(route).toContain('accessDeniedResponse')` still matched after the `return` was deleted, because the **import** remained | a reverted fix still passed |
+| `failures := failures || 'text'` parses the literal as an **array literal**; the probe failed with a type error instead of naming the boundary | the negative control printed the wrong error |
+| A probe granted itself privileges and left them, so the suite's answer depended on what ran before it (**F-015**) | running the suite twice |
+| The money-safety probe asserted a concurrency it never tested (**F-019**) | reading what it actually did |
+
+---
+
+# 16. Broken / Incomplete Features
+
+*Consolidated from `audit/claude-4.md` — worker running.*
+
+Established: the AI Assistant (**L-01**) — a permanently pinned sidebar button
+that produced a billing upsell for a feature the Free plan sells. `AI_MONTHLY_ALLOWANCE`
+sat at "unlimited for everyone" under a comment saying numbers would arrive
+"when the plans define them"; the plans had defined them all along (**L-02**).
+`endEmergencyAction` writes no audit row at all — recorded, not fixed, because
+inventing scope mid-pass is how an audit stops being checkable.
+
+---
+
+# 17. Technical Debt
+
+- **The migration ledger** (**F5**/**F-001**) — the largest single item. It
+  blocks all schema delivery, including two authored security fixes.
+- **71 migrations sit outside the pinned `0240–0254` release manifest**, so the
+  forward-release preflight refuses. Re-pinning is a review decision.
+- **Two Google client secrets** exist in a chat transcript and should be rotated.
+- **i18n fragment debt** — `lib/i18n/messages/INVARIANT.txt` documents strings
+  left identical across languages and names the ones that are technical debt
+  rather than decisions.
+- **`endEmergencyAction`** writes no audit row.
+- **The marketing E2E flake** — `context.newPage()` shares the BrowserContext
+  HTTP cache with the `page` fixture, and Playwright's retry reuses it, so the
+  assertion measures cache state it does not control. Mechanism recorded; one-line
+  fix available.
+
+---
+
+# 18. Recommended Fix Order
+
+1. **Repair the production migration ledger** (**F5**/**F-001**). Everything
+   below it in this list is blocked by it, including two live Critical defects.
+2. **Apply `0296` and `0297`** the moment 1 is done — `I-01` and `O-01` are live
+   in production until then.
+3. **Decide O-02** (which credentials are family-wide) and implement it. A child
+   reading the family's card numbers is not waiting on anything but a decision.
+4. **Decide O-03** and implement the `aal2`-or-no-factor helper.
+5. **Rotate the two Google client secrets.**
+6. **Configure family email** (**F6**) — operator config.
+7. **Decide F19** for the remaining 35 AI routes.
+8. **Re-pin the forward-release manifest** across the 71 migrations outside it.
+9. **SEC-001** — signed URLs for `family-media`.
+10. Worker findings, in the severity order this file records them.
+
+---
+
+# 19. Verification Checklist
+
+Run before calling any of this done:
+
+```bash
+npx tsc --noEmit                       # clean
+npm run lint                           # 0 errors (4 pre-existing warnings)
+npx vitest run                         # 1,191 files / 13,677 tests
+npm run db:audit:queries               # 491 tables, 78 functions, 141 routes resolve
+npm run db:audit:migrations            # no version collisions
+bash docs/audit/pg-bootstrap.sh        # 310 migrations, 0 failed
+bash docs/audit/run-probes.sh          # 20/20 behavioural probes
+npm run build                          # exits 0
+npm run test:e2e                       # includes the mobile device matrix
+```
+
+And, for anything this audit adds:
+
+- [ ] The fix was **reverted** and the guard confirmed to go red.
+- [ ] A database claim was proved against a **real replay**, acting AS the role.
+- [ ] A zero-finding pass records **what it checked**, not only that it checked.
+- [ ] A count from a pattern match was cross-checked against the parser or the
+      catalogue before being written down.
+- [ ] No test was skipped, weakened, or quarantined to get green.
+- [ ] No migration was applied to production by an agent.
+
+---
+---
+
+# Part II — The evidence, pass by pass
+
+Everything below is preserved verbatim. It is what the consolidated sections
+above are summarising, and it is where the proof for each finding lives.
+
+
 Fifteen audits of bubaly.com, kept in one file because one file is the record.
 
 They ran over **different surfaces** and none supersedes another:
