@@ -128,9 +128,15 @@ export async function GET(req: NextRequest) {
       const after = schedule && !settings.enabled
         ? await nextFireAfter(db, rule.family_id, schedule, now, tz)
         : null;
-      await db.from('family_automation_rules')
+      // Same field as the reschedule below, so the same risk — though this one
+      // self-heals: the skip path files no request, so a stale reservation does
+      // eventually reach releaseWedgedOccurrence. That costs the family a
+      // STALE_RESERVATION_MS delay on a routine they only paused, which is worth
+      // a log line rather than a silent wait.
+      const { error: pausedError } = await db.from('family_automation_rules')
         .update({ next_run_at: after ? after.toISOString() : null, last_run_at: now.toISOString() })
         .eq('id', rule.id);
+      if (pausedError) console.error('[cron:family-routines] could not reschedule a skipped routine', rule.id, pausedError);
       skipped += 1;
       continue;
     }
@@ -138,6 +144,17 @@ export async function GET(req: NextRequest) {
     const config = (rule.action_config ?? {}) as { prompt?: unknown };
     const prompt = typeof config.prompt === 'string' && config.prompt.trim() ? config.prompt.trim() : rule.name;
 
+    // The three routine_runs status writes below deliberately keep their results
+    // discarded, and it is worth saying why rather than leaving it looking
+    // missed. Nothing outside this file reads routine_runs, and the one read
+    // inside it — releaseWedgedOccurrence — looks at request_id and created_at,
+    // never status. So a refused status write costs an inaccurate internal row
+    // and drives no decision; the tick already reports the outcome through
+    // `problems`/`filed`. The request_id write is the interesting one, because
+    // that column IS read: if it is refused, a later tick treats the reservation
+    // as abandoned and steps the rule past the occurrence — which is what the
+    // reschedule does anyway, so the outcome matches and the wedge above becomes
+    // recoverable rather than permanent.
     const request = await createRequest(scope, { requestText: prompt, kind: 'routine' }, { db });
     if (!request.ok) {
       await db.from('routine_runs').update({ status: 'failed', detail: request.error }).eq('rule_id', rule.id).eq('due_at', dueAt);
@@ -154,9 +171,21 @@ export async function GET(req: NextRequest) {
     const next = schedule.kind === 'cron'
       ? nextCronRun(schedule.expr, now, tz)
       : await nextRelativeFire(db, rule.family_id, schedule, now, tz);
-    await db.from('family_automation_rules')
+    // This write is the only thing that moves the rule off the occurrence it
+    // just handled, and its result was discarded. A refused update leaves
+    // next_run_at on the due_at that has already passed, so the next tick picks
+    // the same occurrence, collides 23505 on the reservation, and hands it to
+    // releaseWedgedOccurrence — which returns immediately, because that guard is
+    // for reservations that never became a request and this one did. There is no
+    // path out: the routine is wedged for good, counted as filed, on one
+    // transient error. The family's routine simply stops happening.
+    const { error: rescheduleError } = await db.from('family_automation_rules')
       .update({ next_run_at: next ? next.toISOString() : null, last_run_at: now.toISOString() })
       .eq('id', rule.id);
+    if (rescheduleError) {
+      console.error('[cron:family-routines] filed the occurrence but could not advance the rule', rule.id, rescheduleError);
+      problems.push(rule.id);
+    }
   }
 
   return NextResponse.json({
@@ -212,7 +241,16 @@ async function armPendingRoutines(db: DB, now: Date): Promise<number> {
     const tz = family?.timezone ?? 'America/New_York';
     const next = await nextFireAfter(db, rule.family_id, schedule, now, tz);
     if (!next) continue;
-    await db.from('family_automation_rules').update({ next_run_at: next.toISOString() }).eq('id', rule.id);
+    // `armed` is returned and reported in the response precisely so a quiet tick
+    // reads differently from a broken one, so it may only count writes that
+    // landed. A refused update leaves next_run_at NULL — the rule stays
+    // unscheduled and never fires — while the tick reported it as armed.
+    const { error: armError } = await db.from('family_automation_rules')
+      .update({ next_run_at: next.toISOString() }).eq('id', rule.id);
+    if (armError) {
+      console.error('[cron:family-routines] could not arm routine', rule.id, armError);
+      continue;
+    }
     armed += 1;
   }
   return armed;
@@ -245,10 +283,16 @@ async function releaseWedgedOccurrence(
 
   const schedule = scheduleOf(rule);
   const next = schedule ? await nextFireAfter(db, rule.family_id, schedule, now, tz) : null;
-  await db.from('routine_runs')
+  const { error: markError } = await db.from('routine_runs')
     .update({ status: 'failed', detail: 'Bubaly stopped before it could file this one.' })
     .eq('rule_id', rule.id).eq('due_at', dueAt);
-  await db.from('family_automation_rules')
+  if (markError) console.error('[cron:family-routines] could not mark the abandoned reservation', rule.id, markError);
+  // This is the un-wedging write. If it is refused the rule stays on the same
+  // occurrence and arrives back here every tick — the exact state this function
+  // exists to end — so a silent failure turns the recovery into a no-op that
+  // looks like it ran.
+  const { error: stepError } = await db.from('family_automation_rules')
     .update({ next_run_at: next ? next.toISOString() : null, last_run_at: now.toISOString() })
     .eq('id', rule.id);
+  if (stepError) console.error('[cron:family-routines] could not step the wedged rule past its occurrence', rule.id, stepError);
 }

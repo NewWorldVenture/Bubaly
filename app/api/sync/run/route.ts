@@ -7,6 +7,7 @@ import { runProviderSync } from '@/lib/sync/engine/generic';
 import type { Json, SyncProviderEnum } from '@/lib/database.types';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body';
+import { logSyncAudit } from '@/lib/sync/audit';
 
 const MAX_SYNC_REQUEST_BYTES = 4_096;
 
@@ -68,7 +69,7 @@ export async function POST(req: Request) {
 
   const result = await runProviderSync(admin, account, adapter);
 
-  await admin.from('sync_audit_logs').insert({
+  await logSyncAudit(admin, {
     user_id: ctx.user.id, family_id: ctx.active.familyId, provider, action: 'sync',
     detail: result as unknown as Json,
   });

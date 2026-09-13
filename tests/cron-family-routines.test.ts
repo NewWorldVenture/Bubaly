@@ -21,6 +21,9 @@ const state = vi.hoisted(() => ({
   families: [] as Row[],
   routineRuns: [] as Row[],
   updates: [] as { table: string; patch: Row; filters: Row }[],
+  // Lets a case make one specific update RESOLVE with an error, the way
+  // PostgREST does, without touching any other write.
+  failUpdate: null as null | ((table: string, patch: Row) => boolean),
 }));
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -48,6 +51,9 @@ vi.mock('@/lib/supabase/server', () => ({
         }
         if (kind === 'update') {
           state.updates.push({ table, patch: payload as Row, filters: { ...filters } });
+          if (state.failUpdate?.(table, payload as Row)) {
+            return { data: null, error: { code: '08006', message: 'connection failure' } };
+          }
           for (const row of rowsFor()) Object.assign(row, payload);
           return { data: rowsFor(), error: null };
         }
@@ -110,6 +116,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(FROZEN_NOW);
   vi.clearAllMocks();
+  state.failUpdate = null;
   state.rules = [{ ...RULE }];
   state.families = [{ id: 'fam-1', timezone: 'America/New_York' }];
   state.routineRuns = [];
@@ -141,6 +148,50 @@ describe('the routine worker', () => {
       expect.anything(),
     );
     expect(mocks.kickRun).toHaveBeenCalledWith('run-1', expect.objectContaining({ budgetMs: expect.any(Number) }));
+  });
+
+  // A routine that stops happening, from one transient write failure.
+  //
+  // The reschedule at the end of the loop is the only thing that moves a rule
+  // off the occurrence it just handled, and its result was discarded. When it is
+  // refused, next_run_at keeps the due_at that has already passed: the next tick
+  // selects the same occurrence, collides 23505 on the reservation, and hands it
+  // to releaseWedgedOccurrence — which returns at once, because that guard is for
+  // reservations that never became a request and this one did. Nothing else
+  // advances the rule. It is wedged for good, and the tick that wedged it
+  // reported ok: true.
+  it('reports a filed routine it could not advance, instead of a clean tick', async () => {
+    state.failUpdate = (table, patch) => table === 'family_automation_rules' && 'next_run_at' in patch;
+    const res = await GET(req() as never);
+    const body = await res.json();
+
+    // It really did file the work — that part succeeded and is still true.
+    expect(body).toMatchObject({ filed: 1 });
+    // But the tick may not call itself clean: the rule did not move.
+    expect(body.ok, 'a tick that wedged a routine reported itself as fine').toBe(false);
+    expect(body.problems).toBe(1);
+    expect(state.rules[0].next_run_at, 'the rule is still on the occurrence it just handled')
+      .toBe(RULE.next_run_at);
+  });
+
+  // `armed` is returned so a quiet tick reads differently from a broken one, so
+  // it may only count writes that landed. A refused update leaves next_run_at
+  // NULL — the rule stays unscheduled and never fires at all — while the tick
+  // reported it as armed.
+  it('does not count an arming that did not land', async () => {
+    state.rules = [{ ...RULE, next_run_at: null }];
+    state.failUpdate = (table) => table === 'family_automation_rules';
+    const res = await GET(req() as never);
+    const body = await res.json();
+    expect(body.armed, 'counted a routine as armed while it stayed unscheduled').toBe(0);
+    expect(state.rules[0].next_run_at).toBeNull();
+  });
+
+  it('still counts an arming that did land', async () => {
+    state.rules = [{ ...RULE, next_run_at: null }];
+    const res = await GET(req() as never);
+    expect((await res.json()).armed).toBe(1);
+    expect(state.rules[0].next_run_at).not.toBeNull();
   });
 
   it('reserves the occurrence before filing, so a second worker does nothing', async () => {
