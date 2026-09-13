@@ -56,3 +56,44 @@ export function resumeFrom(
   if (durationSeconds && positionSeconds >= durationSeconds - 5) return 0;
   return Math.floor(positionSeconds);
 }
+
+/**
+ * Anything that can be told to stop. `HTMLAudioElement` is one; a test's
+ * stand-in is another, and that is the point of naming the shape.
+ */
+export type Pausable = { pause: () => void };
+
+/**
+ * The one thing allowed to be making noise.
+ *
+ * Every row in the library renders its own `<audio>`, so pressing Play on a
+ * second episode while the first was going gave you both at once — two voices
+ * over each other, and two rows writing a position every fifteen seconds.
+ * Module scope rather than React state because the rows are siblings with no
+ * shared parent to hold it, and because what is being coordinated is a DOM
+ * element rather than a render.
+ */
+let nowPlaying: Pausable | null = null;
+
+/** Take playback, stopping whatever held it. */
+export function claimPlayback(next: Pausable): void {
+  if (nowPlaying && nowPlaying !== next) nowPlaying.pause();
+  nowPlaying = next;
+}
+
+/**
+ * Give it up — but only if it is still yours.
+ *
+ * The guard matters: pausing the outgoing element inside `claimPlayback` fires
+ * its `pause` event, which calls this. Releasing unconditionally would then
+ * clear the registry the incoming element had just been written into, and the
+ * next row to start would find nothing to stop.
+ */
+export function releasePlayback(current: Pausable): void {
+  if (nowPlaying === current) nowPlaying = null;
+}
+
+/** Who holds it. Exported for tests; nothing in the app needs to ask. */
+export function playbackHolder(): Pausable | null {
+  return nowPlaying;
+}

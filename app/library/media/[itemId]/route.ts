@@ -18,6 +18,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Readable } from 'node:stream';
 import type { ReadableStream as WebReadableStream } from 'node:stream/web';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { rateLimit } from '@/lib/server/rate-limit';
 import { createServer } from '@/lib/supabase/server';
 import { openPublicMedia } from '@/lib/server/public-media-fetch';
 import { PublicDocumentError } from '@/lib/server/public-document-fetch';
@@ -31,6 +32,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ item
   if (!itemId) return new NextResponse('Not found', { status: 404 });
 
   const ctx = await requireUserContext();
+  // Per USER, because this is our egress paid on their behalf: one signed-in
+  // person should not be able to pull a 500 MB episode in a loop. Generous
+  // enough for real playback — a player asks for a handful of byte ranges when
+  // it seeks, and the response is cacheable for an hour — and far short of what
+  // a script does.
+  const limited = rateLimit(`library-media:${ctx.user.id}`, { limit: 60, windowMs: 60_000 });
+  if (!limited.ok) {
+    return new NextResponse('Too many requests', {
+      status: 429, headers: { 'Retry-After': String(limited.retryAfter) },
+    });
+  }
   const supabase = await createServer();
 
   // The user's client, not the service client: RLS is what decides whether this
