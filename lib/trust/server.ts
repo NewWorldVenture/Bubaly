@@ -237,8 +237,23 @@ export async function evaluateTrust(supabase: DB, familyId: string, req: Evaluat
     alreadyPending = opened?.alreadyPending ?? false;
   }
 
-  // Explainable audit trail — always recorded.
-  await writer.from('trust_audit_logs').insert({
+  // Explainable audit trail. It said "always recorded" and was not: the insert
+  // RESOLVES with { data, error } rather than throwing and the result was
+  // discarded, so a refused write left no row and told nobody.
+  //
+  // This table is not incidental telemetry — it is the evidence base for the one
+  // screen whose job is showing a family what Bubaly decided and why.
+  // dashboard/trust reads the last forty rows (actor, domain, capability,
+  // decision, reason, policy), and app/api/privacy/export states that every
+  // download is a row here. A lost row is a decision the family cannot see,
+  // including a denial or one that needed their approval.
+  //
+  // Deliberately NOT fatal. The approval request above is already open and its
+  // own write was checked; callers act on the returned decision. Refusing a
+  // decision because its explanation failed to log would turn a bookkeeping
+  // failure into an outage of the whole AI layer, denials included. Loud is the
+  // fix here; fatal is not.
+  const { error: auditError } = await writer.from('trust_audit_logs').insert({
     family_id: familyId,
     actor_kind: req.actor.kind === 'ai_agent' ? 'ai_agent' : 'member',
     actor_id: req.actor.id,
@@ -251,6 +266,10 @@ export async function evaluateTrust(supabase: DB, familyId: string, req: Evaluat
     approval_id: approvalId ?? null,
     context: { basis: decision.basis, amountCents: req.context?.amountCents ?? null },
   });
+  if (auditError) {
+    console.error('[trust] decision was made but not recorded',
+      { familyId, domain: req.domain, capability: req.capability, decision: decision.effect }, auditError);
+  }
 
   return { decision, approvalId, alreadyPending };
 }

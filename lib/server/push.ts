@@ -88,8 +88,20 @@ export async function sendPushToUser(supabase: DB, userId: string, payload: Push
         } catch (err: unknown) {
           const status = (err as { statusCode?: number }).statusCode;
           if (status === 404 || status === 410) {
-            await supabase.from('push_devices').delete().eq('id', d.id);
-            result.pruned++;
+            // `pruned` is returned to the caller and reported, so it has to mean
+            // the row is gone. The delete's result was discarded and the counter
+            // incremented regardless, so a refused delete was reported as a
+            // pruned device while the row stayed — and a permanently dead
+            // endpoint that never gets pruned is retried on every notification
+            // from here on, spending a send each time and reporting itself
+            // cleaned up each time.
+            const { error: pruneError } = await supabase.from('push_devices').delete().eq('id', d.id);
+            if (pruneError) {
+              console.error('[push] dead device could not be pruned', { deviceId: d.id, status }, pruneError);
+              result.failed++;
+            } else {
+              result.pruned++;
+            }
           } else {
             result.failed++;
           }
