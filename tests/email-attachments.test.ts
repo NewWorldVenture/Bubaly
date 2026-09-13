@@ -89,7 +89,9 @@ async function requestFor(files: File[], ref = 'email-1') {
       controller.close();
     },
   });
-  return new NextRequest('http://localhost/api/contact-center/email', {
+  // Built as a platform Request first: a streaming body needs `duplex`, which
+  // NextRequest's own init type does not carry.
+  return new NextRequest(new Request('http://localhost/api/contact-center/email', {
     method: 'POST',
     headers: {
       'x-inbound-secret': 'test-secret',
@@ -97,7 +99,7 @@ async function requestFor(files: File[], ref = 'email-1') {
     },
     body: stream,
     duplex: 'half',
-  } as RequestInit & { duplex: 'half' });
+  } as RequestInit & { duplex: 'half' }));
 }
 
 function source(files: File[], overrides: Partial<Parameters<typeof fileEmailAttachments>[1]> = {}) {
