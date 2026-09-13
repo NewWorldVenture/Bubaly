@@ -1,4 +1,7 @@
 'use client';
+import {
+  shouldPersistOnUnmount, resumeFrom, claimPlayback, releasePlayback, LIBRARY_CACHE,
+} from '@/lib/library/progress';
 
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { Play, Pause, Bookmark, BookmarkCheck, Download, RefreshCw, Trash2, ExternalLink } from 'lucide-react';
@@ -24,12 +27,31 @@ export type PlayableItem = {
   positionSeconds: number;
   saved: boolean;
   offline: boolean;
+  /** Finished, so "play again" starts at the beginning rather than the credits. */
+  completed: boolean;
 };
+
+/**
+ * Where the bytes come from: Bubaly's own origin, not the publisher's.
+ *
+ * `cache.add()` fetches from the DOCUMENT context, so it answers to
+ * `connect-src` — not `media-src`, which is why streaming from a CDN worked and
+ * downloading from one never could. No podcast host is on this app's
+ * connect-src allowlist, so every Download press failed with a CSP refusal.
+ * A same-origin URL is permitted by `connect-src 'self'` as it stands, and it
+ * also sidesteps CORS, since `cache.add` rejects an opaque response.
+ */
+function mediaHref(itemId: string): string {
+  return `/library/media/${encodeURIComponent(itemId)}`;
+}
 
 export function ItemRow({ item }: { item: PlayableItem }) {
   const { success, error } = useToast();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const lastSaved = useRef(item.positionSeconds);
+  // Whether this row's audio was actually played in this visit. See the unmount
+  // effect below — without it, opening the page was enough to lose your place.
+  const touched = useRef(false);
   const [playing, setPlaying] = useState(false);
   const [position, setPosition] = useState(item.positionSeconds);
   const [saved, setSaved] = useState(item.saved);
@@ -43,17 +65,28 @@ export function ItemRow({ item }: { item: PlayableItem }) {
   useEffect(() => {
     let alive = true;
     if (!item.mediaUrl || typeof caches === 'undefined') { setCached(false); return () => { alive = false; }; }
-    caches.match(item.mediaUrl)
+    caches.match(mediaHref(item.id))
       .then((hit) => { if (alive) setCached(Boolean(hit)); })
       .catch(() => { if (alive) setCached(false); });
     return () => { alive = false; };
-  }, [item.mediaUrl]);
+  }, [item.mediaUrl, item.id]);
 
   // Write the position on unmount as well as on the interval, so closing the
   // tab mid-episode does not lose the last stretch of listening.
+  //
+  // `touched` is what makes that safe. `lastSaved` starts at the position the
+  // person had already reached, while an <audio> element that has never been
+  // played reports currentTime 0 — so for every part-listened episode on the
+  // page, the difference was the whole of their progress and unmount wrote a 0
+  // over it. Opening the library and walking away was enough to lose every
+  // bookmark in the house, silently, and the next visit started them at the top
+  // of each episode with nothing to say why.
   useEffect(() => () => {
     const audio = audioRef.current;
-    if (!audio || Math.abs(audio.currentTime - lastSaved.current) < 5) return;
+    if (!audio) return;
+    if (!shouldPersistOnUnmount({
+      touched: touched.current, currentTime: audio.currentTime, lastSaved: lastSaved.current,
+    })) return;
     void saveProgressAction({ itemId: item.id, positionSeconds: Math.floor(audio.currentTime) });
   }, [item.id]);
 
@@ -62,11 +95,39 @@ export function ItemRow({ item }: { item: PlayableItem }) {
     if (!audio) return;
     if (audio.paused) {
       // Resume where this person left off, not where the last person did.
-      if (item.positionSeconds > 0 && audio.currentTime < 1) audio.currentTime = item.positionSeconds;
-      void audio.play().then(() => setPlaying(true)).catch(() => error('That audio could not be played.'));
+      if (audio.currentTime < 1) audio.currentTime = resumeFrom(item);
+      touched.current = true;
+      // Stop whatever else was playing BEFORE asking this one to start, so the
+      // two never overlap even for the moment the promise takes to settle.
+      claimPlayback(audio);
+      void audio.play().catch(() => {
+        releasePlayback(audio);
+        error('That audio could not be played.');
+      });
     } else {
       audio.pause();
-      setPlaying(false);
+    }
+  }
+
+  // `playing` follows the ELEMENT, not the click. A row can stop for reasons
+  // this component never hears about — another row claiming playback, the
+  // browser interrupting for a call, the operating system's media controls —
+  // and a button that only tracked its own clicks showed Pause over silence.
+  function onPlay() {
+    const audio = audioRef.current;
+    if (audio) claimPlayback(audio);
+    touched.current = true;
+    setPlaying(true);
+  }
+
+  function onPause() {
+    const audio = audioRef.current;
+    setPlaying(false);
+    if (!audio) return;
+    releasePlayback(audio);
+    // Whatever stopped it, this is where they got to.
+    if (touched.current) {
+      lastSaved.current = audio.currentTime;
       void saveProgressAction({ itemId: item.id, positionSeconds: Math.floor(audio.currentTime) });
     }
   }
@@ -75,6 +136,7 @@ export function ItemRow({ item }: { item: PlayableItem }) {
     const audio = audioRef.current;
     if (!audio) return;
     setPosition(audio.currentTime);
+    touched.current = true;
     if (audio.currentTime - lastSaved.current >= SAVE_EVERY_SECONDS) {
       lastSaved.current = audio.currentTime;
       void saveProgressAction({ itemId: item.id, positionSeconds: Math.floor(audio.currentTime) });
@@ -102,12 +164,17 @@ export function ItemRow({ item }: { item: PlayableItem }) {
         setCached(false);
         return;
       }
+      const href = mediaHref(item.id);
       try {
-        const cache = await caches.open('bubaly-library-v1');
-        if (next) { await cache.add(item.mediaUrl); setCached(true); success('Saved for offline.'); }
-        else { await cache.delete(item.mediaUrl); setCached(false); success('Removed from offline.'); }
+        const cache = await caches.open(LIBRARY_CACHE);
+        if (next) { await cache.add(href); setCached(true); success('Saved for offline.'); }
+        else { await cache.delete(href); setCached(false); success('Removed from offline.'); }
       } catch {
         setCached(false);
+        // The flag was written before the bytes were fetched, and used to stay
+        // written when the fetch failed — so the row claimed a download that
+        // did not exist and the tick asserted it. Put it back.
+        if (next) void saveProgressAction({ itemId: item.id, offline: false }).then(() => setOffline(false));
         error(next ? 'That file could not be stored offline.' : 'That file could not be removed.');
       }
     });
@@ -153,11 +220,19 @@ export function ItemRow({ item }: { item: PlayableItem }) {
         </div>
       </div>
       {item.mediaUrl && (
-        <audio ref={audioRef} src={item.mediaUrl} preload="none" onTimeUpdate={onTimeUpdate}
-          onEnded={() => { setPlaying(false); void saveProgressAction({ itemId: item.id, completed: true }); }} />
+        <audio ref={audioRef} src={mediaHref(item.id)} preload="none" onTimeUpdate={onTimeUpdate}
+          onPlay={onPlay} onPause={onPause}
+          onEnded={() => { void saveProgressAction({ itemId: item.id, completed: true }); }} />
       )}
       {offline && cached === false && (
         <p className="mt-1.5 text-xs text-warning">Marked for offline, but not stored on this device yet.</p>
+      )}
+      {!item.mediaUrl && !item.pageUrl && (
+        // A title with nothing attached renders as a row with no play button,
+        // no download and no link — and said nothing about why. It is a
+        // perfectly reasonable thing to keep (a book you mean to read), so the
+        // row explains itself rather than the buttons vanishing silently.
+        <p className="mt-1.5 text-xs text-muted">Title only — add a link or an audio file to play or open it.</p>
       )}
     </li>
   );

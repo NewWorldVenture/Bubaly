@@ -29,7 +29,14 @@ export function isPublicDocumentAddress(address: string): boolean {
   return family === 6 && globalV6.check(address, 'ipv6') && !blocked.check(address, 'ipv6');
 }
 
-async function resolveAddresses(host: string, signal: AbortSignal): Promise<Address[]> {
+/**
+ * Every address a host resolves to, with the unroutable ones rejected.
+ *
+ * Exported so the media proxy pins addresses exactly the way document fetching
+ * does. Two copies of an SSRF guard is two guards that drift, and the one that
+ * drifts is always the copy.
+ */
+export async function resolvePublicAddresses(host: string, signal: AbortSignal): Promise<Address[]> {
   const resolver = new Resolver({ timeout: 3_000, tries: 1 });
   const cancel = () => resolver.cancel();
   signal.throwIfAborted();
@@ -62,9 +69,23 @@ export const FEED_MEDIA_TYPES = [
 ] as const;
 
 type Options = {
-  signal?: AbortSignal; resolve?: typeof resolveAddresses; request?: typeof httpsRequest; timeoutMs?: number;
+  signal?: AbortSignal; resolve?: typeof resolvePublicAddresses; request?: typeof httpsRequest; timeoutMs?: number;
   /** Media types this call will take. Defaults to DOCUMENT_MEDIA_TYPES. */
   accept?: readonly string[];
+  /**
+   * How the BYTES are checked once they arrive, independent of which media
+   * types were accepted. Defaults to 'document'.
+   *
+   * Explicit, because the first version of this inferred it as
+   * `accept !== DOCUMENT_MEDIA_TYPES` — by reference identity. A caller passing
+   * a COPY of the document list (`[...DOCUMENT_MEDIA_TYPES]`, a `.slice()`, or
+   * the same strings inline) would have been treated as a feed, skipping
+   * documentType()'s magic-byte rejection of executables and archives AND the
+   * looksLikeHtml() check — leaving verification as "starts with '<'", which an
+   * HTML page passes. Nothing did that yet; a guard should not depend on nobody
+   * ever doing it.
+   */
+  verify?: 'document' | 'feed';
 };
 type Hop = { redirect: string } | { document: DocumentInput };
 
@@ -78,7 +99,7 @@ function looksLikeHtml(bytes: Uint8Array): boolean {
   return /^(?:<!doctype\s+html|<(?:html|head|body|script|form)\b)/i.test(text);
 }
 
-function readHop(url: URL, pinned: Address, signal: AbortSignal, request: typeof httpsRequest, accept: readonly string[]): Promise<Hop> {
+function readHop(url: URL, pinned: Address, signal: AbortSignal, request: typeof httpsRequest, accept: readonly string[], verify: 'document' | 'feed'): Promise<Hop> {
   return new Promise((resolve, reject) => {
     // Per-request agent: no pooled connection or environment proxy may bypass this lookup.
     // Node HTTPS forwards lookup to net.connect and retains the URL hostname for Host/TLS.
@@ -126,8 +147,7 @@ function readHop(url: URL, pinned: Address, signal: AbortSignal, request: typeof
         // page. A feed is markup by definition, so it is sniffed for a leading
         // '<' instead of run through documentType, which only knows documents —
         // the check is not skipped for feeds, it is the right check for them.
-        const isFeed = accept !== DOCUMENT_MEDIA_TYPES;
-        const wellFormed = isFeed
+        const wellFormed = verify === 'feed'
           ? new TextDecoder().decode(document.bytes.subarray(0, 512)).trimStart().startsWith('<')
           : Boolean(documentType(document)) && !(mediaType === 'text/plain' && looksLikeHtml(document.bytes));
         if (!wellFormed) reject(new PublicDocumentError('unsupported'));
@@ -153,10 +173,10 @@ export async function fetchPublicDocument(raw: string, options: Options = {}): P
       const url = new URL(normalized);
       if (isIP(url.hostname.replace(/^\[|\]$/g, '')) || seen.has(normalized)) throw new PublicDocumentError('blocked');
       seen.add(normalized);
-      const addresses = await (options.resolve ?? resolveAddresses)(url.hostname, signal);
+      const addresses = await (options.resolve ?? resolvePublicAddresses)(url.hostname, signal);
       signal.throwIfAborted();
       if (!addresses.length || addresses.some(({ address, family }) => isIP(address) !== family || !isPublicDocumentAddress(address))) throw new PublicDocumentError('blocked');
-      const result = await readHop(url, addresses[0], signal, options.request ?? httpsRequest, options.accept ?? DOCUMENT_MEDIA_TYPES);
+      const result = await readHop(url, addresses[0], signal, options.request ?? httpsRequest, options.accept ?? DOCUMENT_MEDIA_TYPES, options.verify ?? 'document');
       if ('document' in result) return { ...result.document, url: normalized };
       current = new URL(result.redirect, url).href;
     }
@@ -179,7 +199,7 @@ export async function fetchPublicDocument(raw: string, options: Options = {}): P
  * one deadline across the lot. The only difference is which media types come
  * back, and that a feed is verified as markup rather than as a document.
  */
-export async function fetchPublicFeed(raw: string, options: Omit<Options, 'accept'> = {}): Promise<{ url: string; text: string }> {
-  const result = await fetchPublicDocument(raw, { ...options, accept: FEED_MEDIA_TYPES });
+export async function fetchPublicFeed(raw: string, options: Omit<Options, 'accept' | 'verify'> = {}): Promise<{ url: string; text: string }> {
+  const result = await fetchPublicDocument(raw, { ...options, accept: FEED_MEDIA_TYPES, verify: 'feed' });
   return { url: result.url, text: new TextDecoder().decode(result.bytes) };
 }

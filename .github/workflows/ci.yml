@@ -171,6 +171,21 @@ jobs:
       - name: Replay every migration
         run: bash docs/audit/pg-bootstrap.sh
 
+      # Postgres resolves `ON CONFLICT (a, b)` by INDEX INFERENCE, which matches
+      # only a unique index over exactly those columns that is neither partial
+      # nor an expression index. Nothing else in CI puts the PAIR together: the
+      # migration reads fine on its own, so does the upsert, and a mismatch
+      # fails at PLANNING time with 42P10 — on the first row, against an empty
+      # table, so no test that never reaches the database can see it.
+      #
+      # This runs here, after the replay, because only a real catalog is
+      # trustworthy: `scripts/audit-supabase-queries.mjs` performs the same
+      # check by reading the migration files on every pull request, but 0261
+      # drops a unique constraint through `execute format(...)`, which no static
+      # reader can follow. Believing in an index that is gone misses a defect.
+      - name: ON CONFLICT targets are inferable
+        run: node scripts/check-conflict-targets.mjs
+
       # Each probe asserts with RAISE EXCEPTION under ON_ERROR_STOP=1. Covers
       # both directions of the 0118 failure: another family reading your rows,
       # and your own family losing access to them.

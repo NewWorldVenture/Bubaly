@@ -6,8 +6,12 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { createServer } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { fetchPublicFeed } from '@/lib/server/public-document-fetch';
-import { parseFeed, safeFeedUrl } from '@/lib/library/feed-parse';
+import { safeFeedUrl } from '@/lib/library/feed-parse';
+// The ingest itself lives in lib/, not here: a 'use server' module may only
+// export async functions and every export it has is callable from the browser,
+// so anything the nightly cron also needs cannot live in this file.
+import { ingestFeed } from '@/lib/library/ingest';
+import { rateLimit } from '@/lib/server/rate-limit';
 
 const PAGE = '/dashboard/library';
 
@@ -24,62 +28,6 @@ const bookSchema = z.object({
   pageUrl: z.string().trim().url('Enter a valid link').or(z.literal('')).optional(),
   mediaUrl: z.string().trim().url('Enter a valid audio link').or(z.literal('')).optional(),
 });
-
-/**
- * Pull a feed and write what it contains.
- *
- * The fetch goes through fetchPublicFeed, which is the SAME guard a document
- * fetch uses: a feed address is chosen by a user and fetched by our server,
- * which is textbook server-side request forgery unless the blocked-subnet list,
- * the DNS pinning and the redirect budget all apply. They do.
- */
-async function ingestFeed(
-  supabase: Awaited<ReturnType<typeof createServer>>,
-  familyId: string, userId: string, feedId: string, feedUrl: string,
-): Promise<{ added: number } | { error: string }> {
-  let parsed;
-  try {
-    const fetched = await fetchPublicFeed(feedUrl);
-    parsed = parseFeed(fetched.text);
-  } catch (err) {
-    console.error('[library] feed fetch failed', err);
-    return { error: 'That address could not be read. Check it is a public feed and try again.' };
-  }
-  if (!parsed) return { error: 'That address did not return a feed Bubaly can read.' };
-
-  await supabase.from('library_feeds').update({
-    title: parsed.title,
-    author: parsed.author,
-    description: parsed.description,
-    image_url: parsed.imageUrl,
-    last_fetched_at: new Date().toISOString(),
-    last_error: null,
-  }).eq('id', feedId).eq('family_id', familyId);
-
-  const rows = parsed.items
-    // An entry with nothing to play and nowhere to go is not worth a row.
-    .filter((item) => item.mediaUrl || item.pageUrl)
-    .map((item) => ({
-      family_id: familyId, feed_id: feedId,
-      kind: 'episode' as const,
-      guid: item.guid, title: item.title, description: item.description,
-      media_url: item.mediaUrl, page_url: item.pageUrl, image_url: item.imageUrl ?? parsed.imageUrl,
-      duration_seconds: item.durationSeconds, published_at: item.publishedAt,
-      author: parsed.author, created_by: userId,
-    }));
-  if (rows.length === 0) return { added: 0 };
-
-  // Keyed on the publisher's own guid, so a refresh updates what it already has
-  // instead of duplicating the whole back catalogue every time.
-  const { error } = await supabase.from('library_items').upsert(rows, {
-    onConflict: 'family_id,feed_id,guid',
-  } as never);
-  if (error) {
-    console.error('[library] item upsert failed', error);
-    return { error: 'The feed was read but its episodes could not be saved.' };
-  }
-  return { added: rows.length };
-}
 
 export async function subscribeFeedAction(formData: FormData): Promise<LibraryResult> {
   const ctx = await requireUserContext();
@@ -118,8 +66,29 @@ export async function subscribeFeedAction(formData: FormData): Promise<LibraryRe
   return { ok: true, message: `Subscribed. ${result.added} ${result.added === 1 ? 'item' : 'items'} added.` };
 }
 
+/**
+ * Two limits, because there are two things to protect.
+ *
+ * Per FEED: pressing Refresh is one click and a publisher's server is somebody
+ * else's. Five in ten minutes is more than any person needs and far less than
+ * a held-down button sends.
+ *
+ * Per FAMILY: a household with thirty subscriptions could otherwise walk down
+ * the list and make thirty outbound fetches as fast as it can click, which is
+ * OUR egress and our reputation with every one of those publishers.
+ *
+ * Both are advisory — the limiter is per-instance and in memory — and that is
+ * the right weight here. The cron below is what keeps a feed current, so manual
+ * refresh is the exception rather than the mechanism.
+ */
+const REFRESH_TOO_OFTEN = 'That feed was just refreshed. Give it a few minutes.';
+
 export async function refreshFeedAction(feedId: string): Promise<LibraryResult> {
   const ctx = await requireUserContext();
+  if (!rateLimit(`library-refresh-feed:${feedId}`, { limit: 5, windowMs: 10 * 60_000 }).ok
+    || !rateLimit(`library-refresh-family:${ctx.active.familyId}`, { limit: 30, windowMs: 10 * 60_000 }).ok) {
+    return { ok: false, error: REFRESH_TOO_OFTEN };
+  }
   const supabase = await createServer();
   const { data: feed, error } = await supabase
     .from('library_feeds').select('id, feed_url')

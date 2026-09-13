@@ -19,6 +19,28 @@ describe('webhook persistence boundaries', () => {
     expect(stripeHelper).toContain('Stripe webhook error state was not recorded');
   });
 
+  // `onConflict: 'family_id'` was never satisfiable — there is no unique index
+  // on subscriptions.family_id, and Postgres infers an ON CONFLICT target from
+  // one — so every delivery raised 42P10 at planning time and became the
+  // generic message above with nothing logged to say why. Two properties keep
+  // that from recurring: the reason reaches the logs, and the write does not
+  // depend on an index that may be absent (0285 only creates it when no family
+  // already holds two rows, and refuses to delete billing rows to force it).
+  it('persists a subscription without depending on a conflict target, and says why when it cannot', () => {
+    expect(stripeRoute).toContain("from('subscriptions').update(fields).eq('family_id', familyId).select('id')");
+    expect(stripeRoute).toContain('[stripe webhook] Subscription update failed');
+    expect(stripeRoute).toContain('[stripe webhook] Subscription insert failed');
+
+    // The insert is the fallback, not the first move: reversing them would
+    // write a second row for every family that already has one.
+    const update = stripeRoute.indexOf("from('subscriptions').update(");
+    const insert = stripeRoute.indexOf("from('subscriptions').insert(");
+    expect(update).toBeGreaterThan(-1);
+    expect(insert).toBeGreaterThan(update);
+
+    expect(stripeRoute).not.toMatch(/from\('subscriptions'\)\s*\.upsert/);
+  });
+
   it('fails Resend delivery when counters, suppressions, or event finalization fail', () => {
     expect(resendRoute).toContain('counterError');
     expect(resendRoute).toContain('suppressionError');

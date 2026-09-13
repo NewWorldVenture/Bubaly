@@ -32,6 +32,11 @@ export const SCHEDULES = {
   '/api/cron/push-scan': '0 */2 * * *',
   '/api/cron/calendar-feeds': '0 5 * * *',
   '/api/cron/automations': '0 13 * * *',
+  // Podcasts publish on their own schedule and a family expects new episodes to
+  // be there, not to have to ask for them. Six-hourly is often enough that a
+  // morning show is waiting by the morning and rare enough that four requests a
+  // day per feed is a courteous thing to send a publisher.
+  '/api/cron/library-feeds': '0 */6 * * *',
   '/api/cron/marketing': '*/5 * * * *',
   // Recurring social ads post on local wall-clock times, so the dispatcher has
   // to tick finer than the schedules it serves: 15 minutes is the granularity

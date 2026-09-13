@@ -5,6 +5,7 @@ import { createServer } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
+import { isMissingRelationError } from '@/lib/supabase/errors';
 import { fmtDate } from '@/lib/utils/format';
 import { AddBookForm, FeedControls, ItemRow, SubscribeForm, type PlayableItem } from './player';
 
@@ -45,8 +46,23 @@ export default async function LibraryPage() {
       .eq('family_id', ctx.active.familyId).eq('user_id', ctx.user.id),
   ]);
 
-  if (feedsResult.error || itemsResult.error) {
-    console.error('[library] read failed', feedsResult.error ?? itemsResult.error);
+  const readError = feedsResult.error ?? itemsResult.error;
+  if (readError) {
+    // "Refresh and try again" is only true for a database that HAS these tables.
+    // 0284 is applied by a person, not by the deploy, so between the two this
+    // page is reachable from the sidebar with nothing behind it — and telling
+    // someone to refresh sends them round a loop that cannot end. Say which of
+    // the two it is.
+    if (isMissingRelationError(readError)) {
+      return (
+        <EmptyState
+          icon={Library}
+          title="The family library isn't switched on yet"
+          description="It needs database migration 0284_library_books_podcasts.sql. Once an administrator applies it, podcasts and books work here — nothing else is needed."
+        />
+      );
+    }
+    console.error('[library] read failed', readError);
     return <ErrorState message="Your library could not be read. Refresh and try again." />;
   }
   if (progressResult.error) {
@@ -69,6 +85,7 @@ export default async function LibraryPage() {
       positionSeconds: mine?.position_seconds ?? 0,
       saved: mine?.saved ?? false,
       offline: mine?.offline ?? false,
+      completed: Boolean(mine?.completed_at),
     };
   };
 

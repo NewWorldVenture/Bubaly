@@ -15,7 +15,7 @@ import type Stripe from 'stripe';
 export const runtime = 'nodejs';
 const MAX_WEBHOOK_BODY_BYTES = 256_000;
 
-async function upsertSubscription(supabase: ReturnType<typeof createServiceClient>, sub: Stripe.Subscription) {
+async function persistSubscription(supabase: ReturnType<typeof createServiceClient>, sub: Stripe.Subscription) {
   const familyId = sub.metadata.family_id;
   if (!familyId) return;
 
@@ -46,20 +46,42 @@ async function upsertSubscription(supabase: ReturnType<typeof createServiceClien
     throw new Error('Billing state lookup failed');
   }
 
-  const { error: subscriptionError } = await supabase.from('subscriptions').upsert(
-    {
-      family_id: familyId,
-      billing_customer_id: bc?.id ?? null,
-      plan,
-      status: sub.status as 'trialing' | 'active' | 'past_due' | 'canceled' | 'incomplete' | 'incomplete_expired' | 'unpaid',
-      provider_ref: sub.id,
-      current_period_end: new Date((sub as unknown as { current_period_end: number }).current_period_end * 1000).toISOString(),
-      cancel_at_period_end: sub.cancel_at_period_end ?? false,
-      seats: 10,
-    },
-    { onConflict: 'family_id' },
-  );
-  if (subscriptionError) throw new Error('Subscription persistence failed');
+  // `family_id` is deliberately not part of `fields`: it selects the row, and
+  // the Update type withholds it so no code path can move a subscription
+  // between families.
+  const fields = {
+    billing_customer_id: bc?.id ?? null,
+    plan,
+    status: sub.status as 'trialing' | 'active' | 'past_due' | 'canceled' | 'incomplete' | 'incomplete_expired' | 'unpaid',
+    provider_ref: sub.id,
+    current_period_end: new Date((sub as unknown as { current_period_end: number }).current_period_end * 1000).toISOString(),
+    cancel_at_period_end: sub.cancel_at_period_end ?? false,
+    seats: 10,
+  };
+
+  // Update-then-insert rather than upsert. `onConflict: 'family_id'` was never
+  // satisfiable: there is no unique index on subscriptions.family_id, and
+  // Postgres resolves an ON CONFLICT column list by index inference, so this
+  // raised 42P10 at planning time on EVERY delivery — with the error swallowed
+  // into a generic message that named the symptom and not the cause.
+  //
+  // 0285 declares the missing index, but only when no family already holds two
+  // rows; it refuses to delete billing rows to make an index fit. This path is
+  // written so it does not care either way — an update touches however many rows
+  // the family has, and the insert runs only when it has none.
+  const { data: updated, error: updateError } = await supabase
+    .from('subscriptions').update(fields).eq('family_id', familyId).select('id');
+  if (updateError) {
+    console.error('[stripe webhook] Subscription update failed', updateError);
+    throw new Error('Subscription persistence failed');
+  }
+  if (!updated || updated.length === 0) {
+    const { error: insertError } = await supabase.from('subscriptions').insert({ family_id: familyId, ...fields });
+    if (insertError) {
+      console.error('[stripe webhook] Subscription insert failed', insertError);
+      throw new Error('Subscription persistence failed');
+    }
+  }
 
   // Credit a pending referral when a referred family first becomes paid, then
   // fulfil it: both families' Stripe customer balances are credited and the
@@ -149,7 +171,7 @@ export async function POST(req: NextRequest) {
       case 'customer.subscription.created':
       case 'customer.subscription.updated':
       case 'customer.subscription.deleted': {
-        await upsertSubscription(supabase, event.data.object as Stripe.Subscription);
+        await persistSubscription(supabase, event.data.object as Stripe.Subscription);
         break;
       }
 

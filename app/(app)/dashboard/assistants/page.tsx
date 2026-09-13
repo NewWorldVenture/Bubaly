@@ -5,6 +5,7 @@ import { createServer } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
+import { isMissingRelationError } from '@/lib/supabase/errors';
 import { fmtDate } from '@/lib/utils/format';
 import { NewAssistantKey, RevokeAssistantKey } from './controls';
 
@@ -32,6 +33,18 @@ export default async function AssistantsPage() {
     .eq('family_id', ctx.active.familyId)
     .order('created_at', { ascending: false });
   if (error) {
+    // Same reason as the library page: 0283 is applied by a person and the
+    // sidebar entry ships with the deploy, so "refresh and try again" would be
+    // advice that cannot work. Name the migration instead.
+    if (isMissingRelationError(error)) {
+      return (
+        <EmptyState
+          icon={Speaker}
+          title="Assistants aren't switched on yet"
+          description="Connecting a speaker needs database migration 0283_assistant_links.sql. Once an administrator applies it, you can create a key here and link Alexa, Siri, Google Assistant or Home Assistant."
+        />
+      );
+    }
     console.error('[assistants] list read failed', error);
     return <ErrorState message="Your assistant keys could not be read. Refresh and try again." />;
   }
@@ -43,8 +56,8 @@ export default async function AssistantsPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Assistants</h1>
         <p className="mt-1 text-sm text-muted">
-          Connect a speaker or phone assistant and ask Bubaly what is on, what is next, or what you are
-          forgetting — and add things to your lists without opening the app.
+          Connect a speaker or phone assistant and ask Bubaly what is on, what is next, what you are
+          forgetting, or what is on the shopping list — and add things to your lists without opening the app.
         </p>
       </div>
 
@@ -98,8 +111,13 @@ export default async function AssistantsPage() {
                 <p>
                   Point a custom skill&apos;s endpoint at
                   {' '}<code className="text-xs">https://www.bubaly.com/api/assistant/alexa</code> and put the key in
-                  account linking. One intent with an <code className="text-xs">AMAZON.SearchQuery</code> slot is enough —
+                  account linking. One intent with an <code className="text-xs">AMAZON.SearchQuery</code> slot is enough &mdash;
                   Bubaly works out what you meant from the words.
+                </p>
+                <p className="mt-1">
+                  Bubaly checks Amazon&apos;s request signature on every call, so the endpoint only answers
+                  Alexa. Set <code className="text-xs">ALEXA_SKILL_ID</code> to your skill&apos;s application id as
+                  well, and it will only answer <em>your</em> skill.
                 </p>
               </div>
               <div>

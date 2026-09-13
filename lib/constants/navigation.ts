@@ -6,7 +6,7 @@ import {
   UserCog, ClipboardList, Inbox, ScanLine, Monitor, Megaphone,
   MessageCircle, Image as ImageGallery, Users, Bell, ChefHat, ListChecks,
   DollarSign, HardDrive, RefreshCw, Gauge, Command, Bot, Brain, Wallet, Coins, Rss,
-  Truck, Hammer, Briefcase, Languages, Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, MapPin, CalendarRange, Cake, SlidersHorizontal, Boxes, GitBranch, Heart, PawPrint, Plus, Repeat, Rocket, NotebookPen, Focus, PhoneCall, LayoutGrid, HelpCircle, Smartphone, Apple, Utensils, PiggyBank, Receipt, Target, FileText, History, Cloud, Lock, Store, Mic, Wand2, Leaf, Scale, Radar, Milestone, ClipboardCheck, Compass, Headset, Shirt, Clapperboard, PackageSearch, MoonStar, Sparkle, type LucideIcon,
+  Truck, Hammer, Briefcase, Languages, Zap, Network, ShieldAlert, BookHeart, Import, Share2, CloudSun, Car, Pill, Gift, Plane, BookOpen, HeartHandshake, CalendarClock, MapPin, CalendarRange, Cake, SlidersHorizontal, Boxes, GitBranch, Heart, PawPrint, Plus, Repeat, Rocket, NotebookPen, Focus, PhoneCall, LayoutGrid, HelpCircle, Smartphone, Apple, Utensils, PiggyBank, Receipt, Target, FileText, History, Cloud, Lock, Store, Mic, Wand2, Leaf, Scale, Radar, Milestone, ClipboardCheck, Compass, Headset, Shirt, Clapperboard, PackageSearch, MoonStar, Sparkle, Headphones, Speaker, type LucideIcon,
 } from 'lucide-react';
 import { AllServicesIcon } from '@/components/app/icons/all-services-icon';
 
@@ -113,6 +113,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/relationship', label: 'Relationship Helper', icon: HeartHandshake, minLevel: 0 },
       { href: '/dashboard/readiness', label: 'Readiness', icon: Gauge, minLevel: 0 },
       { href: '/dashboard/memories', label: 'Memories', icon: BookHeart, minLevel: 0 },
+      { href: '/dashboard/library', label: 'Library', icon: Headphones, minLevel: 0 },
       { href: '/dashboard/family-tree', label: 'Family Tree', icon: GitBranch, minLevel: 0 },
       { href: '/dashboard/grandparent-portal', label: 'Grandparent Portal', icon: Heart, minLevel: 0 },
       { href: '/dashboard/pets', label: 'Pets', icon: PawPrint, minLevel: 0 },
@@ -205,6 +206,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/conflicts', label: 'AI Conflict Resolution', icon: CalendarClock, minLevel: 2 },
       { href: '/dashboard/autonomous-family-management', label: 'Autonomous AI', icon: Bot, minLevel: 2 },
       { href: '/dashboard/voice', label: 'Voice Control', icon: Mic, minLevel: 0 },
+      { href: '/dashboard/assistants', label: 'Assistants', icon: Speaker, minLevel: 0 },
       { href: '/dashboard/family-digital-twin', label: 'Digital Twin', icon: Brain, minLevel: 2 },
       { href: '/dashboard/family-cfo', label: 'Family CFO', icon: Wallet, minLevel: 2 },
       { href: '/dashboard/family-coo', label: 'Family COO', icon: ClipboardList, minLevel: 2 },
@@ -310,6 +312,7 @@ export const PRIMARY_NAV: NavItem[] = [
     ],
   },
   { href: '/dashboard/memories', label: 'Memories', icon: ImageGallery },
+  { href: '/dashboard/library', label: 'Library', icon: Headphones },
   { href: '/dashboard/messages', label: 'Messages', icon: MessageCircle },
   {
     href: '/dashboard/documents', label: 'Files', icon: FolderLock,
@@ -332,6 +335,7 @@ export const PRIMARY_NAV: NavItem[] = [
       { href: '/dashboard/family/play-dates', label: 'Play Dates', icon: Heart },
     ],
   },
+  { href: '/dashboard/assistants', label: 'Assistants', icon: Speaker },
 ];
 
 /**

@@ -39,11 +39,32 @@ vi.mock('@/lib/supabase/server', () => {
       maybeSingle: async () => ({ data: mocks.rows[table] ?? null, error: mocks.errors[table] ?? null }),
       upsert: async (value: unknown) => { mocks.writes.push({ table, operation: 'upsert', value }); return { error: null }; },
       insert: async (value: unknown) => { mocks.writes.push({ table, operation: 'insert', value }); return { error: null }; },
-      update: (value: unknown) => ({ eq: async () => {
-        mocks.writes.push({ table, operation: 'update', value });
-        if (mocks.syncFailure === 'thrown') throw new Error('private sync write failure');
-        return { error: mocks.syncFailure === 'returned' ? { message: 'private sync write failure' } : null };
-      } }),
+      // A real PostgREST builder is chainable AND awaitable, so `.update().eq()`
+      // and `.update().eq().select()` are both valid. The subscription webhook
+      // needs the second form to learn whether the update matched a row (it
+      // inserts only when it matched none), so the mock has to model both or it
+      // answers 500 to something production handles.
+      update: (value: unknown) => {
+        const settle = () => {
+          mocks.writes.push({ table, operation: 'update', value });
+          if (mocks.syncFailure === 'thrown') throw new Error('private sync write failure');
+          return { error: mocks.syncFailure === 'returned' ? { message: 'private sync write failure' } : null };
+        };
+        const chain = {
+          eq: () => chain,
+          select: async () => {
+            const { error } = settle();
+            // `rows[table]` is this suite's stand-in for "the row exists".
+            return { data: mocks.rows[table] ? [{ id: `${table}-row` }] : [], error };
+          },
+          then: (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) => {
+            let settled;
+            try { settled = settle(); } catch (error) { return Promise.reject(error).then(resolve, reject); }
+            return Promise.resolve(settled).then(resolve, reject);
+          },
+        };
+        return chain;
+      },
     };
     return builder;
   } };
@@ -309,7 +330,11 @@ describe('subscription webhook price history', () => {
   it.each(known)('preserves $slug entitlement for current or historical price $id', async ({ id, slug }) => {
     const response = await webhook(event(id));
     expect(response.status).toBe(200);
-    expect(mocks.writes).toContainEqual(expect.objectContaining({ table: 'subscriptions', operation: 'upsert', value: expect.objectContaining({ plan: slug }) }));
+    // 'update', not 'upsert': the webhook stopped upserting on `family_id`,
+    // which was never a target Postgres could infer (no unique index on that
+    // column), so every delivery had failed at planning time. What this asserts
+    // is unchanged — the family's subscription row carries the mapped plan.
+    expect(mocks.writes).toContainEqual(expect.objectContaining({ table: 'subscriptions', operation: 'update', value: expect.objectContaining({ plan: slug }) }));
     expect(mocks.markProcessed).toHaveBeenCalledTimes(1);
   });
   it('retains custom environment-configured price mapping', async () => {

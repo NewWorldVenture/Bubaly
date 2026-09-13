@@ -3,10 +3,21 @@ import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { hashAssistantToken } from '@/lib/assistant/link-token';
 
-const mocks = vi.hoisted(() => ({ getUser: vi.fn(), admin: vi.fn(), answer: vi.fn(), record: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  getUser: vi.fn(), admin: vi.fn(), answer: vi.fn(), record: vi.fn(),
+  // Amazon's request signature is checked BEFORE the access token, so an
+  // unsigned envelope never reaches the token logic this file is about. These
+  // cases predate that check and would otherwise be asserting a contract the
+  // route no longer has. Stubbed to "verified" so each one still tests what it
+  // was written to test — and the last case below turns it off to pin the new
+  // contract. What a real signature must satisfy is proved end to end against a
+  // freshly minted certificate chain in tests/alexa-request-verification.ts.
+  verifyAlexa: vi.fn(),
+}));
 vi.mock('@supabase/ssr', () => ({ createServerClient: () => ({ auth: { getUser: mocks.getUser } }) }));
 vi.mock('@/lib/supabase/server', () => ({ createServiceClient: mocks.admin }));
 vi.mock('@/lib/assistant/service', async original => ({ ...await original<typeof import('@/lib/assistant/service')>(), answerAssistant: mocks.answer, recordAssistantEvent: mocks.record }));
+vi.mock('@/lib/assistant/alexa-verify', async original => ({ ...await original<typeof import('@/lib/assistant/alexa-verify')>(), verifyAlexaRequest: mocks.verifyAlexa }));
 
 const ORIGIN = 'https://assistant-middleware-fixture.invalid';
 const TOKEN = `bub_asst_${'x'.repeat(43)}`;
@@ -24,6 +35,7 @@ beforeEach(() => {
   mocks.getUser.mockResolvedValue({ data: { user: null }, error: null });
   mocks.answer.mockResolvedValue({ speech: 'Synthetic authorized answer', intent: 'help', outcome: 'answered' });
   mocks.record.mockResolvedValue(undefined);
+  mocks.verifyAlexa.mockResolvedValue({ ok: true });
   linkExists = false; reads = [];
   const client = createClient('https://assistant-db-fixture.invalid', 'synthetic-service-key', {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
@@ -93,6 +105,26 @@ describe('exact assistant middleware authorization boundary', () => {
     const { middleware } = await import('@/middleware');
     expect((await middleware(request(path, undefined, 'GET'))).status).toBe(307);
     expect((await middleware(request(path, undefined, 'DELETE'))).status).toBe(307);
+  });
+  it('refuses an Alexa envelope that cannot be proved to come from Amazon, before any lookup', async () => {
+    // The contract the stub above stands in for. Being routable is what makes
+    // the assistant work; being unforgeable is what makes it safe to be
+    // routable, and the two are decided in that order.
+    mocks.verifyAlexa.mockResolvedValue({ ok: false, reason: 'missing_signature' });
+    const response = await deliver('/api/assistant/alexa', TOKEN);
+    expect(response.status).toBe(403);
+    // No speech either: there is no device on the other end of a forged
+    // request, and a spoken reply would confirm the endpoint is live.
+    expect(await response.text()).toBe('');
+    expect(mocks.admin).not.toHaveBeenCalled();
+    expect(reads).toEqual([]);
+    expect(mocks.answer).not.toHaveBeenCalled();
+    expect(mocks.record).not.toHaveBeenCalled();
+  });
+  it('leaves the token endpoint alone: it has no signature to check', async () => {
+    mocks.verifyAlexa.mockResolvedValue({ ok: false, reason: 'missing_signature' });
+    expect((await deliver('/api/assistant', TOKEN)).status).toBe(401);
+    expect(reads).toHaveLength(1);
   });
   it('preserves the exact POST boundary when Supabase session configuration is missing', async () => {
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', ''); vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', '');
