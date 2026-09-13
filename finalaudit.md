@@ -102,6 +102,7 @@ PRODUCTION READY: NO
 - SEO-004: /pay/<handle>, the Pay-ID resolver a relative follows to send a gift, answered 307 to /login while the /gift/<token> link it forwards to answered 200 — the fifth route in this audit whose only caller is unauthenticated, sitting behind the session boundary.
 - DATA-008: Eighteen useRealtimeQuery call sites across fourteen files rendered an empty state for a failed read — "No bills yet" on a failed bills query, a rewards balance computed from reads that failed, "Nothing on the horizon" from the page whose job is to say what is coming. All 231 call sites are now swept by a guard that requires each to surface its error or be named, with a reason, as deliberately silent.
 - DATA-009: logAudit's try/catch could never fire — PostgREST resolves with { data, error } rather than throwing, so the line written to notice a failed audit write had never run, and all fourteen callers lost their audit rows silently. Ten wallet-audit writes discarded the error the same way, including the credit and debit paths.
+- DATA-009 (sharpest instance): the Guardian escalation route set pushSent = true on the line after that insert, inside the try — so a refused write still recorded push_sent = true in the guardian_escalations row and returned it to the caller. An emergency was recorded as having alerted the parents when nothing was written.
 
 ## Audit Summary
 | ID | Area | Feature / Service | Status | Severity | Tests | Fix | Retest | Notes |
@@ -20467,6 +20468,38 @@ audit row does not return, and nothing writes the insert longhand.
 #### Evidence
 tests/audit-write-failures-are-visible.test.ts; node_modules/@supabase/postgrest-js/dist/index.mjs (shouldThrowOnError default and the catch that converts a fetch failure into a resolved error); PR #531.
 
+#### The sharpest instance: an emergency that recorded the opposite of what happened
+The same shape sat on four notification writes, and one of them did not merely
+stay silent. app/api/guardian/escalate/route.ts:
+
+    try {
+      await supabase.from('notifications').insert({ ... });
+      pushSent = true;
+    } catch { /* non-fatal */ }
+
+The insert resolves rather than throws, so a refused write never reached the
+catch and `pushSent = true` ran anyway. That value is not cosmetic: it is
+written into the guardian_escalations row as push_sent, and returned to the
+caller. An emergency escalation was therefore recorded, permanently, as having
+alerted the parents when nothing had been written — and the audit trail OF the
+emergency asserted it.
+
+This is the same class as the false-empty reads in DATA-008, in the place where
+it costs the most: not "we do not know", but "we did it", written down, about an
+emergency. The three others — the Guardian screening call, an urgent Contact
+Center message, an urgent voicemail — had the silent half only: an urgent
+message reached nobody and left no trace of having failed.
+
+All four now read the error, and the escalation claims the push only on the
+no-error branch, so push_sent means the row landed.
+
+Left deliberately undone and recorded rather than skipped: routing these four
+through the notify() service, which would also give them dedupe, recipient
+resolution and an urgent-flagged quiet-hours bypass. That is the right
+destination and the direction the §21 work established, but it is a larger
+change on Guardian emergency paths that this pass could not exercise end to
+end. Making the failure visible is the part that should not wait behind it.
+
 #### Final Status
 🛠 FIXED + PASS — deployed re-probe not applicable; the failure is observable in server logs rather than over HTTP.
 
@@ -20635,6 +20668,7 @@ Full verification remains incomplete. Confirmed defects appear above; no depende
 - SEO-004: /pay/<handle>, the Pay-ID resolver a relative follows to send a gift, answered 307 to /login while the /gift/<token> link it forwards to answered 200 — the fifth route in this audit whose only caller is unauthenticated, sitting behind the session boundary.
 - DATA-008: Eighteen useRealtimeQuery call sites across fourteen files rendered an empty state for a failed read — "No bills yet" on a failed bills query, a rewards balance computed from reads that failed, "Nothing on the horizon" from the page whose job is to say what is coming. All 231 call sites are now swept by a guard that requires each to surface its error or be named, with a reason, as deliberately silent.
 - DATA-009: logAudit's try/catch could never fire — PostgREST resolves with { data, error } rather than throwing, so the line written to notice a failed audit write had never run, and all fourteen callers lost their audit rows silently. Ten wallet-audit writes discarded the error the same way, including the credit and debit paths.
+- DATA-009 (sharpest instance): the Guardian escalation route set pushSent = true on the line after that insert, inside the try — so a refused write still recorded push_sent = true in the guardian_escalations row and returned it to the caller. An emergency was recorded as having alerted the parents when nothing was written.
 
 ## Production Readiness
 NO
