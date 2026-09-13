@@ -139,7 +139,7 @@ it returns. The Supabase stub is a `Proxy`, not a fixed method list, so adding a
 `.limit()` or `.range()` to either query cannot silently turn the suite into a
 false pass.
 
-## F5 — Production migrations cannot be applied *(High, open — operator)*
+## F5 — Production migrations cannot be applied *(High, operator — credentials)*
 
 The **Supabase production migrations** workflow fails on every push:
 
@@ -172,7 +172,7 @@ production ledger as holding only `0001-0003`, and warns that a missing ledger
 entry does *not* prove the schema is absent (441 tables exist). So the state of
 any given migration in production is genuinely unknown from here.
 
-## F6 — Family email is built but not routed *(Medium, open — operator)*
+## F6 — Family email is built but not routed *(Medium, operator — config)*
 
 The code path is complete and merged (#516, #517): addresses are provisioned at
 onboarding, the reserved namespace is held back, the inbound webhook is reachable,
@@ -423,7 +423,7 @@ module matched on the comment. Found by reverting one page and watching the test
 stay green — precisely the failure F4 is about. The sweep now strips comments
 before scanning, and reverting `/faq` correctly fails and names it.
 
-## F12 — The 404 page ships no server-rendered markup *(Low, recorded)*
+## F12 — The 404 page ships no server-rendered markup *(Low, closed — recorded)*
 
 A dead URL under a public prefix correctly answers **404**, but the response body
 contains no rendered content — only an unresolved React Suspense placeholder:
@@ -468,29 +468,6 @@ so the trade-off is known rather than rediscovered.
 
 ---
 
-## Verified healthy (no action)
-
-| Area | Evidence |
-|---|---|
-| Security headers | CSP with `frame-ancestors 'none'` and `object-src 'none'`, HSTS `max-age=63072000; includeSubDomains`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy` restricting camera/mic/geolocation to self |
-| Public routes | 21 public routes probed; all 200 except the two noted below |
-| `/onboarding` 307 | Correct — gated, redirects to login |
-| `/resources/benchmarks` 404 | **By design.** Gated on an admin publication flag so an unpublished page is indistinguishable from one that never existed. The sitemap already refuses to list it unless published. Not a defect |
-| Page metadata | All 17 public pages carry a real `<title>`, description and canonical. An earlier reading that `/how-it-works` and `/login` had none was **my own extraction bug**, re-checked and withdrawn — both are correct |
-| API boundary | Every public-allowlisted API route refuses an unauthenticated request: contact-center email 401, sms/voice/transcription 401 each (with provider-shaped bodies), assistant 401, alexa 403, stripe webhook 400, forms 422. Nothing answered 200 with data |
-| Production revision | `/api/build-info` reports `f9c4d7a1…`, matching `main` — production is current |
-| Typecheck | `tsc --noEmit` clean |
-| Lint | 0 errors (2 pre-existing `exhaustive-deps` warnings, untouched) |
-| Test suite | 1,150 files / 13,102 tests passing |
-| Security headers | see above — CSP, HSTS, frame/nosniff/referrer/permissions all present |
-| Domain redirects | `http://bubaly.com`, `https://bubaly.com` and `http://www.bubaly.com` all 308 to `https://www.bubaly.com`; trailing slash 308s to the canonical path. An initial `000` reading on the apex was a transient blip — it resolved cleanly on all three retries, so it is not reported as a finding |
-| Accessibility basics | one `<h1>` per page (after F11), all images carry `alt`, `lang` set, skip link present, single `<main>` landmark |
-| Server-rendered content | all 17 public pages ship 6 KB–92 KB of real markup; only the 404 path does not (F12) |
-| Programmatic SEO routes | `/compare`, `/guides`, `/alternatives`, `/audiences`, `/questions`, `/glossary` render from `marketing_pages` and simply have no published rows yet — feature built, content pending. Not a defect |
-| Unresolved work markers | 38 `TODO`/`FIXME` in source; the substantive ones are migration-gated and explicitly marked "owner approval required", i.e. blocked behind F5. None independently closeable |
-| Health endpoint | `status: ok` — env, database ~98ms, auth ~90ms, serviceRole ~508ms |
-| Auth gating | All 20 authenticated segments answer 307 to `/login` when signed out |
-
 ## F14 — Nine sitemap URLs declare themselves non-canonical *(Low, handled elsewhere)*
 
 **Not my find.** A parallel audit session raised it on
@@ -533,6 +510,29 @@ The rest of this branch — robots coverage, the seeded customer stories, the
 missing `<h1>`s, the brand-doubled titles — does not overlap #526 at all.
 
 ---
+
+## Verified healthy (no action)
+
+| Area | Evidence |
+|---|---|
+| Security headers | CSP with `frame-ancestors 'none'` and `object-src 'none'`, HSTS `max-age=63072000; includeSubDomains`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy` restricting camera/mic/geolocation to self |
+| Public routes | 21 public routes probed; all 200 except the two noted below |
+| `/onboarding` 307 | Correct — gated, redirects to login |
+| `/resources/benchmarks` 404 | **By design.** Gated on an admin publication flag so an unpublished page is indistinguishable from one that never existed. The sitemap already refuses to list it unless published. Not a defect |
+| Page metadata | All 17 public pages carry a real `<title>`, description and canonical. An earlier reading that `/how-it-works` and `/login` had none was **my own extraction bug**, re-checked and withdrawn — both are correct |
+| API boundary | Every public-allowlisted API route refuses an unauthenticated request: contact-center email 401, sms/voice/transcription 401 each (with provider-shaped bodies), assistant 401, alexa 403, stripe webhook 400, forms 422. Nothing answered 200 with data |
+| Production revision | `/api/build-info` reports `f9c4d7a1…`, matching `main` — production is current |
+| Typecheck | `tsc --noEmit` clean |
+| Lint | 0 errors (2 pre-existing `exhaustive-deps` warnings, untouched) |
+| Test suite | 1,150 files / 13,102 tests passing |
+| Security headers | see above — CSP, HSTS, frame/nosniff/referrer/permissions all present |
+| Domain redirects | `http://bubaly.com`, `https://bubaly.com` and `http://www.bubaly.com` all 308 to `https://www.bubaly.com`; trailing slash 308s to the canonical path. An initial `000` reading on the apex was a transient blip — it resolved cleanly on all three retries, so it is not reported as a finding |
+| Accessibility basics | one `<h1>` per page (after F11), all images carry `alt`, `lang` set, skip link present, single `<main>` landmark |
+| Server-rendered content | all 17 public pages ship 6 KB–92 KB of real markup; only the 404 path does not (F12) |
+| Programmatic SEO routes | `/compare`, `/guides`, `/alternatives`, `/audiences`, `/questions`, `/glossary` render from `marketing_pages` and simply have no published rows yet — feature built, content pending. Not a defect |
+| Unresolved work markers | 38 `TODO`/`FIXME` in source; the substantive ones are migration-gated and explicitly marked "owner approval required", i.e. blocked behind F5. None independently closeable |
+| Health endpoint | `status: ok` — env, database ~98ms, auth ~90ms, serviceRole ~508ms |
+| Auth gating | All 20 authenticated segments answer 307 to `/login` when signed out |
 
 ## What remains, and who owns it
 
