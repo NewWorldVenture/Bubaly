@@ -59,7 +59,11 @@ const ALL = pageRoutes();
 const OUTSIDE_APP_SHELL = ALL.filter((p) => !p.groups.includes('(app)')).map((p) => p.route).sort();
 
 describe('every page meant for signed-out visitors is past the middleware', () => {
-  const middleware = readFileSync('middleware.ts', 'utf8');
+// The public allowlist moved to lib/auth/route-access.ts when middleware
+// gained a PROTECTED list (so an unrouted path 404s instead of being sent
+// to /login). Both files are read here: the routing LOGIC is still in
+// middleware.ts, the allowlist entries are in the other.
+  const middleware = readFileSync('middleware.ts', 'utf8') + readFileSync('lib/auth/route-access.ts', 'utf8');
   const literal = /const PUBLIC = \[([\s\S]*?)\];/.exec(middleware);
 
   // Comment lines first: the list documents which neighbours were left OFF it
@@ -127,7 +131,7 @@ describe('every page meant for signed-out visitors is past the middleware', () =
 // own authentication never runs. That is exactly how the Contact Center's four
 // inbound webhooks came to be unreachable while looking correctly written.
 describe('every self-authenticating API route is past the middleware', () => {
-  const middleware = readFileSync('middleware.ts', 'utf8');
+  const middleware = readFileSync('middleware.ts', 'utf8') + readFileSync('lib/auth/route-access.ts', 'utf8');
   const literal = /const PUBLIC = \[([\s\S]*?)\];/.exec(middleware);
   const entries = (literal?.[1] ?? '')
     .split('\n')
