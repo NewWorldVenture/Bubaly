@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import robots, { DISALLOWED_APP_PATHS } from '@/app/robots';
+import robots from '@/app/robots';
+import { DISALLOWED_PREFIXES } from '@/lib/marketing/sitemap-urls';
 
 /**
  * Every segment of the authenticated route group. These are the surfaces that
@@ -28,12 +29,12 @@ const AUTHENTICATED_OUTSIDE_APP_GROUP = ['/library', '/pay', '/onboarding', '/ap
 
 describe('robots disallows every authenticated surface', () => {
   it('covers each segment of the authenticated route group', () => {
-    const missing = authenticatedSegments().filter((seg) => !DISALLOWED_APP_PATHS.includes(seg as never));
+    const missing = authenticatedSegments().filter((seg) => !DISALLOWED_PREFIXES.includes(seg as never));
     expect(missing).toEqual([]);
   });
 
   it('covers the authenticated surfaces that live outside that group', () => {
-    const missing = AUTHENTICATED_OUTSIDE_APP_GROUP.filter((p) => !DISALLOWED_APP_PATHS.includes(p as never));
+    const missing = AUTHENTICATED_OUTSIDE_APP_GROUP.filter((p) => !DISALLOWED_PREFIXES.includes(p as never));
     expect(missing).toEqual([]);
   });
 
@@ -41,8 +42,22 @@ describe('robots disallows every authenticated surface', () => {
     // /admin is 80 pages including the super-admin console. It was the most
     // consequential omission, so it gets its own guard rather than relying on
     // the directory sweep to keep covering it.
-    expect(DISALLOWED_APP_PATHS).toContain('/admin');
+    expect(DISALLOWED_PREFIXES).toContain('/admin');
     expect(robots().rules).toMatchObject({ disallow: expect.arrayContaining(['/admin']) });
+  });
+
+  it('uses prefix matching that cannot swallow a public sibling route', () => {
+    // The sitemap reads this same list and refuses any URL under it, so a
+    // looser `startsWith(p)` would silently drop the PUBLIC /family-display
+    // from both robots and the sitemap. The matcher requires an exact match or
+    // a `/`-delimited prefix; this pins that.
+    const matches = (target: string) =>
+      DISALLOWED_PREFIXES.some((p) => target === p || target.startsWith(`${p}/`));
+    expect(matches('/family-display')).toBe(false);
+    expect(matches('/family')).toBe(true);
+    expect(matches('/family/members')).toBe(true);
+    expect(matches('/display')).toBe(true);
+    expect(matches('/pricing')).toBe(false);
   });
 
   it('still allows the public marketing site', () => {
@@ -61,6 +76,6 @@ describe('robots disallows every authenticated surface', () => {
   });
 
   it('has no duplicate entries', () => {
-    expect(DISALLOWED_APP_PATHS).toHaveLength(new Set(DISALLOWED_APP_PATHS).size);
+    expect(DISALLOWED_PREFIXES).toHaveLength(new Set(DISALLOWED_PREFIXES).size);
   });
 });

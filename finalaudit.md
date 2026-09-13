@@ -5,10 +5,12 @@ what remains — with an owner for every remaining item. Every finding here was
 reproduced against the live site or the real code path before being written
 down; nothing is inferred from a filename or a comment.
 
-**Audit status: complete.** Fourteen findings. Seven fixed and shipped, one
-disproved and withdrawn, five closed as decisions or operator actions with the
-evidence and the next step recorded against each. Nothing is left unexamined or
-unassigned.
+**Audit status: complete.** Fourteen findings. **Ten are fixed in code** — seven
+on this branch, and F1, F3 and F14 on `main` via #526, whose sitemap
+implementation superseded mine and which I withdrew in its favour. One finding
+was disproved and withdrawn after re-checking. **Three remain**, each closed with
+a decision and an owner: two need credentials this session cannot hold (F5, F6)
+and one needs a pricing call (F7). Nothing is left unexamined or unassigned.
 
 - **Audit opened:** 2026-09-13
 - **Audit closed:** 2026-09-13
@@ -21,9 +23,9 @@ unassigned.
 
 | # | Finding | Severity | Status |
 |---|---|---|---|
-| F1 | Sitemap advertised 435 URLs that answer 404 (29% of it) | High | **Fixed** |
-| F2 | `robots.txt` omitted 20 authenticated surfaces, `/admin` among them | Medium | **Fixed** |
-| F3 | Homepage published twice in the sitemap (`…com` and `…com/`) | Low | **Fixed** |
+| F1 | Sitemap advertised 435 URLs that answer 404 (29% of it) | High | **Fixed on main by #526**; my implementation withdrawn in its favour |
+| F2 | `robots.txt` omitted 20 authenticated surfaces, `/admin` among them | Medium | **Fixed** — and #526 did *not* cover this |
+| F3 | Homepage published twice in the sitemap (`…com` and `…com/`) | Low | **Fixed on main by #526** |
 | F4 | The test named for F1's property only grepped source | Medium | **Fixed** |
 | F5 | Supabase production migration workflow cannot authenticate | High | **Operator — credentials** |
 | F6 | Family email routing not configured (`CONTACT_CENTER_INBOUND_SECRET`, MX) | Medium | **Operator — config** |
@@ -34,7 +36,7 @@ unassigned.
 | F11 | Five public pages had no `<h1>` at all | Medium | **Fixed** |
 | F12 | The 404 page ships no server-rendered markup | Low | **Closed — recorded, not worth the fix** |
 | F13 | An unknown top-level path redirects to login instead of 404 | Low | **By design — no change** |
-| F14 | Sitemap lists 9 `/blog?category=` URLs whose canonical points at `/blog` | Low | **Open — handled in #526, not duplicated here** |
+| F14 | Sitemap lists 9 `/blog?category=` URLs whose canonical points at `/blog` | Low | **Fixed on main by #526** |
 
 ---
 
@@ -468,7 +470,7 @@ so the trade-off is known rather than rediscovered.
 
 ---
 
-## F14 — Nine sitemap URLs declare themselves non-canonical *(Low, handled elsewhere)*
+## F14 — Nine sitemap URLs declare themselves non-canonical *(Low, fixed on main by #526)*
 
 **Not my find.** A parallel audit session raised it on
 [#526](https://github.com/NewWorldVenture/Bubaly/pull/526); I verified it
@@ -508,6 +510,47 @@ F1 actually had.
 
 The rest of this branch — robots coverage, the seeded customer stories, the
 missing `<h1>`s, the brand-doubled titles — does not overlap #526 at all.
+
+---
+
+## Reconciliation with #526 — how the sitemap findings actually landed
+
+#526 merged to `main` as `61ad4bb0` while this branch was open, and it rewrote
+both files this audit touched. The overlap was predicted and written down before
+it happened; this records the outcome.
+
+**F1 and F3: #526's implementation won, and mine was withdrawn.** Its rule is
+stronger than the one I shipped. I filtered the registry's `/blog` rows through
+the same predicate the renderer uses; #526 observes that the `marketing_pages`
+registry is a **path overlay** — a row decorates a path, it is not a claim that
+the path resolves — and so lets a registry row mint a URL only for a prefix the
+registry itself renders. `/blog` is served from `blog_posts`, so no registry row
+can publish a `/blog` URL at all.
+
+That **subsumes** the seed filter rather than duplicating it: if none can
+publish a blog URL, none can publish a wrong one. My `isAdvertisablePlatformPath`
+and `canonicalSitemapUrl` are deleted; `canonicalUrl()` and
+`isRegistryRenderedPath()` do the work, and also cover percent-encoding, query
+strings and fragments that mine did not.
+
+One of my tests asserted the behaviour I had built — that a *real* blog path from
+the registry is still advertised. Under #526 that is deliberately false. The case
+is rewritten to assert the new rule and to say why it inverted, rather than being
+deleted.
+
+**F2 was not covered by #526, and still is not.** It kept the four-entry list
+(`/dashboard`, `/onboarding`, `/api`, `/auth`). The 20 missing authenticated
+surfaces are still this branch's finding, and the fix is now **better placed than
+where I first put it**: #526 moved the disallow list into
+`lib/marketing/sitemap-urls.ts` and made `canonicalUrl()` refuse any URL beneath
+it, so robots and the sitemap cannot contradict each other. Expanding that shared
+constant to all 24 surfaces therefore fixes robots **and** stops the sitemap from
+ever listing them.
+
+That coupling introduced one hazard worth pinning: the matcher is `=== p` or
+`startsWith(p + '/')`. A looser `startsWith(p)` would now drop the **public**
+`/family-display` from both robots and the sitemap, because `/family` and
+`/display` are both on the list. Verified empirically and pinned by its own test.
 
 ---
 

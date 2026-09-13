@@ -80,7 +80,12 @@ describe('marketing sitemap closed loop', () => {
   });
 
   it('emits public landing-page URLs without making sitemap generation fatal', () => {
-    expect(source).toContain('`' + '${SITE_URL}/lp/${encodeURIComponent(page.slug)}`');
+    // Minted through canonicalUrl(), which percent-encodes each segment and
+    // rejects anything that cannot be a canonical, indexable address. It is the
+    // only thing in this file allowed to produce a <loc>.
+    expect(source).toContain("import { canonicalUrl, isRegistryRenderedPath } from '@/lib/marketing/sitemap-urls'");
+    expect(source).toContain('canonicalUrl(`/lp/${page.slug}`)');
+    expect(source).not.toContain('${SITE_URL}');
     expect(source).toContain("console.error('[sitemap] published landing-page read failed'");
     expect(source).toContain('const byUrl = new Map');
     expect(source).toContain('return [...byUrl.values()]');
@@ -117,7 +122,16 @@ describe('marketing sitemap closed loop', () => {
     expect(urls.filter((u) => u.includes('seed-blog_posts'))).toEqual([]);
   });
 
-  it('still advertises real blog paths that come from the platform table', async () => {
+  it('advertises no blog path from the registry at all, real or seeded', async () => {
+    // This case previously asserted the opposite, and the opposite was my
+    // design: filter the registry's /blog rows by the same predicate the
+    // renderer uses. #526 replaced it with a stronger rule — the registry is a
+    // path OVERLAY, not proof that a path resolves, so it may only mint a URL
+    // for a prefix it actually renders, and /blog is served from blog_posts.
+    //
+    // That subsumes the seed filter rather than duplicating it: no registry row
+    // can publish a /blog URL, so none can publish a wrong one. Blog entries
+    // reach the sitemap through getAllPosts(), which filters via publicRows.
     platformRows = [{
       path: '/blog/a-simple-system-for-a-calm-approach-to-holiday-hosting',
       updated_at: '2026-09-01T00:00:00.000Z',
@@ -126,7 +140,7 @@ describe('marketing sitemap closed loop', () => {
 
     const urls = await runSitemap();
 
-    expect(urls).toContain('https://www.bubaly.com/blog/a-simple-system-for-a-calm-approach-to-holiday-hosting');
+    expect(urls.filter((u) => u.includes('/blog/'))).toEqual([]);
   });
 
   it('does not publish the homepage twice when a platform row stores the root as "/"', async () => {

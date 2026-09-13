@@ -120,7 +120,7 @@ describe('/resources/benchmarks — the public page', () => {
   it('is in the sitemap only while published', () => {
     expect(sitemap).toContain("import { readBenchmarksPublication } from '@/lib/network/benchmarks-server'");
     expect(sitemap).toContain('if (benchmarks.ok && benchmarks.published) {');
-    expect(sitemap).toContain('`${SITE_URL}/resources/benchmarks`');
+    expect(sitemap).toContain("canonicalUrl('/resources/benchmarks')");
     expect(sitemap).toContain('...benchmarkEntries');
   });
 
