@@ -6,7 +6,7 @@ They ran over **different surfaces** and neither supersedes the other:
 
 | Pass | Surface | Findings | Numbering |
 |---|---|---|---|
-| **A — Public surface** | marketing pages, SEO and crawler contract, robots/sitemap, headers, titles, i18n payload, plan entitlement, role entitlement | 20 | `F1`–`F20` |
+| **A — Public surface** | marketing pages, SEO and crawler contract, robots/sitemap, headers, titles, i18n payload, plan entitlement, role entitlement | 21 | `F1`–`F21` |
 | **B — Data layer** | Supabase reads and writes, RLS and grant boundaries, nightly jobs, the build/data-cache boundary, calendar-day correctness, query plans, money concurrency, and the audit's own probes | 19 | `F-001`–`F-019` |
 
 **Where they touch, stated plainly.** Only two places:
@@ -33,19 +33,20 @@ Everything else is disjoint.
 
 ---
 
-# Pass A — Public surface (F1–F20)
+# Pass A — Public surface (F1–F21)
 
 Full audit of bubaly.com: what was checked, what was found, what was fixed, and
 what remains — with an owner for every remaining item. Every finding here was
 reproduced against the live site or the real code path before being written
 down; nothing is inferred from a filename or a comment.
 
-**Audit status: reopened, then complete again.** Twenty findings, and the
+**Audit status: reopened, then complete again.** Twenty-one findings, and the
 arithmetic stated exactly rather than approximately:
 
 | | |
 |---|---|
 | **Fixed in code** | **14** — F2, F4, F7, F8, F10, F11, F15, F16, F17, F18, F20 from this audit; F1, F3, F14 on `main` via #526, whose sitemap implementation superseded mine and which I withdrew in its favour |
+| **Written, proven, not yet live** | **1** — F21's durable half. The trigger can only land as a migration, and the migration workflow is F5's blocker; CI replays and probes it on every pull request. Its client-side half — the app no longer deciding status, decider or price — *is* live |
 | **Closed without a code change** | **4** — F9 (a decision, with the design and the numbers recorded), F12 (recorded; the fix is not worth its risk), F13 (correct as built — fail-closed routing), F19 (a pricing decision the owner has to make; the numbers are below) |
 | **Blocked on credentials** | **2** — F5 (Supabase access token *and* the ledger baseline gate) and F6 (`CONTACT_CENTER_INBOUND_SECRET` + MX records) |
 
@@ -91,6 +92,7 @@ Nothing is left unexamined or unassigned.
 | F18 | 20 endpoints behind feature-gated pages had no entitlement check — the fetch was the bypass, mostly on the surface that costs money per call | High | **Fixed** |
 | F19 | `AI_MONTHLY_ALLOWANCE` is enforced on 4 of the 39 AI routes; 35 run unmetered | Medium | **Open — a pricing decision, recorded** |
 | F20 | A child could delete any chore on the family's board, and mint chores for a sibling | High | **Fixed** |
+| F21 | A child could self-approve a reward redemption — the third decision forgery, and the only one left unguarded | High | **Half fixed and live; the durable half awaits the F5 operator** |
 
 ---
 
@@ -950,6 +952,92 @@ looked at:
 
 Recording what the sweep cleared matters as much as what it caught: three of the
 four plausible instances were already right.
+
+## F21 — A child could grant themselves a reward *(High; half fixed and live, half awaiting the operator)*
+
+F20 found one gap the team's own `0222`/`0223` work had left. Looking for the
+rest of that family found the other, and it is the more direct of the two.
+
+`reward_redemptions` shipped in `0028` with a single policy —
+`FOR ALL … USING is_family_member(family_id) WITH CHECK is_family_member(family_id)`
+— and no trigger. Both of its write paths were **direct browser writes** that
+chose `status`, `decided_by` *and* `cost_points` client-side:
+
+| Path | Write |
+|---|---|
+| `chores-module.tsx` → `redeem()` | insert; `status` = `'approved'` when the client believed the member was a manager |
+| `rewards-module.tsx` → `requestReward()` | insert; the same choice |
+| `rewards-module.tsx` → `decide()` | update; `status` straight from the caller |
+
+**The choice was the client's.** A child could insert a redemption already
+marked `approved` with `decided_by` pointing at themselves, or approve one
+sitting in the queue — and set `cost_points` to whatever they liked in the same
+request.
+
+This is the **third** of three decision surfaces in the chores and rewards
+economy. `0222` closed the submission forge, `0223` the assignment-status forge,
+and this was the only one left open. Like them it **mints no money**: the points
+economy is separate from the wallet, which is manager-only under `0217`. It is
+an accountability forgery, in the exact words `0223`'s own header uses.
+
+### The half that ships without the migration
+
+Both write paths go through `app/(app)/dashboard/rewards/actions.ts`. The role is
+resolved from the session rather than asserted by the caller, `decided_by` is the
+session's own member, and `reward_title` and `cost_points` are read from the
+reward instead of accepted from the request.
+
+That last one is the quieter half of the finding: `cost_points` is a deliberate
+snapshot so history survives the reward being edited (`0028`), and a snapshot the
+spender supplies is not a snapshot — a child could ask for an expensive reward at
+a cost of zero points, and the balance the board renders would never know.
+
+Reads stay in the client. Both screens subscribe to the table through
+`useRealtimeQuery`, which is the point of a live board; it is the writes that had
+to move, and the test forbids those specifically rather than any mention of the
+table.
+
+This does **not** close the finding. `reward_redemptions` is reachable from
+PostgREST whatever these actions do, so the forgery is now a hand-crafted API
+call rather than a browser console. A smaller door, not a shut one.
+
+### The half that shuts it, and cannot be applied
+
+Migration `0295` is the sibling of `0222` and `0223`:
+
+- **Guarded**: `approved`, `rejected`, `fulfilled` — the three a parent decides.
+- **Left to the member**: `requested` and `pending` (asking), and `cancelled`
+  (withdrawing your own ask, which needs no parent). A guard that blocked those
+  would break the queue it exists to protect.
+- **Allowed through**: the service role, an unauthenticated migration or seed,
+  and `can_manage_family()`.
+
+No legitimate flow breaks: the only code that sets a guarded status is a
+manager's own click in the two modules above, and the service role.
+
+### Proven before it was written down
+
+`docs/audit/reward-redemption-decision-check.sql` runs as a real `authenticated`
+session under RLS and asserts **both** directions — child insert-as-approved,
+approve-from-queue and mark-fulfilled all refused; child request and child cancel
+allowed; parent approve and fulfil allowed.
+
+It was run against a local PostgreSQL 16 with the trigger present (six assertions
+pass) and with it dropped, where it fails on the first case: *"a child inserted
+an APPROVED reward redemption"*. CI replays it against the fully bootstrapped
+schema on every pull request — `run-probes.sh` globs rather than lists, so it
+runs without anyone registering it.
+
+### What is not done
+
+**The migration is not applied, and cannot be.** That is F5: the workflow cannot
+authenticate and the ledger baseline is unrepaired, in that order. Until an
+operator clears both, the direct-to-PostgREST forgery is live in production and
+the guard sits in the repository, replayed and probed by CI, waiting.
+`docs/PENDING_PROD_MIGRATIONS.md` records it alongside the others, so it is
+visible rather than inferred from the absence of a row.
+
+This is the one finding in this audit whose fix I could write but not land.
 
 ## Reconciliation with #526 — how the sitemap findings actually landed
 

@@ -501,10 +501,11 @@ passed; production application of the atomic `0240-0254` release remains pending
 ## Migrations added since this document's stated baseline (2026-09-12)
 
 The status line at the top of this file is dated **2026-09-05** against main
-`01881fb2`. **Thirty-one** migrations have landed since, `0255` through `0285`, and
-none of them appear anywhere above. Nothing here authorizes applying any of
-them; this section exists so the gap is visible rather than inferred from the
-absence of a row.
+`01881fb2`. **Seventy-one** migration files have landed since, `0255` through
+`0295`, and none of them appear anywhere above. (This read "thirty-one, `0255`
+through `0285`" until 2026-09-13; the range had simply grown past the sentence.)
+Nothing here authorizes applying any of them; this section exists so the gap is
+visible rather than inferred from the absence of a row.
 
 The same caution as the rest of this document applies without exception: a
 missing ledger entry does not establish that the schema is absent, and a local
@@ -541,6 +542,49 @@ CI migration replay in the way production would exercise it:
   `ON CONFLICT` column list from an expression index, so every feed ingest
   failed with `42P10` at planning time. `0285` adds a stored generated column
   and moves the index onto it; apply `0285` with `0284` (see below).
+
+### `0295` closes the last of three self-approval forgeries — unapplied
+
+Authored 2026-09-13 during the Pass A audit (finding **F21**) and **not
+applied**: applying it needs the same credentialed operator as the two steps at
+the top of this document, in the same order.
+
+`reward_redemptions` shipped in `0028` with a single policy —
+`FOR ALL … USING is_family_member(family_id) WITH CHECK is_family_member(family_id)`
+— and no trigger. Both of its write paths are **direct browser writes** that
+choose `status` and `decided_by` client-side:
+
+| Path | Write |
+|---|---|
+| `components/modules/chores-module.tsx` → `redeem()` | insert, `status` = 'approved' when the client believes the member is a manager |
+| `components/modules/rewards-module.tsx` → `requestReward()` | insert, same choice |
+| `components/modules/rewards-module.tsx` → `decide()` | update, `status` straight from the caller |
+
+The choice was the client's. A child calling PostgREST directly could insert a
+redemption already marked `approved` with `decided_by` pointing at themselves,
+or update one sitting in the queue — self-granting a reward no parent agreed to.
+
+This is the **third** of three decision surfaces in the chores and rewards
+economy. `0222` closed the submission forge and `0223` the assignment-status
+forge; this is their sibling and the only one still open. Like them it **mints
+no money** — the points economy is separate from the wallet, which is
+manager-only under `0217` — so it is an accountability forgery rather than a
+financial one.
+
+Guarded: `approved`, `rejected`, `fulfilled`. Left to the member: `requested`
+and `pending` (asking) and `cancelled` (withdrawing your own ask, which needs no
+parent). No legitimate flow breaks: the only code that sets a guarded status is
+a manager's own click in the two modules above, and the service role.
+
+**Proven before it was written down.** `docs/audit/reward-redemption-decision-check.sql`
+runs as a real `authenticated` session under RLS and asserts both directions —
+child insert-as-approved, approve-from-queue and mark-fulfilled all blocked;
+child request and cancel allowed; parent approve and fulfil allowed. It was run
+against a local PG16 with the trigger present (passes) and absent (fails on the
+first case). CI replays it against the fully bootstrapped schema on every pull
+request, because `run-probes.sh` globs rather than lists.
+
+Until it is applied, the forgery is live in production.
 
 ### `0285` repairs five upserts that could never have run
 
