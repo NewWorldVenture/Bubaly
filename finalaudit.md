@@ -54,9 +54,9 @@ worker has audited yet is recorded as *not yet audited*, never as "clean" —
 | Public surface, SEO, entitlement, child sign-in | Pass A (F1–F22) | deep |
 | Data layer, RLS, grants, cron, query plans, money concurrency | Pass B (F-001–F-020) | deep |
 | Architecture / integration seams | Claude-1 | in progress — config contract, cron auth, service-role boundary done |
-| Frontend / UI / responsive / accessibility | Claude-2 | **not yet started** |
-| Backend / API / auth / security | Claude-3 | **not yet started** |
-| QA / flows / performance / edge cases | Claude-4 | **not yet started** |
+| Frontend / UI / responsive / accessibility | Claude-2 | **running** |
+| Backend / API / auth / security | Claude-3 | **running** |
+| QA / flows / performance / edge cases | Claude-4 | **running** |
 
 # Executive Summary
 
@@ -151,6 +151,7 @@ highest-yield check in this repository.
 | F14 | Nine sitemap URLs declare themselves non-canonical | fixed by #526 |
 | **F13** | Unknown top-level paths redirect to login | **SUPERSEDED — see below** |
 | CLAUDE-1 | The service-role boundary was real but inherited from an incidental `next/headers` import rather than declared | fixed (hardening) |
+| CLAUDE-1 | Mobile imported from a folder Metro does not watch; safe only because the import is type-only, and no CI job bundles the app | fixed (guard added) |
 
 # Architecture
 

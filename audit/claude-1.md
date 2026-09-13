@@ -370,3 +370,29 @@ mine was wrong before it was right; each one is now a test instead.
 `mobile/node_modules` with `disableHierarchicalLookup`, so the app cannot walk up
 into the web app's different React version. `shared/` is genuinely shared by both
 consumers. Both were checked and are correct.
+
+### [CLAUDE-1][VERIFIED][ARCHITECTURE] Platform and security-header configuration — examined, sound
+
+Recorded because an audit that lists only defects says nothing about what was
+looked at, and the next worker needs to know which stones are already turned.
+
+- **`next.config.mjs` headers.** `X-Content-Type-Options: nosniff`,
+  `Referrer-Policy: strict-origin-when-cross-origin`, a `Permissions-Policy`
+  scoped to `self` for camera/microphone/geolocation, and HSTS at two years with
+  `includeSubDomains`. `preload` is deliberately omitted, with the reason stated
+  — it is an irreversible commitment for every subdomain. Correct call.
+- **CSP** is composed in `lib/security/csp.mjs`, and `frame-ancestors` mirrors the
+  `X-Frame-Options` split so the two headers cannot disagree about who may frame
+  a page.
+- **`'unsafe-eval'` is dev-only** — `isProduction ? [] : ["'unsafe-eval'"]`.
+  `'unsafe-inline'` remains in `script-src`, documented: Next hydrates through
+  inline scripts and there is no nonce pipeline. That is a real, acknowledged
+  trade-off rather than an oversight.
+- **The test is load-bearing, verified rather than assumed.** Planting
+  `'unsafe-eval'` unconditionally into the production policy fails
+  `tests/csp-header.test.ts` — 1 failed, 6 passed. Restored, 7 pass.
+- **`vercel.json` carries only `crons`** — no header or redirect layer that could
+  silently contradict `next.config.mjs`. One place to read, which is the right
+  shape.
+
+No finding. Status: VERIFIED.

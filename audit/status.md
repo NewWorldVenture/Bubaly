@@ -62,6 +62,7 @@ FILES-TOUCHED:
   - lib/health/status.ts, app/api/health/route.ts, tests/health-feature-secrets.test.ts
   - app/api/cron/{feedback-github-sync,library-feeds,automations,marketing-social,marketing}/route.ts
   - tests/cron-failed-runs-are-visible.test.ts
+  - tests/mobile-imports-stay-bundleable.test.ts
   - supabase/migrations/* (idempotency guards — landed on main, do not re-edit)
 BLOCKERS:
   - F-001: applying migrations to production needs operator credentials. Agents must not
