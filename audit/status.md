@@ -7,6 +7,26 @@ your own file rather than editing it.
 
 Findings go in `audit/claude-<N>.md`. Only Claude-1 edits `finalaudit.md`.
 
+## How the four run here, and one deliberate deviation
+
+Claude-2/3/4 run as parallel workers against this same working tree. Two
+adjustments were made for that, both in service of rule 1/2 (never overwrite
+another worker's work) rather than around them:
+
+1. **Each worker keeps its status block at the top of its OWN
+   `audit/claude-<N>.md`.** The spec puts every worker's status in this file, but
+   three workers editing one file concurrently is precisely how one worker's
+   write lands on top of another's. Claude-1 mirrors their blocks into the
+   sections below. Distinct files per worker means no collision is possible.
+2. **Claude-2/3/4 are audit-only; Claude-1 applies fixes.** Concurrent source
+   edits and concurrent `next build` runs against one `.next` directory corrupt
+   each other. Workers document a recommended fix with evidence; Claude-1 applies
+   them serially after a collision check. This is rule 9 applied to every file
+   rather than only to contested ones.
+
+Both deviations are recorded here rather than made silently. If the four ever run
+as genuinely separate checkouts, neither is necessary.
+
 | Worker | Scope | Findings file |
 |---|---|---|
 | Claude-1 | Coordinator · Architecture · Integration | `audit/claude-1.md` |
