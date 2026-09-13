@@ -6,7 +6,7 @@ They ran over **different surfaces** and neither supersedes the other:
 
 | Pass | Surface | Findings | Numbering |
 |---|---|---|---|
-| **A — Public surface** | marketing pages, SEO and crawler contract, robots/sitemap, headers, titles, i18n payload, plan entitlement, role entitlement | 21 | `F1`–`F21` |
+| **A — Public surface** | marketing pages, SEO and crawler contract, robots/sitemap, headers, titles, i18n payload, plan entitlement, role entitlement, child sign-in | 22 | `F1`–`F22` |
 | **B — Data layer** | Supabase reads and writes, RLS and grant boundaries, nightly jobs, the build/data-cache boundary, calendar-day correctness, query plans, money concurrency, and the audit's own probes | 19 | `F-001`–`F-019` |
 
 **Where they touch, stated plainly.** Only two places:
@@ -33,19 +33,19 @@ Everything else is disjoint.
 
 ---
 
-# Pass A — Public surface (F1–F21)
+# Pass A — Public surface (F1–F22)
 
 Full audit of bubaly.com: what was checked, what was found, what was fixed, and
 what remains — with an owner for every remaining item. Every finding here was
 reproduced against the live site or the real code path before being written
 down; nothing is inferred from a filename or a comment.
 
-**Audit status: reopened, then complete again.** Twenty-one findings, and the
+**Audit status: reopened, then complete again.** Twenty-two findings, and the
 arithmetic stated exactly rather than approximately:
 
 | | |
 |---|---|
-| **Fixed in code** | **14** — F2, F4, F7, F8, F10, F11, F15, F16, F17, F18, F20 from this audit; F1, F3, F14 on `main` via #526, whose sitemap implementation superseded mine and which I withdrew in its favour |
+| **Fixed in code** | **15** — F2, F4, F7, F8, F10, F11, F15, F16, F17, F18, F20, F22 from this audit; F1, F3, F14 on `main` via #526, whose sitemap implementation superseded mine and which I withdrew in its favour |
 | **Written, proven, not yet live** | **1** — F21's durable half. The trigger can only land as a migration, and the migration workflow is F5's blocker; CI replays and probes it on every pull request. Its client-side half — the app no longer deciding status, decider or price — *is* live |
 | **Closed without a code change** | **4** — F9 (a decision, with the design and the numbers recorded), F12 (recorded; the fix is not worth its risk), F13 (correct as built — fail-closed routing), F19 (a pricing decision the owner has to make; the numbers are below) |
 | **Blocked on credentials** | **2** — F5 (Supabase access token *and* the ledger baseline gate) and F6 (`CONTACT_CENTER_INBOUND_SECRET` + MX records) |
@@ -93,6 +93,7 @@ Nothing is left unexamined or unassigned.
 | F19 | `AI_MONTHLY_ALLOWANCE` is enforced on 4 of the 39 AI routes; 35 run unmetered | Medium | **Open — a pricing decision, recorded** |
 | F20 | A child could delete any chore on the family's board, and mint chores for a sibling | High | **Fixed** |
 | F21 | A child could self-approve a reward redemption — the third decision forgery, and the only one left unguarded | High | **Half fixed and live; the durable half awaits the F5 operator** |
+| F22 | A child's username was matched as a LIKE **pattern**, so every wildcard spelling was a fresh brute-force budget against their PIN | High | **Fixed** |
 
 ---
 
@@ -1038,6 +1039,72 @@ the guard sits in the repository, replayed and probed by CI, waiting.
 visible rather than inferred from the absence of a row.
 
 This is the one finding in this audit whose fix I could write but not land.
+
+## F22 — A child's username was matched as a pattern *(High, fixed)*
+
+`lib/auth/child-throttle.ts` states the stakes in its own header: *"a 4-digit
+PIN is only 10,000 combinations and kid usernames are guessable (suggested from
+the display name), so unthrottled sign-in is a real account-takeover risk."* The
+throttle it implements is the control that makes a 4-digit PIN survivable — five
+failures per username per fifteen minutes, then an escalating lockout.
+
+Sign-in resolved the account with `.ilike('username', username)`. In SQL LIKE,
+**`_` matches any single character**. `USERNAME_RE` anchors both ends to
+`[a-z0-9]`, so `%` and an edge underscore are refused — but it permits `_` in
+between:
+
+| Typed | Valid username? | `ILIKE` matches |
+|---|---|---|
+| `a%ice` | no | — |
+| `alic_` | no | — |
+| `a_ice` | **yes** | `alice` |
+| `a___e` | **yes** | `alice` |
+
+Verified against PostgreSQL 16 rather than reasoned about: `where username ilike
+'a_ice'` returns `alice`; `where username = 'a_ice'` returns nothing.
+
+### Why that broke the throttle rather than the password
+
+On its own a wildcard match is not a bypass — the attacker still needs the PIN,
+and sign-in proceeds as `row.username`, the real account. What it broke is the
+budget.
+
+The throttle is keyed on the username **as typed** (`child_login_throttle.username`),
+while the lookup treated that same string as a **pattern**. So every wildcard
+spelling was a different throttle key pointing at one real account:
+
+```
+alice → a_ice  al_ce  ali_e  a__ce  a_i_e  al__e  a___e      (7 spellings)
+```
+
+Eight keys × five failures = **40 attempts per fifteen minutes instead of 5**. An
+eight-character username yields 63 spellings — **320 per window**. The per-IP
+limiter (30/min) is then the only remaining bound, and it is per-IP, not
+per-account, so it does not constrain an attacker with addresses to spend.
+
+### The fix
+
+`eq`, not an escape. Both sides are already lowercased by `normalizeUsername` —
+the create path normalizes before inserting and sign-in normalizes before looking
+up — so the case-insensitive match was buying nothing and costing the throttle
+its purpose. `eq` removes the metacharacter class rather than escaping it.
+
+The same change is applied to the "is this username free?" check in
+`child-login-actions.ts`, which had the same `ilike` and was therefore answering
+about a *different* login than the one being created. Over-strict rather than
+under-strict, but wrong either way.
+
+**This is consistent with the repository, not a new idea in it.** `escapeLike`
+and inline `%_` escaping already appear in a dozen service queries — home, trips,
+inventory, groceries, meals, finances. The two lookups that did not escape were
+the two on the authentication path.
+
+### What was left alone
+
+Roughly a dozen `ilike('…', '%term%')` search queries do not escape. In a search
+box an unescaped `_` makes the match slightly fuzzier and nothing more — there is
+no throttle keyed on the term and no credential behind it. Widening this change
+to cover them would have buried a security fix inside a refactor.
 
 ## Reconciliation with #526 — how the sitemap findings actually landed
 
