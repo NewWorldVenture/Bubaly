@@ -1,6 +1,6 @@
 # Bubaly — Final Audit
 
-Nine audits of bubaly.com, kept in one file because one file is the record.
+Ten audits of bubaly.com, kept in one file because one file is the record.
 
 They ran over **different surfaces** and none supersedes another:
 
@@ -15,6 +15,7 @@ They ran over **different surfaces** and none supersedes another:
 | **G — RLS completeness** | all 491 tables in a real replayed catalogue: is RLS on, and is any policy a blanket `true` | 0 | — |
 | **H — Storage object paths** | the Storage buckets Passes A–G never looked at: which are public, and what protects an object in one | 1 | `H-01` |
 | **I — Role boundaries** | the question Pass D left open: not who is calling or which family, but which ROLE — can a child reach what a parent decides | 1 | `I-01` |
+| **J — What the AI may do** | the 94-tool registry: does a tool that declares it cannot write actually not write, given that the write gate believes the declaration | 0 | — |
 
 **Where they touch, stated plainly.** Passes A and B meet in only two places:
 
@@ -3086,3 +3087,63 @@ behavioural rather than structural, picked up automatically by the glob in
 
 Verified on a **fresh** bootstrap rather than the database it was developed
 against: **308 migrations applied, 0 failed, 17/17 probes pass.**
+
+---
+
+# Pass J — What the AI may do (0 findings)
+
+Bubaly acts on a family's behalf, so the last surface worth asking about is what
+the assistant itself is allowed to do.
+
+The design is sound and worth stating before the question. `lib/ai/tools/registry.ts`
+is a **closed set** — `executeTool` looks a name up and denies anything absent,
+so a hallucinated `finances.transferMoney` is refused rather than attempted. Every
+tool carries a domain, a capability, a risk tier and a schema, and writes go
+through `evaluateTrust` with an `approval_requests` row when the household's
+policy says so.
+
+- **Surface:** **94 tools — 48 declaring `readOnly: true`, 46 declaring `false`.**
+- **The question:** `readOnly` means *"the tool cannot change anything"*, and
+  `execute.ts` **skips the write gate** for such a tool — no `evaluateTrust`, no
+  approval, and `trailActionFor()` returns `null`, so nothing reaches the
+  household trail either. The gate believes what each tool says about itself.
+- **Result:** all 48 are honest. **No finding.**
+
+## What was actually checked, and one false positive worth keeping
+
+A first sweep reported `routines.list` — declared `readOnly: true` — as reaching
+a mutation through `listRoutines()`. It does not. `listRoutines` is a pure
+`.select()`; the `.update(` belonged to **`setRoutineEnabled` beneath it**, and
+the sweep had taken a fixed 1,500 characters after the function signature rather
+than the function's actual body.
+
+That is the fifth pattern-based miscount in this audit, and the guard below is
+written to make it the last of its kind here: bodies come from the TypeScript
+parser by brace matching, and one of the five cases pins `routines.list`
+specifically as clean, so the false positive cannot come back silently.
+
+## How Pass J is kept closed
+
+`tests/readonly-tools-cannot-write.test.ts` — **5 cases**.
+
+| what it holds | how |
+|---|---|
+| The registry is actually being read | floors on tools parsed, read-only tools, and write tools — a sweep over an empty registry passes forever |
+| No read-only tool reaches a mutation | its handler, plus every function it calls one level into the project's own imports |
+| It fires on an inline write | a planted `readOnly` tool that deletes in its own handler |
+| **It fires on a write reached through a helper** | the harder half — handlers delegate, so a check that read only the handler would miss a tool whose service call does the writing |
+| It does not mistake a pure read for a write | `routines.list` pinned clean, so the character-window false positive is a regression test rather than a memory |
+
+Proved load-bearing against the real registry rather than only against planted
+input: flipping `routines.create` to `readOnly: true` fails the sweep with
+*"routines.create (lib/ai/tools/routines.ts) writes via createRoutine() in
+lib/services/routines/index.ts"*.
+
+**Also re-audited here:** `app/api/blog/search-index/route.ts`, a new **public**
+route that landed on `main` after Pass F's sweep had run. Checked against the
+same criteria: it sits under the public `/api/blog` prefix, is IP rate-limited at
+60/min, and serves only published posts — `getAllPosts()` goes through
+`fetchAllPublishedRows` **and** `publicRows`, so the claim in its comment holds
+against the code. Its degradation to an empty index is logged, with the comment
+citing the stale-sitemap defect (**F-012**) that once hid behind that same catch.
+Clean.
