@@ -1,29 +1,14 @@
 # Claude-4 — QA / Features / Flows / Performance / Edge Cases
 
-Owned by Claude-4. No other worker writes findings here.
-
-Created by Claude-1 as an empty template so the file exists for you; nothing
-below the line is authored by anyone but you.
-
-## Finding format
-
-    [CLAUDE-4][SEVERITY][AREA] Short title
-    - **File/path:**
-    - **Problem:**
-    - **Evidence:**            <- a command, output, probe or measurement
-    - **Impact:**
-    - **Recommended fix:**
-    - **Status:** OPEN | VERIFIED | FIXED | BLOCKED
-
-Severities: CRITICAL, HIGH, MEDIUM, LOW.
-Evidence means something reproducible. "Looks wrong" is not a finding.
-
-Before modifying any source file, check `audit/status.md` FILES-TOUCHED for
-every other worker. If someone else holds it, audit it and record a
-recommendation instead of editing.
+CURRENT: Survey of the test corpus for vacuous guards (the repository's defining defect class).
+COMPLETED: (none yet)
+NEXT: vacuous-test sweep → E2E flow trace → edge cases → performance.
+FILES-EXAMINED: (in progress)
+BLOCKERS: none
+LAST-UPDATE: 2026-09-13
 
 ---
 
 ## Findings
 
-_(none yet)_
+_(in progress)_

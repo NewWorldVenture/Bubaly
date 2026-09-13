@@ -327,3 +327,46 @@ spread form specifically, because `{ ok: true, ...summary }` is how four of thes
 hid — the counter never appears in the literal, so any check reading the response
 shape alone misses them. That is the third time in this session a text scan of
 mine was wrong before it was right; each one is now a test instead.
+
+### [CLAUDE-1][MEDIUM][INTEGRATION] The mobile bundle was safe only by accident, and nothing checked it
+
+- **File/path:** `mobile/metro.config.js`, `mobile/src/lib/{db,supabase}.ts`,
+  `lib/database.types.ts`, `.github/workflows/ci.yml`
+- **Problem:** Metro bundles only what it **watches**. `mobile/metro.config.js`
+  adds the repo's `design` and `shared` folders for exactly that reason. But
+  `mobile/src` imports from a third root — `../../../lib/database.types` — which
+  is **not** watched. That works today only because both sites use `import type`
+  and the target has no runtime exports, so TypeScript erases it before Metro
+  sees it. Nothing enforced any part of that.
+- **Evidence:**
+  - Out-of-package imports from `mobile/src` + `mobile/app` land in three roots:
+    `design`, `lib`, `shared`. `watchFolders` contains only `design` and
+    `shared`.
+  - Both `lib` imports are `import type`; `lib/database.types.ts` has 0 runtime
+    exports (131 type/interface exports, no enums).
+  - CI's mobile job runs `npm run typecheck` and `npx expo config` — and
+    `grep -n "expo export\|metro" .github/workflows/*.yml` returns nothing.
+    **No CI job bundles the mobile app.** `tsc` resolves the path happily, so
+    every check stays green.
+- **Impact:** Changing one `import type` to `import`, or adding a single runtime
+  export (an enum, a const) to `database.types.ts`, breaks the mobile bundle with
+  CI fully green. The failure first appears in a real or EAS build — the slowest,
+  most expensive place to discover it. The `shared/` folder is genuinely shared
+  (mobile and web both consume `shared/auth/refresh-fetch`), so this boundary is
+  load-bearing rather than vestigial.
+- **Recommended fix:** applied — `tests/mobile-imports-stay-bundleable.test.ts`.
+  It reads the watch list **out of `metro.config.js`** rather than hardcoding a
+  copy, so the test tracks the config instead of drifting from it.
+- **Status:** FIXED. `tsc` clean, 13,614 tests pass.
+- **Proved load-bearing against all three regressions it claims to catch:**
+  1. `import type` → `import` on the unwatched root: 2 cases fail, naming `lib`.
+  2. A runtime export added to `database.types.ts`: the erasability case fails.
+  3. `shared` removed from `watchFolders`: 3 cases fail.
+  It also carries a case asserting the parser finds any escaping imports at all —
+  a silently-matching-nothing parser would make every other case vacuous, which is
+  this repository's signature defect.
+
+**Recorded as SOUND (not a defect):** Metro pins `nodeModulesPaths` to
+`mobile/node_modules` with `disableHierarchicalLookup`, so the app cannot walk up
+into the web app's different React version. `shared/` is genuinely shared by both
+consumers. Both were checked and are correct.

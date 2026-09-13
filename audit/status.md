@@ -75,7 +75,7 @@ NOTE FOR OTHER WORKERS:
 LAST-UPDATE: 2026-09-13
 
 ## Claude-2
-CURRENT: _not yet started_
+CURRENT: RUNNING — launched by Claude-1 as a parallel worker. Status block lives at the top of audit/claude-2.md; mirrored here on completion.
 COMPLETED:
 NEXT:
 FILES-TOUCHED:
@@ -83,7 +83,7 @@ BLOCKERS:
 LAST-UPDATE:
 
 ## Claude-3
-CURRENT: _not yet started_
+CURRENT: RUNNING — launched by Claude-1 as a parallel worker. Status block lives at the top of audit/claude-3.md; mirrored here on completion.
 COMPLETED:
 NEXT:
 FILES-TOUCHED:
@@ -91,7 +91,7 @@ BLOCKERS:
 LAST-UPDATE:
 
 ## Claude-4
-CURRENT: _not yet started_
+CURRENT: RUNNING — launched by Claude-1 as a parallel worker. Status block lives at the top of audit/claude-4.md; mirrored here on completion.
 COMPLETED:
 NEXT:
 FILES-TOUCHED:
