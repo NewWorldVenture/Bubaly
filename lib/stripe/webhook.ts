@@ -197,15 +197,31 @@ export async function handleAuthorizationRequest(
     throw new Error('Stripe authorization response failed');
   }
 
-  // Audit row (best-effort).
+  // Audit row. Best-effort on purpose and it must stay that way: Stripe has
+  // already been told to approve or decline, and that is final. Throwing here
+  // would answer the webhook non-2xx, Stripe would redeliver, and the retry
+  // would try to decide an authorization that is already decided. So a failed
+  // row may not fail the handler.
+  //
+  // What it may not do is fail in silence, which is what discarding the result
+  // did. The insert RESOLVES with { data, error } rather than throwing, so
+  // nothing here ever knew. And the row is read: the admin Stripe page lists the
+  // last twenty outcomes with their decline reasons, and lib/ai/context/policy
+  // exposes the table to the assistant as "card authorisations". A parent asking
+  // why their child's card was declined is answered from rows that quietly may
+  // not exist.
   if (card) {
-    await supabase.from('stripe_authorizations').insert({
+    const { error: auditError } = await supabase.from('stripe_authorizations').insert({
       family_id: card.family_id, card_id: card.id, child_wallet_id: card.child_wallet_id,
       stripe_authorization_id: auth.id, amount_cents: amount,
       merchant_name: merchantName, merchant_category: merchantCategory,
       outcome: decision.approve ? 'approved' : 'declined',
       decline_reason: decision.approve ? null : decision.reason,
     });
+    if (auditError) {
+      console.error('[money] card authorization was decided but not recorded',
+        { authorizationId: auth.id, outcome: decision.approve ? 'approved' : 'declined' }, auditError);
+    }
   }
 }
 

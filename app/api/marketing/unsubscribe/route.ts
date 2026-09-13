@@ -43,7 +43,32 @@ async function suppress(email: string, token: string, req: NextRequest): Promise
     return page('Link unavailable', 'The unsubscribe service is not configured yet.', false, 503);
   }
 
-  await supabase.from('marketing_suppressions').upsert({ email: clean, reason: 'unsubscribe' });
+  // This upsert IS the unsubscribe — lib/marketing/send.ts excludes an address
+  // only by finding its row here. Its result was discarded while the page below
+  // promises, unconditionally and with a tick, that the address "will no longer
+  // receive marketing emails". A refused write therefore sent someone away
+  // believing they had opted out, and the next campaign mailed them anyway.
+  //
+  // The rest of this subsystem already treats that write as load-bearing, which
+  // is what makes the omission stand out rather than read as house style:
+  // send.ts THROWS and abandons the whole send if it cannot read suppressions,
+  // and the Resend webhook answers 503 so a bounce or complaint is retried. The
+  // only path that did not check was the one where a person is told something.
+  //
+  // Status matters here beyond the HTML. POST is the RFC 8058 one-click
+  // endpoint, and a 2xx is what tells Gmail or Yahoo the opt-out was honoured;
+  // answering 200 on a failed write spends the provider's only signal on a
+  // promise that was not kept.
+  const { error } = await supabase.from('marketing_suppressions').upsert({ email: clean, reason: 'unsubscribe' });
+  if (error) {
+    console.error('[unsubscribe] suppression write failed', error);
+    return page(
+      'Unsubscribe not completed',
+      'We could not record your request just now, so you may still receive marketing email. Please open this link again in a few minutes.',
+      false,
+      503,
+    );
+  }
   return page('Unsubscribed', `${clean} will no longer receive marketing emails from Bubaly. Account and transactional emails are unaffected.`, true);
 }
 
