@@ -12,13 +12,16 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { hashAssistantToken } from './link-token';
 import {
-  agendaSpeech, forgettingSpeech, nextSpeech,
-  CAPTURE_NOT_ALLOWED_SPEECH, type AgendaEvent, type AgendaTask,
+  agendaSpeech, forgettingSpeech, nextSpeech, listSpeech,
+  BUBALY_SWITCHED_OFF_SPEECH, CAPTURE_NOT_ALLOWED_SPEECH,
+  type AgendaEvent, type AgendaTask, type SpokenList,
 } from './answers';
 import { captureSpeech, unknownSpeech, HELP_SPEECH, boundSpeech, boundText, type AssistantIntent } from './intent';
 import type { VoiceRoute } from '@/lib/voice/command-router';
 import { splitItems, parseGroceryItem } from '@/lib/capture/parse';
 import { instantForLocalTime } from '@/lib/time/zoned';
+import { expandEventsInZone } from '@/lib/calendar/recurrence';
+import { readAISettings } from '@/lib/services/ai-settings';
 
 type Client = SupabaseClient<Database>;
 
@@ -114,19 +117,57 @@ export function dayWindow(now: Date, timezone: string, offsetDays = 0): { from: 
   return { from: from.toISOString(), to: to.toISOString() };
 }
 
+/** Most series a family may have running at once before the speaker stops looking. */
+const MAX_SERIES = 200;
+/** Most occurrences one spoken answer will consider. */
+const MAX_OCCURRENCES = 50;
+
+type EventRow = AgendaEvent & {
+  id: string; ends_at: string | null; recurrence: string; recurrence_until: string | null;
+};
+
+/**
+ * The events inside one window, INCLUDING the occurrences of recurring series.
+ *
+ * This used to be a single `starts_at BETWEEN` query, which is the right query
+ * for a calendar that stores every occurrence as a row and the wrong one for
+ * this schema. `calendar_events.recurrence` holds a rule and the app expands it
+ * at read time — so a weekly soccer practice matched exactly once, on the
+ * afternoon it was created, and never again. What a speaker is asked about all
+ * week (the school run, practice, bin day) was precisely what it could not see.
+ *
+ * Two queries rather than one `.or(...)` with nested groups: the two halves ask
+ * genuinely different questions — "did it start in the window" and "could it
+ * still be running" — and a PostgREST filter string expressing both is the kind
+ * of thing that is wrong in production and right in review.
+ */
 async function readEvents(
-  supabase: Client, familyId: string, window: { from: string; to: string },
+  supabase: Client, familyId: string, window: { from: string; to: string }, timezone: string,
 ): Promise<AgendaEvent[]> {
-  const { data, error } = await supabase
-    .from('calendar_events')
-    .select('title, starts_at, all_day')
-    .eq('family_id', familyId)
-    .gte('starts_at', window.from)
-    .lt('starts_at', window.to)
-    .order('starts_at')
-    .limit(50);
-  if (error) throw error;
-  return (data ?? []) as unknown as AgendaEvent[];
+  const columns = 'id, title, starts_at, ends_at, all_day, recurrence, recurrence_until';
+  const [single, series] = await Promise.all([
+    supabase.from('calendar_events').select(columns)
+      .eq('family_id', familyId).eq('recurrence', 'none')
+      .gte('starts_at', window.from).lt('starts_at', window.to)
+      .order('starts_at').limit(MAX_OCCURRENCES),
+    // A series reaches the window when it began before the window ends and has
+    // not been ended before the window starts.
+    supabase.from('calendar_events').select(columns)
+      .eq('family_id', familyId).neq('recurrence', 'none')
+      .lt('starts_at', window.to)
+      .or(`recurrence_until.is.null,recurrence_until.gte.${window.from}`)
+      .order('starts_at').limit(MAX_SERIES),
+  ]);
+  if (single.error) throw single.error;
+  if (series.error) throw series.error;
+
+  const rows = [...(single.data ?? []), ...(series.data ?? [])] as unknown as EventRow[];
+  // In the FAMILY's zone, not the runtime's. A server's runtime zone is UTC,
+  // and a weekly 4pm event stepped in UTC drifts an hour the week the clocks
+  // change — enough to move a late event into the wrong local day.
+  return expandEventsInZone(rows, new Date(window.from), new Date(window.to), timezone)
+    .slice(0, MAX_OCCURRENCES)
+    .map(({ title, starts_at, all_day }) => ({ title, starts_at, all_day }));
 }
 
 async function readOpenTasks(supabase: Client, familyId: string): Promise<AgendaTask[]> {
@@ -140,6 +181,54 @@ async function readOpenTasks(supabase: Client, familyId: string): Promise<Agenda
     .limit(100);
   if (error) throw error;
   return (data ?? []) as unknown as AgendaTask[];
+}
+
+/** Most items read back before the count carries the rest. */
+const MAX_LIST_READ = 40;
+
+/**
+ * The shopping list, as it stands.
+ *
+ * Only from lists the family has NOT archived, for the same reason the writes
+ * avoid them: reading back a list nobody looks at is worse than saying nothing,
+ * because it sounds authoritative.
+ */
+async function readShoppingList(supabase: Client, familyId: string): Promise<SpokenList> {
+  const { data: lists, error: listError } = await supabase
+    .from('grocery_lists').select('id').eq('family_id', familyId)
+    .eq('is_archived', false).is('archived_at', null);
+  if (listError) throw listError;
+  const ids = (lists ?? []).map((row) => row.id);
+  if (ids.length === 0) return { names: [], total: 0 };
+
+  const { data, error } = await supabase
+    .from('grocery_items')
+    .select('name, quantity')
+    .eq('family_id', familyId)
+    .in('list_id', ids)
+    .eq('is_checked', false)
+    .order('created_at')
+    .limit(MAX_LIST_READ);
+  if (error) throw error;
+  const rows = (data ?? []) as unknown as { name: string; quantity: string | null }[];
+  // The quantity belongs in the sentence: "two pints of milk" is the useful
+  // answer and "milk" is the one that sends somebody back to the shop.
+  const names = rows.map((row) => (row.quantity ? `${row.quantity} ${row.name}` : row.name));
+  return { names, total: names.length };
+}
+
+/** The open to-do items, oldest first, so the oldest is the one that gets said. */
+async function readTaskList(supabase: Client, familyId: string): Promise<SpokenList> {
+  const { data, error } = await supabase
+    .from('todo_items')
+    .select('title')
+    .eq('family_id', familyId)
+    .eq('is_done', false)
+    .order('created_at')
+    .limit(MAX_LIST_READ);
+  if (error) throw error;
+  const names = ((data ?? []) as unknown as { title: string }[]).map((row) => row.title);
+  return { names, total: names.length };
 }
 
 /** Record what the speaker did. Never throws: an audit gap must not eat a reply. */
@@ -179,7 +268,7 @@ export async function answerAssistant(
 
     case 'agenda': {
       const window = dayWindow(now, link.timezone, intent.day === 'tomorrow' ? 1 : 0);
-      const events = await readEvents(supabase, link.family_id, window);
+      const events = await readEvents(supabase, link.family_id, window, link.timezone);
       return { speech: agendaSpeech(events, intent.day, link.timezone), outcome: 'answered', intent: 'agenda' };
     }
 
@@ -189,7 +278,7 @@ export async function answerAssistant(
       // most likely to ask what the morning holds.
       const today = dayWindow(now, link.timezone);
       const tomorrow = dayWindow(now, link.timezone, 1);
-      const events = await readEvents(supabase, link.family_id, { from: today.from, to: tomorrow.to });
+      const events = await readEvents(supabase, link.family_id, { from: today.from, to: tomorrow.to }, link.timezone);
       const upcoming = events.filter((e) => e.all_day || new Date(e.starts_at).getTime() >= now.getTime());
       return { speech: nextSpeech(upcoming, link.timezone), outcome: 'answered', intent: 'next' };
     }
@@ -202,9 +291,33 @@ export async function answerAssistant(
       };
     }
 
+    case 'list': {
+      // Bubaly could be told to put milk ON the shopping list and had no way to
+      // say what was on it. Half a feature, and the missing half is the one you
+      // want while standing in a shop.
+      const items = intent.list === 'shopping'
+        ? await readShoppingList(supabase, link.family_id)
+        : await readTaskList(supabase, link.family_id);
+      return { speech: listSpeech(intent.list, items), outcome: 'answered', intent: `list:${intent.list}` };
+    }
+
     case 'capture': {
       if (!link.scopes.includes('capture')) {
         return { speech: CAPTURE_NOT_ALLOWED_SPEECH, outcome: 'refused', intent: 'capture' };
+      }
+      // Settings → Bubaly AI says, in these words: "Bubaly is switched off: it
+      // will still answer questions, but it will not change anything for your
+      // family." A speaker is Bubaly. Every branch above this one is the
+      // answering half and keeps working; this is the half the switch governs,
+      // and until now a kitchen speaker went on creating events, notes, tasks
+      // and shopping items for a family that had switched Bubaly off.
+      //
+      // After the link's own scope, not before: the scope is a property of this
+      // link and costs no query, and a read-only link deserves the more
+      // specific sentence about what IT may do.
+      const settings = await readAISettings(supabase, link.family_id);
+      if (!settings.enabled) {
+        return { speech: BUBALY_SWITCHED_OFF_SPEECH, outcome: 'refused', intent: 'capture' };
       }
       const saved = await saveAssistantCapture(supabase, link, intent.route, now);
       if (!saved) throw new Error('capture write failed');
@@ -314,9 +427,24 @@ async function saveAssistantCapture(
 async function ensureList(
   supabase: Client, link: AssistantLink, table: 'todo_lists' | 'grocery_lists', name: string,
 ): Promise<string | null> {
-  const { data: existing, error } = await supabase
-    .from(table).select('id').eq('family_id', link.family_id)
-    .order('created_at').limit(1).maybeSingle();
+  // ARCHIVED lists are skipped. This took the family's OLDEST list, which is
+  // precisely the one most likely to have been archived and replaced — so a
+  // family who tidied up their first Groceries list had every spoken item
+  // dropped into it, where nobody looks, while the speaker said "added to your
+  // list" each time.
+  //
+  // Three column names across two tables, which is why one builder over a union
+  // of table names checked none of them: `todo_lists.archived_at`, and
+  // `grocery_lists` carrying BOTH `is_archived` (0002) and `archived_at`
+  // (0014). Only `archived_at` is ever written — the shopping module stamps it
+  // — so an `is_archived`-only reader calls an archived list open, which
+  // lib/services/groceries documents at length. Both are asked here for the
+  // same reason it asks both.
+  const { data: existing, error } = table === 'todo_lists'
+    ? await supabase.from('todo_lists').select('id').eq('family_id', link.family_id)
+      .is('archived_at', null).order('created_at').limit(1).maybeSingle()
+    : await supabase.from('grocery_lists').select('id').eq('family_id', link.family_id)
+      .eq('is_archived', false).is('archived_at', null).order('created_at').limit(1).maybeSingle();
   if (error) { console.error(`[assistant] ${table} lookup failed`, error); return null; }
   if (existing?.id) return existing.id;
 

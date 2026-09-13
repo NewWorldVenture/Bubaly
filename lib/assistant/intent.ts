@@ -24,6 +24,8 @@ export type AssistantIntentKind =
   | 'next'
   /** The proactive "what am I forgetting" check. */
   | 'forgetting'
+  /** Read a list back: the shopping list, the to-do list. */
+  | 'list'
   /** Save something: task, note, event or shopping item. */
   | 'capture'
   /** Tell the person what they can say. */
@@ -35,6 +37,7 @@ export type AssistantIntent =
   | { kind: 'agenda'; day: 'today' | 'tomorrow' }
   | { kind: 'next' }
   | { kind: 'forgetting' }
+  | { kind: 'list'; list: 'shopping' | 'tasks' }
   | { kind: 'capture'; route: VoiceRoute }
   | { kind: 'help' }
   | { kind: 'unknown'; utterance: string };
@@ -45,6 +48,22 @@ const TOMORROW_RE = /\btomorrow\b/i;
 const NEXT_RE = /\b(what(?:'?s| is)?\s+next|next up|coming up next|what do i do now)\b/i;
 const FORGETTING_RE = /\b(forget|forgetting|missing|miss(ed)?\s+anything|overlook)/i;
 const HELP_RE = /\b(help|what can (you|i) (do|say)|how does this work|commands?)\b/i;
+
+/**
+ * Reading a list back.
+ *
+ * Bubaly could be told to put milk ON the shopping list and had no way to say
+ * what was on it — which is half a feature, and the missing half is the one you
+ * want standing in a shop.
+ *
+ * Two conditions, both required. A list NOUN, because "what do we need" is not
+ * specific enough to answer without guessing which list; and a READ cue,
+ * because "milk for the shopping list" names a list while plainly asking for
+ * something to be added to it.
+ */
+const SHOPPING_LIST_RE = /\b(shopping|grocery|groceries)\s+list\b/i;
+const TASK_LIST_RE = /\b(to-?\s?dos?|todos?|tasks?)\s+list\b|\bto-?do\s+list\b/i;
+const LIST_READ_RE = /\b(what(?:'?s| is| are)?\s+(?:on|in|left|still)|read|tell me|say|check)\b/i;
 
 /**
  * Openers that mean "do this". When an utterance starts with one, the words
@@ -83,6 +102,13 @@ export function classifyAssistantUtterance(
   // calendar entry called "what's on" instead of answering.
   const commanded = IMPERATIVE_RE.test(utterance);
   if (!commanded) {
+    // Most specific first. "What's on the shopping list" matches AGENDA_RE
+    // ("what's on"), so anything less specific asked before it would read the
+    // calendar and answer a question nobody asked.
+    if (LIST_READ_RE.test(utterance)) {
+      if (SHOPPING_LIST_RE.test(utterance)) return { kind: 'list', list: 'shopping' };
+      if (TASK_LIST_RE.test(utterance)) return { kind: 'list', list: 'tasks' };
+    }
     if (HELP_RE.test(utterance)) return { kind: 'help' };
     if (FORGETTING_RE.test(utterance)) return { kind: 'forgetting' };
     if (NEXT_RE.test(utterance)) return { kind: 'next' };
@@ -163,7 +189,8 @@ export function boundSpeech(text: string, limit = MAX_SPEECH_CHARS): string {
 }
 
 export const HELP_SPEECH = toSpeakable(
-  'You can ask what is on today, what is next, or what you are forgetting. '
+  'You can ask what is on today, what is next, what you are forgetting, '
+  + 'or what is on the shopping list. '
   + 'You can also say things like add milk to the shopping list, or remind me to call the dentist.',
 );
 

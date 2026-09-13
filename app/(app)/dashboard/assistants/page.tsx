@@ -56,8 +56,8 @@ export default async function AssistantsPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Assistants</h1>
         <p className="mt-1 text-sm text-muted">
-          Connect a speaker or phone assistant and ask Bubaly what is on, what is next, or what you are
-          forgetting — and add things to your lists without opening the app.
+          Connect a speaker or phone assistant and ask Bubaly what is on, what is next, what you are
+          forgetting, or what is on the shopping list — and add things to your lists without opening the app.
         </p>
       </div>
 

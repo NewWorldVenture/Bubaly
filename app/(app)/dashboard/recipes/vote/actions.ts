@@ -103,7 +103,11 @@ export async function addWinnerToGrocery(voteId: string): Promise<Result> {
   if (ingredients.length === 0) return { ok: false, error: t('actions.thatRecipeHasNoIngredients') };
 
   // Get or create a default grocery list.
-  const { data: list } = await supabase.from('grocery_lists').select('id').eq('family_id', familyId).eq('is_archived', false).order('created_at').limit(1).maybeSingle();
+  // Both archive columns, as lib/services/groceries explains: only `archived_at`
+  // is ever written, so an `is_archived`-only reader hands the shopping list a
+  // list the family already put away.
+  const { data: list } = await supabase.from('grocery_lists').select('id').eq('family_id', familyId)
+    .eq('is_archived', false).is('archived_at', null).order('created_at').limit(1).maybeSingle();
   let listId = list?.id;
   if (!listId) {
     const { data: created, error } = await supabase.from('grocery_lists').insert({ family_id: familyId, name: 'Groceries', created_by: ctx.user.id }).select('id').single();
