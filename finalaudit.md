@@ -44,7 +44,7 @@ PRODUCTION READY: NO
 ## Critical Blockers
 - API-387E2B30BCD7: Text source a61804db requires hosted acceptance. Signed delivery publication 0d68bdbb passed all 1,064 hosted cases. Real provider delivery, controlled old-handler cutover, durable pre-candidate intake and production configuration remain open.
 - API-BBD0A5DB630F: Real provider delivery, production scheduler configuration and nontransactional cross-table/payload changes remain open; Guardian role authorization is tracked under AUTHZ-005.
-- LIBRARY-10D7AA8F3175: SMS source discovery: claim insert errors collapse into duplicate acknowledgements; required Guardian profile and communication persistence errors can be ignored before processed acknowledgement. Actual route/provider-SDK reproductions pending.
+- LIBRARY-10D7AA8F3175: claimGuardianCallback cannot distinguish "already handled" from "the claim could not be written", so a database outage makes all six Guardian callbacks acknowledge 200 and lose the event — two of them hang up on the caller while doing it.
 - LIBRARY-5BA7FEA22007: Family timezone, existing rule/time/regex semantics, emergency-versus-block precedence and deployed policy behavior remain unverified.
 - FLOW-DDE6E8974B46: Real provider delivery, production scheduler configuration and nontransactional cross-table/payload changes remain open; Guardian role authorization is tracked under AUTHZ-005.
 - DB-TBL-161: Existing rows do not establish service-authored Guardian decisions; AUTHZ-004 records the signed-route replay consequence.
@@ -14795,10 +14795,52 @@ The complete supported workflow performs authorized actions, persists intended s
 - [ ] Console and network inspection; related regression
 
 #### Issues Found
-SMS source discovery: claim insert errors collapse into duplicate acknowledgements; required Guardian profile and communication persistence errors can be ignored before processed acknowledgement. Actual route/provider-SDK reproductions pending.
+`claimGuardianCallback` answers a boolean, and that single bit has to carry two
+completely different answers: "someone else owns this event, or it is already
+done" and "the claim could not be written at all". Every caller reads the false
+as the first meaning.
+
+    const claimed = await claimGuardianCallback(supabase, 'emergency_escalation', callbackId);
+    if (!claimed) return NextResponse.json({ ok: true, duplicate: true });
+
+So when the database is briefly unavailable, Guardian tells Twilio the callback
+was a duplicate and succeeded. Twilio does not retry a 200. The event is gone.
+
+Six call sites share the shape, and two of them are worse than a dropped record
+because they answer with TwiML that ends the call:
+
+    app/api/guardian/escalate/route.ts:39         -> {ok: true, duplicate: true}
+    app/api/guardian/inbound/sms/route.ts:45      -> 200 empty
+    app/api/guardian/inbound/whatsapp/route.ts:52 -> 200 empty
+    app/api/guardian/inbound/voice/route.ts:54    -> twimlHangup()
+    app/api/guardian/screen/route.ts:56           -> "thank you for calling, goodbye" + hangup
+    app/api/guardian/status/voicemail/route.ts:58 -> acknowledged
+
+A database hiccup during a Guardian screening call therefore hangs up on
+whoever is calling, and reports the callback as a successful duplicate.
+
+The stale-reclaim branch inside the helper repeats the same mistake one level
+down: it destructures only `data` from the reclaim update and discards `error`,
+so a failed reclaim is also indistinguishable from "another worker holds it".
+
+This was already reproduced empirically, against a real signed Guardian POST on
+an installed PostgREST: claim 503, profile 503 and communication 503 each
+answered 200 with nothing saved. What is outstanding is the repair, not the
+evidence.
 
 #### Fixes Applied
-The shared callback helper is unchanged. The SMS route now uses lib/guardian/sms-intake.ts with typed outcomes and ownership checks. Other Guardian callback consumers retain the original boolean/error behavior.
+In progress. The SMS route was routed around the helper via
+lib/guardian/sms-intake.ts, which has typed outcomes and ownership checks, but
+that left the helper itself and the other five consumers exactly as they were —
+the defect was moved out of one path rather than removed.
+
+The repair is to make the helper say which of the two things happened:
+'claimed', 'settled' (another worker owns it, or it is done) and 'unavailable'
+(the claim could not be read or written), with the reclaim branch checking its
+own error instead of discarding it. Callers acknowledge on 'settled' as they do
+today and ask the provider to retry on 'unavailable'. It lands on main as its
+own change, not here: the code is identical on both branches and this is a live
+production defect that should not wait behind a draft audit.
 
 #### Retest Results
 43 new SMS helper cases pass. They do not verify unchanged shared-helper consumers; this record remains IN PROGRESS.
@@ -20254,7 +20296,7 @@ Full verification remains incomplete. Confirmed defects appear above; no depende
 ## Remaining Issues
 - API-387E2B30BCD7: Text source a61804db requires hosted acceptance. Signed delivery publication 0d68bdbb passed all 1,064 hosted cases. Real provider delivery, controlled old-handler cutover, durable pre-candidate intake and production configuration remain open.
 - API-BBD0A5DB630F: Real provider delivery, production scheduler configuration and nontransactional cross-table/payload changes remain open; Guardian role authorization is tracked under AUTHZ-005.
-- LIBRARY-10D7AA8F3175: SMS source discovery: claim insert errors collapse into duplicate acknowledgements; required Guardian profile and communication persistence errors can be ignored before processed acknowledgement. Actual route/provider-SDK reproductions pending.
+- LIBRARY-10D7AA8F3175: claimGuardianCallback cannot distinguish "already handled" from "the claim could not be written", so a database outage makes all six Guardian callbacks acknowledge 200 and lose the event — two of them hang up on the caller while doing it.
 - LIBRARY-5BA7FEA22007: Family timezone, existing rule/time/regex semantics, emergency-versus-block precedence and deployed policy behavior remain unverified.
 - FLOW-DDE6E8974B46: Real provider delivery, production scheduler configuration and nontransactional cross-table/payload changes remain open; Guardian role authorization is tracked under AUTHZ-005.
 - DB-TBL-161: Existing rows do not establish service-authored Guardian decisions; AUTHZ-004 records the signed-route replay consequence.
