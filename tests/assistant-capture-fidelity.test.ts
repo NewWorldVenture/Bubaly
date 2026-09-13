@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyAssistantUtterance, captureSpeech } from '@/lib/assistant/intent';
+import { classifyAssistantUtterance, captureSpeech, toSpeakable, boundText } from '@/lib/assistant/intent';
 import { classifyVoiceCommand } from '@/lib/voice/command-router';
 import { answerAssistant, type AssistantLink } from '@/lib/assistant/service';
 
@@ -248,3 +248,41 @@ describe('the row that reaches the database', () => {
     expect(rows[0].name).toBe('Macaroni and cheese');
   });
 });
+
+
+describe('what is spoken and what is stored are not the same string', () => {
+  it('does not read a slash out as the word "slash"', () => {
+    // The module's contract has named this since it was written; the code never
+    // did it, so "Parent/teacher evening" was read as "parent slash teacher".
+    expect(toSpeakable('Parent/teacher evening')).toBe('Parent teacher evening');
+    expect(toSpeakable('take 1/3 of the tray')).toBe('take 1 3 of the tray');
+  });
+
+  it('leaves a date-like slash inside a URL alone, because the URL goes first', () => {
+    expect(toSpeakable('see https://x.test/a/b now')).toBe('see a link now');
+  });
+
+  it('stores the family\'s words, not the version rewritten for a speaker', () => {
+    // boundText is length only. Everything toSpeakable removes, it removes
+    // because a speech engine mangles it — a fact about the speaker, not about
+    // the note.
+    expect(boundText('the garage code is #1234', 200)).toBe('the garage code is #1234');
+    expect(boundText('Parent/teacher evening', 200)).toBe('Parent/teacher evening');
+    expect(boundSpeechStripsIt()).toBe('the garage code is 1234');
+  });
+
+  it('still clips an overlong stored value on a word boundary', () => {
+    expect(boundText('alpha bravo charlie delta', 12)).toBe('alpha bravo…');
+    expect(boundText('   spaced   out   ', 200)).toBe('spaced out');
+  });
+
+  it('keeps a note typed with punctuation intact through the whole capture path', async () => {
+    const writes = await capture('note that the garage code is #1234');
+    const note = writes.find((w) => w.table === 'notes');
+    expect(note?.payload.title).toBe('The garage code is #1234');
+  });
+});
+
+function boundSpeechStripsIt(): string {
+  return toSpeakable('the garage code is #1234');
+}

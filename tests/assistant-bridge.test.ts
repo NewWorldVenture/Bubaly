@@ -198,13 +198,28 @@ describe('"today" means the family’s today', () => {
   });
 
   it('stays a real day across a DST change', () => {
-    // The spring-forward day is 23 hours long. A window built by adding a fixed
-    // 24h to local midnight would run an hour into the next day.
-    const window = dayWindow(new Date('2026-03-08T12:00:00Z'), 'America/New_York');
-    expect(window.from).toBe('2026-03-08T05:00:00.000Z');
-    const hours = (Date.parse(window.to) - Date.parse(window.from)) / 3_600_000;
-    expect(hours).toBe(24); // the window is a fixed span; the KEY is what moves
-    expect(dayKey(new Date(window.from), 'America/New_York')).toBe('2026-03-08');
+    // The spring-forward day is 23 hours long, and this test used to assert 24
+    // — the comment beside it described the defect correctly and then pinned it
+    // anyway ("the window is a fixed span"). A fixed span runs an hour into
+    // tomorrow every spring, so today's agenda read out tomorrow's first
+    // appointment.
+    const spring = dayWindow(new Date('2026-03-08T12:00:00Z'), 'America/New_York');
+    expect(spring.from).toBe('2026-03-08T05:00:00.000Z');
+    expect((Date.parse(spring.to) - Date.parse(spring.from)) / 3_600_000).toBe(23);
+    expect(dayKey(new Date(spring.from), 'America/New_York')).toBe('2026-03-08');
+
+    // And the fall-back day is 25 hours. The fixed span stopped an hour early,
+    // silently dropping the last hour of the evening.
+    const autumn = dayWindow(new Date('2026-11-01T12:00:00Z'), 'America/New_York');
+    expect((Date.parse(autumn.to) - Date.parse(autumn.from)) / 3_600_000).toBe(25);
+    expect(dayKey(new Date(autumn.from), 'America/New_York')).toBe('2026-11-01');
+  });
+
+  it('hands today straight over to tomorrow with no gap or overlap, DST or not', () => {
+    for (const day of ['2026-03-08', '2026-11-01', '2026-07-15']) {
+      const at = new Date(`${day}T12:00:00Z`);
+      expect(dayWindow(at, 'America/New_York', 0).to, day).toBe(dayWindow(at, 'America/New_York', 1).from);
+    }
   });
 });
 

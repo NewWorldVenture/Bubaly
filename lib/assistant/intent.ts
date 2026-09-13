@@ -114,11 +114,34 @@ export const MAX_SPEECH_CHARS = 600;
 export function toSpeakable(text: string): string {
   return text
     .replace(/https?:\/\/\S+/g, 'a link')
+    // A slash between words or digits is read out as the word "slash", so
+    // "Parent/teacher evening" becomes "parent slash teacher evening" and "1/3"
+    // becomes "one slash three". The contract above has named this since the
+    // module was written; the code never did it.
+    .replace(/(?<=[\p{L}\p{N}])\s*\/\s*(?=[\p{L}\p{N}])/gu, ' ')
     .replace(/[*_`#>|]+/g, ' ')
     .replace(/^\s*[-•·]\s*/gm, ' ')
     .replace(/&/g, ' and ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+/**
+ * Bound a value on its way to the DATABASE. Length only.
+ *
+ * The counterpart to `boundSpeech`, and the distinction matters: everything
+ * `toSpeakable` removes is removed because a speech engine mangles it, which is
+ * a fact about the speaker and not about the note. Storing the spoken form
+ * meant "the garage code is #1234" was filed with the hash gone and
+ * "Parent/teacher evening" would lose its slash — the family's own words
+ * quietly edited to suit a device that had already finished talking.
+ */
+export function boundText(text: string, limit: number): string {
+  const tidy = (text ?? '').replace(/\s+/g, ' ').trim();
+  if (tidy.length <= limit) return tidy;
+  const clipped = tidy.slice(0, limit);
+  const lastSpace = clipped.lastIndexOf(' ');
+  return `${(lastSpace > limit * 0.5 ? clipped.slice(0, lastSpace) : clipped).trim()}…`;
 }
 
 /** Join items the way a person would say them: "a, b and c". */
