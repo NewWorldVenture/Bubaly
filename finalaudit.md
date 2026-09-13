@@ -3029,7 +3029,7 @@ duplicate a check the database already enforces.
 
 | # | Finding | Severity | Status |
 |---|---|---|---|
-| I-01 | A social restriction could be removed by the person it restricted | Medium | **Fixed** — `0295`, this branch |
+| I-01 | A social restriction could be removed by the person it restricted | **Critical** (their rating; mine was Medium — see below) | **Fixed** — `0295`, this branch |
 
 ---
 
@@ -3070,6 +3070,47 @@ an admin can still remove an override.
 
 **Not applied to production.** The migration is authored and replays clean in
 sequence, but production's ledger is gated (F5) and applying is the owner's.
+
+## Not found first here — and the other audit was right about the severity
+
+`codex/final-production-audit-20260912` had already found this, and recorded it
+in `docs/final-audit/social-access-cycle.md` before this pass ran. Its write-up
+is the better one and is worth quoting rather than paraphrasing:
+
+> an active `adult` starts with an explicit `read_only` social role, so
+> connect/publish are denied. Their authenticated client directly deletes their
+> own `social_access_permissions` row, which the generic family-member DELETE
+> policy permits. A subsequent successful required read observes clean absence;
+> both the intended default and the repaired JavaScript resolver grant
+> `marketing_manager`, which includes `connect_accounts` and `publish_posts`.
+> The client does not need service credentials or a failed query.
+
+Three corrections to what this pass wrote above, in their favour:
+
+1. **Severity.** They rate it *"Critical; OPEN database hardening / release
+   blocker before enabling live restricted-role publishing"*. This pass rated it
+   Medium. Theirs is better reasoned: the escalation restores the right to
+   publish on the family's connected accounts to someone a parent deliberately
+   stopped, which is a release blocker rather than a permission quirk. The table
+   above now carries their rating.
+2. **Root cause, stated more precisely than here.** `0034` creates *generic*
+   family-member DELETE policies for every table in `social_tables`
+   (lines 712–739); the later granular block tightens that table's INSERT and
+   UPDATE *only* (lines 765–771). The asymmetry is not an oversight on one
+   policy, it is a blanket policy the tightening pass did not revisit.
+3. **They also noticed something this pass did not:** *"A parent/admin SQL
+   permission matrix also differs from JavaScript on `manage_access`."* Recorded
+   here as their observation, unverified by this pass.
+
+What is new here is the repair, not the finding. They were working under a
+standing no-new-SQL constraint and wrote, correctly, that *"app-only error
+handling cannot repair it"* — so the finding stayed open for want of a
+migration. `0295` is that migration, and **A-17** is the behavioural proof, which
+their cycle could not produce for the same reason.
+
+This is the second duplicate across the whole document, after C-08's push prune
+counter, and it is recorded for the same reason: an audit that quietly claims
+another's finding is worth less than one that says who found what.
 
 ## How Pass I is kept closed
 
