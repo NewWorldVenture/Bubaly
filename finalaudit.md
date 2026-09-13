@@ -23,6 +23,11 @@ head 92340315):
   seven CI checks pass; mergeable_state is clean.
 - SEO-001 and SEO-002 are new records, both 🛠 FIXED + PASS pending deployment.
   Together they meant no shared Bubaly link rendered a preview card anywhere.
+- SEO-003 and SEO-004 are new records, both 🛠 FIXED + PASS. They are the fourth
+  and fifth instances of one class: a route whose only caller is unauthenticated,
+  sitting behind the session boundary. SEO-004 closes it structurally — a guard
+  now enumerates every page route outside app/(app) and requires each to be
+  publicly reachable or named, with a reason, as deliberately session-gated.
 - The Final Regression sections are no longer NOT STARTED. Four gates pass
   outright (Build, Type Check, Lint, Automated Tests) and the unauthenticated API
   boundary passed a 266-probe sweep with no exposure and no server error. What
@@ -94,6 +99,7 @@ PRODUCTION READY: NO
 - SEO-002: resolveMarketingMetadata replaces the root Open Graph object with {title, description}, deleting og:image, og:url, og:type and og:site_name from every marketing page.
 
 - SEO-003: Eight of the eleven published marketing page families answered 307 to /login for anonymous visitors and search engines; the middleware now derives its public prefixes from PAGE_TYPES instead of restating them.
+- SEO-004: /pay/<handle>, the Pay-ID resolver a relative follows to send a gift, answered 307 to /login while the /gift/<token> link it forwards to answered 200 — the fifth route in this audit whose only caller is unauthenticated, sitting behind the session boundary.
 
 ## Audit Summary
 | ID | Area | Feature / Service | Status | Severity | Tests | Fix | Retest | Notes |
@@ -20182,6 +20188,84 @@ eleven prefixes against www.bubaly.com on 2026-09-13 (build f9c4d7a1).
 #### Final Status
 🛠 FIXED + PASS — deployed re-probe pending.
 
+### SEO-004 — Public Pay-ID resolver reachable without a session
+
+Status: 🛠 FIXED + PASS
+Severity: Critical
+Route(s), components, actions, tables and providers: middleware.ts PUBLIC list; app/pay/[handle]/page.tsx; lib/wallet/pay-handle.ts; pay_handles; gift_links
+
+#### Expected Behavior
+The complete supported workflow performs authorized actions, persists intended state, handles invalid input and unavailable dependencies, and reports an accurate outcome across refresh, navigation and supported viewports.
+
+#### Test Cases
+- [ ] Happy path through every required layer and persisted readback
+- [ ] Missing, invalid, unauthorized and cross-tenant inputs
+- [ ] Empty, loading, provider failure and retry states
+- [ ] Duplicate submissions and concurrent execution where applicable
+- [ ] Refresh, restart, keyboard and mobile behavior where applicable
+- [ ] Console and network inspection; related regression
+
+#### Issues Found
+/pay/<handle> is the Family Wallet's shareable Pay-ID. A parent shares a handle;
+a relative opens it; the page resolves the handle to the child's newest active
+gift link and forwards to /gift/<token>. Its own source says what it is for:
+"Reads via the service role (the visitor isn't signed in)."
+
+It was not on the middleware PUBLIC list, so it was not reachable by the only
+audience it has. Unauthenticated production probes, 2026-09-13, build 0a472a5a:
+
+    /pay/emma            -> 307 /login?redirect=%2Fpay%2Femma
+    /pay/anything        -> 307 /login?redirect=%2Fpay%2Fanything
+    /gift/sometoken      -> 200
+
+The 200 on /gift is the control. The destination of the redirect worked; the
+resolver that produces it did not. A grandparent following a shared Pay-ID was
+asked to create a Bubaly account, one hop short of the page that would have let
+them send the gift — and the failure looked like the handle was wrong rather
+than like a routing bug, because the login page says nothing about /pay.
+
+This is the fifth instance of the class, after the Contact Center callbacks, the
+assistant endpoints (API-C8B72ACE022A, API-A2C5302CAE88), the social preview
+images (SEO-001) and the marketing page families (SEO-003). Five occurrences of
+one defect is a property of the design, not five separate oversights: a page
+declares its audience in its own code, and a hand-maintained list in a different
+file decides whether that audience can reach it.
+
+#### Fixes Applied
+'/pay' is on the PUBLIC list, with the reason recorded inline beside it. The
+page is unchanged: it already never leaks whether a handle exists — an unknown
+handle and an active handle with no live link render the identical dead-end —
+and it never touches money, only a redirect to the existing gift token flow.
+
+More importantly, the class is now checked rather than remembered.
+tests/public-pages-reachable.test.ts walks app/, removes route groups from the
+URL while remembering them, and requires every page route outside app/(app) to
+be either publicly reachable through the middleware's own matching rule or named
+in a DELIBERATELY_PRIVATE map with a written reason. Today that map holds one
+entry, /onboarding, which runs after sign-up and has no signed-out form. A sixth
+instance now fails a test at the moment the route is added.
+
+#### Retest Results
+tests/public-pages-reachable.test.ts: 44 cases pass on Node 24.15.0. Removing
+'/pay' from the middleware fails exactly the case that should fail, with the
+message "/pay/[handle] answers 307 to /login before its page runs".
+
+Two traps were found and closed while writing it. The PUBLIC list documents the
+paths deliberately left OFF it — "Deliberately NOT '/display'" — so a naive
+scan for quoted strings read the signed-in kiosk as public; the parse now drops
+comment lines, and asserts both that the prose case is still present and that
+/display is not in the parsed result. And the walk asserts it found more than
+100 routes before testing any of them, because a traversal that silently found
+nothing would have passed every case.
+
+#### Evidence
+tests/public-pages-reachable.test.ts; unauthenticated production probes of
+/pay/emma, /pay/anything and /gift/sometoken against www.bubaly.com on
+2026-09-13 (build 0a472a5a).
+
+#### Final Status
+🛠 FIXED + PASS — deployed re-probe pending.
+
 # Final Regression
 
 ## Build
@@ -20344,6 +20428,7 @@ Full verification remains incomplete. Confirmed defects appear above; no depende
 - SEO-001: Both generated social preview images answer 307 to /login for an unauthenticated crawler, so no shared Bubaly link renders a preview card on any platform.
 - SEO-002: resolveMarketingMetadata replaces the root Open Graph object with {title, description}, deleting og:image, og:url, og:type and og:site_name from every marketing page.
 - SEO-003: Eight of the eleven published marketing page families answered 307 to /login for anonymous visitors and search engines; the middleware now derives its public prefixes from PAGE_TYPES instead of restating them.
+- SEO-004: /pay/<handle>, the Pay-ID resolver a relative follows to send a gift, answered 307 to /login while the /gift/<token> link it forwards to answered 200 — the fifth route in this audit whose only caller is unauthenticated, sitting behind the session boundary.
 
 ## Production Readiness
 NO
