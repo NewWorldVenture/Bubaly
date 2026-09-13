@@ -13,15 +13,19 @@ are verifying or contradicting it.
 ---
 
 ## Claude-1
-CURRENT: Passes D and E merged; waiting on Claude-4 (QA/flows/perf)
+CURRENT: all four workers done; passes C, D, E, F merged into finalaudit.md
 COMPLETED: scaffolding; workers dispatched; architecture+integration sweep
   (CSP vs real outbound hosts, server/client boundary, env contract, workflow
   health, dependency audit, mobile gate); Pass C written into finalaudit.md as
   F-C01–F-C10 with all 41 prior findings preserved; #526/#540/#543/#544/#546
   shipped and verified in production
-NEXT: merge Claude-4 when it lands; then the category index the goal asks for
-  (Critical/High/Medium/Low, Frontend/Backend/…) across all five passes
-FILES-TOUCHED: audit/status.md, audit/claude-1.md, finalaudit.md
+NEXT: the category index the goal asks for (Critical/High/Medium/Low,
+  Frontend/Backend/Security/UX/Performance/…) across all six passes, and a
+  recommended fix order
+FILES-TOUCHED: audit/status.md, audit/claude-1.md, finalaudit.md,
+  supabase/migrations/0296_family_credentials_manager_only.sql,
+  docs/audit/family-credentials-boundary-check.sql,
+  tests/migration-version-safety.test.ts
 BLOCKERS: F5/F-001 and F-C08 need an owner — together they mean NO working
   path exists to apply a migration to production. Not a blocker on the audit.
   F-E01 is CRITICAL and needs an owner decision tonight, not a queue slot.
@@ -63,9 +67,12 @@ BLOCKERS: production schema unverifiable (no credentials) — if finalaudit F-00
 LAST-UPDATE: 2026-09-13T23:40Z
 
 ## Claude-4
-CURRENT: sweeping tests for non-failing assertions; flakiness; coverage holes on money/kids
-COMPLETED: read finalaudit.md index (41 prior findings)
-NEXT: money/kids coverage cross-reference; flow edge cases; N+1 perf
-FILES-TOUCHED: audit/claude-4.md, audit/status.md
-BLOCKERS: none
-LAST-UPDATE: 2026-09-13T22:45Z
+CURRENT: done — 13 findings written to audit/claude-4.md
+COMPLETED: read finalaudit.md; 2 full suite runs (TZ=UTC and TZ=America/Los_Angeles, 195s each);
+  4 scripted sweeps over tests/** for non-failing assertions; await-in-loop sweep over app/+lib/;
+  money/kids action-to-test cross-reference (51 actions); invite/join and double-submit flow review
+NEXT: nothing queued. Available for follow-up if Claude-1 wants any OPEN item closed (C-4-09 needs
+  a caller walk to bound Promise.all fan-out)
+FILES-TOUCHED: audit/claude-4.md, audit/status.md (no source code modified)
+BLOCKERS: none. Could not reach: live database, running app, Playwright e2e matrix
+LAST-UPDATE: 2026-09-13T23:40Z

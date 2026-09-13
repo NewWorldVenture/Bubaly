@@ -11,10 +11,13 @@ They ran over **different surfaces** and neither supersedes the other:
 | **C — Delivery and integration** (2026-09-13) | what the sitemap says, what every public page weighs, what an unrouted path answers, the environment contract, workflow health, the mobile app's gate | 10 | `F-C01`–`F-C10` |
 | **D — Frontend and accessibility** (2026-09-13) | the *authenticated* app, which A and B barely touched on the frontend: dialogs, labels, keyboard reachability, headings, loading and error states, React effect correctness | 14 | `F-D01`–`F-D14` |
 | **E — Backend, auth and security** (2026-09-13) | RLS and grants audited against a real catalogue after replaying 308 migrations, all 141 API routes mapped to their guard, all 61 public-list carve-outs read, storage buckets, secrets | 9 | `F-E01`–`F-E09` |
+| **F — QA, flows, performance, edge cases** (2026-09-13) | tests that cannot fail, coverage holes on money and children, timezone and DST correctness, N+1 round trips, incomplete features | 13 | `F-F01`–`F-F13` |
 
 > **Pass E opens with the most serious finding in this document.** See
 > **F-E01**: every child in a family can read, edit and delete the family
-> password vault, and the secrets are stored in plaintext.
+> password vault, and the secrets are stored in plaintext. **It is fixed** by
+> migration `0296`, proved by a probe CI runs — but see F-C08: no migration can
+> currently reach production.
 
 **Pass C changes the disposition of two Pass A findings.** Both are recorded
 below rather than edited in place, so the history stays readable:
@@ -2558,7 +2561,7 @@ all 61 entries of the public carve-out list were read individually.
    extension was absent — so the **marketing platform spine tables were not
    checked**. That is a known gap, not a clean bill.
 
-## F-E01 — Every child can read, edit and delete the family password vault *(CRITICAL)*
+## F-E01 — Every child can read, edit and delete the family password vault *(CRITICAL — fixed by 0296, unapplied)*
 
 `public.family_credentials` holds Wi-Fi passwords, account logins, PINs and card
 details, with `secret` stored as **plaintext `text`**.
@@ -2576,6 +2579,43 @@ and it does not hold**.
 
 A child signed into the family app can read every stored password, change them,
 or delete them.
+
+### Independently reproduced, then fixed
+
+Every link was verified by hand before anything was changed: `secret` is
+plaintext `text`; all four policies call `is_family_member`; that function
+checks only `user_id = auth.uid() and is_active`; `child-login-actions.ts`
+creates a real auth user and sets `family_members.user_id` to it, its own
+comment reading *"Link the member to the new auth user so they ARE this member
+on sign-in"*; and no migration after `0119` ever touched the table.
+
+**Migration `0296_family_credentials_manager_only.sql`** swaps all four policies
+to `can_manage_family`, which is `role in ('parent','adult') and is_active` —
+so no adult loses access and only children do, which is the point. `0266` did
+exactly this for the document vault; this is the same fix for the table that
+holds the passwords.
+
+**`docs/audit/family-credentials-boundary-check.sql`** proves it behaviourally,
+and CI globs `docs/audit/*-check.sql`, so it runs on every PR. Against a real
+Postgres 16:
+
+- against the **original** policies it fails with
+  `0296: a child can READ 1 credential row(s); the vault is open`
+- against the **fixed** policies it passes, asserting the child is refused
+  read, insert, update *and* delete, while both a parent and an adult keep the
+  vault and can still write to it
+
+The probe was itself defective on first write — it inserted a row per run, so a
+second run tripped its own count assertion and looked like the fix had locked
+out a parent. It now clears its family's rows first and asserts on the row it
+created; verified re-runnable three times.
+
+**This cannot reach production yet.** See F5 and F-C08: authentication blocks
+one release path and a stale pin blocks the other. The fix is merged-ready and
+inert until an operator unblocks them.
+
+*If the owner wants the vault narrowed further — parents only, not adults —
+that is a second and additive decision, deliberately not made here.*
 
 ## F-E02 — Step-up MFA is presentational *(High)*
 
@@ -2625,3 +2665,69 @@ found it undocumented, Pass E found it accepted in a query string.
 
 Twelve items, listed in `audit/claude-3.md`, including that no table is
 actually missing RLS once the catalogue is read rather than grepped.
+
+
+---
+
+# Pass F — QA, flows, performance and edge cases (F-F01–F-F13)
+
+Ran 2026-09-13. Working notes in `audit/claude-4.md`.
+
+## The three that matter most
+
+### F-F01 — A capped read reports success while dropping rows *(High, money)*
+
+`lib/supabase/read-all.ts:93` returns `error: null` when a read stops at a
+**caller-supplied** `max`; only the default ceiling raises.
+
+So `app/(app)/admin/wallet/reconciliation/page.tsx` reads the platform-wide
+ledger with `{ max: 20000 }` ordered `created_at DESC`, silently drops every
+row past that, and renders **"Everything reconciles"** from a prefix — the
+exact failure its own comment says the helper was fixed to prevent. Same shape
+at `economy/page.tsx` with `{ max: 5000 }`, where the comment reads *"a capped
+read is a wrong balance."*
+
+*Related to F-008/F-011/F-013, which fixed the default ceiling. This is the
+caller-supplied path the fix did not cover.*
+
+### F-F02 — F-017's timezone bug is still live on eleven server-rendered surfaces *(High)*
+
+`setHours(0,0,0,0)` — server midnight — remains on eleven surfaces including
+`app/(app)/kids/page.tsx:22` and the "today"/"tomorrow" text of every
+notification.
+
+F-017's guard cannot see them: it flags `toISOString().slice(0,10)` next to a
+**DATE** column, and these are `setHours` against **timestamptz**. On a UTC host
+a Californian child's "today" runs 17:00 → 17:00.
+
+*This is F-017 incompletely closed, found by a different detector.*
+
+### F-F03 — /missions issues up to 240 sequential storage round trips *(High, perf)*
+
+`app/(app)/missions/page.tsx:70-77` nests two loops around
+`await createSignedUrl`. The batch call `createSignedUrls` is already used
+correctly at `app/(app)/admin/marketing/assets/page.tsx:53`. This is the parent
+approval queue — the page a parent opens most.
+
+## The rest
+
+| | Finding | Severity |
+|---|---|---|
+| F-F04 | A requested local time that does not exist (DST spring-forward) is mishandled — **a genuine production bug**, found by running the suite under `TZ=America/Los_Angeles`, reproduced in two lines of node, and the suite pins no `TZ` at all | Medium |
+| F-F05 | 96 tests across 12 files share the exact shape of the known `api-ai-runs` 5-second timeout — a cold `await import('@/app/…')` inside a default-timeout test — and no `testTimeout` is configured anywhere | Medium |
+| F-F06 | `tests/seed-failure-safety.test.ts`, named "fails closed", asserts only the *absence* of two bad shapes, so deleting the error check makes it greener | Medium |
+| F-F07 | 37 of 51 money, kids, economy and missions server actions have no test | Medium |
+| F-F08 | `addFundsAction` is the one money mutator that writes the balance directly | Medium |
+| F-F09 | Unbounded concurrent fan-out to an external drive-time API | Medium |
+| F-F10 | Two buttons in the message header exist only to say the feature is unavailable | Low |
+| F-F11 | The proof-photo signing error is discarded, so a parent sees a blank frame rather than a reason | Low |
+| F-F12 | The vitest config's JSX block is dead under vitest 4 | Low |
+| F-F13 | Sixty-nine test blocks assert only the absence of a pattern | Low |
+
+## On the hunt for tests that cannot fail
+
+This was the highest-priority sweep and it came back **mostly clean** — one
+genuine instance (F-F06). That is worth recording as a positive: this suite's
+grep-style guards mostly carry explicit non-vacuity blocks, which is unusual
+and means the earlier findings (F4, F-004, F-015, F-019) were the exception
+rather than the pattern.
