@@ -76,6 +76,31 @@ const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security',
   '/api/webhooks',
   '/api/marketing/unsubscribe'];
 
+// The assistant bridge's two entry points.
+//
+// Found the same way the Contact Center webhooks above were: they were not
+// here, so middleware answered a speaker's POST with a 307 to the HTML login
+// page and the route — with its token check and its Amazon signature
+// verification — never ran at all. Every utterance from every Alexa, Siri
+// Shortcut and Home Assistant failed, and the failure looked like a device or
+// a skill problem rather than a routing one. Nothing in the feature's own
+// tests could see it, because they all start inside the handler.
+//
+// Safe to be public for the same reason as that group: each authenticates
+// ITSELF. /api/assistant requires a `bub_asst_…` capability token and answers
+// 401 without one; /api/assistant/alexa additionally proves the request came
+// from Amazon — signature, certificate chain to a trusted root, and a 150
+// second replay window — and answers 403 when it cannot.
+//
+// An EXACT set and POST only, not a '/api/assistant' prefix. A prefix would
+// also open any settings or management endpoint added under it later, and
+// those belong behind a session. Same shape as the Contact Center callbacks
+// below it in spirit: name the paths, do not open a namespace.
+const PUBLIC_ASSISTANT_CALLBACKS = new Set([
+  '/api/assistant',
+  '/api/assistant/alexa',
+]);
+
 export async function middleware(req: NextRequest) {
   const path = req.nextUrl.pathname;
 
@@ -100,7 +125,8 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  const isPublic = PUBLIC.some((p) => path === p || path.startsWith(p + '/'));
+  const isPublic = (req.method === 'POST' && PUBLIC_ASSISTANT_CALLBACKS.has(path))
+    || PUBLIC.some((p) => path === p || path.startsWith(p + '/'));
   // The AI edge (/api/ai, /api/ai/requests, /api/ai/runs/*) is called by the
   // mobile app with `Authorization: Bearer <supabase jwt>` and no cookie. Those
   // handlers verify the token themselves (`authenticateAI` /
