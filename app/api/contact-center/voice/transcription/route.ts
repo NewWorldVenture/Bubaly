@@ -6,11 +6,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settle } from '@/lib/supabase/settle';
-import { validateTwilioSignature, sendSms } from '@/lib/guardian/twilio';
+import { validateTwilioSignature } from '@/lib/guardian/twilio';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
-import { getOrCreateChannelResult, recordInboundMessage, routeInboundToPlanner } from '@/lib/contact-center/server';
+import { getOrCreateChannelResult, routeInboundToPlanner } from '@/lib/contact-center/server';
+import { captureInboundWithUrgency, attemptUrgentDelivery } from '@/lib/contact-center/urgent-delivery';
 import { runConcierge } from '@/lib/contact-center/concierge';
-import { shouldNotifyFamily } from '@/lib/contact-center/routing';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -29,12 +29,12 @@ export async function POST(req: NextRequest) {
     const url = `${BASE_URL}/api/contact-center/voice/transcription?familyId=${familyId}`;
     if (!validateTwilioSignature(sig, url, params)) return new NextResponse('Unauthorized', { status: 401 });
   }
-  if (!familyId) return new NextResponse('', { status: 204 });
+  if (!familyId) return new NextResponse(null, { status: 204 });
 
   const text = (params.TranscriptionText ?? '').slice(0, 4096);
   const from = params.From ?? null;
   const sid = params.RecordingSid ?? params.TranscriptionSid ?? null;
-  if (!text.trim()) return new NextResponse('', { status: 204 });
+  if (!text.trim()) return new NextResponse(null, { status: 204 });
 
   const admin = createServiceClient();
   const [channelResult, familyResult] = await Promise.all([
@@ -45,35 +45,44 @@ export async function POST(req: NextRequest) {
     console.error('[contact-center] transcription family context read failed', channelResult.error ?? familyResult.error);
     return new NextResponse('Contact Center temporarily unavailable', { status: 503 });
   }
-  const channel = channelResult.data;
   const familyLabel = familyResult.data?.name || 'the family';
 
   const result = await runConcierge({ channel: 'voice', from: from ?? undefined, text, familyLabel });
-  const filed = await recordInboundMessage(admin, {
-    familyId, channel: 'voice', from: from ?? undefined, subject: 'Voicemail', body: text,
+  let filed: Awaited<ReturnType<typeof captureInboundWithUrgency>>;
+  try { filed = await captureInboundWithUrgency(admin, {
+    familyId, channel: 'voice', from: from ?? undefined, to: params.To || channelResult.data?.phone_number || undefined, subject: 'Voicemail', body: text,
     providerRef: sid ?? undefined, aiSummary: result.summary, aiIntent: result.intent,
-  });
+  }); } catch { return new NextResponse('Inbox temporarily unavailable', { status: 503 }); }
+  const urgentOutcome = filed.urgentReceiptId ? await attemptUrgentDelivery(admin, filed.urgentReceiptId, familyId) : undefined;
 
-  // M20: a voicemail asking to reschedule is work, not an audio file. Twilio
-  // retries a transcription callback, so only a delivery that was actually new
-  // reaches the planner.
-  if (filed.inserted) {
-    await routeInboundToPlanner(admin, {
-      familyId, channel: 'voice', messageId: filed.messageId, body: text,
-      intent: result.intent, providerRef: filed.providerRef,
-    }).catch((error) => { console.error('[contact-center] voicemail planner routing threw', error); });
-  }
-
-  if (shouldNotifyFamily(result.intent) && channel?.forward_to_phone) {
-    try { await sendSms(channel.forward_to_phone, `🚨 Urgent voicemail at your Bubaly line: ${result.summary}`); } catch (error) { console.error('[contact-center] urgent voicemail SMS failed', error); }
+  // Capture and planning can fail independently. Resume an unhandled saved
+  // voicemail on replay, retaining the provider-ref intake idempotency key.
+  let needsPlanning = filed.inserted;
+  if (!filed.messageId) return new NextResponse('Inbox temporarily unavailable', { status: 503 });
+  if (!filed.inserted) {
     try {
-      await admin.from('notifications').insert({
-        family_id: familyId, type: 'system',
-        title: '🚨 Urgent voicemail at your family line', body: result.summary,
-        related_type: 'contact_center',
+      const saved = await settle(admin.from('family_inbox_messages').select('ai_handled')
+        .eq('id', filed.messageId).eq('family_id', familyId).maybeSingle());
+      if (saved.error || !saved.data || typeof saved.data.ai_handled !== 'boolean') throw saved.error ?? new Error('Handled state was unavailable');
+      needsPlanning = !saved.data.ai_handled;
+    } catch (error) {
+      console.error('[contact-center] voicemail handled state read failed', error);
+      return new NextResponse('Inbox temporarily unavailable', { status: 503 });
+    }
+  }
+  if (needsPlanning) {
+    try {
+      const outcome = await routeInboundToPlanner(admin, {
+        familyId, channel: 'voice', messageId: filed.messageId, body: text,
+        intent: result.intent, providerRef: filed.providerRef,
       });
-    } catch (error) { console.error('[contact-center] urgent voicemail notification write failed', error); }
+      if (outcome.reason === 'no_scope' || outcome.reason === 'intake_failed') return new NextResponse('Planner temporarily unavailable', { status: 503 });
+    } catch (error) {
+      console.error('[contact-center] voicemail planner routing threw', error);
+      return new NextResponse('Planner temporarily unavailable', { status: 503 });
+    }
   }
 
-  return new NextResponse('', { status: 204 });
+  if (urgentOutcome === 'failed') return new NextResponse('Urgent delivery state temporarily unavailable', { status: 503 });
+  return new NextResponse(null, { status: 204 });
 }

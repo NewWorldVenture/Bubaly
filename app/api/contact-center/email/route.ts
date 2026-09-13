@@ -9,18 +9,25 @@
 // endpoint is never an open relay; permitted in dev for local testing.
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settle } from '@/lib/supabase/settle';
 import { readBoundedRequestFormData, readBoundedRequestText } from '@/lib/server/bounded-request-body';
-import { sendEmail } from '@/lib/server/email';
-import { sendSms } from '@/lib/guardian/twilio';
+import { familyReplySender, sendEmail } from '@/lib/server/email';
 import { parseRecipientLocal, buildBubalyAddress } from '@/lib/contact-center/address';
 import {
-  resolveFamilyByEmailLocalResult, getOrCreateChannelResult, recordInboundMessage, recordOutboundMessage,
+  resolveFamilyByEmailLocalResult, getOrCreateChannelResult, recordOutboundMessage,
   routeInboundToPlanner, fileInboundPaperwork,
 } from '@/lib/contact-center/server';
 import { runConcierge } from '@/lib/contact-center/concierge';
-import { shouldNotifyFamily } from '@/lib/contact-center/routing';
+// Aliased: this file already has a MAX_BODY, and it is a different limit —
+// that one bounds the whole REQUEST (1 MB), this one bounds the body FIELD a
+// receipt will accept (8 KB). Importing it unaliased silently swapped the
+// second for the first, which is the same defect wearing a different hat.
+import {
+  MAX_ADDRESS, MAX_BODY as MAX_RECEIPT_BODY, MAX_PROVIDER_REF, MAX_SUBJECT,
+  captureInboundWithUrgency, attemptUrgentDelivery,
+} from '@/lib/contact-center/urgent-delivery';
 import { fileEmailAttachments, MAX_MULTIPART_EMAIL_BYTES } from '@/lib/services/paperwork/email-attachments';
 
 export const runtime = 'nodejs';
@@ -54,7 +61,9 @@ export async function POST(req: NextRequest) {
     if (ctype.includes('application/json')) {
       const raw = await readBoundedRequestText(req, MAX_BODY);
       if (!raw.ok) return new NextResponse('Payload too large', { status: 413 });
-      fields = JSON.parse(raw.text) as Record<string, unknown>;
+      const parsed: unknown = JSON.parse(raw.text);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return new NextResponse('Invalid payload', { status: 400 });
+      fields = parsed as Record<string, unknown>;
     } else {
       const form = await readBoundedRequestFormData(req, MAX_MULTIPART_EMAIL_BYTES);
       if (!form.ok) return new NextResponse('Payload too large', { status: 413 });
@@ -67,11 +76,26 @@ export async function POST(req: NextRequest) {
     return new NextResponse('Invalid payload', { status: 400 });
   }
 
-  const to = pick(fields, 'to', 'To', 'recipient', 'envelope_to');
-  const from = pick(fields, 'from', 'From', 'sender') || null;
-  const subject = pick(fields, 'subject', 'Subject') || null;
-  const body = (pick(fields, 'text', 'body-plain', 'stripped-text', 'plain') || pick(fields, 'html', 'body-html')).slice(0, 8000);
-  const messageId = pick(fields, 'Message-Id', 'message-id', 'messageId') || null;
+  // Every one of these is bounded to what the urgent receipt's schema accepts,
+  // not just `body`.
+  //
+  // captureInboundWithUrgency parses its input against those exact caps and
+  // does not catch the ZodError, so it reached this route's `catch` and
+  // answered 503 — with nothing written. No inbox row, no escalation, no
+  // notification, no auto-reply, and deterministic, so every provider
+  // redelivery failed the same way. A school mailing a class distribution list
+  // has a `To` header well past 512 characters, and the non-urgent path files
+  // it fine, so the loss landed precisely on the messages this subsystem
+  // exists to escalate.
+  //
+  // Bounding here rather than widening the schema: these are headers from an
+  // unauthenticated sender, and the caps are the contract. Truncating an
+  // absurd header keeps the message; refusing it loses the message.
+  const to = pick(fields, 'to', 'To', 'recipient', 'envelope_to').slice(0, MAX_ADDRESS);
+  const from = pick(fields, 'from', 'From', 'sender').slice(0, MAX_ADDRESS) || null;
+  const subject = pick(fields, 'subject', 'Subject').slice(0, MAX_SUBJECT) || null;
+  const body = (pick(fields, 'text', 'body-plain', 'stripped-text', 'plain') || pick(fields, 'html', 'body-html')).slice(0, MAX_RECEIPT_BODY);
+  const messageId = pick(fields, 'Message-Id', 'message-id', 'messageId').slice(0, MAX_PROVIDER_REF) || null;
 
   const local = parseRecipientLocal(to);
   if (!local) return NextResponse.json({ ok: true, skipped: 'no bubaly recipient' });
@@ -97,17 +121,13 @@ export async function POST(req: NextRequest) {
   const familyLabel = familyResult.data?.name || 'the family';
 
   const result = await runConcierge({ channel: 'email', from: from ?? undefined, text: body || subject || '', familyLabel });
-  const filed = await recordInboundMessage(admin, {
+  let filed: Awaited<ReturnType<typeof captureInboundWithUrgency>>;
+  try { filed = await captureInboundWithUrgency(admin, {
     familyId, channel: 'email', from: from ?? undefined, to, subject: subject ?? undefined,
     body: body || subject || '(no content)', providerRef: messageId ?? undefined,
     aiSummary: result.summary, aiIntent: result.intent,
-  });
-
-  // Urgent escalation must still reach the human if paperwork matching needs
-  // a retry. Keep it independent of the enrichment/planner availability below.
-  if (filed.inserted && shouldNotifyFamily(result.intent) && channel?.forward_to_phone) {
-    try { await sendSms(channel.forward_to_phone, `🚨 Urgent email at your Bubaly line: ${result.summary}`); } catch (error) { console.error('[contact-center] urgent email SMS failed', error); }
-  }
+  }); } catch { return new NextResponse('Inbox temporarily unavailable', { status: 503 }); }
+  const urgentOutcome = filed.urgentReceiptId ? await attemptUrgentDelivery(admin, filed.urgentReceiptId, familyId) : undefined;
 
   // A saved inbox delivery can still need paperwork enrichment. Retry the
   // same captured row before acknowledging it, including on redelivery.
@@ -166,24 +186,25 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // Auto-reply (best-effort) unless the concierge is off or it's spam.
+  if (urgentOutcome === 'failed') return new NextResponse('Urgent delivery state temporarily unavailable', { status: 503 });
+  // Auto-reply acknowledges intake; it does not assert that the fallback text arrived.
   if (channel?.ai_concierge_enabled !== false && result.intent !== 'spam' && from) {
     try {
-      // Reply AS the family, not as the product. The address was previously
-      // only named in the footer while the message came from FROM_EMAIL, so a
-      // teacher who hit Reply reached Bubaly's inbox rather than the family's
-      // and the conversation they started went nowhere. replyTo is set to the
-      // same address as well, so the thread survives even if a provider or a
-      // forwarder rewrites From.
+      const reply = filed.escalated ? (await getTranslations())('contactUrgent.replySaved') : result.reply;
+      // Keep replies on the family's thread while respecting the configured
+      // sender domain. The footer and message body are plain text in HTML.
       const familyAddress = buildBubalyAddress(local);
-      await sendEmail({
+      const escapedFamilyLabel = familyLabel.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+      const sent = await sendEmail({
         to: from,
-        from: `${familyLabel} <${familyAddress}>`,
+        from: familyReplySender(familyLabel, familyAddress),
         replyTo: familyAddress,
         subject: subject ? `Re: ${subject}` : `Message received — ${familyLabel}`,
-        html: `<p>${result.reply.replace(/</g, '&lt;')}</p><p style="color:#888;font-size:12px">— ${familyLabel} via ${familyAddress}</p>`,
+        html: `<p>${reply.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</p><p style="color:#888;font-size:12px">— ${escapedFamilyLabel} via ${familyAddress}</p>`,
       });
-      await recordOutboundMessage(admin, { familyId, channel: 'email', to: from, body: result.reply });
+      if (sent.ok && !sent.skipped) {
+        await recordOutboundMessage(admin, { familyId, channel: 'email', to: from, body: reply });
+      }
     } catch (error) { console.error('[contact-center] email auto-reply failed', error); }
   }
 

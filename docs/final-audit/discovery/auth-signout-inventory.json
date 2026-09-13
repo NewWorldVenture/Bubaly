@@ -1,0 +1,1421 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-12T18:08:09.220Z",
+  "baselineCommit": "effe6a2edddba707d2bbc5b11cd790071080822a",
+  "sourceCommit": "c4d4ea1eda5eebd7c2ec0f24816cf5e019ef9895",
+  "methodology": [
+    "Exact committed changed blobs, excluding audit documents. Source SHA256 is over Git blob bytes.",
+    "Exported declarations and static environment names parsed using installed TypeScript. No secret values.",
+    "New page routes are derived without route-group segments. Discovery does not establish workflow completion."
+  ],
+  "counts": {
+    "files": 48,
+    "newFiles": 16,
+    "production": 19,
+    "tests": 22,
+    "addedExportedFunctions": 16,
+    "newPageRoutes": [
+      "/auth/signout/complete"
+    ]
+  },
+  "files": [
+    {
+      "path": "app/(auth)/auth/signout/complete/page.tsx",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "55943ff3161c32d4ab6be1040b988e702189df4cbd1beb58115dffe591e76ccb",
+      "bytes": 580,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "SignOutCompletionPage",
+          "line": 5,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "SignOutCompletionPage",
+          "line": 5,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": "/auth/signout/complete",
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "app/auth/signout/route.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "b445e480ea4dc4c7a744c7c03c4e3f58b7512e7bbdc1637ff69ffbec9ffd6d09",
+      "sourceSha256": "6e89849e866c52c40a5edf83634a8302b45fd8fb00890282d54b732175a78b9f",
+      "bytes": 2099,
+      "baselineExportedSymbols": [
+        {
+          "name": "POST",
+          "line": 17,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "POST",
+          "line": 16,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "ROLE-653C5C5D599A",
+        "API-216181642979",
+        "FLOW-B9D906284539"
+      ]
+    },
+    {
+      "path": "components/app/account-closed-gate.tsx",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "dd920ef8dec54fc80d66a145ef08d4beef7120e5cded62eba2818aef469c0f89",
+      "sourceSha256": "eeed528b9923711df2efc8151b1372f3735b3b6f28a5417535cc76b6c33162ea",
+      "bytes": 2413,
+      "baselineExportedSymbols": [
+        {
+          "name": "AccountClosedGate",
+          "line": 13,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "AccountClosedGate",
+          "line": 14,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "COMPONENT-C64B18806167",
+        "CONTROL-8B2791C0CF81",
+        "CONTROL-53D2BB673FA2",
+        "CONTROL-C4DCD2804779",
+        "UI-WF-015"
+      ]
+    },
+    {
+      "path": "components/app/app-lock-gate.tsx",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "76daeca397184af8dc303db91b44f203c344bebc6c4a1f4a9454b5e0000e56db",
+      "sourceSha256": "2d526031a177b4f0bb15f697fd16976c95e0901c4f57773e4361f411ae03b5c3",
+      "bytes": 7139,
+      "baselineExportedSymbols": [
+        {
+          "name": "AppLockGate",
+          "line": 15,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "AppLockGate",
+          "line": 16,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "COMPONENT-E958F37ADC46",
+        "CONTROL-5F6A486720BA",
+        "CONTROL-2933296F4DE0",
+        "CONTROL-F15C60A155D6",
+        "CONTROL-ADEEE7C81727",
+        "CONTROL-133F9F1E464F",
+        "ROLE-E958F37ADC46",
+        "UI-WF-010"
+      ]
+    },
+    {
+      "path": "components/app/trial-paywall-gate.tsx",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "5ffa605ec186bf67030e8a3402b1ab53f5fff7f95400d62e3ea3cb94878a08d1",
+      "sourceSha256": "2661c9c4ab132d75997b3c2533643df8c02a482397d61213f518f004de5a6c12",
+      "bytes": 5551,
+      "baselineExportedSymbols": [
+        {
+          "name": "TrialPaywallGate",
+          "line": 19,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "TrialPaywallGate",
+          "line": 20,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "COMPONENT-81D20C4C5738",
+        "CONTROL-A49F8298AE93",
+        "CONTROL-5FB5C7F37995",
+        "CONTROL-04B9A4E4899E",
+        "CONTROL-792941B051B1",
+        "CONTROL-414472FBC2DB",
+        "CONTROL-66A23A76642F",
+        "CONTROL-E6F46978EE9E",
+        "UI-WF-015"
+      ]
+    },
+    {
+      "path": "components/auth/session-keeper.tsx",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "a501da851534d23129db6c6a0eedf391b12388f00d0f37e98a7aacdb481068e4",
+      "sourceSha256": "9f78835af344656d7c5866c758b05d095ff9e32405303e9239ae073a1232798a",
+      "bytes": 5679,
+      "baselineExportedSymbols": [
+        {
+          "name": "SessionKeeper",
+          "line": 28,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "SessionKeeper",
+          "line": 29,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "COMPONENT-4CE9A38CCEFD",
+        "ROLE-4CE9A38CCEFD",
+        "AUTH-002"
+      ]
+    },
+    {
+      "path": "components/auth/sign-out-button.tsx",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "e8398bdbe74cd57b7a442a9bc3266db653e642d912bded7a278e06ed2124b1e4",
+      "sourceSha256": "3b387ccb02e4286f834d99c17391f74caa19d674b60e3443435df49c69f9e9f6",
+      "bytes": 1739,
+      "baselineExportedSymbols": [
+        {
+          "name": "SignOutButton",
+          "line": 14,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "SignOutButton",
+          "line": 14,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "COMPONENT-B2DC4702677D",
+        "CONTROL-01E465DF5F4A",
+        "CONTROL-8497005958E8",
+        "CONTROL-0BA69F2FF4D0",
+        "CONTROL-B875FDA0F066",
+        "CONTROL-84BB9724A095",
+        "ROLE-B2DC4702677D"
+      ]
+    },
+    {
+      "path": "components/auth/sign-out-completion.tsx",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "b2c52d6323599a43c901b366ba490cbd9857ee35ec991434cef38f7fda986f7c",
+      "bytes": 1935,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "SignOutCompletion",
+          "line": 12,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "SignOutCompletion",
+          "line": 12,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "components/auth/sign-out-form.tsx",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "4eafbe4e498206bc63de9435a7ebfc5ec271d0cbe5f5ef6d5f428929f47ff9a3",
+      "bytes": 3251,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "SignOutForm",
+          "line": 11,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "SignOutForm",
+          "line": 11,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "components/auth/step-up-form.tsx",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "dd3f999611e4c0c98be194e82ee3c4a865c407a9fb32b68ff8b6a95348034d67",
+      "sourceSha256": "458224febe3ddb3c068fb52303e7ef1708c85c869504dcff62a97df198c2c1a3",
+      "bytes": 4816,
+      "baselineExportedSymbols": [
+        {
+          "name": "StepUpForm",
+          "line": 25,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "StepUpForm",
+          "line": 26,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "COMPONENT-0CB779F5FBBE",
+        "CONTROL-4992C5647183",
+        "CONTROL-7753B9C32536",
+        "CONTROL-CAA82B27525A",
+        "CONTROL-59A8DC696E91",
+        "CONTROL-105422D391EC",
+        "CONTROL-0BC8A1F9359D",
+        "ROLE-0CB779F5FBBE"
+      ]
+    },
+    {
+      "path": "components/settings/privacy-center.tsx",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "36f5e1e1364d0b761fbc7b5a8cab2c0303fb3514546e78050507b3bb4a192243",
+      "sourceSha256": "9f9dbf610de68ddbb2cdd96201c5d5d5b522f6913d57f22454a0ec16b36a6605",
+      "bytes": 15426,
+      "baselineExportedSymbols": [
+        {
+          "name": "PrivacyCenter",
+          "line": 54,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "PrivacyCenter",
+          "line": 55,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "COMPONENT-18868DC65B37",
+        "CONTROL-59E0E8D31B40",
+        "CONTROL-5CCF0C0ABA0B",
+        "CONTROL-1B15E4F8EE3F",
+        "CONTROL-6B83368C978A",
+        "CONTROL-869EF89327F8",
+        "CONTROL-FB599FE3D566",
+        "CONTROL-104116995759",
+        "CONTROL-9C03DD87349B",
+        "CONTROL-A310BF3000AF",
+        "CONTROL-71E52CF34E0D",
+        "CONTROL-57F6A97BF644"
+      ]
+    },
+    {
+      "path": "lib/auth/browser-session-storage.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "a362999fec640460300e2219fa16efde4a564a74317fbcf87ccc59211df45265",
+      "bytes": 10194,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "BrowserSessionSnapshot",
+          "line": 10,
+          "kind": "type"
+        },
+        {
+          "name": "captureBrowserSessionSnapshot",
+          "line": 51,
+          "kind": "function"
+        },
+        {
+          "name": "clearBrowserSessionSnapshot",
+          "line": 70,
+          "kind": "function"
+        },
+        {
+          "name": "createBrowserSessionStorage",
+          "line": 92,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "captureBrowserSessionSnapshot",
+          "line": 51,
+          "kind": "function"
+        },
+        {
+          "name": "clearBrowserSessionSnapshot",
+          "line": 70,
+          "kind": "function"
+        },
+        {
+          "name": "createBrowserSessionStorage",
+          "line": 92,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [
+        "NEXT_PUBLIC_SUPABASE_URL"
+      ],
+      "addedEnvironmentNames": [
+        "NEXT_PUBLIC_SUPABASE_URL"
+      ],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "lib/auth/browser-signout.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "b9b6523b494f6b7e07486cce11c72cb92244bf5e63e26c8b3fe50fc29d0f1b09",
+      "bytes": 2769,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "SignOutIntent",
+          "line": 11,
+          "kind": "type"
+        },
+        {
+          "name": "BrowserSignOutResult",
+          "line": 13,
+          "kind": "type"
+        },
+        {
+          "name": "captureSignOutIntent",
+          "line": 24,
+          "kind": "function"
+        },
+        {
+          "name": "isBrowserSignedOut",
+          "line": 29,
+          "kind": "function"
+        },
+        {
+          "name": "signOutBrowserSession",
+          "line": 35,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "captureSignOutIntent",
+          "line": 24,
+          "kind": "function"
+        },
+        {
+          "name": "isBrowserSignedOut",
+          "line": 29,
+          "kind": "function"
+        },
+        {
+          "name": "signOutBrowserSession",
+          "line": 35,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY"
+      ],
+      "addedEnvironmentNames": [
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY"
+      ],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "lib/auth/cache-session.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "3615e09de9136c5c11c752f5c279d712e85a08bc19ac515b6d6efbf4552725ed",
+      "sourceSha256": "d4edde49d48a9f53bd7e695787210fe14e66f2ed81cd12b8c3795bfdfd47ba46",
+      "bytes": 10826,
+      "baselineExportedSymbols": [
+        {
+          "name": "CacheSessionIdentity",
+          "line": 7,
+          "kind": "type"
+        },
+        {
+          "name": "CacheSessionSnapshot",
+          "line": 8,
+          "kind": "type"
+        },
+        {
+          "name": "cacheSessionIdentity",
+          "line": 27,
+          "kind": "function"
+        },
+        {
+          "name": "getCacheSessionSnapshot",
+          "line": 109,
+          "kind": "function"
+        },
+        {
+          "name": "getServerCacheSessionSnapshot",
+          "line": 112,
+          "kind": "function"
+        },
+        {
+          "name": "subscribeCacheSession",
+          "line": 114,
+          "kind": "function"
+        },
+        {
+          "name": "subscribeCacheAuthEvents",
+          "line": 121,
+          "kind": "function"
+        },
+        {
+          "name": "refreshCacheSession",
+          "line": 129,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "CacheSessionIdentity",
+          "line": 9,
+          "kind": "type"
+        },
+        {
+          "name": "CacheSessionSnapshot",
+          "line": 10,
+          "kind": "type"
+        },
+        {
+          "name": "cacheSessionIdentity",
+          "line": 29,
+          "kind": "function"
+        },
+        {
+          "name": "getCacheSessionSnapshot",
+          "line": 148,
+          "kind": "function"
+        },
+        {
+          "name": "getServerCacheSessionSnapshot",
+          "line": 151,
+          "kind": "function"
+        },
+        {
+          "name": "subscribeCacheSession",
+          "line": 153,
+          "kind": "function"
+        },
+        {
+          "name": "subscribeCacheAuthEvents",
+          "line": 160,
+          "kind": "function"
+        },
+        {
+          "name": "refreshCacheSession",
+          "line": 168,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY"
+      ],
+      "addedEnvironmentNames": [
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY"
+      ],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "LIBRARY-478BBDEF113D",
+        "SERVICE-0AD17213A84C",
+        "SERVICE-498FF9278C86",
+        "SERVICE-224D78698802",
+        "SERVICE-302F44D76277",
+        "SERVICE-D31DE05A02EA",
+        "SERVICE-353CD9BBF8DD"
+      ]
+    },
+    {
+      "path": "lib/auth/revoke-session.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "b41d82e53213e4e82a742ee99cf3f5f9048612dd4a749e7d1388b43bfc4a341c",
+      "bytes": 1571,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "SessionRevocation",
+          "line": 3,
+          "kind": "type"
+        },
+        {
+          "name": "revokeSessionToken",
+          "line": 6,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "revokeSessionToken",
+          "line": 6,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        "NEXT_PUBLIC_SUPABASE_URL"
+      ],
+      "addedEnvironmentNames": [
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        "NEXT_PUBLIC_SUPABASE_URL"
+      ],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "lib/auth/session-change.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "74facd64dc96ceeb40e66c1f708d6cde5323764fac1a4bb8d980f0950353e751",
+      "bytes": 3422,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "getSessionStorageChangeRevision",
+          "line": 42,
+          "kind": "function"
+        },
+        {
+          "name": "subscribeSessionStorageChanges",
+          "line": 44,
+          "kind": "function"
+        },
+        {
+          "name": "notifySessionStorageChanged",
+          "line": 60,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "getSessionStorageChangeRevision",
+          "line": 42,
+          "kind": "function"
+        },
+        {
+          "name": "subscribeSessionStorageChanges",
+          "line": 44,
+          "kind": "function"
+        },
+        {
+          "name": "notifySessionStorageChanged",
+          "line": 60,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "lib/auth/signout-bridge.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "666ebde67a79e923438df10d4e86dd722db39789821f1c256726907e458cc8fa",
+      "bytes": 3386,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "SIGNOUT_BRIDGE_COOKIE",
+          "line": 7,
+          "kind": "value"
+        },
+        {
+          "name": "SIGNOUT_BRIDGE_PATH",
+          "line": 8,
+          "kind": "value"
+        },
+        {
+          "name": "SignOutBridge",
+          "line": 10,
+          "kind": "type"
+        },
+        {
+          "name": "prepareSignOutBridge",
+          "line": 14,
+          "kind": "function"
+        },
+        {
+          "name": "encodeSignOutBridge",
+          "line": 40,
+          "kind": "function"
+        },
+        {
+          "name": "decodeSignOutBridge",
+          "line": 45,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "prepareSignOutBridge",
+          "line": 14,
+          "kind": "function"
+        },
+        {
+          "name": "encodeSignOutBridge",
+          "line": 40,
+          "kind": "function"
+        },
+        {
+          "name": "decodeSignOutBridge",
+          "line": 45,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [
+        "NEXT_PUBLIC_SUPABASE_URL"
+      ],
+      "addedEnvironmentNames": [
+        "NEXT_PUBLIC_SUPABASE_URL"
+      ],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "lib/i18n/messages/de-DE.json",
+      "kind": "locale",
+      "isNew": false,
+      "baselineSha256": "9e69553bd2fd1d61b2e0855e20b8ae8f3badb66bfdf0762eaae8a69710b80a04",
+      "sourceSha256": "192f38de3122b6df6ee7f61dc81bc885870aff2c4132fc3ac4c51a8a8e0e496d",
+      "bytes": 984363,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-88F1E3670486"
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/en-US.json",
+      "kind": "locale",
+      "isNew": false,
+      "baselineSha256": "500add6246edcf76d580ffd31c170144187de777f9e87b42318b548bad222782",
+      "sourceSha256": "291854ffd6d1001aa597df62da506f4238df757ab9ad7554812e0f11a65d59f3",
+      "bytes": 878858,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-C346841E8649"
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/es-ES.json",
+      "kind": "locale",
+      "isNew": false,
+      "baselineSha256": "a4f6d705287e069116921aa68aed675898f91d6fc6f8f10e9603c84053e1413f",
+      "sourceSha256": "2e08de0e711d89cb71ea0d23ef8d3a9fb71dc2abc71b0425a03cb6a0b68182de",
+      "bytes": 968081,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-DC666FC0E80F"
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/fr-FR.json",
+      "kind": "locale",
+      "isNew": false,
+      "baselineSha256": "92186bdc45e04377b348572c17f7f675c6f591ce4187b7dae2ea68624e50b164",
+      "sourceSha256": "e2bc6a4662310586521c544c32875364b161dc2001a52a8bf73f4c3dffdd9b35",
+      "bytes": 993424,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-24D39068AF0B"
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/it-IT.json",
+      "kind": "locale",
+      "isNew": false,
+      "baselineSha256": "6ebd9d2ccfac09843fa7f234de942df8224dfde9935afc92fcc58597af1e40dd",
+      "sourceSha256": "ec1d7033fa6470d3453de7800c6997cc1a48a1b20144582684131b87ae178ee0",
+      "bytes": 955754,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-9E9B391BC4E5"
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/nl-NL.json",
+      "kind": "locale",
+      "isNew": false,
+      "baselineSha256": "c7889155d635f43691e3231a8aec8693db6233abe15736f3652dcf1cee8dd11f",
+      "sourceSha256": "3bab330129148c037ea9520e23975c006c694acd5611130d84d9e4f914e80b8c",
+      "bytes": 939962,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-6F4C71EB2624"
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/pt-PT.json",
+      "kind": "locale",
+      "isNew": false,
+      "baselineSha256": "506d03fb55c308d01f43078a78d0c89d972978b1377de0b649c58b6e41e78712",
+      "sourceSha256": "a945dea074e3bc10874337a9cccd787ac0608902ed76007822939f04e55cbedd",
+      "bytes": 970060,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-091D62717E32"
+      ]
+    },
+    {
+      "path": "lib/supabase/client.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "de4169506c349bff441856947f509b7d3ed829576ec9bbf11d39e6cd2c779085",
+      "sourceSha256": "e59a839e4c028e61562af6320fc87d665d6653c24c43209ec30427aa9b1d134c",
+      "bytes": 3689,
+      "baselineExportedSymbols": [
+        {
+          "name": "createClient",
+          "line": 56,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "createClient",
+          "line": 64,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        "NEXT_PUBLIC_SUPABASE_URL"
+      ],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "LIBRARY-E7335A071B71",
+        "AUTH-002",
+        "OPS-INT-001",
+        "AUTH-003"
+      ]
+    },
+    {
+      "path": "middleware.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "5043b8898b2f1794e99f6d15dbb2f49d5ff9ac788681dcaf0532057575a4d331",
+      "sourceSha256": "286497edecda942dab6c24b08b1b6ea13fef7471cd63fc5f03a758d6a4a8ae0f",
+      "bytes": 10623,
+      "baselineExportedSymbols": [
+        {
+          "name": "middleware",
+          "line": 78,
+          "kind": "function"
+        },
+        {
+          "name": "config",
+          "line": 200,
+          "kind": "value"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "middleware",
+          "line": 78,
+          "kind": "function"
+        },
+        {
+          "name": "config",
+          "line": 203,
+          "kind": "value"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        "NEXT_PUBLIC_SUPABASE_URL"
+      ],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-3C67EB27B539",
+        "INT-001"
+      ]
+    },
+    {
+      "path": "tests/browser-signout.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "3734e42c4992a07458f0c1ea19def445d8783a1beb6d11785a95b18b20e405b8",
+      "bytes": 6442,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "tests/cache-session.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "842572b818afdfaf301799057c6ebe58c1dd961214f66ebb43990465d9ac01e6",
+      "sourceSha256": "073e6039de365686cf116563ea854157191efd08218056ae3073ee2aea499098",
+      "bytes": 18633,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-2754B70257DB"
+      ]
+    },
+    {
+      "path": "tests/e2e/auth-cache-partition.spec.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "1af3697b66ecc3897ac64019bfb5213fb8ac6cf630c6669d2fe25b6ad53c37b1",
+      "sourceSha256": "94b200c3272ec4fa740aeb43f5c5b0a0904ced3c305fca00ee008a7ab0982918",
+      "bytes": 31662,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-0BB0813F7C43"
+      ]
+    },
+    {
+      "path": "tests/e2e/auth-lifecycle-boundary.spec.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "fb3c1e3f6b3ad2dce9798469d4d8e37dc59f342ad33473df67ec03a706a16f3d",
+      "sourceSha256": "1ade2c0c7eb944d08659b443d54586a83e65a1c15ab9ef44a81b1d64bbc009d0",
+      "bytes": 14350,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-77FBDAD6AFB2"
+      ]
+    },
+    {
+      "path": "tests/e2e/browser-session-storage.spec.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "1ae127c79acefd63634a984c90f9e64d7f53a4ae8e9493e41d06e44d1c169a14",
+      "sourceSha256": "b158595b0ba6cdbe80503a03dc247ed2e2fbe8125efedd2515cf776221f431d8",
+      "bytes": 11606,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [
+        "PW_CHROMIUM_PATH"
+      ],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-1177446EFB72",
+        "ENV-462EAC324A8E"
+      ]
+    },
+    {
+      "path": "tests/e2e/browser-signout-flow.spec.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "ee0c9cbdee3fc42c764e1ba42dd9059e2cc9fee7889f2ac119b2c6b972fe3ee6",
+      "bytes": 13965,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "tests/e2e/durable-session.spec.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "47fa1bb11ad39e89761b9546f3203812463d23cd7ea51ce58ccdd620660c0fc1",
+      "sourceSha256": "da9bf1453f84db99688ff75c36523bdba1824cf180cfd42d79066a7bff595025",
+      "bytes": 9139,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [
+        "E2E_DURABLE_SESSION",
+        "NEXT_PUBLIC_SUPABASE_URL",
+        "SUPABASE_SERVICE_ROLE_KEY"
+      ],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-B2214422F295"
+      ]
+    },
+    {
+      "path": "tests/e2e/hydration-ledger.spec.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "ab03fd4ec16e5aec83f705557b25b8fc12729adac0e5c1dd3cea1ede5f04ec9d",
+      "sourceSha256": "9e696acd6e154cfa7971279095b6599e7b55f674322c23f5230ce78e6f2ed4f1",
+      "bytes": 38575,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-C407CC9796A8"
+      ]
+    },
+    {
+      "path": "tests/e2e/logout-refresh-storage.spec.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "ff200af4e23445e3394ed0c0899c49b10abbbbb95adfc6826c303708454deddf",
+      "bytes": 27104,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "tests/e2e/medications-ledger.spec.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "6d79c7f35f9f0531288d5f53aba36cc55f2f9f40556cb9ac3d24602a727f1c20",
+      "sourceSha256": "2030e8386129809d6a62be6f4c39d8b7ad6ad814e93cc58c29766ab5b4d7a083",
+      "bytes": 38168,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-678300F81E6F"
+      ]
+    },
+    {
+      "path": "tests/e2e/medications-readback-review.spec.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "596a7c131f845610d726966bd80c46c1225d2840928154a27e56e15e01f9d612",
+      "sourceSha256": "411ac5313555dc39f5e99c7c0d3eeb9dcf3a98d892c083f6032aaf7428ace7c6",
+      "bytes": 25135,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-C33E1A58D1C6"
+      ]
+    },
+    {
+      "path": "tests/e2e/quick-capture-task.spec.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "5bf09646e418a87fb7b7933f9f8c489460b1e0f482f4b570d49512fcfd6331d0",
+      "sourceSha256": "4b8c8120492b179b6e8fea9a5255b25bf1a8a183e731cfe7c2a44f0334bb2e79",
+      "bytes": 41876,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-155C44B711F8"
+      ]
+    },
+    {
+      "path": "tests/e2e/realtime-query.spec.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "3adfe26014f54de7eb09d83fe323058b9ad127911086e889cdf619a16bdaea9c",
+      "sourceSha256": "37776c9ad82b82e15ce24fb76984fd85cd7add5c7bab66ec1b68ebc672161c17",
+      "bytes": 25467,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-02FD32F09502"
+      ]
+    },
+    {
+      "path": "tests/e2e/rewards-ledger.spec.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "8e390f7d30691653fb3950f7dc7ea09e28ab42b57f422115e549c3eb61333a58",
+      "sourceSha256": "a2f83c047506d621f676af9823dbf4d80d036cb0b94f5266adc99f05abe82d1f",
+      "bytes": 28479,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-C1CEE5335C18"
+      ]
+    },
+    {
+      "path": "tests/e2e/rewards-readback-review.spec.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "e5dab389026cd9fcaf1949be1c94d0205f6a75f4f6204e8bdc73d5f8852feb9b",
+      "sourceSha256": "1c2fd427ecb74b4f0ee86feda9136056f51079ac0ed08f285fc9260ceba96611",
+      "bytes": 20467,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-4B19503B0067"
+      ]
+    },
+    {
+      "path": "tests/e2e/session-storage-reconcile.spec.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "657c9857debecc8803e0be9443c6db1b1a4d3df1c78e2e154f86321b7e92a31b",
+      "bytes": 19072,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "tests/e2e/signout-form-boundaries.spec.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "4a2f5af5bfcddd72253a9c035508659eb5a4ebe9b83100af441f3357fc3b815b",
+      "bytes": 18799,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "tests/persistent-login.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "b2cae1339ef78bba631ec3dbab7713ea80de45cae443207460e4556720a0234c",
+      "sourceSha256": "88adb7107ab95c30c816825000793f9f9d822706995326ef5966c64b36b2d69c",
+      "bytes": 15317,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        "NEXT_PUBLIC_SUPABASE_URL"
+      ],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-45879E8D96C5"
+      ]
+    },
+    {
+      "path": "tests/session-keeper.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "950580daaa48d84f57b6b502754854bf2d8536d1b2308b771f4b905fbd28c3a3",
+      "sourceSha256": "95fa069bd805542b62af9447d3d95e16c97a54a5299879c7e95130aaa21f4622",
+      "bytes": 14928,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-7873613C8B70"
+      ]
+    },
+    {
+      "path": "tests/session-revocation.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "ca19f8cdf1b14297d0b178d0ac575bdd12a62e98097ceb86dea74bc9b8b66d29",
+      "bytes": 3630,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "tests/session-storage-change.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "9d253a9c48419488c6b9c2c5429838b59c74d9c6bea8c4c61637fcb1623d5556",
+      "bytes": 6596,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "tests/signout-bridge.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "553ce96ea8bf33b6d57cbb14b644c258dd4d033b6f4f4b0e397f39a535052eeb",
+      "bytes": 8846,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    }
+  ]
+}

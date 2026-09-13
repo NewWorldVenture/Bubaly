@@ -73,14 +73,19 @@ function toQuestion(r: Row): AeoQuestion {
 }
 
 /** Published AEO questions that carry a real answer (safe to render + cite). */
-export async function readPublishedAeoQuestions(limit = 60): Promise<PublicAeoRead> {
+export async function readPublishedAeoQuestions(
+  limit = 60,
+  signal = AbortSignal.timeout(1500),
+): Promise<PublicAeoRead> {
   try {
+    signal.throwIfAborted();
     const { data, error } = await anonClient()
       .from('marketing_aeo_questions')
       .select('*')
       .eq('status', 'published')
       .not('answer', 'is', null)
       .order('clarity_score', { ascending: false, nullsFirst: false })
+      .abortSignal(signal)
       .limit(limit);
     if (error) {
       console.error('[marketing-aeo] published questions read failed', error);
@@ -107,6 +112,7 @@ export async function getPublishedAeoQuestions(limit = 60): Promise<AeoQuestion[
  */
 export async function readAeoQuestionsForCategory(category: string, limit = 4): Promise<PublicAeoRead> {
   try {
+    const signal = AbortSignal.timeout(1500);
     const client = anonClient();
     const { data, error } = await client
       .from('marketing_aeo_questions')
@@ -115,6 +121,7 @@ export async function readAeoQuestionsForCategory(category: string, limit = 4): 
       .not('answer', 'is', null)
       .eq('metadata->>category', category)
       .order('clarity_score', { ascending: false, nullsFirst: false })
+      .abortSignal(signal)
       .limit(limit);
     if (error) {
       console.error('[marketing-aeo] category questions read failed', error);
@@ -123,7 +130,7 @@ export async function readAeoQuestionsForCategory(category: string, limit = 4): 
     let rows = (data ?? []).map(toQuestion).filter((q) => q.answer.trim().length > 0);
     let available = true;
     if (rows.length < limit) {
-      const extra = await readPublishedAeoQuestions(limit * 2);
+      const extra = await readPublishedAeoQuestions(limit * 2, signal);
       available = extra.available;
       const seen = new Set(rows.map((r) => r.question));
       for (const q of extra.questions) {
@@ -231,6 +238,9 @@ export async function readAeoQuestionsForCategoryCached(category: string, limit 
 /** Read the canonical page payload populated by the Super Admin content loop. */
 export async function readAeoQuestionsForPath(path: string, limit = 6): Promise<PublicAeoRead> {
   try {
+    // One budget includes retries and the compatibility read, so unavailable
+    // optional answers cannot stall the rest of a public page's navigation.
+    const signal = AbortSignal.timeout(1500);
     const client = anonClient();
     // The AEO console is the editable source of truth. Prefer its published
     // rows so an admin answer reaches every matching public route immediately.
@@ -241,6 +251,7 @@ export async function readAeoQuestionsForPath(path: string, limit = 6): Promise<
       .eq('status', 'published')
       .not('answer', 'is', null)
       .order('clarity_score', { ascending: false, nullsFirst: false })
+      .abortSignal(signal)
       .limit(limit);
     if (!rowsError) {
       const questions = (rows ?? []).map(toQuestion).filter((q) => q.answer.trim().length > 0);
@@ -251,12 +262,14 @@ export async function readAeoQuestionsForPath(path: string, limit = 6): Promise<
       console.error('[marketing-aeo] path question rows read failed', rowsError);
     }
 
+    signal.throwIfAborted();
     const { data, error } = await client
       .from('marketing_pages')
       .select('aeo')
       .eq('path', path)
       .eq('status', 'published')
       .is('deleted_at', null)
+      .abortSignal(signal)
       .maybeSingle();
     if (error) {
       console.error('[marketing-aeo] path questions read failed', error);

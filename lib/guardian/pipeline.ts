@@ -2,7 +2,7 @@
 // Orchestrates: ID → Trust → Risk → Intent → Urgency → Context → Rules → AI Decision → Action
 
 import type { TrustLevel } from './trust';
-import { trustFromSpamScore, explainTrustDecision } from './trust';
+import { TRUST_LEVELS, explainTrustDecision } from './trust';
 import { evaluateRules, buildRuleContext, type GuardianRule } from './rules';
 import { detectScamFromText, type ScamType } from './scam';
 import { applySeasonalBoost } from './seasonal';
@@ -75,20 +75,77 @@ export type MemberProfile = {
   voicemail_greeting: string | null;
 };
 
+export class GuardianPolicyUnavailableError extends Error {
+  constructor(public readonly stage: 'contact' | 'profile' | 'rules') {
+    super('Guardian routing policy unavailable');
+    this.name = 'GuardianPolicyUnavailableError';
+  }
+}
+
+type PolicyStage = GuardianPolicyUnavailableError['stage'];
+type Contact = { id: string; name: string | null; trust_level: TrustLevel; spam_score: number };
+const POLICY_READ_MS = 5000;
+const MAX_RULES = 1000;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const CONTEXTS = ['normal', 'driving', 'meeting', 'sleeping', 'vacation', 'do_not_disturb'];
+const validId = (value: unknown): value is string => typeof value === 'string' && UUID.test(value);
+const nullableString = (value: unknown): value is string | null => value === null || typeof value === 'string';
+const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
+const routing = (value: unknown): value is RoutingMode => typeof value === 'string' && Object.hasOwn(ROUTING_MODE_LABELS, value);
+const trust = (value: unknown): value is TrustLevel => typeof value === 'string' && TRUST_LEVELS.includes(value as TrustLevel);
+const nullableArray = (value: unknown, valid: (item: unknown) => boolean): boolean => value === null || Array.isArray(value) && value.every(valid);
+const clockTime = (value: unknown): boolean => value === null || typeof value === 'string'
+  && /^(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d{1,6})?)?|24:00(?::00(?:\.0{1,6})?)?)$/.test(value);
+
+/** Abort the transport and settle even if a custom fetch ignores cancellation. */
+async function policyRows(
+  stage: PolicyStage,
+  signal: AbortSignal,
+  maxRows: number,
+  run: () => PromiseLike<{ data: unknown; error: unknown; count: number | null }>,
+): Promise<Record<string, unknown>[]> {
+  let abort: () => void = () => {};
+  try {
+    if (signal.aborted) throw new GuardianPolicyUnavailableError(stage);
+    const interrupted = new Promise<never>((_resolve, reject) => {
+      abort = () => reject(new GuardianPolicyUnavailableError(stage));
+      signal.addEventListener('abort', abort, { once: true });
+    });
+    const result = await Promise.race([Promise.resolve().then(run), interrupted]);
+    if (signal.aborted || result.error || !Array.isArray(result.data) || !Number.isInteger(result.count)
+      || result.count !== result.data.length || result.data.length > maxRows || !result.data.every(record)) {
+      throw new GuardianPolicyUnavailableError(stage);
+    }
+    return result.data;
+  } catch {
+    // Do not expose database errors or caller content in callback responses/logs.
+    throw new GuardianPolicyUnavailableError(stage);
+  } finally {
+    signal.removeEventListener('abort', abort);
+  }
+}
+
 /** Look up a contact in the family trust graph by phone number. */
 async function lookupContact(
   supabase: SupabaseClient,
   familyId: string,
   phone: string | null,
-): Promise<{ id: string; name: string | null; trust_level: TrustLevel; spam_score: number } | null> {
+  signal: AbortSignal,
+): Promise<Contact | null> {
   if (!phone) return null;
-  const { data } = await supabase
+  const data = await policyRows('contact', signal, 1, () => supabase
     .from('guardian_contacts')
-    .select('id, name, trust_level, spam_score')
+    .select('id, family_id, phone, name, trust_level, spam_score', { count: 'exact' })
     .eq('family_id', familyId)
     .eq('phone', phone)
-    .maybeSingle();
-  return data as { id: string; name: string | null; trust_level: TrustLevel; spam_score: number } | null;
+    .limit(2).abortSignal(signal).retry(false));
+  if (!data.length) return null;
+  const row = data[0];
+  if (!validId(row.id) || row.family_id !== familyId || row.phone !== phone || !nullableString(row.name)
+    || !trust(row.trust_level) || !Number.isInteger(row.spam_score) || (row.spam_score as number) < 0 || (row.spam_score as number) > 100) {
+    throw new GuardianPolicyUnavailableError('contact');
+  }
+  return row as Contact;
 }
 
 /** Load member routing profile. */
@@ -96,19 +153,30 @@ async function loadMemberProfile(
   supabase: SupabaseClient,
   familyId: string,
   memberId: string | null,
+  signal: AbortSignal,
 ): Promise<MemberProfile | null> {
   if (!memberId) return null;
-  const { data } = await supabase
+  const data = await policyRows('profile', signal, 1, () => supabase
     .from('guardian_member_profiles')
-    .select('*')
+    .select('*', { count: 'exact' })
     .eq('family_id', familyId)
     .eq('member_id', memberId)
     .eq('is_active', true)
-    .maybeSingle();
-  if (!data) return null;
+    .limit(2).abortSignal(signal).retry(false));
+  if (!data.length) return null;
+  const row = data[0];
+  if (!validId(row.id) || row.family_id !== familyId || row.member_id !== memberId || row.is_active !== true
+    || typeof row.ai_persona_name !== 'string' || !nullableString(row.ai_greeting_template)
+    || !nullableString(row.guardian_phone) || !nullableString(row.voicemail_greeting)
+    || (row.current_context !== null && !CONTEXTS.includes(row.current_context as string))
+    || !record(row.context_overrides) || !Object.values(row.context_overrides).every(routing)
+    || !['default_mode_immediate', 'default_mode_close', 'default_mode_trusted', 'default_mode_known', 'default_mode_unknown', 'default_mode_suspected_spam', 'default_mode_blocked'].every(key => routing(row[key]))) {
+    throw new GuardianPolicyUnavailableError('profile');
+  }
   return {
-    ...(data as MemberProfile),
-    context_overrides: (data as { context_overrides?: Record<string, RoutingMode> }).context_overrides ?? {},
+    ...(row as MemberProfile),
+    // The schema permits an unset context; no context override then applies.
+    current_context: row.current_context as string | null ?? 'normal',
   };
 }
 
@@ -117,20 +185,29 @@ async function loadRules(
   supabase: SupabaseClient,
   familyId: string,
   memberId: string | null,
+  signal: AbortSignal,
 ): Promise<GuardianRule[]> {
-  const { data, error } = await supabase
+  const data = await policyRows('rules', signal, MAX_RULES, () => supabase
     .from('guardian_routing_rules')
-    .select('*')
+    .select('*', { count: 'exact' })
     .eq('family_id', familyId)
     .eq('is_active', true)
     .or(memberId ? `member_id.is.null,member_id.eq.${memberId}` : 'member_id.is.null')
-    .order('priority', { ascending: true });
-  // Degrade to profile defaults rather than throw — this runs in the inbound
-  // call/message webhook pipeline, so a hard failure would break screening
-  // entirely. But log it: a broken rules table silently changes how calls are
-  // routed (custom blocks/overrides get skipped), which must be observable.
-  if (error) console.error('[guardian/pipeline] guardian_routing_rules read failed', { familyId, memberId, error });
-  return (data ?? []) as unknown as GuardianRule[];
+    .order('priority', { ascending: true }).limit(MAX_RULES).abortSignal(signal).retry(false));
+  const ids = new Set<string>();
+  for (const row of data) {
+    if (!validId(row.id) || ids.has(row.id) || row.family_id !== familyId || (row.member_id !== null && row.member_id !== memberId)
+      || row.is_active !== true || typeof row.name !== 'string' || !Number.isInteger(row.priority)
+      || (row.condition_contact_id !== null && !validId(row.condition_contact_id))
+      || !nullableArray(row.condition_trust_levels, trust) || !clockTime(row.condition_time_start) || !clockTime(row.condition_time_end)
+      || !nullableArray(row.condition_days_of_week, day => Number.isInteger(day) && (day as number) >= 0 && (day as number) <= 6)
+      || !nullableArray(row.condition_contexts, context => typeof context === 'string') || !nullableString(row.condition_caller_pattern)
+      || !routing(row.action_routing_mode) || !nullableArray(row.action_notify_members, validId)) {
+      throw new GuardianPolicyUnavailableError('rules');
+    }
+    ids.add(row.id);
+  }
+  return data as unknown as GuardianRule[];
 }
 
 /** Resolve routing mode from profile based on trust level + current context. */
@@ -170,8 +247,25 @@ export async function runDecisionPipeline(
 ): Promise<PipelineResult> {
   const { callerPhone, callerName, familyId, memberId, initialTranscript } = input;
 
-  // Step 1: Identify caller in trust graph
-  const contact = await lookupContact(supabase, familyId, callerPhone);
+  if (!validId(familyId)) throw new GuardianPolicyUnavailableError('contact');
+  if (memberId !== null && !validId(memberId)) throw new GuardianPolicyUnavailableError('profile');
+  // All required policy must be available before screening or choosing a route.
+  // Independent reads share one deadline; a late response cannot resume routing.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), POLICY_READ_MS);
+  let contact: Contact | null, profile: MemberProfile | null, rules: GuardianRule[];
+  try {
+    [contact, profile, rules] = await Promise.all([
+      lookupContact(supabase, familyId, callerPhone, controller.signal),
+      loadMemberProfile(supabase, familyId, memberId, controller.signal),
+      loadRules(supabase, familyId, memberId, controller.signal),
+    ]);
+  } catch (error) {
+    controller.abort();
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
 
   // Step 2: Determine trust level
   let trust: TrustLevel = contact?.trust_level ?? 'unknown';
@@ -195,11 +289,7 @@ export async function runDecisionPipeline(
     }
   }
 
-  // Step 4: Load member profile
-  const profile = await loadMemberProfile(supabase, familyId, memberId);
-
-  // Step 5: Load and evaluate rules
-  const rules = await loadRules(supabase, familyId, memberId);
+  // Step 5: Evaluate the verified rules
   const ruleCtx = buildRuleContext({
     contactId: contact?.id ?? null,
     trustLevel: trust,

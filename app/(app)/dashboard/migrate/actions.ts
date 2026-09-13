@@ -225,7 +225,10 @@ export async function commitImport(payload: ImportPayload): Promise<ImportResult
   if (grocery.length) {
     const listName = 'Imported Groceries';
     let listId: string | null = null;
-    const { data: list } = await supabase.from('grocery_lists').select('id').eq('family_id', familyId).eq('name', listName).maybeSingle();
+    // Reuse the import list only while it is live: adopting an archived one
+    // hides the whole import behind the archive the family put it in.
+    const { data: list } = await supabase.from('grocery_lists').select('id').eq('family_id', familyId).eq('name', listName)
+      .eq('is_archived', false).is('archived_at', null).maybeSingle();
     listId = list?.id ?? null;
     if (!listId) {
       const { data: createdList, error } = await supabase.from('grocery_lists').insert({ family_id: familyId, name: listName, created_by: userId }).select('id').single();

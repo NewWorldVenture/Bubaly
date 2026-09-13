@@ -60,21 +60,21 @@ const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security',
   '/api/cron',
   '/api/concierge-calls',
   '/api/guardian',
-  // The Family Contact Center's four inbound webhooks. Omitted when the rest of
-  // this group was added, which made every one of them unreachable: middleware
-  // answered the provider's POST with a 307 to /login, so the route — and its
-  // own authentication — never ran at all. Inbound email, SMS, voice and
-  // transcription therefore could not work however the numbers and MX were
-  // configured, and the failure looked like a provider problem rather than a
-  // routing one. Each authenticates itself exactly as this comment requires:
-  // /email demands CONTACT_CENTER_INBOUND_SECRET and is fail-closed in
-  // production, the other three verify the x-twilio-signature and answer 401.
-  '/api/contact-center',
   '/api/email/welcome',
   // Provider webhooks (signature-verified) and the signed unsubscribe link must
   // be reachable without a session.
   '/api/webhooks',
   '/api/marketing/unsubscribe'];
+
+// Provider callbacks authenticate inside their handlers. Keep this list exact:
+// future Contact Center settings or data endpoints still require a user session.
+const PUBLIC_CONTACT_CALLBACKS = new Set([
+  '/api/contact-center/email',
+  '/api/contact-center/sms',
+  '/api/contact-center/sms/status',
+  '/api/contact-center/voice',
+  '/api/contact-center/voice/transcription',
+]);
 
 // The assistant bridge's two entry points.
 //
@@ -107,6 +107,15 @@ export async function middleware(req: NextRequest) {
   // This exact public path exposes only the artifact's revision. Do not refresh
   // sessions or interpret OAuth query parameters for this read-only response.
   if (path === '/api/build-info') return NextResponse.next({ request: req });
+  // Logout replies must never carry stale authentication cookie mutations.
+  // The browser performs its own guarded local deletion after explicit intent.
+  if (path === '/auth/signout' || path === '/auth/signout/complete') return NextResponse.next({ request: req });
+  // Child credentials are verified by this public action, then the browser
+  // adopts its receipt conditionally. A delayed action response must not carry
+  // an unrelated ambient session refresh that bypasses that ownership check.
+  if (path === '/kid-login' && req.method === 'POST' && req.headers.has('next-action')) return NextResponse.next({ request: req });
+  const recoveryPage = path === '/auth/recovery'
+    || (path === '/login' && req.nextUrl.searchParams.get('reset') === '1');
 
   // A Supabase OAuth code that landed on the wrong path gets forwarded to
   // /auth/callback — but ONLY when it is ours to exchange. `code` is the
@@ -122,10 +131,19 @@ export async function middleware(req: NextRequest) {
   })) {
     const url = req.nextUrl.clone();
     url.pathname = '/auth/callback';
+    if (recoveryPage) url.searchParams.set('next', '/auth/recovery');
     return NextResponse.redirect(url);
   }
 
-  const isPublic = (req.method === 'POST' && PUBLIC_ASSISTANT_CALLBACKS.has(path))
+  // Recovery verifies the exact candidate token in its own action/callback.
+  // Ambient refresh here would attach session A cookies to a delayed response
+  // and could overwrite a newer browser session B before UI guards can act.
+  if (recoveryPage || (path === '/auth/callback' && req.nextUrl.searchParams.get('next') === '/auth/recovery')) {
+    return NextResponse.next({ request: req });
+  }
+
+  const isPublic = PUBLIC_CONTACT_CALLBACKS.has(path)
+    || (req.method === 'POST' && PUBLIC_ASSISTANT_CALLBACKS.has(path))
     || PUBLIC.some((p) => path === p || path.startsWith(p + '/'));
   // The AI edge (/api/ai, /api/ai/requests, /api/ai/runs/*) is called by the
   // mobile app with `Authorization: Bearer <supabase jwt>` and no cookie. Those

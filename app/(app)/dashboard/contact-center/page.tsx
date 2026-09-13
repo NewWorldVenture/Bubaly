@@ -4,6 +4,7 @@ import { requirePlanLevel } from '@/lib/supabase/auth';
 import { settle } from '@/lib/supabase/settle';
 import { createServiceClient } from '@/lib/supabase/server';
 import { getOrCreateChannelResult } from '@/lib/contact-center/server';
+import { readSmsReplyStatuses } from '@/lib/contact-center/sms-reply-status';
 import { suggestEmailLocal } from '@/lib/contact-center/address';
 import { isTwilioConfigured } from '@/lib/guardian/twilio';
 import type { Tables } from '@/lib/database.types';
@@ -35,10 +36,14 @@ export default async function ContactCenterPage() {
     return <ErrorState message={t('contactCenter.theContactCenterIsTemporarily')} />;
   }
 
+  const messages = (messagesResult.data ?? []) as InboxRow[];
+  const smsReplyStatuses = await readSmsReplyStatuses(messages);
+
   return (
     <ContactCenterModule
       channel={channelResult.data}
-      messages={(messagesResult.data ?? []) as InboxRow[]}
+      messages={messages}
+      smsReplyStatuses={smsReplyStatuses}
       suggestedLocal={suggestEmailLocal(ctx.active.family.name)}
       twilioReady={isTwilioConfigured()}
       canManage={ctx.active.role === 'parent'}

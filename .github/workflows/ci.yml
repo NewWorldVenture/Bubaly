@@ -19,7 +19,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
       - name: Install dependencies
@@ -207,7 +207,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
       - name: Install dependencies
@@ -293,6 +293,15 @@ jobs:
           E2E_AUTHENTICATED: '1'
           # Each durable-session test owns a unique local-only account/household.
           E2E_DURABLE_SESSION: '1'
+          # Synthetic, disposable-only input shared by the child fixture/server.
+          CHILD_LOGIN_SECRET: ci-only-child-pin-session-fixture
+          # Signed Guardian ingress against the disposable server only. A token
+          # alone cannot configure outbound Twilio; the fixture refuses real keys.
+          TWILIO_AUTH_TOKEN: ci-only-guardian-signed-ingress-fixture
+          # Authenticates only the disposable server's recovery job.
+          CRON_SECRET: ci-only-guardian-recovery-fixture
+          ANTHROPIC_API_KEY: ''
+          OPENAI_API_KEY: ''
           NEXT_PUBLIC_SITE_URL: http://localhost:3107
           E2E_AUTH_EMAIL: bubaly-e2e-${{ github.run_id }}-${{ github.run_attempt }}@example.test
           E2E_AUTH_PASSWORD: Bubaly-E2E-2026!

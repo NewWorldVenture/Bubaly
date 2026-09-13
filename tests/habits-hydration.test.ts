@@ -1,24 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { readUiSource } from './helpers/i18n-source';
-import { readFileSync } from 'node:fs';
 
 // TODO-0416 — hydration ships as habit presets + count logging, not a new module.
 const src = readUiSource('components/modules/habits-module.tsx');
-function body(fn: string): string {
-  const start = src.indexOf(`async function ${fn}(`);
-  expect(start, `${fn} should exist`).toBeGreaterThan(-1);
-  const after = src.indexOf('async function ', start + 1);
-  return src.slice(start, after === -1 ? undefined : after);
-}
 
 describe('habits hydration (TODO-0416)', () => {
-  it('count logging updates the single row per day and guards every write', () => {
-    const b = body('logCount');
-    expect(b).toContain("from('habit_logs').delete().eq('id', existing.id)");
-    expect(b).toContain("from('habit_logs').update({ count: next }).eq('id', existing.id)");
-    expect(b).toContain("from('habit_logs').insert({");
-    expect(b.match(/if \(error\) return toastError\(describeDbError\(error\)\)/g)).toHaveLength(2);
-  });
+  // Count mutation, readback, conflict and lifecycle guarantees execute through
+  // the actual component and SDK in e2e/hydration-ledger.spec.ts. The previous
+  // source-shape assertion required id-only writes and missed those failures.
   it('streaks only count days that met the daily target', () => {
     expect(src).toContain("doneDates(logsQ.data, h.id, h.cadence === 'daily' ? h.target_per_period : 1)");
   });

@@ -54,7 +54,7 @@ vi.mock('@/lib/supabase/server', () => ({
 vi.mock('@/lib/supabase/auth', () => ({
   requireUserContext: async () => ({
     user: { id: 'u1', email: 'operator@example.com' },
-    active: { familyId: 'f1', family: { id: 'f1', name: 'Test Family' }, role: 'owner' },
+    active: { familyId: 'f1', family: { id: 'f1', name: 'Test Family' }, role: 'owner', member: { id: 'm1', updated_at: '2026-09-12T12:00:00Z' } },
     memberships: [{ familyId: 'f1', family: { name: 'Test Family' } }],
   }),
   // The access check the frame must fail CLOSED on.

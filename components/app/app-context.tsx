@@ -6,6 +6,7 @@ import { isRealtimePublished } from '@/lib/realtime/published-tables';
 import type { Tables, DashboardView } from '@/lib/database.types';
 import type { MemberRole } from '@/lib/constants/roles';
 import type { FeatureTier } from '@/lib/constants/feature-catalog';
+import { AuthenticatedCacheBoundary } from '@/lib/offline/cache-scope';
 
 export type FamilyOption = { familyId: string; name: string };
 
@@ -40,15 +41,34 @@ export function useApp(): AppContextValue {
   return ctx;
 }
 
-export function AppProvider({
-  value,
-  initialMembers,
-  children,
-}: {
+type AppProviderProps = {
   value: Omit<AppContextValue, 'members' | 'refreshMembers' | 'selfMember' | 'unreadMessages'> & { unreadMessages?: number };
+  /** Required membership read from the server, independent of the optional roster. */
+  membershipId: string;
+  membershipUpdatedAt: string;
   initialMembers: Tables<'family_members'>[];
   children: React.ReactNode;
-}) {
+};
+
+export function AppProvider(props: AppProviderProps) {
+  const { value, membershipId, membershipUpdatedAt } = props;
+  return (
+    <AuthenticatedCacheBoundary access={{
+      userId: value.userId,
+      familyId: value.familyId,
+      memberId: membershipId,
+      membershipUpdatedAt,
+      role: value.role,
+      isSuperAdmin: value.isSuperAdmin,
+      planLevel: value.planLevel,
+      featureTiers: value.featureTiers,
+    }}>
+      <AppProviderState {...props} />
+    </AuthenticatedCacheBoundary>
+  );
+}
+
+function AppProviderState({ value, initialMembers, children }: AppProviderProps) {
   const [members, setMembers] = useState(initialMembers);
 
   const refreshMembers = useCallback(async () => {

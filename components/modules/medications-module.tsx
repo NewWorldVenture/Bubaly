@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Pill, Plus, Pencil, Trash2, Check, X, Clock, CalendarClock, Activity,
 } from 'lucide-react';
@@ -19,7 +19,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import {
-  dosesForDay, adherenceRate, doseStatusCounts, shortTime, localDateKey,
+  dosesForDay, doseSlotInstant, adherenceRate, doseStatusCounts, shortTime, localDateKey,
   DAY_LABELS, type ScheduleLike, type DueDose,
 } from '@/lib/medications/adherence';
 import type { Tables, DoseStatus } from '@/lib/database.types';
@@ -33,7 +33,7 @@ const WHOLE_FAMILY = '__family__';
 const ADHERENCE_WINDOW_DAYS = 30;
 
 const blankMed = { id: '', member_id: '', name: '', dosage: '', instructions: '', is_active: true, refill_on: '', refill_reminder_days: 7 };
-const blankSchedule = { time_of_day: '08:00', days_of_week: [0, 1, 2, 3, 4, 5, 6] as number[], starts_on: localDateKey(new Date()), ends_on: '' };
+const blankSchedule = { time_of_day: '08:00', days_of_week: [0, 1, 2, 3, 4, 5, 6] as number[], starts_on: '', ends_on: '' };
 
 // Refill badge for an active medication. Surfaces what Autopilot already reasons
 // about (refill_on) right in the list, within the member-set reminder window.
@@ -72,39 +72,146 @@ function AdherenceRing({ rate, size = 96 }: { rate: number | null; size?: number
 
 export function MedicationsModule() {
   const t = useTranslations();
-  const { familyId, userId, members, role } = useApp();
+  const { familyId, userId, members, role, family } = useApp();
+  // A dose slot is the family's 08:00, not the viewer's. Resolving it in the
+  // family's zone is what lets the reminder cron recognise a dose this
+  // browser logged; for a member sitting in that zone nothing changes.
+  const familyZone = family.timezone || 'UTC';
   const { success, error: toastError } = useToast();
   const canEdit = isManager(role);
 
   const [memberFilter, setMemberFilter] = useState<string>('all');
-  const [medModalOpen, setMedModalOpen] = useState(false);
+  const [medOpening, setMedOpening] = useState<object | null>(null);
+  const currentMedOpening = useRef<object | null>(null);
+  const medModalOpen = medOpening !== null;
   const [medForm, setMedForm] = useState(blankMed);
-  const [savingMed, setSavingMed] = useState(false);
   const [scheduleFor, setScheduleFor] = useState<Medication | null>(null);
+  const [scheduleOpening, setScheduleOpening] = useState<object | null>(null);
+  const currentScheduleOpening = useRef<object | null>(null);
   const [scheduleForm, setScheduleForm] = useState(blankSchedule);
-  const [savingSchedule, setSavingSchedule] = useState(false);
-  const [busyDose, setBusyDose] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [readbackBlocked, setReadbackBlocked] = useState(false);
+  const savingMed = busy === 'medication';
+  const savingSchedule = busy === 'schedule';
+  const [dayKey, setDayKey] = useState(() => localDateKey(new Date()));
+  const owner = useMemo(() => ({ active: false, pending: false, familyId, userId, role }), [familyId, userId, role]);
+  const currentOwner = useRef(owner);
+  currentOwner.current = owner;
+  const deferredCompletion = useRef<{ owner: typeof owner; complete: () => void } | null>(null);
+  // Keep the synchronous write guard until React commits the readback and the
+  // released busy state together; a queued callback must see the new rows.
+  useLayoutEffect(() => { if (busy === null) owner.pending = false; });
+
+  useEffect(() => {
+    owner.active = true;
+    setBusy(null);
+    setReadbackBlocked(false);
+    deferredCompletion.current = null;
+    setMemberFilter('all');
+    currentMedOpening.current = null;
+    setMedOpening(null);
+    setMedForm(blankMed);
+    setScheduleFor(null);
+    currentScheduleOpening.current = null;
+    setScheduleOpening(null);
+    setScheduleForm(blankSchedule);
+    return () => { owner.active = false; };
+  }, [owner]);
+
+  useEffect(() => {
+    const updateDay = () => setDayKey(localDateKey(new Date()));
+    const timer = window.setInterval(updateDay, 60_000);
+    window.addEventListener('focus', updateDay);
+    window.addEventListener('online', updateDay);
+    document.addEventListener('visibilitychange', updateDay);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', updateDay);
+      window.removeEventListener('online', updateDay);
+      document.removeEventListener('visibilitychange', updateDay);
+    };
+  }, []);
 
   // Adherence window lower bound (ISO) for the dose log query.
   const windowStart = useMemo(() => {
-    const d = new Date();
+    const d = new Date(`${dayKey}T00:00:00`);
     d.setDate(d.getDate() - ADHERENCE_WINDOW_DAYS);
     return d.toISOString();
-  }, []);
+  }, [dayKey]);
 
   // ── Data ──────────────────────────────────────────────────
-  const { data: meds, loading: medsLoading, error: medsError, refresh: refreshMeds } = useRealtimeQuery<Medication>({
+  const { data: meds, loading: medsLoading, error: medsError, refreshAndConfirm: confirmMeds, stale: medsStale } = useRealtimeQuery<Medication>({
     table: 'medications', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('medications').select('*').eq('family_id', familyId).order('is_active', { ascending: false }).order('name'),
   });
-  const { data: schedules, loading: schedulesLoading, error: schedulesError, refresh: refreshSchedules } = useRealtimeQuery<Schedule>({
+  const { data: schedules, loading: schedulesLoading, error: schedulesError, refreshAndConfirm: confirmSchedules, stale: schedulesStale } = useRealtimeQuery<Schedule>({
     table: 'medication_schedules', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('medication_schedules').select('*').eq('family_id', familyId).order('time_of_day'),
   });
-  const { data: doses, loading: dosesLoading, error: dosesError, refresh: refreshDoses } = useRealtimeQuery<Dose>({
-    table: 'medication_doses', familyId, deps: [familyId],
+  const { data: doses, loading: dosesLoading, error: dosesError, refreshAndConfirm: confirmDoses, stale: dosesStale } = useRealtimeQuery<Dose>({
+    table: 'medication_doses', familyId, deps: [familyId, dayKey],
     fetcher: (sb) => sb.from('medication_doses').select('*').eq('family_id', familyId).gte('scheduled_for', windowStart),
   });
+  const loading = medsLoading || schedulesLoading || dosesLoading;
+  const readError = medsError || schedulesError || dosesError;
+  const verified = !readbackBlocked && !loading && !readError && !medsStale && !schedulesStale && !dosesStale;
+  const latest = useRef({ meds, schedules, doses, verified, dayKey, members });
+  latest.current = { meds, schedules, doses, verified, dayKey, members };
+  const isCurrent = () => owner.active && currentOwner.current === owner;
+  const canMutate = (manager = false) => isCurrent() && !owner.pending && latest.current.verified && (!manager || canEdit);
+  const confirmAll = async () => (await Promise.all([confirmMeds(), confirmSchedules(), confirmDoses()])).every(result => result.ok);
+  const confirmDoseReadback = async () => (await confirmDoses()).ok;
+
+  async function retryReadback() {
+    if (!isCurrent() || owner.pending) return;
+    owner.pending = true;
+    setBusy('readback');
+    try {
+      const confirmed = await confirmAll();
+      if (isCurrent()) {
+        setReadbackBlocked(!confirmed);
+        if (confirmed && deferredCompletion.current?.owner === owner) {
+          const complete = deferredCompletion.current.complete;
+          deferredCompletion.current = null;
+          complete();
+        }
+      }
+    } finally {
+      if (isCurrent()) setBusy(null);
+      else owner.pending = false;
+    }
+  }
+
+  async function mutate(key: string, manager: boolean, write: () => PromiseLike<{ error: unknown }>,
+    readback: () => Promise<boolean>, complete?: () => void) {
+    if (!canMutate(manager)) return;
+    owner.pending = true;
+    setBusy(key);
+    try {
+      const { error } = await write();
+      if (error) throw error;
+      if (!isCurrent()) return;
+      const confirmed = await readback();
+      if (isCurrent()) {
+        setReadbackBlocked(!confirmed);
+        if (confirmed) complete?.();
+        else if (complete) deferredCompletion.current = { owner, complete };
+      }
+    } catch (error) {
+      if (!isCurrent()) return;
+      // A conflict or lost response can follow another writer's successful
+      // action. Read back before allowing the next toggle against this slot.
+      const confirmed = await readback();
+      if (isCurrent()) {
+        setReadbackBlocked(!confirmed);
+        toastError(key.startsWith('dose:') && (error as { code?: string } | null)?.code === '23505'
+          ? t('medicationsModule.doseChanged') : describeDbError(error));
+      }
+    } finally {
+      if (isCurrent()) setBusy(null);
+      else owner.pending = false;
+    }
+  }
 
   const memberName = (id: string | null) => members.find((m) => m.id === id)?.display_name ?? null;
 
@@ -120,18 +227,21 @@ export function MedicationsModule() {
   // Schedules for the currently-visible meds, as the pure helper's shape.
   const scheduleLikes = useMemo<(ScheduleLike & { medMemberId: string | null })[]>(() =>
     (schedules ?? [])
-      .filter((s) => medIdSet.has(s.medication_id))
+      .filter((s) => s.family_id === familyId && medIdSet.has(s.medication_id)
+        && meds.some((m) => m.id === s.medication_id && m.family_id === familyId && m.is_active))
       .map((s) => ({
         id: s.id, medication_id: s.medication_id, time_of_day: s.time_of_day,
         days_of_week: s.days_of_week, starts_on: s.starts_on, ends_on: s.ends_on,
         medMemberId: (meds ?? []).find((m) => m.id === s.medication_id)?.member_id ?? null,
       })),
-    [schedules, medIdSet, meds]);
+    [schedules, medIdSet, meds, familyId]);
 
-  const today = useMemo(() => new Date(), []);
+  const today = useMemo(() => new Date(`${dayKey}T12:00:00`), [dayKey]);
   const todayDoses = useMemo(
-    () => dosesForDay(scheduleLikes, (doses ?? []).map((d) => ({ schedule_id: d.schedule_id, scheduled_for: d.scheduled_for, status: d.status })), today),
-    [scheduleLikes, doses, today],
+    () => dosesForDay(scheduleLikes, doses.filter((d) => d.family_id === familyId
+      && meds.some((m) => m.id === d.medication_id && m.member_id === d.member_id))
+      .map((d) => ({ schedule_id: d.schedule_id, scheduled_for: d.scheduled_for, status: d.status })), today, familyZone),
+    [scheduleLikes, doses, today, meds, familyId, familyZone],
   );
 
   const windowDoseLogs = useMemo(() => {
@@ -145,53 +255,73 @@ export function MedicationsModule() {
 
   // ── Dose logging ──────────────────────────────────────────
   async function logDose(due: DueDose, status: DoseStatus) {
-    const key = due.scheduleId + due.slotKey;
-    setBusyDose(key);
-    const sb = createClient();
-    // Reconstruct the canonical instant from the local slot (date + HH:MM).
-    const [datePart, timePart] = due.slotKey.split('T');
-    const [y, mo, d] = datePart.split('-').map(Number);
-    const [hh, mm] = timePart.split(':').map(Number);
-    const scheduledFor = new Date(y, mo - 1, d, hh, mm).toISOString();
-    const med = medById.get(due.medicationId);
-
-    // Find an existing dose for this slot (same schedule + same local day).
-    const existing = (doses ?? []).find(
-      (x) => x.schedule_id === due.scheduleId && localDateKey(new Date(x.scheduled_for)) === datePart,
-    );
-
-    let err;
-    if (existing && existing.status === status) {
-      // Toggle back to pending.
-      ({ error: err } = await sb.from('medication_doses').delete().eq('id', existing.id));
-    } else if (existing) {
-      ({ error: err } = await sb.from('medication_doses').update({
-        status, taken_at: status === 'taken' ? new Date().toISOString() : null,
-      }).eq('id', existing.id));
-    } else {
-      ({ error: err } = await sb.from('medication_doses').insert({
-        family_id: familyId, medication_id: due.medicationId, schedule_id: due.scheduleId,
-        member_id: med?.member_id ?? null, scheduled_for: scheduledFor, status,
-        taken_at: status === 'taken' ? new Date().toISOString() : null, logged_by: userId,
-      }));
+    if (!canMutate()) return;
+    const currentDay = localDateKey(new Date());
+    if (latest.current.dayKey !== currentDay || !due.slotKey.startsWith(`${currentDay}T`)) {
+      setDayKey(currentDay);
+      return;
     }
-    setBusyDose(null);
-    if (err) { toastError(describeDbError(err)); return; }
-    if (status === 'taken') success(t('medicationsModule.doseLogged'));
+    const med = latest.current.meds.find((m) => m.id === due.medicationId && m.family_id === familyId && m.is_active);
+    const schedule = latest.current.schedules.find((s) => s.id === due.scheduleId && s.medication_id === med?.id && s.family_id === familyId);
+    const currentSlot = schedule && dosesForDay([schedule], [], new Date(), familyZone).find((slot) => slot.slotKey === due.slotKey);
+    if (!med || !currentSlot || (med.member_id && !latest.current.members.some((m) => m.id === med.member_id && m.family_id === familyId))) {
+      toastError(t('medicationsModule.doseChanged'));
+      return;
+    }
+    const scheduledFor = doseSlotInstant(due.slotKey, familyZone);
+    if (!scheduledFor) return;
+
+    // Find the exact unique slot, preserving a prior dose if its schedule time
+    // changed during this day.
+    const existing = latest.current.doses.find(
+      (x) => x.schedule_id === due.scheduleId && new Date(x.scheduled_for).getTime() === new Date(scheduledFor).getTime(),
+    );
+    if (existing && (existing.family_id !== familyId || existing.medication_id !== med.id || existing.member_id !== med.member_id)) {
+      toastError(t('medicationsModule.doseChanged'));
+      return;
+    }
+    await mutate(`dose:${due.scheduleId}:${due.slotKey}`, false, () => {
+      const sb = createClient();
+      if (existing?.status === status) {
+        return sb.from('medication_doses').delete().eq('id', existing.id).eq('family_id', familyId)
+          .eq('medication_id', med.id).eq('scheduled_for', existing.scheduled_for).eq('status', existing.status).select('id').single();
+      }
+      if (existing) return sb.from('medication_doses').update({
+        status, taken_at: status === 'taken' ? new Date().toISOString() : null,
+      }).eq('id', existing.id).eq('family_id', familyId).eq('medication_id', med.id)
+        .eq('scheduled_for', existing.scheduled_for).eq('status', existing.status).select('id').single();
+      return sb.from('medication_doses').insert({
+        family_id: familyId, medication_id: med.id, schedule_id: due.scheduleId,
+        member_id: med.member_id, scheduled_for: scheduledFor, status,
+        taken_at: status === 'taken' ? new Date().toISOString() : null, logged_by: userId,
+      });
+    }, confirmDoseReadback, () => { if (status === 'taken' && existing?.status !== status) success(t('medicationsModule.doseLogged')); });
   }
 
   // ── Medication CRUD ───────────────────────────────────────
-  function openNewMed() { setMedForm(blankMed); setMedModalOpen(true); }
+  function openNewMed() {
+    if (!canMutate(true)) return;
+    const opening = {};
+    currentMedOpening.current = opening;
+    setMedOpening(opening);
+    setMedForm(blankMed);
+  }
   function openEditMed(m: Medication) {
+    if (!canMutate(true) || m.family_id !== familyId) return;
+    const opening = {};
+    currentMedOpening.current = opening;
+    setMedOpening(opening);
     setMedForm({ id: m.id, member_id: m.member_id ?? '', name: m.name, dosage: m.dosage ?? '', instructions: m.instructions ?? '', is_active: m.is_active, refill_on: m.refill_on ?? '', refill_reminder_days: m.refill_reminder_days ?? 7 });
-    setMedModalOpen(true);
   }
 
   async function saveMed(e: React.FormEvent) {
     e.preventDefault();
+    // A retained submit belongs to one opening, even when the same owner opens
+    // another form after this one was canceled or its write was confirmed.
+    if (!canMutate(true) || !medOpening || currentMedOpening.current !== medOpening) return;
+    if (medForm.id && !latest.current.meds.some((m) => m.id === medForm.id && m.family_id === familyId)) return;
+    if (medForm.member_id && !latest.current.members.some((m) => m.id === medForm.member_id && m.family_id === familyId)) return;
     if (!medForm.name.trim()) { toastError(t('medicationsModule.nameIsRequired')); return; }
-    setSavingMed(true);
-    const sb = createClient();
     const fields = {
       member_id: medForm.member_id || null,
       name: medForm.name.trim(),
@@ -201,55 +331,72 @@ export function MedicationsModule() {
       refill_on: medForm.refill_on || null,
       refill_reminder_days: Math.max(0, Math.min(90, Number(medForm.refill_reminder_days) || 0)),
     };
-    const { error: err } = medForm.id
-      ? await sb.from('medications').update(fields).eq('id', medForm.id)
-      : await sb.from('medications').insert({ ...fields, family_id: familyId, created_by: userId });
-    setSavingMed(false);
-    if (err) { toastError(describeDbError(err)); return; }
-    success(medForm.id ? 'Medication updated' : 'Medication added');
-    setMedModalOpen(false);
+    await mutate('medication', true, () => medForm.id
+      ? createClient().from('medications').update(fields).eq('id', medForm.id).eq('family_id', familyId).select('id').single()
+      : createClient().from('medications').insert({ ...fields, family_id: familyId, created_by: userId }), confirmAll, () => {
+      if (currentMedOpening.current !== medOpening) return;
+      currentMedOpening.current = null;
+      setMedOpening(null);
+      success(medForm.id ? 'Medication updated' : 'Medication added');
+    });
   }
 
   async function deleteMed(m: Medication) {
+    if (!canMutate(true) || !latest.current.meds.some((item) => item.id === m.id && item.family_id === familyId)) return;
     if (!confirm(`Delete ${m.name}? This also removes its schedules and dose history.`)) return;
-    const sb = createClient();
-    const { error: err } = await sb.from('medications').delete().eq('id', m.id);
-    if (err) { toastError(describeDbError(err)); return; }
-    success(t('medicationsModule.medicationDeleted'));
+    await mutate('remove-medication', true, () => createClient().from('medications').delete().eq('id', m.id).eq('family_id', familyId).select('id').single(),
+      confirmAll, () => success(t('medicationsModule.medicationDeleted')));
   }
 
   async function toggleActive(m: Medication) {
-    const sb = createClient();
-    const { error: err } = await sb.from('medications').update({ is_active: !m.is_active }).eq('id', m.id);
-    if (err) toastError(describeDbError(err));
+    const current = latest.current.meds.find((item) => item.id === m.id && item.family_id === familyId);
+    if (!canMutate(true) || !current) return;
+    await mutate('active', true, () => createClient().from('medications').update({ is_active: !current.is_active }).eq('id', current.id).eq('family_id', familyId).select('id').single(), confirmAll);
   }
 
   // ── Schedule CRUD ─────────────────────────────────────────
-  function openSchedule(m: Medication) { setScheduleFor(m); setScheduleForm(blankSchedule); }
+  function openSchedule(m: Medication) {
+    if (!canMutate(true) || m.family_id !== familyId) return;
+    const opening = {};
+    currentScheduleOpening.current = opening;
+    setScheduleOpening(opening);
+    setScheduleFor(m); setScheduleForm({ ...blankSchedule, starts_on: localDateKey(new Date()) });
+  }
 
   async function saveSchedule(e: React.FormEvent) {
     e.preventDefault();
-    if (!scheduleFor) return;
+    if (!canMutate(true) || !scheduleOpening || currentScheduleOpening.current !== scheduleOpening
+      || !scheduleFor || !latest.current.meds.some((m) => m.id === scheduleFor.id && m.family_id === familyId)) return;
     if (scheduleForm.days_of_week.length === 0) { toastError(t('medicationsModule.pickAtLeastOneDay')); return; }
-    setSavingSchedule(true);
-    const sb = createClient();
-    const { error: err } = await sb.from('medication_schedules').insert({
+    await mutate('schedule', true, () => createClient().from('medication_schedules').insert({
       family_id: familyId, medication_id: scheduleFor.id,
       time_of_day: scheduleForm.time_of_day,
       days_of_week: scheduleForm.days_of_week,
       starts_on: scheduleForm.starts_on,
       ends_on: scheduleForm.ends_on || null,
+    }), confirmAll, () => {
+      if (currentScheduleOpening.current !== scheduleOpening) return;
+      currentScheduleOpening.current = null;
+      setScheduleOpening(null);
+      success(t('medicationsModule.scheduleAdded'));
+      setScheduleFor(null);
     });
-    setSavingSchedule(false);
-    if (err) { toastError(describeDbError(err)); return; }
-    success(t('medicationsModule.scheduleAdded'));
-    setScheduleFor(null);
   }
 
   async function deleteSchedule(id: string) {
-    const sb = createClient();
-    const { error: err } = await sb.from('medication_schedules').delete().eq('id', id);
-    if (err) toastError(describeDbError(err));
+    if (!canMutate(true) || !latest.current.schedules.some((s) => s.id === id && s.family_id === familyId)) return;
+    await mutate('remove-schedule', true, () => createClient().from('medication_schedules').delete().eq('id', id).eq('family_id', familyId).select('id').single(), confirmAll);
+  }
+  function closeMed() {
+    if (owner.pending || currentMedOpening.current !== medOpening) return;
+    currentMedOpening.current = null;
+    setMedOpening(null);
+  }
+  function closeSchedule() {
+    if (owner.pending || currentScheduleOpening.current !== scheduleOpening) return;
+    currentScheduleOpening.current = null;
+    setScheduleOpening(null);
+    setScheduleFor(null);
   }
 
   function toggleDay(day: number) {
@@ -268,10 +415,8 @@ export function MedicationsModule() {
     return map;
   }, [schedules]);
 
-  const loading = medsLoading || schedulesLoading || dosesLoading;
-  const readError = medsError || schedulesError || dosesError;
-  if (loading) return <SkeletonList count={5} />;
-  if (readError) return <ErrorState message={t('medicationsModule.couldNotLoadMedicationData')} onRetry={() => { void refreshMeds(); void refreshSchedules(); void refreshDoses(); }} />;
+  if (readError || readbackBlocked) return <ErrorState message={t('medicationsModule.couldNotLoadMedicationData')} onRetry={() => { void retryReadback(); }} />;
+  if (!verified) return <SkeletonList count={5} />;
 
   return (
     <div>
@@ -281,7 +426,7 @@ export function MedicationsModule() {
         action={
           <div className="flex items-center gap-2">
             <AiInsight kind="medications" />
-            {canEdit && <Button onClick={openNewMed} className="gap-1.5"><Plus className="h-4 w-4" /> {t('medications.addMedication')}</Button>}
+            {canEdit && <Button onClick={openNewMed} disabled={!!busy} className="gap-1.5"><Plus className="h-4 w-4" /> {t('medications.addMedication')}</Button>}
           </div>
         }
       />
@@ -300,7 +445,10 @@ export function MedicationsModule() {
                 const med = medById.get(due.medicationId);
                 if (!med) return null;
                 const key = due.scheduleId + due.slotKey;
-                const busy = busyDose === key;
+                const instant = doseSlotInstant(due.slotKey, familyZone);
+                const targetUnavailable = !instant || (med.member_id && !members.some((member) => member.id === med.member_id && member.family_id === familyId))
+                  || doses.some((dose) => dose.schedule_id === due.scheduleId && new Date(dose.scheduled_for).getTime() === new Date(instant).getTime()
+                    && (dose.medication_id !== med.id || dose.member_id !== med.member_id));
                 return (
                   <li key={key} className={cn(
                     'flex items-center gap-3 rounded-xl border px-3 py-2.5 transition',
@@ -315,15 +463,16 @@ export function MedicationsModule() {
                         {med.name}{med.dosage ? <span className="text-muted font-normal"> · {med.dosage}</span> : null}
                       </div>
                       {memberName(med.member_id) && <div className="text-xs text-muted">{memberName(med.member_id)}</div>}
+                      {targetUnavailable && <p className="text-xs text-warning">{t('medicationsModule.doseChanged')}</p>}
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <button onClick={() => logDose(due, 'taken')} disabled={busy}
+                      <button onClick={() => logDose(due, 'taken')} disabled={!!busy || !!targetUnavailable}
                         aria-label={t('medications.markTaken')}
                         className={cn('inline-flex h-8 w-8 items-center justify-center rounded-lg border transition',
                           due.status === 'taken' ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-border text-muted hover:text-emerald-400 hover:border-emerald-500/50')}>
                         <Check className="h-4 w-4" />
                       </button>
-                      <button onClick={() => logDose(due, 'skipped')} disabled={busy}
+                      <button onClick={() => logDose(due, 'skipped')} disabled={!!busy || !!targetUnavailable}
                         aria-label={t('medications.skipDose')}
                         className={cn('inline-flex h-8 w-8 items-center justify-center rounded-lg border transition',
                           due.status === 'skipped' ? 'border-amber-500 bg-amber-500 text-white' : 'border-border text-muted hover:text-amber-400 hover:border-amber-500/50')}>
@@ -366,7 +515,7 @@ export function MedicationsModule() {
       {visibleMeds.length === 0 ? (
         <EmptyState icon={Pill} title={t('medications.noMedicationsYet')}
           description={canEdit ? 'Add a medication and set its dosing schedule to start tracking adherence.' : 'No medications have been added for this filter.'}
-          action={canEdit && <Button onClick={openNewMed} className="gap-1.5"><Plus className="h-4 w-4" /> {t('medications.addMedication')}</Button>} />
+          action={canEdit && <Button onClick={openNewMed} disabled={!!busy} className="gap-1.5"><Plus className="h-4 w-4" /> {t('medications.addMedication')}</Button>} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {visibleMeds.map((m) => {
@@ -398,8 +547,8 @@ export function MedicationsModule() {
                   </div>
                   {canEdit && (
                     <div className="flex items-center gap-1 flex-shrink-0">
-                      <button onClick={() => openEditMed(m)} aria-label={t('medications.edit')} className="p-1.5 rounded-lg text-muted hover:text-fg hover:bg-elevated"><Pencil className="h-4 w-4" /></button>
-                      <button onClick={() => deleteMed(m)} aria-label={t('medications.delete')} className="p-1.5 rounded-lg text-muted hover:text-rose-400 hover:bg-elevated"><Trash2 className="h-4 w-4" /></button>
+                      <button onClick={() => openEditMed(m)} disabled={!!busy} aria-label={t('medications.edit')} className="p-1.5 rounded-lg text-muted hover:text-fg hover:bg-elevated"><Pencil className="h-4 w-4" /></button>
+                      <button onClick={() => deleteMed(m)} disabled={!!busy} aria-label={t('medications.delete')} className="p-1.5 rounded-lg text-muted hover:text-rose-400 hover:bg-elevated"><Trash2 className="h-4 w-4" /></button>
                     </div>
                   )}
                 </div>
@@ -417,7 +566,7 @@ export function MedicationsModule() {
                         {s.days_of_week.length === 7 ? 'Every day' : s.days_of_week.map((d) => DAY_LABELS[d]).join(', ')}
                       </span>
                       {canEdit && (
-                        <button onClick={() => deleteSchedule(s.id)} aria-label={t('medications.removeSchedule')} className="ml-auto p-0.5 rounded text-muted hover:text-rose-400"><X className="h-3.5 w-3.5" /></button>
+                        <button onClick={() => deleteSchedule(s.id)} disabled={!!busy} aria-label={t('medications.removeSchedule')} className="ml-auto p-0.5 rounded text-muted hover:text-rose-400"><X className="h-3.5 w-3.5" /></button>
                       )}
                     </div>
                   ))}
@@ -425,10 +574,10 @@ export function MedicationsModule() {
 
                 {canEdit && (
                   <div className="mt-3 flex items-center gap-3">
-                    <button onClick={() => openSchedule(m)} className="text-xs font-medium text-brand-text hover:underline inline-flex items-center gap-1">
+                    <button onClick={() => openSchedule(m)} disabled={!!busy} className="text-xs font-medium text-brand-text hover:underline inline-flex items-center gap-1">
                       <Plus className="h-3.5 w-3.5" /> {t('medications.addSchedule')}
                     </button>
-                    <button onClick={() => toggleActive(m)} className="text-xs font-medium text-muted hover:text-fg">
+                    <button onClick={() => toggleActive(m)} disabled={!!busy} className="text-xs font-medium text-muted hover:text-fg">
                       {m.is_active ? 'Mark inactive' : 'Reactivate'}
                     </button>
                   </div>
@@ -440,8 +589,9 @@ export function MedicationsModule() {
       )}
 
       {/* Medication modal */}
-      <Modal open={medModalOpen} onClose={() => setMedModalOpen(false)} title={medForm.id ? 'Edit medication' : 'Add medication'}>
+      <Modal open={medModalOpen} onClose={closeMed} title={medForm.id ? 'Edit medication' : 'Add medication'}>
         <form onSubmit={saveMed} className="space-y-4">
+          <fieldset disabled={!!busy} className="space-y-4">
           <Field label={t('medications.name')} required>
             {(id) => <Input id={id} value={medForm.name} onChange={(e) => setMedForm((f) => ({ ...f, name: e.target.value }))} placeholder={t('medications.eGAmoxicillin')} autoFocus />}
           </Field>
@@ -472,15 +622,17 @@ export function MedicationsModule() {
             {t('medications.active')}
           </label>
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => setMedModalOpen(false)}>{t('medications.cancel')}</Button>
-            <Button type="submit" disabled={savingMed}>{savingMed ? 'Saving…' : medForm.id ? 'Save changes' : 'Add medication'}</Button>
+            <Button type="button" variant="outline" onClick={closeMed} disabled={!!busy}>{t('medications.cancel')}</Button>
+            <Button type="submit" disabled={!!busy}>{savingMed ? 'Saving…' : medForm.id ? 'Save changes' : 'Add medication'}</Button>
           </div>
+          </fieldset>
         </form>
       </Modal>
 
       {/* Schedule modal */}
-      <Modal open={!!scheduleFor} onClose={() => setScheduleFor(null)} title={`Add schedule${scheduleFor ? ` · ${scheduleFor.name}` : ''}`}>
+      <Modal open={!!scheduleFor} onClose={closeSchedule} title={`Add schedule${scheduleFor ? ` · ${scheduleFor.name}` : ''}`}>
         <form onSubmit={saveSchedule} className="space-y-4">
+          <fieldset disabled={!!busy} className="space-y-4">
           <Field label={t('medications.timeOfDay')} required>
             {(id) => <Input id={id} type="time" value={scheduleForm.time_of_day} onChange={(e) => setScheduleForm((f) => ({ ...f, time_of_day: e.target.value }))} />}
           </Field>
@@ -505,12 +657,12 @@ export function MedicationsModule() {
             </Field>
           </div>
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => setScheduleFor(null)}>{t('medications.cancel')}</Button>
-            <Button type="submit" disabled={savingSchedule}>{savingSchedule ? 'Saving…' : 'Add schedule'}</Button>
+            <Button type="button" variant="outline" onClick={closeSchedule} disabled={!!busy}>{t('medications.cancel')}</Button>
+            <Button type="submit" disabled={!!busy}>{savingSchedule ? 'Saving…' : 'Add schedule'}</Button>
           </div>
+          </fieldset>
         </form>
       </Modal>
     </div>
   );
 }
-

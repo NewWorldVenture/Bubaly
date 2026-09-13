@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import { saveCapture, tableForKind, undoCapture } from '@/lib/capture/save';
 import type { SupabaseBrowser } from '@/lib/supabase/types';
+const LIST = '44444444-4444-4444-8444-444444444444';
 
 // A tiny chainable fake of the Supabase browser client: records every insert
 // and resolves list lookups to an existing list (so we exercise the insert
@@ -9,18 +11,19 @@ import type { SupabaseBrowser } from '@/lib/supabase/types';
 function makeFakeSupabase() {
   const inserts: { table: string; payload: unknown }[] = [];
   function builder(table: string) {
+    let rows: unknown[] = [];
     const b: Record<string, unknown> = {};
     const chain = () => b;
     Object.assign(b, {
-      select: chain, eq: chain, is: chain, order: chain, limit: chain,
-      insert: (payload: unknown) => { inserts.push({ table, payload }); return b; },
+      select: chain, eq: chain, is: chain, order: chain, limit: chain, abortSignal: chain,
+      insert: (payload: unknown) => { inserts.push({ table, payload }); rows = Array.isArray(payload) ? payload : [payload]; return b; },
       maybeSingle: () =>
         Promise.resolve(
           table === 'todo_lists' || table === 'grocery_lists'
-            ? { data: { id: `${table}-1` }, error: null }
+            ? { data: { id: LIST }, error: null }
             : { data: null, error: null },
         ),
-      then: (resolve: (v: { data: null; error: null }) => void) => resolve({ data: null, error: null }),
+      then: (resolve: (v: { data: { id: string }[]; error: null }) => void) => resolve({ data: rows.map(() => ({ id: randomUUID() })), error: null }),
     });
     return b;
   }
@@ -69,13 +72,11 @@ describe('saveCapture', () => {
       const b: Record<string, unknown> = {};
       const chain = () => b;
       Object.assign(b, {
-        select: chain, eq: chain, is: chain, order: chain, limit: chain,
+        select: chain, eq: chain, is: chain, order: chain, limit: chain, abortSignal: chain,
         insert: (payload: unknown) => { inserts.push({ table, payload }); return b; },
         // No existing list → exercise the list-creation path.
-        maybeSingle: () => Promise.resolve(table === 'todo_lists' && inserts.some((i) => i.table === 'todo_lists')
-          ? { data: { id: 'todo_lists-new' }, error: null }
-          : { data: null, error: null }),
-        then: (resolve: (v: { data: null; error: null }) => void) => resolve({ data: null, error: null }),
+        maybeSingle: () => Promise.resolve({ data: null, error: null }),
+        then: (resolve: (v: { data: { id: string }[]; error: null }) => void) => resolve({ data: [{ id: table === 'todo_lists' ? LIST : randomUUID() }], error: null }),
       });
       return b;
     }
@@ -83,7 +84,7 @@ describe('saveCapture', () => {
     await saveCapture(client, { ...BASE, kind: 'task', text: 'Pack lunches for tomorrow' });
     expect(inserts.find((i) => i.table === 'todo_lists')!.payload).toEqual({ family_id: 'fam-1', name: 'To-Do', created_by: 'member-1' });
     const item = inserts.find((i) => i.table === 'todo_items')!.payload as Record<string, unknown>;
-    expect(item).toMatchObject({ list_id: 'todo_lists-new', title: 'Pack lunches for tomorrow', created_by: 'member-1', assigned_to_id: 'member-1' });
+    expect(item).toMatchObject({ list_id: LIST, title: 'Pack lunches for tomorrow', created_by: 'member-1', assigned_to_id: 'member-1' });
   });
 
   it('splits a shopping list into multiple rows', async () => {
@@ -122,6 +123,7 @@ describe('saveCapture', () => {
       const res = await saveCapture(client, { ...BASE, kind: c.kind, text: c.text });
       expect(res.undo.table).toBe(c.table);
       expect(Array.isArray(res.undo.ids)).toBe(true);
+      expect(res.undo.ids).toHaveLength(res.count);
     }
   });
 });
@@ -139,11 +141,14 @@ describe('undoCapture', () => {
   function makeDeleteFake() {
     const deletes: { table: string; ids: unknown }[] = [];
     let curTable = '';
+    let removed: string[] = [];
     const b: Record<string, unknown> = {};
     Object.assign(b, {
       delete: () => b,
-      in: (_col: string, ids: unknown) => { deletes.push({ table: curTable, ids }); return b; },
-      then: (resolve: (v: { error: null }) => void) => resolve({ error: null }),
+      select: () => b,
+      abortSignal: () => b,
+      in: (_col: string, ids: string[]) => { deletes.push({ table: curTable, ids }); removed = ids; return b; },
+      then: (resolve: (v: { data: { id: string }[]; error: null }) => void) => resolve({ data: removed.map(id => ({ id })), error: null }),
     });
     const client = { from: (t: string) => { curTable = t; return b; } } as unknown as SupabaseBrowser;
     return { client, deletes };
@@ -151,8 +156,9 @@ describe('undoCapture', () => {
 
   it('deletes the created rows from the right table', async () => {
     const { client, deletes } = makeDeleteFake();
-    await undoCapture(client, { table: 'grocery_items', ids: ['a', 'b'] });
-    expect(deletes).toEqual([{ table: 'grocery_items', ids: ['a', 'b'] }]);
+    const ids = [randomUUID(), randomUUID()];
+    await undoCapture(client, { table: 'grocery_items', ids });
+    expect(deletes).toEqual([{ table: 'grocery_items', ids }]);
   });
 
   it('is a no-op when there are no ids', async () => {

@@ -133,6 +133,22 @@ export type GroceryItemInput = {
   sourceMealId?: string | null;
 };
 
+async function writableList(scope: ServiceScope, listId?: string | null): Promise<ServiceResult<{ id: string }>> {
+  if (!listId) return ensureDefaultList(scope);
+  if (typeof listId !== 'string') return fail('Choose a shopping list.', { code: SERVICE_CODES.invalidInput });
+  // Deliberately NOT filtered on the archive columns, unlike ensureDefaultList
+  // above. Naming a list is the caller saying which one it means, and
+  // tests/grocery-write-path.test.ts pins that: "the shopping module only ever
+  // shows an open one. Overriding that would be the service second-guessing its
+  // caller." Worth knowing when reading it next to the default-list path, which
+  // skips archived lists precisely because nothing named one.
+  const { data, error } = await scope.db.from('grocery_lists').select('id')
+    .eq('family_id', scope.familyId).eq('id', listId).maybeSingle();
+  if (error) return fail(describeDbError(error, 'Could not open your shopping list.'), { code: SERVICE_CODES.db });
+  if (!data || data.id !== listId) return fail('That shopping list could not be found.', { code: SERVICE_CODES.notFound });
+  return ok({ id: data.id });
+}
+
 /**
  * Add items in one insert, skipping anything already on the list unchecked.
  *
@@ -145,15 +161,18 @@ export async function addItems(
   scope: ServiceScope,
   input: { items: GroceryItemInput[]; listId?: string | null },
 ): Promise<ServiceResult<{ listId: string; added: GroceryItem[]; skipped: string[] }>> {
-  const names = (input.items ?? []).map((i) => ({ ...i, name: i.name?.trim() ?? '' })).filter((i) => i.name.length > 0);
+  if (!input || !Array.isArray(input.items) || input.items.length > 200 || input.items.some((item) =>
+    !item || typeof item.name !== 'string' || item.name.length > 300
+    || (item.quantity != null && (typeof item.quantity !== 'string' || item.quantity.length > 20000))
+    || (item.category != null && (typeof item.category !== 'string' || item.category.length > 300)))) {
+    return fail('Check the items to add.', { code: SERVICE_CODES.invalidInput });
+  }
+  const names = input.items.map((i) => ({ ...i, name: i.name.trim() })).filter((i) => i.name.length > 0);
   if (names.length === 0) return fail('There was nothing to add to the list.', { code: SERVICE_CODES.invalidInput });
 
-  let listId = input.listId ?? null;
-  if (!listId) {
-    const list = await ensureDefaultList(scope);
-    if (!list.ok) return list;
-    listId = list.data.id;
-  }
+  const list = await writableList(scope, input.listId);
+  if (!list.ok) return list;
+  const listId = list.data.id;
 
   const { data: open, error: openError } = await scope.db
     .from('grocery_items')
@@ -192,9 +211,21 @@ export async function addItems(
   if (rows.length === 0) return ok({ listId, added: [], skipped });
 
   const { data, error } = await scope.db.from('grocery_items').insert(rows).select('*');
-  if (error) {
+  const matches = (saved: GroceryItem, requested: Omit<typeof rows[number], 'source_meal_id'> & { source_meal_id?: string | null }) =>
+    typeof saved.id === 'string' && saved.id.length > 0 && saved.family_id === requested.family_id
+    && saved.list_id === requested.list_id && saved.name === requested.name && saved.quantity === requested.quantity
+    && saved.category === requested.category && (saved.source_meal_id ?? null) === (requested.source_meal_id ?? null)
+    && saved.created_by === requested.created_by;
+  if (error || !data || data.length !== rows.length || new Set(data.map((item) => item.id)).size !== rows.length
+    || rows.some((requested) => !data.some((saved) => matches(saved, requested)))) {
     console.error('[service:groceries] add items failed', error);
     return fail(describeDbError(error, 'Could not add those items.'), { code: SERVICE_CODES.db });
+  }
+  const { data: verified, error: verifyError } = await scope.db.from('grocery_items').select('*')
+    .eq('family_id', scope.familyId).eq('list_id', listId).in('id', data.map((item) => item.id));
+  if (verifyError || !verified || verified.length !== rows.length
+    || data.some((saved) => !verified.some((item) => item.id === saved.id && matches(item, saved)))) {
+    return fail('Could not confirm the added items. Refresh the list before trying again.', { code: SERVICE_CODES.db });
   }
 
   await recordActivitySafely(scope, {
@@ -204,7 +235,7 @@ export async function addItems(
     detail: rows.map((r) => r.name).join(', '),
     href: '/dashboard/grocery',
   });
-  return ok({ listId, added: data ?? [], skipped });
+  return ok({ listId, added: verified, skipped });
 }
 
 /** Everything still to buy, grouped-friendly: category first, then insertion order. */
@@ -340,14 +371,16 @@ export type MealPlanGroceryInput = {
   from?: string | null;
   to?: string | null;
   listId?: string | null;
+  /** Opt out of presence-based pantry skipping when exact weekly amounts are wanted. */
+  usePantry?: boolean;
 };
 
 export type MealPlanGroceryResult = {
   listId: string;
   added: GroceryItem[];
-  /** Already on the list, unbought. */
+  /** Already on the list, unbought; existing quantities are left unchanged. */
   skipped: string[];
-  /** In the pantry with stock, so not needed. */
+  /** Skipped by the caller's pantry-presence preference; quantities were not compared. */
   inPantry: string[];
   /** Planned dishes the ingredients came from. */
   meals: { id: string; name: string; date: string }[];
@@ -387,14 +420,13 @@ export function planGroceryNeeds(
         // Two dishes want the same thing: keep one line, but note both amounts
         // rather than silently dropping one — "2 lb + 1 lb" is honest, a
         // summed quantity across "2 lb" and "1 cup" would be fiction.
-        const qty = ing.quantity ? `${ing.quantity}${ing.unit ? ` ${ing.unit}` : ''}` : null;
-        if (qty && existing.quantity && !existing.quantity.includes(qty)) existing.quantity = `${existing.quantity} + ${qty}`;
-        else if (qty && !existing.quantity) existing.quantity = qty;
+        const qty = [ing.quantity, ing.unit].filter(Boolean).join(' ') || null;
+        existing.quantity = `${existing.quantity || 'amount unspecified'} + ${qty || 'amount unspecified'}`;
         continue;
       }
       needed.set(key, {
         name: ing.name,
-        quantity: ing.quantity ? `${ing.quantity}${ing.unit ? ` ${ing.unit}` : ''}` : null,
+        quantity: [ing.quantity, ing.unit].filter(Boolean).join(' ') || null,
         sourceMealId: dish.id,
       });
     }
@@ -403,6 +435,9 @@ export function planGroceryNeeds(
 }
 
 export async function addFromMealPlan(scope: ServiceScope, input: MealPlanGroceryInput = {}): Promise<ServiceResult<MealPlanGroceryResult>> {
+  if (input.usePantry !== undefined && typeof input.usePantry !== 'boolean') {
+    return fail('Choose whether to skip pantry ingredients.', { code: SERVICE_CODES.invalidInput });
+  }
   let from = input.from ?? null;
   let to = input.to ?? null;
   if (!from && !to) {
@@ -434,7 +469,8 @@ export async function addFromMealPlan(scope: ServiceScope, input: MealPlanGrocer
 
   const [mealsRes, pantryRes] = await settleAll([
     scope.db.from('meals').select('id, name, ingredients').eq('family_id', scope.familyId).in('id', mealIds),
-    scope.db.from('pantry_items').select('name, quantity').eq('family_id', scope.familyId),
+    input.usePantry === false ? Promise.resolve({ data: [], error: null })
+      : scope.db.from('pantry_items').select('name, quantity').eq('family_id', scope.familyId),
   ]);
   const readError = mealsRes.error ?? pantryRes.error;
   if (readError) {
@@ -443,10 +479,17 @@ export async function addFromMealPlan(scope: ServiceScope, input: MealPlanGrocer
   }
 
   const mealById = new Map((mealsRes.data ?? []).map((m) => [m.id, m]));
+  if (mealIds.some((id) => !mealById.has(id))) {
+    return fail('Some planned dishes could not be read. Refresh the meal plan before adding groceries.', { code: SERVICE_CODES.db });
+  }
   const dishes = (plans ?? [])
     .map((p) => (p.meal_id ? mealById.get(p.meal_id) : null))
     .filter((m): m is NonNullable<typeof m> => Boolean(m))
     .map((m) => ({ id: m.id, name: m.name, ingredients: parseIngredients(m.ingredients) }));
+  const withoutIngredients = [...new Set(dishes.filter((dish) => dish.ingredients.length === 0).map((dish) => dish.name))];
+  if (withoutIngredients.length) {
+    return fail(`Add ingredients to ${withoutIngredients.slice(0, 5).join(', ')} before building the shopping list.`, { code: SERVICE_CODES.invalidInput });
+  }
   const { needed: rawNeeded, inPantry } = planGroceryNeeds(dishes, pantryRes.data ?? []);
 
   // What the household cannot or will not eat -------------------------------
@@ -479,9 +522,9 @@ export async function addFromMealPlan(scope: ServiceScope, input: MealPlanGrocer
     .map((p) => ({ id: p.meal_id as string, name: mealById.get(p.meal_id as string)!.name, date: p.plan_date }));
 
   if (needed.length === 0) {
-    const list = await ensureDefaultList(scope);
+    const list = await writableList(scope, input.listId);
     if (!list.ok) return list;
-    return ok({ listId: input.listId ?? list.data.id, added: [], skipped: [], inPantry, meals, substitutions });
+    return ok({ listId: list.data.id, added: [], skipped: [], inPantry, meals, substitutions });
   }
 
   const res = await addItems(scope, { items: needed, listId: input.listId ?? null });

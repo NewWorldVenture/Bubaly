@@ -13,6 +13,28 @@ const seeded = () => {
 };
 
 describe('in-memory PostgREST logical filters', () => {
+  it('compares JSON objects independent of key order while retaining arrays and scalar types', async () => {
+    const db = createInMemorySupabase();
+    db.seed('items', [{ id: 'a', payload: { state: 'ready', values: [1, '2'], meta: { x: true, y: null } } }]);
+    const query = (value: unknown) => db.from('items').select('id').eq('payload', JSON.stringify(value));
+    expect((await query({ meta: { y: null, x: true }, values: [1, '2'], state: 'ready' })).data).toEqual([{ id: 'a' }]);
+    expect((await query({ state: 'ready', values: ['2', 1], meta: { x: true, y: null } })).data).toEqual([]);
+    expect((await query({ state: 'ready', values: [1, 2], meta: { x: true, y: null } })).data).toEqual([]);
+    expect((await query({ state: 'ready', values: [1, '2'] })).data).toEqual([]);
+    expect((await db.from('items').select('id').eq('payload', '[object Object]')).data).toEqual([]);
+  });
+  it('applies exact text extraction to a JSON member before a conditional update', async () => {
+    const db = createInMemorySupabase();
+    db.seed('items', [{ id: 'a', payload: { revision: 'old', nested: { source: 'manual' } } }, { id: 'b', payload: { revision: 'new' } }, { id: 'missing', payload: {} }]);
+    const changed = await db.from('items').update({ changed: true }, { count: 'exact' }).eq('payload->>revision', 'old').select('id').retry(false);
+    expect(changed.data).toEqual([{ id: 'a' }]);
+    expect(changed.count).toBe(1);
+    expect(db.table('items').filter(row => row.changed)).toHaveLength(1);
+    expect((await db.from('items').select('id').is('payload->>revision', null)).data).toEqual([{ id: 'missing' }]);
+    expect((await db.from('items').select('id').eq('payload->nested->>source', 'manual')).data).toEqual([{ id: 'a' }]);
+    expect(() => db.from('items').eq('payload->>nested->>revision', 'old')).toThrow('unsupported JSON path');
+    expect(() => db.from('items').retry(true)).toThrow('retries are unsupported');
+  });
   it('applies OR-of-AND groups before ordering, projection and a shared limit', async () => {
     const result = await seeded().from('items').select('id').eq('family_id', 'own')
       .or('and(done.eq.false,value.gte.3),and(done.eq.true,value.lt.3)').order('value', { ascending: false }).limit(1);

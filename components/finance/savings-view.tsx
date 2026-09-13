@@ -11,7 +11,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field } from '@/components/ui/input';
-import { SkeletonList, EmptyState } from '@/components/ui/states';
+import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import type { Tables } from '@/lib/database.types';
 import { usd, pct, fmtDueDate } from '@/lib/finance/hub';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -24,7 +24,7 @@ export function SavingsView() {
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
-  const { data: goals, loading } = useRealtimeQuery<Goal>({
+  const { data: goals, loading, error, stale, refresh } = useRealtimeQuery<Goal>({
     table: 'savings_goals', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('savings_goals').select('*').eq('family_id', familyId).order('created_at', { ascending: false }),
   });
@@ -53,7 +53,7 @@ export function SavingsView() {
       <PageHeader title={t('savings.savingsGoals')} description={t('savingsView.setTargetsAndWatchYour')}
         action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('savings.addGoal')}</Button>} />
 
-      {loading ? <SkeletonList /> : rows.length === 0 ? (
+      {error ? <ErrorState message={error} onRetry={() => { void refresh(); }} /> : loading || stale ? <SkeletonList /> : rows.length === 0 ? (
         <EmptyState icon={Target} title={t('savings.noSavingsGoals')} description={t('savingsView.createAGoalToStart')}
           action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('savings.addGoal')}</Button>} />
       ) : (

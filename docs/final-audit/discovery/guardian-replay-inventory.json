@@ -1,0 +1,3332 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-12T19:48:16.165Z",
+  "baselineCommit": "cc91568425c9a3f42765b9230a39f3b3d3748428",
+  "sourceCommit": "1aa4d6fb4b8c3b59e69a8da291fa136d4922a72f",
+  "methodology": [
+    "Exact committed changed blobs, excluding audit documents. Source SHA256 is over Git blob bytes.",
+    "Exported declarations and static environment names parsed using installed TypeScript. No secret values.",
+    "New page routes are derived without route-group segments. Discovery does not establish workflow completion."
+  ],
+  "counts": {
+    "files": 38,
+    "newFiles": 27,
+    "production": 23,
+    "tests": 12,
+    "addedExportedFunctions": 57,
+    "newPageRoutes": [
+      "/dashboard/assistants",
+      "/dashboard/library"
+    ]
+  },
+  "files": [
+    {
+      "path": ".github/workflows/ci.yml",
+      "kind": "support",
+      "isNew": false,
+      "baselineSha256": "ea6d2147f8085c414a84530a727d17ef32a01d05d100d11bd70eedd2e83e2438",
+      "sourceSha256": "61338011caa84fac3c275563759f0ee5ae0db11ab174e8ab0a39f6ec2ec9c8e0",
+      "bytes": 13517,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "DEPLOY-B803FCB7F17E",
+        "OPS-INT-022",
+        "PERF-002",
+        "TEST-002"
+      ]
+    },
+    {
+      "path": "app/(app)/dashboard/assistants/actions.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "d02b138c7679ecff36cff94d9e5afb5b97e0a933ae1edbba2afb49cb15994072",
+      "bytes": 4016,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "AssistantActionResult",
+          "line": 17,
+          "kind": "type"
+        },
+        {
+          "name": "createAssistantLinkAction",
+          "line": 32,
+          "kind": "function"
+        },
+        {
+          "name": "revokeAssistantLinkAction",
+          "line": 73,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "createAssistantLinkAction",
+          "line": 32,
+          "kind": "function"
+        },
+        {
+          "name": "revokeAssistantLinkAction",
+          "line": 73,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "app/(app)/dashboard/assistants/controls.tsx",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "aae1aa84686687146d51ccc6f1678c876cda958287ff3de12a4943a001744dd0",
+      "bytes": 4130,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "NewAssistantKey",
+          "line": 18,
+          "kind": "function"
+        },
+        {
+          "name": "RevokeAssistantKey",
+          "line": 93,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "NewAssistantKey",
+          "line": 18,
+          "kind": "function"
+        },
+        {
+          "name": "RevokeAssistantKey",
+          "line": 93,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [
+        {
+          "tag": "form",
+          "line": 53
+        },
+        {
+          "tag": "input",
+          "line": 56
+        },
+        {
+          "tag": "select",
+          "line": 60
+        },
+        {
+          "tag": "input",
+          "line": 65
+        },
+        {
+          "tag": "Button",
+          "line": 74
+        },
+        {
+          "tag": "Button",
+          "line": 84
+        },
+        {
+          "tag": "Button",
+          "line": 97
+        }
+      ],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "app/(app)/dashboard/assistants/page.tsx",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "070b1a03ad1b67ff618a99f246af1a66979b4018b18715146c270dc699a15717",
+      "bytes": 6681,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "metadata",
+          "line": 11,
+          "kind": "value"
+        },
+        {
+          "name": "dynamic",
+          "line": 12,
+          "kind": "value"
+        },
+        {
+          "name": "AssistantsPage",
+          "line": 23,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "AssistantsPage",
+          "line": 23,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": "/dashboard/assistants",
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "app/(app)/dashboard/contact-center/actions.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "dbecab47176c7c4012d2164b72f98b6dfb71067b5c120b668371d7bfba4384d9",
+      "sourceSha256": "03b1e929d63ff4d5c7bbc2c3a01a35a6a700f72255ef7e1d5341cabace857dfb",
+      "bytes": 5343,
+      "baselineExportedSymbols": [
+        {
+          "name": "assignEmailAction",
+          "line": 27,
+          "kind": "function"
+        },
+        {
+          "name": "provisionNumberAction",
+          "line": 51,
+          "kind": "function"
+        },
+        {
+          "name": "updateConciergeAction",
+          "line": 63,
+          "kind": "function"
+        },
+        {
+          "name": "setMessageStatusAction",
+          "line": 83,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "assignEmailAction",
+          "line": 27,
+          "kind": "function"
+        },
+        {
+          "name": "provisionNumberAction",
+          "line": 57,
+          "kind": "function"
+        },
+        {
+          "name": "updateConciergeAction",
+          "line": 69,
+          "kind": "function"
+        },
+        {
+          "name": "setMessageStatusAction",
+          "line": 89,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "ACTION-94F23566076E",
+        "ACTION-FD08ADD85C8A",
+        "ACTION-E698D59FDBA3",
+        "ACTION-183CAA85923F",
+        "FLOW-D82B9410319A"
+      ]
+    },
+    {
+      "path": "app/(app)/dashboard/library/actions.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "beeda85dbfab7ab4668189101ad3fcf605d18bd600adc0b8a67ec1dcf4e46eff",
+      "bytes": 9441,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "LibraryResult",
+          "line": 14,
+          "kind": "type"
+        },
+        {
+          "name": "subscribeFeedAction",
+          "line": 84,
+          "kind": "function"
+        },
+        {
+          "name": "refreshFeedAction",
+          "line": 121,
+          "kind": "function"
+        },
+        {
+          "name": "unsubscribeFeedAction",
+          "line": 138,
+          "kind": "function"
+        },
+        {
+          "name": "addBookAction",
+          "line": 151,
+          "kind": "function"
+        },
+        {
+          "name": "saveProgressAction",
+          "line": 197,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "subscribeFeedAction",
+          "line": 84,
+          "kind": "function"
+        },
+        {
+          "name": "refreshFeedAction",
+          "line": 121,
+          "kind": "function"
+        },
+        {
+          "name": "unsubscribeFeedAction",
+          "line": 138,
+          "kind": "function"
+        },
+        {
+          "name": "addBookAction",
+          "line": 151,
+          "kind": "function"
+        },
+        {
+          "name": "saveProgressAction",
+          "line": 197,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "app/(app)/dashboard/library/page.tsx",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "72fa7ed45d4a63d1ac5cf97140b62f52bf1b01960cafe4e3ac1a53d26e1f318b",
+      "bytes": 8356,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "metadata",
+          "line": 11,
+          "kind": "value"
+        },
+        {
+          "name": "dynamic",
+          "line": 12,
+          "kind": "value"
+        },
+        {
+          "name": "LibraryPage",
+          "line": 28,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "LibraryPage",
+          "line": 28,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": "/dashboard/library",
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "app/(app)/dashboard/library/player.tsx",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "556bab252ab7cf5cd11cba29ae1501bacd33a1fe673e0bba9c0073559912d957",
+      "bytes": 10528,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "PlayableItem",
+          "line": 17,
+          "kind": "type"
+        },
+        {
+          "name": "ItemRow",
+          "line": 29,
+          "kind": "function"
+        },
+        {
+          "name": "SubscribeForm",
+          "line": 166,
+          "kind": "function"
+        },
+        {
+          "name": "AddBookForm",
+          "line": 201,
+          "kind": "function"
+        },
+        {
+          "name": "FeedControls",
+          "line": 238,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "ItemRow",
+          "line": 29,
+          "kind": "function"
+        },
+        {
+          "name": "SubscribeForm",
+          "line": 166,
+          "kind": "function"
+        },
+        {
+          "name": "AddBookForm",
+          "line": 201,
+          "kind": "function"
+        },
+        {
+          "name": "FeedControls",
+          "line": 238,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [
+        {
+          "tag": "Button",
+          "line": 121
+        },
+        {
+          "tag": "Button",
+          "line": 138
+        },
+        {
+          "tag": "Button",
+          "line": 142
+        },
+        {
+          "tag": "a",
+          "line": 148
+        },
+        {
+          "tag": "form",
+          "line": 170
+        },
+        {
+          "tag": "input",
+          "line": 184
+        },
+        {
+          "tag": "select",
+          "line": 191
+        },
+        {
+          "tag": "Button",
+          "line": 196
+        },
+        {
+          "tag": "form",
+          "line": 205
+        },
+        {
+          "tag": "input",
+          "line": 219
+        },
+        {
+          "tag": "input",
+          "line": 223
+        },
+        {
+          "tag": "input",
+          "line": 227
+        },
+        {
+          "tag": "input",
+          "line": 231
+        },
+        {
+          "tag": "Button",
+          "line": 233
+        },
+        {
+          "tag": "Button",
+          "line": 248
+        },
+        {
+          "tag": "Button",
+          "line": 251
+        }
+      ],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "app/api/assistant/alexa/route.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "0720f38d26df08c0f2c18a1644346d61bccbe3683875fe9b0d01bf90aaddfff3",
+      "bytes": 2738,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "runtime",
+          "line": 14,
+          "kind": "value"
+        },
+        {
+          "name": "POST",
+          "line": 25,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "POST",
+          "line": 25,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": "/api/assistant/alexa",
+      "httpMethods": [
+        "POST"
+      ],
+      "existingMasterIds": []
+    },
+    {
+      "path": "app/api/assistant/route.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "d071a6d324d3e2b4d9f7a603e87feb563335dff0326aae54685c5839fd4d704c",
+      "bytes": 3544,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "runtime",
+          "line": 10,
+          "kind": "value"
+        },
+        {
+          "name": "POST",
+          "line": 29,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "POST",
+          "line": 29,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": "/api/assistant",
+      "httpMethods": [
+        "POST"
+      ],
+      "existingMasterIds": []
+    },
+    {
+      "path": "app/api/guardian/inbound/sms/route.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "bb55dae6f8ba4d8c0c37ebce30a677e0e8a348892a10089ea361583bc2952c68",
+      "sourceSha256": "77cd8589a30e278532e9a88e5edfd9fdcfd0382003f7e35d6b64e2cd74f58400",
+      "bytes": 18193,
+      "baselineExportedSymbols": [
+        {
+          "name": "runtime",
+          "line": 18,
+          "kind": "value"
+        },
+        {
+          "name": "POST",
+          "line": 52,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "runtime",
+          "line": 19,
+          "kind": "value"
+        },
+        {
+          "name": "POST",
+          "line": 54,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [
+        "NEXT_PUBLIC_APP_URL",
+        "NODE_ENV"
+      ],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": "/api/guardian/inbound/sms",
+      "httpMethods": [
+        "POST"
+      ],
+      "existingMasterIds": [
+        "API-BBD0A5DB630F",
+        "FLOW-DDE6E8974B46",
+        "CALLBACK-07F1FB3AED21",
+        "AUTHZ-004"
+      ]
+    },
+    {
+      "path": "app/onboarding/actions.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "5594a63133af379dd63b0953613f7d873a31656b86df22c8a573466bfba6ae60",
+      "sourceSha256": "e942f14dec1b35a50a74faf15594ac6ffef4232c79faf83ede63c10c1a589351",
+      "bytes": 41195,
+      "baselineExportedSymbols": [
+        {
+          "name": "previewCalendarImportAction",
+          "line": 110,
+          "kind": "function"
+        },
+        {
+          "name": "saveFamilyDetailsAction",
+          "line": 166,
+          "kind": "function"
+        },
+        {
+          "name": "resetOnboardingAction",
+          "line": 249,
+          "kind": "function"
+        },
+        {
+          "name": "finalizeOnboardingAction",
+          "line": 313,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "previewCalendarImportAction",
+          "line": 112,
+          "kind": "function"
+        },
+        {
+          "name": "saveFamilyDetailsAction",
+          "line": 168,
+          "kind": "function"
+        },
+        {
+          "name": "resetOnboardingAction",
+          "line": 251,
+          "kind": "function"
+        },
+        {
+          "name": "finalizeOnboardingAction",
+          "line": 315,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "INCOMPLETE-54F2B68C42D8",
+        "INCOMPLETE-1CCD32B4639E",
+        "INCOMPLETE-0A2E6362C2A9",
+        "INCOMPLETE-3EF41FA1F5B7",
+        "ACTION-478E5E023D7F",
+        "ACTION-AA600E5AC1E4",
+        "ACTION-344AA8CFAD46",
+        "ACTION-2C0D1DC16D66",
+        "ACTION-E9901AA42D31",
+        "ACTION-7FE88226F6DE",
+        "ACTION-07F38B234F9E",
+        "ACTION-0BA933FFD4A3",
+        "ACTION-03BB5F5C118E",
+        "FLOW-A4963C49961A",
+        "UI-WF-002"
+      ]
+    },
+    {
+      "path": "lib/assistant/alexa.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "1f8c9d100295fda51a50773c825e698eb171c36a5eecf443d1f145408da26f0c",
+      "bytes": 4491,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "AlexaRequestBody",
+          "line": 13,
+          "kind": "type"
+        },
+        {
+          "name": "AlexaTranslation",
+          "line": 23,
+          "kind": "type"
+        },
+        {
+          "name": "alexaAccessToken",
+          "line": 37,
+          "kind": "function"
+        },
+        {
+          "name": "alexaUtterance",
+          "line": 54,
+          "kind": "function"
+        },
+        {
+          "name": "AlexaResponse",
+          "line": 75,
+          "kind": "type"
+        },
+        {
+          "name": "alexaSpeechResponse",
+          "line": 85,
+          "kind": "function"
+        },
+        {
+          "name": "alexaSilentResponse",
+          "line": 102,
+          "kind": "function"
+        },
+        {
+          "name": "ALEXA_NOT_LINKED_SPEECH",
+          "line": 107,
+          "kind": "value"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "alexaAccessToken",
+          "line": 37,
+          "kind": "function"
+        },
+        {
+          "name": "alexaUtterance",
+          "line": 54,
+          "kind": "function"
+        },
+        {
+          "name": "alexaSpeechResponse",
+          "line": 85,
+          "kind": "function"
+        },
+        {
+          "name": "alexaSilentResponse",
+          "line": 102,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "lib/assistant/answers.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "574bd912515fb3c6a5f1a65eb164ed8e389b5e6f01ee024740084d3201c9bab7",
+      "bytes": 4889,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "AgendaEvent",
+          "line": 13,
+          "kind": "type"
+        },
+        {
+          "name": "AgendaTask",
+          "line": 19,
+          "kind": "type"
+        },
+        {
+          "name": "SPOKEN_ITEM_LIMIT",
+          "line": 25,
+          "kind": "value"
+        },
+        {
+          "name": "speakTime",
+          "line": 28,
+          "kind": "function"
+        },
+        {
+          "name": "agendaSpeech",
+          "line": 56,
+          "kind": "function"
+        },
+        {
+          "name": "nextSpeech",
+          "line": 79,
+          "kind": "function"
+        },
+        {
+          "name": "forgettingSpeech",
+          "line": 95,
+          "kind": "function"
+        },
+        {
+          "name": "CAPTURE_NOT_ALLOWED_SPEECH",
+          "line": 118,
+          "kind": "value"
+        },
+        {
+          "name": "ERROR_SPEECH",
+          "line": 124,
+          "kind": "value"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "speakTime",
+          "line": 28,
+          "kind": "function"
+        },
+        {
+          "name": "agendaSpeech",
+          "line": 56,
+          "kind": "function"
+        },
+        {
+          "name": "nextSpeech",
+          "line": 79,
+          "kind": "function"
+        },
+        {
+          "name": "forgettingSpeech",
+          "line": 95,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "lib/assistant/intent.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "53c57326afa1e83633d023b2e7a1499b0301e2bf46f0bec5dd490ef2e5859e22",
+      "bytes": 5904,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "AssistantIntentKind",
+          "line": 20,
+          "kind": "type"
+        },
+        {
+          "name": "AssistantIntent",
+          "line": 34,
+          "kind": "type"
+        },
+        {
+          "name": "classifyAssistantUtterance",
+          "line": 57,
+          "kind": "function"
+        },
+        {
+          "name": "MAX_SPEECH_CHARS",
+          "line": 81,
+          "kind": "value"
+        },
+        {
+          "name": "toSpeakable",
+          "line": 91,
+          "kind": "function"
+        },
+        {
+          "name": "speakList",
+          "line": 102,
+          "kind": "function"
+        },
+        {
+          "name": "boundSpeech",
+          "line": 110,
+          "kind": "function"
+        },
+        {
+          "name": "HELP_SPEECH",
+          "line": 119,
+          "kind": "value"
+        },
+        {
+          "name": "unknownSpeech",
+          "line": 125,
+          "kind": "function"
+        },
+        {
+          "name": "captureSpeech",
+          "line": 133,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "classifyAssistantUtterance",
+          "line": 57,
+          "kind": "function"
+        },
+        {
+          "name": "toSpeakable",
+          "line": 91,
+          "kind": "function"
+        },
+        {
+          "name": "speakList",
+          "line": 102,
+          "kind": "function"
+        },
+        {
+          "name": "boundSpeech",
+          "line": 110,
+          "kind": "function"
+        },
+        {
+          "name": "unknownSpeech",
+          "line": 125,
+          "kind": "function"
+        },
+        {
+          "name": "captureSpeech",
+          "line": 133,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "lib/assistant/link-token.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "928bff0ac2c67c32232cae7d078a52e3be7e2c6164a49919b8c652c6636447d6",
+      "bytes": 3403,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "IssuedToken",
+          "line": 24,
+          "kind": "type"
+        },
+        {
+          "name": "issueAssistantToken",
+          "line": 33,
+          "kind": "function"
+        },
+        {
+          "name": "hashAssistantToken",
+          "line": 50,
+          "kind": "function"
+        },
+        {
+          "name": "assistantTokenMatches",
+          "line": 55,
+          "kind": "function"
+        },
+        {
+          "name": "looksLikeAssistantToken",
+          "line": 63,
+          "kind": "function"
+        },
+        {
+          "name": "readPresentedToken",
+          "line": 77,
+          "kind": "function"
+        },
+        {
+          "name": "ASSISTANT_TOKEN_PREFIX",
+          "line": 87,
+          "kind": "value"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "issueAssistantToken",
+          "line": 33,
+          "kind": "function"
+        },
+        {
+          "name": "hashAssistantToken",
+          "line": 50,
+          "kind": "function"
+        },
+        {
+          "name": "assistantTokenMatches",
+          "line": 55,
+          "kind": "function"
+        },
+        {
+          "name": "looksLikeAssistantToken",
+          "line": 63,
+          "kind": "function"
+        },
+        {
+          "name": "readPresentedToken",
+          "line": 77,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "lib/assistant/service.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "c6d20ad77b12b7e5f22bb5a276b6a7f2f0be28603392045e732ae01979349b13",
+      "bytes": 11567,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "AssistantLink",
+          "line": 22,
+          "kind": "type"
+        },
+        {
+          "name": "AssistantOutcome",
+          "line": 31,
+          "kind": "type"
+        },
+        {
+          "name": "AssistantReply",
+          "line": 32,
+          "kind": "type"
+        },
+        {
+          "name": "resolveAssistantLink",
+          "line": 44,
+          "kind": "function"
+        },
+        {
+          "name": "dayKey",
+          "line": 72,
+          "kind": "function"
+        },
+        {
+          "name": "dayWindow",
+          "line": 82,
+          "kind": "function"
+        },
+        {
+          "name": "recordAssistantEvent",
+          "line": 133,
+          "kind": "function"
+        },
+        {
+          "name": "answerAssistant",
+          "line": 157,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "resolveAssistantLink",
+          "line": 44,
+          "kind": "function"
+        },
+        {
+          "name": "dayKey",
+          "line": 72,
+          "kind": "function"
+        },
+        {
+          "name": "dayWindow",
+          "line": 82,
+          "kind": "function"
+        },
+        {
+          "name": "recordAssistantEvent",
+          "line": 133,
+          "kind": "function"
+        },
+        {
+          "name": "answerAssistant",
+          "line": 157,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "lib/contact-center/address.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "d873e5b21ec519648ab696a84aa1aa1309bf00d0b3bb66a49e81b9be8328eae8",
+      "sourceSha256": "24de9fcfb2a36b8d441415f80342b0155851c091a57cccf183f110ed7bdbc761",
+      "bytes": 6076,
+      "baselineExportedSymbols": [
+        {
+          "name": "BUBALY_DOMAIN",
+          "line": 5,
+          "kind": "value"
+        },
+        {
+          "name": "normalizeEmailLocal",
+          "line": 14,
+          "kind": "function"
+        },
+        {
+          "name": "isValidEmailLocal",
+          "line": 24,
+          "kind": "function"
+        },
+        {
+          "name": "suggestEmailLocal",
+          "line": 29,
+          "kind": "function"
+        },
+        {
+          "name": "buildBubalyAddress",
+          "line": 42,
+          "kind": "function"
+        },
+        {
+          "name": "channelAddress",
+          "line": 47,
+          "kind": "function"
+        },
+        {
+          "name": "parseRecipientLocal",
+          "line": 56,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "BUBALY_DOMAIN",
+          "line": 5,
+          "kind": "value"
+        },
+        {
+          "name": "normalizeEmailLocal",
+          "line": 14,
+          "kind": "function"
+        },
+        {
+          "name": "RESERVED_EMAIL_LOCALS",
+          "line": 46,
+          "kind": "value"
+        },
+        {
+          "name": "isReservedEmailLocal",
+          "line": 67,
+          "kind": "function"
+        },
+        {
+          "name": "isValidEmailLocal",
+          "line": 74,
+          "kind": "function"
+        },
+        {
+          "name": "isClaimableEmailLocal",
+          "line": 86,
+          "kind": "function"
+        },
+        {
+          "name": "suggestEmailLocal",
+          "line": 91,
+          "kind": "function"
+        },
+        {
+          "name": "buildBubalyAddress",
+          "line": 107,
+          "kind": "function"
+        },
+        {
+          "name": "channelAddress",
+          "line": 112,
+          "kind": "function"
+        },
+        {
+          "name": "parseRecipientLocal",
+          "line": 121,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "isReservedEmailLocal",
+          "line": 67,
+          "kind": "function"
+        },
+        {
+          "name": "isClaimableEmailLocal",
+          "line": 86,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "LIBRARY-1BD73A3C9A1E"
+      ]
+    },
+    {
+      "path": "lib/contact-center/provision.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "d7580dd2923cd7343aaa0517af23810ff4e51c4debb2bd56faadb1d8b2029344",
+      "bytes": 5438,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "MAX_CANDIDATES",
+          "line": 11,
+          "kind": "value"
+        },
+        {
+          "name": "candidateLocals",
+          "line": 24,
+          "kind": "function"
+        },
+        {
+          "name": "ProvisionResult",
+          "line": 65,
+          "kind": "type"
+        },
+        {
+          "name": "provisionFamilyEmailLocal",
+          "line": 83,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "candidateLocals",
+          "line": 24,
+          "kind": "function"
+        },
+        {
+          "name": "provisionFamilyEmailLocal",
+          "line": 83,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "lib/database.types.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "73fa48c0b19143af58d9296e249d036f17ac7092ccfe6921dc196427a3a0c4d7",
+      "sourceSha256": "eaa23617fb1fe78eddbe14241322f7dfce77d11a33448ebeea18d7992917c3f3",
+      "bytes": 403505,
+      "baselineExportedSymbols": [
+        {
+          "name": "Json",
+          "line": 6,
+          "kind": "type"
+        },
+        {
+          "name": "MemberRole",
+          "line": 8,
+          "kind": "type"
+        },
+        {
+          "name": "InviteStatus",
+          "line": 9,
+          "kind": "type"
+        },
+        {
+          "name": "TaskStatus",
+          "line": 10,
+          "kind": "type"
+        },
+        {
+          "name": "Priority",
+          "line": 11,
+          "kind": "type"
+        },
+        {
+          "name": "EventCategory",
+          "line": 12,
+          "kind": "type"
+        },
+        {
+          "name": "RecurrenceFreq",
+          "line": 15,
+          "kind": "type"
+        },
+        {
+          "name": "PetSpecies",
+          "line": 16,
+          "kind": "type"
+        },
+        {
+          "name": "PetCareKind",
+          "line": 17,
+          "kind": "type"
+        },
+        {
+          "name": "WardrobeCategory",
+          "line": 18,
+          "kind": "type"
+        },
+        {
+          "name": "WardrobeStatus",
+          "line": 19,
+          "kind": "type"
+        },
+        {
+          "name": "OutfitOccasion",
+          "line": 20,
+          "kind": "type"
+        },
+        {
+          "name": "WatchKind",
+          "line": 21,
+          "kind": "type"
+        },
+        {
+          "name": "WatchService",
+          "line": 22,
+          "kind": "type"
+        },
+        {
+          "name": "WatchStatus",
+          "line": 23,
+          "kind": "type"
+        },
+        {
+          "name": "WatchVote",
+          "line": 24,
+          "kind": "type"
+        },
+        {
+          "name": "HomeLocationKind",
+          "line": 25,
+          "kind": "type"
+        },
+        {
+          "name": "InventoryCategory",
+          "line": 26,
+          "kind": "type"
+        },
+        {
+          "name": "InventoryStatus",
+          "line": 27,
+          "kind": "type"
+        },
+        {
+          "name": "SleepSource",
+          "line": 28,
+          "kind": "type"
+        },
+        {
+          "name": "DeclutterZoneKind",
+          "line": 29,
+          "kind": "type"
+        },
+        {
+          "name": "DeclutterMissionStatus",
+          "line": 30,
+          "kind": "type"
+        },
+        {
+          "name": "MoveStatus",
+          "line": 31,
+          "kind": "type"
+        },
+        {
+          "name": "MoveKind",
+          "line": 32,
+          "kind": "type"
+        },
+        {
+          "name": "MoveTaskCategory",
+          "line": 33,
+          "kind": "type"
+        },
+        {
+          "name": "MoveTaskStatus",
+          "line": 34,
+          "kind": "type"
+        },
+        {
+          "name": "MoveBoxStatus",
+          "line": 35,
+          "kind": "type"
+        },
+        {
+          "name": "HomeProjectKind",
+          "line": 36,
+          "kind": "type"
+        },
+        {
+          "name": "HomeProjectStatus",
+          "line": 37,
+          "kind": "type"
+        },
+        {
+          "name": "HomeProjectPriority",
+          "line": 38,
+          "kind": "type"
+        },
+        {
+          "name": "ProjectQuoteStatus",
+          "line": 39,
+          "kind": "type"
+        },
+        {
+          "name": "CareerWorkMode",
+          "line": 40,
+          "kind": "type"
+        },
+        {
+          "name": "CareerEmploymentType",
+          "line": 41,
+          "kind": "type"
+        },
+        {
+          "name": "CareerStatus",
+          "line": 42,
+          "kind": "type"
+        },
+        {
+          "name": "JobStage",
+          "line": 43,
+          "kind": "type"
+        },
+        {
+          "name": "CefrLevel",
+          "line": 44,
+          "kind": "type"
+        },
+        {
+          "name": "LanguageSessionKind",
+          "line": 45,
+          "kind": "type"
+        },
+        {
+          "name": "InsurancePolicyType",
+          "line": 46,
+          "kind": "type"
+        },
+        {
+          "name": "PremiumFrequency",
+          "line": 47,
+          "kind": "type"
+        },
+        {
+          "name": "MealType",
+          "line": 48,
+          "kind": "type"
+        },
+        {
+          "name": "PantryLocation",
+          "line": 49,
+          "kind": "type"
+        },
+        {
+          "name": "NutritionSubject",
+          "line": 50,
+          "kind": "type"
+        },
+        {
+          "name": "NotificationType",
+          "line": 51,
+          "kind": "type"
+        },
+        {
+          "name": "WalletTxnType",
+          "line": 54,
+          "kind": "type"
+        },
+        {
+          "name": "WalletTxnStatus",
+          "line": 57,
+          "kind": "type"
+        },
+        {
+          "name": "StripeAccountStatus",
+          "line": 59,
+          "kind": "type"
+        },
+        {
+          "name": "InvestOrderSide",
+          "line": 60,
+          "kind": "type"
+        },
+        {
+          "name": "InvestOrderStatus",
+          "line": 61,
+          "kind": "type"
+        },
+        {
+          "name": "SocialItemKind",
+          "line": 62,
+          "kind": "type"
+        },
+        {
+          "name": "SocialCategory",
+          "line": 63,
+          "kind": "type"
+        },
+        {
+          "name": "EconomyDirection",
+          "line": 64,
+          "kind": "type"
+        },
+        {
+          "name": "EconomyRedemptionStatus",
+          "line": 65,
+          "kind": "type"
+        },
+        {
+          "name": "SubscriptionStatus",
+          "line": 66,
+          "kind": "type"
+        },
+        {
+          "name": "AccountType",
+          "line": 68,
+          "kind": "type"
+        },
+        {
+          "name": "TransactionType",
+          "line": 69,
+          "kind": "type"
+        },
+        {
+          "name": "BudgetPeriod",
+          "line": 70,
+          "kind": "type"
+        },
+        {
+          "name": "BillStatus",
+          "line": 71,
+          "kind": "type"
+        },
+        {
+          "name": "MetricType",
+          "line": 72,
+          "kind": "type"
+        },
+        {
+          "name": "GameResult",
+          "line": 73,
+          "kind": "type"
+        },
+        {
+          "name": "GradeType",
+          "line": 74,
+          "kind": "type"
+        },
+        {
+          "name": "ThemePref",
+          "line": 75,
+          "kind": "type"
+        },
+        {
+          "name": "DashboardView",
+          "line": 76,
+          "kind": "type"
+        },
+        {
+          "name": "AiRole",
+          "line": 77,
+          "kind": "type"
+        },
+        {
+          "name": "AiRunState",
+          "line": 81,
+          "kind": "type"
+        },
+        {
+          "name": "AiRunLifecycleState",
+          "line": 85,
+          "kind": "type"
+        },
+        {
+          "name": "AiStepState",
+          "line": 86,
+          "kind": "type"
+        },
+        {
+          "name": "AiRequestKind",
+          "line": 87,
+          "kind": "type"
+        },
+        {
+          "name": "RoutineScheduleKind",
+          "line": 89,
+          "kind": "type"
+        },
+        {
+          "name": "RoutineRunStatus",
+          "line": 91,
+          "kind": "type"
+        },
+        {
+          "name": "HomeBriefKind",
+          "line": 93,
+          "kind": "type"
+        },
+        {
+          "name": "AutonomyBehaviorValue",
+          "line": 95,
+          "kind": "type"
+        },
+        {
+          "name": "AiRunType",
+          "line": 96,
+          "kind": "type"
+        },
+        {
+          "name": "AiPlanStatus",
+          "line": 97,
+          "kind": "type"
+        },
+        {
+          "name": "AiStepType",
+          "line": 99,
+          "kind": "type"
+        },
+        {
+          "name": "AiRiskLevel",
+          "line": 100,
+          "kind": "type"
+        },
+        {
+          "name": "AiActorKind",
+          "line": 101,
+          "kind": "type"
+        },
+        {
+          "name": "AiToolCallState",
+          "line": 102,
+          "kind": "type"
+        },
+        {
+          "name": "AiConversationState",
+          "line": 103,
+          "kind": "type"
+        },
+        {
+          "name": "AiApprovalPayloadKind",
+          "line": 104,
+          "kind": "type"
+        },
+        {
+          "name": "AiRunEventType",
+          "line": 105,
+          "kind": "type"
+        },
+        {
+          "name": "RecordKind",
+          "line": 110,
+          "kind": "type"
+        },
+        {
+          "name": "RideStatus",
+          "line": 111,
+          "kind": "type"
+        },
+        {
+          "name": "HomeworkStatus",
+          "line": 112,
+          "kind": "type"
+        },
+        {
+          "name": "RenewalStatus",
+          "line": 113,
+          "kind": "type"
+        },
+        {
+          "name": "CareLogType",
+          "line": 114,
+          "kind": "type"
+        },
+        {
+          "name": "OpportunityStatus",
+          "line": 115,
+          "kind": "type"
+        },
+        {
+          "name": "LocationEventType",
+          "line": 116,
+          "kind": "type"
+        },
+        {
+          "name": "WishPriority",
+          "line": 117,
+          "kind": "type"
+        },
+        {
+          "name": "RelationshipDateKind",
+          "line": 118,
+          "kind": "type"
+        },
+        {
+          "name": "RelationshipDateStatus",
+          "line": 119,
+          "kind": "type"
+        },
+        {
+          "name": "RelationshipGiftSource",
+          "line": 120,
+          "kind": "type"
+        },
+        {
+          "name": "RelationshipGiftStatus",
+          "line": 121,
+          "kind": "type"
+        },
+        {
+          "name": "DoseStatus",
+          "line": 122,
+          "kind": "type"
+        },
+        {
+          "name": "WeekPattern",
+          "line": 123,
+          "kind": "type"
+        },
+        {
+          "name": "TripStatus",
+          "line": 124,
+          "kind": "type"
+        },
+        {
+          "name": "TripItemKind",
+          "line": 125,
+          "kind": "type"
+        },
+        {
+          "name": "RedemptionStatus",
+          "line": 126,
+          "kind": "type"
+        },
+        {
+          "name": "VacationStatus",
+          "line": 129,
+          "kind": "type"
+        },
+        {
+          "name": "VacationKind",
+          "line": 130,
+          "kind": "type"
+        },
+        {
+          "name": "VacItemKind",
+          "line": 131,
+          "kind": "type"
+        },
+        {
+          "name": "VacDayPart",
+          "line": 132,
+          "kind": "type"
+        },
+        {
+          "name": "VacTransportKind",
+          "line": 133,
+          "kind": "type"
+        },
+        {
+          "name": "VacLodgingKind",
+          "line": 134,
+          "kind": "type"
+        },
+        {
+          "name": "VacBudgetCategory",
+          "line": 135,
+          "kind": "type"
+        },
+        {
+          "name": "VacPackCategory",
+          "line": 136,
+          "kind": "type"
+        },
+        {
+          "name": "VacDocKind",
+          "line": 137,
+          "kind": "type"
+        },
+        {
+          "name": "VacRecoKind",
+          "line": 138,
+          "kind": "type"
+        },
+        {
+          "name": "VacRecoStatus",
+          "line": 139,
+          "kind": "type"
+        },
+        {
+          "name": "WeekendPlanStatus",
+          "line": 142,
+          "kind": "type"
+        },
+        {
+          "name": "WeekendFeedKind",
+          "line": 143,
+          "kind": "type"
+        },
+        {
+          "name": "SyncProviderEnum",
+          "line": 146,
+          "kind": "type"
+        },
+        {
+          "name": "SyncDirection",
+          "line": 147,
+          "kind": "type"
+        },
+        {
+          "name": "SyncStatusEnum",
+          "line": 148,
+          "kind": "type"
+        },
+        {
+          "name": "SyncItemType",
+          "line": 150,
+          "kind": "type"
+        },
+        {
+          "name": "SyncConflictStatus",
+          "line": 151,
+          "kind": "type"
+        },
+        {
+          "name": "SyncConflictResolutionEnum",
+          "line": 152,
+          "kind": "type"
+        },
+        {
+          "name": "SyncJobStatus",
+          "line": 154,
+          "kind": "type"
+        },
+        {
+          "name": "SocialPlatformEnum",
+          "line": 158,
+          "kind": "type"
+        },
+        {
+          "name": "SocialAccountStatus",
+          "line": 161,
+          "kind": "type"
+        },
+        {
+          "name": "SocialPostKind",
+          "line": 163,
+          "kind": "type"
+        },
+        {
+          "name": "SocialPostStatusEnum",
+          "line": 166,
+          "kind": "type"
+        },
+        {
+          "name": "SocialTargetStatus",
+          "line": 169,
+          "kind": "type"
+        },
+        {
+          "name": "SocialJobStatus",
+          "line": 171,
+          "kind": "type"
+        },
+        {
+          "name": "SocialApprovalStatus",
+          "line": 173,
+          "kind": "type"
+        },
+        {
+          "name": "SocialInboxStatus",
+          "line": 175,
+          "kind": "type"
+        },
+        {
+          "name": "SocialAssetKind",
+          "line": 176,
+          "kind": "type"
+        },
+        {
+          "name": "SocialRoleEnum",
+          "line": 177,
+          "kind": "type"
+        },
+        {
+          "name": "Database",
+          "line": 188,
+          "kind": "type"
+        },
+        {
+          "name": "Tables",
+          "line": 2773,
+          "kind": "type"
+        },
+        {
+          "name": "Insertable",
+          "line": 2775,
+          "kind": "type"
+        },
+        {
+          "name": "Updatable",
+          "line": 2777,
+          "kind": "type"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "Json",
+          "line": 6,
+          "kind": "type"
+        },
+        {
+          "name": "MemberRole",
+          "line": 8,
+          "kind": "type"
+        },
+        {
+          "name": "InviteStatus",
+          "line": 9,
+          "kind": "type"
+        },
+        {
+          "name": "TaskStatus",
+          "line": 10,
+          "kind": "type"
+        },
+        {
+          "name": "Priority",
+          "line": 11,
+          "kind": "type"
+        },
+        {
+          "name": "EventCategory",
+          "line": 12,
+          "kind": "type"
+        },
+        {
+          "name": "RecurrenceFreq",
+          "line": 15,
+          "kind": "type"
+        },
+        {
+          "name": "PetSpecies",
+          "line": 16,
+          "kind": "type"
+        },
+        {
+          "name": "PetCareKind",
+          "line": 17,
+          "kind": "type"
+        },
+        {
+          "name": "WardrobeCategory",
+          "line": 18,
+          "kind": "type"
+        },
+        {
+          "name": "WardrobeStatus",
+          "line": 19,
+          "kind": "type"
+        },
+        {
+          "name": "OutfitOccasion",
+          "line": 20,
+          "kind": "type"
+        },
+        {
+          "name": "WatchKind",
+          "line": 21,
+          "kind": "type"
+        },
+        {
+          "name": "WatchService",
+          "line": 22,
+          "kind": "type"
+        },
+        {
+          "name": "WatchStatus",
+          "line": 23,
+          "kind": "type"
+        },
+        {
+          "name": "WatchVote",
+          "line": 24,
+          "kind": "type"
+        },
+        {
+          "name": "HomeLocationKind",
+          "line": 25,
+          "kind": "type"
+        },
+        {
+          "name": "InventoryCategory",
+          "line": 26,
+          "kind": "type"
+        },
+        {
+          "name": "InventoryStatus",
+          "line": 27,
+          "kind": "type"
+        },
+        {
+          "name": "SleepSource",
+          "line": 28,
+          "kind": "type"
+        },
+        {
+          "name": "DeclutterZoneKind",
+          "line": 29,
+          "kind": "type"
+        },
+        {
+          "name": "DeclutterMissionStatus",
+          "line": 30,
+          "kind": "type"
+        },
+        {
+          "name": "MoveStatus",
+          "line": 31,
+          "kind": "type"
+        },
+        {
+          "name": "MoveKind",
+          "line": 32,
+          "kind": "type"
+        },
+        {
+          "name": "MoveTaskCategory",
+          "line": 33,
+          "kind": "type"
+        },
+        {
+          "name": "MoveTaskStatus",
+          "line": 34,
+          "kind": "type"
+        },
+        {
+          "name": "MoveBoxStatus",
+          "line": 35,
+          "kind": "type"
+        },
+        {
+          "name": "HomeProjectKind",
+          "line": 36,
+          "kind": "type"
+        },
+        {
+          "name": "HomeProjectStatus",
+          "line": 37,
+          "kind": "type"
+        },
+        {
+          "name": "HomeProjectPriority",
+          "line": 38,
+          "kind": "type"
+        },
+        {
+          "name": "ProjectQuoteStatus",
+          "line": 39,
+          "kind": "type"
+        },
+        {
+          "name": "CareerWorkMode",
+          "line": 40,
+          "kind": "type"
+        },
+        {
+          "name": "CareerEmploymentType",
+          "line": 41,
+          "kind": "type"
+        },
+        {
+          "name": "CareerStatus",
+          "line": 42,
+          "kind": "type"
+        },
+        {
+          "name": "JobStage",
+          "line": 43,
+          "kind": "type"
+        },
+        {
+          "name": "CefrLevel",
+          "line": 44,
+          "kind": "type"
+        },
+        {
+          "name": "LanguageSessionKind",
+          "line": 45,
+          "kind": "type"
+        },
+        {
+          "name": "InsurancePolicyType",
+          "line": 46,
+          "kind": "type"
+        },
+        {
+          "name": "PremiumFrequency",
+          "line": 47,
+          "kind": "type"
+        },
+        {
+          "name": "MealType",
+          "line": 48,
+          "kind": "type"
+        },
+        {
+          "name": "PantryLocation",
+          "line": 49,
+          "kind": "type"
+        },
+        {
+          "name": "NutritionSubject",
+          "line": 50,
+          "kind": "type"
+        },
+        {
+          "name": "NotificationType",
+          "line": 51,
+          "kind": "type"
+        },
+        {
+          "name": "WalletTxnType",
+          "line": 54,
+          "kind": "type"
+        },
+        {
+          "name": "WalletTxnStatus",
+          "line": 57,
+          "kind": "type"
+        },
+        {
+          "name": "StripeAccountStatus",
+          "line": 59,
+          "kind": "type"
+        },
+        {
+          "name": "InvestOrderSide",
+          "line": 60,
+          "kind": "type"
+        },
+        {
+          "name": "InvestOrderStatus",
+          "line": 61,
+          "kind": "type"
+        },
+        {
+          "name": "SocialItemKind",
+          "line": 62,
+          "kind": "type"
+        },
+        {
+          "name": "SocialCategory",
+          "line": 63,
+          "kind": "type"
+        },
+        {
+          "name": "EconomyDirection",
+          "line": 64,
+          "kind": "type"
+        },
+        {
+          "name": "EconomyRedemptionStatus",
+          "line": 65,
+          "kind": "type"
+        },
+        {
+          "name": "SubscriptionStatus",
+          "line": 66,
+          "kind": "type"
+        },
+        {
+          "name": "AccountType",
+          "line": 68,
+          "kind": "type"
+        },
+        {
+          "name": "TransactionType",
+          "line": 69,
+          "kind": "type"
+        },
+        {
+          "name": "BudgetPeriod",
+          "line": 70,
+          "kind": "type"
+        },
+        {
+          "name": "BillStatus",
+          "line": 71,
+          "kind": "type"
+        },
+        {
+          "name": "MetricType",
+          "line": 72,
+          "kind": "type"
+        },
+        {
+          "name": "GameResult",
+          "line": 73,
+          "kind": "type"
+        },
+        {
+          "name": "GradeType",
+          "line": 74,
+          "kind": "type"
+        },
+        {
+          "name": "ThemePref",
+          "line": 75,
+          "kind": "type"
+        },
+        {
+          "name": "DashboardView",
+          "line": 76,
+          "kind": "type"
+        },
+        {
+          "name": "AiRole",
+          "line": 77,
+          "kind": "type"
+        },
+        {
+          "name": "AiRunState",
+          "line": 81,
+          "kind": "type"
+        },
+        {
+          "name": "AiRunLifecycleState",
+          "line": 85,
+          "kind": "type"
+        },
+        {
+          "name": "AiStepState",
+          "line": 86,
+          "kind": "type"
+        },
+        {
+          "name": "AiRequestKind",
+          "line": 87,
+          "kind": "type"
+        },
+        {
+          "name": "RoutineScheduleKind",
+          "line": 89,
+          "kind": "type"
+        },
+        {
+          "name": "RoutineRunStatus",
+          "line": 91,
+          "kind": "type"
+        },
+        {
+          "name": "HomeBriefKind",
+          "line": 93,
+          "kind": "type"
+        },
+        {
+          "name": "AutonomyBehaviorValue",
+          "line": 95,
+          "kind": "type"
+        },
+        {
+          "name": "AiRunType",
+          "line": 96,
+          "kind": "type"
+        },
+        {
+          "name": "AiPlanStatus",
+          "line": 97,
+          "kind": "type"
+        },
+        {
+          "name": "AiStepType",
+          "line": 99,
+          "kind": "type"
+        },
+        {
+          "name": "AiRiskLevel",
+          "line": 100,
+          "kind": "type"
+        },
+        {
+          "name": "AiActorKind",
+          "line": 101,
+          "kind": "type"
+        },
+        {
+          "name": "AiToolCallState",
+          "line": 102,
+          "kind": "type"
+        },
+        {
+          "name": "AiConversationState",
+          "line": 103,
+          "kind": "type"
+        },
+        {
+          "name": "AiApprovalPayloadKind",
+          "line": 104,
+          "kind": "type"
+        },
+        {
+          "name": "AiRunEventType",
+          "line": 105,
+          "kind": "type"
+        },
+        {
+          "name": "RecordKind",
+          "line": 110,
+          "kind": "type"
+        },
+        {
+          "name": "RideStatus",
+          "line": 111,
+          "kind": "type"
+        },
+        {
+          "name": "HomeworkStatus",
+          "line": 112,
+          "kind": "type"
+        },
+        {
+          "name": "RenewalStatus",
+          "line": 113,
+          "kind": "type"
+        },
+        {
+          "name": "CareLogType",
+          "line": 114,
+          "kind": "type"
+        },
+        {
+          "name": "OpportunityStatus",
+          "line": 115,
+          "kind": "type"
+        },
+        {
+          "name": "LocationEventType",
+          "line": 116,
+          "kind": "type"
+        },
+        {
+          "name": "WishPriority",
+          "line": 117,
+          "kind": "type"
+        },
+        {
+          "name": "RelationshipDateKind",
+          "line": 118,
+          "kind": "type"
+        },
+        {
+          "name": "RelationshipDateStatus",
+          "line": 119,
+          "kind": "type"
+        },
+        {
+          "name": "RelationshipGiftSource",
+          "line": 120,
+          "kind": "type"
+        },
+        {
+          "name": "RelationshipGiftStatus",
+          "line": 121,
+          "kind": "type"
+        },
+        {
+          "name": "DoseStatus",
+          "line": 122,
+          "kind": "type"
+        },
+        {
+          "name": "WeekPattern",
+          "line": 123,
+          "kind": "type"
+        },
+        {
+          "name": "TripStatus",
+          "line": 124,
+          "kind": "type"
+        },
+        {
+          "name": "TripItemKind",
+          "line": 125,
+          "kind": "type"
+        },
+        {
+          "name": "RedemptionStatus",
+          "line": 126,
+          "kind": "type"
+        },
+        {
+          "name": "VacationStatus",
+          "line": 129,
+          "kind": "type"
+        },
+        {
+          "name": "VacationKind",
+          "line": 130,
+          "kind": "type"
+        },
+        {
+          "name": "VacItemKind",
+          "line": 131,
+          "kind": "type"
+        },
+        {
+          "name": "VacDayPart",
+          "line": 132,
+          "kind": "type"
+        },
+        {
+          "name": "VacTransportKind",
+          "line": 133,
+          "kind": "type"
+        },
+        {
+          "name": "VacLodgingKind",
+          "line": 134,
+          "kind": "type"
+        },
+        {
+          "name": "VacBudgetCategory",
+          "line": 135,
+          "kind": "type"
+        },
+        {
+          "name": "VacPackCategory",
+          "line": 136,
+          "kind": "type"
+        },
+        {
+          "name": "VacDocKind",
+          "line": 137,
+          "kind": "type"
+        },
+        {
+          "name": "VacRecoKind",
+          "line": 138,
+          "kind": "type"
+        },
+        {
+          "name": "VacRecoStatus",
+          "line": 139,
+          "kind": "type"
+        },
+        {
+          "name": "WeekendPlanStatus",
+          "line": 142,
+          "kind": "type"
+        },
+        {
+          "name": "WeekendFeedKind",
+          "line": 143,
+          "kind": "type"
+        },
+        {
+          "name": "SyncProviderEnum",
+          "line": 146,
+          "kind": "type"
+        },
+        {
+          "name": "SyncDirection",
+          "line": 147,
+          "kind": "type"
+        },
+        {
+          "name": "SyncStatusEnum",
+          "line": 148,
+          "kind": "type"
+        },
+        {
+          "name": "SyncItemType",
+          "line": 150,
+          "kind": "type"
+        },
+        {
+          "name": "SyncConflictStatus",
+          "line": 151,
+          "kind": "type"
+        },
+        {
+          "name": "SyncConflictResolutionEnum",
+          "line": 152,
+          "kind": "type"
+        },
+        {
+          "name": "SyncJobStatus",
+          "line": 154,
+          "kind": "type"
+        },
+        {
+          "name": "SocialPlatformEnum",
+          "line": 158,
+          "kind": "type"
+        },
+        {
+          "name": "SocialAccountStatus",
+          "line": 161,
+          "kind": "type"
+        },
+        {
+          "name": "SocialPostKind",
+          "line": 163,
+          "kind": "type"
+        },
+        {
+          "name": "SocialPostStatusEnum",
+          "line": 166,
+          "kind": "type"
+        },
+        {
+          "name": "SocialTargetStatus",
+          "line": 169,
+          "kind": "type"
+        },
+        {
+          "name": "SocialJobStatus",
+          "line": 171,
+          "kind": "type"
+        },
+        {
+          "name": "SocialApprovalStatus",
+          "line": 173,
+          "kind": "type"
+        },
+        {
+          "name": "SocialInboxStatus",
+          "line": 175,
+          "kind": "type"
+        },
+        {
+          "name": "SocialAssetKind",
+          "line": 176,
+          "kind": "type"
+        },
+        {
+          "name": "SocialRoleEnum",
+          "line": 177,
+          "kind": "type"
+        },
+        {
+          "name": "Database",
+          "line": 188,
+          "kind": "type"
+        },
+        {
+          "name": "Tables",
+          "line": 2798,
+          "kind": "type"
+        },
+        {
+          "name": "Insertable",
+          "line": 2800,
+          "kind": "type"
+        },
+        {
+          "name": "Updatable",
+          "line": 2802,
+          "kind": "type"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-39A229E29D4D"
+      ]
+    },
+    {
+      "path": "lib/guardian/sms-receipt.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "0c8773b11fdf56bc41ead9b888ba6faefcba67d2c12b647c87dd97fedcbcf03b",
+      "bytes": 10765,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "GuardianSmsReceiptInput",
+          "line": 31,
+          "kind": "type"
+        },
+        {
+          "name": "GuardianSmsDecision",
+          "line": 32,
+          "kind": "type"
+        },
+        {
+          "name": "GuardianSmsReceipt",
+          "line": 33,
+          "kind": "type"
+        },
+        {
+          "name": "GuardianSmsReceiptUnavailableError",
+          "line": 36,
+          "kind": "class"
+        },
+        {
+          "name": "readGuardianSmsReceipt",
+          "line": 103,
+          "kind": "function"
+        },
+        {
+          "name": "captureGuardianSmsReceipt",
+          "line": 108,
+          "kind": "function"
+        },
+        {
+          "name": "saveGuardianSmsDecision",
+          "line": 131,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "readGuardianSmsReceipt",
+          "line": 103,
+          "kind": "function"
+        },
+        {
+          "name": "captureGuardianSmsReceipt",
+          "line": 108,
+          "kind": "function"
+        },
+        {
+          "name": "saveGuardianSmsDecision",
+          "line": 131,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "lib/library/feed-parse.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "9975cefadf8e86ffd7a6809596156801adf3bd9346c2b27393a8ad1cd5ff17e2",
+      "bytes": 9385,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "ParsedFeedItem",
+          "line": 18,
+          "kind": "type"
+        },
+        {
+          "name": "ParsedFeed",
+          "line": 29,
+          "kind": "type"
+        },
+        {
+          "name": "MAX_FEED_ITEMS",
+          "line": 38,
+          "kind": "value"
+        },
+        {
+          "name": "decodeEntities",
+          "line": 45,
+          "kind": "function"
+        },
+        {
+          "name": "textContent",
+          "line": 61,
+          "kind": "function"
+        },
+        {
+          "name": "parseDuration",
+          "line": 85,
+          "kind": "function"
+        },
+        {
+          "name": "parseFeedDate",
+          "line": 102,
+          "kind": "function"
+        },
+        {
+          "name": "safeFeedUrl",
+          "line": 115,
+          "kind": "function"
+        },
+        {
+          "name": "parseFeed",
+          "line": 173,
+          "kind": "function"
+        },
+        {
+          "name": "progressPercent",
+          "line": 219,
+          "kind": "function"
+        },
+        {
+          "name": "formatDuration",
+          "line": 225,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "decodeEntities",
+          "line": 45,
+          "kind": "function"
+        },
+        {
+          "name": "textContent",
+          "line": 61,
+          "kind": "function"
+        },
+        {
+          "name": "parseDuration",
+          "line": 85,
+          "kind": "function"
+        },
+        {
+          "name": "parseFeedDate",
+          "line": 102,
+          "kind": "function"
+        },
+        {
+          "name": "safeFeedUrl",
+          "line": 115,
+          "kind": "function"
+        },
+        {
+          "name": "parseFeed",
+          "line": 173,
+          "kind": "function"
+        },
+        {
+          "name": "progressPercent",
+          "line": 219,
+          "kind": "function"
+        },
+        {
+          "name": "formatDuration",
+          "line": 225,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "lib/server/public-document-fetch.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "887fde062af99e744ca07f6c9f8424700c74ff884f6b4d58ded04aa44bceb33f",
+      "sourceSha256": "bc6b475b8e050af4cdda61de7819bfaf1963ebcd8d405b61888e57a12670b867",
+      "bytes": 10938,
+      "baselineExportedSymbols": [
+        {
+          "name": "PUBLIC_DOCUMENT_TIMEOUT_MS",
+          "line": 9,
+          "kind": "value"
+        },
+        {
+          "name": "PublicDocumentError",
+          "line": 12,
+          "kind": "class"
+        },
+        {
+          "name": "isPublicDocumentAddress",
+          "line": 25,
+          "kind": "function"
+        },
+        {
+          "name": "fetchPublicDocument",
+          "line": 118,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "PUBLIC_DOCUMENT_TIMEOUT_MS",
+          "line": 9,
+          "kind": "value"
+        },
+        {
+          "name": "PublicDocumentError",
+          "line": 12,
+          "kind": "class"
+        },
+        {
+          "name": "isPublicDocumentAddress",
+          "line": 25,
+          "kind": "function"
+        },
+        {
+          "name": "DOCUMENT_MEDIA_TYPES",
+          "line": 55,
+          "kind": "value"
+        },
+        {
+          "name": "FEED_MEDIA_TYPES",
+          "line": 60,
+          "kind": "value"
+        },
+        {
+          "name": "fetchPublicDocument",
+          "line": 143,
+          "kind": "function"
+        },
+        {
+          "name": "fetchPublicFeed",
+          "line": 182,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "fetchPublicFeed",
+          "line": 182,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "LIBRARY-BD471D472544"
+      ]
+    },
+    {
+      "path": "middleware.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "ffebf6c2da98465666c83bf944ae3ea7be1682bb767b62d1aac0a62f403b3774",
+      "sourceSha256": "c0ccaace6e0fb8e49c3a1ccaa878b358300b161e44594a54d40f642a025d8c83",
+      "bytes": 11311,
+      "baselineExportedSymbols": [
+        {
+          "name": "middleware",
+          "line": 78,
+          "kind": "function"
+        },
+        {
+          "name": "config",
+          "line": 207,
+          "kind": "value"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "middleware",
+          "line": 85,
+          "kind": "function"
+        },
+        {
+          "name": "config",
+          "line": 215,
+          "kind": "value"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        "NEXT_PUBLIC_SUPABASE_URL"
+      ],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-3C67EB27B539",
+        "INT-001"
+      ]
+    },
+    {
+      "path": "supabase/migrations/0283_assistant_links.sql",
+      "kind": "support",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "0c24dec379cc6768954a9c8980e9a969fc7f0416d98fe827b348db043a107ed4",
+      "bytes": 5256,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [
+        {
+          "name": "assistant_links",
+          "line": 21
+        },
+        {
+          "name": "assistant_link_events",
+          "line": 46
+        }
+      ],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "supabase/migrations/0284_library_books_podcasts.sql",
+      "kind": "support",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "73cb380863fe0d736e0e33d3d4bd3c739bf14aac4b23c98fa9c4cf82d835ba8f",
+      "bytes": 5867,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [
+        {
+          "name": "library_feeds",
+          "line": 21
+        },
+        {
+          "name": "library_items",
+          "line": 43
+        },
+        {
+          "name": "library_progress",
+          "line": 69
+        }
+      ],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "tests/assistant-answers.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "55f2d7b39416919bb6791b31dd532cd024ff67b06e9dd22d1ebe01c1402057cf",
+      "bytes": 5800,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "tests/assistant-bridge.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "15047473de6e384008e043745c192566088d28e025ac39d346f3c81c1121a9c2",
+      "bytes": 13218,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "tests/assistant-intent.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "24bbc6044f275937ab4a7f8f6559126540995cb7e4cd72f925fa25bb6c452f46",
+      "bytes": 6561,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "tests/contact-center-provision-address.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "326c501f8e79c02fc9c3486daa4e07a2cdb7dad898072123f069095a02d7dcfd",
+      "bytes": 6606,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "tests/contact-center-reserved-addresses.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "c7e51498132bbf9256415cca87e18fbb34ab0336f47c14e52069fc3f0faeb937",
+      "bytes": 3836,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "tests/e2e/guardian-receipt-authority.spec.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "c6c8cafc9700b82051d8f0eccbedd6d792d284d7c4180eaaf6bbc96ef74ae716",
+      "bytes": 19841,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [
+        "ANTHROPIC_API_KEY",
+        "E2E_DURABLE_SESSION",
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        "NEXT_PUBLIC_SUPABASE_URL",
+        "OPENAI_API_KEY",
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "TWILIO_ACCOUNT_SID",
+        "TWILIO_AUTH_TOKEN",
+        "TWILIO_PHONE_NUMBER"
+      ],
+      "addedEnvironmentNames": [
+        "ANTHROPIC_API_KEY",
+        "E2E_DURABLE_SESSION",
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        "NEXT_PUBLIC_SUPABASE_URL",
+        "OPENAI_API_KEY",
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "TWILIO_ACCOUNT_SID",
+        "TWILIO_AUTH_TOKEN",
+        "TWILIO_PHONE_NUMBER"
+      ],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "tests/guardian-sms-intake-execution.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "43badd2d05429d4888f93ee0e014b7ed26f4691b9ccd6da0b14478c9366e5edb",
+      "sourceSha256": "bbcd7e091f407cc682e22eaf607b7f939d9301e797fbf194c86536e445811120",
+      "bytes": 56794,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-322C46B32414"
+      ]
+    },
+    {
+      "path": "tests/guardian-sms-receipt.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "48882d96464fcf3e1d6d0b0d0c9ce51dff2916040c5812bae33ee6ec2422334c",
+      "bytes": 20347,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "tests/library-feed-parse.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "10cdf9f9e67dcd1a7c26e61f3c8027069c2e8d37ccf3e33bb2eda7e5a15ef169",
+      "bytes": 8237,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "tests/middleware-assistant-boundary.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "f245acda3f6335ec4afb7684d34c3cfd5822de8beca59e31f4c880ce93c5f524",
+      "bytes": 6433,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "tests/middleware-public-api-boundary.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "df09b7993f5cce56b11d9685140338b69f899120c67e7b9d149d32161460ecdc",
+      "sourceSha256": "e56ab719a92969ff6bf9329c5ace782dd8a32ad1380644394b736efa7196e8da",
+      "bytes": 3411,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-068EC0F060F6"
+      ]
+    },
+    {
+      "path": "tests/migration-version-safety.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "17712ad0d22e692ac450e0eac0b1f25be50cd1087c9a32436c5a7a3183b2da29",
+      "sourceSha256": "fe8e069917cb83e8387c1ec89a8e6457aee6ffc96b736fa98f9e25332b22e4f6",
+      "bytes": 2571,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-E735B7554AC0"
+      ]
+    }
+  ]
+}

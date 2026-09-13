@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 const personalization = readFileSync('app/(app)/admin/marketing/personalization/actions.ts', 'utf8');
 const push = readFileSync('app/(app)/admin/marketing/push/actions.ts', 'utf8');
+const pushAudience = readFileSync('lib/marketing/push-audience.ts', 'utf8');
 
 describe('marketing delivery action boundaries', () => {
   it('checks personalization rule inserts, updates, and deletes', () => {
@@ -12,13 +13,13 @@ describe('marketing delivery action boundaries', () => {
     expect(personalization).not.toContain("await supabase.from('marketing_personalization_rules').update({ status");
   });
 
-  it('claims push campaigns atomically and checks delivery prerequisites', () => {
+  it('loads the audited complete audience before dispatch', () => {
+    // Claim races, failed writes and safe retry decisions execute through the
+    // actual action in marketing-push-outcome-execution.test.ts.
     expect(push).toContain('marketingActionFailure');
-    expect(push).toContain(".eq('status', campaign.status)");
-    expect(push).toContain('markFailedAndThrow');
-    expect(push).toContain('deviceError');
-    expect(push).toContain('profileError');
-    expect(push).toContain('suppressionError');
-    expect(push).toContain(".eq('status', 'sending').select('id').maybeSingle()");
+    expect(push).toContain('recipients = await loadPushCampaignAudience(supabase)');
+    expect(push.indexOf('await loadPushCampaignAudience(supabase)')).toBeLessThan(push.indexOf('await sendPushToUsers('));
+    for (const table of ['push_devices', 'profiles', 'marketing_suppressions']) expect(pushAudience).toContain(`.from('${table}')`);
+    expect(pushAudience).toContain('if (result.error || !Array.isArray(result.data)) throw');
   });
 });

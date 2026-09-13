@@ -180,7 +180,7 @@ export type MealPlanToListResult =
  * their own zone.
  */
 export async function addMealPlanToGroceryListAction(
-  input: { from?: string | null; to?: string | null; listId?: string | null } = {},
+  input: { from?: string | null; to?: string | null; listId?: string | null; usePantry?: boolean } = {},
 ): Promise<MealPlanToListResult> {
   const t = await getTranslations();
   const scope = await groceryScope();
@@ -189,6 +189,7 @@ export async function addMealPlanToGroceryListAction(
       from: input.from ?? null,
       to: input.to ?? null,
       listId: input.listId ?? null,
+      usePantry: input.usePantry,
     });
     if (!result.ok) return { ok: false, error: result.error };
     revalidatePath(PATH);

@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-12T19:56:13.076Z",
+  "baselineCommit": "ed4381b533d8e0df426713981255b18ee6d9b0be",
+  "sourceCommit": "48e7e9e1939c8f4be2e4f70d283606ef29f5807c",
+  "methodology": [
+    "Exact committed changed blobs, excluding audit documents. Source SHA256 is over Git blob bytes.",
+    "Exported declarations and static environment names parsed using installed TypeScript. No secret values.",
+    "New page routes are derived without route-group segments. Discovery does not establish workflow completion."
+  ],
+  "counts": {
+    "files": 2,
+    "newFiles": 1,
+    "production": 1,
+    "tests": 1,
+    "addedExportedFunctions": 0,
+    "newPageRoutes": []
+  },
+  "files": [
+    {
+      "path": "components/auth/kid-login-form.tsx",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "17d64bf17af55a48ff680ddaaf14f49340e235c822acb77f944e4c85f2027598",
+      "sourceSha256": "45b45fb0069efb964e7653f398fb576a7e11ccb820f76f51a89e0f266f6c6e38",
+      "bytes": 6393,
+      "baselineExportedSymbols": [
+        {
+          "name": "KidLoginForm",
+          "line": 15,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "KidLoginForm",
+          "line": 15,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "COMPONENT-8B7ECBCBD636",
+        "CONTROL-FE8754BB2A3F",
+        "CONTROL-3EC0584FBC22",
+        "CONTROL-9A68A4B158A1",
+        "CONTROL-D9CDEDCFC232",
+        "CONTROL-9AEAEC38420B",
+        "CONTROL-5D018402685E",
+        "CONTROL-1EDC198FFBCD",
+        "CONTROL-7946F49E959D",
+        "ROLE-8B7ECBCBD636",
+        "INCOMPLETE-96714A11970A",
+        "UI-WF-001"
+      ]
+    },
+    {
+      "path": "tests/e2e/kid-login-readiness.spec.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "57db5ca8695619c188968f9c282f72f45064c95e061b72fb913c2c0a1ad4fad3",
+      "bytes": 8034,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 
 const SKIP_DIRS = new Set(['node_modules', '.next', '.git', 'dist', 'build', 'coverage', 'supabase', 'mobile']);
 
@@ -30,7 +30,7 @@ describe("a 'use server' module may only export async functions", () => {
     expect(SERVER_MODULES.length).toBeGreaterThan(50);
   });
 
-  it.each(SERVER_MODULES.map(([file]) => file.replace(`${process.cwd()}/`, '')))(
+  it.each(SERVER_MODULES.map(([file]) => relative(process.cwd(), file)))(
     '%s',
     (relative) => {
       const text = readFileSync(join(process.cwd(), relative), 'utf8');

@@ -70,13 +70,18 @@ export async function POST(req: NextRequest) {
   const memberId = (memberProfile as { member_id: string }).member_id;
 
   // Run decision pipeline.
-  const decision = await runDecisionPipeline(supabase, {
-    callerPhone: from,
-    callerName: null,
-    familyId,
-    memberId,
-    initialTranscript: body,
-  });
+  let decision: Awaited<ReturnType<typeof runDecisionPipeline>>;
+  try {
+    decision = await runDecisionPipeline(supabase, {
+      callerPhone: from,
+      callerName: null,
+      familyId,
+      memberId,
+      initialTranscript: body,
+    });
+  } catch {
+    return new NextResponse('Guardian routing unavailable', { status: 503 });
+  }
 
   // Deep scam analysis on the message body.
   const scamResult = await detectScamWithAI(body, from, `Family ID: ${familyId}`);

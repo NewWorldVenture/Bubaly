@@ -1,5 +1,9 @@
 import { createHash } from 'node:crypto';
+import { once } from 'node:events';
+import { createServer, request as httpRequest } from 'node:http';
 import { NextRequest } from 'next/server';
+import { NodeNextRequest } from 'next/dist/server/base-http/node';
+import { NextRequestAdapter, signalFromNodeResponse } from 'next/dist/server/web/spec-extension/adapters/next-request';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
@@ -51,7 +55,7 @@ beforeEach(() => {
   state.provider = { structuredCompletion: transcribe } as unknown as AIProvider;
 });
 
-async function deliver(files: File[], ref = 'email-1') {
+async function inboundRequest(files: File[], ref = 'email-1') {
   const form = new FormData();
   form.set('to', 'household@bubaly.com');
   form.set('from', 'office@example.com');
@@ -59,9 +63,32 @@ async function deliver(files: File[], ref = 'email-1') {
   form.set('text', 'Please see attached.');
   form.set('Message-Id', ref);
   files.forEach((file, i) => form.append(`attachment-${i + 1}`, file));
-  return POST(new NextRequest('http://localhost/api/contact-center/email', {
+  const encoded = new Request('http://localhost/api/contact-center/email', {
     method: 'POST', headers: { 'x-inbound-secret': 'test-secret' }, body: form,
-  }));
+  });
+  // An inbound HTTP request carries bytes, not an active FormData encoder.
+  // Finish encoding first: Node's encoder can enqueue after its body is canceled.
+  const bytes = new Uint8Array(await encoded.arrayBuffer());
+  const cancel = vi.fn();
+  let offset = 0;
+  const body = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (offset === bytes.byteLength) {
+        controller.close();
+        return;
+      }
+      const end = Math.min(offset + 64 * 1024, bytes.byteLength);
+      controller.enqueue(bytes.subarray(offset, end));
+      offset = end;
+    },
+    cancel,
+  }, { highWaterMark: 0 });
+  const request = new NextRequest(encoded.url, { method: 'POST', headers: encoded.headers, body, duplex: 'half' });
+  return { request, cancel, byteLength: bytes.byteLength, bytesRead: () => offset };
+}
+
+async function deliver(files: File[], ref = 'email-1') {
+  return POST((await inboundRequest(files, ref)).request);
 }
 
 function source(files: File[], overrides: Partial<Parameters<typeof fileEmailAttachments>[1]> = {}) {
@@ -184,10 +211,60 @@ describe('inbound multipart attachment capture', () => {
   });
 
   it('bounds the whole multipart request before any database or provider work', async () => {
-    const response = await deliver([new File([new Uint8Array(MAX_MULTIPART_EMAIL_BYTES)], 'oversize.pdf', { type: 'application/pdf' })]);
+    const input = await inboundRequest([new File([new Uint8Array(MAX_MULTIPART_EMAIL_BYTES + 128 * 1024)], 'oversize.pdf', { type: 'application/pdf' })]);
+    expect(input.request.headers.has('content-length')).toBe(false);
+    const response = await POST(input.request);
     expect(response.status).toBe(413);
+    expect(input.cancel).toHaveBeenCalledTimes(1);
+    expect(input.bytesRead()).toBeGreaterThan(MAX_MULTIPART_EMAIL_BYTES);
+    expect(input.bytesRead()).toBeLessThanOrEqual(MAX_MULTIPART_EMAIL_BYTES + 64 * 1024);
+    expect(input.bytesRead()).toBeLessThan(input.byteLength);
     expect(db.log).toHaveLength(0);
     expect(transcribe).not.toHaveBeenCalled();
+  });
+
+  it('rejects oversized chunked HTTP through the actual Next adapter and handler without reading providers', async () => {
+    const input = await inboundRequest([new File([new Uint8Array(MAX_MULTIPART_EMAIL_BYTES + 128 * 1024)], 'oversize.pdf', { type: 'application/pdf' })]);
+    const bytes = Buffer.from(await input.request.arrayBuffer());
+    const incomingHeaders: Array<{ contentLength: string | undefined; transferEncoding: string | undefined }> = [];
+    const handlerErrors: unknown[] = [];
+    const server = createServer((incoming, outgoing) => {
+      incomingHeaders.push({ contentLength: incoming.headers['content-length'], transferEncoding: incoming.headers['transfer-encoding'] });
+      const request = NextRequestAdapter.fromNodeNextRequest(new NodeNextRequest(incoming), signalFromNodeResponse(outgoing));
+      void POST(request).then(async (response) => {
+        outgoing.writeHead(response.status).end(Buffer.from(await response.arrayBuffer()));
+      }).catch((error: unknown) => {
+        handlerErrors.push(error);
+        outgoing.writeHead(500).end();
+      });
+    });
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('Expected a loopback port');
+      const status = await new Promise<number | undefined>((resolve, reject) => {
+        const client = httpRequest({
+          host: '127.0.0.1', port: address.port, path: '/api/contact-center/email', method: 'POST',
+          headers: { 'content-type': input.request.headers.get('content-type')!, 'x-inbound-secret': 'test-secret', 'transfer-encoding': 'chunked' },
+        }, (response) => {
+          response.resume();
+          response.once('end', () => resolve(response.statusCode));
+          response.once('error', reject);
+        });
+        client.once('error', reject);
+        client.setTimeout(3000, () => client.destroy(new Error('Loopback response timed out')));
+        client.end(bytes);
+      });
+      expect(status).toBe(413);
+      expect(incomingHeaders).toEqual([{ contentLength: undefined, transferEncoding: 'chunked' }]);
+      expect(handlerErrors).toEqual([]);
+      expect(db.log).toHaveLength(0);
+      expect(transcribe).not.toHaveBeenCalled();
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    }
   });
 
   it('caps combined attachment bytes and keeps sanitized filenames as metadata', async () => {

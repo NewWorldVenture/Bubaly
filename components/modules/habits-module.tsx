@@ -3,7 +3,7 @@
 // Habit Tracker — build personal & family routines with streaks, a heatmap,
 // one-tap check-ins, and an AI coach. 100% Supabase-wired via the `habits` and
 // `habit_logs` tables (family-scoped RLS); streak math lives in lib/habits.
-import { useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Flame, Plus, Trash2, Check, Sparkles, X, Pencil, Trophy, Target, CalendarCheck, Archive,
   Minus,
@@ -30,6 +30,7 @@ import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Habit = Tables<'habits'>;
 type HabitLog = Tables<'habit_logs'>;
+type HabitPatch = Pick<Habit, 'title' | 'description' | 'color' | 'cadence' | 'target_per_period' | 'member_id' | 'weekdays'>;
 
 const COLORS = [
   { id: 'violet', dot: 'bg-violet-500', soft: 'bg-violet-500/10', ring: 'border-violet-500/40', text: 'text-violet-500' },
@@ -51,12 +52,38 @@ export function HabitsModule() {
   const t = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
-  const today = toISODate(new Date());
+  const [today, setToday] = useState(() => toISODate(new Date()));
   const [editing, setEditing] = useState<Habit | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [coachOpen, setCoachOpen] = useState(false);
   const [coachLoading, setCoachLoading] = useState(false);
   const [coaching, setCoaching] = useState<HabitCoaching | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [recoveryError, setRecoveryError] = useState<string | null>(null);
+  const memberId = selfMember?.id ?? null;
+  const owner = useMemo(() => ({ active: false, pending: false, familyId, userId, memberId }), [familyId, userId, memberId]);
+  const currentOwner = useRef(owner);
+  currentOwner.current = owner;
+  useLayoutEffect(() => { if (!busy) owner.pending = false; });
+  useEffect(() => {
+    owner.active = true;
+    setBusy(false); setRecoveryError(null); setEditing(null); setAddOpen(false);
+    setCoachOpen(false); setCoachLoading(false); setCoaching(null);
+    return () => { owner.active = false; };
+  }, [owner]);
+  useEffect(() => {
+    const updateDay = () => setToday(toISODate(new Date()));
+    const timer = window.setInterval(updateDay, 60_000);
+    window.addEventListener('focus', updateDay);
+    window.addEventListener('online', updateDay);
+    document.addEventListener('visibilitychange', updateDay);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', updateDay);
+      window.removeEventListener('online', updateDay);
+      document.removeEventListener('visibilitychange', updateDay);
+    };
+  }, []);
 
   const habitsQ = useRealtimeQuery<Habit>({
     table: 'habits',
@@ -70,7 +97,7 @@ export function HabitsModule() {
   const logsQ = useRealtimeQuery<HabitLog>({
     table: 'habit_logs',
     familyId,
-    deps: [familyId],
+    deps: [familyId, today],
     fetcher: (supabase) =>
       supabase.from('habit_logs').select('*').eq('family_id', familyId)
         .gte('log_date', toISODate(new Date(Date.now() - 120 * 86400000)))
@@ -86,58 +113,122 @@ export function HabitsModule() {
   }, [logsQ.data, habitsQ.data]);
   const countTarget = (h: Habit) => (h.cadence === 'daily' ? h.target_per_period : 1);
 
-  async function toggleToday(habit: Habit) {
-    const supabase = createClient();
-    const dates = logsByHabit.get(habit.id) ?? [];
-    const done = isDoneToday(dates, today);
-    if (done) {
-      const { error } = await supabase.from('habit_logs').delete()
-        .eq('family_id', familyId).eq('habit_id', habit.id).eq('log_date', today);
-      if (error) return toastError(describeDbError(error));
-    } else {
-      const { error } = await supabase.from('habit_logs').insert({
-        family_id: familyId, habit_id: habit.id,
-        member_id: habit.member_id ?? selfMember?.id ?? null,
-        log_date: today, count: 1, created_by: userId,
-      });
-      if (error) return toastError(describeDbError(error));
-      success(t('habitsModule.niceCheckedInForToday'));
-    }
-    void logsQ.refresh();
+  const loading = habitsQ.loading || logsQ.loading;
+  const readError = habitsQ.error || logsQ.error || recoveryError;
+  const verified = !loading && !readError && !habitsQ.stale && !logsQ.stale;
+  const latest = useRef({ verified, habits: habitsQ.data, logs: logsQ.data, today, members });
+  latest.current = { verified, habits: habitsQ.data, logs: logsQ.data, today, members };
+  const isCurrent = () => owner.active && currentOwner.current === owner;
+  const canMutate = () => isCurrent() && !owner.pending && latest.current.verified;
+
+  async function readback() {
+    const results = await Promise.all([habitsQ.refreshAndConfirm(), logsQ.refreshAndConfirm()]);
+    if (!isCurrent()) return false;
+    const confirmed = results.every(result => result.ok);
+    setRecoveryError(confirmed ? null : t('habitsModule.dataUnavailable'));
+    return confirmed;
   }
 
-  /** +1 / −1 for count habits (cups of water, refills). One row per day is
-   *  updated in place; the day is deleted when it drops to zero. */
-  async function logCount(habit: Habit, delta: number) {
-    const supabase = createClient();
-    const existing = logsQ.data.filter((l) => l.habit_id === habit.id && l.log_date === today).sort((a, b) => b.count - a.count)[0];
-    if (existing) {
-      const next = Math.max(0, existing.count + delta);
-      const { error } = next === 0
-        ? await supabase.from('habit_logs').delete().eq('id', existing.id)
-        : await supabase.from('habit_logs').update({ count: next }).eq('id', existing.id);
-      if (error) return toastError(describeDbError(error));
-      if (next >= countTarget(habit) && existing.count < countTarget(habit)) success(`${habit.title}: target met 💧`);
-    } else {
-      if (delta <= 0) return;
-      const { error } = await supabase.from('habit_logs').insert({
-        family_id: familyId, habit_id: habit.id, member_id: habit.member_id ?? selfMember?.id ?? null, log_date: today, count: delta, created_by: userId,
-      });
-      if (error) return toastError(describeDbError(error));
+  async function retryReads() {
+    if (!isCurrent() || owner.pending) return;
+    owner.pending = true; setBusy(true);
+    try { await readback(); }
+    finally { if (isCurrent()) setBusy(false); else owner.pending = false; }
+  }
+
+  async function mutate(write: () => PromiseLike<{ error: unknown }>, message?: string, persisted?: () => void) {
+    if (!canMutate()) return;
+    owner.pending = true; setBusy(true);
+    try {
+      const { error } = await write();
+      if (error) throw error;
+      if (!isCurrent()) return;
+      // A confirmed create must not remain a new draft if its readback fails.
+      persisted?.();
+      if (await readback() && isCurrent() && message) success(message);
+    } catch (error) {
+      if (!isCurrent()) return;
+      await readback();
+      if (isCurrent()) toastError(['23505', 'PGRST116'].includes(String((error as { code?: string } | null)?.code))
+        ? t('habitsModule.habitChanged') : describeDbError(error));
+    } finally {
+      if (isCurrent()) setBusy(false);
+      else owner.pending = false;
     }
-    void logsQ.refresh();
+  }
+
+  function currentHabit(habit: Habit, checkDay = false): Habit | null {
+    if (!canMutate()) return null;
+    if (checkDay && latest.current.today !== toISODate(new Date())) {
+      setToday(toISODate(new Date()));
+      return null;
+    }
+    const current = latest.current.habits.find(row => row.id === habit.id && row.family_id === familyId && row.is_active);
+    if (!current || current.member_id !== habit.member_id || current.target_per_period !== habit.target_per_period
+      || current.cadence !== habit.cadence || (current.member_id && !latest.current.members.some(member => member.id === current.member_id && member.family_id === familyId))) {
+      toastError(t('habitsModule.habitChanged'));
+      return null;
+    }
+    return current;
+  }
+
+  async function toggleToday(habit: Habit) {
+    const current = currentHabit(habit, true);
+    if (!current) return;
+    const done = isDoneToday(doneDates(latest.current.logs, current.id, countTarget(current)), latest.current.today);
+    await logCount(current, done ? -1 : 1, true);
+  }
+
+  /** Relative amounts use current verified rows and a conditional write.
+   * The existing unique day slot remains the guard against duplicate inserts. */
+  async function logCount(habit: Habit, delta: number, toggle = false) {
+    if (delta !== 1 && delta !== -1) return;
+    const current = currentHabit(habit, true);
+    if (!current) return;
+    const day = latest.current.today;
+    const existing = latest.current.logs.find(row => row.family_id === familyId && row.habit_id === current.id && row.log_date === day);
+    if (existing && (!Number.isSafeInteger(existing.count) || existing.count < 0
+      || (current.member_id && existing.member_id !== current.member_id))) {
+      toastError(t('habitsModule.habitChanged')); return;
+    }
+    if (!existing && delta < 0) return;
+    const next = toggle ? delta > 0 ? 1 : 0 : Math.max(0, (existing?.count ?? 0) + delta);
+    const message = next >= countTarget(current) && (existing?.count ?? 0) < countTarget(current)
+      ? countTarget(current) > 1 ? `${current.title}: target met 💧` : t('habitsModule.niceCheckedInForToday') : undefined;
+    await mutate(() => {
+      const supabase = createClient();
+      if (!existing) return supabase.from('habit_logs').insert({
+        family_id: familyId, habit_id: current.id, member_id: current.member_id ?? memberId,
+        log_date: day, count: next, created_by: userId,
+      }).select('id').single();
+      const write = next === 0 ? supabase.from('habit_logs').delete() : supabase.from('habit_logs').update({ count: next });
+      const guarded = write.eq('id', existing.id).eq('family_id', familyId).eq('habit_id', current.id)
+        .eq('log_date', day).eq('count', existing.count);
+      return (existing.member_id ? guarded.eq('member_id', existing.member_id) : guarded.is('member_id', null)).select('id').single();
+    }, message);
   }
 
   async function archive(habit: Habit) {
-    const supabase = createClient();
-    const { error } = await supabase.from('habits')
-      .update({ is_active: false, archived_at: new Date().toISOString() }).eq('id', habit.id);
-    if (error) return toastError(describeDbError(error));
-    success(t('habitsModule.habitArchived'));
-    void habitsQ.refresh();
+    const current = currentHabit(habit);
+    if (!current) return;
+    await mutate(() => createClient().from('habits')
+      .update({ is_active: false, archived_at: new Date().toISOString() }).eq('id', current.id)
+      .eq('family_id', familyId).eq('is_active', true).select('id').single(), t('habitsModule.habitArchived'));
+  }
+
+  async function saveHabit(habit: Habit | null, patch: HabitPatch) {
+    if (!canMutate() || (habit && !currentHabit(habit))) return;
+    if (patch.member_id && !latest.current.members.some(member => member.id === patch.member_id && member.family_id === familyId)) {
+      toastError(t('habitsModule.habitChanged')); return;
+    }
+    await mutate(() => habit
+      ? createClient().from('habits').update(patch).eq('id', habit.id).eq('family_id', familyId).eq('is_active', true).select('id').single()
+      : createClient().from('habits').insert({ family_id: familyId, created_by: userId, ...patch }).select('id').single(),
+    habit ? 'Habit saved' : 'Habit created', () => { setAddOpen(false); setEditing(null); });
   }
 
   async function runCoach() {
+    if (!canMutate()) return;
     setCoachOpen(true);
     setCoachLoading(true);
     setCoaching(null);
@@ -154,9 +245,6 @@ export function HabitsModule() {
     }
   }
 
-  if (habitsQ.loading) return <SkeletonList />;
-  if (habitsQ.error) return <ErrorState message={habitsQ.error} onRetry={habitsQ.refresh} />;
-
   const habits = habitsQ.data;
   const doneTodayCount = habits.filter((h) => isDoneToday(logsByHabit.get(h.id) ?? [], today)).length;
   const bestStreak = habits.reduce((m, h) => {
@@ -171,15 +259,15 @@ export function HabitsModule() {
         description={t('habitsModule.buildRoutinesThatStickStreaks')}
         action={
           <div className="flex items-center gap-2">
-            <Button variant="ghost" onClick={runCoach}>
+            <Button variant="ghost" disabled={!verified || busy} onClick={runCoach}>
               <Sparkles className="h-4 w-4" /> {t('habits.aiCoach')}
             </Button>
-            <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {t('habits.newHabit')}</Button>
+            <Button disabled={!verified || busy} onClick={() => { if (canMutate()) setAddOpen(true); }}><Plus className="h-4 w-4" /> {t('habits.newHabit')}</Button>
           </div>
         }
       />
 
-      {habits.length > 0 && (
+      {verified && habits.length > 0 && (
         <div className="mb-5 grid grid-cols-3 gap-3">
           <StatCard icon={CalendarCheck} label={t('habits.doneToday')} value={`${doneTodayCount}/${habits.length}`} />
           <StatCard icon={Flame} label={t('habits.bestStreak')} value={`${bestStreak}d`} />
@@ -187,26 +275,26 @@ export function HabitsModule() {
         </div>
       )}
 
-      {habits.length === 0 ? (
+      {readError ? <ErrorState message={readError} onRetry={retryReads} /> : !verified ? <SkeletonList /> : habits.length === 0 ? (
         <EmptyState icon={Target} title={t('habits.noHabitsYet')}
           description={t('habitsModule.startSmallOneHabitChecked')}
-          action={<Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {t('habits.newHabit')}</Button>} />
+          action={<Button disabled={!verified || busy} onClick={() => { if (canMutate()) setAddOpen(true); }}><Plus className="h-4 w-4" /> {t('habits.newHabit')}</Button>} />
       ) : (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {habits.map((h) => (
-            <HabitCard key={h.id} habit={h} today={today} logDates={logsByHabit.get(h.id) ?? []}
+            <HabitCard key={h.id} disabled={busy} habit={h} today={today} logDates={logsByHabit.get(h.id) ?? []}
               progress={countTarget(h) > 1 ? dayProgress(logsQ.data, h.id, today, countTarget(h)) : null}
               memberName={members.find((m) => m.id === h.member_id)?.display_name}
-              onToggle={() => toggleToday(h)} onCount={(d) => logCount(h, d)} onEdit={() => setEditing(h)} onArchive={() => archive(h)} />
+              onToggle={() => toggleToday(h)} onCount={(d) => logCount(h, d)} onEdit={() => { if (currentHabit(h)) setEditing(h); }} onArchive={() => archive(h)} />
           ))}
         </div>
       )}
 
       {(addOpen || editing) && (
-        <HabitModal habit={editing} familyId={familyId} userId={userId}
-          members={members} defaultMemberId={selfMember?.id ?? null}
-          onClose={() => { setAddOpen(false); setEditing(null); }}
-          onSaved={() => { setAddOpen(false); setEditing(null); void habitsQ.refresh(); }} />
+        <HabitModal habit={editing} members={members} defaultMemberId={memberId}
+          blocked={!verified || busy} busy={busy} canWrite={canMutate} onSave={saveHabit}
+          readError={readError} onRetry={retryReads}
+          onClose={() => { if (isCurrent() && !owner.pending) { setAddOpen(false); setEditing(null); } }} />
       )}
 
       {coachOpen && (
@@ -250,8 +338,8 @@ function StatCard({ icon: Icon, label, value }: { icon: typeof Flame; label: str
   );
 }
 
-function HabitCard({ habit, today, logDates, progress, memberName, onToggle, onCount, onEdit, onArchive }: {
-  habit: Habit; today: string; logDates: string[]; progress: { count: number; target: number; pct: number; done: boolean } | null; memberName?: string;
+function HabitCard({ habit, today, logDates, progress, memberName, onToggle, onCount, onEdit, onArchive, disabled }: {
+  disabled: boolean; habit: Habit; today: string; logDates: string[]; progress: { count: number; target: number; pct: number; done: boolean } | null; memberName?: string;
   onToggle: () => void; onCount: (delta: number) => void; onEdit: () => void; onArchive: () => void;
 }) {
   const t = useTranslations();
@@ -279,11 +367,11 @@ function HabitCard({ habit, today, logDates, progress, memberName, onToggle, onC
         </div>
         {progress ? (
           <div className="flex flex-shrink-0 items-center gap-1">
-            <button onClick={() => onCount(-1)} aria-label={t('habits.removeOne')} disabled={progress.count === 0} className={cn('flex h-9 w-9 items-center justify-center rounded-full border-2 border-border text-muted transition hover:border-current disabled:opacity-40', c.text)}><Minus className="h-4 w-4" /></button>
-            <button onClick={() => onCount(1)} aria-label={t('habits.addOne')} className={cn('flex h-9 min-w-9 items-center justify-center gap-1 rounded-full border-2 px-2 text-sm font-semibold transition', done ? cn(c.dot, 'border-transparent text-white') : cn('border-border hover:border-current', c.text))}><Plus className="h-4 w-4" />1</button>
+            <button onClick={() => onCount(-1)} aria-label={t('habits.removeOne')} disabled={disabled || progress.count === 0} className={cn('flex h-9 w-9 items-center justify-center rounded-full border-2 border-border text-muted transition hover:border-current disabled:opacity-40', c.text)}><Minus className="h-4 w-4" /></button>
+            <button disabled={disabled} onClick={() => onCount(1)} aria-label={t('habits.addOne')} className={cn('flex h-9 min-w-9 items-center justify-center gap-1 rounded-full border-2 px-2 text-sm font-semibold transition', done ? cn(c.dot, 'border-transparent text-white') : cn('border-border hover:border-current', c.text))}><Plus className="h-4 w-4" />1</button>
           </div>
         ) : (
-        <button onClick={onToggle} aria-label={t('habits.toggleToday')}
+        <button disabled={disabled} onClick={onToggle} aria-label={t('habits.toggleToday')}
           className={cn('flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border-2 transition',
             done ? cn(c.dot, 'border-transparent text-white') : cn('border-border text-muted hover:border-current', c.text))}>
           <Check className="h-4 w-4" />
@@ -321,22 +409,27 @@ function HabitCard({ habit, today, logDates, progress, memberName, onToggle, onC
       </div>
 
       <div className="mt-3 flex justify-end gap-1 opacity-0 transition group-hover:opacity-100">
-        <button onClick={onEdit} aria-label={t('habits.editHabit')} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
-        <button onClick={() => { if (confirm(t('habitsModule.archiveThisHabit'))) onArchive(); }} aria-label={t('habits.archiveHabit')} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Archive className="h-3.5 w-3.5" /></button>
+        <button disabled={disabled} onClick={onEdit} aria-label={t('habits.editHabit')} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
+        <button disabled={disabled} onClick={() => { if (!disabled && confirm(t('habitsModule.archiveThisHabit'))) onArchive(); }} aria-label={t('habits.archiveHabit')} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Archive className="h-3.5 w-3.5" /></button>
       </div>
     </div>
   );
 }
 
-function HabitModal({ habit, familyId, userId, members, defaultMemberId, onClose, onSaved }: {
-  habit: Habit | null; familyId: string; userId: string;
-  members: Tables<'family_members'>[]; defaultMemberId: string | null;
-  onClose: () => void; onSaved: () => void;
+function HabitModal({ habit, members, defaultMemberId, onClose, onSave, blocked, busy, canWrite, readError, onRetry }: {
+  habit: Habit | null; members: Tables<'family_members'>[]; defaultMemberId: string | null;
+  onClose: () => void; onSave: (habit: Habit | null, patch: HabitPatch) => Promise<void>;
+  blocked: boolean; busy: boolean; canWrite: () => boolean;
+  readError: string | null; onRetry: () => Promise<void>;
 }) {
   const tr = useTranslations();
   const t = useTranslations();
-  const { success, error: toastError } = useToast();
-  const [loading, setLoading] = useState(false);
+  const { error: toastError } = useToast();
+  const active = useRef(false);
+  useLayoutEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
   const [title, setTitle] = useState(habit?.title ?? '');
   const [description, setDescription] = useState(habit?.description ?? '');
   const [color, setColor] = useState(habit?.color ?? 'violet');
@@ -359,29 +452,23 @@ function HabitModal({ habit, familyId, userId, members, defaultMemberId, onClose
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!active.current || !canWrite()) return;
     const name = title.trim();
     const detail = description.trim() || null;
     if (!name) return toastError(t('habitsModule.giveYourHabitAName'));
-    setLoading(true);
-    const supabase = createClient();
-    const patch = {
+    await onSave(habit, {
       title: name, description: detail, color, cadence,
       target_per_period: Math.max(1, Math.min(cadence === 'weekly' ? 7 : 30, target)),
       member_id: memberId,
       weekdays: cadence === 'daily' ? weekdays : [],
-    };
-    const { error } = habit
-      ? await supabase.from('habits').update(patch).eq('id', habit.id)
-      : await supabase.from('habits').insert({ family_id: familyId, created_by: userId, ...patch });
-    setLoading(false);
-    if (error) return toastError(describeDbError(error));
-    success(habit ? 'Habit saved' : 'Habit created');
-    onSaved();
+    });
   }
 
   return (
     <Modal open onClose={onClose} title={habit ? 'Edit Habit' : 'New Habit'}>
-      <form onSubmit={onSubmit} className="space-y-4">
+      {readError && <ErrorState message={readError} onRetry={onRetry} />}
+      <form onSubmit={onSubmit}>
+        <fieldset disabled={blocked} className="space-y-4">
         {!habit && (
           <div className="rounded-xl border border-brand/20 bg-brand/5 p-3">
             <div className="flex flex-wrap items-center gap-1.5">
@@ -466,9 +553,10 @@ function HabitModal({ habit, familyId, userId, members, defaultMemberId, onClose
           )}
         </Field>
 
+        </fieldset>
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={onClose}>{t('habits.cancel')}</Button>
-          <Button type="submit" loading={loading}>{habit ? 'Save' : 'Create Habit'}</Button>
+          <Button type="button" variant="ghost" disabled={busy} onClick={onClose}>{t('habits.cancel')}</Button>
+          <Button type="submit" disabled={blocked} loading={busy}>{habit ? 'Save' : 'Create Habit'}</Button>
         </div>
       </form>
     </Modal>

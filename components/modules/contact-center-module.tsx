@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import type { Tables } from '@/lib/database.types';
 import type { InboxRow } from '@/app/(app)/dashboard/contact-center/page';
+import type { SmsReplyStatus } from '@/lib/contact-center/sms-reply-status';
 import { buildBubalyAddress, normalizeEmailLocal, isValidEmailLocal, BUBALY_DOMAIN } from '@/lib/contact-center/address';
 import { formatPhone } from '@/lib/contact-center/phone';
 import { intentMeta } from '@/lib/contact-center/routing';
@@ -25,6 +26,19 @@ import { useTranslations } from '@/components/i18n/locale-provider';
 type Channel = Tables<'family_contact_channels'> | null;
 
 const CHANNEL_ICON: Record<string, typeof MailIcon> = { email: MailIcon, sms: MessageSquare, voice: Voicemail };
+const SMS_REPLY_COPY = {
+  prepared: ['contactSmsReply.prepared', 'contactSmsReply.preparedDetail'],
+  confirmation_unknown: ['contactSmsReply.confirmationUnknown', 'contactSmsReply.confirmationUnknownDetail'],
+  suppressed: ['contactSmsReply.suppressed', 'contactSmsReply.suppressedDetail'],
+  legacy_unknown: ['contactSmsReply.legacyUnknown', 'contactSmsReply.legacyUnknownDetail'],
+  unavailable: ['contactSmsReply.unavailable', 'contactSmsReply.unavailableDetail'],
+  provider_queued: ['contactSmsReply.providerQueued', 'contactSmsReply.providerQueuedDetail'],
+  sending: ['contactSmsReply.sending', 'contactSmsReply.sendingDetail'],
+  sent: ['contactSmsReply.sent', 'contactSmsReply.sentDetail'],
+  delivered: ['contactSmsReply.delivered', 'contactSmsReply.deliveredDetail'],
+  undelivered: ['contactSmsReply.undelivered', 'contactSmsReply.undeliveredDetail'],
+  failed: ['contactSmsReply.failed', 'contactSmsReply.failedDetail'],
+} as const;
 
 function timeAgo(iso: string): string {
   const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
@@ -35,8 +49,9 @@ function timeAgo(iso: string): string {
   return new Date(iso).toLocaleDateString();
 }
 
-export function ContactCenterModule({ channel, messages, suggestedLocal, twilioReady, canManage }: {
+export function ContactCenterModule({ channel, messages, smsReplyStatuses = {}, suggestedLocal, twilioReady, canManage }: {
   channel: Channel; messages: InboxRow[]; suggestedLocal: string; twilioReady: boolean; canManage: boolean;
+  smsReplyStatuses?: Record<string, SmsReplyStatus>;
 }) {
   const tr = useTranslations();
   const t = useTranslations();
@@ -192,6 +207,7 @@ export function ContactCenterModule({ channel, messages, suggestedLocal, twilioR
               const Icon = CHANNEL_ICON[m.channel] ?? MailIcon;
               const meta = intentMeta(m.ai_intent ?? 'other');
               const outbound = m.direction === 'outbound';
+              const replyCopy = m.channel === 'sms' ? SMS_REPLY_COPY[smsReplyStatuses[m.id] ?? 'unavailable'] : null;
               return (
                 <li key={m.id} id={`inbox-message-${m.id}`} className={cn('scroll-mt-24 rounded-2xl border border-border bg-card p-4', m.status === 'new' && !outbound && 'ring-1 ring-brand/30')}>
                   <div className="flex items-start gap-3">
@@ -205,6 +221,12 @@ export function ContactCenterModule({ channel, messages, suggestedLocal, twilioR
                         <span className="ml-auto text-[11px] text-muted/70">{timeAgo(m.occurred_at)}</span>
                       </div>
                       <p className="mt-1 text-sm text-fg">{m.ai_summary || m.body}</p>
+                      {replyCopy && (
+                        <div className="mt-2 rounded-lg bg-elevated/60 px-3 py-2 text-xs text-muted">
+                          <p className="font-semibold">{t(replyCopy[0])}</p>
+                          <p className="mt-1">{t(replyCopy[1])}</p>
+                        </div>
+                      )}
                       {!outbound && (
                         <div className="mt-2 flex items-center gap-3">
                           {m.status !== 'read' && (

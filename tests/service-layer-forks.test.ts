@@ -79,7 +79,6 @@ const KNOWN_FORKS: Record<string, string> = {
   // caller, not a conversion, exactly like the M13/M14 pair above.
   routine_templates: 'service added for the memory view (M22); the panel’s own CRUD is not converted yet',
   maintenance_tasks: 'not yet converted',
-  meals: 'not yet converted',
   notifications: 'not yet converted',
   vacation_budgets: 'not yet converted',
   vacation_itinerary_days: 'not yet converted',
@@ -117,7 +116,7 @@ describe('the service layer owns its tables', () => {
   it('keeps the tables the §7 tranches closed at zero', () => {
     // The four claims that were true, now proven over every component rather
     // than over the one module each tranche happened to convert.
-    for (const table of ['calendar_events', 'todo_items', 'meal_plans', 'grocery_items', 'agent_activity', 'audit_logs']) {
+    for (const table of ['calendar_events', 'todo_items', 'meals', 'meal_plans', 'grocery_items', 'agent_activity', 'audit_logs']) {
       expect(clientWrites.get(table) ?? [], `${table} is written from the browser`).toEqual([]);
     }
   });

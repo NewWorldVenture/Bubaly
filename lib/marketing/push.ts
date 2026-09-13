@@ -29,27 +29,65 @@ export function deliveryRate(sent: number, recipients: number): number {
   return Math.round((sent / recipients) * 100);
 }
 
-/** Only draft (or previously-failed) campaigns can be sent. */
-export function canSendPush(status: string): boolean {
-  return status === 'draft' || status === 'failed';
+export function pushDeliveryPhase(metadata: unknown): string | null {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return null;
+  const delivery = (metadata as Record<string, unknown>).push_delivery;
+  if (!delivery || typeof delivery !== 'object' || Array.isArray(delivery)) return null;
+  const fields = delivery as Record<string, unknown>;
+  return fields.version === 1 && typeof fields.attemptId === 'string' && typeof fields.phase === 'string'
+    ? fields.phase : null;
 }
 
-export type PushCampaignLike = { status: string; recipients?: number; sent?: number };
+/** A failed or legacy attempt is retryable only with durable proof of no dispatch. */
+export function canSendPush(status: string, metadata?: unknown): boolean {
+  const phase = pushDeliveryPhase(metadata);
+  return (status === 'draft' && !phase) || (status === 'failed' && phase === 'preflight_failed');
+}
+
+/** Keep active or uncertain attempt records available for outcome review. */
+export function canDeletePush(status: string, metadata?: unknown): boolean {
+  const phase = pushDeliveryPhase(metadata);
+  return status !== 'sending' && !['preparing', 'dispatching', 'unknown'].includes(phase ?? '');
+}
+
+export type PushCampaignLike = { status: string; recipients?: number; sent?: number; failed?: number; skipped?: number; metadata?: unknown };
+
+export function needsPushReview(row: PushCampaignLike): boolean {
+  const counts = pushDeliveryCounts(row.metadata);
+  return (row.status === 'failed' && !canSendPush(row.status, row.metadata))
+    || row.status === 'sending'
+    || (row.status === 'sent' && (counts
+      ? counts.failed > 0 || counts.skipped > 0 || counts.pruned > 0
+      : (row.failed ?? 0) > 0 || (row.skipped ?? 0) > 0));
+}
+
+export function pushDeliveryCounts(metadata: unknown): { accepted: number; failed: number; skipped: number; withheld: number; pruned: number } | null {
+  if (!pushDeliveryPhase(metadata)) return null;
+  const d = (metadata as { push_delivery: Record<string, unknown> }).push_delivery;
+  const values = [d.confirmedDeviceAcceptances, d.failedDeviceOperations, d.skippedDevices, d.withheldUsers, d.prunedDevices];
+  if (!values.every(value => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0)) return null;
+  const [accepted, failed, skipped, withheld, pruned] = values as number[];
+  return { accepted, failed, skipped, withheld, pruned };
+}
 
 export function summarizePush(rows: PushCampaignLike[]) {
   let totalSent = 0;
   let totalRecipients = 0;
   let sentCampaigns = 0;
+  let reviewCampaigns = 0;
   for (const r of rows) {
     totalSent += r.sent ?? 0;
     totalRecipients += r.recipients ?? 0;
     if (r.status === 'sent') sentCampaigns++;
+    if (needsPushReview(r)) reviewCampaigns++;
   }
   return {
     campaigns: rows.length,
     sentCampaigns,
     totalSent,
     totalRecipients,
-    deliveryRate: deliveryRate(totalSent, totalRecipients),
+    // sent counts provider-accepted device requests; recipients counts users.
+    // A ratio between those different units is not a delivery percentage.
+    reviewCampaigns,
   };
 }

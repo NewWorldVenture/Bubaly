@@ -86,8 +86,17 @@ const mock = vi.hoisted(() => ({
   push: vi.fn(), refresh: vi.fn(), toast: vi.fn(), stitch: vi.fn(), referral: vi.fn(),
   signUp: vi.fn(), password: vi.fn(), oauth: vi.fn(), otp: vi.fn(), verify: vi.fn(),
 }));
-vi.mock('react', async (original) => ({
-  ...await original<typeof import('react')>(),
+vi.mock('react', async (original) => {
+  const actual = await original<typeof import('react')>();
+  function effectSlot(effect: () => void | (() => void), deps: readonly unknown[] = []) {
+    const index = mock.cursor++;
+    const previous = mock.slots[index] as readonly unknown[] | undefined;
+    if (previous && previous.length === deps.length && deps.every((item, i) => Object.is(item, previous[i]))) return;
+    mock.slots[index] = deps;
+    mock.effects.push(() => { const cleanup = effect(); if (typeof cleanup === 'function') mock.cleanups.push(cleanup); });
+  }
+  return {
+  ...actual,
   useState: (initial: unknown) => {
     const index = mock.cursor++;
     if (!(index in mock.slots)) mock.slots[index] = typeof initial === 'function' ? (initial as () => unknown)() : initial;
@@ -100,14 +109,16 @@ vi.mock('react', async (original) => ({
     if (!(index in mock.slots)) mock.slots[index] = { current: initial };
     return mock.slots[index];
   },
-  useEffect: (effect: () => void | (() => void), deps: readonly unknown[] = []) => {
+  useMemo: (factory: () => unknown, deps: readonly unknown[]) => {
     const index = mock.cursor++;
-    const previous = mock.slots[index] as readonly unknown[] | undefined;
-    if (previous && deps.every((item, i) => Object.is(item, previous[i]))) return;
-    mock.slots[index] = deps;
-    mock.effects.push(() => { const cleanup = effect(); if (typeof cleanup === 'function') mock.cleanups.push(cleanup); });
+    const previous = mock.slots[index] as { deps: readonly unknown[]; value: unknown } | undefined;
+    if (previous && previous.deps.length === deps.length && deps.every((item, i) => Object.is(item, previous.deps[i]))) return previous.value;
+    const value = factory(); mock.slots[index] = { deps, value }; return value;
   },
-}));
+  useEffect: effectSlot,
+  useLayoutEffect: effectSlot,
+  };
+});
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mock.push, refresh: mock.refresh }), useSearchParams: () => mock.query }));
 vi.mock('next/link', () => ({ default: ({ children, ...props }: { children: ReactNode }) => ({ type: 'a', props: { ...props, children }, $$typeof: Symbol.for('react.element') }) }));
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ error: mock.toast, success: mock.toast }) }));
@@ -122,6 +133,11 @@ vi.mock('@/lib/supabase/client', () => ({ createClient: () => ({ auth: {
 } }) }));
 vi.mock('@/app/(auth)/actions', () => ({ resolveLandingPathAction: vi.fn(), stitchIdentityAction: mock.stitch }));
 vi.mock('@/app/(auth)/signup/actions', () => ({ rememberReferralCodeAction: mock.referral }));
+// Cookie ownership is exercised with the actual SDK in signup-boundaries.spec.
+// This fixture isolates form validation, receipts and the displayed outcome.
+vi.mock('@/lib/auth/signup-client', () => ({
+  signUpWithOwnedVerifier: (_client: unknown, credentials: unknown) => mock.signUp(credentials),
+}));
 
 const { SignupForm } = await import('@/components/auth/signup-form');
 const { getMessages } = await import('@/lib/i18n/messages');
@@ -159,11 +175,16 @@ async function submitWith(fields: { fullName: string; email: string; password: s
   return render(() => SignupForm());
 }
 const GOOD = { fullName: 'Taylor Example', email: 'taylor@example.test', password: 'correct-horse' };
+const USER = { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', email: GOOD.email,
+  aud: 'authenticated', app_metadata: {}, user_metadata: {}, created_at: '2026-09-12T00:00:00Z' };
 
 beforeEach(() => {
   resetHooks(); vi.clearAllMocks();
   mock.query = new URLSearchParams();
-  mock.signUp.mockReset().mockResolvedValue({ data: { session: { user: { id: 'u1' } }, user: { id: 'u1' } }, error: null });
+  mock.signUp.mockReset().mockResolvedValue({ data: { session: { user: USER,
+    access_token: 'synthetic-access-token', refresh_token: 'synthetic-refresh-token', token_type: 'bearer', expires_in: 3600 }, user: USER }, error: null });
+  mock.stitch.mockReset().mockResolvedValue(undefined);
+  mock.referral.mockReset().mockResolvedValue(undefined);
   vi.stubGlobal('window', { location: { origin: 'https://bubaly.test' } });
   vi.stubGlobal('FormData', class { constructor(private f: Record<string, string>) {} get(n: string) { return this.f[n]; } });
 });
@@ -185,7 +206,7 @@ describe('SignupForm — creating the account', () => {
   });
 
   it('shows "check your email" and does NOT route when confirmation is required', async () => {
-    mock.signUp.mockResolvedValue({ data: { session: null, user: { id: 'u1', identities: [{ id: 'i1' }] } }, error: null });
+    mock.signUp.mockResolvedValue({ data: { session: null, user: { ...USER, identities: [{ id: 'i1' }] } }, error: null });
 
     const tree = await submitWith(GOOD);
     expect(textOf(tree)).toContain(getMessages('en-US')['signup.checkEmailTitle']);
@@ -196,7 +217,7 @@ describe('SignupForm — creating the account', () => {
   it('treats an ALREADY-REGISTERED email exactly like a new one', async () => {
     // What Supabase returns for an existing confirmed address: a user, no
     // session, and no identities.
-    mock.signUp.mockResolvedValue({ data: { session: null, user: { id: 'u1', identities: [] } }, error: null });
+    mock.signUp.mockResolvedValue({ data: { session: null, user: { ...USER, identities: [] } }, error: null });
 
     const tree = await submitWith(GOOD);
     const text = textOf(tree);
@@ -217,7 +238,7 @@ describe('SignupForm — creating the account', () => {
   });
 
   it('surfaces a provider failure as a toast and stays on the form', async () => {
-    mock.signUp.mockResolvedValue({ data: { session: null }, error: { message: 'Signup is disabled' } });
+    mock.signUp.mockResolvedValue({ data: { session: null, user: null }, error: { name: 'AuthApiError', status: 400, message: 'Signup is disabled' } });
 
     const tree = await submitWith(GOOD);
     expect(mock.toast).toHaveBeenCalledTimes(1);
@@ -226,11 +247,14 @@ describe('SignupForm — creating the account', () => {
     expect(textOf(tree)).not.toContain(getMessages('en-US')['signup.checkEmailTitle']);
   });
 
-  it('recovers from a thrown network error without routing', async () => {
+  it('shows an uncertain outcome after a lost response without routing or inviting a duplicate signup', async () => {
     mock.signUp.mockRejectedValue(new Error('fetch failed'));
 
-    await submitWith(GOOD);
-    expect(mock.toast).toHaveBeenCalledTimes(1);
+    const tree = await submitWith(GOOD);
+    expect(textOf(tree)).toContain(getMessages('en-US')['signupForm.unconfirmedTitle']);
+    expect(nodes(tree).some(node => node.type === 'form')).toBe(false);
+    expect(mock.signUp).toHaveBeenCalledTimes(1);
+    expect(mock.toast).not.toHaveBeenCalled();
     expect(mock.push).not.toHaveBeenCalled();
   });
 

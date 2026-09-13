@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/social-publish",
+      "schedule": "5 1 * * *"
+    },
+    {
       "path": "/api/cron/admin-digest",
       "schedule": "30 12 * * *"
     },
@@ -33,6 +37,10 @@
       "schedule": "0 10 * * *"
     },
     {
+      "path": "/api/cron/contact-center-urgent",
+      "schedule": "0 1 * * *"
+    },
+    {
       "path": "/api/cron/family-routines",
       "schedule": "10 9 * * *"
     },
@@ -43,6 +51,10 @@
     {
       "path": "/api/cron/guardian-learning",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/guardian-sms-recovery",
+      "schedule": "10 2 * * *"
     },
     {
       "path": "/api/cron/journey-recovery",

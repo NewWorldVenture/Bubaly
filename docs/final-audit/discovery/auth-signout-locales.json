@@ -1,0 +1,83 @@
+{
+  "sourceCommit": "44811fb61c750a95d048be4998b4197fc357dce4",
+  "baselineCommit": "effe6a2edddba707d2bbc5b11cd790071080822a",
+  "report": [
+    {
+      "locale": "en-US",
+      "existingEntriesPreserved": 13556,
+      "appendedKeys": [
+        "signOutButton.sessionChanged",
+        "signOutButton.sessionUnavailable",
+        "signOutButton.sessionReviewed",
+        "signOutButton.reviewSession",
+        "signOutButton.javascriptRequired"
+      ]
+    },
+    {
+      "locale": "de-DE",
+      "existingEntriesPreserved": 13556,
+      "appendedKeys": [
+        "signOutButton.sessionChanged",
+        "signOutButton.sessionUnavailable",
+        "signOutButton.sessionReviewed",
+        "signOutButton.reviewSession",
+        "signOutButton.javascriptRequired"
+      ]
+    },
+    {
+      "locale": "es-ES",
+      "existingEntriesPreserved": 13556,
+      "appendedKeys": [
+        "signOutButton.sessionChanged",
+        "signOutButton.sessionUnavailable",
+        "signOutButton.sessionReviewed",
+        "signOutButton.reviewSession",
+        "signOutButton.javascriptRequired"
+      ]
+    },
+    {
+      "locale": "fr-FR",
+      "existingEntriesPreserved": 13556,
+      "appendedKeys": [
+        "signOutButton.sessionChanged",
+        "signOutButton.sessionUnavailable",
+        "signOutButton.sessionReviewed",
+        "signOutButton.reviewSession",
+        "signOutButton.javascriptRequired"
+      ]
+    },
+    {
+      "locale": "it-IT",
+      "existingEntriesPreserved": 13556,
+      "appendedKeys": [
+        "signOutButton.sessionChanged",
+        "signOutButton.sessionUnavailable",
+        "signOutButton.sessionReviewed",
+        "signOutButton.reviewSession",
+        "signOutButton.javascriptRequired"
+      ]
+    },
+    {
+      "locale": "nl-NL",
+      "existingEntriesPreserved": 13556,
+      "appendedKeys": [
+        "signOutButton.sessionChanged",
+        "signOutButton.sessionUnavailable",
+        "signOutButton.sessionReviewed",
+        "signOutButton.reviewSession",
+        "signOutButton.javascriptRequired"
+      ]
+    },
+    {
+      "locale": "pt-PT",
+      "existingEntriesPreserved": 13556,
+      "appendedKeys": [
+        "signOutButton.sessionChanged",
+        "signOutButton.sessionUnavailable",
+        "signOutButton.sessionReviewed",
+        "signOutButton.reviewSession",
+        "signOutButton.javascriptRequired"
+      ]
+    }
+  ]
+}

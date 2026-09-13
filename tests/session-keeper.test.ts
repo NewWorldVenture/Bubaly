@@ -1,6 +1,7 @@
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SessionKeeper } from '@/components/auth/session-keeper';
+import { notifySessionStorageChanged } from '@/lib/auth/session-change';
 
 type Effect = { deps?: readonly unknown[]; cleanup?: () => void };
 type SessionResult = { data: { session: Session | null }; error: Error | null };
@@ -45,12 +46,15 @@ vi.mock('@/lib/supabase/client', () => ({
   }),
 }));
 vi.mock('@/lib/native/capacitor', () => ({ isNative: mocks.isNative }));
+vi.mock('@/lib/auth/browser-session-storage', () => ({ captureBrowserSessionSnapshot: () => null }));
 vi.mock('@capacitor/app', () => ({ App: { addListener: mocks.addListener } }));
 
 function session(userId: string): Session {
+  const id = userId === 'user-a' ? '11111111-1111-4111-8111-111111111111' : '22222222-2222-4222-8222-222222222222';
+  const claims = Buffer.from(JSON.stringify({ sub: id, session_id: '33333333-3333-4333-8333-333333333333' })).toString('base64url');
   return {
-    access_token: 'fixture-access', refresh_token: 'fixture-refresh', token_type: 'bearer', expires_in: 3_600,
-    user: { id: userId, app_metadata: {}, user_metadata: {}, aud: 'authenticated', created_at: '2026-09-09T00:00:00Z' },
+    access_token: `fixture.${claims}.signature`, refresh_token: 'fixture-refresh', token_type: 'bearer', expires_in: 3_600,
+    user: { id, app_metadata: {}, user_metadata: {}, aud: 'authenticated', created_at: '2026-09-09T00:00:00Z' },
   };
 }
 function result(userId: string | null, error: Error | null = null): SessionResult {
@@ -63,7 +67,7 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 function render(userId = 'user-a') {
-  expect(SessionKeeper({ userId })).toBeNull();
+  expect(SessionKeeper({ userId: session(userId).user.id })).toBeNull();
   mocks.pendingEffects.splice(0).forEach((effect) => effect());
 }
 function unmount() {
@@ -74,7 +78,7 @@ function emit(event: AuthChangeEvent, userId: string | null = 'user-a') {
   mocks.authCallback!(event, userId === null ? null : session(userId));
 }
 async function settle() {
-  for (let i = 0; i < 6; i += 1) await Promise.resolve();
+  for (let i = 0; i < 20; i += 1) await Promise.resolve();
 }
 async function nativeReady() {
   await vi.dynamicImportSettled();
@@ -106,6 +110,51 @@ afterEach(() => {
 });
 
 describe('SessionKeeper identity reconciliation', () => {
+  it('reconciles an explicit cookie removal inside the ordinary focus throttle', async () => {
+    render(); await settle();
+    mocks.getSession.mockResolvedValue(result(null));
+    windowTarget.dispatchEvent(new Event('focus'));
+    await settle(); expect(mocks.getSession).toHaveBeenCalledTimes(1);
+    notifySessionStorageChanged(); await settle();
+    expect(mocks.getSession).toHaveBeenCalledTimes(2);
+    expect(mocks.router.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('shares one forced reread and ignores an older bootstrap after explicit cookie change', async () => {
+    const old = deferred<SessionResult>();
+    mocks.getSession.mockReturnValueOnce(old.promise).mockResolvedValue(result(null));
+    render(); await settle();
+    notifySessionStorageChanged(); await settle();
+    expect(mocks.getSession).toHaveBeenCalledTimes(2);
+    expect(mocks.router.refresh).toHaveBeenCalledTimes(1);
+    old.resolve(result('user-a')); await settle();
+    expect(mocks.router.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('a delayed logout signal keeps a newer server identity and current login', async () => {
+    mocks.getSession.mockResolvedValue(result('user-b'));
+    render('user-b'); await settle();
+    notifySessionStorageChanged(); await settle();
+    expect(mocks.getSession).toHaveBeenCalledTimes(2);
+    expect(mocks.router.refresh).not.toHaveBeenCalled();
+  });
+
+  it('a newer login supersedes an explicit-change reread without an extra refresh', async () => {
+    render(); await settle(); const held = deferred<SessionResult>();
+    mocks.getSession.mockReturnValueOnce(held.promise);
+    notifySessionStorageChanged(); await settle();
+    emit('SIGNED_IN', 'user-b');
+    held.resolve(result(null)); await settle();
+    expect(mocks.router.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not restart a read when a storage-change signal arrives after unmount', async () => {
+    render(); await settle(); unmount();
+    notifySessionStorageChanged(); await settle();
+    expect(mocks.getSession).toHaveBeenCalledTimes(1);
+    expect(mocks.router.refresh).not.toHaveBeenCalled();
+  });
+
   it('keeps the current server tree when the saved session still belongs to its user', async () => {
     render();
     windowTarget.dispatchEvent(new Event('focus'));
@@ -228,10 +277,12 @@ describe('SessionKeeper lifecycle and cleanup', () => {
     documentTarget.visibilityState = 'visible';
     documentTarget.dispatchEvent(new Event('visibilitychange'));
     for (const event of ['focus', 'online', 'pageshow']) windowTarget.dispatchEvent(new Event(event));
+    await settle();
     expect(mocks.getSession).toHaveBeenCalledTimes(1);
     for (const [index, event] of ['focus', 'online', 'pageshow'].entries()) {
       vi.setSystemTime((index + 1) * 30_000);
       windowTarget.dispatchEvent(new Event(event));
+      await settle();
     }
     await settle();
     expect(mocks.getSession).toHaveBeenCalledTimes(4);
@@ -262,14 +313,16 @@ describe('SessionKeeper lifecycle and cleanup', () => {
     await nativeReady();
     expect(mocks.addListener).toHaveBeenCalledWith('resume', expect.any(Function));
     const resume = mocks.addListener.mock.calls[0][1] as () => void;
+    expect(mocks.getSession).toHaveBeenCalledTimes(1); // shared initial bootstrap
+    vi.setSystemTime(30_000);
     resume();
     await settle();
-    expect(mocks.getSession).toHaveBeenCalledTimes(1);
+    expect(mocks.getSession).toHaveBeenCalledTimes(2);
     unmount();
     expect(mocks.removeResume).toHaveBeenCalledTimes(1);
     vi.setSystemTime(30_000);
     resume();
-    expect(mocks.getSession).toHaveBeenCalledTimes(1);
+    expect(mocks.getSession).toHaveBeenCalledTimes(2);
   });
 
   it('removes a native listener that finishes registering after unmount', async () => {
@@ -290,9 +343,10 @@ describe('SessionKeeper lifecycle and cleanup', () => {
     mocks.addListener.mockRejectedValue(new Error('plugin unavailable'));
     render();
     await nativeReady();
+    vi.setSystemTime(30_000);
     windowTarget.dispatchEvent(new Event('online'));
     await settle();
-    expect(mocks.getSession).toHaveBeenCalledTimes(1);
+    expect(mocks.getSession).toHaveBeenCalledTimes(2); // bootstrap plus lifecycle recovery
     expect(mocks.router.refresh).not.toHaveBeenCalled();
   });
 });

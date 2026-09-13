@@ -10,6 +10,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
+import { safeSocialLink } from '@/lib/social/links';
 
 export const metadata: Metadata = { title: 'Inbox · Social' };
 export const dynamic = 'force-dynamic';
@@ -48,7 +49,7 @@ export default async function InboxPage() {
                 </div>
                 <p className="text-sm text-muted">{c.body}</p>
                 <div className="mt-2 flex items-center gap-3">
-                  {c.permalink_url && <a href={c.permalink_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-brand-text underline">{t('inbox.openOriginal')}{' '}<ExternalLink className="h-3 w-3" /></a>}
+                  {safeSocialLink(c.permalink_url) && <a href={safeSocialLink(c.permalink_url)!} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-brand-text underline">{t('inbox.openOriginal')}{' '}<ExternalLink className="h-3 w-3" /></a>}
                   {c.status === 'open' && (
                     <form action={resolveCommentAction.bind(null, c.id)}>
                       <button className="text-xs font-medium text-muted hover:text-fg underline">{t('inbox.markResolved')}</button>

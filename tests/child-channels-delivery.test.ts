@@ -97,15 +97,11 @@ describe('a family can say how Bubaly may reach its children', () => {
     expect(blocked.has('auth-child-b')).toBe(false);
   });
 
-  it('delivers rather than fails closed when a read breaks', async () => {
-    // This governs WHICH CHANNEL a notice takes, not whether a child may be told
-    // something. Failing closed would silently drop notifications on a transient
-    // database error; quiet hours and the trust gate are the boundaries that
-    // fail closed.
+  it('keeps delivery pending when parental channel permissions cannot be read', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     for (const mode of ['members', 'settings'] as const) {
       const db = makeDb([CHILD], [{ family_id: 'fam-1', child_channels: { push: false } }], mode);
-      expect(await childrenBlockedOn(db, 'push', ALL), mode).toEqual(new Set());
+      await expect(childrenBlockedOn(db, 'push', ALL)).rejects.toThrow(/Child channel .* read failed/);
     }
   });
 

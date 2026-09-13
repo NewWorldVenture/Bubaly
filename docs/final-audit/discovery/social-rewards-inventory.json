@@ -1,0 +1,2585 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-12T14:28:00.868Z",
+  "outsideFrozenCycle": [
+    "tests/contact-center-urgent-durability-repro.test.ts",
+    "tests/e2e/medications-audit-repro.spec.ts"
+  ],
+  "baselineRequested": "19a6907f",
+  "baselineCommit": "19a6907fdf906de3d44da583f2aa87a88298e697",
+  "workingTreeHeadAtInspection": "6094eb04045326fdd18a1a67785188cc805c2612",
+  "existingIdSource": {
+    "path": "docs/final-audit/audit-state.json",
+    "sha256": "0d06d8b5b6edafe919538364941714abd65ab084f188dceb1ce29b94a80ca638",
+    "copiedFields": [
+      "id",
+      "key",
+      "source"
+    ]
+  },
+  "methodology": [
+    "Frozen source commit compared with fixed baseline; canonical repository-relative paths. Disk hashes rechecked separately. New untracked next-cycle reproduction files are listed outside this frozen cycle.",
+    "SHA256 values cover exact inspected disk/git-blob bytes, including CRLF/LF differences. No source blobs or environment values included.",
+    "Top-level exported function declarations and arrow/function-valued exports parsed with installed TypeScript. Other exported symbols are labeled. Nested/object/class methods are not additional exported-function records.",
+    "Environment references are names only from static process.env access, test vi.stubEnv calls, and .env.example assignments. Baseline reference paths use literal-name source search, which can include comments.",
+    "Existing master id/key/source fields copied without changes for mapping only. No permanent IDs or audit statuses assigned.",
+    "Generated finalaudit.md and docs/final-audit artifacts are excluded; localization/tests/configuration are not counted as product features.",
+    "Source checkpoint is frozen; any later edits require hash verification. Complete committed changed-path set and every corresponding working-file hash are checked after generation."
+  ],
+  "counts": {
+    "files": 28,
+    "newFiles": 9,
+    "productionSourceFiles": 15,
+    "newProductionSourceFiles": 4,
+    "testFiles": 6,
+    "localizationFiles": 7,
+    "exportedFunctionsInNewProductionFiles": 16,
+    "newHttpMethods": 1
+  },
+  "environment": [
+    {
+      "name": "NEXT_PUBLIC_APP_URL",
+      "currentProductionPaths": [
+        "lib/social/x-oauth.ts"
+      ],
+      "baselineReferencePaths": [
+        ".env.example",
+        "app/(app)/admin/settings/page.tsx",
+        "app/api/billing/change-plan/route.ts",
+        "app/api/billing/checkout/route.ts",
+        "app/api/billing/portal/route.ts",
+        "app/api/contact-center/sms/route.ts",
+        "app/api/contact-center/voice/route.ts",
+        "app/api/contact-center/voice/transcription/route.ts",
+        "app/api/cron/admin-digest/route.ts",
+        "app/api/google/calendar/callback/route.ts",
+        "app/api/guardian/escalate/route.ts",
+        "app/api/guardian/escalate/twiml/route.ts",
+        "app/api/guardian/inbound/sms/route.ts",
+        "app/api/guardian/inbound/voice/route.ts",
+        "app/api/guardian/inbound/whatsapp/route.ts",
+        "app/api/guardian/screen/route.ts",
+        "app/api/guardian/status/voicemail/route.ts",
+        "lib/contact-center/server.ts",
+        "lib/email.ts",
+        "lib/feedback/notify.ts",
+        "lib/google.ts"
+      ],
+      "newNameAbsentFromBaselineProductionReferences": false
+    },
+    {
+      "name": "NEXT_PUBLIC_SITE_URL",
+      "currentProductionPaths": [
+        "lib/social/x-oauth.ts"
+      ],
+      "baselineReferencePaths": [
+        ".env.example",
+        "app/(app)/admin/marketing/reviews/page.tsx",
+        "app/(app)/admin/marketing/surveys/[id]/page.tsx",
+        "app/(marketing)/blog/[slug]/page.tsx",
+        "app/(marketing)/blog/page.tsx",
+        "app/(marketing)/lp/[slug]/page.tsx",
+        "app/layout.tsx",
+        "app/onboarding/actions.ts",
+        "app/robots.ts",
+        "app/sitemap.ts",
+        "components/marketing/structured-data.tsx",
+        "lib/email.ts",
+        "lib/marketing/provider-sync.ts",
+        "lib/marketing/public-pages.tsx",
+        "lib/marketing/seo.ts",
+        "lib/supabase/server.ts"
+      ],
+      "newNameAbsentFromBaselineProductionReferences": false
+    },
+    {
+      "name": "SYNC_TOKEN_KEY",
+      "currentProductionPaths": [
+        "lib/social/x-oauth.ts"
+      ],
+      "baselineReferencePaths": [
+        ".env.example",
+        "app/(app)/admin/settings/page.tsx",
+        "app/(app)/dashboard/sync/accounts/[provider]/page.tsx",
+        "app/api/sync/[provider]/callback/route.ts",
+        "app/api/sync/google/callback/route.ts",
+        "lib/i18n/messages/de-DE.json",
+        "lib/i18n/messages/en-US.json",
+        "lib/i18n/messages/es-ES.json",
+        "lib/i18n/messages/fr-FR.json",
+        "lib/i18n/messages/it-IT.json",
+        "lib/i18n/messages/nl-NL.json",
+        "lib/i18n/messages/pt-PT.json",
+        "lib/sync/crypto.ts",
+        "lib/sync/feed-token.ts"
+      ],
+      "newNameAbsentFromBaselineProductionReferences": false
+    },
+    {
+      "name": "X_CLIENT_ID",
+      "currentProductionPaths": [
+        "lib/social/x-oauth.ts"
+      ],
+      "baselineReferencePaths": [
+        "lib/social/capabilities.ts"
+      ],
+      "newNameAbsentFromBaselineProductionReferences": false
+    },
+    {
+      "name": "X_CLIENT_SECRET",
+      "currentProductionPaths": [
+        "lib/social/x-oauth.ts"
+      ],
+      "baselineReferencePaths": [
+        "lib/social/capabilities.ts"
+      ],
+      "newNameAbsentFromBaselineProductionReferences": false
+    }
+  ],
+  "files": [
+    {
+      "path": "app/(app)/dashboard/social/actions.ts",
+      "kind": "production-source",
+      "change": "M",
+      "isNew": false,
+      "baselineSha256": "f4d26a22f35f57c6da007e18ae2a7c7f7e9e2ba3370969ed38a2b387e1573f26",
+      "workingSha256": "59b8253498f5cc60f24e3703d0671cf86bbefc043e87b3a0da62e1cacb5fe749",
+      "workingBytes": 16361,
+      "exportedFunctions": [
+        {
+          "name": "connectAccountAction",
+          "line": 43,
+          "async": true
+        },
+        {
+          "name": "disconnectAccountAction",
+          "line": 83,
+          "async": true
+        },
+        {
+          "name": "createPostAction",
+          "line": 120,
+          "async": true
+        },
+        {
+          "name": "retryPublishAction",
+          "line": 237,
+          "async": true
+        },
+        {
+          "name": "resolveCommentAction",
+          "line": 257,
+          "async": true
+        },
+        {
+          "name": "createMediaAction",
+          "line": 274,
+          "async": true
+        },
+        {
+          "name": "updateSettingsAction",
+          "line": 306,
+          "async": true
+        },
+        {
+          "name": "grantAccessAction",
+          "line": 328,
+          "async": true
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "connectAccountAction",
+          "kind": "function",
+          "line": 43
+        },
+        {
+          "name": "disconnectAccountAction",
+          "kind": "function",
+          "line": 83
+        },
+        {
+          "name": "CreatePostResult",
+          "kind": "type",
+          "line": 107
+        },
+        {
+          "name": "createPostAction",
+          "kind": "function",
+          "line": 120
+        },
+        {
+          "name": "retryPublishAction",
+          "kind": "function",
+          "line": 237
+        },
+        {
+          "name": "resolveCommentAction",
+          "kind": "function",
+          "line": 257
+        },
+        {
+          "name": "createMediaAction",
+          "kind": "function",
+          "line": 274
+        },
+        {
+          "name": "updateSettingsAction",
+          "kind": "function",
+          "line": 306
+        },
+        {
+          "name": "grantAccessAction",
+          "kind": "function",
+          "line": 328
+        }
+      ],
+      "environmentNames": [],
+      "httpMethods": [],
+      "addedExportedFunctions": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "ACTION-38924C6BA1BC",
+          "key": "app/(app)/dashboard/social/actions.ts:connectAccountAction",
+          "source": "app/(app)/dashboard/social/actions.ts"
+        },
+        {
+          "id": "ACTION-34DED829EF63",
+          "key": "app/(app)/dashboard/social/actions.ts:disconnectAccountAction",
+          "source": "app/(app)/dashboard/social/actions.ts"
+        },
+        {
+          "id": "ACTION-3C9C7E7C3208",
+          "key": "app/(app)/dashboard/social/actions.ts:createPostAction",
+          "source": "app/(app)/dashboard/social/actions.ts"
+        },
+        {
+          "id": "ACTION-FD08580CBD41",
+          "key": "app/(app)/dashboard/social/actions.ts:retryPublishAction",
+          "source": "app/(app)/dashboard/social/actions.ts"
+        },
+        {
+          "id": "ACTION-29B242DBD1B3",
+          "key": "app/(app)/dashboard/social/actions.ts:resolveCommentAction",
+          "source": "app/(app)/dashboard/social/actions.ts"
+        },
+        {
+          "id": "ACTION-9F9715F212FF",
+          "key": "app/(app)/dashboard/social/actions.ts:createMediaAction",
+          "source": "app/(app)/dashboard/social/actions.ts"
+        },
+        {
+          "id": "ACTION-FD1221F34629",
+          "key": "app/(app)/dashboard/social/actions.ts:updateSettingsAction",
+          "source": "app/(app)/dashboard/social/actions.ts"
+        },
+        {
+          "id": "ACTION-EB48756176AA",
+          "key": "app/(app)/dashboard/social/actions.ts:grantAccessAction",
+          "source": "app/(app)/dashboard/social/actions.ts"
+        },
+        {
+          "id": "FLOW-3E860F41A5EA",
+          "key": "social",
+          "source": "app/(app)/dashboard/social/actions.ts, app/api/social/ai/route.ts"
+        }
+      ],
+      "inspectedHeadBlobSha256": "59b8253498f5cc60f24e3703d0671cf86bbefc043e87b3a0da62e1cacb5fe749"
+    },
+    {
+      "path": "app/(app)/dashboard/social/posts/[id]/page.tsx",
+      "kind": "production-source",
+      "change": "M",
+      "isNew": false,
+      "baselineSha256": "9b408701ee9f8edf19f258cfc44c964a4c5c77630ba766035f6a5f867fd894b4",
+      "workingSha256": "be1d2483fa6bed27f770e1f532032beba0d97056c71f8b7432421ad80728aa5c",
+      "workingBytes": 6010,
+      "exportedFunctions": [
+        {
+          "name": "PostDetailPage",
+          "line": 21,
+          "async": true
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "metadata",
+          "kind": "value",
+          "line": 14
+        },
+        {
+          "name": "dynamic",
+          "kind": "value",
+          "line": 15
+        },
+        {
+          "name": "PostDetailPage",
+          "kind": "function",
+          "line": 21
+        }
+      ],
+      "environmentNames": [],
+      "httpMethods": [],
+      "addedExportedFunctions": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "UI-ROUTE-0251",
+          "key": "app/(app)/dashboard/social/posts/[id]/page.tsx",
+          "source": "app/(app)/dashboard/social/posts/[id]/page.tsx"
+        },
+        {
+          "id": "CONTROL-3CB6AA07883E",
+          "key": "app/(app)/dashboard/social/posts/[id]/page.tsx:32:Link:0",
+          "source": "app/(app)/dashboard/social/posts/[id]/page.tsx"
+        },
+        {
+          "id": "CONTROL-1782EA39EECE",
+          "key": "app/(app)/dashboard/social/posts/[id]/page.tsx:44:a:1",
+          "source": "app/(app)/dashboard/social/posts/[id]/page.tsx"
+        },
+        {
+          "id": "CONTROL-D00399292B7B",
+          "key": "app/(app)/dashboard/social/posts/[id]/page.tsx:44:ExternalLink:2",
+          "source": "app/(app)/dashboard/social/posts/[id]/page.tsx"
+        },
+        {
+          "id": "CONTROL-BFD303B2CC07",
+          "key": "app/(app)/dashboard/social/posts/[id]/page.tsx:69:RetryPublishButton:3",
+          "source": "app/(app)/dashboard/social/posts/[id]/page.tsx"
+        },
+        {
+          "id": "CONTROL-B9E062E336CF",
+          "key": "app/(app)/dashboard/social/posts/[id]/page.tsx:80:a:4",
+          "source": "app/(app)/dashboard/social/posts/[id]/page.tsx"
+        },
+        {
+          "id": "CONTROL-C563CB81B5B8",
+          "key": "app/(app)/dashboard/social/posts/[id]/page.tsx:80:ExternalLink:5",
+          "source": "app/(app)/dashboard/social/posts/[id]/page.tsx"
+        }
+      ],
+      "inspectedHeadBlobSha256": "be1d2483fa6bed27f770e1f532032beba0d97056c71f8b7432421ad80728aa5c"
+    },
+    {
+      "path": "app/api/social/x/callback/route.ts",
+      "kind": "production-source",
+      "change": "A",
+      "isNew": true,
+      "baselineSha256": null,
+      "workingSha256": "28594ad473c16d56b59738da19f1dca40c4caf63bd2044fcb4246cee117846f1",
+      "workingBytes": 2448,
+      "exportedFunctions": [
+        {
+          "name": "GET",
+          "line": 11,
+          "async": true
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "runtime",
+          "kind": "value",
+          "line": 6
+        },
+        {
+          "name": "GET",
+          "kind": "function",
+          "line": 11
+        }
+      ],
+      "environmentNames": [],
+      "httpMethods": [
+        "GET"
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "GET",
+          "line": 11,
+          "async": true
+        }
+      ],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-8F67371FBEBC",
+          "key": "app/api/social/x/callback/route.ts",
+          "source": "app/api/social/x/callback/route.ts"
+        },
+        {
+          "id": "API-3B7C407D8AC2",
+          "key": "/api/social/x/callback:GET",
+          "source": "app/api/social/x/callback/route.ts"
+        }
+      ],
+      "inspectedHeadBlobSha256": "28594ad473c16d56b59738da19f1dca40c4caf63bd2044fcb4246cee117846f1",
+      "apiRoute": "/api/social/x/callback"
+    },
+    {
+      "path": "components/modules/rewards-module.tsx",
+      "kind": "production-source",
+      "change": "M",
+      "isNew": false,
+      "baselineSha256": "3d65d293e59a9537fc2c635f538397e4ed8b5facce2ef1bf28ecbfdbbe24ea6a",
+      "workingSha256": "ad0e21319b1f1127835c4378c5a5ac5b6ca5f792673fabcdd46cff4874ca7785",
+      "workingBytes": 21249,
+      "exportedFunctions": [
+        {
+          "name": "RewardsModule",
+          "line": 42,
+          "async": false
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "RewardsModule",
+          "kind": "function",
+          "line": 42
+        }
+      ],
+      "environmentNames": [],
+      "httpMethods": [],
+      "addedExportedFunctions": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "COMPONENT-11B28DE9BA2B",
+          "key": "components/modules/rewards-module.tsx",
+          "source": "components/modules/rewards-module.tsx"
+        },
+        {
+          "id": "CONTROL-02DA06CB9232",
+          "key": "components/modules/rewards-module.tsx:149:Button:0",
+          "source": "components/modules/rewards-module.tsx"
+        },
+        {
+          "id": "CONTROL-45635FDBCC35",
+          "key": "components/modules/rewards-module.tsx:203:button:1",
+          "source": "components/modules/rewards-module.tsx"
+        },
+        {
+          "id": "CONTROL-BF26C483234A",
+          "key": "components/modules/rewards-module.tsx:207:button:2",
+          "source": "components/modules/rewards-module.tsx"
+        },
+        {
+          "id": "CONTROL-795DAFCFB807",
+          "key": "components/modules/rewards-module.tsx:225:Button:3",
+          "source": "components/modules/rewards-module.tsx"
+        },
+        {
+          "id": "CONTROL-99531C734B33",
+          "key": "components/modules/rewards-module.tsx:238:button:4",
+          "source": "components/modules/rewards-module.tsx"
+        },
+        {
+          "id": "CONTROL-85976BB73F95",
+          "key": "components/modules/rewards-module.tsx:239:button:5",
+          "source": "components/modules/rewards-module.tsx"
+        },
+        {
+          "id": "CONTROL-AFCBA8DA1671",
+          "key": "components/modules/rewards-module.tsx:250:Button:6",
+          "source": "components/modules/rewards-module.tsx"
+        },
+        {
+          "id": "CONTROL-3232BB31435A",
+          "key": "components/modules/rewards-module.tsx:255:RedeemForMember:7",
+          "source": "components/modules/rewards-module.tsx"
+        },
+        {
+          "id": "CONTROL-48E6E7F07E08",
+          "key": "components/modules/rewards-module.tsx:280:button:8",
+          "source": "components/modules/rewards-module.tsx"
+        },
+        {
+          "id": "CONTROL-5173C5E95AD2",
+          "key": "components/modules/rewards-module.tsx:290:Modal:9",
+          "source": "components/modules/rewards-module.tsx"
+        },
+        {
+          "id": "CONTROL-7DF478641A1B",
+          "key": "components/modules/rewards-module.tsx:291:form:10",
+          "source": "components/modules/rewards-module.tsx"
+        },
+        {
+          "id": "CONTROL-63D430076519",
+          "key": "components/modules/rewards-module.tsx:293:Input:11",
+          "source": "components/modules/rewards-module.tsx"
+        },
+        {
+          "id": "CONTROL-64AE9AC7F923",
+          "key": "components/modules/rewards-module.tsx:296:Textarea:12",
+          "source": "components/modules/rewards-module.tsx"
+        },
+        {
+          "id": "CONTROL-F79B1AFACA73",
+          "key": "components/modules/rewards-module.tsx:299:Input:13",
+          "source": "components/modules/rewards-module.tsx"
+        },
+        {
+          "id": "CONTROL-ADA5F9C540EB",
+          "key": "components/modules/rewards-module.tsx:302:Button:14",
+          "source": "components/modules/rewards-module.tsx"
+        },
+        {
+          "id": "CONTROL-0A300EB82CB3",
+          "key": "components/modules/rewards-module.tsx:303:Button:15",
+          "source": "components/modules/rewards-module.tsx"
+        },
+        {
+          "id": "CONTROL-FBAEB7939943",
+          "key": "components/modules/rewards-module.tsx:327:select:16",
+          "source": "components/modules/rewards-module.tsx"
+        },
+        {
+          "id": "CONTROL-FF1549FD4370",
+          "key": "components/modules/rewards-module.tsx:331:Button:17",
+          "source": "components/modules/rewards-module.tsx"
+        },
+        {
+          "id": "INCOMPLETE-1A789447818F",
+          "key": "components/modules/rewards-module.tsx:293:0",
+          "source": "components/modules/rewards-module.tsx"
+        },
+        {
+          "id": "INCOMPLETE-AEE4E8362CA9",
+          "key": "components/modules/rewards-module.tsx:296:1",
+          "source": "components/modules/rewards-module.tsx"
+        },
+        {
+          "id": "DATA-004",
+          "key": "DATA-004",
+          "source": "components/modules/rewards-module.tsx; chore_assignments; reward_redemptions"
+        }
+      ],
+      "inspectedHeadBlobSha256": "ad0e21319b1f1127835c4378c5a5ac5b6ca5f792673fabcdd46cff4874ca7785"
+    },
+    {
+      "path": "components/social/connect-grid.tsx",
+      "kind": "production-source",
+      "change": "M",
+      "isNew": false,
+      "baselineSha256": "30046aa640020712a02645c8e2ee194c340048f26e98bfb175b4062b2999f2cd",
+      "workingSha256": "6546f1c0cf1773a2f49231c69183ebede0d3e789206f6299570e44eb199adf99",
+      "workingBytes": 4507,
+      "exportedFunctions": [
+        {
+          "name": "ConnectGrid",
+          "line": 15,
+          "async": false
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "ConnectGrid",
+          "kind": "function",
+          "line": 15
+        }
+      ],
+      "environmentNames": [],
+      "httpMethods": [],
+      "addedExportedFunctions": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "COMPONENT-7C7A2D8FCA85",
+          "key": "components/social/connect-grid.tsx",
+          "source": "components/social/connect-grid.tsx"
+        },
+        {
+          "id": "CONTROL-8DBB560FB027",
+          "key": "components/social/connect-grid.tsx:68:button:0",
+          "source": "components/social/connect-grid.tsx"
+        },
+        {
+          "id": "CONTROL-1BDCFFAC7ACD",
+          "key": "components/social/connect-grid.tsx:77:a:1",
+          "source": "components/social/connect-grid.tsx"
+        },
+        {
+          "id": "CONTROL-AE82C052E446",
+          "key": "components/social/connect-grid.tsx:78:ExternalLink:2",
+          "source": "components/social/connect-grid.tsx"
+        }
+      ],
+      "inspectedHeadBlobSha256": "6546f1c0cf1773a2f49231c69183ebede0d3e789206f6299570e44eb199adf99"
+    },
+    {
+      "path": "components/social/retry-button.tsx",
+      "kind": "production-source",
+      "change": "M",
+      "isNew": false,
+      "baselineSha256": "dffcc478fa923bc31c10dd89fbc1a5e872c228b2d63bf78b3374e7ee29f13541",
+      "workingSha256": "f6c3b718b165298c8a39b6e32269d3550a1ecdfad6b212740d3edfc20d36abef",
+      "workingBytes": 1755,
+      "exportedFunctions": [
+        {
+          "name": "RetryPublishButton",
+          "line": 8,
+          "async": false
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "RetryPublishButton",
+          "kind": "function",
+          "line": 8
+        }
+      ],
+      "environmentNames": [],
+      "httpMethods": [],
+      "addedExportedFunctions": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "COMPONENT-E066C861D997",
+          "key": "components/social/retry-button.tsx",
+          "source": "components/social/retry-button.tsx"
+        },
+        {
+          "id": "CONTROL-C56F758DD7A0",
+          "key": "components/social/retry-button.tsx:14:button:0",
+          "source": "components/social/retry-button.tsx"
+        }
+      ],
+      "inspectedHeadBlobSha256": "f6c3b718b165298c8a39b6e32269d3550a1ecdfad6b212740d3edfc20d36abef"
+    },
+    {
+      "path": "components/social/studio-form.tsx",
+      "kind": "production-source",
+      "change": "M",
+      "isNew": false,
+      "baselineSha256": "40aa253e3785cdeb80da2e6f9d9bfd16ffdec8691107ad403addca139c273b5e",
+      "workingSha256": "ab0fb7347a6577e59a889e4c7911ded45d2fe47a4db9f545c5ced85225ea7b49",
+      "workingBytes": 17245,
+      "exportedFunctions": [
+        {
+          "name": "StudioForm",
+          "line": 22,
+          "async": false
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "StudioForm",
+          "kind": "function",
+          "line": 22
+        }
+      ],
+      "environmentNames": [],
+      "httpMethods": [],
+      "addedExportedFunctions": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "COMPONENT-71B08AF10F6E",
+          "key": "components/social/studio-form.tsx",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-47A21081716A",
+          "key": "components/social/studio-form.tsx:106:label:0",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-6C3676384976",
+          "key": "components/social/studio-form.tsx:107:input:1",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-143E0D8C55B4",
+          "key": "components/social/studio-form.tsx:116:button:2",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-9C22999F5AE5",
+          "key": "components/social/studio-form.tsx:129:label:3",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-D2E1243B35D9",
+          "key": "components/social/studio-form.tsx:130:textarea:4",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-A3298E02A6F6",
+          "key": "components/social/studio-form.tsx:137:label:5",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-2F1D4699ECE3",
+          "key": "components/social/studio-form.tsx:138:input:6",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-4FA0DD8FD909",
+          "key": "components/social/studio-form.tsx:231:button:7",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-07C88A53D191",
+          "key": "components/social/studio-form.tsx:254:label:8",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-CEDF2EA6CF3A",
+          "key": "components/social/studio-form.tsx:255:input:9",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-963848C9C0E0",
+          "key": "components/social/studio-form.tsx:270:select:10",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-7B642BA72986",
+          "key": "components/social/studio-form.tsx:273:input:11",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-7D706DBFBF9D",
+          "key": "components/social/studio-form.tsx:275:input:12",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-8AEDE3B9ACD0",
+          "key": "components/social/studio-form.tsx:276:select:13",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-F23A019E493B",
+          "key": "components/social/studio-form.tsx:281:button:14",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-14F8F60475E7",
+          "key": "components/social/studio-form.tsx:289:button:15",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-758163AE2D26",
+          "key": "components/social/studio-form.tsx:290:button:16",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-A15EBCEB001B",
+          "key": "components/social/studio-form.tsx:298:label:17",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-F3094D631555",
+          "key": "components/social/studio-form.tsx:299:input:18",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-CC31041A149F",
+          "key": "components/social/studio-form.tsx:306:button:19",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-91D6AA10F7CD",
+          "key": "components/social/studio-form.tsx:309:button:20",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "CONTROL-61BC51156470",
+          "key": "components/social/studio-form.tsx:312:button:21",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "INCOMPLETE-7E5D8FFFA9ED",
+          "key": "components/social/studio-form.tsx:273:0",
+          "source": "components/social/studio-form.tsx"
+        },
+        {
+          "id": "INCOMPLETE-1AC1C23F5CC8",
+          "key": "components/social/studio-form.tsx:275:1",
+          "source": "components/social/studio-form.tsx"
+        }
+      ],
+      "inspectedHeadBlobSha256": "ab0fb7347a6577e59a889e4c7911ded45d2fe47a4db9f545c5ced85225ea7b49"
+    },
+    {
+      "path": "lib/database.types.ts",
+      "kind": "production-source",
+      "change": "M",
+      "isNew": false,
+      "baselineSha256": "f07b7ff85cf2da86f84e70504fd38a2d9436eb5d1e214181ac6a41024243da7a",
+      "workingSha256": "4c8c8f766189d8226371228d111e877104061a663e28f8bfd546f9a73be79da7",
+      "workingBytes": 397645,
+      "exportedFunctions": [],
+      "exportedSymbols": [
+        {
+          "name": "Json",
+          "kind": "type",
+          "line": 6
+        },
+        {
+          "name": "MemberRole",
+          "kind": "type",
+          "line": 8
+        },
+        {
+          "name": "InviteStatus",
+          "kind": "type",
+          "line": 9
+        },
+        {
+          "name": "TaskStatus",
+          "kind": "type",
+          "line": 10
+        },
+        {
+          "name": "Priority",
+          "kind": "type",
+          "line": 11
+        },
+        {
+          "name": "EventCategory",
+          "kind": "type",
+          "line": 12
+        },
+        {
+          "name": "RecurrenceFreq",
+          "kind": "type",
+          "line": 15
+        },
+        {
+          "name": "PetSpecies",
+          "kind": "type",
+          "line": 16
+        },
+        {
+          "name": "PetCareKind",
+          "kind": "type",
+          "line": 17
+        },
+        {
+          "name": "WardrobeCategory",
+          "kind": "type",
+          "line": 18
+        },
+        {
+          "name": "WardrobeStatus",
+          "kind": "type",
+          "line": 19
+        },
+        {
+          "name": "OutfitOccasion",
+          "kind": "type",
+          "line": 20
+        },
+        {
+          "name": "WatchKind",
+          "kind": "type",
+          "line": 21
+        },
+        {
+          "name": "WatchService",
+          "kind": "type",
+          "line": 22
+        },
+        {
+          "name": "WatchStatus",
+          "kind": "type",
+          "line": 23
+        },
+        {
+          "name": "WatchVote",
+          "kind": "type",
+          "line": 24
+        },
+        {
+          "name": "HomeLocationKind",
+          "kind": "type",
+          "line": 25
+        },
+        {
+          "name": "InventoryCategory",
+          "kind": "type",
+          "line": 26
+        },
+        {
+          "name": "InventoryStatus",
+          "kind": "type",
+          "line": 27
+        },
+        {
+          "name": "SleepSource",
+          "kind": "type",
+          "line": 28
+        },
+        {
+          "name": "DeclutterZoneKind",
+          "kind": "type",
+          "line": 29
+        },
+        {
+          "name": "DeclutterMissionStatus",
+          "kind": "type",
+          "line": 30
+        },
+        {
+          "name": "MoveStatus",
+          "kind": "type",
+          "line": 31
+        },
+        {
+          "name": "MoveKind",
+          "kind": "type",
+          "line": 32
+        },
+        {
+          "name": "MoveTaskCategory",
+          "kind": "type",
+          "line": 33
+        },
+        {
+          "name": "MoveTaskStatus",
+          "kind": "type",
+          "line": 34
+        },
+        {
+          "name": "MoveBoxStatus",
+          "kind": "type",
+          "line": 35
+        },
+        {
+          "name": "HomeProjectKind",
+          "kind": "type",
+          "line": 36
+        },
+        {
+          "name": "HomeProjectStatus",
+          "kind": "type",
+          "line": 37
+        },
+        {
+          "name": "HomeProjectPriority",
+          "kind": "type",
+          "line": 38
+        },
+        {
+          "name": "ProjectQuoteStatus",
+          "kind": "type",
+          "line": 39
+        },
+        {
+          "name": "CareerWorkMode",
+          "kind": "type",
+          "line": 40
+        },
+        {
+          "name": "CareerEmploymentType",
+          "kind": "type",
+          "line": 41
+        },
+        {
+          "name": "CareerStatus",
+          "kind": "type",
+          "line": 42
+        },
+        {
+          "name": "JobStage",
+          "kind": "type",
+          "line": 43
+        },
+        {
+          "name": "CefrLevel",
+          "kind": "type",
+          "line": 44
+        },
+        {
+          "name": "LanguageSessionKind",
+          "kind": "type",
+          "line": 45
+        },
+        {
+          "name": "InsurancePolicyType",
+          "kind": "type",
+          "line": 46
+        },
+        {
+          "name": "PremiumFrequency",
+          "kind": "type",
+          "line": 47
+        },
+        {
+          "name": "MealType",
+          "kind": "type",
+          "line": 48
+        },
+        {
+          "name": "PantryLocation",
+          "kind": "type",
+          "line": 49
+        },
+        {
+          "name": "NutritionSubject",
+          "kind": "type",
+          "line": 50
+        },
+        {
+          "name": "NotificationType",
+          "kind": "type",
+          "line": 51
+        },
+        {
+          "name": "WalletTxnType",
+          "kind": "type",
+          "line": 54
+        },
+        {
+          "name": "WalletTxnStatus",
+          "kind": "type",
+          "line": 57
+        },
+        {
+          "name": "StripeAccountStatus",
+          "kind": "type",
+          "line": 59
+        },
+        {
+          "name": "InvestOrderSide",
+          "kind": "type",
+          "line": 60
+        },
+        {
+          "name": "InvestOrderStatus",
+          "kind": "type",
+          "line": 61
+        },
+        {
+          "name": "SocialItemKind",
+          "kind": "type",
+          "line": 62
+        },
+        {
+          "name": "SocialCategory",
+          "kind": "type",
+          "line": 63
+        },
+        {
+          "name": "EconomyDirection",
+          "kind": "type",
+          "line": 64
+        },
+        {
+          "name": "EconomyRedemptionStatus",
+          "kind": "type",
+          "line": 65
+        },
+        {
+          "name": "SubscriptionStatus",
+          "kind": "type",
+          "line": 66
+        },
+        {
+          "name": "AccountType",
+          "kind": "type",
+          "line": 68
+        },
+        {
+          "name": "TransactionType",
+          "kind": "type",
+          "line": 69
+        },
+        {
+          "name": "BudgetPeriod",
+          "kind": "type",
+          "line": 70
+        },
+        {
+          "name": "BillStatus",
+          "kind": "type",
+          "line": 71
+        },
+        {
+          "name": "MetricType",
+          "kind": "type",
+          "line": 72
+        },
+        {
+          "name": "GameResult",
+          "kind": "type",
+          "line": 73
+        },
+        {
+          "name": "GradeType",
+          "kind": "type",
+          "line": 74
+        },
+        {
+          "name": "ThemePref",
+          "kind": "type",
+          "line": 75
+        },
+        {
+          "name": "DashboardView",
+          "kind": "type",
+          "line": 76
+        },
+        {
+          "name": "AiRole",
+          "kind": "type",
+          "line": 77
+        },
+        {
+          "name": "AiRunState",
+          "kind": "type",
+          "line": 81
+        },
+        {
+          "name": "AiRunLifecycleState",
+          "kind": "type",
+          "line": 85
+        },
+        {
+          "name": "AiStepState",
+          "kind": "type",
+          "line": 86
+        },
+        {
+          "name": "AiRequestKind",
+          "kind": "type",
+          "line": 87
+        },
+        {
+          "name": "RoutineScheduleKind",
+          "kind": "type",
+          "line": 89
+        },
+        {
+          "name": "RoutineRunStatus",
+          "kind": "type",
+          "line": 91
+        },
+        {
+          "name": "HomeBriefKind",
+          "kind": "type",
+          "line": 93
+        },
+        {
+          "name": "AutonomyBehaviorValue",
+          "kind": "type",
+          "line": 95
+        },
+        {
+          "name": "AiRunType",
+          "kind": "type",
+          "line": 96
+        },
+        {
+          "name": "AiPlanStatus",
+          "kind": "type",
+          "line": 97
+        },
+        {
+          "name": "AiStepType",
+          "kind": "type",
+          "line": 99
+        },
+        {
+          "name": "AiRiskLevel",
+          "kind": "type",
+          "line": 100
+        },
+        {
+          "name": "AiActorKind",
+          "kind": "type",
+          "line": 101
+        },
+        {
+          "name": "AiToolCallState",
+          "kind": "type",
+          "line": 102
+        },
+        {
+          "name": "AiConversationState",
+          "kind": "type",
+          "line": 103
+        },
+        {
+          "name": "AiApprovalPayloadKind",
+          "kind": "type",
+          "line": 104
+        },
+        {
+          "name": "AiRunEventType",
+          "kind": "type",
+          "line": 105
+        },
+        {
+          "name": "RecordKind",
+          "kind": "type",
+          "line": 110
+        },
+        {
+          "name": "RideStatus",
+          "kind": "type",
+          "line": 111
+        },
+        {
+          "name": "HomeworkStatus",
+          "kind": "type",
+          "line": 112
+        },
+        {
+          "name": "RenewalStatus",
+          "kind": "type",
+          "line": 113
+        },
+        {
+          "name": "CareLogType",
+          "kind": "type",
+          "line": 114
+        },
+        {
+          "name": "OpportunityStatus",
+          "kind": "type",
+          "line": 115
+        },
+        {
+          "name": "LocationEventType",
+          "kind": "type",
+          "line": 116
+        },
+        {
+          "name": "WishPriority",
+          "kind": "type",
+          "line": 117
+        },
+        {
+          "name": "RelationshipDateKind",
+          "kind": "type",
+          "line": 118
+        },
+        {
+          "name": "RelationshipDateStatus",
+          "kind": "type",
+          "line": 119
+        },
+        {
+          "name": "RelationshipGiftSource",
+          "kind": "type",
+          "line": 120
+        },
+        {
+          "name": "RelationshipGiftStatus",
+          "kind": "type",
+          "line": 121
+        },
+        {
+          "name": "DoseStatus",
+          "kind": "type",
+          "line": 122
+        },
+        {
+          "name": "WeekPattern",
+          "kind": "type",
+          "line": 123
+        },
+        {
+          "name": "TripStatus",
+          "kind": "type",
+          "line": 124
+        },
+        {
+          "name": "TripItemKind",
+          "kind": "type",
+          "line": 125
+        },
+        {
+          "name": "RedemptionStatus",
+          "kind": "type",
+          "line": 126
+        },
+        {
+          "name": "VacationStatus",
+          "kind": "type",
+          "line": 129
+        },
+        {
+          "name": "VacationKind",
+          "kind": "type",
+          "line": 130
+        },
+        {
+          "name": "VacItemKind",
+          "kind": "type",
+          "line": 131
+        },
+        {
+          "name": "VacDayPart",
+          "kind": "type",
+          "line": 132
+        },
+        {
+          "name": "VacTransportKind",
+          "kind": "type",
+          "line": 133
+        },
+        {
+          "name": "VacLodgingKind",
+          "kind": "type",
+          "line": 134
+        },
+        {
+          "name": "VacBudgetCategory",
+          "kind": "type",
+          "line": 135
+        },
+        {
+          "name": "VacPackCategory",
+          "kind": "type",
+          "line": 136
+        },
+        {
+          "name": "VacDocKind",
+          "kind": "type",
+          "line": 137
+        },
+        {
+          "name": "VacRecoKind",
+          "kind": "type",
+          "line": 138
+        },
+        {
+          "name": "VacRecoStatus",
+          "kind": "type",
+          "line": 139
+        },
+        {
+          "name": "WeekendPlanStatus",
+          "kind": "type",
+          "line": 142
+        },
+        {
+          "name": "WeekendFeedKind",
+          "kind": "type",
+          "line": 143
+        },
+        {
+          "name": "SyncProviderEnum",
+          "kind": "type",
+          "line": 146
+        },
+        {
+          "name": "SyncDirection",
+          "kind": "type",
+          "line": 147
+        },
+        {
+          "name": "SyncStatusEnum",
+          "kind": "type",
+          "line": 148
+        },
+        {
+          "name": "SyncItemType",
+          "kind": "type",
+          "line": 150
+        },
+        {
+          "name": "SyncConflictStatus",
+          "kind": "type",
+          "line": 151
+        },
+        {
+          "name": "SyncConflictResolutionEnum",
+          "kind": "type",
+          "line": 152
+        },
+        {
+          "name": "SyncJobStatus",
+          "kind": "type",
+          "line": 154
+        },
+        {
+          "name": "SocialPlatformEnum",
+          "kind": "type",
+          "line": 158
+        },
+        {
+          "name": "SocialAccountStatus",
+          "kind": "type",
+          "line": 161
+        },
+        {
+          "name": "SocialPostKind",
+          "kind": "type",
+          "line": 163
+        },
+        {
+          "name": "SocialPostStatusEnum",
+          "kind": "type",
+          "line": 166
+        },
+        {
+          "name": "SocialTargetStatus",
+          "kind": "type",
+          "line": 169
+        },
+        {
+          "name": "SocialJobStatus",
+          "kind": "type",
+          "line": 171
+        },
+        {
+          "name": "SocialApprovalStatus",
+          "kind": "type",
+          "line": 173
+        },
+        {
+          "name": "SocialInboxStatus",
+          "kind": "type",
+          "line": 175
+        },
+        {
+          "name": "SocialAssetKind",
+          "kind": "type",
+          "line": 176
+        },
+        {
+          "name": "SocialRoleEnum",
+          "kind": "type",
+          "line": 177
+        },
+        {
+          "name": "Database",
+          "kind": "interface",
+          "line": 188
+        },
+        {
+          "name": "Tables",
+          "kind": "type",
+          "line": 2763
+        },
+        {
+          "name": "Insertable",
+          "kind": "type",
+          "line": 2765
+        },
+        {
+          "name": "Updatable",
+          "kind": "type",
+          "line": 2767
+        }
+      ],
+      "environmentNames": [],
+      "httpMethods": [],
+      "addedExportedFunctions": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-39A229E29D4D",
+          "key": "lib/database.types.ts",
+          "source": "lib/database.types.ts"
+        }
+      ],
+      "changeSummary": {
+        "kind": "type-only existing schema alignment",
+        "fields": [
+          "social_accounts.Update.provider_account_id",
+          "social_account_tokens.Update.provider_account_id"
+        ],
+        "schemaSource": "supabase/migrations/0034_social_command_center.sql",
+        "sqlChanged": false
+      },
+      "inspectedHeadBlobSha256": "4c8c8f766189d8226371228d111e877104061a663e28f8bfd546f9a73be79da7"
+    },
+    {
+      "path": "lib/i18n/messages/de-DE.json",
+      "kind": "localization",
+      "change": "M",
+      "isNew": false,
+      "baselineSha256": "f4f313fea4bf189489ffd01c59914cb93e55b413b9b33533f955baaf36771abe",
+      "workingSha256": "dbc1aac12e0af06a9b3a179fac5b40700bffc27d22a845cb6a43ba2d9aba56ce",
+      "workingBytes": 974999,
+      "exportedFunctions": [],
+      "exportedSymbols": [],
+      "environmentNames": [],
+      "httpMethods": [],
+      "addedExportedFunctions": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-88F1E3670486",
+          "key": "lib/i18n/messages/de-DE.json",
+          "source": "lib/i18n/messages/de-DE.json"
+        }
+      ],
+      "inspectedHeadBlobSha256": "dbc1aac12e0af06a9b3a179fac5b40700bffc27d22a845cb6a43ba2d9aba56ce"
+    },
+    {
+      "path": "lib/i18n/messages/en-US.json",
+      "kind": "localization",
+      "change": "M",
+      "isNew": false,
+      "baselineSha256": "61df2d5515bb8a4eb05fd7a87d831ec6dafdca32c5ee09cddfcfd8f99225ae01",
+      "workingSha256": "f569e6ff15161c032cf10623d95132e68775a4e100f3e263877d011bf8fd18f8",
+      "workingBytes": 871366,
+      "exportedFunctions": [],
+      "exportedSymbols": [],
+      "environmentNames": [],
+      "httpMethods": [],
+      "addedExportedFunctions": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-C346841E8649",
+          "key": "lib/i18n/messages/en-US.json",
+          "source": "lib/i18n/messages/en-US.json"
+        }
+      ],
+      "inspectedHeadBlobSha256": "f569e6ff15161c032cf10623d95132e68775a4e100f3e263877d011bf8fd18f8"
+    },
+    {
+      "path": "lib/i18n/messages/es-ES.json",
+      "kind": "localization",
+      "change": "M",
+      "isNew": false,
+      "baselineSha256": "fe2b5eb23cdea82867f83f47cf4ec2d342ca885f4cd6c450b38a11aad7dedaee",
+      "workingSha256": "3fb396fae1493732cb07161b856a505650ea5c3e38b5656dc40a692fee06c0eb",
+      "workingBytes": 959518,
+      "exportedFunctions": [],
+      "exportedSymbols": [],
+      "environmentNames": [],
+      "httpMethods": [],
+      "addedExportedFunctions": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-DC666FC0E80F",
+          "key": "lib/i18n/messages/es-ES.json",
+          "source": "lib/i18n/messages/es-ES.json"
+        }
+      ],
+      "inspectedHeadBlobSha256": "3fb396fae1493732cb07161b856a505650ea5c3e38b5656dc40a692fee06c0eb"
+    },
+    {
+      "path": "lib/i18n/messages/fr-FR.json",
+      "kind": "localization",
+      "change": "M",
+      "isNew": false,
+      "baselineSha256": "f39623bdb6f0b24d17a3338dd6801ef6da1f23fe6226ecb88d97e652bf08ce5b",
+      "workingSha256": "b500a629c44d3c13a989a8c0e5e383bfaf9ff03bac80b3fe9b52fcbf7e69a9c2",
+      "workingBytes": 984388,
+      "exportedFunctions": [],
+      "exportedSymbols": [],
+      "environmentNames": [],
+      "httpMethods": [],
+      "addedExportedFunctions": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-24D39068AF0B",
+          "key": "lib/i18n/messages/fr-FR.json",
+          "source": "lib/i18n/messages/fr-FR.json"
+        }
+      ],
+      "inspectedHeadBlobSha256": "b500a629c44d3c13a989a8c0e5e383bfaf9ff03bac80b3fe9b52fcbf7e69a9c2"
+    },
+    {
+      "path": "lib/i18n/messages/it-IT.json",
+      "kind": "localization",
+      "change": "M",
+      "isNew": false,
+      "baselineSha256": "8f9e1549142cb3b691a9791cafa7c1720818e8c35993d1cc3aa26a74129df2d1",
+      "workingSha256": "ceacfa1b60088551138420ae57f8559183145fac89c8b9bf6daa77629ba02e5b",
+      "workingBytes": 947354,
+      "exportedFunctions": [],
+      "exportedSymbols": [],
+      "environmentNames": [],
+      "httpMethods": [],
+      "addedExportedFunctions": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-9E9B391BC4E5",
+          "key": "lib/i18n/messages/it-IT.json",
+          "source": "lib/i18n/messages/it-IT.json"
+        }
+      ],
+      "inspectedHeadBlobSha256": "ceacfa1b60088551138420ae57f8559183145fac89c8b9bf6daa77629ba02e5b"
+    },
+    {
+      "path": "lib/i18n/messages/nl-NL.json",
+      "kind": "localization",
+      "change": "M",
+      "isNew": false,
+      "baselineSha256": "f3f51dd47a462afd4dcdfa8b0c1a4556039b5a3b49d467ae5ab6602bb157acce",
+      "workingSha256": "16541efc1d8edd94f98c344344f1daac18d6c357c472a73c05b050aaf6a48d37",
+      "workingBytes": 931444,
+      "exportedFunctions": [],
+      "exportedSymbols": [],
+      "environmentNames": [],
+      "httpMethods": [],
+      "addedExportedFunctions": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-6F4C71EB2624",
+          "key": "lib/i18n/messages/nl-NL.json",
+          "source": "lib/i18n/messages/nl-NL.json"
+        }
+      ],
+      "inspectedHeadBlobSha256": "16541efc1d8edd94f98c344344f1daac18d6c357c472a73c05b050aaf6a48d37"
+    },
+    {
+      "path": "lib/i18n/messages/pt-PT.json",
+      "kind": "localization",
+      "change": "M",
+      "isNew": false,
+      "baselineSha256": "1fe3c7ee6d25cecd4d931ce59ad7183fa0d96dd1e5c79a3320328627ef7a5931",
+      "workingSha256": "e8ab4e1f1c90311c61ca621fcdf23c923dd5716b8d51aa917c5e11d8118680db",
+      "workingBytes": 961415,
+      "exportedFunctions": [],
+      "exportedSymbols": [],
+      "environmentNames": [],
+      "httpMethods": [],
+      "addedExportedFunctions": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-091D62717E32",
+          "key": "lib/i18n/messages/pt-PT.json",
+          "source": "lib/i18n/messages/pt-PT.json"
+        }
+      ],
+      "inspectedHeadBlobSha256": "e8ab4e1f1c90311c61ca621fcdf23c923dd5716b8d51aa917c5e11d8118680db"
+    },
+    {
+      "path": "lib/social/access.ts",
+      "kind": "production-source",
+      "change": "M",
+      "isNew": false,
+      "baselineSha256": "08d6b869c736c847acef9fcce51f7fb731dccdbc16ebb0e4b3d4127acc1e3dc0",
+      "workingSha256": "221a285be19c1e6a5a0dd7060af7a4d4d6fcabd3476be96f4a50e1e76f5a2565",
+      "workingBytes": 3809,
+      "exportedFunctions": [
+        {
+          "name": "getSocialAccess",
+          "line": 39,
+          "async": true
+        },
+        {
+          "name": "requireSocialPermission",
+          "line": 97,
+          "async": true
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "SocialAccess",
+          "kind": "type",
+          "line": 13
+        },
+        {
+          "name": "SocialAccessUnavailableError",
+          "kind": "class",
+          "line": 21
+        },
+        {
+          "name": "getSocialAccess",
+          "kind": "function",
+          "line": 39
+        },
+        {
+          "name": "SocialAccessError",
+          "kind": "class",
+          "line": 89
+        },
+        {
+          "name": "requireSocialPermission",
+          "kind": "function",
+          "line": 97
+        }
+      ],
+      "environmentNames": [],
+      "httpMethods": [],
+      "addedExportedFunctions": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "LIBRARY-CDAD151BCBB7",
+          "key": "lib/social/access.ts",
+          "source": "lib/social/access.ts"
+        },
+        {
+          "id": "AUTHZ-002",
+          "key": "AUTHZ-002",
+          "source": "lib/social/access.ts; lib/social/roles.ts; social_access_permissions; family_members"
+        }
+      ],
+      "inspectedHeadBlobSha256": "221a285be19c1e6a5a0dd7060af7a4d4d6fcabd3476be96f4a50e1e76f5a2565"
+    },
+    {
+      "path": "lib/social/account-tokens.ts",
+      "kind": "production-source",
+      "change": "A",
+      "isNew": true,
+      "baselineSha256": null,
+      "workingSha256": "60bfe6fc1baf4b7230312c817cea248d70684f55912bef11335ad1dfd8a2c810",
+      "workingBytes": 12465,
+      "exportedFunctions": [
+        {
+          "name": "xFailure",
+          "line": 12,
+          "async": false
+        },
+        {
+          "name": "isXId",
+          "line": 14,
+          "async": false
+        },
+        {
+          "name": "requireXActor",
+          "line": 27,
+          "async": true
+        },
+        {
+          "name": "createXReceipt",
+          "line": 49,
+          "async": true
+        },
+        {
+          "name": "claimXReceipt",
+          "line": 71,
+          "async": true
+        },
+        {
+          "name": "saveXConnection",
+          "line": 85,
+          "async": true
+        },
+        {
+          "name": "loadXAccessToken",
+          "line": 145,
+          "async": true
+        },
+        {
+          "name": "clearXTokens",
+          "line": 162,
+          "async": true
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "XBoundaryError",
+          "kind": "class",
+          "line": 9
+        },
+        {
+          "name": "xFailure",
+          "kind": "function",
+          "line": 12
+        },
+        {
+          "name": "X_SCOPES",
+          "kind": "value",
+          "line": 13
+        },
+        {
+          "name": "isXId",
+          "kind": "function",
+          "line": 14
+        },
+        {
+          "name": "XActor",
+          "kind": "type",
+          "line": 18
+        },
+        {
+          "name": "XFlow",
+          "kind": "type",
+          "line": 19
+        },
+        {
+          "name": "XGrant",
+          "kind": "type",
+          "line": 20
+        },
+        {
+          "name": "requireXActor",
+          "kind": "function",
+          "line": 27
+        },
+        {
+          "name": "createXReceipt",
+          "kind": "function",
+          "line": 49
+        },
+        {
+          "name": "claimXReceipt",
+          "kind": "function",
+          "line": 71
+        },
+        {
+          "name": "saveXConnection",
+          "kind": "function",
+          "line": 85
+        },
+        {
+          "name": "loadXAccessToken",
+          "kind": "function",
+          "line": 145
+        },
+        {
+          "name": "clearXTokens",
+          "kind": "function",
+          "line": 162
+        }
+      ],
+      "environmentNames": [],
+      "httpMethods": [],
+      "addedExportedFunctions": [
+        {
+          "name": "xFailure",
+          "line": 12,
+          "async": false
+        },
+        {
+          "name": "isXId",
+          "line": 14,
+          "async": false
+        },
+        {
+          "name": "requireXActor",
+          "line": 27,
+          "async": true
+        },
+        {
+          "name": "createXReceipt",
+          "line": 49,
+          "async": true
+        },
+        {
+          "name": "claimXReceipt",
+          "line": 71,
+          "async": true
+        },
+        {
+          "name": "saveXConnection",
+          "line": 85,
+          "async": true
+        },
+        {
+          "name": "loadXAccessToken",
+          "line": 145,
+          "async": true
+        },
+        {
+          "name": "clearXTokens",
+          "line": 162,
+          "async": true
+        }
+      ],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "LIBRARY-90A14267D9AB",
+          "key": "lib/social/account-tokens.ts",
+          "source": "lib/social/account-tokens.ts"
+        },
+        {
+          "id": "SERVICE-29F92A78FE3C",
+          "key": "lib/social/account-tokens.ts:xFailure",
+          "source": "lib/social/account-tokens.ts"
+        },
+        {
+          "id": "SERVICE-B2EBE7B38719",
+          "key": "lib/social/account-tokens.ts:isXId",
+          "source": "lib/social/account-tokens.ts"
+        },
+        {
+          "id": "SERVICE-40E029B396EB",
+          "key": "lib/social/account-tokens.ts:requireXActor",
+          "source": "lib/social/account-tokens.ts"
+        },
+        {
+          "id": "SERVICE-2FAF9ABC34E1",
+          "key": "lib/social/account-tokens.ts:createXReceipt",
+          "source": "lib/social/account-tokens.ts"
+        },
+        {
+          "id": "SERVICE-A03C93512AD3",
+          "key": "lib/social/account-tokens.ts:claimXReceipt",
+          "source": "lib/social/account-tokens.ts"
+        },
+        {
+          "id": "SERVICE-D028AB6D5174",
+          "key": "lib/social/account-tokens.ts:saveXConnection",
+          "source": "lib/social/account-tokens.ts"
+        },
+        {
+          "id": "SERVICE-78C15D965A3A",
+          "key": "lib/social/account-tokens.ts:loadXAccessToken",
+          "source": "lib/social/account-tokens.ts"
+        },
+        {
+          "id": "SERVICE-AD532888480E",
+          "key": "lib/social/account-tokens.ts:clearXTokens",
+          "source": "lib/social/account-tokens.ts"
+        }
+      ],
+      "inspectedHeadBlobSha256": "60bfe6fc1baf4b7230312c817cea248d70684f55912bef11335ad1dfd8a2c810"
+    },
+    {
+      "path": "lib/social/connectors.ts",
+      "kind": "production-source",
+      "change": "M",
+      "isNew": false,
+      "baselineSha256": "e86f13d897e8357e8d1bfda1d5d7ccdbe5b4ebfcd1dc28210ce7596b1c594bd6",
+      "workingSha256": "73637d433da2737204cbd541515098958f71e05a60fe02a864d266472e9d25bd",
+      "workingBytes": 3799,
+      "exportedFunctions": [
+        {
+          "name": "getConnector",
+          "line": 103,
+          "async": false
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "ConnectorPublishInput",
+          "kind": "type",
+          "line": 21
+        },
+        {
+          "name": "ConnectorPublishOutput",
+          "kind": "type",
+          "line": 33
+        },
+        {
+          "name": "Connector",
+          "kind": "type",
+          "line": 45
+        },
+        {
+          "name": "getConnector",
+          "kind": "function",
+          "line": 103
+        }
+      ],
+      "environmentNames": [],
+      "httpMethods": [],
+      "addedExportedFunctions": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "LIBRARY-B015E80C1907",
+          "key": "lib/social/connectors.ts",
+          "source": "lib/social/connectors.ts"
+        },
+        {
+          "id": "SOCIAL-001",
+          "key": "SOCIAL-001",
+          "source": "lib/social/connectors.ts"
+        },
+        {
+          "id": "OPS-INT-018",
+          "key": "Social publishing",
+          "source": "lib/social/connectors.ts, lib/social/capabilities.ts, lib/social/publish.ts"
+        }
+      ],
+      "inspectedHeadBlobSha256": "73637d433da2737204cbd541515098958f71e05a60fe02a864d266472e9d25bd"
+    },
+    {
+      "path": "lib/social/content.ts",
+      "kind": "production-source",
+      "change": "M",
+      "isNew": false,
+      "baselineSha256": "fbb324b6e7e99f62df3ea310fa1c9201a1dc42df9ff10cd426668542ce82e437",
+      "workingSha256": "1a4410ce769799d552ee04d5271a59a351057a1079074fa438913fbaab61ee3b",
+      "workingBytes": 7942,
+      "exportedFunctions": [
+        {
+          "name": "effectiveLength",
+          "line": 50,
+          "async": false
+        },
+        {
+          "name": "charsRemaining",
+          "line": 60,
+          "async": false
+        },
+        {
+          "name": "extractHashtags",
+          "line": 64,
+          "async": false
+        },
+        {
+          "name": "extractMentions",
+          "line": 70,
+          "async": false
+        },
+        {
+          "name": "validateForPlatform",
+          "line": 82,
+          "async": false
+        },
+        {
+          "name": "validateForPlatforms",
+          "line": 153,
+          "async": false
+        },
+        {
+          "name": "hasBlockingErrors",
+          "line": 157,
+          "async": false
+        },
+        {
+          "name": "derivePostStatus",
+          "line": 168,
+          "async": false
+        },
+        {
+          "name": "canTransition",
+          "line": 193,
+          "async": false
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "PostKind",
+          "kind": "type",
+          "line": 9
+        },
+        {
+          "name": "POST_KINDS",
+          "kind": "value",
+          "line": 13
+        },
+        {
+          "name": "PostStatus",
+          "kind": "type",
+          "line": 18
+        },
+        {
+          "name": "TargetStatus",
+          "kind": "type",
+          "line": 22
+        },
+        {
+          "name": "DraftContent",
+          "kind": "type",
+          "line": 26
+        },
+        {
+          "name": "ValidationSeverity",
+          "kind": "type",
+          "line": 36
+        },
+        {
+          "name": "ValidationIssue",
+          "kind": "type",
+          "line": 38
+        },
+        {
+          "name": "effectiveLength",
+          "kind": "function",
+          "line": 50
+        },
+        {
+          "name": "charsRemaining",
+          "kind": "function",
+          "line": 60
+        },
+        {
+          "name": "extractHashtags",
+          "kind": "function",
+          "line": 64
+        },
+        {
+          "name": "extractMentions",
+          "kind": "function",
+          "line": 70
+        },
+        {
+          "name": "validateForPlatform",
+          "kind": "function",
+          "line": 82
+        },
+        {
+          "name": "validateForPlatforms",
+          "kind": "function",
+          "line": 153
+        },
+        {
+          "name": "hasBlockingErrors",
+          "kind": "function",
+          "line": 157
+        },
+        {
+          "name": "derivePostStatus",
+          "kind": "function",
+          "line": 168
+        },
+        {
+          "name": "canTransition",
+          "kind": "function",
+          "line": 193
+        },
+        {
+          "name": "ASPECT_GUIDANCE",
+          "kind": "value",
+          "line": 198
+        }
+      ],
+      "environmentNames": [],
+      "httpMethods": [],
+      "addedExportedFunctions": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "LIBRARY-AD572256FC18",
+          "key": "lib/social/content.ts",
+          "source": "lib/social/content.ts"
+        }
+      ],
+      "inspectedHeadBlobSha256": "1a4410ce769799d552ee04d5271a59a351057a1079074fa438913fbaab61ee3b"
+    },
+    {
+      "path": "lib/social/providers/x.ts",
+      "kind": "production-source",
+      "change": "A",
+      "isNew": true,
+      "baselineSha256": null,
+      "workingSha256": "f3d3b37d2ea27f00e7ffe8cb7bcd5a3679bcbd31ab349e5e4151d557451b19ea",
+      "workingBytes": 3071,
+      "exportedFunctions": [
+        {
+          "name": "publishX",
+          "line": 8,
+          "async": true
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "publishX",
+          "kind": "function",
+          "line": 8
+        }
+      ],
+      "environmentNames": [],
+      "httpMethods": [],
+      "addedExportedFunctions": [
+        {
+          "name": "publishX",
+          "line": 8,
+          "async": true
+        }
+      ],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "LIBRARY-FF3F39A469CA",
+          "key": "lib/social/providers/x.ts",
+          "source": "lib/social/providers/x.ts"
+        },
+        {
+          "id": "SERVICE-DC8E395A8A0C",
+          "key": "lib/social/providers/x.ts:publishX",
+          "source": "lib/social/providers/x.ts"
+        }
+      ],
+      "inspectedHeadBlobSha256": "f3d3b37d2ea27f00e7ffe8cb7bcd5a3679bcbd31ab349e5e4151d557451b19ea"
+    },
+    {
+      "path": "lib/social/publish.ts",
+      "kind": "production-source",
+      "change": "M",
+      "isNew": false,
+      "baselineSha256": "ff457d98cc95872d4c6e92ab7a31d6b5d87919aa34fe1ef7fd6601a0d11a4367",
+      "workingSha256": "7d2b28601e2b545ea1e480ce19b55cedfeca960c4177988fbcd3bd656e5971b5",
+      "workingBytes": 15853,
+      "exportedFunctions": [
+        {
+          "name": "createTargets",
+          "line": 67,
+          "async": true
+        },
+        {
+          "name": "runPublishNow",
+          "line": 163,
+          "async": true
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "PublishOutcome",
+          "kind": "type",
+          "line": 52
+        },
+        {
+          "name": "createTargets",
+          "kind": "function",
+          "line": 67
+        },
+        {
+          "name": "runPublishNow",
+          "kind": "function",
+          "line": 163
+        }
+      ],
+      "environmentNames": [],
+      "httpMethods": [],
+      "addedExportedFunctions": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "LIBRARY-F1EE974340EE",
+          "key": "lib/social/publish.ts",
+          "source": "lib/social/publish.ts"
+        },
+        {
+          "id": "OPS-INT-018",
+          "key": "Social publishing",
+          "source": "lib/social/connectors.ts, lib/social/capabilities.ts, lib/social/publish.ts"
+        },
+        {
+          "id": "SOCIAL-002",
+          "key": "SOCIAL-002",
+          "source": "lib/social/publish.ts; social_post_targets; social_publish_results; social_publish_jobs; social_posts"
+        }
+      ],
+      "inspectedHeadBlobSha256": "7d2b28601e2b545ea1e480ce19b55cedfeca960c4177988fbcd3bd656e5971b5"
+    },
+    {
+      "path": "lib/social/x-oauth.ts",
+      "kind": "production-source",
+      "change": "A",
+      "isNew": true,
+      "baselineSha256": null,
+      "workingSha256": "d32effe7f05155113a076941eb6103a06fda10f9b588ed4e38ff1a2bc3bab757",
+      "workingBytes": 7632,
+      "exportedFunctions": [
+        {
+          "name": "xRedirectUri",
+          "line": 25,
+          "async": false
+        },
+        {
+          "name": "xCookieOptions",
+          "line": 35,
+          "async": false
+        },
+        {
+          "name": "beginXAuthorization",
+          "line": 39,
+          "async": true
+        },
+        {
+          "name": "readXAuthorization",
+          "line": 53,
+          "async": false
+        },
+        {
+          "name": "xJsonRequest",
+          "line": 68,
+          "async": true
+        },
+        {
+          "name": "finishXAuthorization",
+          "line": 83,
+          "async": true
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "X_COOKIE",
+          "kind": "value",
+          "line": 8
+        },
+        {
+          "name": "X_CALLBACK_PATH",
+          "kind": "value",
+          "line": 9
+        },
+        {
+          "name": "X_TIMEOUT_MS",
+          "kind": "value",
+          "line": 13
+        },
+        {
+          "name": "xRedirectUri",
+          "kind": "function",
+          "line": 25
+        },
+        {
+          "name": "xCookieOptions",
+          "kind": "function",
+          "line": 35
+        },
+        {
+          "name": "beginXAuthorization",
+          "kind": "function",
+          "line": 39
+        },
+        {
+          "name": "readXAuthorization",
+          "kind": "function",
+          "line": 53
+        },
+        {
+          "name": "xJsonRequest",
+          "kind": "function",
+          "line": 68
+        },
+        {
+          "name": "finishXAuthorization",
+          "kind": "function",
+          "line": 83
+        }
+      ],
+      "environmentNames": [
+        "NEXT_PUBLIC_APP_URL",
+        "NEXT_PUBLIC_SITE_URL",
+        "SYNC_TOKEN_KEY",
+        "X_CLIENT_ID",
+        "X_CLIENT_SECRET"
+      ],
+      "httpMethods": [],
+      "addedExportedFunctions": [
+        {
+          "name": "xRedirectUri",
+          "line": 25,
+          "async": false
+        },
+        {
+          "name": "xCookieOptions",
+          "line": 35,
+          "async": false
+        },
+        {
+          "name": "beginXAuthorization",
+          "line": 39,
+          "async": true
+        },
+        {
+          "name": "readXAuthorization",
+          "line": 53,
+          "async": false
+        },
+        {
+          "name": "xJsonRequest",
+          "line": 68,
+          "async": true
+        },
+        {
+          "name": "finishXAuthorization",
+          "line": 83,
+          "async": true
+        }
+      ],
+      "addedEnvironmentNames": [
+        "NEXT_PUBLIC_APP_URL",
+        "NEXT_PUBLIC_SITE_URL",
+        "SYNC_TOKEN_KEY",
+        "X_CLIENT_ID",
+        "X_CLIENT_SECRET"
+      ],
+      "existingMasterRecords": [
+        {
+          "id": "LIBRARY-75C13DFECF07",
+          "key": "lib/social/x-oauth.ts",
+          "source": "lib/social/x-oauth.ts"
+        },
+        {
+          "id": "SERVICE-3E2F97076A5B",
+          "key": "lib/social/x-oauth.ts:xRedirectUri",
+          "source": "lib/social/x-oauth.ts"
+        },
+        {
+          "id": "SERVICE-CCCF0CE4E6D7",
+          "key": "lib/social/x-oauth.ts:xCookieOptions",
+          "source": "lib/social/x-oauth.ts"
+        },
+        {
+          "id": "SERVICE-AA1A8DD18D26",
+          "key": "lib/social/x-oauth.ts:beginXAuthorization",
+          "source": "lib/social/x-oauth.ts"
+        },
+        {
+          "id": "SERVICE-C339939E5A82",
+          "key": "lib/social/x-oauth.ts:readXAuthorization",
+          "source": "lib/social/x-oauth.ts"
+        },
+        {
+          "id": "SERVICE-DDD8BB404BA6",
+          "key": "lib/social/x-oauth.ts:xJsonRequest",
+          "source": "lib/social/x-oauth.ts"
+        },
+        {
+          "id": "SERVICE-DC2E51DF76FF",
+          "key": "lib/social/x-oauth.ts:finishXAuthorization",
+          "source": "lib/social/x-oauth.ts"
+        }
+      ],
+      "inspectedHeadBlobSha256": "d32effe7f05155113a076941eb6103a06fda10f9b588ed4e38ff1a2bc3bab757"
+    },
+    {
+      "path": "tests/e2e/rewards-ledger.spec.ts",
+      "kind": "test",
+      "change": "A",
+      "isNew": true,
+      "baselineSha256": null,
+      "workingSha256": "54289f57819e29d5be00c3ed24ce35e87d2f1b8d02ba4d036e7045e3712203e2",
+      "workingBytes": 25787,
+      "exportedFunctions": [],
+      "exportedSymbols": [],
+      "environmentNames": [],
+      "httpMethods": [],
+      "addedExportedFunctions": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-C1CEE5335C18",
+          "key": "tests/e2e/rewards-ledger.spec.ts",
+          "source": "tests/e2e/rewards-ledger.spec.ts"
+        }
+      ],
+      "inspectedHeadBlobSha256": "54289f57819e29d5be00c3ed24ce35e87d2f1b8d02ba4d036e7045e3712203e2"
+    },
+    {
+      "path": "tests/e2e/social-publish-consumers.spec.ts",
+      "kind": "test",
+      "change": "A",
+      "isNew": true,
+      "baselineSha256": null,
+      "workingSha256": "29345138d344ea726dd1e1d66f5a08ec5d22648db3051cda5f24769a25c41d70",
+      "workingBytes": 24262,
+      "exportedFunctions": [],
+      "exportedSymbols": [],
+      "environmentNames": [],
+      "httpMethods": [],
+      "addedExportedFunctions": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-361FF3F5A5FC",
+          "key": "tests/e2e/social-publish-consumers.spec.ts",
+          "source": "tests/e2e/social-publish-consumers.spec.ts"
+        }
+      ],
+      "inspectedHeadBlobSha256": "29345138d344ea726dd1e1d66f5a08ec5d22648db3051cda5f24769a25c41d70"
+    },
+    {
+      "path": "tests/social-access-execution.test.ts",
+      "kind": "test",
+      "change": "A",
+      "isNew": true,
+      "baselineSha256": null,
+      "workingSha256": "e32bd6bdefc8948bd1d3458bbe9e5237ac5fa30466d325855ac0b58e7b5d5050",
+      "workingBytes": 8424,
+      "exportedFunctions": [],
+      "exportedSymbols": [],
+      "environmentNames": [],
+      "httpMethods": [],
+      "addedExportedFunctions": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-32BB54E81E06",
+          "key": "tests/social-access-execution.test.ts",
+          "source": "tests/social-access-execution.test.ts"
+        }
+      ],
+      "inspectedHeadBlobSha256": "e32bd6bdefc8948bd1d3458bbe9e5237ac5fa30466d325855ac0b58e7b5d5050"
+    },
+    {
+      "path": "tests/social-publish-execution.test.ts",
+      "kind": "test",
+      "change": "A",
+      "isNew": true,
+      "baselineSha256": null,
+      "workingSha256": "2655309a0f49c0c6b410918613cbe58b6d62e6b033c47a59fb0fe03af1279512",
+      "workingBytes": 12949,
+      "exportedFunctions": [],
+      "exportedSymbols": [],
+      "environmentNames": [],
+      "httpMethods": [],
+      "addedExportedFunctions": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-D4B90940187E",
+          "key": "tests/social-publish-execution.test.ts",
+          "source": "tests/social-publish-execution.test.ts"
+        }
+      ],
+      "inspectedHeadBlobSha256": "2655309a0f49c0c6b410918613cbe58b6d62e6b033c47a59fb0fe03af1279512"
+    },
+    {
+      "path": "tests/social-publish-persistence.test.ts",
+      "kind": "test",
+      "change": "M",
+      "isNew": false,
+      "baselineSha256": "37d6462f1244b320d75f4969ceeda632816c8f4cbf129612d41a82d468cdd0a4",
+      "workingSha256": "e64cce584b9c1a6b1fb1027d4d8beb567bc191afb4de660598d2baf2e788e6a1",
+      "workingBytes": 3189,
+      "exportedFunctions": [],
+      "exportedSymbols": [],
+      "environmentNames": [],
+      "httpMethods": [],
+      "addedExportedFunctions": [],
+      "addedEnvironmentNames": [],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-341042432152",
+          "key": "tests/social-publish-persistence.test.ts",
+          "source": "tests/social-publish-persistence.test.ts"
+        }
+      ],
+      "inspectedHeadBlobSha256": "e64cce584b9c1a6b1fb1027d4d8beb567bc191afb4de660598d2baf2e788e6a1"
+    },
+    {
+      "path": "tests/social-x-execution.test.ts",
+      "kind": "test",
+      "change": "A",
+      "isNew": true,
+      "baselineSha256": null,
+      "workingSha256": "9fd1b40de1c3471fc0af7b751d643cf95074260577cb0be48e3347e1f68c73fe",
+      "workingBytes": 29323,
+      "exportedFunctions": [],
+      "exportedSymbols": [],
+      "environmentNames": [
+        "NEXT_PUBLIC_APP_URL",
+        "REDDIT_CLIENT_ID",
+        "REDDIT_CLIENT_SECRET",
+        "SYNC_TOKEN_KEY",
+        "X_CLIENT_ID",
+        "X_CLIENT_SECRET"
+      ],
+      "httpMethods": [],
+      "addedExportedFunctions": [],
+      "addedEnvironmentNames": [
+        "NEXT_PUBLIC_APP_URL",
+        "REDDIT_CLIENT_ID",
+        "REDDIT_CLIENT_SECRET",
+        "SYNC_TOKEN_KEY",
+        "X_CLIENT_ID",
+        "X_CLIENT_SECRET"
+      ],
+      "existingMasterRecords": [
+        {
+          "id": "SUPPORT-5E3C13BC4ACE",
+          "key": "tests/social-x-execution.test.ts",
+          "source": "tests/social-x-execution.test.ts"
+        }
+      ],
+      "inspectedHeadBlobSha256": "9fd1b40de1c3471fc0af7b751d643cf95074260577cb0be48e3347e1f68c73fe"
+    }
+  ],
+  "freezeVerification": {
+    "verifiedAt": "2026-09-12T14:28:02.404Z",
+    "inspectedHead": "6094eb04045326fdd18a1a67785188cc805c2612",
+    "apiAndUiFreezeConfirmed": true,
+    "allDiskHashesMatched": true,
+    "completeChangedPathSetMatched": true,
+    "productionDeltaFromInspectedHead": [],
+    "scope": "Exact local source/test/config bytes and commit relation only; no workflow, live provider or deployed-policy claims."
+  }
+}

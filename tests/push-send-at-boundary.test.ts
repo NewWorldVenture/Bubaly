@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Database } from '@/lib/database.types';
+import { notificationId, pushDispatchDb } from './helpers/push-dispatch-db';
 import { dispatchPendingPushes } from '@/lib/server/push';
 
 // A scheduled notification must not buzz the phone early.
@@ -24,57 +23,12 @@ type Row = {
 };
 
 function familyDb(rows: Row[]) {
-  const stamped: string[] = [];
-  const filtered = () => {
-    let out = rows.slice();
-    return {
-      state: () => out,
-      is: (col: string, val: null) => { out = out.filter((r) => (r as never as Record<string, unknown>)[col] === val); return api; },
-      lte: (col: string, val: string) => { out = out.filter((r) => String((r as never as Record<string, unknown>)[col]) <= val); return api; },
-      eq: (col: string, val: string) => { out = out.filter((r) => (r as never as Record<string, unknown>)[col] === val); return api; },
-    };
-  };
-  let cur: ReturnType<typeof filtered>;
-  const api: Record<string, unknown> = {
-    select: () => api,
-    is: (c: string, v: null) => cur.is(c, v),
-    lte: (c: string, v: string) => cur.lte(c, v),
-    eq: (c: string, v: string) => cur.eq(c, v),
-    order: () => api,
-    limit: () => api,
-    then: (onF: (v: unknown) => unknown) => Promise.resolve({ data: cur.state(), error: null }).then(onF),
-  };
-  const db = {
-    from: (table: string) => {
-      if (table === 'notifications') {
-        cur = filtered();
-        return {
-          ...api,
-          update: () => ({ eq: (_c: string, id: string) => { stamped.push(id); return Promise.resolve({ error: null }); } }),
-        };
-      }
-      // family_members fan-out, family_ai_settings (child_channels) and
-      // push_subscriptions: nobody is subscribed and no family has restricted a
-      // child's channels, so sendPushToUsers has nothing to deliver and the
-      // counts stay at zero.
-      //
-      // Self-chaining rather than a fixed two-deep shape: `childrenBlockedOn`
-      // filters with `.in(...).eq(...).eq(...)`, and a stub whose `in()` returned
-      // a Promise had nothing to chain onto. Every builder method returns the
-      // builder, and awaiting it yields no rows.
-      const empty: Record<string, unknown> = {};
-      Object.assign(empty, {
-        select: () => empty, eq: () => empty, in: () => empty, is: () => empty,
-        limit: () => empty, order: () => empty,
-        maybeSingle: () => Promise.resolve({ data: null, error: null }),
-        then: (f: (v: unknown) => unknown) => Promise.resolve({ data: [], error: null }).then(f),
-      });
-      return empty;
-    },
-  } as unknown as SupabaseClient<Database>;
-  return { db, stamped };
+  const fixture = pushDispatchDb({
+    notifications: rows.map((item, index) => ({ ...item, id: notificationId(index + 1), created_at: NOW.toISOString() })),
+    family_members: [], family_ai_settings: [], push_devices: [], user_preferences: [],
+  });
+  return { db: fixture.db, stamped: fixture.stamps };
 }
-
 const row = (id: string, sendAt: string): Row => ({
   id, family_id: 'fam', user_id: 'user-1', title: `notice ${id}`, body: null,
   related_type: null, related_id: null, pushed_at: null, send_at: sendAt,
@@ -106,7 +60,7 @@ describe('push dispatch honours send_at', () => {
     const out = await dispatchPendingPushes(db, { now: NOW });
 
     expect(out.notifications).toBe(2);
-    expect(stamped.sort()).toEqual(['due-earlier', 'due-now']);
+    expect(stamped.sort()).toEqual([notificationId(1), notificationId(2)]);
     vi.restoreAllMocks();
   });
 
