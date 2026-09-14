@@ -39,7 +39,7 @@ const FORMATTER_WITH_LOCALE =
 /**
  * The ceiling, measured when the shared formatter was made locale-aware.
  *
- * 240, and every step to that number was a way to get it wrong. A `git grep -c`
+ * 180, and every step to that number was a way to get it wrong. A `git grep -c`
  * says 247, because git grep counts matching LINES and several of these hold two
  * formatters. Counting matches instead says 252 — but that reads COMMENTS, and one
  * of them is this pass's own explanation of the defect. Stripping comments gives
@@ -48,7 +48,7 @@ const FORMATTER_WITH_LOCALE =
  * Getting those three numbers to disagree is how a ratchet starts life already
  * broken, which is why the derivation is written down rather than the result.
  */
-const CEILING = 240;
+const CEILING = 180;
 
 /**
  * Comments stripped first, and this is not a detail.

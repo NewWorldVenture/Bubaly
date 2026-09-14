@@ -143,7 +143,7 @@ export function BabysittersView({ sitters, payments, canManage }: {
                   <div className="flex items-center gap-2 text-[11px] text-muted">
                     {p.hours != null && <span className="flex items-center gap-0.5"><Clock className="h-2.5 w-2.5" />{p.hours}h</span>}
                     {p.tipCents > 0 && <span>+{formatCents(p.tipCents)} tip</span>}
-                    <span>{new Date(p.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                    <span>{new Date(p.createdAt).toLocaleDateString(locale.code, { month: 'short', day: 'numeric' })}</span>
                   </div>
                 </div>
                 <div className="text-sm font-bold">{formatCents(p.amountCents)}</div>

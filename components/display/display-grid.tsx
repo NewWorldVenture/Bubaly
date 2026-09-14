@@ -29,7 +29,7 @@ import { DisplayWeatherProvider, WeatherChip, WeatherTile } from './display-weat
 import { KitchenTimers } from './kitchen-timers';
 import { PhotoFrame } from './photo-frame';
 import { HintsTicker } from './hints-ticker';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 type Ev = { id: string; title: string; starts_at: string; all_day: boolean; location: string | null; assignee_id: string | null };
@@ -184,6 +184,7 @@ function ServiceTile({ href }: { href: string }) {
 function WidgetBody({ widget, size, data, memberById, now }: {
   widget: WidgetKey; size: TileSize; data: DisplayData; memberById: Map<string, DisplayData['members'][number]>; now: Date;
 }) {
+  const locale = useLocale();
   const tr = useTranslations();
   switch (widget) {
     case 'clock': return <AmbientClock clock24={false} seconds={false} />;
@@ -225,7 +226,7 @@ function WidgetBody({ widget, size, data, memberById, now }: {
         <ul className="space-y-2">
           {data.upcoming.slice(0, tileListLimit(size, 4)).map((e) => (
             <li key={e.id} className="flex items-center gap-3 text-sm">
-              <span className="w-24 shrink-0 text-white/50">{new Date(e.starts_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+              <span className="w-24 shrink-0 text-white/50">{new Date(e.starts_at).toLocaleDateString(locale.code, { month: 'short', day: 'numeric' })}</span>
               <span className="min-w-0 flex-1 truncate font-medium text-white">{e.title}</span>
             </li>
           ))}
@@ -353,13 +354,14 @@ class WidgetBoundary extends Component<{ label?: string; children: ReactNode }, 
 }
 
 function MonthCalendar({ cal }: { cal: DisplayData['calendar'] }) {
+  const locale = useLocale();
   const first = new Date(cal.year, cal.month, 1).getDay();
   const days = new Date(cal.year, cal.month + 1, 0).getDate();
   const cells: (number | null)[] = [...Array(first).fill(null), ...Array.from({ length: days }, (_, i) => i + 1)];
   const eventSet = new Set(cal.eventDays);
   return (
     <div>
-      <p className="mb-2 text-center text-sm font-semibold text-white">{new Date(cal.year, cal.month, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</p>
+      <p className="mb-2 text-center text-sm font-semibold text-white">{new Date(cal.year, cal.month, 1).toLocaleDateString(locale.code, { month: 'long', year: 'numeric' })}</p>
       <div className="grid grid-cols-7 gap-1 text-center text-[11px]">
         {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <span key={i} className="text-white/40">{d}</span>)}
         {cells.map((d, i) => (

@@ -2080,3 +2080,61 @@ separator to show at all.
 `formatCents`, shadowing the ledger's, used inside narrative strings — a separate
 piece. Then `app/(app)/marketplace/{orders,insights,item}` (8, server pages),
 `components/modules/chores-module.tsx` (1), and the six other `lib/` money functions.
+
+---
+
+## Pass AD — sixty date sites in twenty-six components, and the mirror of a guard that already existed
+
+### [CLAUDE-1][HIGH][I18N] Dates rendered in US English across the calendar, meals, sports and 23 more
+
+- **Status:** FIXED — 60 sites in 26 files; ratchet 240 → **180**
+- **Biggest:** `calendar-module.tsx` ×15, `meals-module.tsx` ×10, `sports-module.tsx` ×5
+
+Of the 116 remaining component sites, an AST pass split them: **70 inside top-level
+capitalised components** (where a `useLocale()` binding works) and **47 inside 35
+module-scope helpers** — `fmtDate`, `fmtTime`, `timeAgo`, `dueLabel` — where a hook
+cannot go and the locale has to be threaded as a parameter along with its call sites.
+
+**The unit of work is the FILE, not the site.** Converting only the component-level uses
+in a file that also has a helper would leave one date localised and another not *in the
+same view* — worse than leaving the file alone. So this pass takes the **26
+component-only files** whole: 60 sites, 0 helpers. The 34 mixed files (57 sites) are a
+separate pass that converts each helper together with its callers.
+
+### Two async server components, and what caught them
+
+`components/dashboard/{family,personal}-dashboard.tsx` have no `'use client'` and are
+`export async function` — **server** components. The script gave them `useLocale()`,
+which cannot run there. They read `getLocaleContext()` now, the way the
+`getTranslations()` call beside them already did.
+
+The only reason it surfaced is that `react-hooks/rules-of-hooks` refuses a hook in an
+**async** function. A **non-async** server component would have passed `tsc`, passed
+lint and shipped, failing at render.
+
+So the gap is guarded. `tests/i18n-server-boundary.test.ts` checks that
+`lib/i18n/server.ts` never reaches the browser — the header explains it shipped a red
+build twice — and nothing checked the **mirror**: that the client provider's hooks never
+reach the server. It does now.
+
+The rule is about the **specifiers, not the edge**, and the first version got that
+wrong: it flagged `app/layout.tsx` and `components/i18n/scoped-locale-provider.tsx`,
+both of which import `<LocaleProvider>` from a server module *correctly* — that is what
+a client boundary is for. Only `useTranslations`, `useLocale` and `useLocaleSource` are
+the defect. Planting `useLocale` back into the dashboard fails it naming
+`components/dashboard/family-dashboard.tsx: useLocale`.
+
+### A third ordering bug of the same shape
+
+The conversion script checked `if (!/\buseLocale\b/.test(text))` before adding the
+import — **after** it had already inserted `const locale = useLocale();` into that same
+text. So the test found the name it had just written and skipped the import in 24 of 26
+files. Identical in shape to the `lib/wallet/ledger.ts` `LocaleCode` check in Pass AC
+and to the comment-reading ratchet in Pass Z: a check whose subject includes the
+change it is guarding. Fixed by testing for the *import statement* specifically.
+
+### Remaining
+
+180, of which **~39 are correct**: 13 AI-prompt sites (the reader is the model), 8
+Super Admin, and the locale-as-data uses in `lib/i18n`. The real remainder is the 34
+mixed component files (57), `lib/` (66), app pages (18) and api routes (18).

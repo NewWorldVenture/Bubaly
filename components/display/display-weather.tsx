@@ -11,7 +11,7 @@ import { fetchForecast, reverseGeocode, weatherInfo, type Forecast } from '@/lib
 import { tempFromFahrenheit, type TempUnit } from '@/lib/display/ambient';
 import { isCompactTile, type TileSize } from '@/lib/display/tiles';
 import { cn } from '@/lib/utils/cn';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 export type WeatherState = {
   status: 'loading' | 'denied' | 'ready';
@@ -93,6 +93,7 @@ export function WeatherChip() {
  * with the grid's row-spans.
  */
 export function WeatherTile({ size = 'sm' }: { size?: TileSize }) {
+  const locale = useLocale();
   const t = useTranslations();
   const { state, unit } = useWeatherCtx();
   if (state.status === 'loading') return <div className="h-full animate-pulse rounded-xl bg-white/5" />;
@@ -125,7 +126,7 @@ export function WeatherTile({ size = 'sm' }: { size?: TileSize }) {
         <div className="mt-auto flex justify-between gap-1 pt-3">
           {f.daily.slice(1, 1 + days).map((d) => (
             <div key={d.date} className="flex-1 rounded-xl bg-white/5 py-2 text-center">
-              <p className="text-[11px] text-white/50">{new Date(d.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short' })}</p>
+              <p className="text-[11px] text-white/50">{new Date(d.date + 'T00:00:00').toLocaleDateString(locale.code, { weekday: 'short' })}</p>
               <p className="text-xl leading-tight">{weatherInfo(d.code).icon}</p>
               <p className="text-sm font-bold">{tempFromFahrenheit(d.tempMax, unit)}</p>
               <p className="text-[11px] text-white/40">{tempFromFahrenheit(d.tempMin, unit)}</p>

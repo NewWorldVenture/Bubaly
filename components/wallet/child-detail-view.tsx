@@ -819,7 +819,7 @@ export function ChildDetailView({
             {visibleGroups.map((grp) => (
               <div key={grp.date}>
                 <p className="bg-bg/50 px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest text-muted">
-                  {new Date(grp.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                  {new Date(grp.date + 'T00:00:00').toLocaleDateString(locale.code, { weekday: 'short', month: 'short', day: 'numeric' })}
                 </p>
                 {grp.txns.map((tx) => <TxnRow key={tx.id} tx={tx as HistoryTxn} />)}
               </div>

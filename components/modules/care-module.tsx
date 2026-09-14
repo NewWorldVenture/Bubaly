@@ -24,7 +24,7 @@ import {
   type CareEntryLike, type CareLogType,
 } from '@/lib/care/log';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type CareEntry = Tables<'care_log'>;
 
@@ -51,6 +51,7 @@ function toLocalInput(iso: string): string {
 const blank = { id: '', log_type: 'check_in' as CareLogType, occurred_at: '', wellbeing: '', note: '' };
 
 export function CareModule() {
+  const locale = useLocale();
   const tr = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
@@ -138,8 +139,8 @@ export function CareModule() {
     success(tr('careModule.entryDeleted'));
   }
 
-  const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-  const fmtDay = (key: string) => new Date(`${key}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+  const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString(locale.code, { hour: 'numeric', minute: '2-digit' });
+  const fmtDay = (key: string) => new Date(`${key}T00:00:00`).toLocaleDateString(locale.code, { weekday: 'long', month: 'short', day: 'numeric' });
   const sinceLabel = hrsSince == null ? 'No contact logged' : hrsSince < 1 ? 'Just now' : hrsSince < 24 ? `${hrsSince}h ago` : `${Math.floor(hrsSince / 24)}d ago`;
 
   if (loading) return <SkeletonList count={5} />;

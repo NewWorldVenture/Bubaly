@@ -25,7 +25,7 @@ import {
   type OpportunityLike, type UrgencyBucket,
 } from '@/lib/opportunities/deadlines';
 import type { Tables, OpportunityStatus } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type Opportunity = Tables<'opportunities'>;
 
@@ -54,6 +54,7 @@ const blank = {
 };
 
 export function SignupsModule() {
+  const locale = useLocale();
   const t = useTranslations();
   const { familyId, userId, members, role } = useApp();
   const { success, error: toastError } = useToast();
@@ -132,7 +133,7 @@ export function SignupsModule() {
     success(t('signupsModule.signupDeleted'));
   }
 
-  const fmtDate = (key: string | null) => key ? new Date(`${key}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null;
+  const fmtDate = (key: string | null) => key ? new Date(`${key}T00:00:00`).toLocaleDateString(locale.code, { month: 'short', day: 'numeric', year: 'numeric' }) : null;
   const countdownLabel = (o: Opportunity) => {
     const d = daysToDeadline(o as OpportunityLike, tk);
     if (d == null) return null;

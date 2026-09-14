@@ -25,7 +25,7 @@ import {
   type RenewalLike, type ExpiryBucket,
 } from '@/lib/renewals/expiry';
 import type { Tables, RenewalStatus } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type Renewal = Tables<'renewals'>;
 
@@ -50,6 +50,7 @@ const blank = {
 };
 
 export function RenewalsModule() {
+  const locale = useLocale();
   const t = useTranslations();
   const { familyId, userId, members, role } = useApp();
   const { success, error: toastError } = useToast();
@@ -126,7 +127,7 @@ export function RenewalsModule() {
     success(t('renewalsModule.renewalDeleted'));
   }
 
-  const fmtDate = (key: string) => new Date(`${key}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const fmtDate = (key: string) => new Date(`${key}T00:00:00`).toLocaleDateString(locale.code, { month: 'short', day: 'numeric', year: 'numeric' });
   const countdown = (r: Renewal) => {
     const d = daysToExpiry(r as RenewalLike, tk);
     if (d < 0) return `${Math.abs(d)}d ago`;
