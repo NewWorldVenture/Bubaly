@@ -126,11 +126,16 @@ describe('real aggregates come from the RPC and hide below the threshold', () =>
   });
 
   it('the ledger renders each aggregate line only behind its formatter', () => {
-    expect(ledger).toContain('handledNote(t, stats.handledCompleted)');
+    // The PROPERTY is that each stat reaches the page through its formatter and
+    // behind its floor — not the exact argument list. Pinning the call text made
+    // this fail the moment familiesNote gained a locale, which is a change to a
+    // signature and not to the honesty this test exists to hold. Fifth guard in
+    // this audit to assert the solution instead of the property.
+    expect(ledger).toMatch(/handledNote\(\s*t\s*,\s*stats\.handledCompleted/);
     expect(ledger).toContain('meetsHandledFloor(stats.handled30d)');
     expect(ledger).toContain('meetsHandledFloor(stats.tasksCompleted)');
     expect(ledger).toContain('stats.families > 0');
-    expect(ledger).toContain('familiesNote(t, stats.families)');
+    expect(ledger).toMatch(/familiesNote\(\s*t\s*,\s*stats\.families/);
     expect(ledger).toContain('aggregates.length > 0');
     // No aggregate sentence is typed in the component: every line is a
     // formatter result or a catalogue key with the formatted count.

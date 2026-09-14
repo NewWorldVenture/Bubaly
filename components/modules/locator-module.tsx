@@ -140,10 +140,12 @@ export function LocatorModule() {
   }, [places, liveMembers, locByMember]);
 
   const alerts = useMemo(() => arrivalAlerts(events ?? [], 6), [events]);
+  // The day headings follow the reader: two words from the catalogue, the date
+  // from the locale.
   const history = useMemo(() => groupHistoryByDay(
     (events ?? []).map((e) => ({ id: e.id, member_id: e.member_id, place_name: e.place_name, event_type: e.event_type, occurred_at: e.occurred_at })),
-    now,
-  ), [events, now]);
+    now, locale.code, tr,
+  ), [events, now, locale.code, tr]);
 
   useEffect(() => {
     if (selfMember) setSharing(locByMember.get(selfMember.id)?.is_sharing ?? false);

@@ -124,6 +124,33 @@ describe('lib/memories/memories relativeDay', () => {
   });
 });
 
+describe('lib/location/overview groupHistoryByDay', () => {
+  it('heads each day in the reader language, with the date from the locale', async () => {
+    const { groupHistoryByDay } = await import('@/lib/location/overview');
+    const ev = (d: number) => ({
+      id: `e${d}`, member_id: 'm1', place_name: 'Home', event_type: 'arrived',
+      occurred_at: new Date(2026, 6, 14 + d, 12).toISOString(),
+    });
+    const rows = [ev(0), ev(-1), ev(-4)];
+    expect(groupHistoryByDay(rows, NOW).map((r) => r.label)).toEqual(['Today', 'Yesterday', 'Friday, Jul 10']);
+    expect(groupHistoryByDay(rows, NOW, 'de-DE', de).map((r) => r.label))
+      .toEqual(['Heute', 'Gestern', 'Freitag, 10. Juli']);
+  });
+});
+
+describe('lib/marketing/format formatFamilies', () => {
+  it('groups the public family count the way the visitor groups numbers', async () => {
+    const { formatFamilies } = await import('@/lib/marketing/format');
+    expect(formatFamilies(12345)).toBe('12,000+');
+    // German SWAPS the grouping and decimal marks, so "12,000" on a German page
+    // reads as twelve — a public number legible as a different number.
+    expect(formatFamilies(12345, 'de-DE')).toBe('12.000+');
+    expect(formatFamilies(999, 'de-DE')).toBe('999');
+    expect(formatFamilies(0, 'de-DE')).toBe('0');
+    expect(formatFamilies(-5, 'de-DE')).toBe('0');
+  });
+});
+
 // The two seven-entry English weekday arrays are gone, not merely unread.
 describe('the English weekday arrays', () => {
   it('are deleted rather than left sitting unused', async () => {

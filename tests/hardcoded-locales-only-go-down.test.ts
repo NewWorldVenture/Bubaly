@@ -78,7 +78,18 @@ const FORMATTER_WITH_LOCALE =
 /**
  * The ceiling, measured when the shared formatter was made locale-aware.
  *
- * Now 74. The four relative-day labels — lib/chores/dashboard.ts dueLabel,
+ * Now 70, and THE FLOOR ROSE AGAIN — for the third time, and again by reading
+ * callers. lib/autopilot/engine.ts and lib/intelligence/hard-signals.ts build money
+ * PROSE and are driven by app/api/cron/{autopilot-scan,model-refresh}/route.ts,
+ * which PERSIST what they write. A cron has no reader, so their three sites join
+ * the eight already blocked on I18N-001 rather than the convertible set: eleven
+ * blocked, not eight. What was genuinely reachable converted — lib/location/
+ * overview.ts (the history day heading), lib/marketing/format.ts (the public family
+ * count, where German SWAPS the grouping and decimal marks so "12,000" reads as
+ * twelve) and lib/purchases/answer.ts (which already took a translator and had only
+ * its amounts pinned).
+ *
+ * Before that, 74. The four relative-day labels — lib/chores/dashboard.ts dueLabel,
  * lib/messages/overview.ts shortTime, lib/moments/prep.ts momentWhen and
  * lib/memories/memories.ts relativeDay — each mixed a formatter THIS FILE COUNTS
  * with English literals it CANNOT see ("Overdue", "Yesterday", "starting now").
@@ -140,7 +151,7 @@ const FORMATTER_WITH_LOCALE =
  * Getting those three numbers to disagree is how a ratchet starts life already
  * broken, which is why the derivation is written down rather than the result.
  */
-const CEILING = 74;
+const CEILING = 70;
 
 /**
  * Comments stripped first, and this is not a detail.

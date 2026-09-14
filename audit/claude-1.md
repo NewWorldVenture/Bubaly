@@ -3120,3 +3120,52 @@ it `14/06/26`, day first, which the old `M/D/YY` could never express).
 One expectation of mine was wrong and the test caught it: I wrote `'Morgen 09:00'` where
 `hour: 'numeric'` renders `'Morgen 9:00'`. The 24-hour clock is the locale's; the
 zero-padding is the pattern's. Two separate choices.
+
+---
+
+## Pass AS — the floor rose a third time, and again by reading callers
+
+**Status: FIXED (what was reachable) + reclassified (what was not).** Ceiling 74 → **70**.
+
+### `[CLAUDE-1][MEDIUM][I18N]` three more sites are blocked, not convertible
+
+`lib/autopilot/engine.ts` (`fmtUsd`) and `lib/intelligence/hard-signals.ts` (`money`) build
+money **prose** — *"Spent $120 of your $400 monthly Fun budget"*, *"$14 charge: Netflix in
+3 days"*. Both are driven by crons — `app/api/cron/autopilot-scan/route.ts` and
+`app/api/cron/model-refresh/route.ts` — that **persist** what they write. A cron has no
+reader, so a locale parameter would be one nobody could fill.
+
+Their three sites therefore join the eight already behind **I18N-001**: **eleven blocked,
+not eight.** That is the **third** time this audit's floor has risen, and all three times
+from reading callers rather than the call — the mechanism engines (Pass AI), the
+records-not-formatters (Pass AJ), and now the cron-driven prose builders.
+
+### What was genuinely reachable, and converted
+
+| module | what a family sees |
+|---|---|
+| `lib/location/overview.ts groupHistoryByDay` | the location history's day heading — `'Today'`/`'Yesterday'` from the catalogue, the date from the locale |
+| `lib/marketing/format.ts formatFamilies` | the **public** family count on the pricing page and the homepage proof band |
+| `lib/purchases/answer.ts` | the "Before you buy" answer, which already took a translator and had only its **amounts** pinned |
+
+`formatFamilies` is the one worth naming. German **swaps** the grouping and decimal
+marks, so `"12,000"` on a German page is legible as **twelve** — a public number a visitor
+reads as a different number. It now renders `"12.000+"`, and the test pins both.
+
+### `[CLAUDE-1][LOW][TEST]` the fifth guard asserting the solution
+
+`tests/marketing-handled-honesty.test.ts:133` pinned the exact call text
+`'familiesNote(t, stats.families)'` and broke the moment that function gained a locale —
+a change to a signature, not to the honesty the test exists to hold. It now matches
+`/familiesNote\(\s*t\s*,\s*stats\.families/`, so the property survives an argument.
+
+Five now, and the shape is always the same: a guard written against *how* something was
+done rather than *what must be true*. The four before this were a dead CSS-class anchor,
+an exact-text UPDATE assertion, a five-line window, and a magnitude control keyed to a
+number that falls as the work succeeds.
+
+### Where the count stands
+
+**70 = 56 correct** (40 exempt + 16 mechanism) + **11 blocked** on I18N-001 + **3
+convertible**, the last of which are in files this pass did not reach. `components/` is at
+zero; `app/` is at its floor of 25.

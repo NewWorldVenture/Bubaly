@@ -31,7 +31,7 @@ import {
   PLUS_MONTHLY_CENTS,
   PLUS_ANNUAL_CENTS,
 } from '@/lib/constants/plans';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type Period = BillingPeriod;
 
@@ -450,6 +450,8 @@ export function PricingContent({
   switching?: ReactNode;
 }) {
   const tr = useTranslations();
+  // The family-count grouping follows the visitor's chosen locale.
+  const locale = useLocale();
   const [period, setPeriod] = useState<Period>('yearly');
   const yearly = period === 'yearly';
   const router = useRouter();
@@ -619,7 +621,7 @@ export function PricingContent({
         <FeatureMatrixTable matrix={featureMatrix} />
 
         <TrustStrip
-          familiesNote={familiesNote(tr, familiesCount)}
+          familiesNote={familiesNote(tr, familiesCount, locale.code)}
           privateTitle={tr('trustStrip.privateByDesign')}
           privateBody={tr('trustStrip.familyScopedAccessControls')}
           responsiveTitle={tr('trustStrip.responsiveByDesign')}

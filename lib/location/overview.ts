@@ -10,6 +10,8 @@ import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
 
 import type { LatLng } from './geo';
 
+type Translate = (key: string, params?: Record<string, string | number>) => string;
+
 export type Projected = { id: string; xPct: number; yPct: number };
 
 /**
@@ -59,7 +61,12 @@ function dayKey(iso: string): string {
  * `count` is the number of distinct places visited that day (arrivals), matching
  * the "12 places" style counter in the mock.
  */
-export function groupHistoryByDay(events: HistoryEventLike[], now: Date = new Date()): HistoryDay[] {
+export function groupHistoryByDay(
+  events: HistoryEventLike[],
+  now: Date = new Date(),
+  locale: LocaleCode = DEFAULT_LOCALE,
+  t?: Translate,
+): HistoryDay[] {
   const todayKey = dayKey(now.toISOString());
   const yesterdayKey = dayKey(new Date(now.getTime() - 86400000).toISOString());
   const byDay = new Map<string, HistoryEventLike[]>();
@@ -70,8 +77,11 @@ export function groupHistoryByDay(events: HistoryEventLike[], now: Date = new Da
   }
   return [...byDay.entries()].map(([key, evs]) => {
     const places = new Set(evs.filter((e) => e.event_type === 'arrived').map((e) => e.place_name ?? e.id));
-    const label = key === todayKey ? 'Today' : key === yesterdayKey ? 'Yesterday'
-      : new Date(`${key}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+    // The day heading on the location history: two words from the catalogue, the
+    // date from the locale.
+    const label = key === todayKey ? (t ? t('calendar.today') : 'Today')
+      : key === yesterdayKey ? (t ? t('completedByBubaly.yesterday') : 'Yesterday')
+      : createFormat(locale).fmtDate(new Date(`${key}T00:00:00`), 'EEEE, MMM d');
     return { key, label, count: places.size || evs.length, events: evs };
   });
 }

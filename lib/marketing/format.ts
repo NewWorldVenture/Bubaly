@@ -1,14 +1,18 @@
 // Pure, client-safe formatters for public marketing figures.
 // No server imports here so both server and client components can use them.
 
+import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
+
 /** Formats a real count for marketing display: exact below 1k, rounded down with a "+" above. */
-export function formatFamilies(n: number): string {
+export function formatFamilies(n: number, locale: LocaleCode = DEFAULT_LOCALE): string {
+  // Grouped for the reader. German writes 12.000 where English writes 12,000, and
+  // the two marks are SWAPPED between those conventions — so an un-localised
+  // grouping on a public page is legible as a different number, not merely styled
+  // oddly. This renders on the marketing site, where the visitor picked the locale.
   if (!Number.isSafeInteger(n) || n <= 0) return '0';
-  if (n >= 1000) {
-    const rounded = Math.floor(n / 1000) * 1000;
-    return `${rounded.toLocaleString('en-US')}+`;
-  }
-  return n.toLocaleString('en-US');
+  const group = new Intl.NumberFormat(locale);
+  if (n >= 1000) return `${group.format(Math.floor(n / 1000) * 1000)}+`;
+  return group.format(n);
 }
 
 /** A factual public account-count line with an honest pre-launch fallback.
@@ -22,10 +26,11 @@ export function formatFamilies(n: number): string {
 export function familiesNote(
   t: (key: string, params?: Record<string, string | number>) => string,
   n: number,
+  locale: LocaleCode = DEFAULT_LOCALE,
 ): string {
   return !Number.isSafeInteger(n) || n <= 0
     ? t('marketing.builtForModernFamilyLife')
-    : t('marketing.registeredFamilies', { count: formatFamilies(n) });
+    : t('marketing.registeredFamilies', { count: formatFamilies(n, locale) });
 }
 
 /**
@@ -39,8 +44,8 @@ export function familiesNote(
 export const HANDLED_PUBLIC_MIN = 25;
 
 /** Same rounding as formatFamilies: exact below 1k, rounded down with a "+" above. */
-export function formatHandled(n: number): string {
-  return formatFamilies(n);
+export function formatHandled(n: number, locale: LocaleCode = DEFAULT_LOCALE): string {
+  return formatFamilies(n, locale);
 }
 
 /** True when a valid recorded-run count is large enough to print. */
