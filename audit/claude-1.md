@@ -1571,3 +1571,68 @@ Guard:    docs/audit/chore-price-write-boundary-check.sql asserts the price
           several isManager checks belonging to other actions — which is how the
           missing one was overlooked). Removing the check fails it.
 ```
+
+## A3-019 — Claude-3's second CRITICAL: the same defect, one module over
+
+```
+[CLAUDE-1][CRITICAL][RLS/MONEY] A child could set the price of their own reward redemption
+Path:     public.economy_redemptions (economy_redemptions_insert)
+          · public.economy_decide_redemption()
+          · app/(app)/economy/actions.ts:161
+Source:   Claude-3, session 3, proven live on its own rebuilt harness (pgvector
+          installed, 315/315 migrations, 23/23 probes green before probing).
+Problem:  `economy_redemptions_insert` constrained ONE column —
+          `with check (is_family_member(family_id))` — so `cost`, `member_id`,
+          `status`, `decided_by`, `decided_at`, `txn_id` and `title` were all the
+          caller's to choose. And `economy_decide_redemption()` debits
+          `v_redemption.cost`: the number on the row the child wrote. It locks
+          the `economy_rewards` row two statements earlier — for STOCK — and
+          never reads the price off it.
+Evidence: Verified here before acting. `pg_policies` on economy_redemptions:
+          insert `with check (is_family_member(family_id))` and nothing else;
+          update/delete correctly `can_manage_family`. `pg_trigger` shows ONLY
+          `trg_economy_redemptions_updated_at`.
+          `pg_get_functiondef(economy_decide_redemption)` confirms the reward is
+          selected as `id, stock` — no cost — and the debit is
+          `'debit', v_redemption.cost`.
+          Claude-3's live run: a 5000-star "PlayStation 5" redeemed for ONE star;
+          a row forged already `status='fulfilled'` with `decided_by` pointing at
+          a parent; and a redemption inserted billing the PARENT's balance.
+          The asymmetry that found it: the sibling table `reward_redemptions`
+          has carried `trg_reward_redemption_decision_guard` since 0295. Two
+          tables doing the same job, one guarded — and noticing that is what
+          turned it up.
+          The server action is NOT the boundary: `requestRedemptionAction` does
+          read cost/title/currency_id off the reward, but the browser holds the
+          anon key and reaches PostgREST directly. (It also accepts any
+          `memberId` in the family, so even through the action a child could bill
+          a sibling.)
+Fix:      0304, two changes, neither load-bearing alone.
+          1. A trigger in 0295's idiom. For a non-manager an inserted redemption
+             must be a REQUEST and nothing more: status 'pending', no decision
+             fields, their OWN member, a real active reward, at that reward's
+             price, in that reward's currency. A redemption with no `reward_id`
+             is a free-form debit at a caller-chosen amount — exactly the hole —
+             so it stays a manager's. UPDATE is already manager-only by policy;
+             the trigger covers it too, so a future `drop policy` cannot reopen
+             this by itself.
+          2. `economy_decide_redemption` stops trusting the row. When the
+             redemption names a reward, the price DEBITED is the reward's current
+             cost — a manager-controlled value on a row the function already
+             locks — and it is written back so the record and the ledger agree.
+             A parent who reprices while a request is pending therefore charges
+             the price shown on the board, which is the one answer that is not a
+             surprise in either direction.
+Status:   FIXED — migration 0304
+Guard:    docs/audit/economy-redemption-price-check.sql: the self-priced insert,
+          the forged decision, the sibling-billing insert and the reward-less
+          invention all refused; the legitimate request accepted; the parent's
+          approval refused on an insufficient balance and accepted on a
+          sufficient one; the ledger re-read to prove 5000 was charged.
+          It then proves the SECOND lock independently of the first — a manager
+          may author a row directly, so the probe inserts one claiming `cost = 1`
+          and asserts the ledger is still debited 5000. A guard that only worked
+          because the other one did would not have shown that.
+          Non-vacuity proven by dropping the trigger — the probe then fails at
+          "a child priced their own redemption". 25/25 probes.
+```
