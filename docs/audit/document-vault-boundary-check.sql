@@ -73,7 +73,12 @@ begin
   begin
     insert into public.documents (family_id, title, category, storage_path, is_secure, created_by)
     values (fam, 'Smuggled', 'other', fam || '/smuggled.pdf', true, teen_uid);
-  exception when others then refused := true;
+  -- Catch ONLY the RLS refusal, as check 5 above already does. `when others`
+  -- also swallows a typo in this statement: rename a column here and the insert
+  -- raises 42703, is caught, and the vault reports itself shut while nothing was
+  -- tested. Verified against this file: renaming storage_path leaves the probe
+  -- printing "document vault boundary check passed".
+  exception when insufficient_privilege then refused := true;
   end;
   if not refused then raise exception 'a teen filed a document into the vault'; end if;
 
