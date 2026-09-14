@@ -6,7 +6,7 @@
 `Executive Summary — session record` sections below are the earlier summaries,
 kept verbatim; where they disagree with this part, this part is newer.*
 
-**Fourteen passes, A–N. 107 numbered findings.**
+**Fourteen passes, A–N. 124 numbered findings.**
 
 | Pass | Surface | Findings |
 |---|---|---:|
@@ -23,7 +23,7 @@ kept verbatim; where they disagree with this part, this part is newer.*
 | K | A Stripe event acknowledged that nobody finished | fix |
 | L | The marketing platform spine — the tables that had never replayed | 4 (`L1`–`L4`) |
 | M | Reporting a failure is not surviving one; a feature nobody can enable | 2 (`M1`, `M2`) |
-| N | The browser, finally — runtime, page weight, flows | 11 (`N1`–`N3` + 8) |
+| N | The browser, finally — runtime, page weight, flows (Claude-4) and rendered accessibility (Claude-2) | 28 (`N1`–`N3` + 8; `C2-B01`–`C2-B17`) |
 
 Session record 1 says "87 findings across six passes". That was true when
 written; passes G–K have landed since, and Pass A is `F1`–`F22`, which is 22 and
@@ -37,7 +37,18 @@ granted itself the privileges it was testing for (`F-015`). A concurrency check
 that never ran two things at once (`F-019`). An index test blind to `UNIQUE`.
 A migration replay that only ever ran against an empty database (`F-020`).
 Three boundary probes that passed while asserting nothing (`G1`). A bucket-drift
-check that could not fire for any input (Pass J).
+check that could not fire for any input (Pass J). A client-scope test that
+asserts scope coverage while the whole catalogue ships in the bundle (`N1`).
+
+Pass N added the purest instance yet, and it is not a test at all: **`.focus-ring`
+is a focus indicator that never turns off** (`C2-B01`). It fails WCAG 2.4.7 by
+being permanently on. No lint rule, no axe check and no unit test in this
+repository can express "this class should have been a state variant" — and 202
+call sites grew behind that silence. Its companion, `C2-B02`, is the same shape
+one level out: axe returned 326 nodes reading *"background could not be
+determined due to a background gradient"*, so the product's most important
+buttons are precisely the elements its clean report is silent about. **"Zero
+violations" is a statement about what the instrument could see.**
 
 Verifying that a guard **fails when it should** is the highest-yield check in
 this repository. Break what it protects and confirm it goes red; a guard nobody
@@ -70,9 +81,26 @@ rather than the statement), `F-F01` (a caller
 `F-F02` (the `F-017` timezone bug live on eleven server-rendered surfaces),
 `F-F03` (`/missions` — up to 240 sequential storage round trips), `F-D01`
 (photo lightbox: no `role="dialog"`, no Escape, no focus trap), `F-D02`/`F-D03`
-(55 detached labels, 65 unnamed `<select>`), `F-C07` (19 undocumented env vars),
+(55 detached labels, 65 unnamed `<select>` — **not reproducible on the reachable
+public surface**, but the one public page `F-D02` cites needs a database row, so
+BLOCKED and *not* cleared; the other 120 instances are in `app/(app)`),
+`F-C07` (19 undocumented env vars),
 `F-C09`, `F-C10`, `F19`, `F6`, `M2` (the calendar feed nobody can enable), and
 **`F-C03`, REOPENED** — see `N1`.
+
+**Open and new in Pass N, with a sequencing constraint worth reading before
+anyone starts:** `C2-B01` (`.focus-ring` paints permanently on 202 elements, so
+focus is invisible everywhere outside the marketing header) and `C2-B04` (text
+inputs have a 1.28:1 border over a fill identical to the card) **must ship
+together**. The permanent ring is currently the only thing making a form field's
+boundary visible; fixing the focus ring alone would leave every input with no
+visible edge at all. One defect is concealing another. Also `C2-B02` (every
+primary CTA is white on a gradient at 3.68:1, in a blind spot where axe declines
+to judge), `C2-B03` (three light-theme semantic tokens below AA — the theme
+nobody had ever rendered), `C2-B05` (the cookie preference centre declares
+`aria-modal` and manages no focus), `C2-B08` (the `Field` primitive behind ~1,066
+call sites announces required fields as optional), and `C2-B17` (level-A bypass
+blocks missing on 7 of 23 public routes).
 
 **`F-C03` is reopened, and that matters more than its severity.** It is indexed
 below as "fixed and verified in production", and half of it was: the RSC payload
@@ -104,18 +132,24 @@ not read the same on this page.*
 | QA / flows / performance / edge cases | Pass F | deep |
 | Architecture / integration seams | Claude-1, passes C/G/H | deep |
 | Marketing platform spine tables (`0237`, `0239`, `0292`) | Claude-3, Pass L | deep — **gap closed 2026-09-14**, local replay only |
-| Rendered accessibility: contrast, tab order, screen-reader output | **in progress 2026-09-14** | was **not audited** |
+| Rendered accessibility: contrast, tab order, screen-reader output | Claude-2, Pass N | deep on the **public** surface — **gap closed 2026-09-14**; `app/(app)` still **not audited in a browser** |
 | Production schema as actually deployed | **nobody** | **not audited** — needs credentials |
 
 ### The three gaps this audit named as blocking its own completion
 
-1. **No browser had ever been run.** Every Pass D finding is derived from
-   reading source; colour contrast, real tab order and screen-reader output were
-   unverified. *2026-09-14: this environment has Chromium, Playwright and
-   `@axe-core/playwright`, so it is finally actionable and in progress. Scoped to
-   the **public** surface — there is no local Supabase here (no usable docker
-   daemon, no CLI), so the authenticated app cannot be signed into and Pass D's
-   `app/(app)` findings stay statically derived.*
+1. ~~**No browser had ever been run.**~~ — **CLOSED 2026-09-14 for the public
+   surface; still open for `app/(app)`.** See **Pass N**, both halves: 138 axe
+   runs, key-by-key tab walks, ARIA-tree snapshots, real touch emulation, CDP
+   byte accounting. It produced 28 findings, 5 of them HIGH, and — as in gap 2 —
+   its most valuable output was a **refutation**: `F-C03` is indexed here as
+   fixed and verified in production, and `N1` shows half of it never was.
+   *The limit is exact and permanent for this environment: there is no local
+   Supabase (no usable docker daemon, no CLI), so no session can be created.
+   **Pass D's `F-D01`–`F-D09` and `F-D11` remain statically derived**, and that
+   is where its two HIGH findings are almost entirely counted. `app/s/[slug]`,
+   `/gift/[token]`, `/pay/[handle]`, `/blog/[slug]` and `/customers/[slug]` each
+   need a database row and were unreachable too. A real screen reader, and
+   `forced-colors`, were never available.*
 2. ~~**`0237`, `0239` and `0292` never replayed**~~ — **CLOSED 2026-09-14.**
    pgvector installed; 310 migrations applied, 0 failed; the nine spine tables
    audited. See **Pass L**. It found a real gap (`L1`) and, more importantly,
@@ -4285,7 +4319,7 @@ not an audit one.
 # Pass N — the browser, finally
 
 *Claude-4, 2026-09-14. Merged by Claude-1. Evidence in `audit/claude-4.md`.*
-*Partial: Claude-2's accessibility half is still running and lands in this pass.*
+*Claude-2's accessibility half landed in the same pass and follows below.*
 
 This is the first pass with a real browser. Eleven public routes, cold cache and
 a fresh context each, CDP byte accounting, console/`pageerror`/network capture;
@@ -4382,3 +4416,295 @@ No session, so `app/(app)` was never rendered; `N3` on a real blog slug and
 `F-F03` in a browser are both blocked on it. Link discovery could not reach
 DB-driven links. **All wall-clock numbers are stub-inflated** and were used only
 to count and order blocking reads — never as production latency.
+
+---
+
+# Pass N (continued) — the accessibility half
+
+*Claude-2, 2026-09-14. Merged by Claude-1. Evidence in `audit/claude-2.md`,
+section "SESSION 2 — THE BROWSER PASS".*
+
+The other half of the same gap, run in the same browser against the same build:
+**46 structural axe runs** (23 public routes × 1280/390 px), **92 further
+contrast runs** (× 2 themes, each asserting `<html class>` *before* it measures),
+key-by-key tab walks, ARIA-tree snapshots, and overflow/tap-target measurement at
+390 and 360 px with **real touch emulation** — `hasTouch`/`isMobile`, which is
+what makes the `coarse:` utilities apply at all (`pointer: coarse` confirmed
+matched on every run).
+
+**17 findings: 2 HIGH, 10 MEDIUM, 5 LOW** (`C2-B01`–`C2-B17`). Claude-1
+independently verified both HIGH mechanisms and the whole light-theme token
+table before merging.
+
+## C2-B01 — the focus ring was never off
+
+`HIGH`. `.focus-ring` is written as a plain component class, not a state
+variant, so it paints permanently on all **202** elements that carry it:
+
+```
+app/globals.css:179   .focus-ring { @apply outline-none ring-2 ring-brand/60 ring-offset-2 ring-offset-bg; }
+
+compiled (.next/static/css/efe55d1639ee1e52.css):
+  .focus-ring{outline:2px solid transparent;outline-offset:2px;
+    --tw-ring-color:rgb(var(--brand)/0.6);--tw-ring-offset-width:2px;
+    box-shadow:var(--tw-ring-offset-shadow),var(--tw-ring-shadow),...}
+```
+
+No `:focus-visible` anywhere in the rule. It does two harmful things at once:
+paints the brand ring always, and suppresses the browser's own outline with
+`outline:2px solid transparent`. Focusing an element therefore changes its
+computed style by **zero bytes** — measured before/after on the same element,
+with a 400 ms settle so the 150 ms transition cannot skew the read:
+byte-identical `box-shadow`, `matchesFV: true`, `isActive: true`.
+
+The cleanest evidence needs no timing at all: on a freshly loaded homepage with
+`document.activeElement === document.body` — **nothing focused** — eight
+elements were already painting the full ring. On `/login`, both text inputs, the
+submit button, the theme toggle and the language trigger all wear it
+simultaneously. Open the language menu and all **eleven** `role="option"`
+buttons are ringed at once, so there is no way to see which one the keyboard is
+on.
+
+WCAG 2.4.7 Focus Visible (AA) is failed not by omission but by an indicator that
+never turns **off**. Verified independently: **202** bare `focus-ring`
+occurrences against **16** `focus-visible:focus-ring`, the correct 16 almost all
+in `components/marketing/site-header.tsx`.
+
+This is `F-D10`'s lesson in its purest form. No lint rule, no axe check and no
+unit test in this repository can describe "this class should have been a state
+variant" — and the one guard that *could* go red is a two-line Playwright
+assertion that `getComputedStyle(el).boxShadow` differs before and after focus.
+
+**Sequencing matters: this must not ship without `C2-B04`.** The permanent ring
+is currently the only thing making a text field's boundary visible.
+
+## C2-B02 — the primary CTA is 3.68:1, and axe is structurally blind to it
+
+`HIGH`. Every brand CTA is `bg-gradient-to-r from-blue-500 to-violet-600` with
+`text-brand-fg`, and `--brand-fg` is `255 255 255` in **both** themes
+(`app/globals.css:39,79`) — pure white. Over the blue end white is **3.68:1**;
+normal-size text needs 4.5:1. The text is centred in a wide pill, so its
+left-hand glyphs sit on the bluest part of the run.
+
+Claude-1 recomputed the sRGB relative luminance independently: `blue-500`
+`#3b82f6` against white gives **3.68:1**, matching Claude-2 exactly. Confirmed
+carrying this pair: both header CTAs (**10px**/600), the hero CTA, "Start Free
+Trial", "Read the Trust Center", "Start Family Basic" on `/pricing`, and — worst
+— the **selected** FAQ tab, where the least readable state is the current one.
+
+The reason eleven prior passes and 92 axe runs missed it is worth recording as a
+method note. axe returned **4,603 `incomplete` node instances**, the single
+largest reason being **326 ×** *"Element's background color could not be
+determined due to a background gradient"*. axe declines to judge gradient
+backgrounds — so the product's most important buttons are exactly the elements
+its report is silent about. "Zero contrast violations" meant zero among the
+nodes it could measure.
+
+**Correction to the finding's remedy numbers.** The headline 3.68:1 is exact,
+but three secondary ratios in `audit/claude-2.md` drift from an independent
+recomputation:
+
+| pair | filed | recomputed |
+|---|---:|---:|
+| white on `violet-600` `#7c3aed` | 5.90:1 | **5.70:1** |
+| white on `blue-600` `#2563eb` | 4.68:1 | **5.17:1** |
+| white on `blue-700` `#1d4ed8` | 6.30:1 | **6.70:1** |
+
+The recommendation is unaffected and in fact stronger than filed — moving only
+the first stop to `blue-600` clears AA with more margin than claimed. Recorded
+so a later fix is not sized against a wrong figure.
+
+## C2-B03 / C2-B04 — the light theme, which nobody had ever rendered
+
+`MEDIUM` ×2. The themes do not have equivalent contrast. In dark every semantic
+token sits at 7–12:1. In light, three fall below the 4.5:1 body floor and two
+fall below even 3:1. **Claude-1 recomputed the entire table from the `.light`
+block in `app/globals.css` — all twelve ratios reproduce to two decimal
+places**:
+
+```
+              on --bg        on --surface
+--fg           15.85:1
+--muted         4.91:1          5.27:1
+--info          4.82:1
+--danger        4.09:1  FAIL    4.38:1  FAIL
+--success       2.91:1  FAIL            (3.12:1)
+--warning       2.70:1  FAIL    2.89:1  FAIL
+--brand         4.70:1
+--brand-text    6.36:1
+--border        1.19:1          1.28:1
+```
+
+`--danger` is not theoretical on the public surface: it is the colour of the
+required-field asterisk and of form error text, measured live on `/login` at
+**4.38:1** against the white card. axe reported none of it because it skips
+single-character content (81 such incompletes) and no error state is on screen
+during an unauthenticated crawl.
+
+`C2-B04` is the same tokens seen from the other side. `components/ui/input.tsx:5`
+gives every `Input`, `Textarea` and `Select` `bg-surface/60 border border-border`
+— so the fill is **1.00:1** against the card behind it and the border, the only
+remaining boundary, is **1.28:1** where WCAG 1.4.11 wants 3:1. The fields are
+legible today **only because `C2-B01` is outlining them**. That is why the two
+must land together, and it is the most useful single sentence in this pass: one
+defect is currently concealing another.
+
+## C2-B05 — the consent centre: `aria-modal="true"`, no focus management at all
+
+`MEDIUM`. A **fifth** instance of the `F-D04` class, in a file `F-D04` does not
+list, on a surface every visitor meets, reached from a banner pinned over every
+marketing route. `components/marketing/consent-manager.tsx:140` declares
+`role="dialog" aria-modal="true"` — telling assistive tech everything outside is
+inert — and then moves no focus in, traps no Tab, and ignores Escape.
+
+Driven by keyboard on a fresh no-storage context: focus after open fell to
+`<body>`; Tab stop 9 was `<body>` and stop 10 was **"Skip to content"** — out of
+the dialog and into the site nav, with the dialog still open; Escape left it
+open. The ARIA semantics are otherwise good (four `role="switch"` toggles with
+names and `aria-checked`); it is the behaviour that is absent. `components/ui/modal.tsx`
+already implements every missing piece.
+
+This is the one dialog with a regulatory reason to be operable.
+
+## The rest
+
+`C2-B06` the language listbox is rendered **before** its trigger in the DOM, so
+Tab from the open menu lands in the footer and the only way in is Shift+Tab
+backwards from Portuguese; it declares `role="listbox"`/`option` and implements
+none of the pattern (no roving tabindex, no arrow keys) — on the control that
+selects Bubaly's eleven locales · `C2-B07` footer links are **11 px** tall on a
+phone against WCAG 2.5.8's 24 px, 18 links per page including every legal link
+and the privacy-choices re-open control, while the social icons in the same
+footer already carry `coarse:min-h-11` · `C2-B08` the shared `Field` primitive
+(~1,066 call sites) renders `required` as a red asterisk **inside the label** and
+passes it to nothing: the accessible name becomes the literal `"Email*"`, there
+is no `aria-required`, and a real failed submit produces a `role="alert"` with no
+`aria-describedby` and no `aria-invalid` — one file fixes the product ·
+`C2-B09` `heading-order`, 26 nodes over 24 of 46 runs, mostly the footer's four
+`<h4>` column titles after an `<h2>` · `C2-B10` `/join` and `/offline` render
+**no `<main>`** — verified: both layouts provide only a locale provider — so
+their content sits in no landmark and `/join` is the first page an invited family
+member ever sees · `C2-B11` two horizontal scrollers unreachable by keyboard at
+390 px, one of them the pricing comparison table · `C2-B12` the FAQ accordion has
+`aria-expanded` with no `aria-controls`, panels with no `id` or `role`, and
+questions that are not headings — while the page hands Google a complete
+`FAQPage` outline, so **the crawler gets better structure than the screen-reader
+user** · `C2-B13` the consent banner is visible immediately and **more than 60
+tab stops away** · `C2-B14` the theme toggle is 40×40 in the auth layout and
+44×44 in the marketing header, from the same component · `C2-B15` 10 px is the
+chrome's type size, 80–156 sub-11px text nodes per page · `C2-B16` marketing TTFB
+quantised at exactly 7/14/21 s — see below.
+
+## C2-B16 — a stub-inflated number that is still a finding
+
+`MEDIUM`, and a model of how to report a measurement taken on a broken
+dependency. Marketing TTFB lands on exact multiples of ~7 s: `/pricing` 21.2 s
+(3 calls), `/faq` 14.1 s (2), `/reviews` 7.1 s (1), and the six routes with no
+Supabase call under 0.05 s.
+
+The **absolute numbers are an artefact of the stub** — each call runs to its
+timeout instead of returning in milliseconds — and Claude-2 says so in the
+finding rather than in a footnote. What the stub makes visible, and what is real,
+is the **shape**: 1 call = 7 s, 2 = 14 s, 3 = 21 s. Awaited together the worst
+case would be one timeout regardless of count. Against a real database this
+converts one round-trip of latency into two or three, on every marketing page, on
+every request — and these are all `force-dynamic` for the locale cookie, so no
+ISR hides it. This independently corroborates `N3`'s neighbour in Claude-4's
+half ("public TTFB serially coupled to ≥2 untimed Supabase reads") from a
+different instrument.
+
+## Pass D, cross-checked rather than re-derived
+
+| Pass D finding | What the browser says |
+|---|---|
+| `F-D02` 55 detached labels · `F-D03` 65 unnamed `<select>` | **Not reproducible on any reachable public page** — every control on `/login`, `/signup`, `/kid-login` and `/contact` resolves an accessible name, and `/contact`'s topic picker is `combobox "What's this about?"`. But the one *public* page `F-D02` cites (`app/s/[slug]/survey-form.tsx`) needs a published survey row: **BLOCKED, not cleared.** The other 120 instances are all in `app/(app)`. |
+| `F-D04` four hand-rolled `aria-modal` dialogs | **Verified as a class and extended** — a fifth, public instance. See `C2-B05`. |
+| `F-D05` 19 pages with no `<h1>` | Public surface clean: `page-has-heading-one` on 0 of 46 runs. The 19 pages are authenticated → BLOCKED. |
+| `F-D06` clickable rows not keyboard reachable | Public equivalent clean — the homepage cards are real `<a>` and appear at tab stops 14–19. The seven modules are authenticated → BLOCKED. |
+| `F-D01`, `F-D07` | Authenticated → BLOCKED. No `window.confirm` on any public route. |
+| `F-D10` no `jsx-a11y` rules | **Reinforced by a worse instance of the same pattern** — `C2-B01`. |
+
+## Verified clean — measured, with its limit stated
+
+Zero AA `color-contrast` violations from axe in **both** themes across 92 runs
+(every one of the 1,859 flagged nodes was the AAA 7:1 rule) — *stated together
+with the 4,603 `incomplete` nodes that number excludes, which is where `C2-B02`
+and `C2-B03` were found* · zero horizontal overflow on **46/46** runs plus four
+spot checks at 360 px · the mobile drawer is keyboard-correct end to end
+(`aria-controls`, Escape returns focus, `onBlur` closes it — the pattern
+`F-D04`'s dialogs should copy) · `components/marketing/faq-tabs.tsx` is a
+textbook WAI-ARIA tablist and should be the in-repo reference ·
+`prefers-reduced-motion` honoured globally at `app/globals.css:474` · no keyboard
+trap anywhere, across five separate tab walks · `<html lang dir>` set on every
+route.
+
+## Three corrections Claude-2 filed against its own measurements
+
+Recorded because the discipline is the point, and because two of them would have
+shipped a wrong finding.
+
+1. **The first theme sweep measured light twice.** One reused browser context
+   persisted `localStorage['bubaly-theme']='light'` across routes, so every route
+   after the first in each worker was recorded as dark while rendering light. The
+   "0 dark-theme failures" was real but covered 4 routes, not 23. Redone with one
+   pinned context per theme and an assertion on `<html class>` before every
+   measurement: **0/92 runs reported the wrong theme.**
+2. **A tab walk read computed styles mid-transition and invented a
+   catastrophe.** Reading `getComputedStyle` immediately after `Tab` caught the
+   150 ms transition part-way — one stop returned `0.0655955px` of ring — making
+   17 of 34 elements look like they had *no* focus indicator, the entire main
+   navigation included. Re-measured with a 260 ms settle: `focus-visible:focus-ring`
+   works correctly and the nav is fine. **That reading was withdrawn.** What
+   survived is narrower, and provable with no timing at all: the ring is always
+   on, not never on.
+3. **A clean bill was withdrawn.** Verified-clean item 3 originally read
+   "`<main id="main-content">` exists on every `(marketing)` and `(auth)` route",
+   generalised from reading one layout. The browser check took thirty seconds and
+   contradicted it; the real state is filed as `C2-B17`.
+
+The third is the same failure this document keeps naming — an unchecked
+assumption written down as a clean bill — caught by its author, in the file, in
+the direction that matters.
+
+## C2-B17, and a correction to it
+
+`MEDIUM`. Seven of 23 public routes have no way to bypass the header, and five of
+them have a `<main>` with no `id` to skip to. Measured per route — presence of
+`<main>`, its `id`, the skip link, and what the first `Tab` press actually lands
+on: `/` and `/pricing` land on "Skip to content"; `/login`, `/signup`, `/welcome`
+and `/join` land on "Bubaly home"; `/reviews` on "Write a review"; `/kid-login`
+on an autofocused input; `/offline` on `<body>`, having no focusable element at
+all. WCAG 2.4.1 Bypass Blocks is level **A** and applies per page.
+
+`components/a11y/skip-link.tsx` carries a docstring saying exactly what to do,
+and the component works. It is simply not mounted on those layouts.
+
+**Claude-1's correction.** The finding's headline says the marketing layout is
+*"the only mount"*. It is not: `components/app/app-shell.tsx:349` also renders
+`<SkipLink />`, and `:387` provides the matching `<main id="main-content">`. The
+authenticated app is therefore covered. The finding is **correct for the public
+surface it measured** — the `(auth)` layout, the `reviews` layout, `/join` and
+`/offline` are all genuinely missing it — but "one layout out of four" overstates
+it repo-wide, and it changes the fix: the app shell needs nothing.
+
+That correction is only possible because `app/(app)` is unreachable in a browser
+here, which is the same limit that blocks ten Pass D findings. It cuts both
+ways: the blind spot hid a defect from Claude-4's half of this pass, and here it
+manufactured one.
+
+## Blocked — recorded so "we could not look" never reads as "it is clean"
+
+`app/(app)`'s 354 pages (no session: Supabase stubbed, no docker daemon, no CLI)
+— so `F-D01`, `F-D02`, `F-D03`, `F-D04`, `F-D05`, `F-D06`, `F-D07`, `F-D08`,
+`F-D09` and `F-D11` **remain statically derived**, and the two HIGH ones are
+counted almost entirely there · `app/s/[slug]`, `/gift/[token]`, `/pay/[handle]`,
+`/blog/[slug]`, `/customers/[slug]` — each needs a database row · the
+`--success`/`--warning` chips and toasts whose tokens measure 2.70–2.91:1 render
+only behind the login wall · a real screen reader (covered via the accessibility
+tree and axe name/role/state checks, which is the input a reader speaks from, but
+is not the same as hearing one) · Windows High Contrast / `forced-colors` ·
+physical devices.
+
+Database-backed content rendered empty throughout and **none of it is reported as
+a defect**; the one place the stub produced a number worth keeping is labelled
+with exactly what it contributed.

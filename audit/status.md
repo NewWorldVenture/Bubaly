@@ -54,12 +54,28 @@ COMPLETED (session 3 so far):
         Browser work this session is therefore scoped to the public surface,
         and that limit is stated rather than left implied.
   - Dispatched Claude-3 (pgvector replay + marketing spine).
+  - Merged ALL THREE workers into finalaudit.md, verifying the mechanism of
+    every HIGH independently before accepting it (rule 4):
+      * Claude-3 -> Pass L (L1-L4).
+      * Claude-4 -> Pass N first half (N1-N3 + 8). N1 REOPENED F-C03.
+      * Claude-2 -> Pass N second half (C2-B01-C2-B17).
+    Two claims were corrected in the merge, both recorded in place:
+      * C2-B17 says the marketing layout is the skip link's "only mount". It is
+        not — components/app/app-shell.tsx:349 mounts it too, with a matching
+        <main id="main-content"> at :387. Correct for the public surface it
+        measured; overstated repo-wide, and it changes the fix.
+      * C2-B02's headline 3.68:1 is exact, but three of its REMEDY ratios drift
+        (violet-600 5.70 not 5.90; blue-600 5.17 not 4.68; blue-700 6.70 not
+        6.30). Recomputed so a later fix is not sized against a wrong figure.
+    Reproduced exactly: the compiled .focus-ring rule, the 202/16 call-site
+    split, --brand-fg = 255 255 255 in both themes, and ALL TWELVE light-theme
+    token ratios to two decimal places.
 PRIOR SESSIONS (unchanged, see history below): F-020 migration idempotency;
   /api/health FEATURE_ENV tier; 5 cron routes answering 200 on their own
   failures; service-role boundary probe; 0296 renumber.
 NEXT: reconcile the two Executive Summaries into one authoritative index — the
   document names this as a deliberate follow-up and it is the coordinator's job;
-  merge worker findings; verify a sample of Pass G/H fixes against current main.
+  verify a sample of Pass G/H fixes against current main.
 FILES-TOUCHED (session 3):
   - audit/status.md (this section only), audit/claude-1.md, finalaudit.md
   - none in application source yet
@@ -76,28 +92,48 @@ NOTE FOR OTHER WORKERS:
 LAST-UPDATE: 2026-09-14
 
 ## Claude-2
-CURRENT: RUNNING — launched by Claude-1 as a parallel worker. Status block lives at the top of audit/claude-2.md; mirrored here on completion.
-COMPLETED:
-NEXT:
-FILES-TOUCHED:
-BLOCKERS:
-LAST-UPDATE:
+CURRENT: COMPLETE — browser pass over the public marketing/auth surface.
+  Merged into finalaudit.md by Claude-1 as the accessibility half of Pass N.
+  Full status block + evidence at the top of audit/claude-2.md, "SESSION 2".
+COMPLETED: 17 findings C2-B01-C2-B17 (2 HIGH, 10 MEDIUM, 5 LOW), 9
+  verified-clean items, 3 self-corrections, a 7-row BLOCKED table, and a
+  cross-check of Pass D that CONTRADICTED F-D02/F-D03 on the reachable public
+  surface without clearing them (the one public page F-D02 cites needs a DB row).
+  46 structural axe runs + 92 contrast runs across 2 themes; key-by-key tab
+  walks; ARIA-tree snapshots; 390/360px with real touch emulation.
+NEXT: nothing queued.
+FILES-TOUCHED: audit/claude-2.md ONLY. No application source modified.
+BLOCKERS: no session (Supabase stubbed) -> app/(app)'s 354 pages, /s/[slug],
+  /gift/[token], /pay/[handle], /blog/[slug], /customers/[slug] unreachable;
+  no real screen reader; no forced-colors emulation.
+LAST-UPDATE: 2026-09-14 (mirrored by Claude-1)
 
 ## Claude-3
-CURRENT: RUNNING — launched by Claude-1 as a parallel worker. Status block lives at the top of audit/claude-3.md; mirrored here on completion.
-COMPLETED:
-NEXT:
-FILES-TOUCHED:
-BLOCKERS:
-LAST-UPDATE:
+CURRENT: COMPLETE — pgvector replay + the marketing platform spine.
+  Merged into finalaudit.md by Claude-1 as Pass L.
+COMPLETED: 4 findings L1-L4. 310 migrations applied, 0 failed; the nine spine
+  tables (0237/0239/0292) audited for the first time. Also REFUTED one of Pass
+  E's verified-healthy claims (L2): `anon` does hold write privilege on 483 of
+  491 tables, and the "zero" was an artefact of a hand-built test prelude.
+NEXT: nothing queued.
+FILES-TOUCHED: audit/claude-3.md; migrations replayed locally only.
+BLOCKERS: production schema unverifiable without operator credentials (F-001).
+LAST-UPDATE: 2026-09-14 (mirrored by Claude-1)
 
 ## Claude-4
-CURRENT: RUNNING — launched by Claude-1 as a parallel worker. Status block lives at the top of audit/claude-4.md; mirrored here on completion.
-COMPLETED:
-NEXT:
-FILES-TOUCHED:
-BLOCKERS:
-LAST-UPDATE:
+CURRENT: COMPLETE — runtime, page weight and flows in a real browser.
+  Merged into finalaudit.md by Claude-1 as the first half of Pass N.
+COMPLETED: 11 findings (3 HIGH, 6 MEDIUM, 2 LOW). N1 REOPENS F-C03, which this
+  document indexed as "fixed and verified in production" — the RSC half was
+  fixed, the bundle half never was (246 KB gzipped of catalogue on every
+  marketing page). Also disproved its own "prefetch storm" hypothesis and
+  recorded that, which is the right instinct.
+NEXT: nothing queued.
+FILES-TOUCHED: audit/claude-4.md ONLY. No application source modified.
+BLOCKERS: no session -> app/(app) never rendered; N3 on a real blog slug and
+  F-F03 in a browser both blocked on it. All wall-clock numbers stub-inflated
+  and used only to count and order blocking reads.
+LAST-UPDATE: 2026-09-14 (mirrored by Claude-1)
 
 ---
 
