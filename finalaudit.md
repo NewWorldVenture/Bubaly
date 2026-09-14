@@ -113,7 +113,7 @@ as the next task in `audit/claude-1.md`.
 
 **Fixed and live:** F1, F9 (closed as a recorded decision), F10, F15, F16, F18,
 F20, C-01 … C-05, C-07, E-01, F-a, F-b, H-01, L-01, L-02, L-03, **P-01**,
-**U-02**, **P-02**, **P-03**, **U-03**, **P-04**, **U-04**.
+**U-02**, **P-02**, **P-03**, **U-03**, **P-04**, **U-04**, **S-03** (app half).
 
 | id | finding | found by | state |
 |---|---|---|---|
@@ -127,8 +127,8 @@ F20, C-01 … C-05, C-07, E-01, F-a, F-b, H-01, L-01, L-02, L-03, **P-01**,
 | **U-04** | The whole AI Call Guardian surface — five pages — discards every read error, and none appears in the 127 `*-read-boundary` guards. A failed read renders **"0 scams blocked"** on the safety dashboard, **"0 contacts"** on the trust graph, "no routing rules", and "No communications match your filters" over a log that may be full of blocked scam calls — plus "No activity recorded yet" over `/family/activity`'s audit trail | **Claude-2**, verified + fixed by Claude-1 | **Fixed** — `/guardian` now carries a `PartialReadBanner` naming each failed read and its stat tiles take `number \| null`, so a count nobody read renders an em dash rather than a zero; the other four return an `ErrorState`; `CallHistory` tells an empty log from a filtered one. 14 rendered cases, 5 of them negative controls; reverted, 9 of 14 fail |
 | **U-05** | Calendar events, note cards and photo rows are bare `<div onClick>` — mouse-only, WCAG 2.1.1 | **Claude-2** | OPEN |
 
-| **S-02** | The child-PIN throttle is keyed on the **submitted** string while the lookup is `.ilike()`, and `_` is both a legal username character and a SQL wildcard. 16 distinct throttle buckets all resolved to one account — `2^(L-2)` per account, which exceeds the 10,000-PIN keyspace at L≥13 | **Claude-3** | OPEN |
-| **S-03** | `child_logins`' policy is *named* "Managers manage" and *predicated* on `is_family_member`. A child UPDATE'd and DELETE'd a sibling's login — permanent lockout with no UI recovery — and `resetChildPinAction` trusts that table's `user_id` for `admin.auth.admin.updateUserById` | **Claude-3** | OPEN |
+| **S-02** | The child-PIN throttle is keyed on the **submitted** string while the lookup is `.ilike()`, and `_` is both a legal username character and a SQL wildcard. 16 distinct throttle buckets all resolved to one account — `2^(L-2)` per account, which exceeds the 10,000-PIN keyspace at L≥13 | **Claude-3** | **Already fixed** — by `adaa04d8` (#545), before the finding was written; `app/(auth)/actions.ts` uses `.eq()` and `tests/child-login-username-is-not-a-pattern.test.ts` guards it. Claude-3's evidence came from one of the **81 stale git worktrees** under `.claude/worktrees/`, which still hold the pre-fix line: a filesystem grep reads code that was fixed hours earlier |
+| **S-03** | `child_logins`' policy is *named* "Managers manage" and *predicated* on `is_family_member`. A child UPDATE'd and DELETE'd a sibling's login — permanent lockout with no UI recovery — and `resetChildPinAction` trusts that table's `user_id` for `admin.auth.admin.updateUserById`. **Verification made it worse than HIGH:** a child repoints their own row at a PARENT's auth user, asks that parent to reset their PIN, and the parent's password becomes a value the child chose — child→parent takeover with the parent's own hand on the button | **Claude-3**, verified + fixed by Claude-1 | **Fixed in the app; RLS half queued.** `resetChildPinAction` now resolves the auth user from `family_members` and refuses a disagreement or a manager target — that closes the takeover on production **today**, without waiting for the ledger. `0299_child_logins_write_boundary.sql` closes the rest (sibling lockout, planting a mapping) and is **not applied**. Probe's negative control: *"a child REPOINTED 1 login mapping(s) at another auth user — this is the reset-PIN takeover"* |
 | **S-04** | `audit_logs` lets any member forge `actor_id` — a child filed a `delete wallet_transactions` row naming the parent — including `family_id IS NULL` rows the admin **Security** page renders with the service client. `0260_trust_ledger_lockdown.sql` fixed precisely this on `trust_audit_logs` and left `audit_logs` open | **Claude-3** | OPEN |
 | **S-05** | 163 CASCADE foreign keys with no supporting index. Measured on one of the 36 a family delete must resolve: **5,715 buffers / 52.9 ms → 4 buffers / 0.18 ms** | **Claude-3** | OPEN |
 
@@ -587,11 +587,11 @@ Run before calling any of this done:
 ```bash
 npx tsc --noEmit                       # clean
 npm run lint                           # 0 errors (4 pre-existing warnings)
-npx vitest run                         # 1,204 files / 13,793 tests
+npx vitest run                         # 1,205 files / 13,803 tests
 npm run db:audit:queries               # 491 tables, 78 functions, 141 routes resolve
 npm run db:audit:migrations            # no version collisions
-bash docs/audit/pg-bootstrap.sh        # 311 migrations, 0 failed
-bash docs/audit/run-probes.sh          # 21/21 behavioural probes
+bash docs/audit/pg-bootstrap.sh        # 312 migrations, 0 failed
+bash docs/audit/run-probes.sh          # 22/22 behavioural probes
 npm run build                          # exits 0
 npm run test:e2e                       # includes the mobile device matrix
 ```

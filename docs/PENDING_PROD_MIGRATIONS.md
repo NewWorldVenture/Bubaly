@@ -501,10 +501,11 @@ passed; production application of the atomic `0240-0254` release remains pending
 ## Migrations added since this document's stated baseline (2026-09-12)
 
 The status line at the top of this file is dated **2026-09-05** against main
-`01881fb2`. **Seventy-four** migration files have landed since, `0255` through
-`0298`, and none of them appear anywhere above. (This read "thirty-one, `0255`
-through `0285`" until 2026-09-13, then "seventy-two, `0255` through `0296`"
-earlier the same day; the range simply keeps growing past the sentence.)
+`01881fb2`. **Seventy-five** migration files have landed since, `0255` through
+`0299`, and none of them appear anywhere above. (This read "thirty-one, `0255`
+through `0285`" until 2026-09-13, then "seventy-two, `0255` through `0296`" and
+"seventy-four … `0298`" the same day; the range simply keeps growing past the
+sentence.)
 
 `0297_family_credentials_write_boundary.sql` is the newest and is worth naming
 here rather than leaving inside a count, because what it closes is live in
@@ -525,6 +526,28 @@ household rewrites `role` on her own invite row — one PostgREST PATCH, no app 
 — and `accept_invite()` copies it into `family_members`. Proved end to end in
 `docs/audit/invite-cannot-rewrite-what-it-grants-check.sql`: she joins as a
 **parent**. Anyone holding a pending invite can do it.
+**`0299_child_logins_write_boundary.sql` is the second to apply, and it is the
+same shape as `0298`.** `child_logins`' only write policy is *named* "Managers
+manage child_logins" and *predicated* on `is_family_member(family_id)`, so every
+member of the household — a child included — can INSERT, UPDATE and DELETE any
+row in it. Two live consequences. A child can DELETE a sibling's row, leaving
+that sibling's auth user with no username resolving to it: a permanent lockout
+with no recovery in the UI. And a child can UPDATE `user_id`, which
+`resetChildPinAction` reads and hands to `auth.admin.updateUserById` under the
+service role — so a child points their own row at a PARENT's auth user, asks that
+parent to reset their PIN ("I forgot it"), and the parent's account password
+becomes `deriveChildPassword(secret, childUsername, pin)`, a value the child
+chose. Proved in `docs/audit/child-login-mapping-is-managers-only-check.sql`,
+whose negative control reports *"a child REPOINTED 1 login mapping(s) at another
+auth user — this is the reset-PIN takeover"*.
+
+The takeover itself does **not** wait for this migration: `resetChildPinAction`
+now resolves the auth user from `family_members` (already `can_manage_family` on
+writes) and refuses when `child_logins` disagrees with it or when the named member
+is a manager. That closes the escalation on production today. What the migration
+still buys is the rest of the boundary — the sibling lockout, and planting a
+mapping — neither of which any application code can prevent.
+
 Nothing here authorizes applying any of them; this section exists so the gap is
 visible rather than inferred from the absence of a row.
 

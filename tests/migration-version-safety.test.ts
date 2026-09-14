@@ -41,11 +41,12 @@ describe('Supabase migration filename safety', () => {
   // four digits, so those do not drag the next free number up to 1422.
   it('points new migrations at the next unused version', () => {
     // Bumped whenever a migration lands — 0295 is the reward-redemption
-    // decision guard (#542) and 0296 is the social-access DELETE grant. Both
-    // branches independently claimed 0295; stating the number rather than
-    // deriving it is exactly what caught that, so a file that quietly reuses
-    // one, or a rebase that drops one, fails here.
-    expect(audit.nextVersion).toBe('0299');
+    // decision guard (#542), 0296 the social-access DELETE grant, 0297 the
+    // family-credentials write boundary, 0298 the invites UPDATE check, and 0299
+    // the child_logins write boundary. Both branches independently claimed 0295;
+    // stating the number rather than deriving it is exactly what caught that, so
+    // a file that quietly reuses one, or a rebase that drops one, fails here.
+    expect(audit.nextVersion).toBe('0300');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

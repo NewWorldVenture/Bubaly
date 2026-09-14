@@ -1129,3 +1129,104 @@ report. It would have been easy to read "globals.css:414 (.btn-primary)", see a
 - **Proved load-bearing:** reverting all five pages and both components → **9 of
   14 fail**, and the 5 that pass are exactly the negative controls. That is the
   right split: the controls are supposed to pass before and after.
+
+---
+
+## Pass S — the child-login mapping (merged from Claude-3), and a stale-worktree hazard
+
+### [CLAUDE-3][HIGH → CRITICAL on verification][RLS] A child could repoint a login mapping at a parent, and a PIN reset would then set the parent's password
+
+- **File/path:** `supabase/migrations/01051_child_logins.sql:44`; consumer
+  `app/(app)/family/child-login-actions.ts` (`resetChildPinAction`)
+- **Verified against a replay of all 312 migrations.** The policy is *named*
+  "Managers manage child_logins" and *predicated* on
+  `is_family_member(family_id)`, on both sides of a `for all`. Claude-3 rated it
+  HIGH for the sibling lockout. Reading the consumer makes it worse than that:
+
+  `resetChildPinAction` is manager-gated, reads `row.user_id` straight out of
+  that table, and calls `admin.auth.admin.updateUserById(row.user_id, { password })`
+  **under the service role**. So a child points their own row's `user_id` at a
+  PARENT's auth user, asks that parent to reset their PIN — "I forgot it", an
+  ordinary request — and the reset sets the **parent's** account password to
+  `deriveChildPassword(secret, childUsername, pin)`, a value the child chose.
+  Child to parent account takeover, with the parent's own hand on the button and
+  nothing in the audit log to tell it from a normal reset.
+- **Evidence, executed both ways:**
+  - `docs/audit/child-login-mapping-is-managers-only-check.sql` against the
+    replayed schema: **OK** — a child cannot repoint, delete or plant a mapping;
+    a parent still can; reads stay open.
+  - Negative control, permissive policy restored: *"a child REPOINTED 1 login
+    mapping(s) at another auth user — this is the reset-PIN takeover | a child
+    DELETED 1 sibling login(s) | a child INSERTED a login mapping"*.
+  - `tests/a-pin-reset-cannot-reach-a-parents-account.test.ts` calls the real
+    action against the pre-fix code and the failure prints the id it set a
+    password for: `[ "22222222-2222-4222-8222-222222222222" ]` — the parent.
+- **Fix, in two halves, and the order matters:**
+  1. **`0299_child_logins_write_boundary.sql`** makes the write policy
+     `can_manage_family(family_id)` on both sides. **NOT applied to production**
+     (F-001). Third table in this audit with this exact defect, after F20's chore
+     board and O-01's password vault.
+  2. **The application half, which does NOT wait for the migration.**
+     `resetChildPinAction` now resolves the auth user from `family_members`
+     (already manager-only on writes), refuses when `child_logins` disagrees with
+     it, and refuses outright when the named member is a manager. Deliberately a
+     REFUSAL rather than a fallback: a disagreement is evidence of tampering, and
+     it is logged as such. This matters because production's ledger is gated, so
+     0299 will sit unapplied while the takeover is closed in code today.
+- **Why "refuse a manager" cannot block a legitimate reset:**
+  `createChildLoginAction` refuses a member who already has a `user_id`, and a
+  manager always has one, so no manager can ever hold a child login honestly. A
+  test case pins that teens, caregivers and guests still reset fine — the check
+  had to not quietly narrow to `role === 'child'`.
+- **Status:** FIXED (app half live; RLS half queued). Probes **22/22**.
+  Proved load-bearing: reverting the action → **6 of 10 fail**, and the 4 that
+  pass are the happy-path controls.
+
+### The negative control found a bug in my own probe, again
+
+The first draft caught only `insufficient_privilege` around the child's INSERT.
+With the permissive policy restored the insert *succeeded*, hit
+`unique (member_id)`, and the block died on **"duplicate key value violates unique
+constraint"** instead of naming the boundary as open. RLS is checked **before** a
+unique index, so an insert that reaches the constraint is an insert RLS let
+through — it has to be reported, not swallowed. Fixed by catching
+`unique_violation` as a failure and giving the parent's positive control a member
+of its own.
+
+**Second time in this audit that a failure path nobody had run was itself wrong**
+(Pass O's `failures || 'literal'` array-literal bug was the first). A probe is
+code, and the branch that only executes when something is broken is the branch
+nobody reads.
+
+### [CLAUDE-1][MEDIUM][TOOLING] S-02 was already fixed, and the evidence for it came from a stale checkout
+
+Claude-3's S-02 — the child-PIN throttle bypass via `ILIKE`'s `_` wildcard — is
+**already fixed on main**, by `adaa04d8` "Match a child's username as a value, not
+as a pattern (#545)" (2026-09-13 18:46, an ancestor of HEAD), with a dedicated
+guard in `tests/child-login-username-is-not-a-pattern.test.ts`. `app/(auth)/actions.ts`
+reads `.eq('username', username)` and carries a comment describing the exact
+defect. Verified rather than assumed before writing anything.
+
+**Where the stale evidence came from:** `.claude/worktrees/` holds **81 git
+worktrees** — whole checkouts of this repository at older commits, left by
+completed workflow runs. They are gitignored, so they never reach a commit, but
+they are on disk: `grep -rn "ilike('username'"` finds the pre-fix line in dozens
+of them. Any sweep that greps the filesystem rather than `git ls-files` reads code
+that was fixed hours ago and reports it as open.
+
+- **Checked, and this is the reassuring half:** the three tests that walk from the
+  repo root (`catalogue-key-rendered-through-t`, `marketing-aeo-localized-everywhere`,
+  `server-action-authorization`) all skip dot-directories, two of them with an
+  explicit comment naming `.claude/worktrees`. `scripts/audit-unstyled-classes.mjs`
+  uses `git ls-files`. So no guard in the suite is reading stale copies — only
+  ad-hoc greps are at risk, which is exactly what an auditor does by hand.
+- **A second, operational half, for the owner:** those worktrees are **7.7 GB**,
+  against **7.6 GB** of free disk on this machine (80% used). They are the whole
+  remaining headroom. I did **not** delete them: `git worktree list` has 92
+  entries and **19 of them hold commits that are not reachable from HEAD or
+  origin/main**, so a blanket removal would discard work from runs that never
+  merged. The safe recipe, for whoever owns that decision: check
+  `git -C <dir> status --porcelain` and reachability per worktree, remove only the
+  ones that are clean AND reachable, then `git worktree prune`.
+- **Status:** S-02 FIXED (not by me — recorded so it is not re-fixed). The
+  worktree hazard is OPEN and is the owner's call, not an agent's.
