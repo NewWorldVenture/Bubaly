@@ -31,6 +31,14 @@
 //       reading chat/route.ts:110, which builds its fmtDate inside the prompt text.
 //   13  lib/ai/* context and result builders — same.
 //    9  Super Admin / operator pages — the platform's own books in its own currency.
+//    1  lib/services/finances/index.ts formatDollars — NOT A DISPLAY FORMATTER either,
+//       and this one reads like one. Its 27 callers are (a) lib/ai/tools/finances.ts
+//       summarize/consequences strings, which the MODEL reads, and (b) activity-ledger
+//       title/detail rows this module writes (index.ts:704, 723, 945, 1017, 1096, 1187).
+//       A ledger row is a RECORD with many readers over time, written once; formatting
+//       its numbers in the language of whoever happened to trigger the write makes the
+//       record depend on the actor. Its English prose is the real defect there, and that
+//       is a catalogue change, not a formatter change.
 //    2  lib/onboarding/ics-time.ts — NOT A DISPLAY FORMATTER. Its two calls are a
 //       mechanism: resolvedOptions().timeZone canonicalises an IANA zone, and the second
 //       pins calendar 'gregory', numberingSystem 'latn' and hourCycle 'h23' to extract
@@ -63,7 +71,12 @@ const FORMATTER_WITH_LOCALE =
 /**
  * The ceiling, measured when the shared formatter was made locale-aware.
  *
- * 104, and every step to that number was a way to get it wrong. A `git grep -c`
+ * Now 99: the Finances tranche converted five — lib/finance/hub.ts (usd,
+ * fmtDueDate), lib/finance/splits.ts (usd) and lib/finance/timeline.ts (money,
+ * pretty) — across twelve surfaces, proved in
+ * tests/the-finance-surfaces-follow-the-reader.test.ts.
+ *
+ * It started at 104, and every step to that number was a way to get it wrong. A `git grep -c`
  * says 247, because git grep counts matching LINES and several of these hold two
  * formatters. Counting matches instead says 252 — but that reads COMMENTS, and one
  * of them is this pass's own explanation of the defect. Stripping comments gives
@@ -72,7 +85,7 @@ const FORMATTER_WITH_LOCALE =
  * Getting those three numbers to disagree is how a ratchet starts life already
  * broken, which is why the derivation is written down rather than the result.
  */
-const CEILING = 104;
+const CEILING = 99;
 
 /**
  * Comments stripped first, and this is not a detail.

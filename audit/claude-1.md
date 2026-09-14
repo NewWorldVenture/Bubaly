@@ -2417,3 +2417,110 @@ Proved by localising `scope.ts`'s `hourInTz`: **expected 15 to be 16**, with tha
 
 104 total = **55 correct** (39 exempt + 16 mechanism) + **8 blocked** on I18N-001 + **41
 convertible defects**, all display formatters in `lib/` reached by a family surface.
+
+---
+
+## Pass AJ — the Finances surfaces follow the reader, and one "formatter" turned out to be a record
+
+**Status: FIXED.** 5 formatter sites, 3 `lib/` modules, 12 surfaces. Ceiling 104 → **99**.
+
+### What was converted
+
+| module | helper | surfaces |
+|---|---|---|
+| `lib/finance/hub.ts` | `usd(amount, locale)`, `fmtDueDate(iso, locale)` | Bill Manager, Auto Pay, Due Reminders, Budget Planner, Savings, Payments |
+| `lib/finance/splits.ts` | `usd(cents, locale)` | Expense Splitting, Subscriptions, Tax Vault |
+| `lib/finance/timeline.ts` | `money(n, locale)`, `pretty(ymd, locale)` | Financial Copilot, affordability form, Family CFO forecast tiles |
+
+The nine client views import the helper **aliased** (`usd as usdIn`) and rebind it under
+`useLocale()`; `app/(app)/dashboard/family-cfo/page.tsx` is a server component and reads
+`getLocaleContext()`. `BuildTimelineInput` gained an optional `locale`, so the insight copy
+`buildCashflowTimeline` writes is formatted for whoever is reading the page rather than for
+nobody.
+
+### `[CLAUDE-1][MEDIUM][I18N]` `lib/services/finances/index.ts formatDollars` is NOT a display formatter
+
+**Status: VERIFIED — reclassified as exempt, was counted as a defect.**
+
+It reads exactly like one ("`"$1,234.56"` for narrative summaries") and I had it in the
+convertible 41. Reading its **27 callers** says otherwise:
+
+- 17 are `lib/ai/tools/finances.ts` `summarize` / `consequences` strings — read by the
+  **model**, the same category as the AI prompt builders.
+- 10 are activity-ledger `title`/`detail` rows this module **writes** (`index.ts:704, 723,
+  945, 1017, 1096, 1187`).
+
+A ledger row is a **record**: written once, read by many members over time. Formatting its
+numbers in the language of whoever happened to trigger the write makes the record depend on
+the actor. Its hardcoded **English prose** is the real defect there, and that is a
+catalogue change rather than a formatter change. Floor is 56, not 55.
+
+### `[CLAUDE-1][LOW][I18N]` the persisted Copilot insights are write-only
+
+**Status: VERIFIED — not a defect, and worth writing down because it looked like one.**
+
+`syncMoneyInsightsAction` upserts each insight's formatted `title`/`detail` into
+`money_timeline_insights`. That looks like baked-in text a family would later read in one
+member's language. It is not: `money-timeline/page.tsx:42` reads back only
+`dedupe_key, status` and re-derives the copy from a fresh `loadMoneyTimeline` for its own
+reader. The persisted columns are a record of what was surfaced.
+
+Two things had to be true for that to be safe, and both were checked rather than assumed:
+
+1. **`insightDedupeKey` is `${kind}:${weekStart ?? 'general'}`** — it does *not* include the
+   title. Had it hashed the copy, localising the text would have changed every key and
+   **orphaned every acknowledge/dismiss a family had set**. That was the real risk in this
+   file and it is absent.
+2. `AffordabilityResult` carries only numbers and dates, no prose — so
+   `family-cfo/actions.ts` needed no locale and was left alone.
+
+### `[CLAUDE-1][LOW][TEST]` a fourth guard that asserted the solution instead of the property
+
+`tests/family-cfo-read-boundary.test.ts:45` asserted the **exact call text**
+`'forecastInput = await loadMoneyTimelineInput(supabase, familyId);'`. Adding a locale to
+the loader broke it — a change to an argument list, not to the read boundary the test
+exists to hold. Now `toMatch(/forecastInput = await loadMoneyTimelineInput\(/)`: the
+property is that the read is awaited into `forecastInput`, and the ordering assertions
+below it already anchor on the `console.error` line.
+
+That is the **fourth** guard in this audit to assert the solution rather than the property
+(after a dead CSS-class anchor, an exact-text UPDATE assertion, and a five-line window).
+
+### The new guard
+
+`tests/the-finance-surfaces-follow-the-reader.test.ts`, 19 cases. What it holds that a
+green diff would not:
+
+- **Exact strings, not `toContain`.** `usd(1234.5, 'de-DE')` must be `'1.234,50 $'`
+  and `usd(1234.5, 'fr-FR')` must be `'1 234,50 $US'`. A `toContain('1.234,50')`
+  passes against a formatter that has flattened U+00A0 to a plain space — which is how an
+  earlier pass shipped German money that could break mid-amount.
+- **The order, not the words.** `fmtDueDate('2026-07-14', 'de-DE')` is `'14. Juli 2026'`
+  and the test asserts `indexOf('14') < indexOf('Juli')`, because a date-fns pattern gives
+  German month names in American order.
+- **`timeZone: 'UTC'` survives the locale.** `pretty()` renders a week-start built at UTC
+  midnight; under `TZ=America/Los_Angeles` it must still say `'Jan 19'`, not Jan 18.
+- **The locale does not reach the arithmetic.** The de-DE forecast's `amount` and
+  `weekStart` must equal the en-US one.
+- **Every surface binds.** Each of the 10 files must import the helper aliased *and* rebind
+  it to `locale.code`, and must read the locale from the correct half of the boundary
+  (`useLocale()` in a client file, `await getLocaleContext()` in a server one). This is the
+  half-conversion tsc cannot see, because the locale parameter is optional — a view that
+  imports `usd` unaliased compiles and silently renders `en-US`.
+
+Proved load-bearing by reverting `bills-view.tsx`: 2 of 19 fail, naming the file and
+saying it must import `usd as usdIn` and must contain `useLocale()`.
+
+### `[CLAUDE-1][LOW][LINT]` a real eslint error sits outside CI's lint scope
+
+`npm run lint` is `next lint`, which does **not** lint `tests/`. `npx eslint .` finds
+`tests/school-sports-desk.test.ts:359` — `@next/next/no-assign-module-variable`, an
+**error**, committed 2026-09-09 and green in CI ever since. Not this pass's to fix, but the
+gap is: `next lint` is deprecated, and whatever replaces it will start failing on a file
+nobody has been told about. Recorded, not touched.
+
+### Where the count stands
+
+**99 total = 56 correct** (40 exempt + 16 mechanism) + **8 blocked** on I18N-001 +
+**35 convertible defects**, all display formatters in `lib/`. `components/` is at zero;
+`app/` is at its floor of 25.

@@ -8,7 +8,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { SkeletonList, EmptyState, ErrorState, Skeleton } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
-import { usd, fmtDueDate } from '@/lib/finance/hub';
+import { usd as usdIn, fmtDueDate as fmtDueDateIn } from '@/lib/finance/hub';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type Txn = Tables<'transactions'>;
@@ -17,6 +17,9 @@ const FILTERS = ['all', 'income', 'expense', 'transfer'] as const;
 export function PaymentsView() {
   const locale = useLocale();
   const tr = useTranslations();
+  // Money and dates follow the reader; the currency stays the money's own.
+  const usd = (amount: number) => usdIn(amount, locale.code);
+  const fmtDueDate = (iso: string) => fmtDueDateIn(iso, locale.code);
   const { familyId } = useApp();
 
   const { data: rows, loading, error: readError, refresh } = useRealtimeQuery<Txn>({

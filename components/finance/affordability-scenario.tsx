@@ -10,9 +10,9 @@ import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, ArrowRight, CheckCircle2, FlaskConical, Info, Loader2, XCircle } from 'lucide-react';
 import { assessAffordabilityAction } from '@/app/(app)/dashboard/family-cfo/actions';
-import { money, pretty, type AffordabilityResult, type AffordabilityVerdict, type ScenarioRecurrence } from '@/lib/finance/timeline';
+import { money as moneyIn, pretty as prettyIn, type AffordabilityResult, type AffordabilityVerdict, type ScenarioRecurrence } from '@/lib/finance/timeline';
 import { cn } from '@/lib/utils/cn';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 // A commitment that lands outside the 12-week horizon was never weighed by the
 // forecast, so it gets a neutral chip of its own — never the green "Yes", which
@@ -40,6 +40,10 @@ const INPUT = 'mt-1 w-full rounded-lg border border-border bg-surface px-2.5 py-
 
 export function AffordabilityScenario({ buffer }: { buffer: number }) {
   const t = useTranslations();
+  // Amounts and week labels follow the reader; the currency stays the money's own.
+  const locale = useLocale();
+  const money = (n: number) => moneyIn(n, locale.code);
+  const pretty = (ymdStr: string) => prettyIn(ymdStr, locale.code);
   const [label, setLabel] = useState('');
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(defaultDate);

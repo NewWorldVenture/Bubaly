@@ -11,10 +11,10 @@ import {
   Check, X, AlertTriangle, Wallet, ChevronDown, ShieldCheck, ArrowRight,
 } from 'lucide-react';
 import type { CashflowTimeline, TimelineInsight, InsightSeverity, MomentKind, PlanSource } from '@/lib/finance/timeline';
-import { money, pretty } from '@/lib/finance/timeline';
+import { money as moneyIn, pretty as prettyIn } from '@/lib/finance/timeline';
 import { setMoneyInsightStatusAction, syncMoneyInsightsAction } from '@/app/(app)/dashboard/money-timeline/actions';
 import { cn } from '@/lib/utils/cn';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type KeyedInsight = TimelineInsight & { key: string };
 
@@ -60,6 +60,10 @@ export function MoneyTimelineModule({
   statusByKey: Record<string, string>;
 }) {
   const t = useTranslations();
+  // Amounts and week labels follow the reader; the currency stays the money's own.
+  const locale = useLocale();
+  const money = (n: number) => moneyIn(n, locale.code);
+  const pretty = (ymdStr: string) => prettyIn(ymdStr, locale.code);
   const [overrides, setOverrides] = useState<Record<string, string>>({});
   const [pending, startTransition] = useTransition();
 
@@ -201,6 +205,10 @@ function Stat({ label, value, sub, tone }: { label: string; value: string; sub?:
 
 function TimelineView({ timeline }: { timeline: CashflowTimeline }) {
   const t = useTranslations();
+  // Amounts and week labels follow the reader; the currency stays the money's own.
+  const locale = useLocale();
+  const money = (n: number) => moneyIn(n, locale.code);
+  const pretty = (ymdStr: string) => prettyIn(ymdStr, locale.code);
   const [expanded, setExpanded] = useState<string | null>(null);
   const maxOutflow = useMemo(
     () => Math.max(1, ...timeline.weeks.map((w) => w.outflow)),

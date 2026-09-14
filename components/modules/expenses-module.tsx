@@ -16,11 +16,11 @@ import { Avatar } from '@/components/ui/avatar';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import {
-  usd, splitEvenly, memberBalances, settlementSuggestions, summarizeSplits,
+  usd as usdIn, splitEvenly, memberBalances, settlementSuggestions, summarizeSplits,
   type SplitLike, type ShareLike,
 } from '@/lib/finance/splits';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type SplitRow = Tables<'expense_splits'>;
 type Share = Tables<'expense_split_shares'>;
@@ -30,6 +30,9 @@ const blank = () => ({ description: '', amount: '', category: 'Groceries', paid_
 
 export function ExpensesModule() {
   const tr = useTranslations();
+  // Money follows the reader; the currency stays the money's own.
+  const locale = useLocale();
+  const usd = (cents: number) => usdIn(cents, locale.code);
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
   const { run, isPending } = useAction({ onError: (e) => toastError(describeDbError(e)) });
