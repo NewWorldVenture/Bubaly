@@ -22,6 +22,7 @@ import { describeDbError } from '@/lib/supabase/errors';
 import { recordActivitySafely } from '../activity';
 import { scopeNow } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
+import { escapeLike } from '@/lib/supabase/escape-like';
 
 export type InventoryItemRow = Tables<'inventory_items'>;
 export type HomeLocationRow = Tables<'home_locations'>;
@@ -43,10 +44,6 @@ export type InventoryFind = {
   lastConfirmed: Confirmation | null;
   lastMovedAt: string | null;
 };
-
-function escapeLike(value: string): string {
-  return value.replace(/[%_]/g, (m) => `\\${m}`);
-}
 
 async function readLocations(scope: ServiceScope): Promise<ServiceResult<HomeLocationRow[]>> {
   const { data, error } = await scope.db

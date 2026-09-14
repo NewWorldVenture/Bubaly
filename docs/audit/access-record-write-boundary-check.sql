@@ -23,10 +23,10 @@ grant select, insert, update, delete on all tables in schema public to authentic
 
 do $$
 declare
-  fam         uuid := 'ffff0000-0000-4000-8000-00000000000f';
-  parent_uid  uuid := 'f0000000-0000-4000-8000-000000000001';
-  child_uid   uuid := 'f0000000-0000-4000-8000-000000000002';
-  sibling_uid uuid := 'f0000000-0000-4000-8000-000000000003';
+  fam         uuid := 'ffff2222-0000-4000-8000-00000000000f';
+  parent_uid  uuid := 'f2000000-0000-4000-8000-000000000001';
+  child_uid   uuid := 'f2000000-0000-4000-8000-000000000002';
+  sibling_uid uuid := 'f2000000-0000-4000-8000-000000000003';
   child_mid   uuid;
   sibling_mid uuid;
   parent_note uuid;

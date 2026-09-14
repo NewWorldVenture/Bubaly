@@ -12,6 +12,7 @@ import { detectConflicts, type ConflictEvent } from '@/lib/home/conflicts';
 import type { ParentApprovalRow, RenewalRow, DocumentRow } from '@/lib/home/needs-sources';
 import { reminderAttention } from '@/lib/dashboard/reminder-attention';
 import { nextRemindAt } from '@/lib/reminders/details';
+import { escapeLike } from '@/lib/supabase/escape-like';
 
 type DB = SupabaseClient<Database>;
 
@@ -244,7 +245,7 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         if (!q) return { ok: false, error: 'title is required' };
         const { data: rows, error: lookupError } = await supabase.from('family_reminders')
           .select('id, title, notes, kind, priority, recurrence, remind_at, member_id, location_name')
-          .eq('family_id', ctx.familyId).eq('status', 'active').ilike('title', `%${q}%`)
+          .eq('family_id', ctx.familyId).eq('status', 'active').ilike('title', `%${escapeLike(q)}%`)
           .order('remind_at', { ascending: true, nullsFirst: false }).limit(1);
         if (lookupError) return toolFailure('find the reminder', lookupError);
         const r = rows?.[0];
@@ -286,7 +287,7 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         const q = str(a.title); const remind_at = str(a.remind_at);
         if (!q || !remind_at) return { ok: false, error: 'title and remind_at are required' };
         const { data: rows, error: lookupError } = await supabase.from('family_reminders')
-          .select('id, title').eq('family_id', ctx.familyId).eq('status', 'active').ilike('title', `%${q}%`)
+          .select('id, title').eq('family_id', ctx.familyId).eq('status', 'active').ilike('title', `%${escapeLike(q)}%`)
           .order('remind_at', { ascending: true, nullsFirst: false }).limit(1);
         if (lookupError) return toolFailure('find the reminder', lookupError);
         const r = rows?.[0];
@@ -495,7 +496,7 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         if (!title) return { ok: false, error: 'event_title is required' };
         const { data: events, error: eventError } = await supabase.from('calendar_events')
           .select('id, title, starts_at')
-          .eq('family_id', ctx.familyId).ilike('title', `%${title}%`)
+          .eq('family_id', ctx.familyId).ilike('title', `%${escapeLike(title)}%`)
           .order('starts_at', { ascending: false }).limit(1);
         if (eventError) return toolFailure('find the event', eventError);
         if (!events?.length) return { ok: false, error: `No event matching "${title}" found.` };
@@ -529,7 +530,7 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         if (!title || !['accepted', 'maybe', 'declined'].includes(status)) return { ok: false, error: 'event_title and valid status required' };
         const { data: events, error: eventError } = await supabase.from('calendar_events')
           .select('id, title')
-          .eq('family_id', ctx.familyId).ilike('title', `%${title}%`)
+          .eq('family_id', ctx.familyId).ilike('title', `%${escapeLike(title)}%`)
           .order('starts_at', { ascending: false }).limit(1);
         if (eventError) return toolFailure('find the event', eventError);
         if (!events?.length) return { ok: false, error: `No event matching "${title}" found.` };

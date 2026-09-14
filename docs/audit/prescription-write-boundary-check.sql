@@ -1,10 +1,10 @@
--- Behavioural proof for 0299, run as real `authenticated` sessions under RLS.
+-- Behavioural proof for 0300, run as real `authenticated` sessions under RLS.
 --
 -- `medications` and `medication_schedules` are written DIRECTLY FROM THE BROWSER
 -- and the module's idea of who may write is a React boolean
 -- (`const canEdit = isManager(role)`, medications-module.tsx:77). A child is a
 -- real Supabase auth user, so a child session can call PostgREST directly and
--- RLS is the only boundary. Before 0299 the child's UPDATE and DELETE succeeded.
+-- RLS is the only boundary. Before 0300 the child's UPDATE and DELETE succeeded.
 --
 -- Deleting a schedule also silences the medication reminder, so this is a safety
 -- surface and not only a record.
@@ -18,9 +18,9 @@ grant select, insert, update, delete on all tables in schema public to authentic
 
 do $$
 declare
-  fam        uuid := 'cccc0000-0000-4000-8000-00000000000c';
-  parent_uid uuid := 'c0000000-0000-4000-8000-000000000001';
-  child_uid  uuid := 'c0000000-0000-4000-8000-000000000002';
+  fam        uuid := 'cccc2222-0000-4000-8000-00000000000c';
+  parent_uid uuid := 'c2000000-0000-4000-8000-000000000001';
+  child_uid  uuid := 'c2000000-0000-4000-8000-000000000002';
   child_mid  uuid;
   med_id     uuid;
   sched_id   uuid;
@@ -63,7 +63,7 @@ begin
   perform set_config('request.jwt.claim.sub', child_uid::text, true);
   set local role authenticated;
 
-  -- 1. Cannot change a dosage. Before 0299 this was UPDATE 1.
+  -- 1. Cannot change a dosage. Before 0300 this was UPDATE 1.
   update public.medications set dosage = '500mg' where id = med_id;
   get diagnostics n = row_count;
   if n <> 0 then

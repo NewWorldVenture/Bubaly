@@ -2364,3 +2364,36 @@ Four of main's test cases were failing against my version when the two were
 merged. They were not adjusted to fit — the IMPLEMENTATION changed to match
 them, and my cases were rewritten to the settled semantics. That is the right
 way round: their tests were encoding the better rule.
+
+### [CLAUDE-1][MEDIUM][TESTING] Four boundary probes were not isolated from each other
+
+Found by merging main's `0299_family_keeps_a_manager`, and worth recording
+because **the new trigger is what exposed it** — it was invisible before.
+
+- **Problem:** `document-vault-boundary-check.sql` and my
+  `access-record-write-boundary-check.sql` used the SAME `auth.users` ids
+  (`f0000000-…-1`, `-2`). The probes glob in alphabetical order, so `access`
+  runs first and leaves its family behind (its self-cleanup is at the START, for
+  re-runnability); `document-vault` then finishes with `delete from auth.users
+  where id in (parent_uid, teen_uid)`, which **cascades into the other probe's
+  family** and removes its only manager. Main's new constraint trigger fires at
+  COMMIT, sees a family with one active member and no manager, and refuses —
+  after the probe has already printed "check passed".
+- **Evidence:** instrumenting the trigger to name the family it was refusing
+  gave `DEBUG family=ffff0000-…-f members=1 managers=0 tg=DELETE` — the *Access*
+  family, from a probe that had finished several files earlier.
+- **Impact:** two probes whose result depended on **run order**, and which
+  interfered with a third. Nothing was wrong with the boundaries they test; the
+  harness was wrong. A probe that shares identifiers with another probe is not a
+  probe, it is a probe plus whatever ran before it.
+- **Fix:** a sweep for every uuid literal shared between two probe files, and a
+  unique namespace for each of the four of mine that collided —
+  `prescription` (shared `c0000000-…` with `family-credentials`),
+  `access-record` (shared `f0000000-…` with `document-vault`),
+  `paywall` (shared `dddd1111-…`/`d1000000-…` with **my own**
+  `economy-redemption-price`), and `invite-terms` (shared `e0000000-…` with
+  `money-write`). Probes I did not write are left alone where they do not fail.
+- **Status:** FIXED. **322/322 migrations, 30/30 probes, and the suite run
+  THREE times in a row** — once on a fresh database and twice more against its
+  own leftovers, because "passes once" was exactly the property that was not
+  holding.

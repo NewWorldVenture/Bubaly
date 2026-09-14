@@ -171,6 +171,17 @@ export function FamilyModule() {
 
   const visibleMembers = showAllMembers ? activeMembers : activeMembers.slice(0, 12);
 
+  // can_manage_family() — the USING and WITH CHECK clause of fm_update, fm_insert
+  // and fm_delete — is true only for an ACTIVE parent/adult. Demote, deactivate
+  // or remove the last one and every household write evaluates false for
+  // everybody, with no way back from inside the product. Migration 0299 refuses
+  // it in the database, which is where the real guard has to live because these
+  // are direct PostgREST writes. This hides the menu so the screen stops
+  // offering an action the database will reject.
+  const managerCount = activeMembers.filter((m) => MANAGER_ROLES.includes(m.role)).length;
+  const isLastManager = (m: typeof activeMembers[number]) =>
+    managerCount <= 1 && MANAGER_ROLES.includes(m.role);
+
   if (loading) return <SkeletonList />;
   if (loadError) return <ErrorState message={loadError} onRetry={() => { setLoading(true); void load(); }} />;
 
@@ -251,7 +262,7 @@ export function FamilyModule() {
                 const age = memberAge(m.birthday);
                 return (
                   <div key={m.id} className="group relative flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-surface/20 p-4 text-center">
-                    {canManage && (
+                    {canManage && !isLastManager(m) && (
                       <div className="absolute right-1.5 top-1.5">
                         <button onClick={() => setMenuId(menuId === m.id ? null : m.id)} aria-label={`Manage ${m.display_name}`} className="grid h-6 w-6 place-items-center rounded-lg text-muted/60 opacity-0 transition hover:bg-elevated group-hover:opacity-100">
                           <MoreHorizontal className="h-4 w-4" />
@@ -444,7 +455,7 @@ export function FamilyModule() {
         <EditFamilyModal family={family} onClose={() => setEditOpen(false)} onSaved={(f) => { setFamily(f); setEditOpen(false); }} />
       )}
       {inviteOpen && (
-        <InviteModal code={family?.family_code ?? null} onClose={() => setInviteOpen(false)} onCopy={copyCode} />
+        <InviteModal onClose={() => setInviteOpen(false)} />
       )}
       <Modal open={!!removeMember} title={t('family.removeMember')} onClose={() => setRemoveMember(null)}>
         <div className="space-y-4">
@@ -585,16 +596,30 @@ function EditFamilyModal({ family, onClose, onSaved }: { family: Family; onClose
 }
 
 // ── Invite modal ────────────────────────────────────────────────────────────
-function InviteModal({ code, onClose, onCopy }: { code: string | null; onClose: () => void; onCopy: () => void }) {
+//
+// This modal used to LEAD with the family code — the copy button, the big
+// monospace string, and the line "Share your family code so a new member can
+// join". Nothing in the product redeems a family code. There is no route, server
+// action or RPC that reads `families.family_code` as an input: every reference to
+// it is a write, a display, or the migration that creates it. The only working
+// join path is /join?token=… -> rpc('accept_invite', p_token), which matches
+// `invites.token`, a per-invite value with no relationship to the family code.
+// Someone receiving the code has nowhere to type it, and /join without a token
+// answers "This invite link is missing its token".
+//
+// (`marketplace_circles.join_code` DOES have a redemption path — 0176 matches on
+//  `join_code = upper(trim(p_code))`. The same thing was built for circles and
+//  never for families, which is how this got missed.)
+//
+// So the modal now offers only the path that works. The code itself is still
+// shown on the Family screen under "Family Code", where it reads as the
+// identifier it is rather than as an invitation someone can act on.
+function InviteModal({ onClose }: { onClose: () => void }) {
   const t = useTranslations();
   return (
     <Modal open title={t('family.inviteFamily')} onClose={onClose}>
       <div className="space-y-4">
-        <p className="text-sm text-muted">{t('family.shareYourFamilyCodeSoA')}</p>
-        <div className="flex items-center justify-between rounded-xl border border-border bg-surface/40 px-4 py-3">
-          <span className="font-mono text-lg font-bold tracking-widest">{code ?? '—'}</span>
-          {code && <Button size="sm" variant="secondary" onClick={onCopy}><Copy className="h-4 w-4" /> {t('family.copy')}</Button>}
-        </div>
+        <p className="text-sm text-muted">{t('onboardingWizard.inviteByEmail')}</p>
         <Link href="/family/members" className="btn-cta inline-flex w-full items-center justify-center" onClick={onClose}>{t('family.manageMembersInvites')}</Link>
       </div>
     </Modal>

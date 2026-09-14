@@ -10,6 +10,7 @@ import { paperworkKindFields, triagePaperwork, type PaperworkKind } from '@/lib/
 import { systemScopeForFamily } from '@/lib/services/scope';
 import { enrichPaperworkEntities, PaperworkEnrichmentError } from '@/lib/services/paperwork';
 import { classifyIntent, summarizeInbound, shouldNotifyFamily, shouldPlanInbound, type InboundChannel } from './routing';
+import { escapeLike } from '@/lib/supabase/escape-like';
 
 type Admin = ReturnType<typeof createServiceClient>;
 export type ContactChannel = Tables<'family_contact_channels'>;
@@ -82,10 +83,6 @@ export async function resolveFamilyByNumber(admin: Admin, toNumber: string): Pro
  * fix had not reached this call site, where the input is not merely guessable
  * but supplied by the sender.
  */
-function escapeLike(value: string): string {
-  return value.replace(/[%_]/g, (m) => `\\${m}`);
-}
-
 /** Resolve the family that owns a bubaly.com local-part (inbound email routing). */
 export async function resolveFamilyByEmailLocalResult(admin: Admin, local: string): Promise<{
   familyId: string | null;

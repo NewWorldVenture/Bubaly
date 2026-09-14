@@ -5,7 +5,7 @@
 // prep engine. Renders nothing when there's no upcoming event that needs prep,
 // so Home stays calm.
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   Sparkles, Clock, CloudSun, Backpack, ShoppingCart, PiggyBank, Stethoscope,
@@ -43,12 +43,20 @@ export function HomeMomentCard() {
   const wxByDate = useDefaultForecast(familyId);
   const [remindState, setRemindState] = useState<'idle' | 'saving' | 'done'>('idle');
 
-  const { data: rows } = useRealtimeQuery<Event>({
+  const { data: rows, error } = useRealtimeQuery<Event>({
     table: 'calendar_events', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('calendar_events').select('*')
       .eq('family_id', familyId).gte('starts_at', nowISO)
       .order('starts_at', { ascending: true }).limit(3),
   });
+
+  // Same shape as on-this-day: this banner is meant to be absent when there is
+  // nothing to prep for, and a failed read took that same path silently. The
+  // card stays quiet on screen; the failure no longer stays quiet everywhere.
+  // (C2-15.)
+  useEffect(() => {
+    if (error) console.error('[home-moment] upcoming events read failed — banner hidden', error);
+  }, [error]);
 
   const moment = useMemo(() => {
     // Merge real events with any birthday landing today/tomorrow, so Home's

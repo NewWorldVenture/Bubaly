@@ -7,6 +7,7 @@ import { createServer } from '@/lib/supabase/server';
 import { settle } from '@/lib/supabase/settle';
 import type { Tables } from '@/lib/database.types';
 import type { SocialPostStatusEnum } from '@/lib/database.types';
+import { escapeLike } from '@/lib/supabase/escape-like';
 
 export type FeedItem = Tables<'social_feed_items'>;
 export type SocialAccount = Tables<'social_accounts'>;
@@ -56,7 +57,7 @@ export async function getFeed(
     .limit(opts.limit ?? 100);
   if (opts.platform) q = q.eq('platform', opts.platform as FeedItem['platform']);
   if (opts.mediaType) q = q.eq('media_type', opts.mediaType);
-  if (opts.search) q = q.ilike('body', `%${opts.search}%`);
+  if (opts.search) q = q.ilike('body', `%${escapeLike(opts.search)}%`);
   return orThrow(await q, 'social_feed_items', familyId);
 }
 

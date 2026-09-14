@@ -19,9 +19,9 @@ grant select, insert, update, delete on all tables in schema public to authentic
 
 do $$
 declare
-  fam        uuid := 'dddd1111-0000-4000-8000-00000000000d';
-  other      uuid := 'dddd2222-0000-4000-8000-00000000000d';
-  parent_uid uuid := 'd1000000-0000-4000-8000-000000000001';
+  fam        uuid := 'dddd3333-0000-4000-8000-00000000000d';
+  other      uuid := 'dddd4444-0000-4000-8000-00000000000d';
+  parent_uid uuid := 'd3000000-0000-4000-8000-000000000001';
   blocked    boolean;
   n          int;
   v_plan     text;

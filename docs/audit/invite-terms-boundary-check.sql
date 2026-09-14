@@ -19,8 +19,8 @@ do $$
 declare
   fam_a       uuid := 'eeee0000-0000-4000-8000-00000000000a';
   fam_b       uuid := 'eeee0000-0000-4000-8000-00000000000b';
-  parent_uid  uuid := 'e0000000-0000-4000-8000-000000000001';
-  invitee_uid uuid := 'e0000000-0000-4000-8000-000000000002';
+  parent_uid  uuid := 'e2000000-0000-4000-8000-000000000001';
+  invitee_uid uuid := 'e2000000-0000-4000-8000-000000000002';
   tok         text := 'invite-terms-check-token';
   invite_id   uuid;
   blocked     boolean;

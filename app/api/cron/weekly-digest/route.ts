@@ -13,6 +13,32 @@ import { renderCompareLine } from '@/lib/network/compare-line';
 
 // Runs every Monday at 08:00 UTC via Vercel Cron.
 // Sends each family a summary of the week ahead: events, due chores, meal count.
+//
+// Budgeted and bounded, because an unbounded serial loop over every family is
+// not merely slow here — it is silently unfair. The loop walks `families` in the
+// same `order('id')` every week and keeps no cursor, so when the run is killed
+// mid-loop the SAME prefix is served every time and the tail is never served at
+// all: a stable, invisible partition of the customer base, and the families in
+// it simply never receive a digest.
+//
+// Two changes follow from that. A declared budget, matching provider-sync,
+// library-feeds and marketing, so the limit is chosen rather than inherited from
+// the platform default. And bounded concurrency, because each family costs two
+// to four sequential round trips plus an email API call, which serially is what
+// makes the run outgrow any budget at all.
+//
+// If the budget is reached anyway, the run reports what it did NOT reach and
+// answers 502 rather than 200 — the tail being unserved is exactly the thing
+// that must not look like a clean run.
+export const runtime = 'nodejs';
+export const maxDuration = 300;
+
+// Below maxDuration with room to finish the families already in flight and to
+// write the response.
+const BUDGET_MS = 260_000;
+// Each family is mostly waiting on Supabase and the email provider, so this is
+// concurrency against latency, not CPU.
+const CONCURRENCY = 8;
 export async function GET(req: NextRequest) {
   const t = await getTranslations();
   if (!hasCronAuthorization(req)) {
@@ -50,7 +76,10 @@ export async function GET(req: NextRequest) {
 
   let sent = 0;
   let failed = 0;
-  for (const family of families) {
+  let skipped = 0;
+  const startedAt = Date.now();
+
+  const digestFor = async (family: (typeof families)[number]) => {
     // An open chore is an ASSIGNMENT that is still todo/in_progress. `chores` is
     // the definition table — it carries neither `status` nor `assignee_id`, so
     // reading those from it errors and skipped every family's digest. Counts,
@@ -70,10 +99,10 @@ export async function GET(req: NextRequest) {
     if (familyDataError) {
       console.error(`[weekly-digest] Family data read failed for ${family.id}:`, familyDataError);
       failed++;
-      continue;
+      return;
     }
 
-    if (!members?.length) continue;
+    if (!members?.length) return;
 
     const { data: adminMember, error: adminMemberError } = await supabase
       .from('family_members')
@@ -87,12 +116,12 @@ export async function GET(req: NextRequest) {
     if (adminMemberError) {
       console.error(`[weekly-digest] Admin member read failed for ${family.id}:`, adminMemberError);
       failed++;
-      continue;
+      return;
     }
 
-    if (!adminMember?.user_id) continue;
+    if (!adminMember?.user_id) return;
     const adminEmail = emailByUserId.get(adminMember.user_id);
-    if (!adminEmail) continue;
+    if (!adminEmail) return;
 
     const { ok } = await sendReactEmail({
       to: adminEmail,
@@ -111,7 +140,19 @@ export async function GET(req: NextRequest) {
     });
     if (ok) sent++;
     else failed++;
+  };
+
+  for (let i = 0; i < families.length; i += CONCURRENCY) {
+    if (Date.now() - startedAt > BUDGET_MS) {
+      skipped = families.length - i;
+      console.error(`[weekly-digest] budget reached with ${skipped} families unserved`);
+      break;
+    }
+    await Promise.all(families.slice(i, i + CONCURRENCY).map(digestFor));
   }
 
-  return NextResponse.json({ sent, failed }, { status: failed === 0 ? 200 : 502 });
+  // `skipped` counts families this run never attempted. Reporting 200 here would
+  // make an unserved tail indistinguishable from a complete run.
+  const ok = failed === 0 && skipped === 0;
+  return NextResponse.json({ sent, failed, skipped }, { status: ok ? 200 : 502 });
 }

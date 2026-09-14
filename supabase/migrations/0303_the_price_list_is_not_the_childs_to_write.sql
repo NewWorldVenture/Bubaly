@@ -35,7 +35,7 @@
 -- cash_awarded_cents = 4242424 on their own approved assignment, and the guard
 -- did not fire.
 --
--- Same class as the allowance_rules CRITICAL closed by 0299 — a child-writable
+-- Same class as the allowance_rules CRITICAL closed by 0309 — a child-writable
 -- input that a trusted server path later treats as authority — on the surface
 -- that fix did not cover.
 --

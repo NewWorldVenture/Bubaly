@@ -111,7 +111,7 @@ begin
       tbl || '_no_client_delete', tbl);
 
     -- Sweep stray PERMISSIVE write policies BY SHAPE, not by name. Narrowing by
-    -- name is how 0217 left six wallet tables behind for 0299 to find.
+    -- name is how 0217 left six wallet tables behind for 0309 to find.
     for pol in
       select p.polname from pg_policy p
       join pg_class c on c.oid = p.polrelid
