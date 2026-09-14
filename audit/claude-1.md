@@ -1831,3 +1831,94 @@ Convert the 249. The order that follows from the measurements: the 24 money form
 first (money is where a wrong locale misstates a value rather than reading oddly), then
 the 70 client files via `useFormat()`, then the 74 server files via `getFormat()`,
 leaving `lib/i18n`, the crons/exports and the Super Admin pages as recorded exceptions.
+
+---
+
+## Pass AA — four semantic colours that failed WCAG AA in light mode, on web and on mobile
+
+### [CLAUDE-1][HIGH][A11Y] 506 text sites below the contrast floor, and a guard that could not see it
+
+- **Status:** FIXED (web and Expo, one change reaching both)
+- **Files:** `app/globals.css` (light block), `design/tokens.json` (light block),
+  `tests/brand-contrast-contract.test.ts`
+
+Claude-2's ratios verified by independent computation — they match exactly:
+
+| token | light, on `--bg` | on `--surface`/`--elevated` (pure white) | verdict |
+|---|---|---|---|
+| `--accent` | **2.67** | 2.86 | fails even the 3:1 large-text floor |
+| `--success` | **2.91** | 3.12 | fails even 3:1 |
+| `--warning` | **2.70** | 2.89 | fails even 3:1 |
+| `--danger` | **4.09** | 4.38 | large text only |
+
+Across **506** `text-*` sites — 295 of them `text-danger`, 128 `text-success`, 55
+`text-warning`, 28 `text-accent`. **Dark mode was 7.13 to 11.74 throughout**, which is
+how it survived: the app's own default theme is the dark one, so nobody developing in
+it ever saw the failing combination.
+
+### The fix is four lines, not 506
+
+The house pattern for this already exists — `--brand` (4.70) beside `--brand-text`
+(6.36) — so the obvious move was a `-text` variant per token and a rename of all 506
+class names. Rejected: `text-success-text` reads badly, and darkening the base token in
+**light mode only** fixes every site at once.
+
+It is safe *because of what these tokens also drive*, which had to be checked rather
+than assumed. The non-opacity fills are 21 `bg-danger`, 16 `bg-success`, 7
+`bg-warning` — and reading them, every one is a **dot, a bar or a progress fill**:
+graphics, not text backgrounds. A darker fill is *more* visible on a light page. Where
+one does carry white text the ratio improves too, because contrast is symmetric:
+`bg-danger` with white text goes 4.38 → **4.84**.
+
+Hue and saturation held, lightness reduced in 0.005 steps, stopping at the **first**
+value to reach 4.5:1 — so each is the smallest change that passes rather than a
+repalette:
+
+    --accent   233 122 74  ->  194 75 24    4.54 on --bg
+    --success   31 165 122 ->   24 129 95   4.51
+    --warning  197 142 24  ->  147 106 18   4.54
+    --danger   213 70 70   ->  210 55 55    4.51
+
+`--danger` barely moves, which matters because it is 295 of the 506 sites.
+`--warning` moves most — a darker gold — and that is a real visible change, recorded
+rather than glossed: it is the minimum that clears the floor at that hue.
+
+### The mobile app had the same defect
+
+`design/tokens.json` holds the same four light values and its own header calls itself
+*"the ONE place the visual language is defined"*, with `mobile/src/theme/tokens.ts`
+importing it directly. So fixing `app/globals.css` alone would have (a) failed
+`tests/design-tokens.test.ts`, which exists to catch exactly that drift, and (b) **left
+the Expo app inaccessible**. Claude-2's finding covers the web only; the same four
+values were wrong in both. Both updated.
+
+### The guard that was green while this shipped
+
+`tests/brand-contrast-contract.test.ts` asserted that a `--brand-text` token *exists*
+and that `text-brand` is never used. It pins the **shape of the brand fix** and computes
+no ratio at all — so it was green for a stylesheet with four failing text colours. The
+same class as the three defective guards already recorded this session: a test that
+asserts the solution instead of the property.
+
+It now parses the tokens out of `app/globals.css` and measures every text role against
+every ground in both themes. Reverting the four values fails it naming **all twelve**
+combinations with their exact ratios — `--accent on --bg: 2.67` … `--danger on
+--elevated: 4.38` — matching the independent computation. Controls: the parse must find
+the tokens (or "no failures" is indistinguishable from a loop that ran zero times), and
+the measurement is checked against known ratios (black/white = 21, white/white = 1, and
+the shipped `--warning` on `--bg` = 2.70) so a broken luminance formula fails there
+rather than passing everything.
+
+### Two near-misses worth recording
+
+**The dark theme parsed to nothing.** `indexOf(':root {')` found the FIRST `:root {` in
+the stylesheet — a block holding safe-area insets and no colours. The dark case was
+measuring an empty token set. It surfaced only because a missing `--fg` is an explicit
+error in the loop rather than an empty iteration; with a laxer check it would have
+passed vacuously forever. The selector is `.dark {`, which is unambiguous.
+
+**`json.dump` reflowed `design/tokens.json`** — 224 insertions for four values, because
+Python's serialiser puts each array element on its own line. Reverted and done as a
+surgical text replacement asserting **exactly one** occurrence, which also proves the
+dark block (different values) was not touched. Second time this session a serialiser
+turned a four-value edit into a whole-file diff, after the i18n catalogue sort.

@@ -380,9 +380,23 @@ reads the **JWT** email and not `profiles.email`, so it is not an escalation.
   Making the tiles operable would have walked keyboard users straight into it. Both
   Guardian editors had the same gap, because they build a `role="dialog"` shell by
   hand rather than through `components/ui/modal.tsx`, which handles Escape.
-- **In light mode, four semantic text colours fail WCAG AA** — `accent`,
-  `warning`, `success`, `danger` compute to 2.67–4.38:1 — across **504** text
-  sites.
+- **In light mode, four semantic text colours failed WCAG AA. FIXED, web and Expo.**
+  `--accent` 2.67, `--success` 2.91, `--warning` 2.70 — the first three below even the
+  3:1 large-text floor — and `--danger` 4.09, across **506** `text-*` sites, 295 of
+  them `text-danger`. Dark mode was 7.13–11.74 throughout, which is how it survived:
+  the app's own default theme is the dark one, so nobody developing in it saw the
+  failing combination. Fixed in **four lines** rather than 506 renames, by darkening
+  the light-mode tokens with hue and saturation held and stopping at the first value to
+  reach 4.5:1. Safe because the non-opacity fills these tokens also drive — 21
+  `bg-danger`, 16 `bg-success`, 7 `bg-warning` — are every one a dot, bar or progress
+  fill rather than a text background, and where one does carry white text the ratio
+  *improves* (4.38 → 4.84), contrast being symmetric. **`design/tokens.json` held the
+  same four values and the Expo app imports it directly**, so the same defect was live
+  on mobile; both updated, and `tests/design-tokens.test.ts` would have failed on the
+  drift. `tests/brand-contrast-contract.test.ts` now **measures** the ratios instead of
+  only asserting that a `--brand-text` token exists — it was green for a stylesheet
+  with four failing text colours, the same class as the three other guards this audit
+  found pinning a solution rather than a property.
 - **The shared `Field`** announces an error but never sets `aria-invalid`.
 - **Destructive actions in the medical and money modules delete on one click**
   with no confirmation.
