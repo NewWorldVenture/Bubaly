@@ -219,16 +219,21 @@ COMPLETED:
     hrefs, client-component env hygiene, morning-brief timezone handling.
   - The allowance_rules CRITICAL (Claude-3's second) confirmed and closed:
     migration 0298 plus an author check in the cron, with a behavioural probe.
-NEXT: Claude-3's remaining OPEN findings, in severity order — health/medication
-  records readable AND writable by a child, then grades/screen_time_limits, then
-  the child_logins policy whose name and predicate disagree.
+  - Claude-3's medication HIGH: the write half closed (0299 — prescriptions and
+    their schedules are managers-only), with the two halves I would not guess at
+    filed as owner decisions rather than taken (see A3-009).
+NEXT: two owner decisions on the medical surface (narrowing READS; whether
+  logging a vaccination is any member's to do), then grades/screen_time_limits,
+  then the child_logins policy whose name and predicate disagree.
   `family_credentials` is already closed on main by 0296 from the other session.
 FILES-TOUCHED (third session only):
   - .env.example, components/wallet/treasury-view.tsx
   - supabase/migrations/0297_invite_terms_are_not_the_invitees_to_write.sql
   - supabase/migrations/0298_allowance_and_gift_writes_are_managers_only.sql
+  - supabase/migrations/0299_a_prescription_is_a_parents_to_write.sql
   - docs/audit/invite-terms-boundary-check.sql
   - docs/audit/allowance-rule-write-boundary-check.sql
+  - docs/audit/prescription-write-boundary-check.sql
   - app/api/cron/wallet-allowance/route.ts
   - lib/database.types.ts, lib/supabase/guardian-tables.ts (deleted),
     lib/guardian/{ai-screen,pipeline,trust,learning-run}.ts,
@@ -242,7 +247,7 @@ BLOCKERS: none of my own. The owner-blocked set is unchanged — F5/F-001 (no
   working path to apply a migration to production), F6 (inbound-email secret and
   MX), F19 (AI metering is a pricing decision).
 VERIFICATION: tsc clean · eslint clean on every changed file · full vitest suite
-  green · 310 migrations replayed, 0 failed · 19/19 boundary probes · non-vacuity
+  green · 311 migrations replayed, 0 failed · 20/20 boundary probes · non-vacuity
   proven for every new guard by reverting the fix and watching it go red.
 LAST-UPDATE: 2026-09-14T12:05Z
 

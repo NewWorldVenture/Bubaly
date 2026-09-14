@@ -1054,3 +1054,81 @@ Guard:    docs/audit/allowance-rule-write-boundary-check.sql — a child refused
           tests/allowance-cron-pays-only-manager-written-rules.test.ts pins the
           cron half; deleting the guard fails two of its five cases.
 ```
+
+## A3-009 — Claude-3's medication HIGH, the write half closed and the rest filed
+
+```
+[CLAUDE-1][HIGH][RLS] A child could change a dosage and delete the schedule that drives its reminder
+Path:     supabase/migrations/0004_rls.sql (generic loop)
+          · components/modules/medications-module.tsx:77,205-251
+Source:   Claude-3 of the parallel session, [CLAUDE-3][HIGH][RLS]. Re-confirmed
+          here against pg_policies on a fresh replay and against the module.
+Problem:  `medications` and `medication_schedules` resolve to membership-only
+          policies, and BOTH are written directly from the browser through the
+          anon client. The module's idea of who may write is a React boolean:
+            const canEdit = isManager(role);        // line 77
+          which gates the Add/Edit/Delete controls and nothing else. A child is a
+          real Supabase auth user (child-login-actions.ts:52 creates one with
+          admin.auth.admin.createUser), so a child session calls PostgREST
+          directly and RLS is the only boundary.
+Evidence: pg_policies before the fix: medications_update / medications_delete /
+          medications_insert all `is_family_member(family_id)`; same for
+          medication_schedules. Claude-3's probe as a child:
+            update medications set dosage='500mg'  -> UPDATE 1
+            delete from medications                -> DELETE 1
+          Reproduced here. Deleting a schedule also silences the medication
+          reminder (lib/server/notifications.ts), so the blast radius is a missed
+          dose rather than only an altered record.
+          The intended boundary is stated in the repo's own words:
+          lib/ai/context/policy.ts lists these tables in SENSITIVE_TABLES as
+          "prescriptions", and 0264's header says the rule refuses "to read a
+          family's finances or medical detail to a child".
+Fix:      0299 — SELECT unchanged (is_family_member), writes can_manage_family
+          with the three RESTRICTIVE guards, then a sweep by shape and a
+          verification block. Same shape as 0266, 0296, 0297 and 0298: the claim
+          was made where a user could see it and not in the layer that enforces
+          it.
+Status:   FIXED (write half) — migration 0299
+Guard:    docs/audit/prescription-write-boundary-check.sql — a child's dosage
+          change, deletion, schedule deletion and new prescription all refused;
+          a parent's edit accepted; the child's READ asserted intact; and a
+          member's dose record asserted STILL ALLOWED. Non-vacuity proven by
+          restoring the membership-only policies — the probe then fails at "a
+          child changed a medication dosage". 20/20 probes with it in place.
+
+DELIBERATELY NOT INCLUDED, and why. Recorded so the omissions read as decisions
+rather than oversights:
+
+  medication_doses     Left member-writable. `logDose` (medications-module.tsx:147)
+                       is called from buttons rendered for EVERYONE — it is not
+                       behind `canEdit` — because the person taking the medicine
+                       is the one who records it. Manager-only would break
+                       adherence tracking. The residual risk is a child forging a
+                       sibling's dose: an accountability nit, not the
+                       prescription, and the probe asserts this path still works.
+
+  immunizations,       Their modules carry NO role gate at all — every member is
+  health_visits        offered the Add button (grep for isManager/canEdit in
+                       immunizations-module.tsx and health-visits-module.tsx
+                       returns nothing). Tightening the database alone would
+                       leave a UI whose primary control fails for children.
+                       That is a product decision, not a drift repair.
+                       OWNER DECISION NEEDED: either gate both modules on
+                       isManager and extend 0299's list, or state that logging a
+                       vaccination is any member's to do.
+
+  READS on all of them A child can still read a parent's prescription. Real
+                       privacy gap, and the repo already takes a side on it —
+                       policy.ts classes these SENSITIVE, 0264 makes the AI
+                       refuse medical detail to a child. Narrowing SELECT is
+                       expressible (`medications.member_id` exists), but rows
+                       with a null member_id are family-wide and would vanish
+                       from a child's view, changing what the module shows.
+                       OWNER DECISION NEEDED: "own rows plus family-wide rows,
+                       managers see all" is the shape I would propose.
+
+  grades,              Claude-3's MEDIUM, unchanged here: the two
+  screen_time_limits   parental-control surfaces a child has the most motive to
+                       edit are editable by that child. Same fix shape as 0299.
+                       Next, after the owner decisions above.
+```
