@@ -113,7 +113,7 @@ as the next task in `audit/claude-1.md`.
 
 **Fixed and live:** F1, F9 (closed as a recorded decision), F10, F15, F16, F18,
 F20, C-01 … C-05, C-07, E-01, F-a, F-b, H-01, L-01, L-02, L-03, **P-01**,
-**U-02**, **P-02**, **P-03**, **U-03**, **P-04**.
+**U-02**, **P-02**, **P-03**, **U-03**, **P-04**, **U-04**.
 
 | id | finding | found by | state |
 |---|---|---|---|
@@ -124,7 +124,7 @@ F20, C-01 … C-05, C-07, E-01, F-a, F-b, H-01, L-01, L-02, L-03, **P-01**,
 | **P-03** | A greeting the family **deleted came back**: `form.ai_greeting_template \|\| undefined` turned a cleared field into an omitted key, and the upsert left the old text in the column. Neither the AI greeting nor the voicemail greeting could be removed once set; both columns are nullable, so there was a correct value to write | **Claude-1** (same path) | **Fixed** |
 | **U-03** | `.focus-ring` (`app/globals.css:179`) emits `outline: 2px solid transparent` plus an unconditional ring and **no `:focus-visible` selector** — so the ring is always on and the native focus indicator is suppressed. 218 uses, **16 correct**, and all 16 are on the marketing surface plus kid login: the public site was fixed, the signed-in app was not. One-line fix, no call-site edits | **Claude-2**, verified + fixed by Claude-1 | **Fixed** |
 | **P-04** | **Classes the app uses that compile to nothing.** `btn-primary` (one admin button), `no-scrollbar` (**13** tab strips), `bg-card`, `prose-family`, and six colour-opacity modifiers off the scale (`/12`, `/8` — `bg-brand/10` emits, `bg-brand/12` does not), two of them on the **public** pricing and security pages: each renders with no background, border, divider or scrollbar suppression, and neither CSS nor the build reports an unknown class. **Eight fixed.** Three further families are confirmed by compiling each token — shadcn-style tokens this theme never defines (`bg-primary`, `text-foreground`, `bg-background`, `bg-surface-2`), `tailwindcss-animate` classes with `plugins: []`, and more off-scale values — are **all fixed** — 134 replacements across 54 files, with `scripts/audit-unstyled-classes.mjs` now reporting zero and `tests/every-class-in-the-app-styles-something.test.ts` holding it there (five positive controls plant a known-bad token each, because with every real offender fixed a clean sweep is otherwise indistinguishable from a blind one). The inventory was **47** class names across 54 files — 23 off-scale opacity modifiers, ten shadcn theme tokens this theme never defines (`bg-card`, `bg-primary`, `text-foreground`, `bg-background`…), four `tailwindcss-animate` classes with `plugins: []`, and the rest. Getting that number honest took four corrections: 157→65 (a regex read `k === 'high'` as a class), 65→35 (Tailwind escapes a comma as `\2c ` **with a trailing space**, truncating every `grid-cols-[minmax(0,1fr)_…]`), 35→51 (the sweep could not see a literal whose tokens are ALL unstyled — `className="h-4.5 w-4.5"`), 51→47 (an argument to a function that *computes* a class is not a class) | **Claude-1** (found checking a line number in U-03's report) | **Fixed** |
-| **U-04** | The whole AI Call Guardian surface — five pages — discards every read error, and none appears in the 127 `*-read-boundary` guards. A failed read renders **"0 scams blocked"** on the safety dashboard | **Claude-2** | OPEN |
+| **U-04** | The whole AI Call Guardian surface — five pages — discards every read error, and none appears in the 127 `*-read-boundary` guards. A failed read renders **"0 scams blocked"** on the safety dashboard, **"0 contacts"** on the trust graph, "no routing rules", and "No communications match your filters" over a log that may be full of blocked scam calls — plus "No activity recorded yet" over `/family/activity`'s audit trail | **Claude-2**, verified + fixed by Claude-1 | **Fixed** — `/guardian` now carries a `PartialReadBanner` naming each failed read and its stat tiles take `number \| null`, so a count nobody read renders an em dash rather than a zero; the other four return an `ErrorState`; `CallHistory` tells an empty log from a filtered one. 14 rendered cases, 5 of them negative controls; reverted, 9 of 14 fail |
 | **U-05** | Calendar events, note cards and photo rows are bare `<div onClick>` — mouse-only, WCAG 2.1.1 | **Claude-2** | OPEN |
 
 | **S-02** | The child-PIN throttle is keyed on the **submitted** string while the lookup is `.ilike()`, and `_` is both a legal username character and a SQL wildcard. 16 distinct throttle buckets all resolved to one account — `2^(L-2)` per account, which exceeds the 10,000-PIN keyspace at L≥13 | **Claude-3** | OPEN |
@@ -238,10 +238,10 @@ whose error is discarded, and an empty state shown in its place. Six surfaces:
 
 | surface | what a failed read renders |
 |---|---|
-| `/guardian` (5 pages) | "0 scams blocked" on the safety dashboard; "No communications match your filters" over a possibly-full log |
+| `/guardian` (5 pages) | ~~"0 scams blocked" on the safety dashboard; "No communications match your filters" over a possibly-full log~~ (**U-04 — FIXED**: a `PartialReadBanner` names each failed read, the stat tiles take `number \| null` so an unread count is an em dash and never a zero, and the other four pages return an `ErrorState`) |
 | `/guardian/settings` | ~~the factory defaults — and Save then **upserts them over the family's real config**~~ (**U-02** — **FIXED**: the read goes through `settleAll`, `profileError` returns an `ErrorState` before anything savable renders, and the prop is now `{status:'ok'\|'absent'\|'error'}` so a failed read cannot be mistaken for an absent row again) |
 | `/family/members` | "No members yet." — provably unreachable by any *successful* read, since `requireUserContext()` guarantees the caller is an active member. That branch fires **only** on failure |
-| `/family/activity` | "No activity recorded yet" over the audit trail |
+| `/family/activity` | ~~"No activity recorded yet" over the audit trail~~ (**FIXED** with U-04 — the error `settleAll` already delivered is now read) |
 | `/family/permissions` | misdiagnoses a failed read as an unapplied database seed |
 | `/dashboard/family-access` | existing kid logins appear absent |
 
@@ -587,7 +587,7 @@ Run before calling any of this done:
 ```bash
 npx tsc --noEmit                       # clean
 npm run lint                           # 0 errors (4 pre-existing warnings)
-npx vitest run                         # 1,203 files / 13,779 tests
+npx vitest run                         # 1,204 files / 13,793 tests
 npm run db:audit:queries               # 491 tables, 78 functions, 141 routes resolve
 npm run db:audit:migrations            # no version collisions
 bash docs/audit/pg-bootstrap.sh        # 311 migrations, 0 failed

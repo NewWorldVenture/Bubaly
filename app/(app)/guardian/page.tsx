@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { describeReadError, settleAll } from '@/lib/supabase/settle';
+import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { isTwilioConfigured } from '@/lib/guardian/twilio';
 import { GuardianDashboard } from '@/components/guardian/guardian-dashboard';
@@ -22,16 +24,24 @@ export default async function GuardianPage() {
 
   const gFrom = (table: Parameters<typeof db.from>[0]) => (db.from(table) as ReturnType<typeof supabase.from>);
 
+  // Every one of these eight is read for its error as well as its data. This is
+  // the safety dashboard: it renders "0 scams stopped" and "0 blocked" from
+  // `count ?? 0`, and a failed read produced exactly those numbers over a log
+  // that may be full of blocked scam calls. `lib/ui/partial-read-banner.tsx` puts
+  // it best — a zero that means "we could not check" must never be mistaken for
+  // an all-clear. settleAll rather than Promise.all so a transport rejection
+  // arrives as { data: null, error } instead of taking the page to
+  // app/(app)/guardian/error.tsx.
   const [
-    { data: recentComms },
-    { data: suggestions },
-    { data: escalations },
-    { data: memberProfiles },
-    { count: totalCalls },
-    { count: blockedToday },
-    { count: scamsBlocked },
-    { count: screened },
-  ] = await Promise.all([
+    { data: recentComms, error: commsError },
+    { data: suggestions, error: suggestionsError },
+    { data: escalations, error: escalationsError },
+    { data: memberProfiles, error: profilesError },
+    { count: totalCalls, error: totalCallsError },
+    { count: blockedToday, error: blockedTodayError },
+    { count: scamsBlocked, error: scamsBlockedError },
+    { count: screened, error: screenedError },
+  ] = await settleAll([
     gFrom('guardian_communications')
       .select('id, comm_type, from_number, from_name, summary, body, trust_level_at_time, routing_mode_used, scam_detected, scam_type, status, started_at, ai_decision_reason')
       .eq('family_id', familyId)
@@ -80,6 +90,24 @@ export default async function GuardianPage() {
       .gte('started_at', today.toISOString()),
   ]);
 
+  // Named individually, because on production the answer is usually one table
+  // the migration ledger has not reached — "something failed" would not say which.
+  const readFailures = ([
+    ['recent calls and messages', commsError],
+    ['suggestions', suggestionsError],
+    ['escalations', escalationsError],
+    ['member profiles', profilesError],
+    ['calls today', totalCallsError],
+    ['blocked today', blockedTodayError],
+    ['scams stopped', scamsBlockedError],
+    ['AI screened', screenedError],
+  ] as const)
+    .filter(([, error]) => error)
+    .map(([label, error]) => `${label}: ${describeReadError(error)}`);
+
+  // A count whose read failed is `null`, never 0 — the tile renders an em dash.
+  const countOf = (count: number | null, error: unknown) => (error ? null : count ?? 0);
+
   return (
     <div className="mx-auto max-w-2xl space-y-6 px-4 py-6">
       <div className="flex items-start gap-3">
@@ -97,16 +125,21 @@ export default async function GuardianPage() {
         </div>
       </div>
 
+      <PartialReadBanner
+        title={t('guardian.someOfThisScreenCouldNotBeLoaded')}
+        failures={readFailures}
+      />
+
       <GuardianDashboard
         recentComms={(recentComms ?? []) as unknown as Parameters<typeof GuardianDashboard>[0]['recentComms']}
         suggestions={(suggestions ?? []) as unknown as Parameters<typeof GuardianDashboard>[0]['suggestions']}
         escalations={(escalations ?? []) as unknown as Parameters<typeof GuardianDashboard>[0]['escalations']}
         memberProfiles={(memberProfiles ?? []) as unknown as Parameters<typeof GuardianDashboard>[0]['memberProfiles']}
         stats={{
-          totalCalls: totalCalls ?? 0,
-          blockedToday: blockedToday ?? 0,
-          scamsBlocked: scamsBlocked ?? 0,
-          screened: screened ?? 0,
+          totalCalls: countOf(totalCalls, totalCallsError),
+          blockedToday: countOf(blockedToday, blockedTodayError),
+          scamsBlocked: countOf(scamsBlocked, scamsBlockedError),
+          screened: countOf(screened, screenedError),
         }}
         isTwilioConfigured={isTwilioConfigured()}
       />

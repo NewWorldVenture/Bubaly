@@ -1070,3 +1070,62 @@ had the sweep reporting a defect that was not there, or missing one that was:
 **Method note.** The finding came from checking a line number in someone else's
 report. It would have been easy to read "globals.css:414 (.btn-primary)", see a
 `focus-ring` on line 414, and move on.
+
+---
+
+## Pass R — the Guardian read boundary (merged from Claude-2)
+
+### [CLAUDE-2 / verified by CLAUDE-1][HIGH][STATE] Five safety pages made safety claims they had not checked
+
+- **File/path:** `app/(app)/guardian/page.tsx:34` (eight reads),
+  `guardian/history/page.tsx:28`, `guardian/rules/page.tsx:19`,
+  `guardian/contacts/page.tsx:20`, plus `app/(app)/family/activity/page.tsx:23`
+- **Verified:** none of the five destructured `error`, and none appears in the 127
+  existing `*-read-boundary` guards. Traced through the rendering path and then
+  **rendered**, which is the difference between reading the code and knowing what
+  a user sees:
+
+  | page | what a failed read rendered |
+  |---|---|
+  | `/guardian` | `0` in all four stat tiles, from `count ?? 0` — including **"0 Scams Stopped"** and **"0 Blocked"** |
+  | `/guardian/history` | `0 total`, and `CallHistory`'s "No communications match your filters" over a log that may be full of blocked scam calls |
+  | `/guardian/rules` | no routing rules — i.e. "you have written none" |
+  | `/guardian/contacts` | `0 contacts` — i.e. "you have trusted nobody" |
+  | `/family/activity` | "No activity recorded yet" over the family's audit trail |
+
+- **Impact:** Guardian is the product's safety feature. It decides which calls and
+  texts reach a child, and it is the surface a parent opens *because* they are
+  worried about a caller. On a failed read it did not say "we could not load
+  this"; it made a positive safety claim. `components/ui/partial-read-banner.tsx`
+  had already written the rule down for the admin pages — *"A zero that means 'we
+  could not check' must never be mistaken for an all-clear"* — and the safety
+  dashboard was the one place it was not applied. `/guardian/history` also
+  mislabelled the failure: "match your filters" invites the reader to clear a
+  filter that was never the problem.
+- **Fix (applied), as Claude-2 specified:**
+  - `/guardian`: `settleAll`, all eight errors destructured, and a
+    `PartialReadBanner` naming each failed read individually. The `stats` prop is
+    now `number | null` and **`null` means "not read"** — the tile renders an em
+    dash. `countOf(count, error)` is the one place that decision lives, so a
+    future read cannot reintroduce `?? 0`.
+  - `/guardian/history`, `/rules`, `/contacts`: `settle`/`settleAll`, and an
+    `ErrorState` in place of the list. History's header shows `—` rather than
+    `0 total`.
+  - `CallHistory` now tells the two facts apart: `communications.length === 0`
+    renders "No calls or messages yet", and only a non-empty log that filters to
+    nothing says "none match your filters".
+  - `/family/activity`: the error `settleAll` already delivered is now read.
+- **One decision recorded rather than made silently:** on `/guardian/contacts` the
+  `family_members` read is **decoration** — it fills a name dropdown — so its
+  failure does not take the trust graph down. A test case pins that, so the
+  distinction is deliberate rather than an oversight in the same shape as the
+  original defect.
+- **Status:** FIXED, with `tests/guardian-read-boundary.test.ts` — 14 cases that
+  render the real pages with the real components, once per read state. Five of the
+  14 are negative controls: a family with a genuinely quiet day still sees `0`, an
+  empty log still reads empty, and a successful read renders no banner. Without
+  those, "no zero on the page" would pass on a page that can no longer render a
+  number.
+- **Proved load-bearing:** reverting all five pages and both components → **9 of
+  14 fail**, and the 5 that pass are exactly the negative controls. That is the
+  right split: the controls are supposed to pass before and after.

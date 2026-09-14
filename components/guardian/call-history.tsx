@@ -113,9 +113,15 @@ export function CallHistory({ communications }: { communications: Communication[
       </div>
 
       {/* Grouped list */}
+      {/* Two different facts, and they were told as one. An empty log said "no
+          communications match your filters", which invites the reader to clear a
+          filter that is not the problem — and on a failed read (now caught by the
+          page) it invited them to clear a filter instead of retrying. */}
       {groups.size === 0 ? (
         <div className="rounded-2xl border border-border bg-surface/40 py-12 text-center text-sm text-muted">
-          {t('callHistory.noCommunicationsMatchYourFilter')}
+          {communications.length === 0
+            ? t('callHistory.noCallsOrMessagesYet')
+            : t('callHistory.noCommunicationsMatchYourFilter')}
         </div>
       ) : (
         Array.from(groups.entries()).map(([date, comms]) => (

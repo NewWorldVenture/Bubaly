@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { settle } from '@/lib/supabase/settle';
+import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { ContactList } from '@/components/guardian/contact-list';
+import { ErrorState } from '@/components/ui/states';
 import { Users, ArrowLeft } from 'lucide-react';
 import { getTranslations } from '@/lib/i18n/server';
 
@@ -17,17 +18,20 @@ export default async function ContactsPage() {
   const supabase = await createServer();
   const db = withGuardianTables(supabase);
 
-  const [{ data: contacts }, { data: members }] = await Promise.all([
+  // The trust graph decides which callers reach a child. "0 contacts" and an
+  // empty list on a failed read says the family has trusted nobody, which is a
+  // claim about their safety settings rather than a missing screen.
+  const [{ data: contacts, error: contactsError }, { data: members }] = await settleAll([
     (db.from('guardian_contacts') as ReturnType<typeof supabase.from>)
       .select('id, name, phone, email, trust_level, trust_override, notes, total_calls, total_sms, last_contact_at, spam_score')
       .eq('family_id', familyId)
       .order('name', { ascending: true }),
 
-    settle(supabase
+    supabase
       .from('family_members')
       .select('id, display_name')
       .eq('family_id', familyId)
-      .eq('is_active', true)),
+      .eq('is_active', true),
   ]);
 
   return (
@@ -41,7 +45,7 @@ export default async function ContactsPage() {
         </div>
         <div>
           <h1 className="text-xl font-bold leading-tight">{t('guardianContacts.familyTrustGraph')}</h1>
-          <p className="text-sm text-muted">{contacts?.length ?? 0} contacts</p>
+          <p className="text-sm text-muted">{contactsError ? '—' : `${contacts?.length ?? 0} contacts`}</p>
         </div>
       </div>
 
@@ -49,10 +53,12 @@ export default async function ContactsPage() {
         <p className="text-xs text-blue-300">{t('contacts.trustLevelsControlHowBubaly')}</p>
       </div>
 
-      <ContactList
-        contacts={(contacts ?? []) as unknown as Parameters<typeof ContactList>[0]['contacts']}
-        members={(members ?? []) as Parameters<typeof ContactList>[0]['members']}
-      />
+      {contactsError ? <ErrorState message={t('guardianContacts.couldnTLoadYourTrustGraph')} /> : (
+        <ContactList
+          contacts={(contacts ?? []) as unknown as Parameters<typeof ContactList>[0]['contacts']}
+          members={(members ?? []) as Parameters<typeof ContactList>[0]['members']}
+        />
+      )}
     </div>
   );
 }

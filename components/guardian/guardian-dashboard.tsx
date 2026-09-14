@@ -59,11 +59,14 @@ type Props = {
   suggestions: Suggestion[];
   escalations: Escalation[];
   memberProfiles: MemberProfile[];
+  // `null` means the count could not be read — NOT zero. The page renders a
+  // PartialReadBanner saying which read failed, and the tile shows an em dash
+  // rather than a number nobody counted. "0 scams stopped" is a safety claim.
   stats: {
-    totalCalls: number;
-    blockedToday: number;
-    scamsBlocked: number;
-    screened: number;
+    totalCalls: number | null;
+    blockedToday: number | null;
+    scamsBlocked: number | null;
+    screened: number | null;
   };
   isTwilioConfigured: boolean;
 };
@@ -183,7 +186,7 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
         ].map((s) => (
           <div key={s.label} className="rounded-2xl border border-border bg-surface/40 p-4">
             <s.icon className={cn('mb-2 h-5 w-5', s.color)} />
-            <p className="text-2xl font-bold">{s.value}</p>
+            <p className="text-2xl font-bold">{s.value ?? '—'}</p>
             <p className="text-xs text-muted mt-0.5">{s.label}</p>
           </div>
         ))}
