@@ -1283,3 +1283,78 @@ that was fixed hours ago and reports it as open.
 - **Status:** FIXED in the repository, **NOT applied to production** (F-001).
   Probes **23/23** — including `household-trail-check.sql`, whose "any member may
   append" assertion is the one the pin could plausibly have broken, and did not.
+
+---
+
+## Pass U — the allowance is paid once (merged from Claude-4)
+
+### [CLAUDE-4][HIGH][MONEY] "Run now" twice paid the allowance twice; the cron beside it never did
+
+- **File/path:** `app/(app)/wallet/actions.ts:327` (the blind claim) vs
+  `app/api/cron/wallet-allowance/route.ts:80` (the correct one)
+- **Verified by re-running the race myself**, on two connections against a replay
+  of 313 migrations, with a two-second overlap standing in for the
+  `creditChildWallet` round trip and the credit gated on the update's own
+  `RETURNING` exactly as the code gates it:
+
+  ```
+  == BLIND shape — UPDATE by id only (the defect) ==
+  ledger_rows=2  cents_credited=2000
+  == CLAIMED shape — UPDATE carries next_run_on <= current_date (the fix) ==
+  ledger_rows=1  cents_credited=1000
+  ```
+
+  Claude-4's numbers exactly. Same rule, same seconds, same ledger; the predicate
+  is the entire difference. Preserved as
+  `docs/audit/allowance-double-pay-race.sh` so it can be re-run — it is a race,
+  not a boundary check, so it is deliberately outside the `*-check.sql` set that
+  `run-probes.sh` globs.
+- **Impact:** the child is paid twice for one period from the family's money, and
+  `wallet_transactions` is append-only (`0088`), so the correction is a manual
+  reversal row rather than a delete. No exotic client needed:
+  `components/wallet/allowance-view.tsx` is a plain button, so two tabs, a
+  double-submit on a slow connection, or a parent tapping while the nightly cron
+  is mid-run all produce the overlap. The action's own docstring claimed the
+  opposite — *"Idempotent with the Vercel cron … no double-pay"* — which held only
+  if the two never ran at the same time.
+- **Fix (applied):** the action now claims the rule the way the cron does —
+  `.lte('next_run_on', today)`, `.maybeSingle()`, and `continue` on a loser rather
+  than `actionFailure`. A loser is not an error: it means the period is already
+  paid. (`single()` treats zero rows as a failure, which is exactly the case this
+  now expects, so the switch to `maybeSingle` is part of the fix rather than
+  cosmetic.) The i18n key `actions.allowanceScheduleWasNotUpdated`, which existed
+  only to build the synthetic error for that case, is removed from all seven
+  catalogues.
+- **Status:** FIXED.
+
+### [CLAUDE-4][MEDIUM][TESTS] One guard was pointed at one of the two places the pattern lives — and another pinned the defect
+
+Two test defects, and the second is the worse kind.
+
+**`tests/allowance-cron-idempotency.test.ts` read one hardcoded file.** Its header
+states the property in general terms — *"if two invocations overlap (Vercel cron
+re-fire / **manual trigger** / >maxDuration run), both must NOT credit the same
+period"* — and "manual trigger" is the server action, which the test never opened.
+So the second implementation of the same claim shipped without one. It now
+**discovers** every site that advances a schedule (keyed on `next_run_on: next`,
+which excludes the two rollback sites that deliberately restore the prior value)
+and requires the claim of each. It also asserts that discovery found **both** known
+files by name — a discovery that finds nothing would satisfy every loop in the file
+and report success.
+
+**`tests/wallet-allowance-persistence.test.ts:13` asserted the EXACT TEXT of the
+defective update**, `.select('id').single()` and all. The one-line fix for a live
+double-pay would have turned that test red — a guard that makes the fix look like
+the regression. Rewritten to assert what that file is actually about (the advance
+is checked, and rolled back when crediting fails) in ordered pieces, without
+re-pinning a formatting choice.
+
+- **Proved, in the direction that matters:** against the *defective* action, the
+  idempotency guard fails **3 of 13** and every failure names
+  `app/(app)/wallet/actions.ts` — while the persistence file **passes**, which is
+  the whole point of decoupling it. Restored: 13 pass.
+- **This is the second instance of the class in this session** — the first was
+  `tests/mobile-fullscreen-panel-safe-area.test.ts` anchoring on a dead CSS class
+  (Pass Q). Both times the shape is the same: a test that names an implementation
+  detail of the code under test, so correcting the code breaks the test.
+- **Status:** FIXED.

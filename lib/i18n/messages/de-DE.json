@@ -79,7 +79,6 @@
   "actions.addWhoPostedIt": "Geben Sie an, wer es eingestellt hat.",
   "actions.adminRecordNotFound": "Adminsatz nicht gefunden.",
   "actions.aiIsnTConfiguredYet": "Die KI ist noch nicht eingerichtet. Fügen Sie unter Admin → KI-Engine einen KI-Schlüssel hinzu, um Antworten zu entwerfen.",
-  "actions.allowanceScheduleWasNotUpdated": "Der Taschengeldplan wurde nicht aktualisiert.",
   "actions.amountMustBeGreaterThan": "Der Betrag muss größer als 0 $ sein.",
   "actions.anAdminRecordIsRequired": "Ein Adminsatz ist erforderlich.",
   "actions.appliedThePlanButCould": "Der Plan wurde angewendet, aber der Lauf konnte nicht als ausgeführt erfasst werden. Aktualisieren Sie und versuchen Sie es erneut.",

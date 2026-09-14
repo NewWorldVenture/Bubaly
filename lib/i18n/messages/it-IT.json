@@ -79,7 +79,6 @@
   "actions.addWhoPostedIt": "Aggiungi chi l’ha pubblicato.",
   "actions.adminRecordNotFound": "Record amministratore non trovato.",
   "actions.aiIsnTConfiguredYet": "L’IA non è ancora configurata. Aggiungi una chiave IA in Admin → Motore IA per scrivere risposte.",
-  "actions.allowanceScheduleWasNotUpdated": "Il calendario delle paghette non è stato aggiornato.",
   "actions.amountMustBeGreaterThan": "L’importo deve essere maggiore di 0 $.",
   "actions.anAdminRecordIsRequired": "È richiesto un record amministratore.",
   "actions.appliedThePlanButCould": "Il piano è stato applicato ma non è stato possibile registrare l’esecuzione. Aggiorna e riprova.",

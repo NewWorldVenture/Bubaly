@@ -79,7 +79,6 @@
   "actions.addWhoPostedIt": "Indiquez qui l’a publié.",
   "actions.adminRecordNotFound": "Enregistrement administrateur introuvable.",
   "actions.aiIsnTConfiguredYet": "L’IA n’est pas encore configurée. Ajoutez une clé IA dans Admin → Moteur IA pour rédiger des réponses.",
-  "actions.allowanceScheduleWasNotUpdated": "Le calendrier d’argent de poche n’a pas été mis à jour.",
   "actions.amountMustBeGreaterThan": "Le montant doit être supérieur à 0 $.",
   "actions.anAdminRecordIsRequired": "Un enregistrement administrateur est requis.",
   "actions.appliedThePlanButCould": "Le plan a été appliqué, mais l’exécution n’a pas pu être enregistrée. Actualisez et réessayez.",

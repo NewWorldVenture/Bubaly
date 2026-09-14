@@ -79,7 +79,6 @@
   "actions.addWhoPostedIt": "Voeg toe wie het geplaatst heeft.",
   "actions.adminRecordNotFound": "Beheerdersrecord niet gevonden.",
   "actions.aiIsnTConfiguredYet": "AI is nog niet geconfigureerd. Voeg een AI-sleutel toe bij Beheer → AI-engine om antwoorden op te stellen.",
-  "actions.allowanceScheduleWasNotUpdated": "Het zakgeldschema is niet bijgewerkt.",
   "actions.amountMustBeGreaterThan": "Het bedrag moet groter dan $ 0 zijn.",
   "actions.anAdminRecordIsRequired": "Een beheerdersrecord is vereist.",
   "actions.appliedThePlanButCould": "Het plan is toegepast, maar de uitvoering kon niet worden vastgelegd. Vernieuw en probeer het opnieuw.",

@@ -79,7 +79,6 @@
   "actions.addWhoPostedIt": "Indique quem o publicou.",
   "actions.adminRecordNotFound": "Registo de administrador não encontrado.",
   "actions.aiIsnTConfiguredYet": "A IA ainda não está configurada. Adicione uma chave de IA em Admin → Motor de IA para redigir respostas.",
-  "actions.allowanceScheduleWasNotUpdated": "O calendário de mesadas não foi atualizado.",
   "actions.amountMustBeGreaterThan": "O valor tem de ser superior a 0 $.",
   "actions.anAdminRecordIsRequired": "É necessário um registo de administrador.",
   "actions.appliedThePlanButCould": "O plano foi aplicado, mas não foi possível registar a execução. Atualize e tente novamente.",

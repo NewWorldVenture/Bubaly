@@ -79,7 +79,6 @@
   "actions.addWhoPostedIt": "Add who posted it.",
   "actions.adminRecordNotFound": "Admin record not found.",
   "actions.aiIsnTConfiguredYet": "AI isn’t configured yet. Add an AI key in Admin → AI Engine to draft replies.",
-  "actions.allowanceScheduleWasNotUpdated": "Allowance schedule was not updated.",
   "actions.amountMustBeGreaterThan": "Amount must be greater than $0.",
   "actions.anAdminRecordIsRequired": "An admin record is required.",
   "actions.appliedThePlanButCould": "Applied the plan but could not record the run as executed. Refresh and try again.",
