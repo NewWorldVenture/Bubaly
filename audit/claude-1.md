@@ -1455,3 +1455,50 @@ Collision check: no other worker is assigned contact-center. Claude-3 is on inpu
   validation, error leakage, money idempotency, storage and the remaining
   membership-only tables; Claude-2 on frontend; Claude-4 on flows and QA.
 ```
+
+## A3-017 — an outage rendered as a fact about the family
+
+```
+[CLAUDE-1][MEDIUM][ARCHITECTURE] Sixteen server surfaces read through settleAll and threw the error away
+Path:     app/(app)/dashboard/conflicts/page.tsx:38 · app/(app)/dashboard/family-access/page.tsx:23
+          (+ 14 more, now tracked)
+Problem:  `settleAll` exists so ONE failed read cannot reject a page's whole
+          batch — it answers `{ data: null, error }`. A page that destructures
+          `{ data }` and drops `error` throws that distinction away: `data` is
+          null, the list renders empty, and an OUTAGE is presented to the user as
+          a FACT about their family.
+Evidence: `const [{ data: events }, { data: members }] = await settleAll([…])` —
+          the error is destructured out of existence. 16 server pages/routes use
+          settle/settleAll and never mention `.error` anywhere in the file.
+          The repo already states the principle, on the page that gets it right
+          (app/(app)/kids/page.tsx): "A dropped error would tell the child 'All
+          done! 🎉 No jobs left today.' … a reassuring-but-wrong,
+          motivation-affecting lie." So this is a convention applied unevenly,
+          not an absent one — which is how I ruled out "deliberate".
+Impact:   Two of the sixteen are the sharp ones, because their empty state is a
+          positive CLAIM rather than an absence:
+          · /dashboard/conflicts renders "no conflicts" — on the page whose whole
+            job is finding them. Same shape as the reconciler saying "everything
+            reconciles" from a truncated read: an absence presented as an
+            all-clear.
+          · /dashboard/family-access says a family has no kid logins and offers
+            to create them — about an access-control record.
+          The other fourteen are display lists, where an empty render is a
+          display bug rather than a false claim.
+Fix:      Both sharp pages now keep the batch results, check
+          `a.error ?? b.error`, log, and render `<ErrorState>`.
+          They use `root.somethingWentWrong`, an EXISTING key translated in every
+          catalogue locale. A bespoke message per page would read better, and
+          that is exactly what blocks the other fourteen: each needs its own
+          translated string, which is a translation task rather than a code one.
+          Splicing one together from other catalogue entries produces
+          ungrammatical output in inflected languages, so I did not.
+Status:   FIXED (2 of 16)
+Guard:    tests/a-failed-read-is-not-an-empty-table.test.ts is a RATCHET and says
+          so. It lists the fourteen, fails on a fifteenth, fails on a STALE entry
+          (an allowlist that outlives its defect readmits a regression into a
+          page already fixed), and asserts the two fixed pages stay fixed. Its
+          first case asserts more than 50 settle users exist, so the scan cannot
+          pass by finding nothing. Non-vacuity proven: reverting the conflicts
+          page fails two of the four cases.
+```
