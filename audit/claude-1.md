@@ -842,3 +842,73 @@ visible failure is the more comfortable of the two to stop at.
   again, in its "tested the half that works" form.
 - **Status:** OPEN — deliberately not fixed. Choosing between shipping and
   retiring a user-facing capability is a product decision, not an audit one.
+
+---
+
+## C1-S3-03 — a contrast contract that never computes a contrast ratio
+
+```
+[CLAUDE-1][MEDIUM][TESTING] `brand-contrast-contract.test.ts` is named for a
+property it cannot measure; nothing in this repository has ever computed a
+contrast ratio
+File:     tests/brand-contrast-contract.test.ts
+          tests/design-tokens.test.ts (the other half of the same gap)
+Problem:  The file is called "brand contrast contract" and its describe block is
+          "accessible brand color roles". It makes exactly two assertions:
+            1. `--brand-text:` appears twice in globals.css and is wired in
+               tailwind.config.ts   — a STRUCTURAL check.
+            2. no source file uses the class `text-brand`
+               — a NAMING check.
+          Neither one computes a ratio. The test passes if `--brand-text` is
+          defined and referenced, whatever colour it holds: set it to white on
+          white and the contract is still satisfied.
+
+          `design-tokens.test.ts` completes the picture. It verifies that every
+          token in `COLOR_TOKENS` MATCHES `design/tokens.json` in both modes —
+          a synchronisation check. Two files therefore guard the colour system,
+          and between them they establish that the tokens are consistent and
+          well-named, and nothing at all about whether anyone can read them.
+Evidence: grep for the only arithmetic that can answer the question:
+
+            $ grep -rln "0.2126\|relativeLuminance\|contrastRatio\|luminance" \
+                  tests/ lib/ scripts/
+            (no matches)
+
+          Zero. Not in the tests, not in a shared helper, not in a script.
+          The repository has a design-token system, a two-theme palette, a
+          cross-platform token contract feeding the Expo app, a test named for
+          contrast — and no implementation of the WCAG formula anywhere.
+
+          What that blindness cost, from the browser pass:
+            C2-B02  every primary CTA is white on `blue-500` at 3.68:1, on
+                    eleven public routes, at 10px in the header. `text-brand-fg`
+                    passes assertion 2 (it is not `text-brand`), and assertion 1
+                    never looks at it.
+            C2-B03  three light-theme semantic tokens below AA, two of them
+                    below even 3:1 (`--warning` 2.70:1, `--success` 2.91:1).
+                    Both files are satisfied: the tokens are defined in both
+                    modes and match tokens.json exactly.
+          Both defects are one subtraction away from a test that already loads
+          both theme blocks and already iterates every token.
+Impact:   The colour system reads as guarded. A reviewer seeing
+          `brand-contrast-contract.test.ts` green has been told the brand
+          colours are accessible, and has not been. This is the Part 0 pattern
+          in its most literal form yet — not a guard that is hard to trip, but
+          a guard NAMED for a property it does not evaluate.
+Fix:      `tests/focus-and-boundary-contract.test.ts` (added with the C2-B01 /
+          C2-B04 fix) now carries `luminance()` and `contrast()`. Lift them into
+          a shared helper and extend the existing table-driven loop in
+          design-tokens.test.ts over every token pair that renders as TEXT, in
+          both modes. That single test would have caught C2-B03 outright and,
+          with the gradient stops added as a pair, C2-B02 as well.
+          It will go red on today's tokens — which is the point, and the reason
+          it is filed separately rather than smuggled into this fix.
+Status:   OPEN — verified by grep; fix deliberately scoped out (see below)
+```
+
+**Why this is filed rather than fixed.** Adding the contrast loop now would turn
+the suite red on `C2-B03`'s `--success` / `--warning` / `--danger` ramps, which
+are a light-theme palette decision with product-visible consequences across every
+status chip and toast. Shipping a red suite, or quietly widening this change into
+a palette redesign, are both worse than recording it. The guard added here covers
+exactly what this commit fixed.

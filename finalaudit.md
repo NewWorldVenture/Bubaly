@@ -6,7 +6,7 @@
 `Executive Summary — session record` sections below are the earlier summaries,
 kept verbatim; where they disagree with this part, this part is newer.*
 
-**Fourteen passes, A–N. 124 numbered findings.**
+**Fifteen passes, A–O. 125 numbered findings.**
 
 | Pass | Surface | Findings |
 |---|---|---:|
@@ -24,6 +24,7 @@ kept verbatim; where they disagree with this part, this part is newer.*
 | L | The marketing platform spine — the tables that had never replayed | 4 (`L1`–`L4`) |
 | M | Reporting a failure is not surviving one; a feature nobody can enable | 2 (`M1`, `M2`) |
 | N | The browser, finally — runtime, page weight, flows (Claude-4) and rendered accessibility (Claude-2) | 28 (`N1`–`N3` + 8; `C2-B01`–`C2-B17`) |
+| O | `C2-B01` + `C2-B04` fixed together; the contrast contract that computes no contrast | 1 (`C1-S3-03`) + fix |
 
 Session record 1 says "87 findings across six passes". That was true when
 written; passes G–K have landed since, and Pass A is `F1`–`F22`, which is 22 and
@@ -49,6 +50,15 @@ one level out: axe returned 326 nodes reading *"background could not be
 determined due to a background gradient"*, so the product's most important
 buttons are precisely the elements its clean report is silent about. **"Zero
 violations" is a statement about what the instrument could see.**
+
+Pass O then found the most literal instance in the repository. Elsewhere the
+guards were merely hard to trip; `tests/brand-contrast-contract.test.ts` is a
+guard **named** for a property it does not evaluate — it checks that a token is
+declared and that a class name is unused, and never computes a ratio. Before
+Pass O, `grep -rln "0.2126\|luminance" tests/ lib/ scripts/` returned **nothing**:
+a repository with a two-theme palette and a cross-platform token contract had no
+implementation of the WCAG contrast formula anywhere. The name is what a
+reviewer reads (`C1-S3-03`).
 
 Verifying that a guard **fails when it should** is the highest-yield check in
 this repository. Break what it protects and confirm it goes red; a guard nobody
@@ -88,19 +98,26 @@ BLOCKED and *not* cleared; the other 120 instances are in `app/(app)`),
 `F-C09`, `F-C10`, `F19`, `F6`, `M2` (the calendar feed nobody can enable), and
 **`F-C03`, REOPENED** — see `N1`.
 
-**Open and new in Pass N, with a sequencing constraint worth reading before
-anyone starts:** `C2-B01` (`.focus-ring` paints permanently on 202 elements, so
-focus is invisible everywhere outside the marketing header) and `C2-B04` (text
-inputs have a 1.28:1 border over a fill identical to the card) **must ship
-together**. The permanent ring is currently the only thing making a form field's
-boundary visible; fixing the focus ring alone would leave every input with no
-visible edge at all. One defect is concealing another. Also `C2-B02` (every
+**Fixed in Pass O:** `C2-B01` (`.focus-ring` painted permanently on 202
+elements, so focus was invisible everywhere outside the marketing header) and
+`C2-B04` (text inputs had a 1.28:1 border over a fill identical to the card).
+They had to ship **together** — the permanent ring was the only thing making a
+form field's boundary visible, so fixing focus alone would have left every input
+with no visible edge. One defect was concealing another. Guarded by
+`tests/focus-and-boundary-contract.test.ts`, which was watched to fail for each
+of the three reintroduced defects before it was trusted.
+
+**Open and new in Pass N:** `C2-B02` (every
 primary CTA is white on a gradient at 3.68:1, in a blind spot where axe declines
 to judge), `C2-B03` (three light-theme semantic tokens below AA — the theme
 nobody had ever rendered), `C2-B05` (the cookie preference centre declares
-`aria-modal` and manages no focus), `C2-B08` (the `Field` primitive behind ~1,066
-call sites announces required fields as optional), and `C2-B17` (level-A bypass
-blocks missing on 7 of 23 public routes).
+`aria-modal` and manages no focus — the next most valuable, on a regulatory
+surface, with a working implementation to copy in `components/ui/modal.tsx`),
+`C2-B08` (the `Field` primitive behind ~1,066 call sites announces required
+fields as optional), `C2-B17` (level-A bypass blocks missing on 7 of 23 public
+routes), and `C1-S3-03` (the contrast contract that computes no contrast —
+deliberately filed rather than fixed, because closing it turns the suite red on
+`C2-B03`'s palette, which is a product decision).
 
 **`F-C03` is reopened, and that matters more than its severity.** It is indexed
 below as "fixed and verified in production", and half of it was: the RSC payload
@@ -4708,3 +4725,123 @@ physical devices.
 Database-backed content rendered empty throughout and **none of it is reported as
 a defect**; the one place the stub produced a number worth keeping is labelled
 with exactly what it contributed.
+
+---
+
+# Pass O — two defects that had to be fixed together, and a contract that measures nothing
+
+*Claude-1, 2026-09-14. Fix + 1 finding (`C1-S3-03`). Evidence in `audit/claude-1.md`.*
+
+Pass N's two interlocked accessibility HIGHs are **fixed**, together, because
+fixing either alone makes the product worse. One new finding came out of writing
+the guard, and it is the sharpest instance of this document's pattern yet.
+
+## The fix: `C2-B01` + `C2-B04`
+
+`.focus-ring` is now a state variant. It was a plain component class, so it
+compiled to an unconditional ring on all 202 elements carrying it, with
+`outline: 2px solid transparent` suppressing the browser's own outline —
+a focus indicator that failed WCAG 2.4.7 by never being **off**:
+
+```css
+/* before */                              /* after */
+.focus-ring {                             .focus-ring {
+  @apply outline-none                       @apply outline-none;
+    ring-2 ring-brand/60                  }
+    ring-offset-2 ring-offset-bg;         .focus-ring:focus-visible {
+}                                           @apply ring-2 ring-brand/60
+                                              ring-offset-2 ring-offset-bg;
+                                          }
+```
+
+Scoped in the class rather than at the call sites, so no call site can forget it.
+The 16 `focus-visible:focus-ring` prefixes that existed only to work around the
+old behaviour are removed; all 218 call sites now behave identically and
+correctly. Checked first that no call site used the class to mean a *selected*
+state — none does.
+
+**And in the same commit, because it cannot be in a later one:** form controls
+get `--border-input`, a token separate from `--border` so raising it does not
+restyle every divider in the product. Dark `94 107 133` (3.56:1 on `--surface`,
+3.73:1 on `--bg`), light `124 137 163` (3.52:1, 3.29:1) — both clear WCAG
+1.4.11's 3:1 with margin, against the 1.38:1 and 1.28:1 they replace. Added to
+`design/tokens.json` as well, so the Expo app does not drift from the web.
+
+The sequencing is the whole point. Text inputs took `border-border` over a fill
+identical to the card behind them (1.00:1), so the border was a field's only
+boundary — and the fields were legible **only because the permanent ring was
+outlining them**. Ship the focus fix alone and every input in the product loses
+its visible edge. One defect was concealing another, and the audit caught it
+because it measured both rather than filing the first and moving on.
+
+## The guard, proven red before it was trusted
+
+`tests/focus-and-boundary-contract.test.ts`, 7 assertions. Each of the three
+defects was reintroduced and the suite watched to fail:
+
+| reintroduced | result |
+|---|---|
+| the unconditional `.focus-ring` | **2 failed** |
+| `border-border` on the `Input` primitive | **1 failed** |
+| the old `--border-input` values | **2 failed** — *"dark: `--border-input` on `--surface` is 1.38:1"*, *"light: … 1.28:1"* |
+| all three restored | **7 passed** |
+
+The third row is worth reading twice. The test re-derives, from the token file
+alone, the exact ratios Claude-2 measured in a browser — 1.38:1 and 1.28:1. The
+static guard and the running browser agree to two decimal places, which is the
+strongest form of verification available here.
+
+## `C1-S3-03` — the contract named for a property it does not evaluate
+
+`MEDIUM`. `tests/brand-contrast-contract.test.ts` is called *"brand contrast
+contract"*, its describe block is *"accessible brand color roles"*, and it makes
+two assertions: that `--brand-text` is declared twice and wired into Tailwind,
+and that no file uses the class `text-brand`. **One is structural, one is
+naming. Neither computes a ratio.** Set `--brand-text` to white on white and the
+contract is still satisfied.
+
+`design-tokens.test.ts` completes it: it verifies every token *matches*
+`design/tokens.json` in both modes — a synchronisation check. So two files guard
+the colour system, and between them they establish that the tokens are
+consistent and well-named, and nothing whatever about whether a human can read
+them.
+
+The confirming grep is one line:
+
+```
+$ grep -rln "0.2126\|relativeLuminance\|contrastRatio\|luminance" tests/ lib/ scripts/
+(no matches)
+```
+
+**Zero.** A repository with a two-theme palette, a cross-platform token contract
+feeding a second app, and a test named for contrast contained no implementation
+of the WCAG formula anywhere — until this commit added one.
+
+That blindness has a bill, and Pass N itemised it: `C2-B02` (every primary CTA at
+3.68:1 — `text-brand-fg` is not `text-brand`, so it passes the naming assertion,
+and the structural one never looks at it) and `C2-B03` (three light-theme tokens
+below AA, two below even 3:1 — all defined in both modes and matching
+`tokens.json` exactly, so both files are perfectly satisfied). Both defects sit
+one subtraction away from a test that **already loads both theme blocks and
+already iterates every token**.
+
+This is the pattern in its most literal form. Elsewhere in this document the
+guards were hard to trip: a probe that granted itself the privileges it tested
+for, a replay that only ran against an empty database, a bucket-drift check that
+could not fire. This one is not hard to trip. It is a guard **named** for a
+property it does not evaluate — and the name is what a reviewer reads.
+
+**Deliberately not fixed here.** Extending the loop over every text-rendering
+token pair would turn the suite red on `C2-B03`'s ramps, which are a light-theme
+palette decision with consequences across every status chip and toast. Shipping a
+red suite, or widening an accessibility fix into a palette redesign unasked, are
+both worse than recording it. The helpers now exist in
+`tests/focus-and-boundary-contract.test.ts` and should be lifted into a shared
+module when that palette work is scheduled.
+
+## Still open from Pass N
+
+`C2-B02`, `C2-B03` and `C2-B05`–`C2-B17` are unchanged. `C2-B05` (the consent
+preference centre declaring `aria-modal` while managing no focus) is the next
+most valuable, is on a regulatory surface, and has a working implementation to
+copy in `components/ui/modal.tsx`.

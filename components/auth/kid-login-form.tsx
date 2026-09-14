@@ -46,7 +46,7 @@ export function KidLoginForm() {
             onChange={(e) => setUsername(e.target.value)}
             autoFocus autoCapitalize="none" autoCorrect="off" spellCheck={false}
             placeholder={t('kidLogin.eGEmma')}
-            className="h-11 w-full rounded-xl border border-border bg-bg px-3 text-base focus-visible:focus-ring"
+            className="h-11 w-full rounded-xl border border-border bg-bg px-3 text-base focus-ring"
           />
         </label>
         <div className="block">
@@ -57,10 +57,10 @@ export function KidLoginForm() {
               value={pin}
               onChange={(e) => setPin(normalizePin(e.target.value))}
               inputMode="numeric" type={showPin ? 'text' : 'password'} placeholder="••••"
-              className="h-12 w-full rounded-xl border border-border bg-bg px-12 text-center text-lg tracking-[0.5em] focus-visible:focus-ring"
+              className="h-12 w-full rounded-xl border border-border bg-bg px-12 text-center text-lg tracking-[0.5em] focus-ring"
             />
             <button type="button" onClick={() => setShowPin((v) => !v)} aria-label={showPin ? 'Hide PIN' : 'Show PIN'}
-              className="focus-visible:focus-ring absolute right-1 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-lg text-muted hover:bg-elevated hover:text-fg">
+              className="focus-ring absolute right-1 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-lg text-muted hover:bg-elevated hover:text-fg">
               {showPin ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>

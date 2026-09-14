@@ -70,15 +70,45 @@ COMPLETED (session 3 so far):
     Reproduced exactly: the compiled .focus-ring rule, the 202/16 call-site
     split, --brand-fg = 255 255 255 in both themes, and ALL TWELVE light-theme
     token ratios to two decimal places.
+  - APPLIED the first fix the audit's own findings demanded: C2-B01 + C2-B04,
+    together, because fixing either alone makes the product worse. .focus-ring
+    is now a state variant (was an UNCONDITIONAL ring on 202 elements, so focus
+    was invisible); form controls get a separate --border-input token clearing
+    WCAG 1.4.11's 3:1 (was 1.28:1 light / 1.38:1 dark, over a fill identical to
+    the card). The permanent ring was the ONLY thing making a field's boundary
+    visible — one defect was concealing another, which is why the pair ships in
+    one commit. Also added to design/tokens.json so Expo does not drift.
+    Verified in the COMPILED css, the same way the defect was found:
+      .focus-ring{outline:2px solid transparent;outline-offset:2px}
+      .focus-ring:focus-visible{...ring...}
+    Guard: tests/focus-and-boundary-contract.test.ts, 7 assertions, PROVEN RED
+    for each of the three defects reintroduced (2 / 1 / 2 failures) and green
+    with all three restored. Its token assertion re-derives 1.38:1 and 1.28:1
+    from the token file alone — agreeing with Claude-2's browser measurement to
+    two decimal places.
+  - NEW FINDING C1-S3-03 while writing that guard: tests/brand-contrast-contract
+    .test.ts is named for a property it cannot measure. It asserts --brand-text
+    is DECLARED and that `text-brand` is UNUSED; it never computes a ratio.
+    `grep -rln "0.2126\|luminance" tests/ lib/ scripts/` returned NOTHING before
+    this commit — a repo with a two-theme palette and a cross-platform token
+    contract had no WCAG contrast formula anywhere. That is what let C2-B02 and
+    C2-B03 through. Filed, not fixed: closing it turns the suite red on
+    C2-B03's palette, which is a product decision, not an audit one.
 PRIOR SESSIONS (unchanged, see history below): F-020 migration idempotency;
   /api/health FEATURE_ENV tier; 5 cron routes answering 200 on their own
   failures; service-role boundary probe; 0296 renumber.
-NEXT: reconcile the two Executive Summaries into one authoritative index — the
-  document names this as a deliberate follow-up and it is the coordinator's job;
-  verify a sample of Pass G/H fixes against current main.
+NEXT: C2-B05 (the consent preference centre declares aria-modal and manages no
+  focus — regulatory surface, and components/ui/modal.tsx already implements
+  every missing piece) is the next most valuable fix. Then reconcile the two
+  Executive Summaries into one authoritative index — the document names this as
+  a deliberate follow-up and it is the coordinator's job.
 FILES-TOUCHED (session 3):
   - audit/status.md (this section only), audit/claude-1.md, finalaudit.md
-  - none in application source yet
+  - source: lib/server/push.ts (M1), the calendar-feed route (M2),
+    scripts/i18n-scan.mjs, app/globals.css, tailwind.config.ts,
+    components/ui/input.tsx, design/tokens.json, and the 7 .tsx files carrying
+    the now-redundant `focus-visible:focus-ring` prefix (C2-B01/C2-B04).
+  - tests: push-failure-is-not-delivery, focus-and-boundary-contract.
 BLOCKERS:
   - F-001/F5/F-C08: applying migrations to production needs operator
     credentials. Permanent for agent workers.
