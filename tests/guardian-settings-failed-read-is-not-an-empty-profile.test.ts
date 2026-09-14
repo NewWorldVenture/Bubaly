@@ -19,7 +19,14 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { readFileSync } from 'node:fs';
-import { ROUTING_MODE_DESCRIPTIONS } from '@/lib/guardian/pipeline';
+import { ROUTING_MODE_DESCRIPTION_KEYS } from '@/lib/guardian/pipeline';
+import { getMessages, translate } from '@/lib/i18n/messages';
+
+// The map holds catalogue keys now; the page renders what they resolve to.
+// Counting the resolved sentence is the same assertion as before, and it
+// additionally fails if a key ever stops resolving and renders raw.
+const described = (mode: keyof typeof ROUTING_MODE_DESCRIPTION_KEYS) =>
+  translate(getMessages('en-US'), ROUTING_MODE_DESCRIPTION_KEYS[mode]);
 import { routingDefaults, type RoutingProfile } from '@/lib/guardian/routing-form';
 
 const MESSAGES = JSON.parse(readFileSync('lib/i18n/messages/en-US.json', 'utf8')) as Record<string, string>;
@@ -134,7 +141,7 @@ describe('the Guardian settings page tells a failed read from an absent profile'
     expect(html).toContain('Save Settings');
     expect(html).toContain('GUARDIAN-NUMBER-FORM');
     // Seeded from the factory defaults: immediate/close/trusted all ring.
-    expect(occurrences(html, ROUTING_MODE_DESCRIPTIONS.immediate_ring)).toBe(3);
+    expect(occurrences(html, described('immediate_ring'))).toBe(3);
   });
 
   it('seeds the form from the stored profile, not the defaults', async () => {
@@ -143,9 +150,9 @@ describe('the Guardian settings page tells a failed read from an absent profile'
     expect(html).not.toContain(ERROR_COPY);
     // All six editable tiers are stored as `blocked`, so no row may describe a
     // default it was never given.
-    expect(occurrences(html, ROUTING_MODE_DESCRIPTIONS.blocked)).toBe(6);
-    expect(occurrences(html, ROUTING_MODE_DESCRIPTIONS.immediate_ring)).toBe(0);
-    expect(occurrences(html, ROUTING_MODE_DESCRIPTIONS.ai_handle_first)).toBe(0);
+    expect(occurrences(html, described('blocked'))).toBe(6);
+    expect(occurrences(html, described('immediate_ring'))).toBe(0);
+    expect(occurrences(html, described('ai_handle_first'))).toBe(0);
   });
 
   // The heart of it: the page a failed read produces must not be the page an

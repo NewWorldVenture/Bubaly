@@ -27,7 +27,13 @@ import { sanitizeQuery } from '@/lib/services/search/index';
 const field = (
   props: { label: string; error?: string; hint?: string },
   render: (id: string, aria: FieldAria) => ReactElement,
-) => renderToStaticMarkup(createElement(Field, props, render));
+) =>
+  // `children` is passed as a prop rather than as createElement's third
+  // argument because Field's children IS A RENDER PROP — a function of
+  // (id, aria) — and the third parameter is typed as ReactNode. The lint
+  // rule that asks for the other form does not model that case.
+  // eslint-disable-next-line react/no-children-prop
+  renderToStaticMarkup(createElement(Field, { ...props, children: render }));
 
 const input = (extra: Record<string, unknown> = {}) => {
   const control = (id: string) => createElement(Input, { id, ...extra });

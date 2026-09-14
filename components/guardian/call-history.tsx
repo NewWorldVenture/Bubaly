@@ -3,9 +3,9 @@
 import { useState } from 'react';
 import { Search, Phone, MessageSquare, ChevronDown, ChevronUp, Play } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
-import { TRUST_LABELS, TRUST_COLORS, TRUST_ICONS, type TrustLevel } from '@/lib/guardian/trust';
-import { ROUTING_MODE_LABELS, type RoutingMode } from '@/lib/guardian/pipeline';
-import { SCAM_TYPE_LABELS } from '@/lib/guardian/scam';
+import { TRUST_LABEL_KEYS, TRUST_COLORS, TRUST_ICONS, type TrustLevel } from '@/lib/guardian/trust';
+import { ROUTING_MODE_LABEL_KEYS, type RoutingMode } from '@/lib/guardian/pipeline';
+import { SCAM_TYPE_LABEL_KEYS } from '@/lib/guardian/scam';
 import { formatPhone } from '@/lib/guardian/phone';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { useFormat } from '@/components/i18n/use-format';
@@ -181,10 +181,10 @@ export function CallHistory({ communications }: { communications: Communication[
                     <div className="border-t border-border bg-elevated/50 px-4 py-3 space-y-2.5">
                       <DetailRow label={t('callHistory.type')} value={COMM_LABELS[comm.comm_type] ?? comm.comm_type} />
                       {comm.trust_level_at_time && (
-                        <DetailRow label={t('callHistory.trust')} value={`${TRUST_ICONS[comm.trust_level_at_time]} ${TRUST_LABELS[comm.trust_level_at_time]}`} />
+                        <DetailRow label={t('callHistory.trust')} value={`${TRUST_ICONS[comm.trust_level_at_time]} ${t(TRUST_LABEL_KEYS[comm.trust_level_at_time])}`} />
                       )}
                       {comm.routing_mode_used && (
-                        <DetailRow label={t('callHistory.handling')} value={ROUTING_MODE_LABELS[comm.routing_mode_used]} />
+                        <DetailRow label={t('callHistory.handling')} value={t(ROUTING_MODE_LABEL_KEYS[comm.routing_mode_used])} />
                       )}
                       {comm.ai_decision_reason && (
                         <DetailRow label={t('callHistory.aiReasoning')} value={comm.ai_decision_reason} />
@@ -192,7 +192,10 @@ export function CallHistory({ communications }: { communications: Communication[
                       {comm.scam_detected && (
                         <DetailRow
                           label={t('callHistory.scamType')}
-                          value={`${SCAM_TYPE_LABELS[comm.scam_type ?? ''] ?? comm.scam_type} (${comm.scam_confidence}% confidence)`}
+                          value={t('guardian.scamTypeWithConfidence', {
+                            type: SCAM_TYPE_LABEL_KEYS[comm.scam_type ?? ''] ? t(SCAM_TYPE_LABEL_KEYS[comm.scam_type ?? '']) : (comm.scam_type ?? ''),
+                            confidence: comm.scam_confidence ?? 0,
+                          })}
                           danger
                         />
                       )}

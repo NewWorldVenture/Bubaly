@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react';
 import { Plus, Trash2, ToggleLeft, ToggleRight, ChevronDown, ChevronUp, GripVertical } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
-import { TRUST_LABELS, TRUST_LEVELS, TRUST_ICONS, type TrustLevel } from '@/lib/guardian/trust';
-import { ROUTING_MODE_LABELS, type RoutingMode } from '@/lib/guardian/pipeline';
+import { TRUST_LABEL_KEYS, TRUST_LEVELS, TRUST_ICONS, type TrustLevel } from '@/lib/guardian/trust';
+import { ROUTING_MODE_LABEL_KEYS, type RoutingMode } from '@/lib/guardian/pipeline';
 import { createRuleAction, toggleRuleAction, deleteRuleAction } from '@/app/(app)/guardian/actions';
 import { useToast } from '@/components/ui/toast';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -139,7 +139,7 @@ export function RulesEditor({ rules: initial }: { rules: Rule[] }) {
                   <span className="ml-auto text-[10px] text-muted">#{rule.priority}</span>
                 </div>
                 <p className="text-xs text-muted mt-0.5">
-                  → <span className="text-brand-text">{ROUTING_MODE_LABELS[rule.action_routing_mode]}</span>
+                  → <span className="text-brand-text">{t(ROUTING_MODE_LABEL_KEYS[rule.action_routing_mode])}</span>
                   {rule.condition_trust_levels?.length && (
                     <> · {rule.condition_trust_levels.map(t => TRUST_ICONS[t]).join(' ')}</>
                   )}
@@ -176,7 +176,7 @@ export function RulesEditor({ rules: initial }: { rules: Rule[] }) {
               <div className="border-t border-border bg-elevated/40 px-4 py-3 space-y-2 text-xs">
                 {rule.description && <p className="text-muted">{rule.description}</p>}
                 {rule.condition_trust_levels?.length && (
-                  <DetailRow label={t('rulesEditor.trustLevels')} value={rule.condition_trust_levels.map(t => `${TRUST_ICONS[t]} ${TRUST_LABELS[t]}`).join(', ')} />
+                  <DetailRow label={t('rulesEditor.trustLevels')} value={rule.condition_trust_levels.map((lvl) => `${TRUST_ICONS[lvl]} ${t(TRUST_LABEL_KEYS[lvl])}`).join(', ')} />
                 )}
                 {rule.condition_time_start && (
                   <DetailRow label={t('rulesEditor.time')} value={`${rule.condition_time_start} – ${rule.condition_time_end}`} />
@@ -295,7 +295,7 @@ function NewRuleModal({ onSave, onClose }: { onSave: (f: NewRuleForm) => void; o
                   className={cn('rounded-full border px-2.5 py-1 text-xs font-medium transition',
                     form.trust_levels.includes(t) ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:border-brand/40'
                   )}>
-                  {TRUST_ICONS[t]} {TRUST_LABELS[t]}
+                  {TRUST_ICONS[t]} {tr(TRUST_LABEL_KEYS[t])}
                 </button>
               ))}
             </div>
@@ -348,7 +348,7 @@ function NewRuleModal({ onSave, onClose }: { onSave: (f: NewRuleForm) => void; o
                   className={cn('rounded-xl border px-3 py-2 text-xs font-medium text-left transition',
                     form.routing_mode === mode ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:border-brand/40'
                   )}>
-                  {ROUTING_MODE_LABELS[mode]}
+                  {tr(ROUTING_MODE_LABEL_KEYS[mode])}
                 </button>
               ))}
             </div>

@@ -4,8 +4,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Shield, Phone, MessageSquare, AlertTriangle, CheckCircle, Clock, TrendingUp, Users, Zap, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
-import { TRUST_LABELS, TRUST_COLORS, TRUST_ICONS } from '@/lib/guardian/trust';
-import { ROUTING_MODE_LABELS } from '@/lib/guardian/pipeline';
+import { TRUST_LABEL_KEYS, TRUST_COLORS, TRUST_ICONS } from '@/lib/guardian/trust';
+import { ROUTING_MODE_LABEL_KEYS } from '@/lib/guardian/pipeline';
 import { formatPhone } from '@/lib/guardian/phone';
 import { updateContextAction, reviewSuggestionAction, acknowledgeEscalationAction, generateGuardianSuggestionsAction } from '@/app/(app)/guardian/actions';
 import { useToast } from '@/components/ui/toast';
@@ -256,7 +256,7 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
                   <p className="text-xs text-muted mt-0.5 line-clamp-2">{s.reasoning}</p>
                   {s.proposed_trust_level && (
                     <span className={cn('mt-1 inline-block text-xs font-semibold', TRUST_COLORS[s.proposed_trust_level])}>
-                      → {TRUST_LABELS[s.proposed_trust_level]}
+                      → {t(TRUST_LABEL_KEYS[s.proposed_trust_level])}
                     </span>
                   )}
                 </div>
@@ -302,6 +302,7 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
 }
 
 function CommRow({ comm }: { comm: Communication }) {
+  const t = useTranslations();
   // The date follows the reader, not the browser: toLocaleDateString() with no
   // argument takes whatever the machine reports (I18N-002).
   const { fmtDate } = useFormat();
@@ -326,11 +327,11 @@ function CommRow({ comm }: { comm: Communication }) {
             </span>
           )}
           {comm.scam_detected && (
-            <span className="rounded-full bg-red-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-red-400">SCAM</span>
+            <span className="rounded-full bg-red-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-red-400">{t('guardian.scamBadge')}</span>
           )}
         </div>
         <p className="text-xs text-muted mt-0.5 line-clamp-1">
-          {comm.summary ?? comm.body ?? (comm.routing_mode_used ? ROUTING_MODE_LABELS[comm.routing_mode_used] : 'Handled')}
+          {comm.summary ?? comm.body ?? (comm.routing_mode_used ? t(ROUTING_MODE_LABEL_KEYS[comm.routing_mode_used]) : t('guardian.handled'))}
         </p>
       </div>
       <div className="shrink-0 text-right">

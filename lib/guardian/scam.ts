@@ -103,20 +103,22 @@ export function detectScamFromText(text: string, callerNumber?: string): ScamDet
   return { isScam, scamType, confidence, signals, recommendation };
 }
 
-/** Human-readable scam type labels. */
-export const SCAM_TYPE_LABELS: Record<string, string> = {
-  robocall: 'Robocall',
-  warranty_scam: 'Warranty Scam',
-  irs_scam: 'IRS / Government Scam',
-  grandparent_scam: 'Grandparent Scam',
-  tech_support_scam: 'Tech Support Scam',
-  prize_scam: 'Prize / Lottery Scam',
-  bank_scam: 'Bank / Payment Scam',
-  social_security_scam: 'Social Security Scam',
-  medicare_scam: 'Medicare Scam',
-  utility_scam: 'Utility Scam',
-  charity_scam: 'Charity Scam',
-  romance_scam: 'Romance Scam',
-  phishing: 'Phishing',
-  spoofed_number: 'Spoofed Number',
+/** Catalogue KEYS for each scam type, not copy — the component resolves them.
+ *  An unrecognised type has no key, and the caller shows the raw value rather
+ *  than inventing one. */
+export const SCAM_TYPE_LABEL_KEYS: Record<string, string> = {
+  robocall: 'guardian.scamRobocall',
+  warranty_scam: 'guardian.scamWarranty',
+  irs_scam: 'guardian.scamIrs',
+  grandparent_scam: 'guardian.scamGrandparent',
+  tech_support_scam: 'guardian.scamTechSupport',
+  prize_scam: 'guardian.scamPrize',
+  bank_scam: 'guardian.scamBank',
+  social_security_scam: 'guardian.scamSocialSecurity',
+  medicare_scam: 'guardian.scamMedicare',
+  utility_scam: 'guardian.scamUtility',
+  charity_scam: 'guardian.scamCharity',
+  romance_scam: 'guardian.scamRomance',
+  phishing: 'guardian.scamPhishing',
+  spoofed_number: 'guardian.scamSpoofedNumber',
 };

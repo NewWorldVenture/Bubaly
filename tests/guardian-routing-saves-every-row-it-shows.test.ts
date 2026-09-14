@@ -23,7 +23,7 @@
 // would write. No source grepping: a field that never leaves the browser fails
 // here.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ROUTING_MODE_LABELS, type RoutingMode } from '@/lib/guardian/pipeline';
+import { ROUTING_MODE_LABEL_KEYS, type RoutingMode } from '@/lib/guardian/pipeline';
 import type { TrustLevel } from '@/lib/guardian/trust';
 import {
   EDITABLE_TRUST_LEVELS, TRUST_TO_FIELD, guardianProfilePayload, routingDefaults, routingUpdate,
@@ -243,9 +243,9 @@ describe('the payload writes what the caller sent, and nothing else', () => {
   });
 
   it('names every mode the form offers, so no row can select an unsavable one', () => {
-    // Guards the other direction: a seventh routing mode added to ROUTING_MODE_LABELS
+    // Guards the other direction: a seventh routing mode added to ROUTING_MODE_LABEL_KEYS
     // renders a button in every row, and this says it has somewhere to go.
-    const modes = Object.keys(ROUTING_MODE_LABELS) as RoutingMode[];
+    const modes = Object.keys(ROUTING_MODE_LABEL_KEYS) as RoutingMode[];
     for (const trust of EDITABLE_TRUST_LEVELS) {
       for (const mode of modes) {
         const form = { ...routingDefaults('mem-1'), [TRUST_TO_FIELD[trust]]: mode };

@@ -3,8 +3,8 @@
 import { useState } from 'react';
 import { Shield, Phone, Zap, Volume2, BellOff, Ban } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
-import { ROUTING_MODE_LABELS, ROUTING_MODE_DESCRIPTIONS, type RoutingMode } from '@/lib/guardian/pipeline';
-import { TRUST_LABELS, TRUST_ICONS, type TrustLevel } from '@/lib/guardian/trust';
+import { ROUTING_MODE_LABEL_KEYS, ROUTING_MODE_DESCRIPTION_KEYS, type RoutingMode } from '@/lib/guardian/pipeline';
+import { TRUST_LABEL_KEYS, TRUST_ICONS, type TrustLevel } from '@/lib/guardian/trust';
 import {
   EDITABLE_TRUST_LEVELS, TRUST_TO_FIELD, initialRoutingForm, routingUpdate,
   type RoutingProfile, type RoutingProfileSource,
@@ -123,7 +123,7 @@ function RoutingForm({ initial, member }: { initial: RoutingProfile; member: Mem
               <div key={trust} className="rounded-2xl border border-border bg-surface/40 p-4 space-y-2">
                 <p className="text-sm font-semibold flex items-center gap-1.5">
                   <span>{TRUST_ICONS[trust]}</span>
-                  {TRUST_LABELS[trust]}
+                  {tr(TRUST_LABEL_KEYS[trust])}
                 </p>
                 <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
                   {ALL_MODES.map((mode) => (
@@ -138,11 +138,11 @@ function RoutingForm({ initial, member }: { initial: RoutingProfile; member: Mem
                       )}
                     >
                       {ROUTING_ICONS[mode]}
-                      {ROUTING_MODE_LABELS[mode]}
+                      {tr(ROUTING_MODE_LABEL_KEYS[mode])}
                     </button>
                   ))}
                 </div>
-                <p className="text-[11px] text-muted">{ROUTING_MODE_DESCRIPTIONS[currentMode]}</p>
+                <p className="text-[11px] text-muted">{tr(ROUTING_MODE_DESCRIPTION_KEYS[currentMode])}</p>
               </div>
             );
           })}
@@ -212,7 +212,7 @@ function RoutingForm({ initial, member }: { initial: RoutingProfile; member: Mem
                       )}
                     >
                       {ROUTING_ICONS[mode]}
-                      {ROUTING_MODE_LABELS[mode]}
+                      {tr(ROUTING_MODE_LABEL_KEYS[mode])}
                     </button>
                   ))}
                 </div>

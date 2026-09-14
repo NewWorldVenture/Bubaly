@@ -3482,6 +3482,101 @@ written against **how** something was done rather than **what must be true**.
   no `--dir`, so it never reaches the test tree — where three ESLint **errors**
   had been sitting unseen. Two were mine from Pass AU
   (`tests/a-field-reports-its-own-state.test.ts`: `children` passed as a prop, and
-  a component factory with no `displayName`) and are fixed. The third,
-  `tests/school-sports-desk.test.ts:359` assigning to `module`, is not mine and is
-  recorded rather than touched.
+  a component factory with no `displayName`). The `displayName` one is fixed. The
+  other **is not a defect and is now marked as such**: rewriting it the way the
+  rule asks — `createElement(Field, props, render)` — does not compile, because
+  `Field`'s children IS a render prop, a function of `(id, aria)`, and
+  `createElement`'s third parameter is typed as `ReactNode`. `tsc` said so the
+  moment I "fixed" it. The line carries a disable with that reason instead. The
+  third error, `tests/school-sports-desk.test.ts:359` assigning to `module`, is not
+  mine and is recorded rather than touched.
+
+---
+
+## Pass AX — Guardian's safety vocabulary, and a gate that documented a guarantee it did not hold
+
+**Status: FIXED** (33 of 45 + 3 more found in passing), **BLOCKED** (11), **EXEMPT** (1),
+plus the gate itself wired into CI.
+
+### `[CLAUDE-2 → CLAUDE-1][MEDIUM][I18N]` the reason a call was blocked was in English
+
+Verified exactly as filed — `node scripts/i18n-scan.mjs --list lib/guardian` still
+reported **45 hardcoded strings across 7 files** — and then split by **reading the
+callers rather than counting the call**, which is the only thing that decides whether
+a string is convertible:
+
+- **33 are pure UI label maps.** `TRUST_LABELS`, `ROUTING_MODE_LABELS` +
+  `_DESCRIPTIONS`, `SCAM_TYPE_LABELS` have **no consumer outside five client
+  components** — call history, the rules editor, routing settings, the contact
+  list, the dashboard. Every one has a translator two lines up. They now hold
+  catalogue KEYS and the components resolve them, which is the repo's own pattern
+  (`lib/marketing/consent-ui.ts`, gated as `marketing-lib-copy` for exactly this).
+- **11 are blocked on I18N-001, and the trace is worth keeping.**
+  `runDecisionPipeline` builds `reason` from `rules.ts`, `explainTrustDecision` and
+  the seasonal note; the **Twilio voice/SMS/WhatsApp webhooks** persist it into
+  `communications.ai_decision_reason`; `call-history.tsx:190` renders it verbatim
+  weeks later. A webhook has no reader and no locale — the same shape as
+  `lib/emails/chore-reminder.tsx` and the trip-intel calendar descriptions.
+  `learning.ts` is the same by a different route: a cron writes suggestion titles
+  into rows.
+- **1 is exempt.** `ai-screen.ts:192`'s `'Unknown'` sits inside a prompt to the
+  model. The model is its reader.
+
+### The scanner understates the file it reports on
+
+`trust.ts` shows 7 findings, and they are all the label map. It does **not** report
+`explainTrustDecision` (`:103-115`), which builds seven English sentences —
+*"{who} is in your Immediate Family — always rings through."* — because they are
+interpolated templates rather than copy parked in a data structure. So the
+module's real English count is higher than any number the gate will ever print.
+Recorded rather than silently absorbed: this is the third time this audit that a
+scanner's shape, not its threshold, is what limits it.
+
+### Renaming the maps was the safety property, not tidiness
+
+Changing `TRUST_LABELS`'s **values** to keys in place would have compiled
+everywhere and rendered `guardian.trustBlocked` at every site whose author forgot
+a `t()`. Renaming to `TRUST_LABEL_KEYS` makes the compiler visit all eighteen.
+
+That mattered immediately. `rules-editor.tsx:179` was
+`rule.condition_trust_levels.map(t => \`${TRUST_ICONS[t]} ${TRUST_LABELS[t]}\`)` —
+**the callback parameter is named `t`, shadowing the translator** the line now
+needs. Wrapping in place would have called a `TrustLevel` string as a function.
+The parameter is `lvl` now.
+
+### Three more English literals, found by being in the file
+
+`guardian-dashboard.tsx` rendered a bare `'Handled'` fallback and a `SCAM` badge,
+and `call-history.tsx` appended `(${n}% confidence)` — which is not only English
+but puts the `%` where en-US puts it; fr-FR and it-IT space it differently and
+it-IT puts the word first. All three are keys now.
+
+### Two English strings I changed and then changed back
+
+I first wrote **"Tax / Government Scam"** and **"Health Insurance Scam"** for all
+seven locales, because "IRS" and "Medicare" are US agencies that mean nothing to a
+Dutch or Italian reader. That is right for six of them and **wrong for en-US**: it
+would have changed the words an American family already recognises in order to fix
+a problem they do not have. en-US keeps *IRS / Government Scam* and *Medicare
+Scam*; the other six say the same thing in terms their reader has.
+
+### `[CLAUDE-1][MEDIUM][CI]` the i18n gate was never run
+
+`scripts/i18n-gate.mjs` opens: *"Runs every entry in GATED_SURFACES and fails if
+any of them has regained a hardcoded string… Nothing else in the build would
+notice, so this does."* `npm run i18n:gate` exists in `package.json` and appears in
+**no workflow**. Nine surfaces declared themselves translated and the promise was
+checked by nobody — the same defect as Pass AU's two primitives, one layer up.
+
+It now runs in CI directly after Lint, with
+`tests/the-i18n-gate-is-actually-run.test.ts` holding three properties: CI invokes
+it, every declared surface actually scans clean, and the scanner still reports a
+label put back into a gated map.
+
+**My first not-blind probe passed, and I nearly took that as proof.** I planted
+`export const PLANTED = 'Suspected Spam Caller'` in `trust.ts` and the gate stayed
+green. The scanner reads copy parked in data structures and in markup, not every
+string literal — so a bare top-level const is outside it. Re-planted **in the shape
+the defect actually took**, a label inside the `Record<>`, it went red immediately.
+The control in the guard is the second plant, and the first one's blind spot is
+written into the test beside it rather than left for someone to rediscover.
