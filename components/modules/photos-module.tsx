@@ -13,7 +13,7 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
-import { FAMILY_MEDIA_MAX_LABEL, partitionBySize } from '@/lib/storage/family-media';
+import { FAMILY_MEDIA_MAX_LABEL, familyMediaPath, partitionBySize } from '@/lib/storage/family-media';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -108,12 +108,8 @@ export function PhotosModule() {
     for (let i = 0; i < valid.length; i++) {
       const file = valid[i];
       const isVideo = file.type.startsWith('video/');
-      const ext = file.name.split('.').pop();
       const folder = isVideo ? 'videos' : 'photos';
-      const unique = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      const path = `${familyId}/${folder}/${unique}.${ext}`;
+      const path = familyMediaPath(familyId, folder, file.name);
       const { data: stored, error: upErr } = await supabase.storage
         .from('family-media')
         .upload(path, file, { upsert: false, cacheControl: '31536000' });
@@ -148,6 +144,25 @@ export function PhotosModule() {
     }
     setUploadOpen(false);
   }
+
+  // ── Lightbox keyboard ─────────────────────────────────────
+  // The lightbox covers the screen and had no key handling at all, so a keyboard
+  // user who reached it could not leave it: Escape did nothing and the only way
+  // out was clicking the backdrop. WCAG 2.1.2 No Keyboard Trap. It matters more
+  // now that the grid and list tiles that open it are themselves operable.
+  // The arrows move between photos because the Previous/Next buttons already
+  // exist either side of the image and a keyboard user should not have to Tab
+  // back to them for every photo.
+  useEffect(() => {
+    if (lightboxIdx === null) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setLightboxIdx(null); return; }
+      if (e.key === 'ArrowLeft') setLightboxIdx((i) => (i !== null && i > 0 ? i - 1 : i));
+      if (e.key === 'ArrowRight') setLightboxIdx((i) => (i !== null && i < photos.length - 1 ? i + 1 : i));
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [lightboxIdx, photos.length]);
 
   // ── Drag & drop ───────────────────────────────────────────
   useEffect(() => {
@@ -243,7 +258,7 @@ export function PhotosModule() {
           <button key={key} onClick={() => { setTab(key); setActiveAlbum(null); }}
             className={cn('tab-item', tab === key ? 'tab-item-active' : 'tab-item-inactive')}>
             {tr(labelKey)}
-            {key === 'favorites' && <span className="ml-1 rounded-full bg-current/10 px-1.5 text-[10px]">
+            {key === 'favorites' && <span className="ml-1 rounded-full bg-fg/10 px-1.5 text-[10px]">
               {allPhotos.filter((p) => p.is_favorite).length}
             </span>}
           </button>
@@ -330,6 +345,16 @@ export function PhotosModule() {
                 return (
                 <div key={photo.id} className="group relative mb-3 break-inside-avoid overflow-hidden rounded-xl border border-border/40"
                   onClick={() => setLightboxIdx(idx)}>
+                  {/* The tile's onClick stays for the mouse — the hover overlay sits
+                      above this button and swallows the click, which then bubbles to
+                      the tile as before. This button is what a keyboard reaches and
+                      what a screen reader announces. It wraps only the media, so the
+                      overlay's favourite and edit buttons stay siblings rather than
+                      descendants of a role with presentational children. It carries
+                      an explicit name because a photo has no visible text label. */}
+                  <button type="button" onClick={() => setLightboxIdx(idx)}
+                    aria-label={tr('photosModule.openMedia', { name: photo.caption ?? tr(isVideo ? 'photos.video' : 'photosModule.photo') })}
+                    className="focus-ring block w-full">
                   {isVideo ? (
                     <div className="flex aspect-video w-full cursor-pointer items-center justify-center bg-black/80">
                       <Play className="h-10 w-10 text-white/70" />
@@ -340,6 +365,7 @@ export function PhotosModule() {
                       className="w-full cursor-pointer object-cover transition group-hover:scale-105"
                       loading="lazy" decoding="async" />
                   )}
+                  </button>
                   {/* Video badge */}
                   {isVideo && (
                     <div className="absolute left-2 top-2 flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-semibold text-white">
@@ -379,6 +405,11 @@ export function PhotosModule() {
               {photos.map((photo, idx) => (
                 <div key={photo.id} onClick={() => setLightboxIdx(idx)}
                   className="group flex cursor-pointer items-center gap-4 border-b border-border/50 px-4 py-3 hover:bg-elevated/30 transition last:border-0">
+                  {/* Same split as the grid tile; here the row already shows the
+                      caption or the media type as text, so the button takes its name
+                      from its contents and needs no aria-label. */}
+                  <button type="button" onClick={(e) => { e.stopPropagation(); setLightboxIdx(idx); }}
+                    className="focus-ring flex min-w-0 flex-1 items-center gap-4 rounded-lg text-left">
                   {photo.media_type === 'video' ? (
                     <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-black/80">
                       <Play className="h-5 w-5 text-white/70" />
@@ -391,6 +422,7 @@ export function PhotosModule() {
                     <p className="truncate text-sm font-medium">{photo.caption ?? tr(photo.media_type === 'video' ? 'photos.video' : 'photosModule.photo')}</p>
                     <p className="text-xs text-muted">{relativeDate(photo.created_at)}</p>
                   </div>
+                  </button>
                   {photo.tags?.map((t) => <Badge key={t} tone="neutral">{t}</Badge>)}
                   <button onClick={(e) => { e.stopPropagation(); toggleFavorite(photo); }}
                     aria-label={tr(photo.is_favorite ? 'photosModule.removeFavorite' : 'photosModule.addFavorite')}>
@@ -406,6 +438,7 @@ export function PhotosModule() {
       {/* ── Lightbox ──────────────────────────────────────────── */}
       {lightboxIdx !== null && photos[lightboxIdx] && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 pt-[var(--safe-top)] pb-[var(--safe-bottom)]"
+          role="dialog" aria-modal="true" aria-label={tr('photosModule.photoViewer')}
           onClick={() => setLightboxIdx(null)}>
           {/* Nav */}
           {lightboxIdx > 0 && (

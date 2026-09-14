@@ -202,10 +202,19 @@ export function RecipesModule() {
 
   async function addToGrocery(recipe: Recipe) {
     const supabase = createClient();
-    const { data: list } = await supabase
+    const { data: list, error } = await supabase
       .from('grocery_lists').select('id')
       .eq('family_id', familyId).eq('is_archived', false).is('archived_at', null)
       .order('created_at').limit(1).maybeSingle();
+    // A failed read is not "you have no list". Without this the next line offers
+    // to CREATE one — so a family with a perfectly good Groceries list, on a read
+    // that was refused, ends up with a second one and their items split across
+    // both. The difference between "no list" and "could not check" is a write.
+    if (error) {
+      console.error('[recipes] grocery list read failed', error);
+      toastError(tr('recipes.couldNotCheckYourGrocery'));
+      return;
+    }
     if (!list) { setNewListName('Groceries'); setGroceryPrompt(recipe); return; } // offer to create one
     await addItemsToList(recipe, list.id);
   }
@@ -246,7 +255,7 @@ export function RecipesModule() {
               <input value={search} inputMode="search" enterKeyHint="search" onChange={(e) => setSearch(e.target.value)}
                 placeholder={tr('recipes.searchRecipes')}
                 className="w-28 bg-transparent text-sm placeholder:text-muted outline-none sm:w-40" />
-              {search && <button onClick={() => setSearch('')}><X className="h-3.5 w-3.5 text-muted" /></button>}
+              {search && <button aria-label={tr('a11y.clearSearch')} onClick={() => setSearch('')}><X className="h-3.5 w-3.5 text-muted" /></button>}
             </div>
             <button onClick={() => { setTonightOpen(true); setTonightPicks(null); }} className="inline-flex items-center gap-1.5 rounded-xl border border-brand/30 bg-brand/10 px-3 py-2 text-sm font-semibold text-brand-text hover:bg-brand/15"><Sparkles className="h-4 w-4" /> Tonight?</button>
             <a href="/dashboard/recipes/vote" className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm font-semibold hover:bg-elevated"><Vote className="h-4 w-4" /> {tr('recipes.vote')}</a>
@@ -334,8 +343,13 @@ export function RecipesModule() {
                   </button>
                 </div>
 
-                {/* Info */}
-                <div className="flex flex-1 flex-col p-4">
+                {/* The card's onClick stays for the mouse. The control is this
+                    button over the info region: the card also holds the favourite
+                    toggle, and role="button" on the card would have presentational
+                    children, so assistive technology may drop that toggle. Its
+                    accessible name is the recipe name and description. */}
+                <button type="button" onClick={(e) => { e.stopPropagation(); setViewing(recipe); }}
+                  className="focus-ring flex flex-1 flex-col p-4 text-left">
                   <h3 className="mb-1 line-clamp-2 font-semibold leading-tight">{recipe.name}</h3>
                   {recipe.description && <p className="mb-2 line-clamp-2 text-xs text-muted">{recipe.description}</p>}
 
@@ -349,7 +363,7 @@ export function RecipesModule() {
                       <span className="ml-auto text-success">{recipe.times_made}{tr('recipes.made')}</span>
                     )}
                   </div>
-                </div>
+                </button>
               </div>
             );
           })}
@@ -376,11 +390,11 @@ export function RecipesModule() {
                     className="rounded-xl p-2 hover:bg-elevated transition">
                     <Heart className={cn('h-5 w-5', viewing.is_favorite ? 'fill-red-400 text-red-400' : 'text-muted')} />
                   </button>
-                  <button onClick={() => { setEditing(viewing); setViewing(null); }}
+                  <button aria-label={tr('a11y.edit')} onClick={() => { setEditing(viewing); setViewing(null); }}
                     className="rounded-xl p-2 text-muted hover:bg-elevated hover:text-fg transition">
                     <Edit2 className="h-5 w-5" />
                   </button>
-                  <button onClick={() => { if (confirm(tr('recipesModule.deleteThisRecipe'))) deleteRecipe(viewing.id); }}
+                  <button aria-label={tr('a11y.delete')} onClick={() => { if (confirm(tr('recipesModule.deleteThisRecipe'))) deleteRecipe(viewing.id); }}
                     className="rounded-xl p-2 text-muted hover:bg-elevated hover:text-danger transition">
                     <Trash2 className="h-5 w-5" />
                   </button>
@@ -686,7 +700,7 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
                 <Input value={ing.quantity} onChange={(e) => updateIngredient(i, 'quantity', e.target.value)} placeholder="2" className="w-16 flex-shrink-0" />
                 <Input value={ing.unit} onChange={(e) => updateIngredient(i, 'unit', e.target.value)} placeholder="cups" className="w-20 flex-shrink-0" />
                 <Input value={ing.name} onChange={(e) => updateIngredient(i, 'name', e.target.value)} placeholder={tr('recipes.ingredientName')} className="flex-1" />
-                <button type="button" onClick={() => removeIngredient(i)} className="rounded-lg p-2 text-muted hover:text-danger"><X className="h-4 w-4" /></button>
+                <button type="button" aria-label={tr('a11y.remove')} onClick={() => removeIngredient(i)} className="rounded-lg p-2 text-muted hover:text-danger"><X className="h-4 w-4" /></button>
               </div>
             ))}
           </div>
@@ -706,7 +720,7 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
                 </div>
                 <Textarea value={step.text} onChange={(e) => updateStep(i, e.target.value)}
                   placeholder={`Step ${step.step}…`} className="flex-1 min-h-[60px]" />
-                <button type="button" onClick={() => removeStep(i)} className="rounded-lg p-2 text-muted hover:text-danger self-start"><X className="h-4 w-4" /></button>
+                <button type="button" aria-label={tr('a11y.remove')} onClick={() => removeStep(i)} className="rounded-lg p-2 text-muted hover:text-danger self-start"><X className="h-4 w-4" /></button>
               </div>
             ))}
           </div>

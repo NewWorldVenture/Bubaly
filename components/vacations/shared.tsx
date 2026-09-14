@@ -154,8 +154,8 @@ export function TripCrudSection<T extends Row>({
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">{renderRow(row, memberMap)}</div>
                 <div className="flex shrink-0 gap-1">
-                  <button onClick={() => setForm(fromRow(row, fields))} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-4 w-4" /></button>
-                  <button onClick={() => remove(row.id)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Trash2 className="h-4 w-4" /></button>
+                  <button aria-label={t('a11y.edit')} onClick={() => setForm(fromRow(row, fields))} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-4 w-4" /></button>
+                  <button aria-label={t('a11y.delete')} onClick={() => remove(row.id)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Trash2 className="h-4 w-4" /></button>
                 </div>
               </div>
             </li>

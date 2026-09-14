@@ -9,7 +9,7 @@
 // dismissing hides it. All reads/writes go through the RLS-scoped server client.
 
 import { confirmFact } from '@/lib/services/memory';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
@@ -43,6 +43,8 @@ function travelSeason(date: string): string {
  * signatures insert as 'suggested', existing ones are left untouched.
  */
 export async function refreshPlaybookAction(): Promise<Result> {
+  // A server action carries the request's locale, the same as a page does.
+  const { locale } = await getLocaleContext();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const sb = await createServer();
@@ -108,7 +110,7 @@ export async function refreshPlaybookAction(): Promise<Result> {
   for (const t of byTitle.values()) {
     const years = t.yearly ? Math.max(2, t.years.size) : t.years.size;
     if (years < 2) continue;
-    const when = new Date(t.earliest).toLocaleDateString('en-US', MONTH_FMT);
+    const when = new Date(t.earliest).toLocaleDateString(locale.code, MONTH_FMT);
     signals.push({ type: 'tradition', title: t.title, when, years });
   }
 

@@ -29,6 +29,7 @@ import {
 } from '@/lib/marketplace/listings';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Listing = Tables<'marketplace_listings'>;
 type Offer = Tables<'marketplace_offers'>;
@@ -67,6 +68,7 @@ export function MarketplaceModule({
   autoOpenPost?: ListingKind | null;
 }) {
   const t = useTranslations();
+  const askConfirm = useConfirm();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const selfId = selfMember?.id ?? null;
@@ -160,7 +162,7 @@ export function MarketplaceModule({
   }
 
   async function remove(l: Listing) {
-    if (!confirm(`Remove "${l.title}"?`)) return;
+    if (!(await askConfirm({ title: t('confirm.removeNamed', { name: l.title }), body: t('confirm.cannotBeUndone') }))) return;
     const sb = createClient();
     const { error: err } = await sb.from('marketplace_listings').delete().eq('id', l.id);
     if (err) { toastError(describeDbError(err)); return; }

@@ -110,7 +110,7 @@ export function PlanningModule() {
             const done = planSteps.filter((s) => s.is_done).length;
             const d = daysUntil(p.target_date);
             return (
-              <div key={p.id} className="rounded-xl border border-border bg-card p-4">
+              <div key={p.id} className="rounded-xl border border-border bg-surface/40 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <span className="flex size-9 items-center justify-center rounded-lg bg-muted/10"><Icon className="size-4" /></span>

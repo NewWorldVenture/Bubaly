@@ -63,7 +63,7 @@ function LevelPicker({
           title={level.hint}
           className={cn(
             'min-h-9 rounded-md px-3 text-sm transition-colors disabled:opacity-60',
-            value === level.value ? 'bg-brand text-white' : 'text-muted hover:bg-surface-2',
+            value === level.value ? 'bg-brand text-white' : 'text-muted hover:bg-elevated',
           )}
         >
           {level.label}
@@ -136,7 +136,7 @@ export function AISettingsPanel({ role }: { role: MemberRole | null | undefined 
           </Button>
         </div>
         {!settings.enabled && (
-          <p className="mt-3 rounded-lg bg-surface-2 px-3 py-2 text-sm">
+          <p className="mt-3 rounded-lg bg-elevated px-3 py-2 text-sm">
             {t('aiSettings.bubalyIsSwitchedOffItWill')}
           </p>
         )}

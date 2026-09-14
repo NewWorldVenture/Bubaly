@@ -8,6 +8,7 @@ import {
   Flag, Link2, Image as ImageIcon, Tag, ListChecks, ListTodo, ChevronDown, Search,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
+import { familyMediaPath } from '@/lib/storage/family-media';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { useAction } from '@/lib/hooks/use-action';
 import { createClient } from '@/lib/supabase/client';
@@ -290,7 +291,7 @@ export function RemindersModule() {
 
       {/* Overdue alert */}
       {overdue.length > 0 && (
-        <div className="flex items-start gap-3 rounded-2xl border border-danger/30 bg-danger/8 p-4">
+        <div className="flex items-start gap-3 rounded-2xl border border-danger/30 bg-danger/10 p-4">
           <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-danger" />
           <div>
             <p className="text-sm font-bold text-danger">{overdue.length} {tr('reminders.overdueReminder')}{overdue.length > 1 ? 's' : ''}</p>
@@ -306,7 +307,7 @@ export function RemindersModule() {
             <p className="flex items-center gap-2 text-sm font-bold">
               <Sparkles className="h-4 w-4 text-brand-text" /> {tr('reminders.commonReminders')}
             </p>
-            <button onClick={() => setShowSuggestions(false)}><X className="h-4 w-4 text-muted" /></button>
+            <button aria-label={tr('a11y.close')} onClick={() => setShowSuggestions(false)}><X className="h-4 w-4 text-muted" /></button>
           </div>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {AI_SUGGESTIONS.map((s) => {
@@ -632,7 +633,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
     try {
       const supabase = createClient();
       const ext = file.name.split('.').pop();
-      const path = `${familyId}/reminders/${Date.now()}.${ext}`;
+      const path = familyMediaPath(familyId, 'reminders', file.name);
       const { data: stored, error: upErr } = await supabase.storage.from('family-media').upload(path, file, { upsert: false });
       if (upErr || !stored) { toastError(describeDbError(upErr)); return; }
       const { data: { publicUrl } } = supabase.storage.from('family-media').getPublicUrl(stored.path);

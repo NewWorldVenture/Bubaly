@@ -8,6 +8,13 @@ import { useTranslations } from '@/components/i18n/locale-provider';
 
 const FOCUSABLE = 'a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
+// Dialogs nest: a delete confirmation opens on top of the dialog whose Delete
+// button was pressed. Both listen for keys on `document`, so without a stack one
+// Escape would dismiss both and the inner one's Tab trap would fight the outer
+// one's. Only the top-most open dialog answers keys, and the scroll lock lifts
+// only when the last one closes.
+const openDialogs: symbol[] = [];
+
 /** Accessible modal dialog: focus-trapped, ESC to close, scroll lock, and focus
  *  restored to the trigger on close. Renders as a bottom sheet on mobile. */
 export function Modal({
@@ -36,6 +43,8 @@ export function Modal({
   useEffect(() => {
     if (!open) return;
     const dialog = dialogRef.current;
+    const token = Symbol('modal');
+    openDialogs.push(token);
     // Remember what had focus so we can return to it on close (VoiceOver/TalkBack
     // + keyboard users land back where they were, per WAI-ARIA dialog practice).
     const previouslyFocused = document.activeElement as HTMLElement | null;
@@ -46,6 +55,7 @@ export function Modal({
     (focusables()[0] ?? dialog)?.focus();
 
     const onKey = (e: KeyboardEvent) => {
+      if (openDialogs[openDialogs.length - 1] !== token) return;
       if (e.key === 'Escape') { onClose(); return; }
       if (e.key !== 'Tab' || !dialog) return;
       // Trap Tab within the dialog.
@@ -64,8 +74,10 @@ export function Modal({
     document.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
     return () => {
+      const at = openDialogs.lastIndexOf(token);
+      if (at >= 0) openDialogs.splice(at, 1);
       document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = '';
+      if (openDialogs.length === 0) document.body.style.overflow = '';
       previouslyFocused?.focus?.();
     };
   }, [open, onClose]);

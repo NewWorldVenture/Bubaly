@@ -2,8 +2,15 @@
 // (Budget Planner, Bill Manager, Auto Pay, Due Reminders, Savings, Payments).
 // No Supabase/React. Amounts are dollars (numeric), matching the finance tables.
 
-export function usd(amount: number): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount ?? 0);
+import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
+
+/**
+ * Dollars for the reader. The LOCALE is the reader's; the CURRENCY is the
+ * money's own and stays USD — a family's bills are billed in dollars whatever
+ * language the person looking at them reads.
+ */
+export function usd(amount: number, locale: LocaleCode = DEFAULT_LOCALE): string {
+  return new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(amount ?? 0);
 }
 
 export type DueStatus = 'paid' | 'overdue' | 'due_soon' | 'upcoming';
@@ -62,8 +69,8 @@ export function pct(part: number, whole: number): number {
   return Math.max(0, Math.min(100, Math.round((part / whole) * 100)));
 }
 
-export function fmtDueDate(iso: string): string {
+export function fmtDueDate(iso: string, locale: LocaleCode = DEFAULT_LOCALE): string {
   const d = new Date(iso.length === 10 ? `${iso}T00:00:00` : iso);
   if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return d.toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
 }

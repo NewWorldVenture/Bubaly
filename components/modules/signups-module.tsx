@@ -25,7 +25,8 @@ import {
   type OpportunityLike, type UrgencyBucket,
 } from '@/lib/opportunities/deadlines';
 import type { Tables, OpportunityStatus } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Opportunity = Tables<'opportunities'>;
 
@@ -54,7 +55,9 @@ const blank = {
 };
 
 export function SignupsModule() {
+  const locale = useLocale();
   const t = useTranslations();
+  const askConfirm = useConfirm();
   const { familyId, userId, members, role } = useApp();
   const { success, error: toastError } = useToast();
   const canEdit = isManager(role);
@@ -125,14 +128,14 @@ export function SignupsModule() {
   }
 
   async function remove(o: Opportunity) {
-    if (!confirm(`Delete "${o.title}"?`)) return;
+    if (!(await askConfirm({ title: t('confirm.deleteNamed', { name: o.title }), body: t('confirm.cannotBeUndone') }))) return;
     const sb = createClient();
     const { error: err } = await sb.from('opportunities').delete().eq('id', o.id);
     if (err) { toastError(describeDbError(err)); return; }
     success(t('signupsModule.signupDeleted'));
   }
 
-  const fmtDate = (key: string | null) => key ? new Date(`${key}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null;
+  const fmtDate = (key: string | null) => key ? new Date(`${key}T00:00:00`).toLocaleDateString(locale.code, { month: 'short', day: 'numeric', year: 'numeric' }) : null;
   const countdownLabel = (o: Opportunity) => {
     const d = daysToDeadline(o as OpportunityLike, tk);
     if (d == null) return null;

@@ -22,7 +22,9 @@ import { PageHeader } from '@/components/app/page-header';
 import { SkeletonList, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
+import { createFormat } from '@/lib/utils/format';
 
 type Comm = Tables<'family_communications'> & { contact?: Tables<'family_contacts'> | null };
 type Contact = Tables<'family_contacts'>;
@@ -46,17 +48,20 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 type FilterTab = 'all' | 'unread' | 'call' | 'sms' | 'school' | 'sports' | 'email' | 'archived';
 
-function fmtTime(iso: string) {
-  const d = new Date(iso);
-  const diffMs = Date.now() - d.getTime();
-  const diffH = diffMs / 3_600_000;
-  if (diffH < 1) return `${Math.max(1, Math.round(diffMs / 60_000))}m ago`;
-  if (diffH < 24) return `${Math.round(diffH)}h ago`;
-  if (diffH < 48) return 'Yesterday';
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
+/**
+ * Delegates to the shared `fmtTimeAgo` (lib/utils/format.ts).
+ *
+ * It took a locale, which made it LOOK converted — but every rung was an English
+ * literal ("3h ago", "Yesterday") and the locale reached only the fallback date. That is the
+ * defect the hardcoded-locale scan cannot see, and "it accepts a LocaleCode" is not
+ * evidence against it.
+ */
+const fmtTimeIn = (locale: LocaleCode) => (iso: string) =>
+  createFormat(locale).fmtTimeAgo(iso, { absoluteAfterDays: 2, absolutePattern: 'MMM d' });
 
 export function InboxModule() {
+  const locale = useLocale();
+  const fmtTime = fmtTimeIn(locale.code);
   const tr = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
@@ -204,7 +209,7 @@ export function InboxModule() {
                 placeholder={tr('inbox.searchMessagesContacts')}
                 className="w-full rounded-xl border border-border bg-surface/60 py-2.5 pl-9 pr-4 text-sm placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand/30" />
               {search && (
-                <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-fg">
+                <button aria-label={tr('a11y.clearSearch')} onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-fg">
                   <X className="h-4 w-4" />
                 </button>
               )}
@@ -296,7 +301,7 @@ export function InboxModule() {
 
       {/* Detail panel */}
       {selected && (
-        <div className="fixed inset-0 z-50 bg-background flex flex-col pt-[var(--safe-top)] pb-[var(--safe-bottom)] pl-[var(--safe-left)] pr-[var(--safe-right)] lg:pt-0 lg:pb-0 lg:pl-0 lg:pr-0 lg:static lg:inset-auto lg:z-auto lg:w-[400px] lg:rounded-2xl lg:border lg:border-border lg:bg-surface/30 lg:max-h-[calc(100vh-120px)] lg:overflow-y-auto lg:self-start lg:sticky lg:top-4">
+        <div className="fixed inset-0 z-50 bg-bg flex flex-col pt-[var(--safe-top)] pb-[var(--safe-bottom)] pl-[var(--safe-left)] pr-[var(--safe-right)] lg:pt-0 lg:pb-0 lg:pl-0 lg:pr-0 lg:static lg:inset-auto lg:z-auto lg:w-[400px] lg:rounded-2xl lg:border lg:border-border lg:bg-surface/30 lg:max-h-[calc(100vh-120px)] lg:overflow-y-auto lg:self-start lg:sticky lg:top-4">
           <CommDetail comm={selected} familyId={familyId} userId={userId}
             onClose={() => setSelected(null)} onArchive={() => void archive(selected)} onRefresh={refreshComms} />
         </div>
@@ -366,6 +371,8 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
   comm: Comm; familyId: string; userId: string;
   onClose: () => void; onArchive: () => void; onRefresh: () => void;
 }) {
+  const locale = useLocale();
+  const fmtTime = fmtTimeIn(locale.code);
   const tr = useTranslations();
   const { success, error: toastError } = useToast();
   const ch = CHANNELS[comm.channel] ?? CHANNELS.other;
@@ -536,7 +543,7 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
               {actions.map((a, i) => {
                 const added = addedItems.has(i);
                 return (
-                  <div key={i} className="flex items-center gap-2 rounded-lg bg-amber-500/8 border border-amber-500/20 px-3 py-2">
+                  <div key={i} className="flex items-center gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2">
                     <span className="h-1.5 w-1.5 rounded-full bg-amber-400 flex-shrink-0" />
                     <span className="flex-1 text-xs text-fg/90">{a}</span>
                     <button onClick={() => addReminder(a, i)} disabled={added || busyItem !== null}
@@ -570,7 +577,7 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
             <textarea value={draft} onChange={e => setDraft(e.target.value)}
               placeholder={tr('inbox.tapDraftReplyForAnAi')}
               rows={draft ? 5 : 2}
-              className="w-full resize-none rounded-lg border border-border bg-background/60 p-2.5 text-xs leading-relaxed placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand/30" />
+              className="w-full resize-none rounded-lg border border-border bg-bg/60 p-2.5 text-xs leading-relaxed placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand/30" />
             {draft && (
               <div className="mt-2 flex items-center justify-end gap-2">
                 <button onClick={copyDraft} className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-[11px] font-medium hover:border-brand/40 hover:text-brand-text transition">

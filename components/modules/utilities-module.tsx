@@ -13,9 +13,9 @@ import { Button } from '@/components/ui/button';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { fmtDate } from '@/lib/utils/format';
-import { UTILITY_KINDS, utilityLabel, usd, latestByKind, monthlyTotalCents, trendForKind, deltaPct, type BillLike } from '@/lib/home/utilities';
+import { UTILITY_KINDS, utilityLabel, usd as usdIn, latestByKind, monthlyTotalCents, trendForKind, deltaPct, type BillLike } from '@/lib/home/utilities';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type Bill = Tables<'utility_bills'>;
 const blank = () => ({ kind: 'electric', provider: '', period_month: new Date().toISOString().slice(0, 7) + '-01', amount: '', usage: '', unit: '', note: '' });
@@ -35,6 +35,9 @@ const SEVERITY_CLS: Record<SavingsFinding['severity'], string> = {
 
 export function UtilitiesModule() {
   const t = useTranslations();
+  // Money follows the reader; the currency stays the money's own.
+  const locale = useLocale();
+  const usd = (cents: number) => usdIn(cents, locale.code);
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 

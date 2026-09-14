@@ -6,6 +6,7 @@ import { createServer } from '@/lib/supabase/server';
 import { isManager, ROLE_LABELS, type MemberRole } from '@/lib/constants/roles';
 import { PageHeader } from '@/components/app/page-header';
 import { SectionCard, MiniEmpty } from '@/components/family/shell';
+import { ErrorState } from '@/components/ui/states';
 import { Avatar } from '@/components/ui/avatar';
 import { fmtDate } from '@/lib/utils/format';
 import { getTranslations } from '@/lib/i18n/server';
@@ -19,12 +20,26 @@ export default async function FamilyMembersPage() {
   const supabase = await createServer();
   const manager = isManager(ctx.active.role);
 
-  const { data: members } = await supabase
+  const { data: members, error: membersError } = await supabase
     .from('family_members')
     .select('*')
     .eq('family_id', ctx.active.familyId)
     .eq('is_active', true)
     .order('created_at');
+
+  // "No members yet." is LOGICALLY UNREACHABLE on a successful read, which is why
+  // this guard matters more than a usual one. requireUserContext() resolves
+  // ctx.active from a family_members row for THIS caller with is_active = true
+  // (lib/supabase/auth.ts:118-126), provisioning and re-resolving when there is
+  // none — so by the time this body runs the caller is an active member of
+  // ctx.active.familyId. A correct read of the same table, same family, same
+  // filter therefore returns at least one row, always. The empty branch could
+  // only ever fire on `data === null`: the error nothing was reading. A parent
+  // whose read is refused was being told their household is empty.
+  if (membersError) {
+    console.error('[family/members] member read failed', membersError);
+    return <ErrorState message={t('familyMembers.couldNotLoadYourFamily')} />;
+  }
 
   return (
     <div className="space-y-5">

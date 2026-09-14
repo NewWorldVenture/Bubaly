@@ -93,7 +93,21 @@ export async function GET(
     headers: {
       'Content-Type': 'text/calendar; charset=utf-8',
       'Content-Disposition': `inline; filename="${calendar.id}.ics"`,
-      'Cache-Control': 'public, max-age=900, s-maxage=900',
+      // A shared cache must not hold a family's calendar for longer than it
+      // takes to take the feed away. `lib/sync/feed-token.ts` calls this token
+      // "revocable (rotate the column to revoke)", and the route above says
+      // "Revoke by rotating feed_token or setting feed_enabled = false" — but
+      // an `s-maxage` of 900 meant Vercel's edge, and any proxy between, kept
+      // serving the calendar for a quarter of an hour after the revocation. A
+      // family that revokes because the URL leaked is told it is gone while it
+      // is still being served.
+      //
+      // `max-age` stays at 900: that is the SUBSCRIBER's own copy, and they are
+      // the one who held the token. `s-maxage` drops to 60, which still absorbs
+      // a client polling in a loop — the ICS itself asks for a 60-MINUTE
+      // refresh interval, so nothing legitimate re-fetches inside a minute —
+      // while cutting the revocation window from 15 minutes to one.
+      'Cache-Control': 'public, max-age=900, s-maxage=60',
     },
   });
 }

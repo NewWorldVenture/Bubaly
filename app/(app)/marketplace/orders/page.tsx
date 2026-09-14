@@ -18,18 +18,18 @@ export const dynamic = 'force-dynamic';
 
 const RETURN_TONE: Record<string, string> = {
   muted: 'bg-border/60 text-muted',
-  info: 'bg-sky-500/12 text-sky-600 dark:text-sky-400',
+  info: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
   warn: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
   danger: 'bg-rose-500/15 text-rose-600 dark:text-rose-400',
-  ok: 'bg-emerald-500/12 text-emerald-600 dark:text-emerald-400',
+  ok: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
 };
 
 const STATUS_CHIP: Record<string, string> = {
-  requested: 'bg-amber-500/12 text-amber-600 dark:text-amber-400',
-  confirmed: 'bg-sky-500/12 text-sky-600 dark:text-sky-400',
-  active: 'bg-brand/12 text-brand-text',
-  returned: 'bg-violet-500/12 text-violet-600 dark:text-violet-400',
-  completed: 'bg-emerald-500/12 text-emerald-600 dark:text-emerald-400',
+  requested: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+  confirmed: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
+  active: 'bg-brand/10 text-brand-text',
+  returned: 'bg-violet-500/10 text-violet-600 dark:text-violet-400',
+  completed: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
   cancelled: 'bg-border/60 text-muted',
 };
 

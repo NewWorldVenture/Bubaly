@@ -501,9 +501,98 @@ passed; production application of the atomic `0240-0254` release remains pending
 ## Migrations added since this document's stated baseline (2026-09-12)
 
 The status line at the top of this file is dated **2026-09-05** against main
-`01881fb2`. **Seventy-one** migration files have landed since, `0255` through
-`0295`, and none of them appear anywhere above. (This read "thirty-one, `0255`
-through `0285`" until 2026-09-13; the range had simply grown past the sentence.)
+`01881fb2`. **Seventy-seven** migration files have landed since, `0255` through
+`0301`, and none of them appear anywhere above. (This read "thirty-one, `0255`
+through `0285`" until 2026-09-13, then "seventy-two, `0255` through `0296`" and
+"seventy-four … `0298`" the same day; the range simply keeps growing past the
+sentence.)
+
+`0297_family_credentials_write_boundary.sql` is the newest and is worth naming
+here rather than leaving inside a count, because what it closes is live in
+production right now: `family_credentials` holds the "Wi-Fi & Passwords" vault,
+its category constraint allows `card` and `pin`, and all four of its policies
+are `is_family_member(family_id)` — so a member with role `child` can read,
+change and delete the family's stored card PIN, proved behaviourally in
+`docs/audit/family-credential-write-boundary-check.sql`. The migration makes the
+three write verbs `can_manage_family`. Reads are deliberately unchanged (O-02 in
+`finalaudit.md` — a product decision), and the screen's step-up MFA still has
+nothing behind it in the database (O-03).
+
+**`0298_invites_update_pins_what_it_grants.sql` is the one to apply first.** It
+closes a remote privilege escalation that is live in production now: `invites_update`
+was created with `USING` and no `WITH CHECK`, so Postgres reuses `USING` as the
+write check and the invitee branch constrains only `email`. A guest invited to a
+household rewrites `role` on her own invite row — one PostgREST PATCH, no app code
+— and `accept_invite()` copies it into `family_members`. Proved end to end in
+`docs/audit/invite-cannot-rewrite-what-it-grants-check.sql`: she joins as a
+**parent**. Anyone holding a pending invite can do it.
+**`0299_child_logins_write_boundary.sql` is the second to apply, and it is the
+same shape as `0298`.** `child_logins`' only write policy is *named* "Managers
+manage child_logins" and *predicated* on `is_family_member(family_id)`, so every
+member of the household — a child included — can INSERT, UPDATE and DELETE any
+row in it. Two live consequences. A child can DELETE a sibling's row, leaving
+that sibling's auth user with no username resolving to it: a permanent lockout
+with no recovery in the UI. And a child can UPDATE `user_id`, which
+`resetChildPinAction` reads and hands to `auth.admin.updateUserById` under the
+service role — so a child points their own row at a PARENT's auth user, asks that
+parent to reset their PIN ("I forgot it"), and the parent's account password
+becomes `deriveChildPassword(secret, childUsername, pin)`, a value the child
+chose. Proved in `docs/audit/child-login-mapping-is-managers-only-check.sql`,
+whose negative control reports *"a child REPOINTED 1 login mapping(s) at another
+auth user — this is the reset-PIN takeover"*.
+
+The takeover itself does **not** wait for this migration: `resetChildPinAction`
+now resolves the auth user from `family_members` (already `can_manage_family` on
+writes) and refuses when `child_logins` disagrees with it or when the named member
+is a manager. That closes the escalation on production today. What the migration
+still buys is the rest of the boundary — the sibling lockout, and planting a
+mapping — neither of which any application code can prevent.
+
+**`0300_audit_logs_says_who_wrote_it.sql` is the one with no code-side
+mitigation at all, which is why it is named here too.** `audit_insert` on
+`audit_logs` pins `family_id` and nothing else, so `actor_id` is free: a child
+files a row reading `actor_id = <the parent's uid>, action = 'delete', resource =
+'wallet_transactions'` and `/family/activity` renders it as the parent's doing.
+The `family_id is null` branch also lets any authenticated user write rows no RLS
+reader can see, while `app/(app)/admin/security/page.tsx` renders the newest 25 of
+them with the service client — twenty-five inserts from one session replace the
+platform security feed with fabricated events. Proved in
+`docs/audit/audit-log-says-who-wrote-it-check.sql`.
+
+Unlike `0299`, **nothing in the application can stand in front of this one**: the
+forgery is a direct PostgREST INSERT by the attacker, not a read the app performs,
+so the trail remains forgeable in production until this is applied. The migration
+pins `is_family_member(family_id) and actor_id = auth.uid()` rather than dropping
+member INSERT the way `0260` did for `trust_audit_logs`, because fourteen callers
+here append on the caller's own client — all fourteen already pass their own
+`ctx.user.id`, so the pin costs them nothing.
+
+**`0301_family_erasure_indexes.sql` is the one that must NOT be applied as
+written.** It adds the 36 missing indexes behind `delete from families` — each RI
+check issues `select 1 from <child> where <fkcol> = $1 for key share`, and with no
+leading index there is no plan but a full scan of the whole table inside the
+erasure transaction, taking row locks as it goes. Measured on `ai_messages` at
+200,050 rows: 4,990 buffers / 21.4 ms → 55 / 0.064 ms. At the volume the `sync_*`,
+`social_*` and `marketplace_*` tables are designed for, 36 of those scans in one
+transaction is a statement timeout, and a deletion that times out half-way is the
+one that leaves an account partly erased.
+
+The file uses plain `create index` because a migration runs inside a transaction
+and `create index concurrently` cannot — and plain creation takes ACCESS EXCLUSIVE
+on each table for the whole build, which on a live `ai_messages` is a write outage.
+So on production run **`docs/audit/family-erasure-indexes-concurrently.sql`**
+instead: one statement at a time, outside any transaction, `if not exists` so it is
+resumable, and a no-op afterwards if `0301` is ever replayed. A cancelled
+concurrent build leaves an INVALID index behind (`select indexrelid::regclass from
+pg_index where not indisvalid`) — drop those before re-running, because an invalid
+index is ignored by the planner and still maintained on write.
+
+191 further constraints on `family_members` (158), `vacations` (22) and
+`child_wallets` (11) are deliberately NOT in that file: they are member-reference
+columns rather than the RLS predicate, so they buy member-removal speed and nothing
+else, at 191 indexes' worth of write amplification. That is a tradeoff for the
+owner, recorded in `finalaudit.md` under S-05.
+
 Nothing here authorizes applying any of them; this section exists so the gap is
 visible rather than inferred from the absence of a row.
 

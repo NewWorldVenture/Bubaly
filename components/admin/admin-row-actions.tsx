@@ -5,9 +5,11 @@ import { MoreHorizontal, UserX, UserCheck, ShieldOff } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
 import { deactivateAdminAction, activateAdminAction, revokeAdminAction } from '@/app/(app)/admin/admins/actions';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useConfirm } from '@/components/ui/confirm';
 
 export function AdminRowActions({ adminId, status, email }: { adminId: string; status: string; email: string }) {
   const t = useTranslations();
+  const askConfirm = useConfirm();
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const { success, error: toastError } = useToast();
@@ -30,7 +32,7 @@ export function AdminRowActions({ adminId, status, email }: { adminId: string; s
 
   return (
     <div className="relative">
-      <button
+      <button aria-label={t('a11y.moreActions')}
         onClick={() => setOpen((v) => !v)}
         disabled={isPending}
         className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-elevated focus-ring disabled:opacity-50"
@@ -57,8 +59,8 @@ export function AdminRowActions({ adminId, status, email }: { adminId: string; s
               </button>
             )}
             <button
-              onClick={() => {
-                if (confirm(`Remove admin access for ${email}?`)) act(revokeAdminAction);
+              onClick={async () => {
+                if (await askConfirm({ title: t('adminRowActions.removeAdminQ', { email }), body: t('adminRowActions.removeAdminBody') })) act(revokeAdminAction);
               }}
               className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-danger hover:bg-elevated"
             >

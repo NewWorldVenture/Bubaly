@@ -39,15 +39,32 @@ export async function POST(req: NextRequest) {
   if (!boundedBody.ok) return NextResponse.json({ error: t('insight.requestBodyIsTooLarge') }, { status: 400 });
   const body = (boundedBody.value ?? {}) as { memberId?: string };
 
+  // family_id, explicitly, even though RLS is on this table. The comment above
+  // says "family-scoped via the cookie client + RLS", and RLS scopes it to
+  // `is_family_member(family_id)` — EVERY family the caller belongs to, not the
+  // one this request is about. A parent in two households therefore got a
+  // single parenting insight blended from both sets of children, and the
+  // feature gate two statements up was checked against the active family only,
+  // so the other household's logs passed a gate they were never held to.
+  const familyId = ctx.active.familyId;
   const since = new Date(Date.now() - 60 * 86_400_000).toISOString();
   let q = supabase
     .from('behavior_logs')
     .select('member_id, kind, category, note, points, occurred_at')
+    .eq('family_id', familyId)
     .gte('occurred_at', since)
     .order('occurred_at', { ascending: false })
     .limit(200);
   if (body.memberId) q = q.eq('member_id', body.memberId);
-  const { data: logs } = await q;
+  const { data: logs, error: logsError } = await q;
+
+  // A refused read is not an empty log. Without this the parent was told
+  // "No behavior has been logged yet" over a log that may be full, and invited
+  // to start logging what they had already logged.
+  if (logsError) {
+    console.error('[behavior-insight] behavior_logs read failed', { familyId, memberId: body.memberId ?? null }, logsError);
+    return NextResponse.json({ error: t('insight.behaviorDataUnavailable') }, { status: 503 });
+  }
 
   if (!logs || logs.length === 0) {
     return NextResponse.json({ insight: 'No behavior has been logged yet. Start logging positive moments and concerns to unlock AI parenting insights.', tips: [] });

@@ -51,7 +51,7 @@ type Tone = keyof typeof tones;
 
 function ReferencePage({ children }: { children: React.ReactNode }) {
   return (
-    <div className="reference-page soft-grid-bg min-h-dvh overflow-hidden text-fg transition-colors duration-300">
+    <div className="soft-grid-bg min-h-dvh overflow-hidden text-fg transition-colors duration-300">
       {children}
     </div>
   );
@@ -640,7 +640,7 @@ async function StepsPanel() {
             {index < 4 && <><span className="absolute -top-[10px] left-[68%] hidden w-[82%] border-t border-dashed border-violet-500/65 lg:block" /><ArrowRight className="absolute -right-[35px] -top-[16px] hidden h-3 w-3 text-violet-400 lg:block" /></>}
             <Icon className="mx-auto h-[45px] w-[45px] text-violet-500" strokeWidth={1.8} />
             <h3 className="mt-3 text-[11px] font-semibold">{t(title)}</h3>
-            <p className="mt-2 text-balance text-[10px] leading-[16px] text-white/63">{t(body)}</p>
+            <p className="mt-2 text-balance text-[10px] leading-[16px] text-white/65">{t(body)}</p>
           </article>
         ))}
       </div>
@@ -662,7 +662,7 @@ async function MagicPanel() {
       <div>
         <h2 className="whitespace-nowrap text-[27px] font-bold tracking-[-0.03em]">{t('referenceShowcases.theMagicIsInThe')}{' '}<GradientText>{t('referenceShowcases.ai')}</GradientText><Sparkles className="ml-0.5 inline h-5 w-5 text-violet-400" /></h2>
         <p className="mt-2 text-[14px] leading-6 text-white/68">{t('referenceShowcases.bubalyTurnsScatteredInformationInto')}<br />{t('referenceShowcases.organizedActionAutomatically')}</p>
-        <ul className="mt-4 space-y-2.5">{bullets.map((item) => <li key={item} className="flex items-center gap-2.5 text-[12px] text-white/73"><CheckCircle2 className="h-4 w-4 text-violet-400" />{item}</li>)}</ul>
+        <ul className="mt-4 space-y-2.5">{bullets.map((item) => <li key={item} className="flex items-center gap-2.5 text-[12px] text-white/75"><CheckCircle2 className="h-4 w-4 text-violet-400" />{item}</li>)}</ul>
       </div>
       <div className="grid items-start gap-3 sm:grid-cols-3 lg:grid-cols-[166px_28px_176px_28px_1fr]">
         <MagicCapture />
@@ -698,7 +698,7 @@ async function MagicDetails() {
 
 async function MagicCalendar() {
   const t = await getTranslations();
-  return <div><p className="mb-2 whitespace-nowrap text-center text-[11px] font-semibold">{t('referenceShowcases.threeItsOrganizedForYourFamily')}</p><div className="h-[271px] rounded-[12px] border border-white/[0.10] bg-white/[0.035] p-3"><div className="flex justify-between text-[9px] font-semibold"><span>{t('referenceShowcases.may2024')}</span><ChevronRight className="h-3 w-3" /></div><div className="mt-3 grid grid-cols-7 gap-y-1 text-center text-[5px] text-white/50">{['SUN','MON','TUE','WED','THU','FRI','SAT','12','13','14','15','16','17','18'].map((d,i) => <span key={`${d}-${i}`} className={cn(d === '18' && 'mx-auto grid h-5 w-5 place-items-center rounded-full bg-violet-600 text-white')}>{d}</span>)}</div><div className="mt-3 rounded-lg bg-violet-600/25 p-3"><p className="text-[9px] font-semibold">{t('referenceShowcases.springSoccerTournament')}</p><p className="mt-2 text-[7px] leading-[10px] text-white/58">{t('referenceShowcases.may18May19')}<br />8:30 AM – 12:00 PM<br />{t('referenceShowcases.riversidePark')}</p></div><div className="mt-3 border-t border-white/[0.07] pt-2"><p className="text-[8px] font-semibold">{t('referenceShowcases.tasksCreated')}</p>{[t('referenceShowcases.packSoccerGear'),t('referenceShowcases.bringSnacks'),t('referenceShowcases.teamJersey')].map(item => <p key={item} className="mt-1.5 flex items-center gap-1.5 text-[7px]"><CheckCircle2 className="h-2.5 w-2.5 text-violet-400" />{item}</p>)}<div className="mt-2 flex -space-x-1">{[0,1,2].map(i => <TinyAvatar key={i} index={i} className="h-5 w-5" />)}</div></div></div></div>;
+  return <div><p className="mb-2 whitespace-nowrap text-center text-[11px] font-semibold">{t('referenceShowcases.threeItsOrganizedForYourFamily')}</p><div className="h-[271px] rounded-[12px] border border-white/[0.10] bg-white/[0.035] p-3"><div className="flex justify-between text-[9px] font-semibold"><span>{t('referenceShowcases.may2024')}</span><ChevronRight className="h-3 w-3" /></div><div className="mt-3 grid grid-cols-7 gap-y-1 text-center text-[5px] text-white/50">{['SUN','MON','TUE','WED','THU','FRI','SAT','12','13','14','15','16','17','18'].map((d,i) => <span key={`${d}-${i}`} className={cn(d === '18' && 'mx-auto grid h-5 w-5 place-items-center rounded-full bg-violet-600 text-white')}>{d}</span>)}</div><div className="mt-3 rounded-lg bg-violet-600/25 p-3"><p className="text-[9px] font-semibold">{t('referenceShowcases.springSoccerTournament')}</p><p className="mt-2 text-[7px] leading-[10px] text-white/60">{t('referenceShowcases.may18May19')}<br />8:30 AM – 12:00 PM<br />{t('referenceShowcases.riversidePark')}</p></div><div className="mt-3 border-t border-white/[0.07] pt-2"><p className="text-[8px] font-semibold">{t('referenceShowcases.tasksCreated')}</p>{[t('referenceShowcases.packSoccerGear'),t('referenceShowcases.bringSnacks'),t('referenceShowcases.teamJersey')].map(item => <p key={item} className="mt-1.5 flex items-center gap-1.5 text-[7px]"><CheckCircle2 className="h-2.5 w-2.5 text-violet-400" />{item}</p>)}<div className="mt-2 flex -space-x-1">{[0,1,2].map(i => <TinyAvatar key={i} index={i} className="h-5 w-5" />)}</div></div></div></div>;
 }
 
 async function FamilyWorkflowPanel() {

@@ -14,16 +14,16 @@ import { ErrorState } from '@/components/ui/states';
 import { HandleItButton } from '@/components/modules/handle-it-button';
 import { AffordabilityScenario } from '@/components/finance/affordability-scenario';
 import { fmtDate } from '@/lib/utils/format';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
+import { getFormat } from '@/lib/utils/format-server';
 import { loadMoneyTimelineInput } from '@/lib/finance/timeline-load';
-import { buildCashflowTimeline, DEFAULT_BUFFER, money, pretty, type BuildTimelineInput, type PlanSource } from '@/lib/finance/timeline';
+import { buildCashflowTimeline, DEFAULT_BUFFER, money as moneyIn, pretty as prettyIn, type BuildTimelineInput, type PlanSource } from '@/lib/finance/timeline';
 import { EXPLAIN_MONTH_REQUEST } from '@/lib/finance/cfo-prompts';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
 
 export const metadata: Metadata = { title: 'Family CFO' };
 export const dynamic = 'force-dynamic';
 
-const usd = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n);
 
 /** Where each plan-linked commitment comes from, for the forecast list. */
 const PLAN_SOURCE: Record<PlanSource, { labelKey: string; icon: typeof Plane; href: string }> = {
@@ -35,6 +35,14 @@ const PLAN_SOURCE: Record<PlanSource, { labelKey: string; icon: typeof Plane; hr
 
 export default async function FamilyCfoPage() {
   const tr = await getTranslations();
+  // Money follows the reader's locale; the currency does not.
+  const { fmtMoney } = await getFormat();
+  const usd = (n: number) => fmtMoney(Math.round(n * 100));
+  // The forecast tiles use the timeline's own whole-dollar and week-label
+  // formatters, so they take the same reader.
+  const { locale } = await getLocaleContext();
+  const money = (n: number) => moneyIn(n, locale.code);
+  const pretty = (ymdStr: string) => prettyIn(ymdStr, locale.code);
   const ctx = await requireFeature('/dashboard/family-cfo');
   await requireAal2(ctx, 'money', '/dashboard/family-cfo');
   const familyId = ctx.active.familyId;

@@ -23,6 +23,7 @@ import {
 } from '@/lib/connections/providers';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Connection = Tables<'family_connections'>;
 
@@ -38,6 +39,7 @@ const STATUS_STYLE: Record<ConnectionStatus, string> = {
 
 export function ConnectionsModule() {
   const t = useTranslations();
+  const askConfirm = useConfirm();
   const { familyId } = useApp();
   const router = useRouter();
   const { success, error: toastError } = useToast();
@@ -52,7 +54,7 @@ export function ConnectionsModule() {
   const connected = connectedCount(states);
 
   async function disconnect(p: ProviderState) {
-    if (!confirm(`Disconnect ${p.name}?`)) return;
+    if (!(await askConfirm({ title: t('connections.disconnectQ', { name: p.name }), body: t('connections.disconnectBody') }))) return;
     const sb = createClient();
     const { error: err } = await sb.from('family_connections').delete().eq('family_id', familyId).eq('provider', p.id);
     if (err) { toastError(describeDbError(err)); return; }

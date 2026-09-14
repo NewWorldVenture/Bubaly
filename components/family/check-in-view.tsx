@@ -13,8 +13,8 @@ import { Avatar } from '@/components/ui/avatar';
 import { ErrorState, SkeletonList, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
-import { CHECK_IN_STATUS, relTime } from '@/lib/family/safety';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { CHECK_IN_STATUS, relTime as relTimeIn } from '@/lib/family/safety';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type CheckIn = Tables<'safety_check_ins'>;
 
@@ -22,6 +22,9 @@ const ORDER = ['safe', 'on_my_way', 'arrived', 'need_help'] as const;
 
 export function CheckInView() {
   const t = useTranslations();
+  // "30m ago" on a safety surface follows the reader.
+  const locale = useLocale();
+  const relTime = (iso: string) => relTimeIn(iso, new Date(), locale.code);
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);

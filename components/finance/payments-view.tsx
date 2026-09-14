@@ -8,14 +8,18 @@ import { PageHeader } from '@/components/app/page-header';
 import { SkeletonList, EmptyState, ErrorState, Skeleton } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
-import { usd, fmtDueDate } from '@/lib/finance/hub';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { usd as usdIn, fmtDueDate as fmtDueDateIn } from '@/lib/finance/hub';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type Txn = Tables<'transactions'>;
 const FILTERS = ['all', 'income', 'expense', 'transfer'] as const;
 
 export function PaymentsView() {
+  const locale = useLocale();
   const tr = useTranslations();
+  // Money and dates follow the reader; the currency stays the money's own.
+  const usd = (amount: number) => usdIn(amount, locale.code);
+  const fmtDueDate = (iso: string) => fmtDueDateIn(iso, locale.code);
   const { familyId } = useApp();
 
   const { data: rows, loading, error: readError, refresh } = useRealtimeQuery<Txn>({
@@ -113,7 +117,7 @@ export function PaymentsView() {
           {byMonth.map(([month, items]) => (
             <section key={month}>
               <h2 className="mb-2 flex items-baseline justify-between text-sm font-bold uppercase tracking-wide text-muted">
-                <span>{new Date(`${month}-01T00:00:00`).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
+                <span>{new Date(`${month}-01T00:00:00`).toLocaleDateString(locale.code, { month: 'long', year: 'numeric' })}</span>
                 <span className={cn('text-xs font-bold normal-case tabular-nums', monthTotal(items) < 0 ? 'text-muted' : 'text-emerald-400')}>
                   {monthTotal(items) < 0 ? '-' : '+'}{usd(Math.abs(monthTotal(items)))}
                 </span>

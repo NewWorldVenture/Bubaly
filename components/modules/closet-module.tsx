@@ -5,6 +5,7 @@ import {
   Shirt, Plus, Sparkles, Thermometer, Trash2, Star, X, Camera, History, WashingMachine, Check, Pencil, Wand2, AlertTriangle,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
+import { familyMediaPath } from '@/lib/storage/family-media';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -22,7 +23,9 @@ import {
   WARDROBE_CATEGORIES, WARDROBE_STATUSES, SEASONS, OCCASIONS, categoryMeta, statusMeta, occasionMeta,
   suggestOutfit, closetSummary, neglectedItems, costPerWear, tempBand, weatherLabelFromTemp, dayDiff,
 } from '@/lib/closet/outfits';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Item = Tables<'wardrobe_items'>;
 type Outfit = Tables<'outfits'>;
@@ -34,9 +37,9 @@ const cToF = (c: number) => Math.round((c * 9) / 5 + 32);
 const todayIso = () => new Date().toISOString().slice(0, 10);
 const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
-function fmtDate(d: string): string {
-  return new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
+const fmtDateIn = (locale: LocaleCode) => (d: string): string => {
+  return new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+};
 
 function photoUrl(path: string | null): string | null {
   if (!path) return null;
@@ -44,7 +47,10 @@ function photoUrl(path: string | null): string | null {
 }
 
 export function ClosetModule() {
+  const locale = useLocale();
+  const fmtDate = fmtDateIn(locale.code);
   const t = useTranslations();
+  const askConfirm = useConfirm();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -146,7 +152,7 @@ export function ClosetModule() {
   }
 
   async function deleteItem(item: Item) {
-    if (!confirm(`Remove ${item.name} from the closet?`)) return;
+    if (!(await askConfirm({ title: t('confirm.removeNamed', { name: item.name }), body: t('confirm.cannotBeUndone') }))) return;
     const { error } = await createClient().from('wardrobe_items').delete().eq('id', item.id);
     if (error) return toastError(describeDbError(error));
     success(t('closetModule.itemRemoved'));
@@ -158,7 +164,7 @@ export function ClosetModule() {
   }
 
   async function deleteOutfit(outfit: Outfit) {
-    if (!confirm(`Delete the outfit “${outfit.name}”?`)) return;
+    if (!(await askConfirm({ title: t('confirm.deleteNamed', { name: outfit.name }), body: t('confirm.cannotBeUndone') }))) return;
     const { error } = await createClient().from('outfits').delete().eq('id', outfit.id);
     if (error) return toastError(describeDbError(error));
     success(t('closetModule.outfitDeleted'));
@@ -411,7 +417,7 @@ function ItemForm({ familyId, userId, memberId, members, item, onClose, onSaved 
     setUploading(true);
     try {
       const ext = file.name.split('.').pop() || 'jpg';
-      const path = `${familyId}/closet/${Date.now()}.${ext}`;
+      const path = familyMediaPath(familyId, 'closet', file.name);
       const { data: stored, error: upErr } = await createClient().storage.from('family-media').upload(path, file, { upsert: false });
       if (upErr || !stored) { toastError(describeDbError(upErr)); return; }
       setPhotoPath(stored.path);

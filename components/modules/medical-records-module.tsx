@@ -22,6 +22,7 @@ import { ProviderInfoSheet, CheckInSheet } from '@/components/medical/print-shee
 import { cn } from '@/lib/utils/cn';
 import type { Tables, RecordKind } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Provider = Tables<'health_providers'>;
 type Policy = Tables<'insurance_policies'>;
@@ -59,6 +60,7 @@ function CardImage({ path, label }: { path: string | null; label: string }) {
 
 export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
   const t = useTranslations();
+  const askConfirm = useConfirm();
   const { familyId, userId, members, selfMember, role } = useApp();
   const { success, error: toastError } = useToast();
   const canEdit = isManager(role);
@@ -141,6 +143,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
   }
 
   async function deleteProvider(id: string) {
+    if (!(await askConfirm({ title: t('medicalRecords.deleteProviderQ'), body: t('confirm.cannotBeUndone') }))) return;
     const sb = createClient();
     const { error: err } = await sb.from('health_providers').delete().eq('id', id);
     if (err) { toastError(t('medicalRecordsModule.couldNotDelete')); return; }
@@ -189,6 +192,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
   }
 
   async function deletePolicy(id: string) {
+    if (!(await askConfirm({ title: t('medicalRecords.deletePolicyQ'), body: t('medicalRecords.deletePolicyBody') }))) return;
     const sb = createClient();
     const { error: err } = await sb.from('insurance_policies').delete().eq('id', id);
     if (err) { toastError(t('medicalRecordsModule.couldNotDelete')); return; }
@@ -253,7 +257,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
             {canEdit ? (
               <>
                 <Button onClick={() => setCheckInPicker(true)} className="btn-cta"><ClipboardList className="h-4 w-4" /> {t('medicalRecords.atTheDoctor')}</Button>
-                <Button onClick={() => setProviderForm({ ...blankProvider })} className="btn-secondary"><Plus className="h-4 w-4" /> Add {providerWord}</Button>
+                <Button onClick={() => setProviderForm({ ...blankProvider })} variant="secondary"><Plus className="h-4 w-4" /> Add {providerWord}</Button>
               </>
             ) : (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs text-muted"><Lock className="h-3.5 w-3.5" /> {t('medicalRecords.viewOnly')}</span>
@@ -285,8 +289,8 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
                       {p.is_primary && <span className="rounded-full bg-emerald-600/20 px-2 py-0.5 text-[10px] font-bold text-emerald-300">PRIMARY</span>}
                       {canEdit && (
                         <>
-                          <button onClick={() => setPolicyForm({ id: p.id, member_id: p.member_id ?? '', insurer: p.insurer, plan_name: p.plan_name ?? '', plan_type: p.plan_type ?? '', policy_number: p.policy_number ?? '', group_number: p.group_number ?? '', rx_bin: p.rx_bin ?? '', rx_pcn: p.rx_pcn ?? '', rx_group: p.rx_group ?? '', customer_service_phone: p.customer_service_phone ?? '', effective_date: p.effective_date ?? '', is_primary: p.is_primary, notes: p.notes ?? '', front_image_path: p.front_image_path ?? '', back_image_path: p.back_image_path ?? '' })} className="text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
-                          <button onClick={() => deletePolicy(p.id)} className="text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
+                          <button aria-label={t('a11y.edit')} onClick={() => setPolicyForm({ id: p.id, member_id: p.member_id ?? '', insurer: p.insurer, plan_name: p.plan_name ?? '', plan_type: p.plan_type ?? '', policy_number: p.policy_number ?? '', group_number: p.group_number ?? '', rx_bin: p.rx_bin ?? '', rx_pcn: p.rx_pcn ?? '', rx_group: p.rx_group ?? '', customer_service_phone: p.customer_service_phone ?? '', effective_date: p.effective_date ?? '', is_primary: p.is_primary, notes: p.notes ?? '', front_image_path: p.front_image_path ?? '', back_image_path: p.back_image_path ?? '' })} className="text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
+                          <button aria-label={t('a11y.delete')} onClick={() => deletePolicy(p.id)} className="text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
                         </>
                       )}
                     </div>
@@ -341,8 +345,8 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
                       {p.phone && <a href={`tel:${p.phone}`} className="inline-flex items-center gap-1 text-xs text-brand-text"><Phone className="h-3 w-3" />{p.phone}</a>}
                       {canEdit && (
                         <div className="flex items-center gap-1.5">
-                          <button onClick={() => setProviderForm({ id: p.id, member_id: p.member_id ?? '', name: p.name, specialty: p.specialty ?? '', practice_name: p.practice_name ?? '', phone: p.phone ?? '', fax: p.fax ?? '', email: p.email ?? '', address: p.address ?? '', is_primary: p.is_primary, notes: p.notes ?? '' })} className="text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
-                          <button onClick={() => deleteProvider(p.id)} className="text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
+                          <button aria-label={t('a11y.edit')} onClick={() => setProviderForm({ id: p.id, member_id: p.member_id ?? '', name: p.name, specialty: p.specialty ?? '', practice_name: p.practice_name ?? '', phone: p.phone ?? '', fax: p.fax ?? '', email: p.email ?? '', address: p.address ?? '', is_primary: p.is_primary, notes: p.notes ?? '' })} className="text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
+                          <button aria-label={t('a11y.delete')} onClick={() => deleteProvider(p.id)} className="text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
                         </div>
                       )}
                     </div>
@@ -372,7 +376,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
                       <p className="text-xs text-muted">{m.role}</p>
                     </div>
                   </div>
-                  {canEdit && <button onClick={() => openProfile(m.id)} className="text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>}
+                  {canEdit && <button aria-label={t('a11y.edit')} onClick={() => openProfile(m.id)} className="text-muted hover:text-fg"><Pencil className="h-4 w-4" /></button>}
                 </div>
                 {prof ? (
                   <dl className="space-y-1 text-xs">

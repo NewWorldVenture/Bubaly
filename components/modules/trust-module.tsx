@@ -27,9 +27,10 @@ import {
   setPermissionGrantAction, createDelegationAction, revokeDelegationAction,
   decideApprovalAction, activateEmergencyAction, endEmergencyAction,
 } from '@/app/(app)/dashboard/trust/actions';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { explainTrustDecision, isAcceptedPolicy } from '@/lib/ai/explanation';
 import { TrustSharingSection } from '@/components/modules/trust-sharing-section';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 type Member = { id: string; name: string; role: string; color: string | null };
 type Policy = {
@@ -73,20 +74,27 @@ const DECISION_STYLES: Record<string, string> = {
 
 type Tab = 'approvals' | 'activity' | 'policies' | 'permissions' | 'delegations' | 'emergency' | 'audit';
 
-function fmtAmount(cents: number | null) {
+function amountIn(locale: LocaleCode, cents: number | null) {
   if (cents == null) return null;
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(cents / 100);
+  return new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(cents / 100);
 }
-function fmtWhen(iso: string) {
-  return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-}
-function timeLeft(iso: string) {
-  const ms = new Date(iso).getTime() - Date.now();
-  if (ms <= 0) return 'expired';
-  const h = Math.floor(ms / 3_600_000);
-  if (h < 1) return `${Math.max(1, Math.round(ms / 60_000))}m left`;
-  if (h < 48) return `${h}h left`;
-  return `${Math.round(h / 24)}d left`;
+const fmtWhenIn = (locale: LocaleCode) => (iso: string) => {
+  return new Date(iso).toLocaleString(locale, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+};
+/**
+ * How long a delegation has left. FORWARD-facing, so it is not `fmtTimeAgo` —
+ * and every rung was an English literal, which the hardcoded-locale scan cannot
+ * see. The words come from the catalogue now; the caller supplies the translator.
+ */
+function timeLeftIn(t: (key: string, params?: Record<string, string | number>) => string) {
+  return (iso: string) => {
+    const ms = new Date(iso).getTime() - Date.now();
+    if (ms <= 0) return t('trust.expired');
+    const h = Math.floor(ms / 3_600_000);
+    if (h < 1) return t('trust.minutesLeft', { count: Math.max(1, Math.round(ms / 60_000)) });
+    if (h < 48) return t('trust.hoursLeft', { count: h });
+    return t('trust.daysLeft', { count: Math.round(h / 24) });
+  };
 }
 
 export function TrustModule({ data, canManage, needsYouHref }: { data: TrustData; canManage: boolean; needsYouHref?: string }) {
@@ -173,6 +181,8 @@ function ApprovalsTab({ approvals, members, canManage, needsYouHref, basedOn }: 
   /** Context slice names per approval id (M24); absent for a viewer who may not see them. */
   basedOn?: Record<string, BasedOn>;
 }) {
+  const locale = useLocale();
+  const fmtWhen = fmtWhenIn(locale.code);
   const tr = useTranslations();
   const router = useRouter();
   // Optimistic: a decided card leaves the inbox at once; router.refresh()
@@ -234,6 +244,7 @@ function ApprovalsTab({ approvals, members, canManage, needsYouHref, basedOn }: 
 // ─── Policies ────────────────────────────────────────────────────────────────
 function PoliciesTab({ policies, members, canManage }: { policies: Policy[]; members: Member[]; canManage: boolean }) {
   const tr = useTranslations();
+  const locale = useLocale();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [editing, setEditing] = useState<Policy | null>(null);
@@ -296,7 +307,7 @@ function PoliciesTab({ policies, members, canManage }: { policies: Policy[]; mem
                     <span>{tr('trust.priority')} {p.priority}</span>
                   </div>
                   {Object.keys(p.conditions ?? {}).length > 0 && (
-                    <div className="mt-1 text-[10px] text-muted">when {conditionSummary(p.conditions, tr)}</div>
+                    <div className="mt-1 text-[10px] text-muted">when {conditionSummary(p.conditions, tr, locale.code)}</div>
                   )}
                 </div>
                 {canManage && (
@@ -323,9 +334,9 @@ function PoliciesTab({ policies, members, canManage }: { policies: Policy[]; mem
   );
 }
 
-function conditionSummary(c: Record<string, unknown>, tr: (key: string, params?: Record<string, string | number>) => string): string {
+function conditionSummary(c: Record<string, unknown>, tr: (key: string, params?: Record<string, string | number>) => string, locale: LocaleCode): string {
   const parts: string[] = [];
-  if (typeof c.maxAmountCents === 'number') parts.push(`under ${fmtAmount(c.maxAmountCents)}`);
+  if (typeof c.maxAmountCents === 'number') parts.push(`under ${amountIn(locale, c.maxAmountCents)}`);
   if (typeof c.minConfidence === 'number') parts.push(`AI ≥ ${Math.round((c.minConfidence as number) * 100)}% sure`);
   if (typeof c.timeStart === 'string' && typeof c.timeEnd === 'string') parts.push(`between ${c.timeStart}–${c.timeEnd}`);
   // A tag-scoped policy — the narrow kind Autopilot learns — names the one tool it covers.
@@ -571,7 +582,10 @@ function PermissionsTab({ members, grants, canManage }: { members: Member[]; gra
 
 // ─── Delegations ─────────────────────────────────────────────────────────────
 function DelegationsTab({ delegations, members, canManage }: { delegations: Delegation[]; members: Member[]; canManage: boolean }) {
+  const locale = useLocale();
+  const fmtWhen = fmtWhenIn(locale.code);
   const tr = useTranslations();
+  const timeLeft = timeLeftIn(tr);
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [adding, setAdding] = useState(false);
@@ -678,6 +692,8 @@ function DelegationModal({ members, onClose, onSaved }: { members: Member[]; onC
 
 // ─── Emergency ────────────────────────────────────────────────────────────────
 function EmergencyTab({ active, canManage }: { active: Emergency | null; canManage: boolean }) {
+  const locale = useLocale();
+  const fmtWhen = fmtWhenIn(locale.code);
   const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
@@ -762,6 +778,8 @@ function EmergencyTab({ active, canManage }: { active: Emergency | null; canMana
 
 // ─── Audit ────────────────────────────────────────────────────────────────────
 function AuditTab({ audit, members, policies }: { audit: Audit[]; members: Member[]; policies: Policy[] }) {
+  const locale = useLocale();
+  const fmtWhen = fmtWhenIn(locale.code);
   const tr = useTranslations();
   const nameById = useMemo(() => new Map(members.map(m => [m.id, m.name])), [members]);
   const policyById = useMemo(() => new Map(policies.map(p => [p.id, p])), [policies]);

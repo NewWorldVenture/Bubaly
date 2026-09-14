@@ -7,9 +7,9 @@ import Link from 'next/link';
 import { Avatar } from '@/components/ui/avatar';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
-import { formatCents } from '@/lib/wallet/ledger';
+import { formatCents as formatCentsIn } from '@/lib/wallet/ledger';
 import { sendMoneyAction } from '@/app/(app)/wallet/actions';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 export type SendChild = {
   id: string;
@@ -22,6 +22,10 @@ export type SendChild = {
 type Step = 'from' | 'to' | 'amount' | 'confirm';
 
 export function SendMoneyView({ wallets, canManage }: { wallets: SendChild[]; canManage: boolean }) {
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const formatCents = (cents: number, currency?: string) =>
+    formatCentsIn(cents, currency, locale.code);
   const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();

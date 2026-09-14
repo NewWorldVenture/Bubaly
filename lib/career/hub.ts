@@ -8,6 +8,7 @@
 // skills-gap map from the profile's own targets. The AI adds the rewriting.
 
 import type { CareerEmploymentType, CareerStatus, CareerWorkMode, JobStage } from '@/lib/database.types';
+import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
 
 export const JOB_STAGES: { value: JobStage; label: string; open: boolean }[] = [
   { value: 'saved', label: 'Saved', open: true }, { value: 'applied', label: 'Applied', open: true }, { value: 'screening', label: 'Screening', open: true },
@@ -187,4 +188,16 @@ export function careerSummary(profiles: ProfileLike[], apps: ApplicationLike[], 
   return { profiles: profiles.length, open, interviews, offers, dueToday, overdue, text };
 }
 
-export const money = (cents: number | null | undefined) => cents === null || cents === undefined ? '—' : `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+/**
+ * Whole dollars for the reader.
+ *
+ * The "$" used to be prefixed BY HAND with only the digits localised, which is a
+ * defect a locale swap alone would not fix: handed a European locale that shape
+ * renders "$2.767" — the American symbol position with German separators, a
+ * notation nobody writes. `style: 'currency'` puts the symbol where the locale puts
+ * it. Six modules carried the same line; this is one of them.
+ */
+export const money = (cents: number | null | undefined, locale: LocaleCode = DEFAULT_LOCALE) =>
+  cents === null || cents === undefined
+    ? '—'
+    : new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(cents / 100);

@@ -1,13 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, Trash2, ToggleLeft, ToggleRight, ChevronDown, ChevronUp, GripVertical } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
-import { TRUST_LABELS, TRUST_LEVELS, TRUST_ICONS, type TrustLevel } from '@/lib/guardian/trust';
-import { ROUTING_MODE_LABELS, type RoutingMode } from '@/lib/guardian/pipeline';
+import { TRUST_LABEL_KEYS, TRUST_LEVELS, TRUST_ICONS, type TrustLevel } from '@/lib/guardian/trust';
+import { ROUTING_MODE_LABEL_KEYS, type RoutingMode } from '@/lib/guardian/pipeline';
 import { createRuleAction, toggleRuleAction, deleteRuleAction } from '@/app/(app)/guardian/actions';
 import { useToast } from '@/components/ui/toast';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Rule = {
   id: string;
@@ -41,6 +42,7 @@ const ROUTING_MODES: RoutingMode[] = [
 
 export function RulesEditor({ rules: initial }: { rules: Rule[] }) {
   const t = useTranslations();
+  const askConfirm = useConfirm();
   const tr = useTranslations();
   const { success: toastSuccess, error: toastError } = useToast();
   const [rules, setRules] = useState(initial);
@@ -55,6 +57,7 @@ export function RulesEditor({ rules: initial }: { rules: Rule[] }) {
   }
 
   async function handleDelete(id: string) {
+    if (!(await askConfirm({ title: t('rulesEditor.deleteRuleQ'), body: t('rulesEditor.deleteRuleBody') }))) return;
     const res = await deleteRuleAction(id);
     if (!res.ok) { toastError(res.error); return; }
     setRules(prev => prev.filter(r => r.id !== id));
@@ -136,7 +139,7 @@ export function RulesEditor({ rules: initial }: { rules: Rule[] }) {
                   <span className="ml-auto text-[10px] text-muted">#{rule.priority}</span>
                 </div>
                 <p className="text-xs text-muted mt-0.5">
-                  → <span className="text-brand-text">{ROUTING_MODE_LABELS[rule.action_routing_mode]}</span>
+                  → <span className="text-brand-text">{t(ROUTING_MODE_LABEL_KEYS[rule.action_routing_mode])}</span>
                   {rule.condition_trust_levels?.length && (
                     <> · {rule.condition_trust_levels.map(t => TRUST_ICONS[t]).join(' ')}</>
                   )}
@@ -145,13 +148,14 @@ export function RulesEditor({ rules: initial }: { rules: Rule[] }) {
                   )}
                 </p>
               </div>
-              <button
+              <button aria-label={tr(expanded === rule.id ? 'a11y.collapse' : 'a11y.expand')}
                 onClick={() => setExpanded(expanded === rule.id ? null : rule.id)}
                 className="rounded-lg p-1.5 text-muted hover:bg-surface transition"
               >
                 {expanded === rule.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
               </button>
               <button
+                aria-label={tr('a11y.toggle')}
                 onClick={() => handleToggle(rule.id, rule.is_active)}
                 className="text-muted hover:text-fg transition"
               >
@@ -160,7 +164,7 @@ export function RulesEditor({ rules: initial }: { rules: Rule[] }) {
                   : <ToggleLeft className="h-5 w-5" />
                 }
               </button>
-              <button
+              <button aria-label={t('a11y.delete')}
                 onClick={() => handleDelete(rule.id)}
                 className="rounded-lg p-1.5 text-muted hover:bg-red-500/10 hover:text-red-400 transition"
               >
@@ -172,7 +176,7 @@ export function RulesEditor({ rules: initial }: { rules: Rule[] }) {
               <div className="border-t border-border bg-elevated/40 px-4 py-3 space-y-2 text-xs">
                 {rule.description && <p className="text-muted">{rule.description}</p>}
                 {rule.condition_trust_levels?.length && (
-                  <DetailRow label={t('rulesEditor.trustLevels')} value={rule.condition_trust_levels.map(t => `${TRUST_ICONS[t]} ${TRUST_LABELS[t]}`).join(', ')} />
+                  <DetailRow label={t('rulesEditor.trustLevels')} value={rule.condition_trust_levels.map((lvl) => `${TRUST_ICONS[lvl]} ${t(TRUST_LABEL_KEYS[lvl])}`).join(', ')} />
                 )}
                 {rule.condition_time_start && (
                   <DetailRow label={t('rulesEditor.time')} value={`${rule.condition_time_start} – ${rule.condition_time_end}`} />
@@ -247,9 +251,19 @@ function NewRuleModal({ onSave, onClose }: { onSave: (f: NewRuleForm) => void; o
     setForm(p => ({ ...p, contexts: p.contexts.includes(c) ? p.contexts.filter(x => x !== c) : [...p.contexts, c] }));
   }
 
+  // Both Guardian editors declare role="dialog" aria-modal="true" and build the
+  // shell by hand rather than through components/ui/modal.tsx, which handles this
+  // — so neither closed on Escape. A keyboard user could open the editor and the
+  // only way out was the Cancel button; the backdrop was mouse-only.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} aria-hidden />
       <div
         role="dialog"
         aria-modal="true"
@@ -281,7 +295,7 @@ function NewRuleModal({ onSave, onClose }: { onSave: (f: NewRuleForm) => void; o
                   className={cn('rounded-full border px-2.5 py-1 text-xs font-medium transition',
                     form.trust_levels.includes(t) ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:border-brand/40'
                   )}>
-                  {TRUST_ICONS[t]} {TRUST_LABELS[t]}
+                  {TRUST_ICONS[t]} {tr(TRUST_LABEL_KEYS[t])}
                 </button>
               ))}
             </div>
@@ -334,7 +348,7 @@ function NewRuleModal({ onSave, onClose }: { onSave: (f: NewRuleForm) => void; o
                   className={cn('rounded-xl border px-3 py-2 text-xs font-medium text-left transition',
                     form.routing_mode === mode ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:border-brand/40'
                   )}>
-                  {ROUTING_MODE_LABELS[mode]}
+                  {tr(ROUTING_MODE_LABEL_KEYS[mode])}
                 </button>
               ))}
             </div>

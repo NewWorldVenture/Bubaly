@@ -18,7 +18,9 @@ import { PageHeader } from '@/components/app/page-header';
 import { SkeletonList, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
+import { createFormat } from '@/lib/utils/format';
 
 type Call = Tables<'call_logs'> & { contact?: Tables<'family_contacts'> | null };
 
@@ -97,15 +99,16 @@ const HOW_IT_WORKS = [
   { icon: Sparkles,      text: 'Handle it files the message with the planner',   textKey: 'frontDesk.handleItFilesTheMessage' },
 ] as const;
 
-function fmtTime(iso: string) {
-  const d = new Date(iso);
-  const diffMs = Date.now() - d.getTime();
-  const diffH = diffMs / 3_600_000;
-  if (diffH < 1) return `${Math.max(1, Math.round(diffMs / 60_000))}m ago`;
-  if (diffH < 24) return `${Math.round(diffH)}h ago`;
-  if (diffH < 48) return 'Yesterday';
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
+/**
+ * Delegates to the shared `fmtTimeAgo` (lib/utils/format.ts).
+ *
+ * It took a locale, which made it LOOK converted — but every rung was an English
+ * literal ("3h ago", "Yesterday") and the locale reached only the fallback date. That is the
+ * defect the hardcoded-locale scan cannot see, and "it accepts a LocaleCode" is not
+ * evidence against it.
+ */
+const fmtTimeIn = (locale: LocaleCode) => (iso: string) =>
+  createFormat(locale).fmtTimeAgo(iso, { absoluteAfterDays: 2, absolutePattern: 'MMM d' });
 
 function fmtDuration(secs: number | null) {
   if (!secs) return null;
@@ -136,6 +139,8 @@ export function FrontDeskModule({ channel, voice, unavailable }: {
   voice: FrontDeskVoiceMessage[];
   unavailable?: FrontDeskUnavailable;
 }) {
+  const locale = useLocale();
+  const fmtTime = fmtTimeIn(locale.code);
   const tr = useTranslations();
   const { familyId, userId } = useApp();
   const [filterTab, setFilterTab] = useState<FilterTab>('all');
@@ -409,7 +414,7 @@ export function FrontDeskModule({ channel, voice, unavailable }: {
                 placeholder={tr('frontDesk.searchCallsNumbersSummaries')}
                 className="w-full rounded-xl border border-border bg-surface/60 py-2.5 pl-9 pr-4 text-sm placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand/30" />
               {search && (
-                <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-fg">
+                <button aria-label={tr('a11y.clearSearch')} onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-fg">
                   <X className="h-4 w-4" />
                 </button>
               )}
@@ -481,7 +486,7 @@ export function FrontDeskModule({ channel, voice, unavailable }: {
 
       {/* Detail panel */}
       {selected && (
-        <div className="fixed inset-0 z-50 bg-background flex flex-col pt-[var(--safe-top)] pb-[var(--safe-bottom)] pl-[var(--safe-left)] pr-[var(--safe-right)] lg:pt-0 lg:pb-0 lg:pl-0 lg:pr-0 lg:static lg:inset-auto lg:z-auto lg:w-[400px] lg:rounded-2xl lg:border lg:border-border lg:bg-surface/30 lg:max-h-[calc(100vh-120px)] lg:overflow-y-auto lg:self-start lg:sticky lg:top-4">
+        <div className="fixed inset-0 z-50 bg-bg flex flex-col pt-[var(--safe-top)] pb-[var(--safe-bottom)] pl-[var(--safe-left)] pr-[var(--safe-right)] lg:pt-0 lg:pb-0 lg:pl-0 lg:pr-0 lg:static lg:inset-auto lg:z-auto lg:w-[400px] lg:rounded-2xl lg:border lg:border-border lg:bg-surface/30 lg:max-h-[calc(100vh-120px)] lg:overflow-y-auto lg:self-start lg:sticky lg:top-4">
           <CallDetail call={selected} familyId={familyId} userId={userId} onClose={() => setSelected(null)} />
         </div>
       )}
@@ -529,6 +534,8 @@ export function FrontDeskModule({ channel, voice, unavailable }: {
 function CallDetail({ call, familyId, userId, onClose }: {
   call: Call; familyId: string; userId: string; onClose: () => void;
 }) {
+  const locale = useLocale();
+  const fmtTime = fmtTimeIn(locale.code);
   const tr = useTranslations();
   const { success, error: toastError } = useToast();
   const st = STATUS_CONFIG[call.status] ?? STATUS_CONFIG.screened;
@@ -633,7 +640,7 @@ function CallDetail({ call, familyId, userId, onClose }: {
               {actions.map((a, i) => {
                 const added = addedItems.has(i);
                 return (
-                  <div key={i} className="flex items-center gap-2 rounded-lg bg-amber-500/8 border border-amber-500/20 px-3 py-2">
+                  <div key={i} className="flex items-center gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2">
                     <span className="h-1.5 w-1.5 rounded-full bg-amber-400 flex-shrink-0" />
                     <span className="flex-1 text-xs text-fg/90">{a}</span>
                     <button onClick={() => addReminder(a, i)} disabled={added || busyItem !== null}

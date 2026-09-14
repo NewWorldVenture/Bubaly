@@ -8,6 +8,7 @@ import {
   Image as ImageIcon, BellOff, Archive, ChevronRight, FileText, Download,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
+import { familyMediaPath } from '@/lib/storage/family-media';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
@@ -22,10 +23,10 @@ import { ROLE_LABELS } from '@/lib/constants/roles';
 import { fmtDate, firstName } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import {
-  convMatchesTab, previewText, shortTime, summarizeConversations, type ConvTab,
+  convMatchesTab, previewText, shortTime as shortTimeIn, summarizeConversations, type ConvTab,
 } from '@/lib/messages/overview';
 import type { Tables, MemberRole } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type Conversation = Tables<'family_conversations'>;
 type Message = Tables<'family_messages'>;
@@ -79,6 +80,9 @@ async function createConversation(payload: ConvInsert) {
 
 export function MessagesModule() {
   const tr = useTranslations();
+  // The date follows the reader and the words come from the catalogue.
+  const locale = useLocale();
+  const shortTime = (iso: string) => shortTimeIn(iso, new Date(), locale.code, tr);
   const { familyId, userId, members, selfMember } = useApp();
   const { error: toastError } = useToast();
 
@@ -385,7 +389,7 @@ export function MessagesModule() {
     try {
       const supabase = createClient();
       const ext = file.name.split('.').pop();
-      const path = `${familyId}/messages/${Date.now()}.${ext}`;
+      const path = familyMediaPath(familyId, 'messages', file.name);
       const { data: stored, error: upErr } = await supabase.storage.from('family-media').upload(path, file, { upsert: false });
       if (upErr || !stored) { toastError(describeDbError(upErr)); return; }
       const { data: { publicUrl } } = supabase.storage.from('family-media').getPublicUrl(stored.path);
@@ -849,11 +853,11 @@ export function MessagesModule() {
                                 {emoji}
                               </button>
                             ))}
-                            <button onClick={() => setReplyTo(msg)}
+                            <button aria-label={tr('a11y.reply')} onClick={() => setReplyTo(msg)}
                               className="rounded-full bg-elevated p-1.5 text-muted hover:text-fg transition">
                               <Reply className="h-3.5 w-3.5" />
                             </button>
-                            <button onClick={() => setMsgMenu(msgMenu === msg.id ? null : msg.id)}
+                            <button aria-label={tr('a11y.moreActions')} onClick={() => setMsgMenu(msgMenu === msg.id ? null : msg.id)}
                               className="rounded-full bg-elevated p-1.5 text-muted hover:text-fg transition">
                               <MoreHorizontal className="h-3.5 w-3.5" />
                             </button>

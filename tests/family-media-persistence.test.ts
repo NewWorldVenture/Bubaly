@@ -7,12 +7,20 @@ const read = (relativePath: string) => readFileSync(resolve(process.cwd(), relat
 
 describe('family media persistence boundaries', () => {
   it('uses collision-resistant client-side upload paths', () => {
+    // This pinned the literal `crypto.randomUUID` in each component, which was
+    // the right invariant expressed as an implementation detail. Both
+    // family-media callers now build their path with familyMediaPath(), the one
+    // place that decides this — see tests/family-media-paths-are-not-guessable.ts
+    // for why it has to be unguessable rather than merely collision-resistant,
+    // and for the sweep that stops a seventh caller rolling its own again.
     const createMemory = read('components/memories/create-memory.tsx');
     const photosModule = read('components/modules/photos-module.tsx');
-    const marketplaceUpload = read('components/marketplace/photo-upload.tsx');
+    expect(createMemory).toContain('familyMediaPath(');
+    expect(photosModule).toContain('familyMediaPath(');
 
-    expect(createMemory).toContain('crypto.randomUUID');
-    expect(photosModule).toContain('crypto.randomUUID');
+    // The marketplace uploads to a DIFFERENT bucket (marketplace-photos) and
+    // still rolls its own, so it keeps the original assertion.
+    const marketplaceUpload = read('components/marketplace/photo-upload.tsx');
     expect(marketplaceUpload).toContain('crypto.randomUUID');
   });
 

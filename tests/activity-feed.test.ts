@@ -27,7 +27,11 @@ describe('mergeActivity', () => {
 describe('relativeTime', () => {
   const now = new Date('2026-01-10T12:00:00Z');
   it('formats recent intervals', () => {
-    expect(relativeTime('2026-01-10T11:59:40Z', now)).toBe('just now');
+    // "now", not "just now": the shared ladder takes Intl.RelativeTimeFormat's
+    // own word for a sub-minute gap, which is a real word in all eleven locales
+    // where "just now" was English for everybody. Every other rung below is
+    // byte-identical to what this file's own ladder produced.
+    expect(relativeTime('2026-01-10T11:59:40Z', now)).toBe('now');
     expect(relativeTime('2026-01-10T11:30:00Z', now)).toBe('30m ago');
     expect(relativeTime('2026-01-10T09:00:00Z', now)).toBe('3h ago');
     expect(relativeTime('2026-01-08T12:00:00Z', now)).toBe('2d ago');
@@ -35,5 +39,16 @@ describe('relativeTime', () => {
   });
   it('falls back to a date for old items', () => {
     expect(relativeTime('2025-11-01T12:00:00Z', now)).toMatch(/Nov/);
+  });
+
+  // The feed row is rendered by a client component that binds this to
+  // useLocale() (app/(app)/dashboard/activity/activity-feed.tsx), so the chip has
+  // to actually change language. Asserting only en-US would pass over a helper
+  // that ignores its third argument entirely.
+  it('follows the reader', () => {
+    expect(relativeTime('2026-01-10T11:30:00Z', now, 'de-DE')).toBe('vor 30 m');
+    expect(relativeTime('2026-01-10T09:00:00Z', now, 'de-DE')).toBe('vor 3 Std.');
+    expect(relativeTime('2026-01-10T11:59:40Z', now, 'fr-FR')).toBe('maintenant');
+    expect(relativeTime('2025-11-01T12:00:00Z', now, 'de-DE')).toMatch(/Nov/);
   });
 });

@@ -32,7 +32,17 @@ import type { Messages } from '@/lib/i18n/messages';
  *
  * Every other scope includes this, because everything renders inside it.
  */
-export const ROOT_CHROME_SCOPE = ['error', 'globalError', 'root'] as const;
+//
+// `a11y` is here rather than in each surface's own list, and that is a deliberate
+// widening. Those keys are the accessible NAMES of controls — Delete, Close,
+// Clear search — and a control can appear on any surface: the blog's search
+// field, a public gift page, the sign-in screen. Scoping them per surface means
+// that adding an `aria-label` to an auth component fails a test about
+// authentication copy, for a reason that has nothing to do with the author's
+// intent. 28 short strings in the active locale is a few hundred bytes against
+// the marketing scope's 2 KB, and the alternative is a guard that punishes the
+// right change.
+export const ROOT_CHROME_SCOPE = ['a11y', 'error', 'globalError', 'root'] as const;
 
 /** The public marketing site, /blog and the hosted form and landing routes. */
 export const MARKETING_SCOPE = [

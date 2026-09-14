@@ -53,7 +53,7 @@ export default async function AdminNotificationsPage() {
       </div>
 
       {!digest.isEmpty && (
-        <div className="rounded-xl border border-border bg-card p-4">
+        <div className="rounded-xl border border-border bg-surface/40 p-4">
           <div className="flex items-center gap-2">
             <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-emerald-500/15 text-emerald-500">
               <TrendingUp className="h-4 w-4" />

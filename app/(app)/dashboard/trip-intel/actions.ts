@@ -8,6 +8,7 @@
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
+import { getFormat } from '@/lib/utils/format-server';
 import { createServer } from '@/lib/supabase/server';
 import { describeDbError } from '@/lib/supabase/errors';
 import { departureFromEstimate } from '@/lib/trips/drive-time';
@@ -126,6 +127,10 @@ async function upsertHeadOutEvent(
 export async function saveDeparturePlanAction(input: DeparturePlanInput): Promise<Result<{ id: string; leaveBy: string }>> {
   const t = await getTranslations();
   const ctx = await requireUserContext();
+  // The leave-by clock goes into a calendar event the family reads, so it takes
+  // THEIR locale. `toLocaleTimeString([], …)` here took the SERVER's — worse than
+  // the browser-locale sites, because a server has no reader at all (I18N-002).
+  const { fmtDate } = await getFormat();
   const supabase = await createServer();
 
   const title = input.title.trim();
@@ -148,7 +153,7 @@ export async function saveDeparturePlanAction(input: DeparturePlanInput): Promis
   const reminderEventId = await upsertHeadOutEvent(supabase, {
     familyId: ctx.active.familyId, userId: ctx.user.id, existingId: null,
     title, leaveByISO: plan.leaveByISO, location: input.origin ?? null,
-    description: `Leave by ${new Date(plan.leaveByISO).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} to reach ${input.destination ?? 'your destination'} on time. ${input.weatherSummary ? `Weather: ${input.weatherSummary}.` : ''}`.trim(),
+    description: `Leave by ${fmtDate(plan.leaveByISO, 'h:mm a')} to reach ${input.destination ?? 'your destination'} on time. ${input.weatherSummary ? `Weather: ${input.weatherSummary}.` : ''}`.trim(),
   });
 
   const { data, error } = await supabase
@@ -199,6 +204,10 @@ export async function refreshDeparturePlanAction(input: {
 }): Promise<Result<{ leaveBy: string }>> {
   const t = await getTranslations();
   const ctx = await requireUserContext();
+  // The leave-by clock goes into a calendar event the family reads, so it takes
+  // THEIR locale. `toLocaleTimeString([], …)` here took the SERVER's — worse than
+  // the browser-locale sites, because a server has no reader at all (I18N-002).
+  const { fmtDate } = await getFormat();
   const supabase = await createServer();
 
   const { data: existing, error: fetchErr } = await supabase
@@ -221,7 +230,7 @@ export async function refreshDeparturePlanAction(input: {
   const reminderEventId = await upsertHeadOutEvent(supabase, {
     familyId: ctx.active.familyId, userId: ctx.user.id, existingId: existing.reminder_event_id,
     title: existing.title, leaveByISO: plan.leaveByISO, location: existing.origin,
-    description: `Updated: leave by ${new Date(plan.leaveByISO).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} to reach ${existing.destination ?? 'your destination'} on time. ${input.weatherSummary ? `Weather: ${input.weatherSummary}.` : ''}`.trim(),
+    description: `Updated: leave by ${fmtDate(plan.leaveByISO, 'h:mm a')} to reach ${existing.destination ?? 'your destination'} on time. ${input.weatherSummary ? `Weather: ${input.weatherSummary}.` : ''}`.trim(),
   });
 
   const { error } = await supabase

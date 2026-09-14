@@ -24,6 +24,9 @@ import {
 import { createRelationshipDigestRequestScope, suggestGiftsFromWishlist, summarizeGifts, type WishItemLite, type RelationshipDigest } from '@/lib/relationship/gifts';
 import type { Tables, RelationshipDateKind, RelationshipDateStatus, RelationshipGiftStatus } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
+import type { Format } from '@/lib/utils/format';
+import { useConfirm } from '@/components/ui/confirm';
 
 type RDate = Tables<'relationship_dates'>;
 type Gift_ = Tables<'relationship_gift_ideas'>;
@@ -53,11 +56,14 @@ const blankDate = {
   reminderDaysBefore: '14', memberId: '', location: '', notes: '', status: 'upcoming',
 };
 const blankGift = { id: '', title: '', url: '', price: '', occasion: '', forName: '', reason: '', status: 'idea' as RelationshipGiftStatus };
-const fmtDate = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
+const fmtDateIn = (f: Format) => (iso: string) => f.fmtDate(`${iso}T00:00:00`, 'MMMM d, yyyy');
 const dollars = (cents: number | null) => (cents == null ? null : `$${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}`);
 
 export function RelationshipModule() {
   const t = useTranslations();
+  const askConfirm = useConfirm();
+  // Dates follow the reader, not the browser (I18N-002).
+  const fmtDate = fmtDateIn(useFormat());
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -167,7 +173,7 @@ export function RelationshipModule() {
     setDateModal(false);
   }
   async function removeDate(d: RDate) {
-    if (!confirm(`Remove "${d.title}"?`)) return;
+    if (!(await askConfirm({ title: t('confirm.removeNamed', { name: d.title }), body: t('confirm.cannotBeUndone') }))) return;
     const { error: err } = await createClient().from('relationship_dates').delete().eq('id', d.id);
     if (err) { toastError(describeDbError(err)); return; }
     success(t('relationshipModule.removed'));

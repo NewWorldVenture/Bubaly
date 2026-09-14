@@ -14,11 +14,11 @@ import { Field, Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/toast';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
-import { formatCents } from '@/lib/wallet/ledger';
+import { formatCents as formatCentsIn } from '@/lib/wallet/ledger';
 import { dueAllowances } from '@/lib/wallet/allowance';
 import { WalletSubnav } from '@/components/wallet/wallet-subnav';
 import { saveAllowanceRuleAction, toggleAllowanceRuleAction, runDueAllowancesAction } from '@/app/(app)/wallet/actions';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 export type AllowanceRow = {
   childWalletId: string; name: string; ruleId: string | null;
@@ -26,6 +26,10 @@ export type AllowanceRow = {
 };
 
 export function AllowanceView({ rows, enabled, canManage }: { rows: AllowanceRow[]; enabled: boolean; canManage: boolean }) {
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const formatCents = (cents: number, currency?: string) =>
+    formatCentsIn(cents, currency, locale.code);
   const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();

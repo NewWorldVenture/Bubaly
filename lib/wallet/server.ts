@@ -8,6 +8,7 @@ import type { Database, Json, WalletTxnType } from '@/lib/database.types';
 import { allocate, normalizeSplit, type Split } from '@/lib/wallet/ledger';
 import { describeActionError } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
+import { readAll } from '@/lib/supabase/read-all';
 import { logWalletAudit } from '@/lib/server/audit';
 
 type DB = SupabaseClient<Database>;
@@ -110,30 +111,17 @@ export async function fundGoal(supabase: DB, params: {
 
 export type CreditResult = { ok: boolean; error?: string; credited: number };
 
-/**
- * Spendable balance for a child = the live balance of their SPEND bucket, derived
- * from the immutable ledger (credits − debits). This is what a card authorization
- * is checked against in real time. Returns 0 when the bucket/wallet is unknown.
- */
-export async function childSpendableCents(supabase: DB, familyId: string, childWalletId: string): Promise<number> {
-  const { data: bucket, error: bucketError } = await supabase
-    .from('wallet_buckets').select('id')
-    .eq('family_id', familyId).eq('child_wallet_id', childWalletId).eq('kind', 'spend').maybeSingle();
-  if (bucketError) throw new Error(walletFailure(bucketError, 'Could not load the wallet Spend bucket.'));
-  if (!bucket) return 0;
-
-  const { data: txns, error: transactionError } = await supabase
-    .from('wallet_transactions')
-    .select('direction, amount_cents, status')
-    .eq('family_id', familyId).eq('bucket_id', bucket.id)
-    .in('status', ['completed', 'processing']);
-  if (transactionError) throw new Error(walletFailure(transactionError, 'Could not load the wallet balance.'));
-
-  return (txns ?? []).reduce((sum, t) => {
-    if (t.status !== 'completed' && t.status !== 'processing') return sum;
-    return sum + (t.direction === 'credit' ? t.amount_cents : -t.amount_cents);
-  }, 0);
-}
+// A `childSpendableCents` helper used to sit here, exported, and its docstring
+// said "This is what a card authorization is checked against in real time."
+// Nothing called it, and the sentence was false: a card authorization goes
+// through `reserveCardAuth` below, which re-checks the balance in SQL under a
+// per-child lock — the whole point being that two concurrent authorizations
+// cannot each approve against the same balance. A TypeScript sum read outside
+// that lock cannot give the same answer, so a future caller trusting the comment
+// for a money decision would have had a race, not a balance.
+//
+// Use `bucketBalanceCents` (below) for DISPLAY, and `reserveCardAuth` for a
+// decision that spends.
 
 /**
  * Atomically reserve a hold for a card authorization. Under a per-child lock the
@@ -289,8 +277,21 @@ export async function bucketBalanceCents(supabase: DB, params: {
     .select('id').eq('family_id', params.familyId).eq('child_wallet_id', params.childWalletId).eq('kind', params.kind).maybeSingle();
   if (bucketError) return { bucketId: null, available: 0, error: walletFailure(bucketError, 'Could not load the wallet bucket.') };
   if (!bucket?.id) return { bucketId: null, available: 0, error: 'The wallet bucket is unavailable.' };
-  const { data: txns, error: transactionError } = await supabase.from('wallet_transactions')
-    .select('direction, amount_cents, status').eq('family_id', params.familyId).eq('bucket_id', bucket.id);
+  // Paged, not a bare select. PostgREST caps a response at `db-max-rows` (1,000
+  // by default) whatever the client asked for, so an unbounded read of a busy
+  // ledger silently ends after the first page and this `reduce` totals a
+  // FRACTION of it — reporting a balance that is not the child's balance.
+  //
+  // `tests/no-limit-above-the-row-cap.test.ts` was written for exactly this and
+  // could not see it: it looks for `.limit(n)` where n exceeds the cap, and this
+  // read had no `.limit()` at all. Its own header even names the consequence —
+  // "wallet balances totalled from part of the ledger".
+  const { rows: txns, error: transactionError } = await readAll<{ direction: string; amount_cents: number; status: string }>(
+    (from, to) => supabase.from('wallet_transactions')
+      .select('direction, amount_cents, status')
+      .eq('family_id', params.familyId).eq('bucket_id', bucket.id)
+      .order('id').range(from, to),
+  );
   if (transactionError) return { bucketId: bucket.id, available: 0, error: walletFailure(transactionError, 'Could not load the wallet balance.') };
   const available = (txns ?? []).reduce(
     (s, t) => s + (t.status === 'completed' ? (t.direction === 'credit' ? t.amount_cents : -t.amount_cents) : 0), 0,

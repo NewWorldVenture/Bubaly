@@ -8,7 +8,7 @@ import { balanceFromLedger, bucketBalances, type LedgerEntry, type BucketKind } 
 import { WalletActivation } from '@/components/wallet/wallet-activation';
 import { TreasuryView, type TreasuryChild } from '@/components/wallet/treasury-view';
 import { ErrorState } from '@/components/ui/states';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 
 export const metadata: Metadata = { title: 'Family Treasury' };
@@ -16,6 +16,8 @@ export const dynamic = 'force-dynamic';
 
 export default async function WalletTreasuryPage() {
   const tr = await getTranslations();
+  // A server page: the locale comes from the request, as the translator does.
+  const { locale } = await getLocaleContext();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -116,7 +118,7 @@ export default async function WalletTreasuryPage() {
       if (t.direction === 'credit') credits += t.amount_cents;
       else debits += t.amount_cents;
     }
-    trend.push({ label: d.toLocaleDateString('en-US', { month: 'short' }), credits, debits });
+    trend.push({ label: d.toLocaleDateString(locale.code, { month: 'short' }), credits, debits });
   }
 
   return (

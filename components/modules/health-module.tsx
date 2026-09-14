@@ -15,6 +15,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, MetricType } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useConfirm } from '@/components/ui/confirm';
 
 type HealthMetric = Tables<'health_metrics'>;
 type WorkoutLog = Tables<'workout_logs'>;
@@ -105,6 +106,7 @@ function workoutIcon(activity: string) {
 
 export function HealthModule() {
   const tr = useTranslations();
+  const askConfirm = useConfirm();
   const { code: locale } = useLocale();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
@@ -448,6 +450,7 @@ export function HealthModule() {
   }
 
   async function deleteSymptom(s: SymptomLog) {
+    if (!(await askConfirm({ title: tr('health.deleteSymptomQ'), body: tr('confirm.cannotBeUndone') }))) return;
     const sb = createClient();
     const { error: err } = await sb.from('symptom_logs').delete().eq('id', s.id);
     if (err) { toastError(tr('healthModule.failedToDeleteSymptom')); return; }
@@ -523,7 +526,7 @@ export function HealthModule() {
           action={
             <div className="flex gap-2">
               <Button onClick={() => setMetricOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> {tr('health.logMetric')}</Button>
-              <Button onClick={() => setWorkoutOpen(true)} className="btn-secondary"><Dumbbell className="h-4 w-4" /> {tr('health.logWorkout')}</Button>
+              <Button onClick={() => setWorkoutOpen(true)} variant="secondary"><Dumbbell className="h-4 w-4" /> {tr('health.logWorkout')}</Button>
             </div>
           }
         />
@@ -699,7 +702,7 @@ export function HealthModule() {
                 <span className="rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-bold text-rose-300">{tr('healthDashboard.activeCount', { count: activeSymptomCount.toLocaleString(locale) })}</span>
               )}
             </div>
-            <Button onClick={() => setSymptomOpen(true)} className="btn-secondary"><Plus className="h-4 w-4" /> {tr('health.logSymptom')}</Button>
+            <Button onClick={() => setSymptomOpen(true)} variant="secondary"><Plus className="h-4 w-4" /> {tr('health.logSymptom')}</Button>
           </div>
           {sortedSymptoms.length === 0 ? (
             <EmptyState icon={Thermometer} title={tr('health.noSymptomsLogged')} description={tr('healthModule.trackIllnessesAndSymptomsOver')} action={<Button onClick={() => setSymptomOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> {tr('health.logSymptom')}</Button>} />

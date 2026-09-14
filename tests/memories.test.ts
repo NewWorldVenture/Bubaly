@@ -63,10 +63,20 @@ describe('relativeDay', () => {
 describe('relativeTime', () => {
   const now = new Date('2026-07-01T12:00:00Z');
   it('formats sub-day deltas compactly', () => {
-    expect(relativeTime('2026-07-01T11:59:40Z', now)).toBe('just now');
+    // "now" rather than "just now" — Intl's own sub-minute word, which exists in
+    // every locale. The rest is byte-identical to the ladder this replaced.
+    expect(relativeTime('2026-07-01T11:59:40Z', now)).toBe('now');
     expect(relativeTime('2026-07-01T11:30:00Z', now)).toBe('30m ago');
     expect(relativeTime('2026-07-01T09:00:00Z', now)).toBe('3h ago');
     expect(relativeTime('2026-06-29T12:00:00Z', now)).toBe('2d ago');
+  });
+
+  it('follows the reader, and still switches to a dated label after a week', () => {
+    expect(relativeTime('2026-07-01T11:30:00Z', now, 'de-DE')).toBe('vor 30 m');
+    expect(relativeTime('2026-06-29T12:00:00Z', now, 'it-IT')).toBe('2 gg fa');
+    // Past seven days the Memories attribution shows a date carrying the year.
+    expect(relativeTime('2026-06-01T12:00:00Z', now)).toBe('Jun 1, 2026');
+    expect(relativeTime('2026-06-01T12:00:00Z', now, 'de-DE')).toBe('1. Juni 2026');
   });
 });
 

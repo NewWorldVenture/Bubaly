@@ -10,6 +10,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Image as ImageIcon, Plus, X, Check, Sparkles, Loader2, ArrowLeft, Camera } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
+import { familyMediaPath } from '@/lib/storage/family-media';
 import { progressBarA11y } from '@/lib/ui/a11y';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
@@ -91,11 +92,7 @@ export function CreateMemory() {
     let saved = 0;
     for (let i = 0; i < picks.length; i++) {
       const { file } = picks[i];
-      const ext = file.name.split('.').pop() || 'jpg';
-      const unique = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      const path = `${familyId}/photos/${unique}.${ext}`;
+      const path = familyMediaPath(familyId, 'photos', file.name);
       const { data: stored, error: upErr } = await supabase.storage
         .from('family-media')
         .upload(path, file, { upsert: false, cacheControl: '31536000' });

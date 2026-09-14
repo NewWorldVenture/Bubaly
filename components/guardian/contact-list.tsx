@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, Search, Pencil, Trash2, Phone, Mail, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import {
-  TRUST_LEVELS, TRUST_LABELS, TRUST_COLORS, TRUST_BG_COLORS, TRUST_ICONS,
+  TRUST_LEVELS, TRUST_LABEL_KEYS, TRUST_COLORS, TRUST_BG_COLORS, TRUST_ICONS,
   type TrustLevel,
 } from '@/lib/guardian/trust';
 import { upsertContactAction, deleteContactAction, updateContactTrustAction } from '@/app/(app)/guardian/actions';
@@ -121,7 +121,7 @@ export function ContactList({ contacts: initial, members }: { contacts: Contact[
         >
           <option value="all">{tr('contactList.allTrustLevels')}</option>
           {TRUST_LEVELS.map((lvl) => (
-            <option key={lvl} value={lvl}>{TRUST_ICONS[lvl]} {TRUST_LABELS[lvl]}</option>
+            <option key={lvl} value={lvl}>{TRUST_ICONS[lvl]} {tr(TRUST_LABEL_KEYS[lvl])}</option>
           ))}
         </select>
         <button
@@ -140,7 +140,7 @@ export function ContactList({ contacts: initial, members }: { contacts: Contact[
           <div key={lvl} className="rounded-2xl border border-border bg-surface/40 overflow-hidden">
             <div className={cn('flex items-center gap-2 border-b border-border px-4 py-2.5', TRUST_BG_COLORS[lvl])}>
               <span className="text-base">{TRUST_ICONS[lvl]}</span>
-              <span className={cn('text-sm font-semibold', TRUST_COLORS[lvl])}>{TRUST_LABELS[lvl]}</span>
+              <span className={cn('text-sm font-semibold', TRUST_COLORS[lvl])}>{tr(TRUST_LABEL_KEYS[lvl])}</span>
               <span className="ml-auto text-xs text-muted">{group.length}</span>
             </div>
             <div className="divide-y divide-border">
@@ -190,6 +190,7 @@ function ContactRow({
   onDelete: () => void;
   onTrustChange: (t: TrustLevel) => void;
 }) {
+  const tr = useTranslations();
   const [showTrustPicker, setShowTrustPicker] = useState(false);
 
   return (
@@ -217,7 +218,7 @@ function ContactRow({
           onClick={() => setShowTrustPicker(!showTrustPicker)}
           className={cn('flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition', TRUST_BG_COLORS[c.trust_level], TRUST_COLORS[c.trust_level])}
         >
-          {TRUST_ICONS[c.trust_level]} {TRUST_LABELS[c.trust_level]}
+          {TRUST_ICONS[c.trust_level]} {tr(TRUST_LABEL_KEYS[c.trust_level])}
           <ChevronDown className="h-3 w-3" />
         </button>
         {showTrustPicker && (
@@ -231,7 +232,7 @@ function ContactRow({
                   className={cn('flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-surface transition', c.trust_level === lvl && 'bg-brand/10')}
                 >
                   <span>{TRUST_ICONS[lvl]}</span>
-                  <span className={TRUST_COLORS[lvl]}>{TRUST_LABELS[lvl]}</span>
+                  <span className={TRUST_COLORS[lvl]}>{tr(TRUST_LABEL_KEYS[lvl])}</span>
                 </button>
               ))}
             </div>
@@ -239,8 +240,8 @@ function ContactRow({
         )}
       </div>
       {/* Actions */}
-      <button onClick={onEdit} className="rounded-lg p-1.5 text-muted hover:bg-surface hover:text-fg transition"><Pencil className="h-4 w-4" /></button>
-      <button onClick={onDelete} className="rounded-lg p-1.5 text-muted hover:bg-red-500/10 hover:text-red-400 transition"><Trash2 className="h-4 w-4" /></button>
+      <button aria-label={tr('a11y.edit')} onClick={onEdit} className="rounded-lg p-1.5 text-muted hover:bg-surface hover:text-fg transition"><Pencil className="h-4 w-4" /></button>
+      <button aria-label={tr('a11y.delete')} onClick={onDelete} className="rounded-lg p-1.5 text-muted hover:bg-red-500/10 hover:text-red-400 transition"><Trash2 className="h-4 w-4" /></button>
     </div>
   );
 }
@@ -270,9 +271,19 @@ function ContactModal({
 
   function set(k: keyof typeof form, v: string) { setForm(p => ({ ...p, [k]: v })); }
 
+  // Both Guardian editors declare role="dialog" aria-modal="true" and build the
+  // shell by hand rather than through components/ui/modal.tsx, which handles this
+  // — so neither closed on Escape. A keyboard user could open the editor and the
+  // only way out was the Cancel button; the backdrop was mouse-only.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} aria-hidden />
       <div
         role="dialog"
         aria-modal="true"
@@ -297,7 +308,7 @@ function ContactModal({
                     form.trust_level === lvl ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:border-brand/40',
                   )}
                 >
-                  {TRUST_ICONS[lvl]} {TRUST_LABELS[lvl]}
+                  {TRUST_ICONS[lvl]} {tr(TRUST_LABEL_KEYS[lvl])}
                 </button>
               ))}
             </div>

@@ -6,8 +6,10 @@
 // mismatch, then fades in.
 import { useEffect, useState } from 'react';
 import { formatClock } from '@/lib/display/ambient';
+import { useLocale } from '@/components/i18n/locale-provider';
 
 export function AmbientClock({ clock24, seconds }: { clock24: boolean; seconds: boolean }) {
+  const locale = useLocale();
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
     setNow(new Date());
@@ -24,7 +26,7 @@ export function AmbientClock({ clock24, seconds }: { clock24: boolean; seconds: 
         {suffix && <span className="text-xl font-bold text-white/60 sm:text-2xl">{suffix}</span>}
       </div>
       <p className="mt-1.5 text-sm font-medium text-white/60 sm:text-base lg:text-lg">
-        {now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+        {now.toLocaleDateString(locale.code, { weekday: 'long', month: 'long', day: 'numeric' })}
       </p>
     </div>
   );

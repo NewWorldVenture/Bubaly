@@ -78,10 +78,25 @@
   --brand-text: 81 69 205;
   --brand-fg: 255 255 255;
   --brand-soft: 226 224 252;
-  --accent: 233 122 74;
-  --success: 31 165 122;
-  --warning: 197 142 24;
-  --danger: 213 70 70;
+  /* Light-mode semantic colours, darkened to clear WCAG AA (4.5:1) as TEXT.
+     As shipped they were 2.67, 2.91, 2.70 and 4.09 against --bg — the first three
+     failing even the 3:1 floor for large text — across 506 `text-*` sites, 295 of
+     them text-danger. Dark mode was never the problem (7.13 to 11.74), which is
+     how it went unnoticed: the app's own default theme is the dark one.
+
+     Hue and saturation are held and only lightness reduced, and each value is the
+     FIRST that reaches 4.5:1, so this is the smallest change that passes rather
+     than a repalette. The solid fills these tokens also drive are dots, bars and
+     progress fills — graphics, not text backgrounds — and a darker fill is more
+     visible on a light page, not less; where one does carry white text the ratio
+     improves too (danger 4.38 -> 4.84).
+
+     Computed and asserted in tests/brand-contrast-contract.test.ts, which now
+     measures the ratio instead of only checking that a --brand-text token exists. */
+  --accent: 194 75 24;
+  --success: 24 129 95;
+  --warning: 147 106 18;
+  --danger: 210 55 55;
   --info: 37 99 235;
   --glass: 16 22 40;
   --glass-alpha: 0.03;
@@ -155,6 +170,23 @@ body::before {
     radial-gradient(50rem 50rem at -10% 110%, rgb(var(--accent) / 0.10), transparent 55%);
 }
 
+@layer utilities {
+  /* Used at 13 sites — horizontal tab strips and scrolling rows — and defined
+     nowhere, so every one of them showed a scrollbar under the tabs. The scroll
+     itself stays: `overflow-x-auto` is beside it at every call site, and only the
+     bar is hidden. Found by compiling the stylesheet and asking which class
+     tokens in the app emit no rule at all; the same sweep found `bg-card`,
+     `prose-family`, `btn-primary` and five colour opacities (/12 and /8) that are
+     not on the scale, all of which rendered nothing. */
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 @layer components {
   /* Glassmorphism surface — the core visual primitive. */
   .glass {
@@ -176,7 +208,21 @@ body::before {
     background-color: rgb(var(--elevated));
     border: 1px solid rgb(var(--border));
   }
-  .focus-ring {
+  /* The focus indicator, and ONLY on focus.
+     This was declared without a selector of its own, which compiles to
+     `outline: 2px solid transparent` plus an unconditional ring: the ring was
+     painted on every such element at all times (so it said nothing), and the
+     transparent outline is author-origin and therefore beat the browser's own
+     :focus-visible outline (so the native indicator was gone too). 202 of 218
+     call sites are bare `focus-ring` — including components/ui/input.tsx, which
+     is every Input, Textarea and Select in the product. WCAG 2.1 AA 2.4.7.
+     Scoping the DECLARATION fixes all of them without touching a call site, and
+     Tailwind hoists the pseudo-class onto the two component classes that
+     `@apply focus-ring` (.btn-cta, .btn-inline) as well. The 16 sites that write
+     `focus-visible:focus-ring` compile to `:focus-visible:focus-visible`, which
+     still matches. Guarded by tests/the-focus-ring-only-shows-on-focus.test.ts,
+     which compiles this file and asserts on the emitted CSS. */
+  .focus-ring:focus-visible {
     @apply outline-none ring-2 ring-brand/60 ring-offset-2 ring-offset-bg;
   }
   .gradient-text {

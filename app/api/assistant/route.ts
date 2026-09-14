@@ -6,6 +6,7 @@ import { readPresentedToken } from '@/lib/assistant/link-token';
 import { classifyAssistantUtterance } from '@/lib/assistant/intent';
 import { ERROR_SPEECH } from '@/lib/assistant/answers';
 import { answerAssistant, recordAssistantEvent, resolveAssistantLink } from '@/lib/assistant/service';
+import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 
 export const runtime = 'nodejs';
 
@@ -27,9 +28,17 @@ const MAX_UTTERANCE_CHARS = 500;
 // in 0034. It therefore runs on the service client and scopes everything to the
 // family the token resolved to — no identifier from the request is trusted.
 export async function POST(req: NextRequest) {
-  // Rate limited by IP BEFORE the token lookup, so an attacker cannot use this
-  // endpoint to test guessed tokens at speed.
-  const limited = rateLimit(`assistant:${clientIp(req.headers)}`, { limit: 30, windowMs: 60_000 });
+  // Rate limited by IP before the token lookup — durably, across instances.
+  //
+  // It used to say this stopped an attacker testing guessed tokens at speed, and
+  // that was wrong twice over. The limiter was a module-scope Map, so on a
+  // serverless deployment "30 per minute" was 30 per minute PER INSTANCE, and
+  // the count of instances is the caller's to raise by sending in parallel. And
+  // token guessing is not what this defends: a link token is 32 CSPRNG bytes
+  // stored as a SHA-256 (lib/assistant/link-token.ts), so the keyspace is the
+  // defence. What the limit is actually for is COST — every accepted POST runs
+  // answerAssistant, which reads the family and calls a model.
+  const limited = await enforceRequestRateLimit(createServiceClient(), `assistant:${clientIp(req.headers)}`, { limit: 30, windowMs: 60_000 });
   if (!limited.ok) {
     return NextResponse.json(
       { error: 'Too many requests' },

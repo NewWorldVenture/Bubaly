@@ -68,7 +68,14 @@ export async function loadTrustInputs(supabase: DB, familyId: string): Promise<{
 }> {
   const nowIso = new Date().toISOString();
   const [{ data: policies }, { data: grants }, { data: dels }, { data: emergencies }] = await settleAll([
-    supabase.from('trust_policies').select('*').eq('family_id', familyId).eq('enabled', true),
+    // Ordered, because the engine breaks priority ties by list position.
+    // `Array.prototype.sort` is stable, so the highest-priority match the engine
+    // picks is whichever equal-priority row arrived first — and a select with no
+    // ORDER BY has no defined row order at all. Two policies that tie could
+    // therefore swap which one governs between two identical requests. Newest
+    // first on the tie: a policy written later is the family's more recent word.
+    supabase.from('trust_policies').select('*').eq('family_id', familyId).eq('enabled', true)
+      .order('priority', { ascending: false }).order('created_at', { ascending: false }),
     supabase.from('permission_grants').select('member_id, domain, capability, effect').eq('family_id', familyId),
     supabase.from('trust_delegations').select('to_member_id, domains, starts_at, expires_at, revoked_at')
       .eq('family_id', familyId).is('revoked_at', null).gt('expires_at', nowIso),

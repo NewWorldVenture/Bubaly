@@ -7,6 +7,7 @@
 // quote comparison is arithmetic, not opinion; the AI adds the scope draft.
 
 import type { HomeProjectKind, HomeProjectPriority, HomeProjectStatus, ProjectQuoteStatus } from '@/lib/database.types';
+import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
 
 export const PROJECT_KINDS: { value: HomeProjectKind; label: string; emoji: string }[] = [
   { value: 'repair', label: 'Repair', emoji: '🔧' }, { value: 'renovation', label: 'Renovation', emoji: '🏗️' },
@@ -219,4 +220,16 @@ export function projectsSummary(projects: ProjectLike[], materials: MaterialLike
   return { active: active.length, ideas: live.length - active.length, budgetCents, forecastCents, over, overdue, dueSoon, quotesWaiting, text };
 }
 
-export const money = (cents: number | null | undefined) => cents === null || cents === undefined ? '—' : `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+/**
+ * Whole dollars for the reader.
+ *
+ * The "$" used to be prefixed BY HAND with only the digits localised, which is a
+ * defect a locale swap alone would not fix: handed a European locale that shape
+ * renders "$2.767" — the American symbol position with German separators, a
+ * notation nobody writes. `style: 'currency'` puts the symbol where the locale puts
+ * it. Six modules carried the same line; this is one of them.
+ */
+export const money = (cents: number | null | undefined, locale: LocaleCode = DEFAULT_LOCALE) =>
+  cents === null || cents === undefined
+    ? '—'
+    : new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(cents / 100);

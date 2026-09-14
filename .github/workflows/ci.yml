@@ -44,6 +44,12 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # scripts/i18n-gate.mjs says of itself: "Nothing else in the build would
+      # notice, so this does." It was never wired in, so for every surface it
+      # declares translated the promise was checked by nobody.
+      - name: i18n gate (surfaces declared translated)
+        run: npm run i18n:gate
+
       - name: Unit tests
         run: npm test
 

@@ -24,6 +24,7 @@ import {
 } from '@/lib/medications/adherence';
 import type { Tables, DoseStatus } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Medication = Tables<'medications'>;
 type Schedule = Tables<'medication_schedules'>;
@@ -72,6 +73,7 @@ function AdherenceRing({ rate, size = 96 }: { rate: number | null; size?: number
 
 export function MedicationsModule() {
   const t = useTranslations();
+  const askConfirm = useConfirm();
   const { familyId, userId, members, role } = useApp();
   const { success, error: toastError } = useToast();
   const canEdit = isManager(role);
@@ -211,7 +213,7 @@ export function MedicationsModule() {
   }
 
   async function deleteMed(m: Medication) {
-    if (!confirm(`Delete ${m.name}? This also removes its schedules and dose history.`)) return;
+    if (!(await askConfirm({ title: t('confirm.deleteNamed', { name: m.name }), body: t('medications.deleteMedicationBody') }))) return;
     const sb = createClient();
     const { error: err } = await sb.from('medications').delete().eq('id', m.id);
     if (err) { toastError(describeDbError(err)); return; }
@@ -247,6 +249,7 @@ export function MedicationsModule() {
   }
 
   async function deleteSchedule(id: string) {
+    if (!(await askConfirm({ title: t('medications.deleteScheduleQ'), body: t('medications.deleteScheduleBody') }))) return;
     const sb = createClient();
     const { error: err } = await sb.from('medication_schedules').delete().eq('id', id);
     if (err) toastError(describeDbError(err));

@@ -5,6 +5,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { loadMoneyTimeline } from '@/lib/finance/timeline-load';
 import { insightDedupeKey, type TimelineInsight } from '@/lib/finance/timeline';
+import { getLocaleContext } from '@/lib/i18n/server';
 
 const PATH = '/dashboard/money-timeline';
 
@@ -41,7 +42,13 @@ export async function setMoneyInsightStatusAction(input: {
 export async function syncMoneyInsightsAction(): Promise<void> {
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const timeline = await loadMoneyTimeline(supabase, ctx.active.familyId);
+  // The persisted title/detail are a record of what was surfaced, not what the
+  // page renders — money-timeline/page.tsx reads back only dedupe_key and
+  // status and re-derives the copy for its own reader. So this formats in the
+  // language of whoever pressed Refresh, which is the right owner for a record
+  // and deliberately not a per-member choice: one row serves the whole family.
+  const { locale } = await getLocaleContext();
+  const timeline = await loadMoneyTimeline(supabase, ctx.active.familyId, new Date(), { locale: locale.code });
   for (const i of timeline.insights) {
     await supabase.from('money_timeline_insights').upsert(
       {

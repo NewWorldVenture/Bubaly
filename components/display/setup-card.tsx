@@ -50,7 +50,7 @@ export function DisplaySetupCard({
   return (
     <section
       aria-label={t('displaySetupCard.setUpThisTablet')}
-      className="relative mt-4 shrink-0 rounded-3xl border border-white/12 bg-white/[0.07] p-5 backdrop-blur-xl"
+      className="relative mt-4 shrink-0 rounded-3xl border border-white/10 bg-white/[0.07] p-5 backdrop-blur-xl"
     >
       <button
         type="button"

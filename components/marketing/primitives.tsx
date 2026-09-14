@@ -37,11 +37,11 @@ export function IconOrb({
   className?: string;
 }) {
   const tones = {
-    violet: 'text-violet-400 bg-violet-500/12',
-    green: 'text-emerald-400 bg-emerald-500/12',
-    orange: 'text-orange-400 bg-orange-500/12',
-    blue: 'text-blue-400 bg-blue-500/12',
-    pink: 'text-rose-400 bg-rose-500/12',
+    violet: 'text-violet-400 bg-violet-500/10',
+    green: 'text-emerald-400 bg-emerald-500/10',
+    orange: 'text-orange-400 bg-orange-500/10',
+    blue: 'text-blue-400 bg-blue-500/10',
+    pink: 'text-rose-400 bg-rose-500/10',
   };
 
   return (

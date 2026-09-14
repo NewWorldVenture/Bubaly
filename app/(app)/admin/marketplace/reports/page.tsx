@@ -30,7 +30,7 @@ export const dynamic = 'force-dynamic';
 const STATUS_CHIP: Record<string, string> = {
   open: 'bg-rose-500/15 text-rose-600 dark:text-rose-400',
   reviewing: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
-  actioned: 'bg-emerald-500/12 text-emerald-600 dark:text-emerald-400',
+  actioned: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
   dismissed: 'bg-border/60 text-muted',
 };
 

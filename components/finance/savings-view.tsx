@@ -13,14 +13,18 @@ import { Modal } from '@/components/ui/modal';
 import { Input, Field } from '@/components/ui/input';
 import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import type { Tables } from '@/lib/database.types';
-import { usd, pct, fmtDueDate } from '@/lib/finance/hub';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { usd as usdIn, pct, fmtDueDate as fmtDueDateIn } from '@/lib/finance/hub';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type Goal = Tables<'savings_goals'>;
 const EMOJIS = ['🎯', '🏖️', '🚗', '🏠', '🎓', '🎁', '💍', '🎄', '💻', '⚽'];
 
 export function SavingsView() {
   const t = useTranslations();
+  // Money and dates follow the reader; the currency stays the money's own.
+  const locale = useLocale();
+  const usd = (amount: number) => usdIn(amount, locale.code);
+  const fmtDueDate = (iso: string) => fmtDueDateIn(iso, locale.code);
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 

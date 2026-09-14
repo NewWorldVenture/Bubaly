@@ -85,7 +85,7 @@ export default async function MarketplaceStorePage() {
                 )}
                 <span className={cn(
                   'rounded-full px-2 py-0.5 text-[10px] font-medium',
-                  l.status === 'available' ? 'bg-emerald-500/12 text-emerald-600 dark:text-emerald-400' : 'bg-border/60 text-muted',
+                  l.status === 'available' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-border/60 text-muted',
                 )}>{l.status}</span>
               </li>
             ))}

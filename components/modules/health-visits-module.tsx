@@ -143,8 +143,8 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
                   </div>
                   {who && <Avatar name={who.display_name} color={who.color} size={28} />}
                   <div className="flex shrink-0 gap-1">
-                    <button onClick={() => edit(v)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-4 w-4" /></button>
-                    <button onClick={() => remove(v.id)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Trash2 className="h-4 w-4" /></button>
+                    <button aria-label={t('a11y.edit')} onClick={() => edit(v)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-4 w-4" /></button>
+                    <button aria-label={t('a11y.delete')} onClick={() => remove(v.id)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Trash2 className="h-4 w-4" /></button>
                   </div>
                 </div>
               </li>

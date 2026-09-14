@@ -12,7 +12,8 @@ import { Button } from '@/components/ui/button';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { RADIUS_OPTIONS, DEFAULT_RADIUS, DEFAULT_DAYS, categoryMeta, priceRange, isValidZip, PLAN_STATUSES } from '@/lib/weekend/meta';
 import type { Tables, WeekendPlanStatus, WeekendFeedKind } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 type Event = Tables<'weekend_events'>;
 type Plan = Tables<'weekend_plans'>;
@@ -27,10 +28,13 @@ function sourceLabel(source: string): string {
 }
 
 const dayKey = (iso: string) => iso.slice(0, 10);
-const fmtDay = (iso: string) => new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
-const fmtTime = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : 'Time TBA');
+const fmtDayIn = (locale: LocaleCode) => (iso: string) => new Date(iso + 'T00:00:00').toLocaleDateString(locale, { weekday: 'long', month: 'short', day: 'numeric' });
+const fmtTimeIn = (locale: LocaleCode) => (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' }) : 'Time TBA');
 
 export function WeekendModule() {
+  const locale = useLocale();
+  const fmtDay = fmtDayIn(locale.code);
+  const fmtTime = fmtTimeIn(locale.code);
   const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
@@ -171,7 +175,7 @@ export function WeekendModule() {
                     <span className="rounded bg-elevated px-1.5 py-0.5 text-[10px] uppercase text-muted">{f.kind}</span>
                     {f.last_status && <span className={`text-[11px] ${f.last_status === 'ok' ? 'text-emerald-400' : 'text-rose-400'}`}>{f.last_status === 'ok' ? `✓ ${f.last_count} found` : `⚠ ${f.last_status}`}</span>}
                     <a href={f.url} target="_blank" rel="noopener noreferrer" className="truncate text-xs text-muted hover:text-brand-text">{f.url}</a>
-                    <button onClick={() => removeFeed(f.id)} className="ml-auto text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
+                    <button aria-label={t('a11y.delete')} onClick={() => removeFeed(f.id)} className="ml-auto text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
                   </li>
                 ))}
               </ul>
@@ -225,7 +229,7 @@ export function WeekendModule() {
                 {dayEvents.map((e) => {
                   const cat = categoryMeta(e.category);
                   const saved = planByEvent.get(e.id);
-                  const price = priceRange(e.price_min_cents, e.price_max_cents);
+                  const price = priceRange(e.price_min_cents, e.price_max_cents, locale.code, t);
                   return (
                     <div key={e.id} className="flex flex-col overflow-hidden rounded-2xl border border-border bg-surface/40">
                       {e.image_url

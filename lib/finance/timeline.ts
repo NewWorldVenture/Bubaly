@@ -11,6 +11,8 @@
 //
 // Amounts are DOLLARS (numeric), matching the finance tables (see hub.ts).
 
+import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
+
 export interface TimelineBill {
   name: string;
   amount: number;
@@ -277,6 +279,12 @@ export interface BuildTimelineInput {
   horizonWeeks?: number;         // default 12
   buffer?: number;               // low-balance alarm threshold (default 200)
   now?: Date;
+  /**
+   * The reader's locale, used for the amounts and dates the insight copy holds.
+   * Optional because the forecast maths does not depend on it — a caller with no
+   * reader (a test, a cron) leaves it off and gets DEFAULT_LOCALE.
+   */
+  locale?: LocaleCode;
 }
 
 /**
@@ -288,6 +296,9 @@ export function buildCashflowTimeline(input: BuildTimelineInput): CashflowTimeli
   const buffer = input.buffer ?? DEFAULT_BUFFER;
   const startingBalance = round2(input.startingBalance);
   const today = startOfDay(now);
+  const locale = input.locale ?? DEFAULT_LOCALE;
+  const fmtMoney = (n: number) => money(n, locale);
+  const fmtWeek = (w: string) => pretty(w, locale);
 
   const firstWeek = isoWeekStart(now);
   // The LAST day the horizon covers — the final week's Sunday, not the Monday
@@ -464,8 +475,8 @@ export function buildCashflowTimeline(input: BuildTimelineInput): CashflowTimeli
       amount: round2(lowestBalance),
       title: negative ? 'Projected shortfall ahead' : 'Balance runs thin',
       detail: negative
-        ? `At the current pace your balance dips to ${money(lowestBalance)} the week of ${pretty(lowestBalanceWeek)}. Move money in or shift a bill before then.`
-        : `Your balance drops to ${money(lowestBalance)} the week of ${pretty(lowestBalanceWeek)} — below your ${money(buffer)} buffer. Keep a cushion or delay a non-urgent expense.`,
+        ? `At the current pace your balance dips to ${fmtMoney(lowestBalance)} the week of ${fmtWeek(lowestBalanceWeek)}. Move money in or shift a bill before then.`
+        : `Your balance drops to ${fmtMoney(lowestBalance)} the week of ${fmtWeek(lowestBalanceWeek)} — below your ${fmtMoney(buffer)} buffer. Keep a cushion or delay a non-urgent expense.`,
     });
   }
 
@@ -479,7 +490,7 @@ export function buildCashflowTimeline(input: BuildTimelineInput): CashflowTimeli
       weekStart: heaviestWeek.weekStart,
       amount: heaviestWeek.outflow,
       title: 'A heavy money week is coming',
-      detail: `${money(heaviestWeek.outflow)} is due the week of ${pretty(heaviestWeek.weekStart)} across ${heaviestWeek.moments.length} item${heaviestWeek.moments.length === 1 ? '' : 's'}.${withEvents} Spreading a set-aside now smooths it.`,
+      detail: `${fmtMoney(heaviestWeek.outflow)} is due the week of ${fmtWeek(heaviestWeek.weekStart)} across ${heaviestWeek.moments.length} item${heaviestWeek.moments.length === 1 ? '' : 's'}.${withEvents} Spreading a set-aside now smooths it.`,
     });
   }
 
@@ -489,8 +500,8 @@ export function buildCashflowTimeline(input: BuildTimelineInput): CashflowTimeli
       severity: g.perWeek > avgWeekly && avgWeekly > 0 ? 'watch' : 'info',
       weekStart: isoWeekStart(parseDate(g.date)),
       amount: g.remaining,
-      title: `“${g.name}” needs ${money(g.perWeek)}/wk`,
-      detail: `To hit ${g.name} by ${pretty(g.date)} you need ${money(g.remaining)} more — about ${money(g.perWeek)} a week for ${g.weeksLeft} week${g.weeksLeft === 1 ? '' : 's'}. Automating it makes the goal quietly happen.`,
+      title: `“${g.name}” needs ${fmtMoney(g.perWeek)}/wk`,
+      detail: `To hit ${g.name} by ${fmtWeek(g.date)} you need ${fmtMoney(g.remaining)} more — about ${fmtMoney(g.perWeek)} a week for ${g.weeksLeft} week${g.weeksLeft === 1 ? '' : 's'}. Automating it makes the goal quietly happen.`,
     });
   }
 
@@ -500,8 +511,8 @@ export function buildCashflowTimeline(input: BuildTimelineInput): CashflowTimeli
       severity: 'info',
       weekStart: null,
       amount: monthlyRecurring,
-      title: `${money(monthlyRecurring)}/mo in recurring bills`,
-      detail: `Recurring commitments run about ${money(monthlyRecurring)} a month (${money(round2(monthlyRecurring * 12))}/yr). Review anything you no longer use to free up cash for goals.`,
+      title: `${fmtMoney(monthlyRecurring)}/mo in recurring bills`,
+      detail: `Recurring commitments run about ${fmtMoney(monthlyRecurring)} a month (${fmtMoney(round2(monthlyRecurring * 12))}/yr). Review anything you no longer use to free up cash for goals.`,
     });
   }
 
@@ -515,8 +526,8 @@ export function buildCashflowTimeline(input: BuildTimelineInput): CashflowTimeli
         severity: 'info',
         weekStart: heaviestWeek.weekStart,
         amount: setAside,
-        title: `Set aside ${money(setAside)}/wk to smooth it`,
-        detail: `Putting ${money(setAside)} aside each week until ${pretty(heaviestWeek.weekStart)} covers the spike without a scramble.`,
+        title: `Set aside ${fmtMoney(setAside)}/wk to smooth it`,
+        detail: `Putting ${fmtMoney(setAside)} aside each week until ${fmtWeek(heaviestWeek.weekStart)} covers the spike without a scramble.`,
       });
     }
   }
@@ -634,14 +645,23 @@ export function assessAffordability(input: BuildTimelineInput, scenario: Timelin
 }
 
 // ── Presentation helpers (also used by the module for consistency) ───────────
-export function money(n: number): string {
+/**
+ * Whole dollars for the reader. The locale is the reader's; the currency stays
+ * the money's own — a family's forecast is in dollars whatever they read.
+ */
+export function money(n: number, locale: LocaleCode = DEFAULT_LOCALE): string {
   const v = Math.round(n);
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
+  return new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
 }
 
-export function pretty(ymdStr: string): string {
+/**
+ * A week label. `timeZone: 'UTC'` is load-bearing and not a locale concern:
+ * parseDate() builds the date at UTC midnight, so rendering it in the viewer's
+ * zone would shift a week-start back a day west of Greenwich.
+ */
+export function pretty(ymdStr: string, locale: LocaleCode = DEFAULT_LOCALE): string {
   const d = parseDate(ymdStr);
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+  return d.toLocaleDateString(locale, { month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 
 function listPhrase(items: string[]): string {

@@ -18,6 +18,7 @@ import { extractBearerToken, getBearerUserContext } from '@/lib/supabase/bearer'
 import { ensureActiveFamily } from '@/lib/server/ensure-family';
 import { describeAIError, isAIConfigured } from '@/lib/ai/provider';
 import { rateLimit } from '@/lib/server/rate-limit';
+import { AI_ASSISTANT_FEATURE_KEY, accessDeniedResponse, assertAIAccess } from '@/lib/server/ai-access';
 import { rateLimitDb } from '@/lib/server/rate-limit-db';
 import { parseAIChatRequest } from '@/lib/ai/chat-request';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
@@ -117,6 +118,31 @@ export async function POST(req: NextRequest) {
     if (!limited.ok) return rejected(limited.retryAfter);
     const durable = await rateLimitDb(supabase, key, AI_RATE_LIMIT);
     if (!durable.ok) return rejected(durable.retryAfter);
+
+    // The plan gate, on the side that can enforce it.
+    //
+    // It used to live only on the PAGE — `requireFeature('/dashboard/assistant')`
+    // — while this route, which is what actually spends money and is what the
+    // Expo app calls with a bearer token, checked nothing beyond the rate limit
+    // above. So the gate was backwards on both halves: a free family was
+    // refused the screen its plan includes, and any signed-in member could file
+    // unlimited turns through here regardless of plan. The page comment has
+    // always said "the monthly quota is enforced at the request layer"; this is
+    // the request layer.
+    //
+    // Per-family and per-calendar-month, so it cannot be sidestepped by
+    // switching member or device the way the per-user rate limit above can.
+    let access;
+    try {
+      access = await assertAIAccess(ctx, { db: supabase, featureKey: AI_ASSISTANT_FEATURE_KEY, label: 'The AI assistant' });
+    } catch (error) {
+      // assertAIAccess throws only when the family's plan cannot be read. An
+      // unreadable plan is not an unentitled family, so answer 503 rather than
+      // refusing someone who has paid.
+      console.error('[ai] entitlement check failed', error);
+      return NextResponse.json({ error: tr('ai.accountContextIsTemporarilyUnavailable'), code: 'unavailable' }, { status: 503 });
+    }
+    if (!access.ok) return accessDeniedResponse(access);
 
     const boundedBody = await readBoundedRequestJson(req, MAX_PROVIDER_JSON_BYTES);
     if (!boundedBody.ok) {

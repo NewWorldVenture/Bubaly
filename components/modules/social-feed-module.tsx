@@ -23,6 +23,7 @@ import {
   addByUrlAction,
 } from '@/app/(app)/dashboard/social-feed/actions';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 
 export type FeedSource = { id: string; platform: string; displayName: string; handle: string | null; accountCount: number; category: string };
 export type FeedItem = {
@@ -31,15 +32,6 @@ export type FeedItem = {
   kind: 'post' | 'video' | 'photo' | 'link'; durationLabel: string | null; category: string;
   verified: boolean; isFavorite: boolean; isRead: boolean; postedAt: string;
 };
-
-function timeAgo(iso: string): string {
-  const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
-  if (s < 60) return 'now';
-  const m = s / 60; if (m < 60) return `${Math.floor(m)}m`;
-  const h = m / 60; if (h < 24) return `${Math.floor(h)}h`;
-  const d = h / 24; if (d < 7) return `${Math.floor(d)}d`;
-  return `${Math.floor(d / 7)}w`;
-}
 
 /** Brand-tinted platform glyph (initial in a tinted ring — no brand SVGs needed). */
 function PlatformGlyph({ platform, size = 'md' }: { platform: string; size?: 'sm' | 'md' }) {
@@ -71,6 +63,8 @@ const QUICK: { key: QuickFilter; label: string; icon: typeof Star }[] = [
 
 export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; items: FeedItem[] }) {
   const tr = useTranslations();
+  // One time-ago, and it follows the reader (lib/utils/format.ts fmtTimeAgo).
+  const { fmtTimeAgo } = useFormat();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [tab, setTab] = useState<FeedTab>('all');
@@ -256,7 +250,7 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
                     <PlatformGlyph platform={i.platform} size="sm" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm">{i.authorName}</p>
-                      <p className="truncate text-xs text-muted">{platformLabel(i.platform)} · {timeAgo(i.postedAt)} ago</p>
+                      <p className="truncate text-xs text-muted">{platformLabel(i.platform)} · {fmtTimeAgo(i.postedAt)}</p>
                     </div>
                   </div>
                 ))}
@@ -294,6 +288,8 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
 
 function FeedCard({ item, busy, onFavorite, onOpen }: { item: FeedItem; busy: string | null; onFavorite: () => void; onOpen: () => void }) {
   const tr = useTranslations();
+  // One time-ago, and it follows the reader (lib/utils/format.ts fmtTimeAgo).
+  const { fmtTimeAgo } = useFormat();
   const m = platformMeta(item.platform);
   const media = item.mediaUrls.slice(0, 3);
   const hasVideo = item.kind === 'video';
@@ -306,7 +302,7 @@ function FeedCard({ item, busy, onFavorite, onOpen }: { item: FeedItem; busy: st
             <p className="flex items-center gap-1 text-sm font-semibold">
               {item.authorName}
               {item.verified && <BadgeCheck className="h-3.5 w-3.5 text-sky-500" />}
-              <span className="font-normal text-muted">· {timeAgo(item.postedAt)}</span>
+              <span className="font-normal text-muted">· {fmtTimeAgo(item.postedAt)}</span>
             </p>
             <p className={cn('text-xs', m.tint)}>{m.label}{item.authorHandle ? ` · ${item.authorHandle}` : ''}</p>
           </div>

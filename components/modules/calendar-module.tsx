@@ -25,7 +25,8 @@ import { FindTimeModal } from './find-time-modal';
 import { RoutinesPanel } from './routines-panel';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { localDayKey, localDayKeyOf, shiftLocalDay } from '@/lib/time/local-day';
 
 type Event = Tables<'calendar_events'>;
 
@@ -111,6 +112,8 @@ function eventHeight(e: Event): number {
 
 // Mini calendar for the right sidebar
 function MiniCalendar({ current, onSelect }: { current: Date; onSelect: (d: Date) => void }) {
+  const locale = useLocale();
+  const tr = useTranslations();
   const [month, setMonth] = useState(() => new Date(current.getFullYear(), current.getMonth(), 1));
   const today = new Date(); today.setHours(0, 0, 0, 0);
 
@@ -126,10 +129,10 @@ function MiniCalendar({ current, onSelect }: { current: Date; onSelect: (d: Date
   return (
     <div className="w-full">
       <div className="mb-3 flex items-center justify-between">
-        <span className="text-sm font-semibold">{month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
+        <span className="text-sm font-semibold">{month.toLocaleDateString(locale.code, { month: 'long', year: 'numeric' })}</span>
         <div className="flex gap-1">
-          <button onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))} className="rounded p-1 hover:bg-elevated"><ChevronLeft className="h-3.5 w-3.5" /></button>
-          <button onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))} className="rounded p-1 hover:bg-elevated"><ChevronRight className="h-3.5 w-3.5" /></button>
+          <button aria-label={tr('a11y.previous')} onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))} className="rounded p-1 hover:bg-elevated"><ChevronLeft className="h-3.5 w-3.5" /></button>
+          <button aria-label={tr('a11y.next')} onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))} className="rounded p-1 hover:bg-elevated"><ChevronRight className="h-3.5 w-3.5" /></button>
         </div>
       </div>
       <div className="grid grid-cols-7 gap-0.5 text-center">
@@ -170,7 +173,7 @@ function MonthGrid({ gridDays, monthAnchor, eventsByDay, todayStr, onSelect }: {
       </div>
       <div className="grid flex-1 auto-rows-fr grid-cols-7">
         {gridDays.map((d, i) => {
-          const dStr = d.toISOString().slice(0, 10);
+          const dStr = localDayKey(d);
           const inMonth = d.getMonth() === monthAnchor.getMonth();
           const isToday = dStr === todayStr;
           const evs = eventsByDay.get(dStr) ?? [];
@@ -196,11 +199,26 @@ function MonthGrid({ gridDays, monthAnchor, eventsByDay, todayStr, onSelect }: {
 }
 
 export function CalendarModule() {
+  const locale = useLocale();
   const tr = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const [open, setOpen] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
   const [selected, setSelected] = useState<Event | null>(null);
+
+  // The event chip is a <div> in all five views and was openable with a mouse
+  // and by no other means: not focusable, so Tab never reached it and Enter
+  // never fired. WCAG 2.1.1. It cannot become a real <button> without
+  // restyling five layouts, so it takes the button role, a tab stop and this
+  // handler — one copy rather than five, because five copies is five chances
+  // for one view to drift.
+  //
+  // No aria-label: role="button" takes its name from its contents, and the chip
+  // already shows the title and the time. A fixed label would replace that with
+  // something less useful and break WCAG 2.5.3 Label in Name.
+  const openOnKey = (ev: React.KeyboardEvent, event: Event) => {
+    if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); setSelected(event); }
+  };
   const [editing, setEditing] = useState<Event | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
   const [filterCategory, setFilterCategory] = useState<string>('all');
@@ -306,7 +324,7 @@ export function CalendarModule() {
   const timedByDay = useMemo(() => {
     const map = new Map<string, Event[]>();
     for (const e of timed) {
-      const key = new Date(e.starts_at).toISOString().slice(0, 10);
+      const key = localDayKeyOf(e.starts_at) ?? '';
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(e);
     }
@@ -316,7 +334,7 @@ export function CalendarModule() {
   const allDayByDay = useMemo(() => {
     const map = new Map<string, Event[]>();
     for (const e of allDay) {
-      const key = new Date(e.starts_at).toISOString().slice(0, 10);
+      const key = localDayKeyOf(e.starts_at) ?? '';
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(e);
     }
@@ -327,7 +345,7 @@ export function CalendarModule() {
   const eventsByDay = useMemo(() => {
     const map = new Map<string, Event[]>();
     for (const e of filtered) {
-      const key = new Date(e.starts_at).toISOString().slice(0, 10);
+      const key = localDayKeyOf(e.starts_at) ?? '';
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(e);
     }
@@ -348,7 +366,7 @@ export function CalendarModule() {
   const upcomingByDay = useMemo(() => {
     const map = new Map<string, Event[]>();
     for (const e of upcoming) {
-      const key = new Date(e.starts_at).toISOString().slice(0, 10);
+      const key = localDayKeyOf(e.starts_at) ?? '';
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(e);
     }
@@ -402,7 +420,7 @@ export function CalendarModule() {
     setMobileDayIndex((new Date().getDay() + 6) % 7);
   }
 
-  const todayStr = today.toISOString().slice(0, 10);
+  const todayStr = localDayKey(today);
   const nowMins = new Date().getHours() * 60 + new Date().getMinutes();
   const nowTop = (nowMins - 6 * 60) * (HOUR_HEIGHT / 60);
 
@@ -411,7 +429,7 @@ export function CalendarModule() {
 
   // Mobile day data
   const mobileDay = days[mobileDayIndex];
-  const mobileDayStr = mobileDay?.toISOString().slice(0, 10) ?? '';
+  const mobileDayStr = mobileDay ? localDayKey(mobileDay) : '';
   const mobileDayTimed = timedByDay.get(mobileDayStr) ?? [];
   const mobileDayAllDay = allDayByDay.get(mobileDayStr) ?? [];
 
@@ -434,7 +452,7 @@ export function CalendarModule() {
         };
       })
     : gridColumns.map((d) => {
-        const dStr = d.toISOString().slice(0, 10);
+        const dStr = localDayKey(d);
         return {
           key: dStr,
           date: d,
@@ -449,11 +467,11 @@ export function CalendarModule() {
   if (error) return <ErrorState message={error} onRetry={refresh} />;
 
   const dateLabel = view === 'month'
-    ? monthAnchor.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+    ? monthAnchor.toLocaleDateString(locale.code, { month: 'long', year: 'numeric' })
     : view === 'day' || splitActive
       // Split view compares members on one day, so label the focused day, not the week span.
-      ? days[mobileDayIndex].toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })
-      : `${days[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${days[6].toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+      ? days[mobileDayIndex].toLocaleDateString(locale.code, { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })
+      : `${days[0].toLocaleDateString(locale.code, { month: 'short', day: 'numeric' })} – ${days[6].toLocaleDateString(locale.code, { month: 'short', day: 'numeric', year: 'numeric' })}`;
 
   // "Calendars" list: every member + a synthetic whole-family entry.
   const calendarRows = [
@@ -595,18 +613,18 @@ export function CalendarModule() {
         <div className="flex flex-1 flex-col overflow-y-auto md:hidden">
           {/* Mobile day selector */}
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
-            <button onClick={() => setMobileDayIndex(i => (i - 1 + 7) % 7)} className="rounded-lg p-1.5 hover:bg-elevated transition">
+            <button aria-label={tr('a11y.previous')} onClick={() => setMobileDayIndex(i => (i - 1 + 7) % 7)} className="rounded-lg p-1.5 hover:bg-elevated transition">
               <ChevronLeft className="h-5 w-5" />
             </button>
             <div className="text-center">
               <div className="text-xs font-semibold uppercase tracking-wide text-muted">
-                {mobileDay.toLocaleDateString('en-US', { weekday: 'long' })}
+                {mobileDay.toLocaleDateString(locale.code, { weekday: 'long' })}
               </div>
               <div className={cn('text-lg font-bold', mobileDayStr === todayStr ? 'text-brand-text' : 'text-fg')}>
-                {mobileDay.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                {mobileDay.toLocaleDateString(locale.code, { month: 'short', day: 'numeric' })}
               </div>
             </div>
-            <button onClick={() => setMobileDayIndex(i => (i + 1) % 7)} className="rounded-lg p-1.5 hover:bg-elevated transition">
+            <button aria-label={tr('a11y.next')} onClick={() => setMobileDayIndex(i => (i + 1) % 7)} className="rounded-lg p-1.5 hover:bg-elevated transition">
               <ChevronRight className="h-5 w-5" />
             </button>
           </div>
@@ -615,7 +633,7 @@ export function CalendarModule() {
           <div className="flex-1 space-y-1 p-4">
             {/* All-day events */}
             {mobileDayAllDay.map(e => (
-              <div key={`${e.id}-${e.starts_at}`} onClick={() => setSelected(e)} className={cn('cursor-pointer rounded-lg border p-3 transition hover:brightness-110', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
+              <div key={`${e.id}-${e.starts_at}`} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0} className={cn('focus-ring cursor-pointer rounded-lg border p-3 transition hover:brightness-110', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
                 <div className="text-[10px] font-semibold uppercase tracking-wide opacity-70">{tr('calendar.allDay')}</div>
                 <div className="text-sm font-semibold">{e.title}</div>
                 {e.assignee_id && memberById.get(e.assignee_id) && (
@@ -634,11 +652,11 @@ export function CalendarModule() {
             {mobileDayTimed.map(e => {
               const member = e.assignee_id ? memberById.get(e.assignee_id) : null;
               return (
-                <div key={`${e.id}-${e.starts_at}`} onClick={() => setSelected(e)} className={cn('cursor-pointer rounded-lg border p-3 transition hover:brightness-110', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
+                <div key={`${e.id}-${e.starts_at}`} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0} className={cn('focus-ring cursor-pointer rounded-lg border p-3 transition hover:brightness-110', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-semibold">
-                      {new Date(e.starts_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
-                      {e.ends_at && ` – ${new Date(e.ends_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`}
+                      {new Date(e.starts_at).toLocaleTimeString(locale.code, { hour: 'numeric', minute: '2-digit', hour12: true })}
+                      {e.ends_at && ` – ${new Date(e.ends_at).toLocaleTimeString(locale.code, { hour: 'numeric', minute: '2-digit', hour12: true })}`}
                     </span>
                     {member && <Avatar name={member.display_name} color={member.color} size={18} />}
                   </div>
@@ -672,7 +690,7 @@ export function CalendarModule() {
                     ) : (
                       <>
                         <span className={cn('text-[10px] font-semibold uppercase tracking-wide', col.isToday ? 'text-brand-text' : 'text-muted')}>
-                          {col.date.toLocaleDateString('en-US', { weekday: 'short' })}
+                          {col.date.toLocaleDateString(locale.code, { weekday: 'short' })}
                         </span>
                         <span className={cn('flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold', col.isToday ? 'bg-brand text-white' : 'text-fg')}>
                           {col.date.getDate()}
@@ -682,7 +700,7 @@ export function CalendarModule() {
                     {/* All-day events */}
                     <div className="mt-1 w-full space-y-0.5 px-1">
                       {col.allDay.map(e => (
-                        <div key={`${e.id}-${e.starts_at}`} onClick={() => setSelected(e)} className={cn('cursor-pointer truncate rounded px-1.5 py-0.5 text-[10px] font-medium border', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
+                        <div key={`${e.id}-${e.starts_at}`} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0} className={cn('focus-ring cursor-pointer truncate rounded px-1.5 py-0.5 text-[10px] font-medium border', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}>
                           {e.title}
                         </div>
                       ))}
@@ -727,11 +745,11 @@ export function CalendarModule() {
                         const member = e.assignee_id ? memberById.get(e.assignee_id) : null;
                         if (top < 0 || top > HOURS.length * HOUR_HEIGHT) return null;
                         return (
-                          <div key={`${e.id}-${e.starts_at}`} style={{ top, height, left: 2, right: 2 }} onClick={() => setSelected(e)}
-                            className={cn('absolute z-10 overflow-hidden rounded-md border p-1.5 text-[10px] cursor-pointer hover:brightness-110 transition', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}
+                          <div key={`${e.id}-${e.starts_at}`} style={{ top, height, left: 2, right: 2 }} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0} 
+                            className={cn('focus-ring absolute z-10 overflow-hidden rounded-md border p-1.5 text-[10px] cursor-pointer hover:brightness-110 transition', CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.other)}
                             title={e.title}>
                             <div className="flex items-start justify-between gap-1">
-                              <span className="font-semibold leading-tight truncate">{new Date(e.starts_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
+                              <span className="font-semibold leading-tight truncate">{new Date(e.starts_at).toLocaleTimeString(locale.code, { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
                               {height > 30 && member && <Avatar name={member.display_name} color={member.color} size={14} />}
                             </div>
                             {height > 24 && <div className="mt-0.5 truncate font-medium leading-tight">{e.title}</div>}
@@ -803,20 +821,20 @@ export function CalendarModule() {
           ) : upcomingByDay.map(([day, events]) => {
             const d = new Date(day);
             const isToday2 = day === todayStr;
-            const isTomorrow = day === new Date(today.getTime() + 86400000).toISOString().slice(0, 10);
-            const label = isToday2 ? 'Today' : isTomorrow ? 'Tomorrow' : d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+            const isTomorrow = day === shiftLocalDay(today, 1);
+            const label = isToday2 ? 'Today' : isTomorrow ? 'Tomorrow' : d.toLocaleDateString(locale.code, { weekday: 'short', month: 'short', day: 'numeric' });
             return (
               <div key={day} className="mb-3">
                 <div className="mb-1 text-[10px] font-semibold text-muted">
-                  {label} &bull; {d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  {label} &bull; {d.toLocaleDateString(locale.code, { month: 'short', day: 'numeric' })}
                 </div>
                 {events.map(e => (
-                  <div key={`${e.id}-${e.starts_at}`} onClick={() => setSelected(e)} className="mb-1 flex cursor-pointer items-start gap-2 rounded-lg p-1.5 hover:bg-elevated transition">
+                  <div key={`${e.id}-${e.starts_at}`} onClick={() => setSelected(e)} onKeyDown={(ev) => openOnKey(ev, e)} role="button" tabIndex={0} className="focus-ring mb-1 flex cursor-pointer items-start gap-2 rounded-lg p-1.5 hover:bg-elevated transition">
                     <div className={cn('mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full', CATEGORY_DOT[e.category] ?? 'bg-muted')} />
                     <div className="min-w-0">
                       {!e.all_day && (
                         <div className="text-[10px] font-semibold text-muted">
-                          {new Date(e.starts_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                          {new Date(e.starts_at).toLocaleTimeString(locale.code, { hour: 'numeric', minute: '2-digit', hour12: true })}
                         </div>
                       )}
                       <div className="truncate text-xs font-medium">{e.title}</div>
@@ -846,7 +864,7 @@ export function CalendarModule() {
           </label>
           {splitByMember && (
             <p className="mb-1.5 px-1 text-[10px] leading-4 text-muted">
-              {tr('calendar.eachVisibleMemberGetsAColumn')} {mobileDay.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}{tr('calendar.toggleMembersBelowToShowOr')}
+              {tr('calendar.eachVisibleMemberGetsAColumn')} {mobileDay.toLocaleDateString(locale.code, { weekday: 'long', month: 'short', day: 'numeric' })}{tr('calendar.toggleMembersBelowToShowOr')}
             </p>
           )}
           <div className="max-h-64 space-y-0.5 overflow-y-auto pr-1">

@@ -26,6 +26,7 @@ import {
   type TimelinePlan,
   type TimelineScenario,
 } from './timeline';
+import type { LocaleCode } from '@/lib/i18n/locales';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 
 type Client = SupabaseClient<Database>;
@@ -220,8 +221,8 @@ export async function loadMoneyTimeline(
   supabase: Client,
   familyId: string,
   now: Date = new Date(),
-  opts: { scenario?: TimelineScenario | null } = {},
+  opts: { scenario?: TimelineScenario | null; locale?: LocaleCode } = {},
 ): Promise<CashflowTimeline> {
   const input = await loadMoneyTimelineInput(supabase, familyId, now);
-  return buildCashflowTimeline({ ...input, scenario: opts.scenario ?? null });
+  return buildCashflowTimeline({ ...input, scenario: opts.scenario ?? null, locale: opts.locale });
 }

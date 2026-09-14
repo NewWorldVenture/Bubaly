@@ -14,7 +14,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { DashboardWeather } from '@/components/dashboard/dashboard-weather';
 import { fmtTime } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 
 const ACCENT = ['bg-violet-500', 'bg-emerald-500', 'bg-orange-500', 'bg-rose-500', 'bg-blue-500', 'bg-teal-500'];
 
@@ -45,6 +45,9 @@ function StatCard({ href, label, value, icon: Icon, bg }: {
 
 export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
   const tr = await getTranslations();
+  // A SERVER component, so the locale comes from the request rather than from a
+  // hook — useLocale() here is a build error, which is how this was caught.
+  const { locale } = await getLocaleContext();
   const familyId = ctx.active.familyId;
   const role = ctx.active.role;
   const me = ctx.active.member;
@@ -341,7 +344,7 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
                     <li key={e.id} className="flex items-center gap-3">
                       <div className={cn('grid h-11 w-11 shrink-0 place-items-center rounded-lg text-center text-fg', ACCENT[i % ACCENT.length])}>
                         <div>
-                          <p className="text-[9px] font-bold uppercase">{d.toLocaleDateString('en-US', { month: 'short' })}</p>
+                          <p className="text-[9px] font-bold uppercase">{d.toLocaleDateString(locale.code, { month: 'short' })}</p>
                           <p className="text-base font-black leading-none">{d.getDate()}</p>
                         </div>
                       </div>

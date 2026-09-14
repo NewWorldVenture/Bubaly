@@ -25,7 +25,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import { NUTRIENT_LABELS, dailyValuePct, fmtAmount, type Nutrition } from '@/lib/meals/nutrition';
 import type { Tables, MealType } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type Meal = Tables<'meals'>;
 type Plan = Tables<'meal_plans'> & { meal: Meal | null };
@@ -86,6 +86,7 @@ function MealImg({ src, emoji, className }: { src: string | null; emoji: string;
 }
 
 export function MealsModule() {
+  const locale = useLocale();
   const tr = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
@@ -177,7 +178,7 @@ export function MealsModule() {
   }, [plans]);
 
   const todayStr = new Date().toISOString().slice(0, 10);
-  const dateRange = `${days[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${days[6].toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+  const dateRange = `${days[0].toLocaleDateString(locale.code, { month: 'short', day: 'numeric' })} – ${days[6].toLocaleDateString(locale.code, { month: 'short', day: 'numeric', year: 'numeric' })}`;
 
   // This week's dinners → the "What's for Dinner?" carousel.
   const dinners = useMemo(
@@ -350,8 +351,8 @@ export function MealsModule() {
                     const isToday = d.toISOString().slice(0, 10) === todayStr;
                     return (
                       <div key={i} className={cn('border-l border-border px-2 py-2 text-center', isToday && 'bg-brand/10')}>
-                        <div className={cn('text-[10px] font-semibold uppercase tracking-wide', isToday ? 'text-brand-text' : 'text-muted')}>{d.toLocaleDateString('en-US', { weekday: 'short' })}</div>
-                        <div className={cn('text-xs font-bold', isToday ? 'text-brand-text' : 'text-fg')}>{d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+                        <div className={cn('text-[10px] font-semibold uppercase tracking-wide', isToday ? 'text-brand-text' : 'text-muted')}>{d.toLocaleDateString(locale.code, { weekday: 'short' })}</div>
+                        <div className={cn('text-xs font-bold', isToday ? 'text-brand-text' : 'text-fg')}>{d.toLocaleDateString(locale.code, { month: 'short', day: 'numeric' })}</div>
                       </div>
                     );
                   })}
@@ -370,22 +371,33 @@ export function MealsModule() {
                       const isToday = dStr === todayStr;
                       return (
                         <div key={di}
-                          className={cn('group relative min-h-[104px] border-l border-border p-1.5 transition', isToday && 'bg-brand/5', !plan && 'cursor-pointer hover:bg-elevated/30')}
-                          onClick={() => !plan && setAddCell({ date: dStr, type })}>
+                          className={cn('group relative min-h-[104px] border-l border-border p-1.5 transition', isToday && 'bg-brand/5')}>
                           {plan ? (
                             <div className="relative overflow-hidden rounded-lg border border-border/60 bg-surface/40">
                               <MealImg src={plan.meal?.image_url ?? null} emoji={MEAL_ICONS[type]} className="h-14 w-full" />
                               <div className="px-1.5 py-1 text-[10px] font-medium leading-tight line-clamp-2">{plan.meal?.name ?? 'Meal'}</div>
-                              <button onClick={(e) => { e.stopPropagation(); removePlan(plan.id); }} aria-label={tr('meals.removeMeal')}
+                              <button onClick={() => removePlan(plan.id)} aria-label={tr('meals.removeMeal')}
                                 className="absolute right-1 top-1 hidden rounded-full bg-danger/90 p-0.5 group-hover:flex">
                                 <XIcon className="h-2.5 w-2.5 text-white" />
                               </button>
                             </div>
                           ) : (
-                            <div className="flex h-full flex-col items-center justify-center opacity-0 transition group-hover:opacity-100">
+                            // The cell's own onClick fired only when the cell was
+                            // empty — so the affordance and the remove button were
+                            // never present at once, and the empty state can be a
+                            // real <button>. It gets Enter/Space and a tab stop for
+                            // free, and the remove button keeps its own semantics
+                            // instead of being a descendant of role="button".
+                            // focus-visible:opacity-100 because the content is
+                            // hidden until hover: a keyboard user would otherwise
+                            // focus something invisible.
+                            <button type="button"
+                              onClick={() => setAddCell({ date: dStr, type })}
+                              aria-label={tr('mealsModule.addMealForDay', { meal: MEAL_LABELS[type], day: d.toLocaleDateString(locale.code, { weekday: 'long', month: 'short', day: 'numeric' }) })}
+                              className="focus-ring flex h-full w-full cursor-pointer flex-col items-center justify-center rounded-lg opacity-0 transition hover:bg-elevated/30 group-hover:opacity-100 focus-visible:opacity-100">
                               <Plus className="h-4 w-4 text-muted" />
                               <span className="mt-0.5 text-[9px] text-muted">{tr('meals.addMeal')}</span>
-                            </div>
+                            </button>
                           )}
                         </div>
                       );
@@ -403,26 +415,40 @@ export function MealsModule() {
                 return (
                   <div key={di} className={cn('overflow-hidden rounded-xl border border-border', isToday && 'border-brand/40')}>
                     <div className={cn('flex items-center gap-2 border-b border-border px-3 py-2', isToday ? 'bg-brand/10' : 'bg-surface/40')}>
-                      <span className={cn('text-sm font-semibold', isToday ? 'text-brand-text' : 'text-fg')}>{d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                      <span className={cn('text-sm font-semibold', isToday ? 'text-brand-text' : 'text-fg')}>{d.toLocaleDateString(locale.code, { weekday: 'short', month: 'short', day: 'numeric' })}</span>
                       {isToday && <span className="rounded-full bg-brand/20 px-2 py-0.5 text-[10px] font-semibold text-brand-text">{tr('meals.today')}</span>}
                     </div>
                     <div className="divide-y divide-border/50">
                       {MEAL_TYPES.map(type => {
                         const plan = planMap.get(cellKey(dStr, type));
                         return (
-                          <div key={type} className={cn('flex items-center gap-3 px-3 py-2.5', !plan && 'cursor-pointer hover:bg-elevated/30')}
-                            onClick={() => !plan && setAddCell({ date: dStr, type })}>
-                            {plan?.meal
-                              ? <MealImg src={plan.meal.image_url} emoji={MEAL_ICONS[type]} className="h-10 w-10 shrink-0 rounded-lg" />
-                              : <span className="text-base">{MEAL_ICONS[type]}</span>}
-                            <div className="min-w-0 flex-1">
-                              <div className="text-[10px] font-semibold uppercase text-muted">{MEAL_LABELS[type]}</div>
-                              {plan ? <div className="truncate text-sm font-medium">{plan.meal?.name ?? 'Meal'}</div> : <div className="text-xs text-muted">{tr('meals.tapToAdd')}</div>}
+                          plan ? (
+                            <div key={type} className="flex items-center gap-3 px-3 py-2.5">
+                              {plan.meal
+                                ? <MealImg src={plan.meal.image_url} emoji={MEAL_ICONS[type]} className="h-10 w-10 shrink-0 rounded-lg" />
+                                : <span className="text-base">{MEAL_ICONS[type]}</span>}
+                              <div className="min-w-0 flex-1 text-left">
+                                <div className="text-[10px] font-semibold uppercase text-muted">{MEAL_LABELS[type]}</div>
+                                <div className="truncate text-sm font-medium">{plan.meal?.name ?? 'Meal'}</div>
+                              </div>
+                              <button onClick={() => removePlan(plan.id)} aria-label={tr('meals.removeMeal')} className="rounded-full p-1 text-muted hover:text-danger"><XIcon className="h-3.5 w-3.5" /></button>
                             </div>
-                            {plan
-                              ? <button onClick={(e) => { e.stopPropagation(); removePlan(plan.id); }} aria-label={tr('meals.removeMeal')} className="rounded-full p-1 text-muted hover:text-danger"><XIcon className="h-3.5 w-3.5" /></button>
-                              : <Plus className="h-4 w-4 text-muted" />}
-                          </div>
+                          ) : (
+                            // Same split as the desktop grid: the planned row holds
+                            // the remove button and is not itself a control, the
+                            // empty row is a real button.
+                            <button key={type} type="button"
+                              onClick={() => setAddCell({ date: dStr, type })}
+                              aria-label={tr('mealsModule.addMealForDay', { meal: MEAL_LABELS[type], day: d.toLocaleDateString(locale.code, { weekday: 'long', month: 'short', day: 'numeric' }) })}
+                              className="focus-ring flex w-full cursor-pointer items-center gap-3 px-3 py-2.5 hover:bg-elevated/30">
+                              <span className="text-base">{MEAL_ICONS[type]}</span>
+                              <div className="min-w-0 flex-1 text-left">
+                                <div className="text-[10px] font-semibold uppercase text-muted">{MEAL_LABELS[type]}</div>
+                                <div className="text-xs text-muted">{tr('meals.tapToAdd')}</div>
+                              </div>
+                              <Plus className="h-4 w-4 text-muted" />
+                            </button>
+                          )
                         );
                       })}
                     </div>
@@ -445,7 +471,7 @@ export function MealsModule() {
                       <div className="p-2">
                         <div className="truncate text-xs font-semibold">{r.name}</div>
                         <div className="mt-0.5 text-[10px] text-muted">
-                          {r.last_made_at ? new Date(r.last_made_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}
+                          {r.last_made_at ? new Date(r.last_made_at).toLocaleDateString(locale.code, { month: 'short', day: 'numeric' }) : ''}
                         </div>
                       </div>
                     </div>
@@ -559,7 +585,7 @@ export function MealsModule() {
               <div className="mt-2">
                 <p className="text-sm font-bold leading-snug">{dinners[dinnerIdx]?.meal?.name}</p>
                 <p className="mt-0.5 text-[11px] text-muted">
-                  {new Date(dinners[dinnerIdx].plan_date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                  {new Date(dinners[dinnerIdx].plan_date).toLocaleDateString(locale.code, { weekday: 'long', month: 'short', day: 'numeric' })}
                 </p>
               </div>
               {dinners[dinnerIdx]?.meal?.recipe_url && (
@@ -620,7 +646,7 @@ export function MealsModule() {
       {addCell && (
         <Modal open title={`Add ${MEAL_LABELS[addCell.type]}`} onClose={() => setAddCell(null)}>
           <div className="space-y-3">
-            <p className="text-xs text-muted">For {new Date(addCell.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+            <p className="text-xs text-muted">For {new Date(addCell.date).toLocaleDateString(locale.code, { weekday: 'long', month: 'long', day: 'numeric' })}</p>
             {library.length === 0 ? (
               <p className="text-sm text-muted">{tr('meals.noMealsInYourLibraryYet')}</p>
             ) : (

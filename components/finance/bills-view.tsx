@@ -13,8 +13,8 @@ import { Input, Field, Select } from '@/components/ui/input';
 import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
-import { usd, billDueStatus, DUE_META, fmtDueDate } from '@/lib/finance/hub';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { usd as usdIn, billDueStatus, DUE_META, fmtDueDate as fmtDueDateIn } from '@/lib/finance/hub';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type Bill = Tables<'bills'>;
 export type BillsMode = 'all' | 'autopay' | 'due';
@@ -29,6 +29,10 @@ const MODE_META: Record<BillsMode, { title: string; desc: string; icon: typeof F
 
 export function BillsView({ mode }: { mode: BillsMode }) {
   const t = useTranslations();
+  // Money and dates follow the reader; the currency stays the money's own.
+  const locale = useLocale();
+  const usd = (amount: number) => usdIn(amount, locale.code);
+  const fmtDueDate = (iso: string) => fmtDueDateIn(iso, locale.code);
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
   const meta = MODE_META[mode];

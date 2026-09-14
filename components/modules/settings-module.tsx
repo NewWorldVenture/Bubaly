@@ -6,7 +6,7 @@ import Link from 'next/link';
 // sets are still rendered, so the icon import is a union.
 import { Users, Mail, Trash2, Plus, Check, Pencil, User, Lock, RefreshCw, Compass, Bot, FileJson, Gift, X } from 'lucide-react';
 import { DEFAULT_REFERRAL_CONFIG, type ReferralConfig } from '@/lib/referrals/core';
-import { fmtMoney } from '@/lib/utils/format';
+import { useFormat } from '@/components/i18n/use-format';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -69,6 +69,7 @@ const HASH_BY_TAB: Record<SettingsTab, string> = {
 
 export function SettingsModule({ referralConfig }: { referralConfig?: ReferralConfig } = {}) {
   const t = useTranslations();
+  const { fmtMoney } = useFormat();
   const { family, members, role, userId, userEmail, defaultDashboard } = useApp();
   const admin = isAdmin(role);
   const { success, error: toastError } = useToast();

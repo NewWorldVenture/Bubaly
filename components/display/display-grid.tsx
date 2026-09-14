@@ -13,7 +13,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { fmtTime } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import {
-  ambientTheme, greeting, dayPart, nowAndNext, countdownLabel, normalizeSettings, buildHints,
+  ambientTheme, greeting, dayPart, nowAndNext, countdownLabel as countdownLabelIn, normalizeSettings, buildHints,
   DEFAULT_DISPLAY_SETTINGS, THEME_OPTIONS, IDLE_OPTIONS,
   type DisplaySettings, type ThemeChoice,
 } from '@/lib/display/ambient';
@@ -29,7 +29,7 @@ import { DisplayWeatherProvider, WeatherChip, WeatherTile } from './display-weat
 import { KitchenTimers } from './kitchen-timers';
 import { PhotoFrame } from './photo-frame';
 import { HintsTicker } from './hints-ticker';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 type Ev = { id: string; title: string; starts_at: string; all_day: boolean; location: string | null; assignee_id: string | null };
@@ -184,7 +184,11 @@ function ServiceTile({ href }: { href: string }) {
 function WidgetBody({ widget, size, data, memberById, now }: {
   widget: WidgetKey; size: TileSize; data: DisplayData; memberById: Map<string, DisplayData['members'][number]>; now: Date;
 }) {
+  const locale = useLocale();
   const tr = useTranslations();
+  // The Now/Next countdown follows the reader: the clock and weekday from the
+  // locale, "Now" and "in N min" from the catalogue.
+  const countdownLabel = (iso: string, at: Date) => countdownLabelIn(iso, at, locale.code, tr);
   switch (widget) {
     case 'clock': return <AmbientClock clock24={false} seconds={false} />;
     case 'weather': return <WeatherTile size={size} />;
@@ -225,7 +229,7 @@ function WidgetBody({ widget, size, data, memberById, now }: {
         <ul className="space-y-2">
           {data.upcoming.slice(0, tileListLimit(size, 4)).map((e) => (
             <li key={e.id} className="flex items-center gap-3 text-sm">
-              <span className="w-24 shrink-0 text-white/50">{new Date(e.starts_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+              <span className="w-24 shrink-0 text-white/50">{new Date(e.starts_at).toLocaleDateString(locale.code, { month: 'short', day: 'numeric' })}</span>
               <span className="min-w-0 flex-1 truncate font-medium text-white">{e.title}</span>
             </li>
           ))}
@@ -353,13 +357,14 @@ class WidgetBoundary extends Component<{ label?: string; children: ReactNode }, 
 }
 
 function MonthCalendar({ cal }: { cal: DisplayData['calendar'] }) {
+  const locale = useLocale();
   const first = new Date(cal.year, cal.month, 1).getDay();
   const days = new Date(cal.year, cal.month + 1, 0).getDate();
   const cells: (number | null)[] = [...Array(first).fill(null), ...Array.from({ length: days }, (_, i) => i + 1)];
   const eventSet = new Set(cal.eventDays);
   return (
     <div>
-      <p className="mb-2 text-center text-sm font-semibold text-white">{new Date(cal.year, cal.month, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</p>
+      <p className="mb-2 text-center text-sm font-semibold text-white">{new Date(cal.year, cal.month, 1).toLocaleDateString(locale.code, { month: 'long', year: 'numeric' })}</p>
       <div className="grid grid-cols-7 gap-1 text-center text-[11px]">
         {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <span key={i} className="text-white/40">{d}</span>)}
         {cells.map((d, i) => (
@@ -378,6 +383,10 @@ function NowNextStrip({ events, memberById, now }: {
   events: Ev[]; memberById: Map<string, DisplayData['members'][number]>; now: Date;
 }) {
   const tr = useTranslations();
+  const locale = useLocale();
+  // The Now/Next countdown follows the reader: the clock and weekday from the
+  // locale, "Now" and "in N min" from the catalogue.
+  const countdownLabel = (iso: string, at: Date) => countdownLabelIn(iso, at, locale.code, tr);
   const { current, next } = nowAndNext(events, now);
   if (!current && !next) return null;
   const Cell = ({ label, ev, tone }: { label: string; ev: Ev; tone: string }) => {
@@ -503,6 +512,10 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
 }) {
   const t = useTranslations();
   const tr = useTranslations();
+  const locale = useLocale();
+  // The Now/Next countdown follows the reader: the clock and weekday from the
+  // locale, "Now" and "in N min" from the catalogue.
+  const countdownLabel = (iso: string, at: Date) => countdownLabelIn(iso, at, locale.code, tr);
   const { success, error: toastError } = useToast();
   // Defense in depth: even the props are re-normalized (SSR throws here are
   // uncatchable by widget boundaries, so the shell must be garbage-proof).
@@ -735,9 +748,9 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-white/60">{t('displayGrid.tile')}</span>
                     <div className="flex gap-1">
-                      <button onClick={() => move(tile.id, -1)} className="rounded p-1 text-white hover:bg-white/10"><ArrowUp className="h-4 w-4" /></button>
-                      <button onClick={() => move(tile.id, 1)} className="rounded p-1 text-white hover:bg-white/10"><ArrowDown className="h-4 w-4" /></button>
-                      <button onClick={() => remove(tile.id)} className="rounded p-1 text-rose-300 hover:bg-white/10"><Trash2 className="h-4 w-4" /></button>
+                      <button aria-label={tr('a11y.moveUp')} onClick={() => move(tile.id, -1)} className="rounded p-1 text-white hover:bg-white/10"><ArrowUp className="h-4 w-4" /></button>
+                      <button aria-label={tr('a11y.moveDown')} onClick={() => move(tile.id, 1)} className="rounded p-1 text-white hover:bg-white/10"><ArrowDown className="h-4 w-4" /></button>
+                      <button aria-label={tr('a11y.delete')} onClick={() => remove(tile.id)} className="rounded p-1 text-rose-300 hover:bg-white/10"><Trash2 className="h-4 w-4" /></button>
                     </div>
                   </div>
                   <div className="space-y-2">
