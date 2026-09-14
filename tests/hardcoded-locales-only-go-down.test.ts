@@ -71,7 +71,14 @@ const FORMATTER_WITH_LOCALE =
 /**
  * The ceiling, measured when the shared formatter was made locale-aware.
  *
- * Now 93. The time-ago tranche converted six more — lib/activity/feed.ts,
+ * Now 88. The Family Wallet hub (fmtUsd, fmtCount, fmtTxnDate), the Home dashboard
+ * (lib/home/home-data.ts) and Utility Tracking (lib/home/utilities.ts) follow the
+ * reader — and home-data's carried a second defect behind the hardcoded locale: it
+ * prefixed the "$" BY HAND and localised only the digits, so a European locale would
+ * have rendered "$2.767,60", the American symbol position with German separators.
+ * Proved in tests/the-wallet-and-home-follow-the-reader.test.ts.
+ *
+ * Before that, 93. The time-ago tranche converted six more — lib/activity/feed.ts,
  * lib/memories/memories.ts, lib/family/safety.ts (relTime + fmtDateTime),
  * lib/location/geo.ts, lib/location/overview.ts, lib/marketplace/discover.ts and
  * lib/display/ambient.ts all delegate to one shared `fmtTimeAgo`.
@@ -99,7 +106,7 @@ const FORMATTER_WITH_LOCALE =
  * Getting those three numbers to disagree is how a ratchet starts life already
  * broken, which is why the derivation is written down rather than the result.
  */
-const CEILING = 93;
+const CEILING = 88;
 
 /**
  * Comments stripped first, and this is not a detail.

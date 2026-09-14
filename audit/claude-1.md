@@ -2858,3 +2858,53 @@ misleading: `lib/display/ambient.ts countdownLabel` is forward-facing (`"in 15 m
 than an elapsed span. Neither can be expressed by a past-tense helper, and both take the
 locale *and* a translator. The test asserts the two file paths, so folding one in or
 adding a third both fail loudly.
+
+---
+
+## Pass AO — the Wallet and the Home dashboard, and a symbol in the wrong place
+
+**Status: FIXED.** 5 sites, 4 surfaces. Ceiling 93 → **88**.
+
+`lib/wallet/hub.ts` (`fmtUsd`, `fmtDollars`, `fmtSignedUsd`, `fmtCount`, `fmtTxnDate`),
+`lib/home/home-data.ts` (`usd`) and `lib/home/utilities.ts` (`usd`) take the reader's
+locale; the Family Wallet hub, the Home dashboard's finance card and donut, and Utility
+Tracking bind them.
+
+### `[CLAUDE-1][MEDIUM][I18N]` `home-data.ts usd` would have been wrong even with a locale
+
+```ts
+return `$${(amount ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+```
+
+The `"$"` is **prefixed by hand** and only the digits are localised. A mechanical
+locale swap — exactly what the rest of this ratchet has been doing — would have produced
+`"$2.767,60"`: the symbol in the American position with German separators, a currency
+notation nobody writes. `style: 'currency'` puts the symbol where the locale puts it
+(`"2.767,60 $"`). The test asserts the exact string *and* that the symbol does not lead in
+a locale that puts it last, because a `toContain` cannot see either.
+
+**This is why the conversion is a per-file reading rather than a sweep.** The ratchet would
+have gone down either way.
+
+### `[CLAUDE-1][MEDIUM][I18N]` `fmtCount` — a wrong separator that reads as a different number
+
+Its own comment said *"Grouped integer count with **locale separators** (2,850)"* while
+the code pinned `'en-US'`. German writes **`2.850`** for two thousand eight hundred and
+fifty and **`2,850`** for two-point-eight-five: the grouping mark and the decimal mark are
+**swapped** between the two conventions. So the Wallet's reward-points count was not
+merely styled oddly for a German reader — it was legible as a different number.
+
+### A binding that landed in the wrong function
+
+`TransactionList` declares no `useTranslations()`, so my "insert after the translator"
+anchor matched the **next** component's, 50 lines down, and the binding landed inside
+`useAddForm`. tsc named it (`TS2552: Did you mean 'fmtTxnDateIn'?`). Third time this pass
+family that an anchor found a later occurrence than intended — the lesson each time is the
+same: anchor on something inside the target, or verify the match is within it.
+
+### Not converted, and why
+
+`lib/home/utilities.ts deterministicSavingsFindings` builds English prose with `usd`
+inside it. Its **only** caller is `app/api/ai/home/utility-savings/route.ts`, which feeds
+the model — the exempt category. No threading needed, and threading would have been
+speculative.

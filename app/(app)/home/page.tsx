@@ -45,7 +45,7 @@ import { ReferralHomeCard } from '@/components/referrals/referral-home-card';
 import { getReferralConfigResult } from '@/lib/referrals/server';
 import { REFERRAL_HOME_CARD_DISMISSED_KEY } from '@/lib/referrals/core';
 import {
-  summarizeMonthFinances, usd, memberTagline, weekStrip, isoDate, type HomeTxn,
+  summarizeMonthFinances, usd as usdIn, memberTagline, weekStrip, isoDate, type HomeTxn,
 } from '@/lib/home/home-data';
 import { pickFirstThing, type FirstThing } from '@/lib/outcomes/launcher';
 import { DoOneThingCard } from '@/components/outcomes/do-one-thing-card';
@@ -108,6 +108,9 @@ function Ring({ value, size = 92, stroke = 8, children }: { value: number; size?
 // A two-slice income/expense donut with the remaining balance in the center.
 async function FinanceDonut({ income, expenses, remaining, size = 124, stroke = 14 }: { income: number; expenses: number; remaining: number; size?: number; stroke?: number }) {
   const i18nT = await getTranslations();
+  // Money follows the reader; the currency stays the money's own.
+  const { locale } = await getLocaleContext();
+  const usd = (amount: number) => usdIn(amount, locale.code);
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const total = Math.max(income, income + Math.max(0, -remaining), 1);
@@ -148,6 +151,7 @@ export default async function HomePage() {
   const i18nT = await getTranslations();
   const { fmtTime, fmtMoney } = await getFormat();
   const { locale } = await getLocaleContext();
+  const usd = (amount: number) => usdIn(amount, locale.code);
   const tr = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
