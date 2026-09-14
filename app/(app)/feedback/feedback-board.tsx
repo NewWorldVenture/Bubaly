@@ -13,17 +13,20 @@ import { submitIdeaAction, toggleVoteAction, addCommentAction, setIdeaStatusActi
 import { FeedbackAttachmentUpload } from './feedback-attachment-upload';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
+import { createFormat } from '@/lib/utils/format';
 
 type Comment = { id: string; author_name: string; is_team: boolean; body: string; created_at: string };
 
-const timeAgoIn = (locale: LocaleCode) => (iso: string): string => {
-  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
-  if (s < 60) return 'just now';
-  const m = Math.floor(s / 60); if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60); if (h < 24) return `${h}h ago`;
-  const d = Math.floor(h / 24); if (d < 30) return `${d}d ago`;
-  return new Date(iso).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
-};
+/**
+ * Delegates to the shared `fmtTimeAgo` (lib/utils/format.ts).
+ *
+ * It took a locale, which made it LOOK converted — but every rung was an English
+ * literal ("just now", "3h ago") and the locale reached only the fallback date. That is the
+ * defect the hardcoded-locale scan cannot see, and "it accepts a LocaleCode" is not
+ * evidence against it.
+ */
+const timeAgoIn = (locale: LocaleCode) => (iso: string): string =>
+  createFormat(locale).fmtTimeAgo(iso, { absoluteAfterDays: 30, absolutePattern: 'MMM d' });
 
 const SORTS: { id: FeedbackSort; label: string }[] = [
   { id: 'top', label: 'Top' }, { id: 'trending', label: 'Trending' }, { id: 'new', label: 'Newest' },

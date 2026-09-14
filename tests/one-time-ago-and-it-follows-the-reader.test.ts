@@ -130,11 +130,19 @@ describe('private time-ago ladders only go down', () => {
     ].join('\n')).toEqual([]);
   });
 
-  it('holds the localised-but-private ladders at six', () => {
-    expect(of('ladder-localised'), 'five are worth folding into fmtTimeAgo; the sixth is '
-      + 'lib/display/ambient.ts countdownLabel, which is FORWARD-facing ("in 15 min", '
-      + '"Sat 3:00 PM") and cannot use a past-tense helper. Converting one? Lower this '
-      + 'number in the same commit.').toHaveLength(6);
+  // TWO LEFT, AND BOTH ARE CORRECT AS THEY ARE — which is why this asserts the files
+  // rather than a count. `ladder-localised` never meant "shows the reader their
+  // language": four of the six that used to be here took a LocaleCode and still said
+  // "just now", "3 hours ago" and "Yesterday" in English, with the locale reaching only
+  // the fallback date. Accepting a LocaleCode is not evidence of anything.
+  //
+  // These two are past-tense helpers' opposites: `countdownLabel` is FORWARD-facing
+  // ("in 15 min", "Sat 3:00 PM" on the Kitchen Display) and `sinceLabel` says
+  // "Since 3:04 PM" rather than an elapsed span. Neither can be expressed by
+  // fmtTimeAgo, and both take the locale AND a translator for their words.
+  it('has two private ladders left, and both are the ones that should be', () => {
+    const files = of('ladder-localised').map((f) => f.file).sort();
+    expect(files).toEqual(['lib/display/ambient.ts', 'lib/location/overview.ts']);
   });
 
   // Named by file, not counted, because the honest list is longer than the scan can

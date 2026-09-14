@@ -25,6 +25,7 @@ import type { Tables } from '@/lib/database.types';
 import { preOpenWindow } from '@/lib/utils/open-url';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
+import { createFormat } from '@/lib/utils/format';
 
 type Document = Tables<'documents'>;
 
@@ -44,17 +45,16 @@ function fmtGb(bytes: number): string { return `${(bytes / GB).toFixed(1)} GB`; 
 const fmtDateIn = (locale: LocaleCode) => (iso: string): string => {
   return new Date(iso).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
 };
-const timeAgoIn = (locale: LocaleCode) => (iso: string): string => {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 60) return mins <= 1 ? 'just now' : `${mins} minutes ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs} hour${hrs === 1 ? '' : 's'} ago`;
-  const days = Math.floor(hrs / 24);
-  if (days === 1) return 'Yesterday';
-  if (days < 7) return `${days} days ago`;
-  return fmtDateIn(locale)(iso);
-};
+/**
+ * Delegates to the shared `fmtTimeAgo` (lib/utils/format.ts).
+ *
+ * It took a locale, which made it LOOK converted — but every rung was an English
+ * literal ("just now", "3 hours ago", "Yesterday") and the locale reached only the fallback date. That is the
+ * defect the hardcoded-locale scan cannot see, and "it accepts a LocaleCode" is not
+ * evidence against it.
+ */
+const timeAgoIn = (locale: LocaleCode) => (iso: string): string =>
+  createFormat(locale).fmtTimeAgo(iso, { absoluteAfterDays: 7, absolutePattern: 'MMM d, yyyy' });
 
 // ── File-type detection → icon + color, and coarse storage group ────────────
 type FileMeta = { Icon: typeof FileText; color: string; tint: string };

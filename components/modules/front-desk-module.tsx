@@ -20,6 +20,7 @@ import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
+import { createFormat } from '@/lib/utils/format';
 
 type Call = Tables<'call_logs'> & { contact?: Tables<'family_contacts'> | null };
 
@@ -98,15 +99,16 @@ const HOW_IT_WORKS = [
   { icon: Sparkles,      text: 'Handle it files the message with the planner',   textKey: 'frontDesk.handleItFilesTheMessage' },
 ] as const;
 
-const fmtTimeIn = (locale: LocaleCode) => (iso: string) => {
-  const d = new Date(iso);
-  const diffMs = Date.now() - d.getTime();
-  const diffH = diffMs / 3_600_000;
-  if (diffH < 1) return `${Math.max(1, Math.round(diffMs / 60_000))}m ago`;
-  if (diffH < 24) return `${Math.round(diffH)}h ago`;
-  if (diffH < 48) return 'Yesterday';
-  return d.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
-};
+/**
+ * Delegates to the shared `fmtTimeAgo` (lib/utils/format.ts).
+ *
+ * It took a locale, which made it LOOK converted — but every rung was an English
+ * literal ("3h ago", "Yesterday") and the locale reached only the fallback date. That is the
+ * defect the hardcoded-locale scan cannot see, and "it accepts a LocaleCode" is not
+ * evidence against it.
+ */
+const fmtTimeIn = (locale: LocaleCode) => (iso: string) =>
+  createFormat(locale).fmtTimeAgo(iso, { absoluteAfterDays: 2, absolutePattern: 'MMM d' });
 
 function fmtDuration(secs: number | null) {
   if (!secs) return null;

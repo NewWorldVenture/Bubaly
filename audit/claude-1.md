@@ -2815,3 +2815,46 @@ would have.
 `fmtTimeAgo`; the sixth, `countdownLabel`, is forward-facing and correct) · **3** files of
 composite durations plus one named miss · **1** browser-locale date, the email blocked on
 I18N-001.
+
+---
+
+## Pass AN — "it takes a LocaleCode" was not evidence of anything
+
+**Status: FIXED.** Four more ladders folded into `fmtTimeAgo`; private ladders **6 → 2**.
+
+### `[CLAUDE-1][MEDIUM][I18N]` the `ladder-localised` label was flattering four defects
+
+Pass AK's instrument split private ladders into `ladder` (English-only) and
+`ladder-localised` (takes a locale). Reading the six that carried the second label, **four
+of them were English-only too**:
+
+| file | what every rung actually said |
+|---|---|
+| `app/(app)/feedback/feedback-board.tsx` | `'just now'`, `` `${m}m ago` ``, `` `${h}h ago` `` |
+| `components/modules/documents-module.tsx` | `'just now'`, `` `${hrs} hours ago` ``, **`'Yesterday'`** |
+| `components/modules/front-desk-module.tsx` | `` `${h}h ago` ``, **`'Yesterday'`** |
+| `components/modules/inbox-module.tsx` | the same ladder, duplicated |
+
+Each took a `LocaleCode` — and passed it **only to the fallback date**, thirty days or
+seven days or two days down. Everything a reader actually sees on a fresh item was
+English. **Accepting a `LocaleCode` is not evidence that anything is localised**, and my
+own classifier had been treating it as exactly that.
+
+All four now delegate to `fmtTimeAgo` with the threshold each already used, so their
+switch-to-a-date behaviour is unchanged and every rung above it follows the reader.
+`front-desk-module.tsx` and `inbox-module.tsx` held **byte-identical** copies of the same
+ladder, which is the duplication the shared helper exists to end.
+
+One wording change, documented in the guard: `'Yesterday'` at 24–48 hours becomes
+`"1d ago"` in en-US. Intl's `numeric: 'auto'` would say "yesterday", but that is the
+setting whose week rung reads "last wk." rather than "1w ago", and keeping en-US
+byte-identical at the other four rungs is worth more than one word.
+
+### The guard now names files rather than counting
+
+Two private ladders remain and **both are correct as they are**, so a number would be
+misleading: `lib/display/ambient.ts countdownLabel` is forward-facing (`"in 15 min"`,
+`"Sat 3:00 PM"`) and `lib/location/overview.ts sinceLabel` says `"Since 3:04 PM"` rather
+than an elapsed span. Neither can be expressed by a past-tense helper, and both take the
+locale *and* a translator. The test asserts the two file paths, so folding one in or
+adding a third both fail loudly.
