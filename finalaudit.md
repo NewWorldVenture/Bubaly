@@ -3879,3 +3879,69 @@ not mask a negative spend bucket. Full suite **13,650 / 13,650** under pinned UT
 and again under `TZ=America/Los_Angeles`. `npx tsc --noEmit` and eslint clean.
 
 **Status: FIXED.** No migration, so it reaches production with the deploy.
+
+---
+
+## Pass K — acknowledging an event nobody finished
+
+**F-K01 — a lost Stripe money event, answered 200 and never retried.**
+
+Stripe stops retrying an event the moment one delivery answers 2xx. `recordEvent`
+in `lib/stripe/webhook.ts` returned `'duplicate'` — which both webhook routes
+answer **200** — for two different situations: an event that reached status
+`processed`, and an event another delivery merely *holds* at status `processing`.
+Those are not the same thing, and conflating them loses money.
+
+**The sequence.**
+
+1. A handler throws — `handleTransactionCreated`, say, on a transient database failure.
+2. `markEventError`, hitting the same failure, throws too. It is the only thing
+   that moves the row to `error`, so the row stays `processing`.
+3. Stripe retries a minute later — inside `STALE_EVENT_MS` (10 min), so the claim
+   is not yet reclaimable.
+4. `recordEvent` falls through to `return { outcome: 'duplicate' }`. The route
+   answers **200**.
+5. Stripe considers the event delivered and **stops**. The card debit is never
+   applied, and the row sits in `processing` with nothing left to reprocess it.
+
+**Proved behaviourally** against `tests/helpers/in-memory-supabase.ts` (the
+Postgres-faithful fake), not from reading:
+
+| After | A Stripe retry saw |
+|---|---|
+| `markEventError` **succeeded** | `fresh` — reprocessed ✅ |
+| `markEventError` **failed** | `duplicate` → **200** → retries stop ❌ |
+
+**A second, unconditional defect in the same path.** The money route called
+`markEventError` *unguarded*, unlike the billing route which wraps it:
+
+```js
+await markEventError(supabase, event.id, message, claimToken);  // can throw
+console.error('[money webhook] handler error', event.type, e);  // never reached
+```
+
+So whenever recording the error state failed, the throw escaped the catch block
+and took the **original money error with it**. The operator saw only the
+secondary failure — "error state was not recorded" — and never the debit failure
+that actually happened. `markEventProcessed` was unguarded there too.
+
+**The fix.** `recordEvent` now distinguishes `'duplicate'` (FINISHED — the only
+outcome a route may acknowledge) from `'in_flight'` (held, unfinished). Both
+routes answer `in_flight` with **409**, so the retry keeps coming: if the holder
+succeeds the next delivery sees `processed` and is acknowledged; if the holder
+died the claim goes stale and is reclaimed. The money route now logs the handler
+error **before** the write that can throw, and guards both `markEventError` and
+`markEventProcessed` the way the billing route already did.
+
+Not changed: `issuing_authorization.request` still bypasses the claim entirely —
+that is deliberate and correct (Stripe's real-time window, and
+`wallet_reserve_card_auth` is idempotent on `p_auth_id` under a row lock, which
+was verified rather than assumed).
+
+**Verification.** 8 new behavioural tests; **5 fail against the original code**
+and the other 3 are regression guards for behaviour that was already right
+(finished ⇒ duplicate, stale reclaim, error reclaim). Full suite **13,658 /
+13,658** under pinned UTC and again under `TZ=America/Los_Angeles`.
+`npx tsc --noEmit` and eslint clean.
+
+**Status: FIXED.** No migration, so it reaches production with the deploy.

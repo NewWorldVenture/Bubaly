@@ -46,12 +46,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ received: true });
   }
 
-  // Everything else is deduped. Failed or abandoned claims can be retried, while
-  // an active concurrent delivery is acknowledged without repeating side effects.
+  // Everything else is deduped. Only a FINISHED event is acknowledged; one that
+  // another delivery still holds gets a 409 so Stripe keeps retrying, because an
+  // unfinished claim is not a completed one — see recordEvent.
   let claimToken = '';
   try {
     const claim = await recordEvent(supabase, event);
     if (claim.outcome === 'duplicate') return NextResponse.json({ received: true, duplicate: true });
+    if (claim.outcome === 'in_flight') return NextResponse.json({ error: 'event_in_flight' }, { status: 409 });
     claimToken = claim.claimToken ?? '';
   } catch {
     return NextResponse.json({ error: t('money.webhookStorageUnavailable') }, { status: 503 });
@@ -78,13 +80,28 @@ export async function POST(req: NextRequest) {
     }
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
-    await markEventError(supabase, event.id, message, claimToken);
+    // The handler failure is the one an operator needs, so log it even when
+    // recording the error state fails. Unguarded, markEventError's own throw
+    // escaped this block and took the money error with it, leaving only the
+    // secondary failure in the logs.
     console.error('[money webhook] handler error', event.type, e);
+    try {
+      await markEventError(supabase, event.id, message, claimToken);
+    } catch (markError) {
+      console.error('[money webhook] failed to record handler error', markError);
+    }
     // Return 500 so Stripe retries; recordEvent keeps errored events reprocessable
     // and the money handlers are idempotent, so the retry settles correctly.
     return NextResponse.json({ error: 'handler_failed' }, { status: 500 });
   }
 
-  await markEventProcessed(supabase, event.id, claimToken);
+  try {
+    await markEventProcessed(supabase, event.id, claimToken);
+  } catch (err) {
+    // The side effects landed but the claim did not close. Answering 2xx here
+    // would strand the row in 'processing'; a non-2xx lets the retry settle it.
+    console.error('[money webhook] failed to finalize event', err);
+    return NextResponse.json({ error: t('money.webhookStorageUnavailable') }, { status: 503 });
+  }
   return NextResponse.json({ received: true });
 }

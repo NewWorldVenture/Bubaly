@@ -160,6 +160,11 @@ export async function POST(req: NextRequest) {
     if (claim.outcome === 'duplicate') {
       return NextResponse.json({ received: true, duplicate: true });
     }
+    // Held by another delivery that has not finished. Not the same as done: a
+    // 2xx here ends Stripe's retries for an event nobody has applied.
+    if (claim.outcome === 'in_flight') {
+      return NextResponse.json({ error: 'event_in_flight' }, { status: 409 });
+    }
     claimToken = claim.claimToken ?? '';
     if (!claimToken) return NextResponse.json({ error: t('stripe.webhookStorageUnavailable') }, { status: 503 });
   } catch {
