@@ -6,7 +6,7 @@
 `Executive Summary — session record` sections below are the earlier summaries,
 kept verbatim; where they disagree with this part, this part is newer.*
 
-**Twelve passes, A–L. 94 numbered findings.**
+**Thirteen passes, A–M. 95 numbered findings.**
 
 | Pass | Surface | Findings |
 |---|---|---:|
@@ -22,6 +22,7 @@ kept verbatim; where they disagree with this part, this part is newer.*
 | J | A reconciliation check that reconciled nothing | fix |
 | K | A Stripe event acknowledged that nobody finished | fix |
 | L | The marketing platform spine — the tables that had never replayed | 4 (`L1`–`L4`) |
+| M | Reporting a failure is not surviving one | 1 (`M1`) |
 
 Session record 1 says "87 findings across six passes". That was true when
 written; passes G–K have landed since, and Pass A is `F1`–`F22`, which is 22 and
@@ -4182,3 +4183,51 @@ migrations that had never replayed: `privileged-rpc-grants-check.sql`, and
 *Given L2, the phrase "verified healthy" in this pass means: verified against a
 faithful replay through the repo's own bootstrap. It does not mean verified
 against production, which remains unaudited and needs operator credentials.*
+
+---
+
+# Pass M — reporting a failure is not surviving one
+
+*Claude-1, 2026-09-14. Evidence in `audit/claude-1.md` (`C1-S3-01`).*
+
+## M1 — a push that failed was recorded as delivered, and nothing could retry it
+
+`HIGH`. `lib/server/push.ts` stamped `pushed_at` on every notification the
+dispatcher touched, success or failure. `pushed_at` is the only column the
+pending query filters on (`.is('pushed_at', null)`), nothing in the codebase
+ever clears it, and no retry path exists — so a provider outage dropped every
+notification in that run **permanently**.
+
+Proved, not read: with `web-push` stubbed to reject `statusCode: 500`, the send
+is counted `failed` and the row is stamped delivered in the same loop iteration.
+
+```
+✓ counts the send as failed                     failed === 1, sent === 0
+✗ does NOT stamp pushed_at when every send failed
+    expected [] to deeply equal
+    [ { "pushed_at": "2026-09-14T21:13:14.747Z", "table": "notifications" } ]
+```
+
+**Why this is worth a pass of its own.** It is a *second-order* instance of the
+pattern in Part 0, and the more dangerous kind. The cron route already answers
+**502** when `result.failed > 0` — an earlier fix in this same audit, and it
+works. It made the failure **visible** while leaving it **unrecoverable**: the
+run goes red, the row says delivered, and the row is what the next run reads.
+
+*Reporting a failure and surviving one are different properties.* The red cron
+run made this look handled, which is precisely why it survived the pass that
+created it. The question that found it was asked of this audit's own fix: **the
+cron now reports the failure — but does anything act on it?**
+
+Fixed: retry only when nothing got through at all (`failed > 0`, `sent === 0`,
+`pruned === 0`), bounded at 24h so a dead endpoint cannot retry forever. A
+partial success still stamps — those devices have the notification and
+re-sending would buzz them twice. Distinguishing partial from total is the most
+that can be done without per-device delivery state, which is a schema change and
+therefore inert in production while `F-001` holds. Guard neutered → suite red;
+restored → green.
+
+**Carry this forward:** every fix in this document that makes a failure
+*visible* — the cron 502s, the `/api/health` FEATURE_ENV tier, the dead-letter
+tables — deserves the same second question. Visibility is where this codebase
+tends to stop, and it is only half of the property.
