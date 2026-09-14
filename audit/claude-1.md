@@ -3169,3 +3169,71 @@ number that falls as the work succeeds.
 **70 = 56 correct** (40 exempt + 16 mechanism) + **11 blocked** on I18N-001 + **3
 convertible**, the last of which are in files this pass did not reach. `components/` is at
 zero; `app/` is at its floor of 25.
+
+---
+
+## Pass AT — five more places a refused read was reported as an empty world
+
+**Status: FIXED.** Verified from Claude-2's and Claude-4's still-OPEN findings, one of
+which carries the best proof in this audit.
+
+### `[CLAUDE-2 → CLAUDE-1][HIGH][STATE]` "No members yet." could never be true
+
+Claude-2's reasoning, which I re-derived from `lib/supabase/auth.ts` before acting:
+`getUserContext()` reads `family_members` for **this caller** with
+`.eq('is_active', true)`; an empty result returns `{ needsFamily: true }`, and
+`requireUserContext` then provisions a family and re-resolves, or redirects to
+`/onboarding`. So by the time `app/(app)/family/members/page.tsx` runs its body, the
+caller **is** an active member of `ctx.active.familyId`.
+
+A correct read of the same table, same family, same filter therefore returns **at least
+one row, always**. `members.length === 0` was reachable only when `data` was `null` — the
+error the page never destructured. **There was no state of the world in which "No members
+yet." was true**, and a parent whose read was refused was told their household was empty.
+
+That is the strongest version of E-01 in the audit: not a wrong message, an **impossible**
+one.
+
+### Two where the empty state changed what the page DID, not just what it said
+
+- **`app/(app)/dashboard/family-access/page.tsx`.** `usernameByMember` is built from an
+  unread `child_logins` result, and that map decides between *"reset this child's PIN"* and
+  *"give this child a login"*. A dropped error turned every existing login into a
+  create-a-login prompt — **a write offered on the strength of a read that did not
+  happen.** The error copy says so explicitly, because the risk is not "the list looks
+  empty" but "you are about to overwrite".
+- **`components/modules/recipes-module.tsx addToGrocery`.** A failed `grocery_lists` read
+  fell into `if (!list)` → *offer to create one*. A family with a perfectly good Groceries
+  list ends up with **two**, their items split across both. The fix is one branch, and its
+  **order** is the whole point: the error case must precede the empty case.
+
+### And one that told the family something false about their own database
+
+`app/(app)/family/permissions/page.tsx` rendered *"Permission rules load from the database
+once the policy seed is applied."* over an unchecked read. That reads as a setup step they
+have not done — so a parent debugging an **RLS regression** was being pointed at a seed
+script that had already run.
+
+### Already fixed, and recorded as such
+
+`app/(app)/family/activity/page.tsx` — Claude-2 filed it OPEN; it now has an `ErrorState`
+on `logsError`. Its `members` read still drops its error, but that read is **decoration**
+(a name lookup), and the Pass R precedent is to say so rather than guard it and pretend
+both matter equally.
+
+### The guard
+
+`tests/a-failed-read-is-never-an-empty-world.test.ts`, 8 cases. It asserts the **property**
+— the error is destructured, logged, and rendered — never the call text, because five
+guards in this audit have now failed by pinning how something was written. Two cases carry
+their weight beyond that:
+
+- **Ordering.** The guard must come *before* anything is derived from the rows, and in the
+  recipe flow the error branch must come *before* the empty branch. A page that guards
+  after deriving still renders a conclusion drawn from a failed read.
+- **The premise is pinned.** The `/family/members` argument rests entirely on
+  `requireUserContext` guaranteeing an active membership. That contract is now asserted in
+  `lib/supabase/auth.ts` directly, so if it ever changes, the reasoning behind the guard
+  fails loudly instead of quietly becoming false.
+
+Reverting the members page and the recipe flow fails 3 of 8, naming both.

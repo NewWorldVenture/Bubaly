@@ -202,10 +202,19 @@ export function RecipesModule() {
 
   async function addToGrocery(recipe: Recipe) {
     const supabase = createClient();
-    const { data: list } = await supabase
+    const { data: list, error } = await supabase
       .from('grocery_lists').select('id')
       .eq('family_id', familyId).eq('is_archived', false).is('archived_at', null)
       .order('created_at').limit(1).maybeSingle();
+    // A failed read is not "you have no list". Without this the next line offers
+    // to CREATE one — so a family with a perfectly good Groceries list, on a read
+    // that was refused, ends up with a second one and their items split across
+    // both. The difference between "no list" and "could not check" is a write.
+    if (error) {
+      console.error('[recipes] grocery list read failed', error);
+      toastError(tr('recipes.couldNotCheckYourGrocery'));
+      return;
+    }
     if (!list) { setNewListName('Groceries'); setGroceryPrompt(recipe); return; } // offer to create one
     await addItemsToList(recipe, list.id);
   }
