@@ -80,7 +80,7 @@ not carry even the policies verified correct.
 | | Finding | Status |
 |---|---|---|
 | F5 / F-001 | Production migrations cannot be applied — the ledger records only `0001–0003` | **BLOCKED — operator** |
-| F-C08 | The forward-release mechanism is pinned to `0240–0254`; the repo is 38 migrations past it | **OPEN — owner** |
+| F-C08 | The forward-release mechanism is pinned to `0240–0254`; the repo is 38 migrations past it | **Code half fixed — re-pinning is now a manifest change; the release itself is still owner/operator** |
 | F-E02 | Step-up MFA is presentational; no policy references `aal`, and guarded pages fetch straight from PostgREST | OPEN |
 | F-E03 | The `family-media` bucket is public; photos and attachments are served with no session | OPEN (known, tracked as LB-009) |
 | F-F01 | A caller-supplied `max` truncates a money read and reports success; reconciliation renders "Everything reconciles" from a prefix | OPEN |
@@ -3148,6 +3148,38 @@ Two things follow, and the second is the one that matters:
 Fix: re-pin the release to the current head with fresh checksums, or retire the
 pinned-release mechanism in favour of the ledger-based one. Either is an owner
 decision about release process, not a code defect.
+
+**Update — the code half is now done; the release itself remains the owner's.**
+
+There *was* a code defect underneath, and it is what made re-pinning expensive:
+the pinned range was stated **twice**. Authoritatively in
+`supabase/production-forward-release.json`, and again as three hardcoded
+literals in `scripts/apply-production-forward-release.mjs` — `RELEASE_VERSIONS`,
+the filename regex `^0(?:24\d|25[0-4])_…`, and two error strings. Re-pinning
+therefore meant editing code *and* regenerating the manifest, and if the two
+disagreed `readReleaseFiles` refused with "Only the pinned 0240-0254 production
+release is supported."
+
+The manifest is now the only statement of the range. Re-pinning is a reviewed
+data change. Nothing was relaxed: every sha256 is still verified, the project
+ref is still checked, the filename still cannot escape `supabase/migrations/`,
+and the range must now additionally be **contiguous and duplicate-free** — a
+property the hand-written list could only assert by being written out correctly.
+The held-release error now names the range it is actually pinned to and points
+at the manifest. Proved by a test that feeds the script a manifest re-pinned to
+`0240-0255`, with the real checksum of `0255`, and asserts it is accepted with
+no code change and still rejects a corrupted read.
+
+**What remains is not code.** A re-pinned manifest also carries `boundary` —
+a snapshot of production's live catalogue — and `newTables`, which
+`assertPreflight` requires to be *absent* from production. Both need a
+credentialed read of production, which this session does not have and must not
+have. And the runbook is explicit that an apply needs "a new successful preview,
+review evidence … and explicit parent authorization", and that the baseline
+block "must not be bypassed or treated as a missing-credentials failure".
+
+So F-C08's code half is closed and F-C08's release half, like F5, is the
+operator's.
 
 ## F-C09 — Supabase credentials fail at first use, not at boot *(Low, open)*
 

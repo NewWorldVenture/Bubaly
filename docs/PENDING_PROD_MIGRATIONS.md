@@ -196,6 +196,19 @@ not establish those results or production application.
 - The original `supabase-production-migrations.yml` workflow deliberately
   blocks historical replay against the incomplete ledger. Its block must not
   be bypassed or treated as a missing-credentials failure.
+- **Re-pinning the forward release is now a manifest change, not a code
+  change.** `scripts/apply-production-forward-release.mjs` used to state the
+  pinned range in three hardcoded literals as well as in
+  `supabase/production-forward-release.json`; the manifest is now the only
+  statement of it. Checksum verification, the project-ref check and the
+  filename constraint are unchanged, and the range must additionally be
+  contiguous and duplicate-free.
+  This removes the code edit from a re-pin. It does **not** remove anything
+  else the corrected release needs: `boundary` is a snapshot of production's
+  live catalogue and `newTables` must be verified absent from production, so a
+  corrected manifest still requires a credentialed read, a new successful
+  preview, and the explicit parent authorization required above. An agent
+  cannot produce or approve one.
 - Do not use a blind `supabase db push`, `--include-all`, production resets,
   blanket migration repair/stamping, historical SQL bundle pastes, or replay
   of historic migrations or seeds to reconcile the ledger. Guards such as
