@@ -2310,3 +2310,53 @@ remaining 74: `lib/` shared helpers reached by a family surface (54), family-fac
 Recorded in `tests/hardcoded-locales-only-go-down.test.ts` so the next person converting
 knows where to stop, and knows which four categories to leave alone and why. A ratchet
 that demands zero where zero is wrong is a ratchet someone deletes.
+
+---
+
+## Pass AH — every family-facing page follows the reader; app/ reaches its floor
+
+### [CLAUDE-1][HIGH][I18N] The 18 family-facing page sites, and one signature threaded five frames deep
+
+- **Status:** FIXED — **app/ is at its floor of 25**, all of which is exempt. Ratchet 123 → **104**.
+- **Files:** `app/(app)/dashboard/{conflicts,food,memories,planning}/page.tsx`,
+  `dashboard/playbook/playbook-actions.ts`, `display/page.tsx`, `wallet/treasury/page.tsx`,
+  `home/page.tsx`, `feedback/feedback-board.tsx`, `app/(marketing)/blog/page.tsx`
+
+All server components (plus one `'use server'` action and one client board), so the locale
+comes from `getLocaleContext()` — the same source the `getTranslations()` call beside it
+already uses — and each module helper takes it as a parameter. 14 call sites needed the
+argument and `tsc` named every one.
+
+`display/page.tsx` was the deep one: `formatBirthday` is called from `loadDisplay`, which
+is called from `KitchenDisplayPage`. The locale had to be threaded through all three, and
+the compiler walked it out one frame at a time.
+
+`playbook-actions.ts` was mis-detected as a helper — my tool took
+`refreshPlaybookAction` for a module-scope formatter because the name starts lowercase.
+Adding a locale parameter to an **exported server action's signature** would have changed
+its public shape. Reverted and done by hand: the action reads `getLocaleContext()` itself,
+which is what a `'use server'` module should do.
+
+### The fifth time I made the same ordering mistake
+
+`if (!/LocaleCode/.test(text))` — checked **after** the edit had written
+`, locale: LocaleCode` into that same text. So the import was skipped in all five files.
+Identical to the `useLocale` check in Pass AF, the `LocaleCode` check in Pass AC, and the
+comment-reading ratchet in Pass Z. Four of those five were the same two-line shape: a
+guard whose subject includes the change it is guarding. Testing for the **import
+statement** rather than the name is the fix, and it is the fix every time.
+
+And one new one: the path regex `^(app/[^(]+)\(` never matched, because a Next route group
+puts parentheses **in the path** — `app/(app)/dashboard/…`. It stopped at `(app)` and the
+loop ran zero times over a non-empty error list, silently. It printed nothing, which is
+the only reason I looked.
+
+### app/ is now at its floor, and what that floor is
+
+25 sites remain under `app/`, and every one is in an exempt category: **17** `app/api/ai/*`
+prompt-construction sites (read by the model), **7** Super Admin pages (the platform's own
+books), **1** `app/api/cron/admin-digest` (no reader). Nothing family-facing is left there.
+
+**Remaining overall: 104**, of which the floor is 41. So 63 real defects, all in `lib/` —
+54 shared helpers reached by a family surface, 8 blocked on I18N-001 (the cookie-only
+locale), and the activity feed's compact relative time.

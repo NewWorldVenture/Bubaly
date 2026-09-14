@@ -20,9 +20,9 @@
 // THE NUMBER MAY ONLY GO DOWN. If a change adds a hardcoded formatter this fails and
 // names the file; if a change converts one, lower the number in the same commit.
 //
-// components/ IS AT ZERO: every date, time and money value a component renders follows
-// the reader. What is left is app/ and lib/, and it has been classified rather than
-// assumed — THE HONEST FLOOR IS 41, NOT 0, and a ratchet that demands zero where zero is
+// components/ IS AT ZERO and app/ IS AT ITS FLOOR OF 25 — every remaining site under app/
+// is one of the exempt categories below. What is left that is real is lib/ (79 sites in 52
+// files), and it has been classified rather than assumed — THE HONEST FLOOR IS 41, NOT 0, and a ratchet that demands zero where zero is
 // wrong is a ratchet someone deletes. The four categories to leave alone:
 //
 //   17  app/api/ai/* prompt construction — read by the MODEL, not a person. Verified by
@@ -61,7 +61,7 @@ const FORMATTER_WITH_LOCALE =
 /**
  * The ceiling, measured when the shared formatter was made locale-aware.
  *
- * 123, and every step to that number was a way to get it wrong. A `git grep -c`
+ * 104, and every step to that number was a way to get it wrong. A `git grep -c`
  * says 247, because git grep counts matching LINES and several of these hold two
  * formatters. Counting matches instead says 252 — but that reads COMMENTS, and one
  * of them is this pass's own explanation of the defect. Stripping comments gives
@@ -70,7 +70,7 @@ const FORMATTER_WITH_LOCALE =
  * Getting those three numbers to disagree is how a ratchet starts life already
  * broken, which is why the derivation is written down rather than the result.
  */
-const CEILING = 123;
+const CEILING = 104;
 
 /**
  * Comments stripped first, and this is not a detail.

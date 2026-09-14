@@ -53,7 +53,7 @@ import { OutcomesStrip } from '@/components/outcomes/outcomes-strip';
 import { countFromResult, countMatchingResult } from '@/lib/outcomes/discovery';
 import { FIRST_VALUE_MILESTONE } from '@/lib/analytics/activation';
 import { nextBirthdayDate, daysUntil } from '@/lib/moments/birthdays';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Home' };
 export const dynamic = 'force-dynamic';
@@ -147,6 +147,7 @@ type Member = { id: string; display_name: string; color: string | null; role: st
 export default async function HomePage() {
   const i18nT = await getTranslations();
   const { fmtTime, fmtMoney } = await getFormat();
+  const { locale } = await getLocaleContext();
   const tr = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
@@ -583,7 +584,7 @@ export default async function HomePage() {
             return (
               <Link key={e.id} href="/dashboard/calendar" className="flex min-h-[44px] items-center gap-3 rounded-xl focus-ring">
                 <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-elevated text-center">
-                  <span className="text-[9px] font-bold uppercase text-muted leading-none">{d.toLocaleDateString('en-US', { month: 'short' })}</span>
+                  <span className="text-[9px] font-bold uppercase text-muted leading-none">{d.toLocaleDateString(locale.code, { month: 'short' })}</span>
                   <span className="text-sm font-black leading-none">{d.getDate()}</span>
                 </div>
                 <div className="min-w-0 flex-1">
@@ -656,7 +657,7 @@ export default async function HomePage() {
             {(tasks ?? []).length === 0 && <EmptyRow>{tr('home.noOpenTasksNicelyDone')}</EmptyRow>}
             {((tasks ?? []) as { id: string; title: string; due_date: string | null; assigned_to_id: string | null }[]).map((t) => {
               const owner = t.assigned_to_id ? memberById.get(t.assigned_to_id) : undefined;
-              const due = t.due_date ? (t.due_date === todayIso ? 'Today' : new Date(t.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })) : null;
+              const due = t.due_date ? (t.due_date === todayIso ? 'Today' : new Date(t.due_date).toLocaleDateString(locale.code, { month: 'short', day: 'numeric' })) : null;
               return (
                 <div key={t.id} className="flex items-center gap-3">
                   <span className="h-4 w-4 shrink-0 rounded-full border-2 border-emerald-400/60" />
@@ -725,7 +726,7 @@ export default async function HomePage() {
         {/* Family Finances */}
         <Card>
           <CardHead icon={DollarSign} title={tr('home.familyFinances')} href="/dashboard/billing" action="View finances" />
-          <p className="text-xs text-muted">{tr('home.thisMonth')} {monthStart.toLocaleDateString('en-US', { month: 'long' })}</p>
+          <p className="text-xs text-muted">{tr('home.thisMonth')} {monthStart.toLocaleDateString(locale.code, { month: 'long' })}</p>
           <div className="mt-3 flex items-center gap-4">
             <FinanceDonut income={finances.income} expenses={finances.expenses} remaining={finances.remaining} />
             <div className="flex-1 space-y-2 text-sm">
@@ -745,7 +746,7 @@ export default async function HomePage() {
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {((photos ?? []) as { id: string; url: string | null; thumbnail_url: string | null; caption: string | null; taken_at: string | null; created_at: string }[]).map((p) => {
                 const src = p.thumbnail_url || p.url;
-                const when = new Date(p.taken_at || p.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                const when = new Date(p.taken_at || p.created_at).toLocaleDateString(locale.code, { month: 'short', day: 'numeric' });
                 return (
                   <Link key={p.id} href="/dashboard/memories" className="group relative aspect-square overflow-hidden rounded-xl bg-elevated">
                     {src
