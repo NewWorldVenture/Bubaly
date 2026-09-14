@@ -2663,3 +2663,88 @@ zero keys**, which looks alarming and is correct — they are deliberate overlay
 **93 = 56 correct + 8 blocked** on I18N-001 + **29 convertible** hardcoded-locale defects,
 all display formatters in `lib/`. Separately: **0** English-only time-ago ladders, **5**
 private-but-localised, **2** composite durations, **14** browser-locale dates (I18N-002).
+
+---
+
+## Pass AL — I18N-002 closed: eighteen dates stopped following the machine
+
+**Status: FIXED (18 of 19; the 19th is blocked on I18N-001).**
+
+`toLocaleDateString()` / `toLocaleTimeString()` with **no locale argument** follow the
+browser. A family who sets Bubaly to Deutsch on an en-US laptop got American dates. Every
+one now takes `useFormat()` in a client component or `await getFormat()` in a server one.
+
+| surface | what it showed |
+|---|---|
+| `components/app/quick-capture.tsx` | the live "when" preview — **and** `'Today'`, `'Tomorrow'` and the joining `" at "` were English literals |
+| `components/guardian/guardian-dashboard.tsx` | an escalation's clock, and every call row's date |
+| `components/guardian/call-history.tsx` | the day heading and each call's clock |
+| `components/migrate/migrate-wizard.tsx` | both event-preview lists |
+| `components/modules/life-events-module.tsx` | `fmtDate` + `fmtFullDate`, module-scope |
+| `components/modules/relationship-module.tsx` | anniversary and gift dates |
+| `components/modules/trip-intel-module.tsx` | `fmtDateTime` + `fmtTime`, module-scope, plus a trip card |
+| `components/modules/independence-module.tsx` | a milestone's achieved date |
+| `components/dashboard/calendar-sync-panel.tsx` | "synced {date}" |
+| `app/(app)/marketplace/item/[id]/page.tsx` | the price-history dates (server) |
+| `app/(app)/dashboard/trip-intel/actions.ts` ×2 | **worse than the rest** — see below |
+
+### `[CLAUDE-1][HIGH][I18N]` the two worst were on the server, writing into a calendar
+
+`app/(app)/dashboard/trip-intel/actions.ts:151` and `:220` build a calendar event's
+**description** with `toLocaleTimeString([], …)`. On a server that is not the browser's
+locale — it is **the server's**, and a server has no reader at all. The text is then
+persisted into the family's calendar, so the leave-by time a family reads was formatted
+for a machine in whatever region Vercel happened to run the action. Both now take
+`await getFormat()`.
+
+### The instrument was wrong in three ways, and only the conversion found them
+
+Pinning a number makes the scanner a contract, so its blind spots become false assurance.
+Three came out while working the list:
+
+1. **`/ 1000` was not a divisor it recognised.** A ladder that converts to *seconds* and
+   then divides by 60 twice reads identically to a person and not at all to a regex looking
+   for `60_000`. Two real sites were invisible.
+2. **`toLocaleTimeString([], …)` was not a spelling it recognised.** An empty array is the
+   same defect written so it looks deliberate, and it hid **five** more sites, including
+   both server actions above.
+3. **`components/admin/` was not covered by the operator-page exemption**, only
+   `app/(app)/admin/` — so `admin-notifications-list.tsx` was being counted as a
+   family-facing defect when the audit's own rule says the operator console is en-US.
+
+Widening it surfaced a **false positive** in the other direction: `lib/blog/engagement.ts`
+`formatLikeCount` renders `"1.2k"` and `"1.2m"`, and `` `${…}m` `` reads exactly like
+"1.2 minutes" to a regex. The discriminator added: a time label **compares against a
+time** — 60, 24, 3600, 86400, 604800 — or says "ago". A like count compares against 1,000.
+
+Also added: dedupe by `file:line:kind`, because one source line can hold two matches (a
+ternary with a clock on one branch and a date on the other is **one** site to fix) and
+counting it twice makes a pinned number drift on a cosmetic edit.
+
+### Four patterns added to the shared map
+
+`'EEEE, MMM d'`, `'EEEE, MMMM d'`, and — for the sites that were calling
+`toLocaleDateString()` with no options at all — `'P'` and `'pp'`, which are date-fns's own
+spelling for "this locale's short date" and "this locale's time with seconds". Mapping the
+shape lets a converted site keep the rendering it had while taking the family's locale
+instead of the machine's.
+
+### Catalogue
+
+`quickCapture.tomorrow` and `quickCapture.dayAtTime` (`"{day} at {time}"` → `"{day} um
+{time}"`, `"{day} à {time}"`, `"{day} às {time}"` …) across the 7 base catalogues.
+`calendar.today` already existed and is reused.
+
+### What is left, and why
+
+**One** browser-locale site: `lib/emails/chore-reminder.tsx`. It is an **email**, and a
+family's language lives only in `LOCALE_COOKIE`, which a cron cannot read — one of the
+eight blocked on **I18N-001**. It is counted in the guard rather than exempted from it, so
+it stays visible as blocked work instead of disappearing into a passing test.
+
+Also still open, pinned so they can only fall: **8** localised-but-private ladders (seven
+worth folding into `fmtTimeAgo`; the eighth, `lib/display/ambient.ts countdownLabel`, is
+forward-facing and correct as it is) and **5** composite durations
+(`lib/marketplace/auction.ts` `"2d 4h"`, `lib/sleep/coach.ts` `"7h 30m"`,
+`lib/analytics/{journey,onboarding}.ts` `"1m 05s"`), which `Intl.RelativeTimeFormat` cannot
+express at all.

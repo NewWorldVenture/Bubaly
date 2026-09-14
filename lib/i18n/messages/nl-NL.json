@@ -2693,6 +2693,8 @@
   "calendar.syncAmpConnect": "Synchroniseren en koppelen",
   "calendar.teamDinner": "Teamdiner",
   "calendar.title": "Titel",
+  "quickCapture.dayAtTime": "{day} om {time}",
+  "quickCapture.tomorrow": "Morgen",
   "calendar.today": "Vandaag",
   "calendar.toggleMembersBelowToShowOr": ". Schakel leden hieronder in of uit om hun kolom te tonen of te verbergen.",
   "calendar.upToDate": "Bijgewerkt",

@@ -111,9 +111,11 @@ describe('the shared time-ago', () => {
 //                       Intl.RelativeTimeFormat describes ONE unit in one direction,
 //                       so it cannot express these at all. A real gap, needing
 //                       Intl.DurationFormat or a catalogue key; not a ladder.
-//   browser-locale      `toLocaleDateString()` with no argument. Follows the BROWSER,
-//                       not the family's Bubaly choice. The worst of the four to
-//                       diagnose, because it looks locale-aware in the source.
+//   browser-locale      `toLocaleDateString()` with no argument — `([], …)` counts too,
+//                       being the same thing spelled so it looks deliberate. Follows the
+//                       BROWSER, not the family's Bubaly choice, and the worst of the four
+//                       to diagnose because it LOOKS locale-aware in the source. Eighteen
+//                       were converted; the one left is an email, blocked on I18N-001.
 describe('private time-ago ladders only go down', () => {
   const found = findLadders() as { file: string; line: number; kind: string }[];
   const of = (kind: string) => found.filter((f) => f.kind === kind);
@@ -127,22 +129,35 @@ describe('private time-ago ladders only go down', () => {
     ].join('\n')).toEqual([]);
   });
 
-  it('holds the localised-but-private ladders at five', () => {
-    expect(of('ladder-localised'), 'four are worth folding into fmtTimeAgo; the fifth is '
-      + 'lib/display/ambient.ts countdownLabel, which is forward-facing and correct as it is. '
-      + 'Converting one? Lower this number in the same commit.').toHaveLength(5);
+  it('holds the localised-but-private ladders at eight', () => {
+    expect(of('ladder-localised'), 'seven are worth folding into fmtTimeAgo; the eighth is '
+      + 'lib/display/ambient.ts countdownLabel, which is FORWARD-facing ("in 15 min", '
+      + '"Sat 3:00 PM") and cannot use a past-tense helper. Converting one? Lower this '
+      + 'number in the same commit.').toHaveLength(8);
   });
 
-  it('holds the composite durations at two', () => {
-    const files = of('composite-duration').map((f) => f.file);
-    expect(files).toEqual(['lib/marketplace/auction.ts', 'lib/sleep/coach.ts']);
+  it('holds the composite durations at five', () => {
+    const files = [...new Set(of('composite-duration').map((f) => f.file))].sort();
+    expect(files).toEqual([
+      'lib/analytics/journey.ts',
+      'lib/analytics/onboarding.ts',
+      'lib/marketplace/auction.ts',
+      'lib/sleep/coach.ts',
+    ]);
   });
 
-  it('holds the browser-locale dates at fourteen', () => {
-    expect(of('browser-locale'), 'toLocaleDateString()/toLocaleTimeString() with no locale '
+  // I18N-002 CLOSED except for the one site that cannot be fixed without a migration.
+  // Eighteen were converted; `lib/emails/chore-reminder.tsx` is an EMAIL, and a family's
+  // language choice lives only in a cookie a cron cannot read (I18N-001). It is counted
+  // here rather than exempted, so it stays visible as blocked work rather than
+  // disappearing into a passing test.
+  it('has one browser-locale date left, and it is the one blocked on I18N-001', () => {
+    const left = of('browser-locale');
+    expect(left.map((f) => f.file), 'toLocaleDateString()/toLocaleTimeString() with no locale '
       + 'follows the BROWSER, not the family\'s Bubaly choice — so a family reading Bubaly in '
-      + 'German on an en-US laptop gets American dates. Fourteen remain; the number may only fall.')
-      .toHaveLength(14);
+      + 'German on an en-US laptop gets American dates. Use useFormat() in a client component '
+      + 'or await getFormat() in a server one; the number may only fall.')
+      .toEqual(['lib/emails/chore-reminder.tsx']);
   });
 
   // Positive control. All four classifications come from one instrument, so if it

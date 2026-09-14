@@ -37,6 +37,8 @@ import { launchDateFor, type LifeEventSuggestion } from '@/lib/life-events/detec
 import { launchLifeEventAction, setLifeEventStatusAction } from '@/app/(app)/dashboard/life-event-actions';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
+import type { Format } from '@/lib/utils/format';
 
 type Fact = Tables<'family_facts'>;
 type Plan = Tables<'life_event_plans'>;
@@ -51,10 +53,10 @@ const ITEM_ICON: Record<string, typeof ListChecks> = {
 };
 // The learned surface focuses on the durable, felt facts (preferences/traditions).
 const LEARNED_CATEGORIES = ['preference', 'about', 'important'] as const;
-const fmtDate = (iso: string | null) => (iso ? new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '');
+const fmtDateIn = (f: Format) => (iso: string | null) => (iso ? f.fmtDate(`${iso}T00:00:00`, 'MMM d') : '');
 /** The long form, for a date a family is being told rather than scanning — a
  *  move is often a year out, and "March 14" alone does not say which year. */
-const fmtFullDate = (iso: string | null) => (iso ? new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }) : '');
+const fmtFullDateIn = (f: Format) => (iso: string | null) => (iso ? f.fmtDate(`${iso}T00:00:00`, 'MMMM d, yyyy') : '');
 
 export function LifeEventsModule({
   suggestions = [],
@@ -66,6 +68,10 @@ export function LifeEventsModule({
   suggestionsUnavailable?: boolean;
 } = {}) {
   const tr = useTranslations();
+  // Dates follow the reader, not the browser (I18N-002).
+  const fmt = useFormat();
+  const fmtDate = fmtDateIn(fmt);
+  const fmtFullDate = fmtFullDateIn(fmt);
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 

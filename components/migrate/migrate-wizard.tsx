@@ -15,6 +15,7 @@ import type { ExistingMember, ResolutionPlan } from '@/lib/migrate/resolve';
 import { commitImport, prepareImport, type ImportResult } from '@/app/(app)/dashboard/migrate/actions';
 import { cn } from '@/lib/utils/cn';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 
 type ParsedFile = {
   id: string; name: string; kind: 'ics' | 'csv' | 'vcf';
@@ -46,6 +47,9 @@ function MemberSelect({ members, value, label, nobodyLabel, onChange }: {
 
 export function MigrateWizard() {
   const tr = useTranslations();
+  // The date follows the reader, not the browser: toLocaleDateString() with no
+  // argument takes whatever the machine reports (I18N-002).
+  const { fmtDate } = useFormat();
   const router = useRouter();
   const [step, setStep] = useState<'pick' | 'upload' | 'review' | 'done'>('pick');
   const [source, setSource] = useState<Competitor | null>(null);
@@ -269,7 +273,7 @@ export function MigrateWizard() {
                 return (
                   <li key={`${e.title}-${e.startsAt}-${i}`} className={cn('flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2 text-xs', isSkipped && 'opacity-50')}>
                     <span className="min-w-0 flex-1 truncate font-medium">{e.title}</span>
-                    <span className="hidden shrink-0 text-muted sm:inline">{new Date(e.startsAt).toLocaleDateString()}</span>
+                    <span className="hidden shrink-0 text-muted sm:inline">{fmtDate(e.startsAt, 'P')}</span>
                     {row?.duplicate && <span className="shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] text-amber-600">{tr('migrateWizard.reviewAlreadyHere')}</span>}
                     {memberSelect('event', i, row?.memberId ?? null)}
                     <label className="flex shrink-0 items-center gap-1 text-[11px] text-muted">
@@ -429,7 +433,7 @@ export function MigrateWizard() {
                   <p className="text-xs font-medium text-muted">{tr('migrateWizard.sampleEvents')}</p>
                   <ul className="mt-1 space-y-1">
                     {preview.events.slice(0, 3).map((e, i) => (
-                      <li key={i} className="flex items-center gap-2 text-xs"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /><span className="truncate">{e.title}</span><span className="ml-auto shrink-0 text-muted">{new Date(e.startsAt).toLocaleDateString()}</span></li>
+                      <li key={i} className="flex items-center gap-2 text-xs"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /><span className="truncate">{e.title}</span><span className="ml-auto shrink-0 text-muted">{fmtDate(e.startsAt, 'P')}</span></li>
                     ))}
                   </ul>
                 </div>

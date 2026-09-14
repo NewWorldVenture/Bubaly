@@ -8,6 +8,7 @@ import { ROUTING_MODE_LABELS, type RoutingMode } from '@/lib/guardian/pipeline';
 import { SCAM_TYPE_LABELS } from '@/lib/guardian/scam';
 import { formatPhone } from '@/lib/guardian/phone';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 
 type Communication = {
   id: string;
@@ -58,6 +59,9 @@ function formatDuration(secs: number): string {
 
 export function CallHistory({ communications }: { communications: Communication[] }) {
   const t = useTranslations();
+  // The date follows the reader, not the browser: toLocaleDateString() with no
+  // argument takes whatever the machine reports (I18N-002).
+  const { fmtDate } = useFormat();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'calls' | 'sms' | 'scams' | 'blocked'>('all');
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -128,7 +132,7 @@ export function CallHistory({ communications }: { communications: Communication[
           <div key={date} className="rounded-2xl border border-border bg-surface/40 overflow-hidden">
             <div className="border-b border-border bg-surface/60 px-4 py-2">
               <p className="text-xs font-semibold text-muted uppercase tracking-wide">
-                {new Date(date).toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}
+                {fmtDate(date, 'EEEE, MMMM d')}
               </p>
             </div>
             <div className="divide-y divide-border">
@@ -163,7 +167,7 @@ export function CallHistory({ communications }: { communications: Communication[
                     </div>
                     <div className="shrink-0 text-right">
                       <p className="text-[11px] text-muted">
-                        {new Date(comm.started_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {fmtDate(comm.started_at, 'hh:mm a')}
                       </p>
                       {comm.call_duration_secs != null && (
                         <p className="text-[10px] text-muted">{formatDuration(comm.call_duration_secs)}</p>

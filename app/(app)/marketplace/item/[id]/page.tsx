@@ -27,6 +27,7 @@ import {
 import { cn } from '@/lib/utils/cn';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
+import { getFormat } from '@/lib/utils/format-server';
 
 export const metadata: Metadata = { title: 'Listing · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -38,6 +39,8 @@ const KIND_ICON: Record<string, typeof ShoppingBag> = {
 
 export default async function ListingDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const t = await getTranslations();
+  // The price-history date follows the reader, not the browser (I18N-002).
+  const { fmtDate } = await getFormat();
   const { id } = await params;
   const ctx = await requireUserContext();
   const sb = await createServer();
@@ -267,7 +270,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
                 {priceHistory.map((h, i) => (
                   <li key={i} className="flex items-center justify-between gap-3">
                     <span className={h.newCents < h.oldCents ? 'text-rose-500 dark:text-rose-400' : 'text-muted'}>{historyLine(h)}</span>
-                    <span className="tabular-nums">{new Date(h.changedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                    <span className="tabular-nums">{fmtDate(h.changedAt, 'MMM d')}</span>
                   </li>
                 ))}
               </ul>

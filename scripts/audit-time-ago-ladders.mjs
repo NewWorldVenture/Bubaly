@@ -29,7 +29,15 @@
 import { readFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 
-const MINUTE_DIVISOR = /\/\s*60_?000|\/\s*\(\s*60\s*\*\s*1000\s*\)/;
+/**
+ * The gap→label conversion, in the three spellings this codebase actually uses.
+ *
+ * `/ 1000` is the one I missed first, and it cost two real sites: a ladder that
+ * converts to SECONDS and then divides by 60 twice reads exactly the same to a
+ * person and not at all to a regex looking for 60_000. An instrument whose count
+ * is a pinned contract has to see every spelling of the thing it counts.
+ */
+const MINUTE_DIVISOR = /\/\s*60_?000|\/\s*\(\s*60\s*\*\s*1000\s*\)|\/\s*1_?000(?!\d)/;
 const AGO_TEMPLATE = /`\$\{[^}]*\}\s?(?:m|h|d|w|min|hr|hrs|sec|day|days|week|weeks)\b[^`]*`/;
 /**
  * "2d 4h", "7h 30m" — TWO units in one label. Not the same defect, and not fixable
@@ -42,7 +50,12 @@ const AGO_TEMPLATE = /`\$\{[^}]*\}\s?(?:m|h|d|w|min|hr|hrs|sec|day|days|week|wee
  */
 const COMPOSITE_DURATION = /`\$\{[^}]*\}\s?[a-z]{1,3}\s+(?:\$\{|[A-Za-z]*\$\{)[^`]*`/;
 const SUBMINUTE_LITERAL = /(['"`])(?:just now|now|Just now|Now)\1/;
-const BARE_TO_LOCALE = /toLocale(?:Date|Time)String\(\s*(?:\)|undefined)/;
+/**
+ * `toLocaleDateString()` with no locale — and `([], …)` counts, which is the same
+ * thing spelled so it looks deliberate. Both follow the BROWSER, not the family's
+ * Bubaly choice.
+ */
+const BARE_TO_LOCALE = /toLocale(?:Date|Time)String\(\s*(?:\)|undefined|\[\s*\])/;
 
 const files = execSync(
   "git ls-files 'app/**/*.ts' 'app/**/*.tsx' 'components/**/*.ts' 'components/**/*.tsx' 'lib/**/*.ts' 'lib/**/*.tsx'",
@@ -51,8 +64,13 @@ const files = execSync(
 
 const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
 
-/** The operator console is en-US by the audit's own rule; see finalaudit.md §11. */
-const isOperatorPage = (file) => /^app\/\(app\)\/admin\//.test(file);
+/**
+ * The operator console is en-US by the audit's own rule (finalaudit.md §11) — and
+ * it is not only under app/(app)/admin/: components/admin/ holds the same surfaces'
+ * client halves, which is how admin-notifications-list.tsx was being counted as a
+ * family-facing defect.
+ */
+const isOperatorPage = (file) => /^app\/\(app\)\/admin\/|^components\/admin\//.test(file);
 
 export function findLadders() {
   const found = [];
@@ -62,8 +80,13 @@ export function findLadders() {
     // ladder always sits within ~700 characters of its minute divisor.
     for (const m of source.matchAll(new RegExp(MINUTE_DIVISOR, 'g'))) {
       const window = source.slice(Math.max(0, m.index - 400), m.index + 700);
-      const isLadder = AGO_TEMPLATE.test(window) || COMPOSITE_DURATION.test(window)
-        || (SUBMINUTE_LITERAL.test(window) && /<\s*24|<\s*60/.test(window));
+      // A unit template is NOT enough on its own. lib/blog/engagement.ts formats a
+      // LIKE COUNT — "1.2k", "1.2m" — and `${…}m` reads exactly like "1.2 minutes"
+      // to a regex. What separates a time label from a number label is that a time
+      // label compares against a time: 60, 24, 3600, 86400, 604800 — or says "ago".
+      const timeThreshold = /[<>]=?\s*(?:24|60|45|3_?600|86_?400|604_?800)\b|60_?000|3_?600_?000|86_?400_?000/.test(window);
+      const shapes = AGO_TEMPLATE.test(window) || COMPOSITE_DURATION.test(window) || SUBMINUTE_LITERAL.test(window);
+      const isLadder = shapes && (timeThreshold || /\bago\b/.test(window));
       if (!isLadder) continue;
       // NO "it mentions fmtTimeAgo" EXEMPTION. That was the first version and it was
       // too generous by exactly the margin that matters: a component which destructures
@@ -96,7 +119,16 @@ export function findLadders() {
       found.push({ file, line: source.slice(0, m.index).split('\n').length, kind: 'browser-locale' });
     }
   }
-  return found;
+  // Dedupe by file:line:kind. One source line can hold two matches — a ternary
+  // with a clock on one branch and a date on the other is a single site to fix, and
+  // counting it twice would make a pinned number drift on a cosmetic edit.
+  const seen = new Set();
+  return found.filter((f) => {
+    const key = `${f.file}:${f.line}:${f.kind}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

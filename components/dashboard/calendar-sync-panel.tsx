@@ -14,11 +14,15 @@ import { addCalendarFeed, syncCalendarFeed, removeCalendarFeed } from '@/app/(ap
 import { CALENDAR_PROVIDERS, getCalendarProvider, type CalendarProvider } from '@/lib/calendar/providers';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 
 type CalendarFeed = Tables<'calendar_feeds'>;
 
 export function CalendarSyncPanel() {
   const t = useTranslations();
+  // The date follows the reader, not the browser: toLocaleDateString() with no
+  // argument takes whatever the machine reports (I18N-002).
+  const { fmtDate } = useFormat();
   const { familyId } = useApp();
   const { success, error: toastError } = useToast();
   const [open, setOpen] = useState(false);
@@ -110,7 +114,7 @@ export function CalendarSyncPanel() {
                     <p className="text-[10px] text-danger mt-0.5"><AlertCircle className="inline h-2.5 w-2.5" /> {feed.last_error}</p>
                   ) : feed.last_synced_at ? (
                     <p className="text-[10px] text-success mt-0.5">
-                      <Check className="inline h-2.5 w-2.5" /> {feed.event_count} events · synced {new Date(feed.last_synced_at).toLocaleDateString()}
+                      <Check className="inline h-2.5 w-2.5" /> {feed.event_count} events · synced {fmtDate(feed.last_synced_at, 'P')}
                     </p>
                   ) : (
                     <p className="text-[10px] text-muted mt-0.5">{t('calendarSyncPanel.notSyncedYet')}</p>

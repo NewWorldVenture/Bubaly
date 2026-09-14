@@ -13,6 +13,7 @@ import {
 import { startMilestoneAction, achieveMilestoneAction, skipMilestoneAction } from '@/app/(app)/dashboard/independence/actions';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 
 type Kid = { id: string; display_name: string; role: string; birthday: string | null; color: string | null };
 type Row = Tables<'independence_milestones'>;
@@ -21,6 +22,9 @@ const DEFAULT_AGE = 10;   // no birthday on file → mid-ladder, parent can stil
 
 export function IndependenceModule({ kids, rows }: { kids: Kid[]; rows: Row[] }) {
   const t = useTranslations();
+  // The date follows the reader, not the browser: toLocaleDateString() with no
+  // argument takes whatever the machine reports (I18N-002).
+  const { fmtDate } = useFormat();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [pending, startTransition] = useTransition();
@@ -203,7 +207,7 @@ export function IndependenceModule({ kids, rows }: { kids: Kid[]; rows: Row[] })
                       <p className="text-sm font-semibold">{r.title}</p>
                       <p className="mt-0.5 text-[11px] text-muted">
                         {DOMAIN_LABEL[r.domain as IndependenceDomain] ?? r.domain}
-                        {r.achieved_at && <> · {new Date(r.achieved_at).toLocaleDateString()}</>}
+                        {r.achieved_at && <> · {fmtDate(r.achieved_at, 'P')}</>}
                         {r.evidence && <> · {r.evidence}</>}
                       </p>
                     </div>

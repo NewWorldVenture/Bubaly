@@ -86,6 +86,15 @@ const PATTERNS: Record<string, Intl.DateTimeFormatOptions> = {
   'MMM d · h:mm a':      { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' },
   'MMM d, yyyy h:mm a':  { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' },
   "EEE, MMM d 'at' h:mm a": { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' },
+  'EEEE, MMM d':         { weekday: 'long', month: 'short', day: 'numeric' },
+  'EEEE, MMMM d':        { weekday: 'long', month: 'long', day: 'numeric' },
+  // date-fns spells a locale's OWN short forms 'P' and 'pp', and these two exist for
+  // the same reason: `toLocaleDateString()` with no argument renders whatever the
+  // locale's own numeric date is, and eighteen sites were calling it that way to
+  // follow the BROWSER. Mapping the shape lets those sites keep the rendering they
+  // had while taking the family's locale instead of the machine's.
+  'P':                   { year: 'numeric', month: 'numeric', day: 'numeric' },
+  'pp':                  { hour: 'numeric', minute: '2-digit', second: '2-digit' },
 };
 
 /** Every pattern the map knows — read by the guard that keeps it complete. */

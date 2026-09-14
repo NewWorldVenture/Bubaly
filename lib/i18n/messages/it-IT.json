@@ -2693,6 +2693,8 @@
   "calendar.syncAmpConnect": "Sincronizza e collega",
   "calendar.teamDinner": "Cena di squadra",
   "calendar.title": "Titolo",
+  "quickCapture.dayAtTime": "{day} alle {time}",
+  "quickCapture.tomorrow": "Domani",
   "calendar.today": "Oggi",
   "calendar.toggleMembersBelowToShowOr": ". Attiva o disattiva i membri qui sotto per mostrare o nascondere la loro colonna.",
   "calendar.upToDate": "Aggiornato",

@@ -12,6 +12,7 @@ import { useToast } from '@/components/ui/toast';
 import type { TrustLevel } from '@/lib/guardian/trust';
 import type { RoutingMode } from '@/lib/guardian/pipeline';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 
 type Communication = {
   id: string;
@@ -91,6 +92,9 @@ const CONTEXT_OPTIONS = [
 
 export function GuardianDashboard({ recentComms, suggestions, escalations, memberProfiles, stats, isTwilioConfigured }: Props) {
   const t = useTranslations();
+  // The date follows the reader, not the browser: toLocaleDateString() with no
+  // argument takes whatever the machine reports (I18N-002).
+  const { fmtDate } = useFormat();
   const router = useRouter();
   const { success: toastSuccess, error: toastError } = useToast();
   const [contextLoading, setContextLoading] = useState<string | null>(null);
@@ -164,7 +168,7 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
                 </p>
                 <p className="text-sm text-muted mt-0.5">{esc.description}</p>
                 <p className="text-xs text-muted mt-1">
-                  From {formatPhone(esc.caller_number)} · {new Date(esc.escalated_at).toLocaleTimeString()}
+                  From {formatPhone(esc.caller_number)} · {fmtDate(esc.escalated_at, 'pp')}
                 </p>
               </div>
               <button
@@ -298,10 +302,13 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
 }
 
 function CommRow({ comm }: { comm: Communication }) {
+  // The date follows the reader, not the browser: toLocaleDateString() with no
+  // argument takes whatever the machine reports (I18N-002).
+  const { fmtDate } = useFormat();
   const icon = COMM_ICONS[comm.comm_type] ?? '📱';
   const time = new Date(comm.started_at);
   const isToday = new Date().toDateString() === time.toDateString();
-  const timeStr = isToday ? time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : time.toLocaleDateString();
+  const timeStr = isToday ? fmtDate(time, 'hh:mm a') : fmtDate(time, 'P');
 
   return (
     <div className="flex items-start gap-3 px-4 py-3 hover:bg-surface/60 transition">
