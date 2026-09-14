@@ -213,7 +213,7 @@ export function MedicationsModule() {
   }
 
   async function deleteMed(m: Medication) {
-    if (!confirm(`Delete ${m.name}? This also removes its schedules and dose history.`)) return;
+    if (!(await askConfirm({ title: t('confirm.deleteNamed', { name: m.name }), body: t('medications.deleteMedicationBody') }))) return;
     const sb = createClient();
     const { error: err } = await sb.from('medications').delete().eq('id', m.id);
     if (err) { toastError(describeDbError(err)); return; }

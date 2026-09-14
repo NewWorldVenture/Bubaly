@@ -28,6 +28,7 @@ import {
 } from '@/lib/memory/facts';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Fact = Tables<'family_facts'>;
 
@@ -38,6 +39,7 @@ const blank = {
 
 export function KnowledgeBaseModule({ canSeed = false }: { canSeed?: boolean }) {
   const t = useTranslations();
+  const askConfirm = useConfirm();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -86,7 +88,7 @@ export function KnowledgeBaseModule({ canSeed = false }: { canSeed?: boolean }) 
   }
 
   async function remove(f: Fact) {
-    if (!confirm(`Forget "${f.label}"?`)) return;
+    if (!(await askConfirm({ title: t('knowledgeBase.forgetQ', { name: f.label }), body: t('knowledgeBase.forgetBody') }))) return;
     const sb = createClient();
     const res = await forgetFactAction(f.id);
     if (!res.ok) { toastError(res.error); return; }

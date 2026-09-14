@@ -20,6 +20,7 @@ import {
 } from '@/lib/declutter/missions';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Zone = Tables<'declutter_zones'>;
 type Mission = Tables<'declutter_missions'>;
@@ -38,6 +39,7 @@ export function DeclutterModule() {
   const locale = useLocale();
   const fmtDate = fmtDateIn(locale.code);
   const tr = useTranslations();
+  const askConfirm = useConfirm();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -105,7 +107,7 @@ export function DeclutterModule() {
   }
 
   async function deleteMission(m: Mission) {
-    if (!confirm(`Delete “${m.title}”?`)) return;
+    if (!(await askConfirm({ title: tr('confirm.deleteNamed', { name: m.title }), body: tr('confirm.cannotBeUndone') }))) return;
     const { error } = await createClient().from('declutter_missions').delete().eq('id', m.id);
     if (error) return toastError(describeDbError(error));
     success(tr('declutterModule.missionDeleted'));

@@ -21,6 +21,7 @@ import {
 } from '@/lib/sleep/coach';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Log = Tables<'sleep_logs'>;
 type Routine = Tables<'bedtime_routines'>;
@@ -40,6 +41,7 @@ export function SleepModule() {
   const fmtTime = fmtTimeIn(locale.code);
   const fmtDay = fmtDayIn(locale.code);
   const t = useTranslations();
+  const askConfirm = useConfirm();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -85,7 +87,7 @@ export function SleepModule() {
   }
 
   async function archiveRoutine(r: Routine) {
-    if (!confirm(`Retire “${r.name}”?`)) return;
+    if (!(await askConfirm({ title: t('sleep.retireQ', { name: r.name }), body: t('sleep.retireBody'), destructive: false }))) return;
     const { error } = await createClient().from('bedtime_routines').update({ is_active: false }).eq('id', r.id);
     if (error) return toastError(describeDbError(error));
     success(t('sleepModule.routineRetired'));

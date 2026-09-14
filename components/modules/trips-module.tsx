@@ -25,6 +25,7 @@ import {
 } from '@/lib/trips/planner';
 import type { Tables, TripStatus } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Trip = Tables<'trips'>;
 type TripItem = Tables<'trip_items'>;
@@ -54,6 +55,7 @@ const blankTrip = {
 export function TripsModule() {
   const locale = useLocale();
   const tr = useTranslations();
+  const askConfirm = useConfirm();
   const { familyId, userId, members, role } = useApp();
   const { success, error: toastError } = useToast();
   const canEdit = isManager(role);
@@ -128,7 +130,7 @@ export function TripsModule() {
     setTripModal(false);
   }
   async function removeTrip(t: Trip) {
-    if (!confirm(`Delete "${t.name}" and its checklist?`)) return;
+    if (!(await askConfirm({ title: tr('confirm.deleteNamed', { name: t.name }), body: tr('trips.deleteTripBody') }))) return;
     const sb = createClient();
     const { error: err } = await sb.from('trips').delete().eq('id', t.id);
     if (err) { toastError(describeDbError(err)); return; }

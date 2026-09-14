@@ -125,37 +125,49 @@ const STILL_UNCONFIRMED = [
   'components/vacations/trip-packing.tsx::remove',
 ];
 
-// Asks that are still hardcoded English — 32 calls across these 26 files. This
-// list only shrinks. The other 18 files that call window.confirm() already pass
-// a t() lookup: they ask in the reader's language, just through the browser's
-// own dialog, which is a smaller and different problem.
-const ENGLISH_ASKS = [
-  'components/admin/admin-row-actions.tsx',
-  'components/dashboard/calendar-sync-panel.tsx',
-  'components/modules/career-module.tsx',
-  'components/modules/closet-module.tsx',
-  'components/modules/connections-module.tsx',
-  'components/modules/declutter-module.tsx',
-  'components/modules/homework-module.tsx',
-  'components/modules/inventory-module.tsx',
-  'components/modules/knowledge-base-module.tsx',
-  'components/modules/language-module.tsx',
-  'components/modules/marketplace-module.tsx',
-  'components/modules/medications-module.tsx',
-  'components/modules/moving-module.tsx',
-  'components/modules/projects-module.tsx',
-  'components/modules/relationship-module.tsx',
-  'components/modules/renewals-module.tsx',
-  'components/modules/rewards-module.tsx',
-  'components/modules/rides-module.tsx',
-  'components/modules/routines-panel.tsx',
-  'components/modules/signups-module.tsx',
-  'components/modules/sleep-module.tsx',
-  'components/modules/timetable-module.tsx',
-  'components/modules/trips-module.tsx',
-  'components/modules/watchlist-module.tsx',
-  'components/modules/wishlists-module.tsx',
-  'components/wallet/wallet-hub.tsx',
+// Asks that are still hardcoded English. This list is EMPTY and stays empty: all
+// 32 now go through the shared primitive, so a file appearing here is a new
+// English confirmation, not a leftover one.
+const ENGLISH_ASKS: string[] = [];
+
+// The 32 confirmations that used to be English literals. Each is asserted on a
+// property rather than on its wording: NOTHING IS AWAITED BEFORE THE QUESTION.
+// That is what a confirmation has to mean — a handler that fires its request and
+// then asks has not asked at all — and it holds whether the handler deletes, or
+// disconnects, or retires.
+const CONVERTED: [string, string][] = [
+  ['components/admin/admin-row-actions.tsx', '<inline>'],
+  ['components/dashboard/calendar-sync-panel.tsx', 'remove'],
+  ['components/modules/career-module.tsx', 'deleteApplication'],
+  ['components/modules/career-module.tsx', 'deleteResume'],
+  ['components/modules/career-module.tsx', 'deleteProfile'],
+  ['components/modules/closet-module.tsx', 'deleteItem'],
+  ['components/modules/closet-module.tsx', 'deleteOutfit'],
+  ['components/modules/connections-module.tsx', 'disconnect'],
+  ['components/modules/declutter-module.tsx', 'deleteMission'],
+  ['components/modules/homework-module.tsx', 'remove'],
+  ['components/modules/inventory-module.tsx', 'deleteItem'],
+  ['components/modules/inventory-module.tsx', 'deleteLocation'],
+  ['components/modules/knowledge-base-module.tsx', 'remove'],
+  ['components/modules/language-module.tsx', 'deleteGoal'],
+  ['components/modules/marketplace-module.tsx', 'remove'],
+  ['components/modules/medications-module.tsx', 'deleteMed'],
+  ['components/modules/moving-module.tsx', 'deleteTask'],
+  ['components/modules/moving-module.tsx', 'deleteBox'],
+  ['components/modules/moving-module.tsx', 'deleteMove'],
+  ['components/modules/projects-module.tsx', 'deleteProject'],
+  ['components/modules/relationship-module.tsx', 'removeDate'],
+  ['components/modules/renewals-module.tsx', 'remove'],
+  ['components/modules/rewards-module.tsx', 'remove'],
+  ['components/modules/rides-module.tsx', 'remove'],
+  ['components/modules/routines-panel.tsx', 'deleteTemplate'],
+  ['components/modules/signups-module.tsx', 'remove'],
+  ['components/modules/sleep-module.tsx', 'archiveRoutine'],
+  ['components/modules/timetable-module.tsx', 'remove'],
+  ['components/modules/trips-module.tsx', 'removeTrip'],
+  ['components/modules/watchlist-module.tsx', 'deleteTitle'],
+  ['components/modules/wishlists-module.tsx', 'remove'],
+  ['components/wallet/wallet-hub.tsx', 'del'],
 ];
 
 describe('a destructive click asks first', () => {
@@ -178,6 +190,29 @@ describe('a destructive click asks first', () => {
     expect(asked, `${handler} no longer asks`).toBeGreaterThanOrEqual(0);
     expect(asked, `${handler} deletes before it asks`).toBeLessThan(deleted);
     expect(text, `${handler} asks with a different key`).toContain(`'${key}'`);
+  });
+
+
+  it.each(CONVERTED)('%s :: %s awaits nothing before the question', (file, handler) => {
+    const source = readFileSync(file, 'utf8');
+    const src = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    let body: string | null = null;
+    const find = (n: ts.Node) => {
+      const named = (ts.isFunctionDeclaration(n) && n.name?.text === handler)
+        || (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.name.text === handler
+          && n.initializer !== undefined && isFnLike(n.initializer));
+      if (named) body = body ?? (ts.isFunctionDeclaration(n) ? n.getText() : (n as ts.VariableDeclaration).initializer!.getText());
+      // The one site that is an inline JSX handler rather than a named function.
+      if (handler === '<inline>' && ts.isJsxAttribute(n) && n.name.getText() === 'onClick'
+        && n.initializer && n.getText().includes('askConfirm(')) body = body ?? n.getText();
+      ts.forEachChild(n, find);
+    };
+    ts.forEachChild(src, find);
+    expect(body, `${handler} not found in ${file}`).not.toBeNull();
+    const text = body as unknown as string;
+    expect(text, `${handler} no longer asks`).toContain('askConfirm(');
+    expect(text.indexOf('await '), `${handler} awaits something before it asks`)
+      .toBe(text.indexOf('await askConfirm('));
   });
 
   it('asks in the reader’s language, never a bare literal', () => {

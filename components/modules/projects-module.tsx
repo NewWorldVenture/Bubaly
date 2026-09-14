@@ -39,6 +39,7 @@ export function ProjectsModule() {
   const locale = useLocale();
   const fmtDate = fmtDateIn(locale.code);
   const tr = useTranslations();
+  const askConfirm = useConfirm();
   // Money follows the reader; the currency stays the money's own.
   const money = (cents: number | null | undefined) => moneyIn(cents, locale.code);
   const { familyId, userId, members, selfMember } = useApp();
@@ -81,7 +82,7 @@ export function ProjectsModule() {
   }
 
   async function deleteProject(p: Project) {
-    if (!confirm(`Delete “${p.title}” with its materials and quotes?`)) return;
+    if (!(await askConfirm({ title: tr('confirm.deleteNamed', { name: p.title }), body: tr('projects.deleteProjectBody') }))) return;
     const { error } = await createClient().from('home_projects').delete().eq('id', p.id);
     if (error) return toastError(describeDbError(error));
     setOpenId(null);

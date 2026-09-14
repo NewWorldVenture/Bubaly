@@ -20,6 +20,7 @@ import {
 } from '@/lib/school/timetable';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useConfirm } from '@/components/ui/confirm';
 
 type SchoolClass = Tables<'school_classes'>;
 
@@ -43,6 +44,7 @@ const blankForm = {
 
 export function TimetableModule() {
   const t = useTranslations();
+  const askConfirm = useConfirm();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -109,7 +111,7 @@ export function TimetableModule() {
   }
 
   async function remove(c: SchoolClass) {
-    if (!confirm(`Remove ${c.subject} from the timetable?`)) return;
+    if (!(await askConfirm({ title: t('confirm.removeNamed', { name: c.subject }), body: t('confirm.cannotBeUndone') }))) return;
     const sb = createClient();
     const { error: err } = await sb.from('school_classes').delete().eq('id', c.id);
     if (err) { toastError(t('timetableModule.failedToRemoveClass')); return; }

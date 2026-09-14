@@ -26,6 +26,7 @@ import {
 } from '@/lib/renewals/expiry';
 import type { Tables, RenewalStatus } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Renewal = Tables<'renewals'>;
 
@@ -52,6 +53,7 @@ const blank = {
 export function RenewalsModule() {
   const locale = useLocale();
   const t = useTranslations();
+  const askConfirm = useConfirm();
   const { familyId, userId, members, role } = useApp();
   const { success, error: toastError } = useToast();
   const canEdit = isManager(role);
@@ -120,7 +122,7 @@ export function RenewalsModule() {
   }
 
   async function remove(r: Renewal) {
-    if (!confirm(`Delete "${r.title}"?`)) return;
+    if (!(await askConfirm({ title: t('confirm.deleteNamed', { name: r.title }), body: t('confirm.cannotBeUndone') }))) return;
     const sb = createClient();
     const { error: err } = await sb.from('renewals').delete().eq('id', r.id);
     if (err) { toastError(describeDbError(err)); return; }

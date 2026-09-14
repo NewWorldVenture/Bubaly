@@ -15,11 +15,13 @@ import { CALENDAR_PROVIDERS, getCalendarProvider, type CalendarProvider } from '
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { useFormat } from '@/components/i18n/use-format';
+import { useConfirm } from '@/components/ui/confirm';
 
 type CalendarFeed = Tables<'calendar_feeds'>;
 
 export function CalendarSyncPanel() {
   const t = useTranslations();
+  const askConfirm = useConfirm();
   // The date follows the reader, not the browser: toLocaleDateString() with no
   // argument takes whatever the machine reports (I18N-002).
   const { fmtDate } = useFormat();
@@ -67,7 +69,7 @@ export function CalendarSyncPanel() {
   }
 
   async function remove(feed: CalendarFeed) {
-    if (!confirm(`Remove "${feed.name}" and its imported events?`)) return;
+    if (!(await askConfirm({ title: t('confirm.removeNamed', { name: feed.name }), body: t('calendarSync.removeFeedBody') }))) return;
     const res = await removeCalendarFeed(feed.id);
     if (!res.ok) { toastError(res.error); return; }
     success(t('calendarSyncPanel.calendarRemoved'));

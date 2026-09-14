@@ -26,6 +26,7 @@ import type { Tables, RelationshipDateKind, RelationshipDateStatus, Relationship
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { useFormat } from '@/components/i18n/use-format';
 import type { Format } from '@/lib/utils/format';
+import { useConfirm } from '@/components/ui/confirm';
 
 type RDate = Tables<'relationship_dates'>;
 type Gift_ = Tables<'relationship_gift_ideas'>;
@@ -60,6 +61,7 @@ const dollars = (cents: number | null) => (cents == null ? null : `$${(cents / 1
 
 export function RelationshipModule() {
   const t = useTranslations();
+  const askConfirm = useConfirm();
   // Dates follow the reader, not the browser (I18N-002).
   const fmtDate = fmtDateIn(useFormat());
   const { familyId, userId, members, selfMember } = useApp();
@@ -171,7 +173,7 @@ export function RelationshipModule() {
     setDateModal(false);
   }
   async function removeDate(d: RDate) {
-    if (!confirm(`Remove "${d.title}"?`)) return;
+    if (!(await askConfirm({ title: t('confirm.removeNamed', { name: d.title }), body: t('confirm.cannotBeUndone') }))) return;
     const { error: err } = await createClient().from('relationship_dates').delete().eq('id', d.id);
     if (err) { toastError(describeDbError(err)); return; }
     success(t('relationshipModule.removed'));

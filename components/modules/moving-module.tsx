@@ -23,6 +23,7 @@ import {
 } from '@/lib/moving/planner';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Move = Tables<'moves'>;
 type Task = Tables<'move_tasks'>;
@@ -44,6 +45,7 @@ export function MovingWorkspace() {
   const fmtDate = fmtDateIn(locale.code);
   const fmtLong = fmtLongIn(locale.code);
   const tr = useTranslations();
+  const askConfirm = useConfirm();
   // Money follows the reader; the currency stays the money's own.
   const money = (cents: number | null | undefined) => moneyIn(cents, locale.code);
   const { familyId, userId, members, selfMember } = useApp();
@@ -116,7 +118,7 @@ export function MovingWorkspace() {
   }
 
   async function deleteTask(t: Task) {
-    if (!confirm(`Delete “${t.title}”?`)) return;
+    if (!(await askConfirm({ title: tr('confirm.deleteNamed', { name: t.title }), body: tr('confirm.cannotBeUndone') }))) return;
     const { error } = await createClient().from('move_tasks').delete().eq('id', t.id);
     if (error) return toastError(describeDbError(error));
     success(tr('movingModule.taskDeleted'));
@@ -131,7 +133,7 @@ export function MovingWorkspace() {
   }
 
   async function deleteBox(b: Box) {
-    if (!confirm(`Delete box #${b.box_number} “${b.label}”?`)) return;
+    if (!(await askConfirm({ title: tr('moving.deleteBoxQ', { number: b.box_number, label: b.label }), body: tr('confirm.cannotBeUndone') }))) return;
     const { error } = await createClient().from('move_boxes').delete().eq('id', b.id);
     if (error) return toastError(describeDbError(error));
     success(tr('movingModule.boxDeleted'));
@@ -145,7 +147,7 @@ export function MovingWorkspace() {
   }
 
   async function deleteMove(m: Move) {
-    if (!confirm(`Delete “${m.title}” with all its tasks and boxes? This cannot be undone.`)) return;
+    if (!(await askConfirm({ title: tr('confirm.deleteNamed', { name: m.title }), body: tr('moving.deleteMoveBody') }))) return;
     const { error } = await createClient().from('moves').delete().eq('id', m.id);
     if (error) return toastError(describeDbError(error));
     setMoveId('');

@@ -26,6 +26,7 @@ import {
 import type { Tables, RedemptionStatus } from '@/lib/database.types';
 import { requestRedemptionAction, decideRedemptionAction, type RedemptionDecision } from '@/app/(app)/dashboard/rewards/actions';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Reward = Tables<'rewards'>;
 type Redemption = Tables<'reward_redemptions'>;
@@ -42,6 +43,7 @@ const blankReward = { id: '', title: '', description: '', cost_points: 100 };
 
 export function RewardsModule() {
   const t = useTranslations();
+  const askConfirm = useConfirm();
   const { familyId, userId, members, selfMember, role } = useApp();
   const { success, error: toastError } = useToast();
   const canManage = isManager(role);
@@ -100,7 +102,7 @@ export function RewardsModule() {
   }
 
   async function remove(r: Reward) {
-    if (!confirm(`Delete the reward "${r.title}"?`)) return;
+    if (!(await askConfirm({ title: t('confirm.deleteNamed', { name: r.title }), body: t('confirm.cannotBeUndone') }))) return;
     const sb = createClient();
     const { error: err } = await sb.from('rewards').delete().eq('id', r.id);
     if (err) { toastError(describeDbError(err)); return; }

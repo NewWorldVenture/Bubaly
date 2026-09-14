@@ -26,6 +26,7 @@ import {
   deleteWalletRowAction,
 } from '@/app/(app)/wallet/hub-actions';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Account = Tables<'financial_accounts'>;
 type Txn = Tables<'transactions'>;
@@ -47,6 +48,7 @@ type AddKind = 'account' | 'card' | 'pass' | 'reward' | 'transaction' | null;
 
 export function WalletHub() {
   const t = useTranslations();
+  const askConfirm = useConfirm();
   // Money and counts follow the reader; the currency stays the money's own.
   const locale = useLocale();
   const fmtUsd = (cents: number) => fmtUsdIn(cents, locale.code);
@@ -89,7 +91,7 @@ export function WalletHub() {
   );
 
   async function del(table: string, id: string, label: string) {
-    if (!confirm(`Remove ${label}?`)) return;
+    if (!(await askConfirm({ title: t('confirm.removeNamed', { name: label }), body: t('confirm.cannotBeUndone') }))) return;
     const res = await deleteWalletRowAction({ table, id });
     if (!res.ok) return toastError(res.error ?? 'Could not remove');
     success(t('walletHub.removed'));

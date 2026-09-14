@@ -25,6 +25,7 @@ import {
 } from '@/lib/closet/outfits';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Item = Tables<'wardrobe_items'>;
 type Outfit = Tables<'outfits'>;
@@ -49,6 +50,7 @@ export function ClosetModule() {
   const locale = useLocale();
   const fmtDate = fmtDateIn(locale.code);
   const t = useTranslations();
+  const askConfirm = useConfirm();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -150,7 +152,7 @@ export function ClosetModule() {
   }
 
   async function deleteItem(item: Item) {
-    if (!confirm(`Remove ${item.name} from the closet?`)) return;
+    if (!(await askConfirm({ title: t('confirm.removeNamed', { name: item.name }), body: t('confirm.cannotBeUndone') }))) return;
     const { error } = await createClient().from('wardrobe_items').delete().eq('id', item.id);
     if (error) return toastError(describeDbError(error));
     success(t('closetModule.itemRemoved'));
@@ -162,7 +164,7 @@ export function ClosetModule() {
   }
 
   async function deleteOutfit(outfit: Outfit) {
-    if (!confirm(`Delete the outfit “${outfit.name}”?`)) return;
+    if (!(await askConfirm({ title: t('confirm.deleteNamed', { name: outfit.name }), body: t('confirm.cannotBeUndone') }))) return;
     const { error } = await createClient().from('outfits').delete().eq('id', outfit.id);
     if (error) return toastError(describeDbError(error));
     success(t('closetModule.outfitDeleted'));

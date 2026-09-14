@@ -25,6 +25,7 @@ import {
 } from '@/lib/rides/schedule';
 import type { Tables, RideStatus } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Ride = Tables<'rides'>;
 
@@ -49,6 +50,7 @@ const blankRide = {
 export function RidesModule() {
   const locale = useLocale();
   const tr = useTranslations();
+  const askConfirm = useConfirm();
   const t = useTranslations();
   const { familyId, userId, members, role } = useApp();
   const { success, error: toastError } = useToast();
@@ -125,7 +127,7 @@ export function RidesModule() {
   }
 
   async function remove(r: Ride) {
-    if (!confirm(`Delete the ride "${r.title}"?`)) return;
+    if (!(await askConfirm({ title: tr('confirm.deleteNamed', { name: r.title }), body: tr('confirm.cannotBeUndone') }))) return;
     const sb = createClient();
     const { error: err } = await sb.from('rides').delete().eq('id', r.id);
     if (err) { toastError(describeDbError(err)); return; }

@@ -20,6 +20,7 @@ import {
 } from '@/lib/career/hub';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Profile = Tables<'career_profiles'>;
 type Application = Tables<'job_applications'>;
@@ -38,6 +39,7 @@ export function CareerModule() {
   const locale = useLocale();
   const fmtDate = fmtDateIn(locale.code);
   const tr = useTranslations();
+  const askConfirm = useConfirm();
   // Money follows the reader; the currency stays the money's own.
   const money = (cents: number | null | undefined) => moneyIn(cents, locale.code);
   const { familyId, userId, members, selfMember } = useApp();
@@ -93,7 +95,7 @@ export function CareerModule() {
   }
 
   async function deleteApplication(a: Application) {
-    if (!confirm(`Remove ${a.role_title} at ${a.company}?`)) return;
+    if (!(await askConfirm({ title: tr('career.removeApplicationQ', { role: a.role_title, company: a.company }), body: tr('confirm.cannotBeUndone') }))) return;
     const { error } = await createClient().from('job_applications').delete().eq('id', a.id);
     if (error) return toastError(describeDbError(error));
     success(tr('careerModule.applicationRemoved'));
@@ -109,7 +111,7 @@ export function CareerModule() {
   }
 
   async function deleteResume(r: Resume) {
-    if (!confirm(`Delete “${r.title}”?`)) return;
+    if (!(await askConfirm({ title: tr('confirm.deleteNamed', { name: r.title }), body: tr('confirm.cannotBeUndone') }))) return;
     const { error } = await createClient().from('resume_versions').delete().eq('id', r.id);
     if (error) return toastError(describeDbError(error));
     success(tr('careerModule.resumeDeleted'));
@@ -122,7 +124,7 @@ export function CareerModule() {
   }
 
   async function deleteProfile(p: Profile) {
-    if (!confirm(`Delete “${p.title}” for ${nameOf(p.member_id)} with every application and resume?`)) return;
+    if (!(await askConfirm({ title: tr('confirm.deleteNamed', { name: p.title }), body: tr('career.deleteProfileBody') }))) return;
     const { error } = await createClient().from('career_profiles').delete().eq('id', p.id);
     if (error) return toastError(describeDbError(error));
     setProfileId('');

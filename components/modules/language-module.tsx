@@ -138,7 +138,7 @@ export function LanguageModule() {
   }
 
   async function deleteGoal(g: Goal) {
-    if (!confirm(`Delete ${nameOf(g.member_id)}’s ${g.language_label} goal with every card and session?`)) return;
+    if (!(await askConfirm({ title: tr('language.deleteGoalQ', { name: nameOf(g.member_id), language: g.language_label }), body: tr('language.deleteGoalBody') }))) return;
     const { error } = await createClient().from('language_goals').delete().eq('id', g.id);
     if (error) return toastError(describeDbError(error));
     setGoalId('');

@@ -21,6 +21,7 @@ import {
 } from '@/lib/watchlist/picker';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Title = Tables<'watchlist_titles'>;
 type Vote = Tables<'watchlist_votes'>;
@@ -35,6 +36,7 @@ export function WatchlistModule() {
   const locale = useLocale();
   const fmtDate = fmtDateIn(locale.code);
   const tr = useTranslations();
+  const askConfirm = useConfirm();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -98,7 +100,7 @@ export function WatchlistModule() {
   }
 
   async function deleteTitle(title: Title) {
-    if (!confirm(`Remove “${title.title}” from the watchlist?`)) return;
+    if (!(await askConfirm({ title: tr('confirm.removeNamed', { name: title.title }), body: tr('confirm.cannotBeUndone') }))) return;
     const { error } = await createClient().from('watchlist_titles').delete().eq('id', title.id);
     if (error) return toastError(describeDbError(error));
     success(tr('watchlistModule.titleRemoved'));

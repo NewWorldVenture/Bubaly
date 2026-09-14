@@ -27,6 +27,7 @@ import {
 } from '@/lib/routines/detect';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Template = Tables<'routine_templates'>;
 type Item = Tables<'routine_template_items'>;
@@ -55,6 +56,7 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
   onApplied: () => void;
 }) {
   const tr = useTranslations();
+  const askConfirm = useConfirm();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
   const { run, isPending } = useAction({ onError: (e) => toastError(describeDbError(e)) });
@@ -169,8 +171,8 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
     });
   }
 
-  function deleteTemplate(t: Template) {
-    if (!confirm(`Delete the "${t.name}" routine? (Events already added to your calendar stay.)`)) return;
+  async function deleteTemplate(t: Template) {
+    if (!(await askConfirm({ title: tr('confirm.deleteNamed', { name: t.name }), body: tr('routines.deleteRoutineBody') }))) return;
     return run(`del:${t.id}`, async () => {
       const { error } = await createClient().from('routine_templates').delete().eq('id', t.id);
       if (error) throw error;

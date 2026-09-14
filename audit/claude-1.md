@@ -3414,3 +3414,74 @@ and the transactions went with them. **Both are `ON DELETE SET NULL`** — `medi
 (`00261`) and `transactions.account_id` (`0006`). The rows survive, unlinked. Checked
 before writing, so the copy now says that, which is both accurate and the more reassuring
 thing to read.
+
+---
+
+## Pass AW — I18N-004 closed: thirty-two confirmations that now ask in the reader's language
+
+**Status: FIXED** (32 of 32).
+
+Every English `confirm()` literal in `app/` and `components/` now goes through the
+primitive from Pass AV. 22 keys across the seven base catalogues; the guard's
+`ENGLISH_ASKS` inventory is empty and stays empty.
+
+### The copy was accurate. Only its language was wrong.
+
+Nine of the thirty-two made a claim about what else the delete takes with it, and
+**every one was checked against the schema before being translated**:
+
+| claim | FK | verdict |
+|---|---|---|
+| a medication takes its schedules and dose history | `medication_schedules.medication_id`, `medication_doses.medication_id` — both CASCADE | true |
+| a move takes its tasks and boxes | `move_tasks.move_id`, `move_boxes.move_id` CASCADE | true |
+| a project takes its materials and quotes | `project_materials.project_id`, `project_quotes.project_id` CASCADE | true |
+| a career profile takes every application and résumé | `job_applications.profile_id`, `resume_versions.profile_id` CASCADE | true |
+| a language goal takes every card and session | `vocab_cards.goal_id`, `language_sessions.goal_id` CASCADE | true |
+| a trip takes its checklist | `trip_items.trip_id` CASCADE | true |
+| a calendar feed takes its imported events | `calendar_events.feed_id` CASCADE (`0045`) | true |
+| deleting a location makes its items lose their location | `inventory_items.location_id` **SET NULL** | true — and it is the one that is *not* a cascade |
+| routine events already on the calendar stay | `calendar_events` has no template FK | true |
+
+Nine for nine. That is worth stating beside Pass AV, where the **same check caught
+two claims I was about to write that were false**. The check is what makes either
+result worth anything; nine confirmations are not evidence that the check was
+unnecessary.
+
+### A count that could not be translated, and was not faked
+
+`inventory-module` said *"{n} item{s} will lose their location."* `translate()` has
+no plural machinery — it interpolates `{param}` and nothing else. Three options:
+build an `Intl.PluralRules` layer for one string, ship a German plural that is
+wrong half the time, or **say the same true thing without a count**. The body is
+now *"Anything stored there loses its location. The items themselves are kept."* —
+count-independent, grammatical in all seven, and it adds the reassurance the
+original did not have.
+
+### Four more guards asserted the solution rather than the property — nine now
+
+`career`, `language`, `moving` and `projects` write-boundary tests each pinned
+`/if \(!confirm\(/`. All four went **red on a change that made the behaviour
+stricter**: the ask moved to a shared, localised, accessible dialog.
+
+They are rewritten to the property they meant — **nothing is awaited before the
+question** — which is what a confirmation has to mean. A handler that fires its
+request and then asks has not asked. That is also the assertion the new guard uses
+for all 32, so the local and global guards now say the same thing.
+
+Nine instances of this mistake across the audit, always the same shape: a guard
+written against **how** something was done rather than **what must be true**.
+
+### Two things my own tooling got wrong
+
+- **The converter was not idempotent.** `language-module` and `medications-module`
+  were already adopted in Pass AV, and the script added a *second*
+  `const askConfirm = useConfirm()` to each. `tsc` named it (TS2451, cannot
+  redeclare). A generated binding needs an existence check, not just a
+  within-this-run set.
+- **`tests/` is outside the repo's lint scope.** `npm run lint` is `next lint` with
+  no `--dir`, so it never reaches the test tree — where three ESLint **errors**
+  had been sitting unseen. Two were mine from Pass AU
+  (`tests/a-field-reports-its-own-state.test.ts`: `children` passed as a prop, and
+  a component factory with no `displayName`) and are fixed. The third,
+  `tests/school-sports-desk.test.ts:359` assigning to `module`, is not mine and is
+  recorded rather than touched.

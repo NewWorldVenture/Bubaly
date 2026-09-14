@@ -27,10 +27,13 @@ import { sanitizeQuery } from '@/lib/services/search/index';
 const field = (
   props: { label: string; error?: string; hint?: string },
   render: (id: string, aria: FieldAria) => ReactElement,
-) => renderToStaticMarkup(createElement(Field, { ...props, children: render }));
+) => renderToStaticMarkup(createElement(Field, props, render));
 
-const input = (extra: Record<string, unknown> = {}) => (id: string) =>
-  createElement(Input, { id, ...extra });
+const input = (extra: Record<string, unknown> = {}) => {
+  const control = (id: string) => createElement(Input, { id, ...extra });
+  control.displayName = 'TestInput';
+  return control;
+};
 
 describe('Field marks the control, not just the page', () => {
   it('sets aria-invalid on the control when there is an error', () => {

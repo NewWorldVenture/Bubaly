@@ -24,6 +24,7 @@ import {
 } from '@/lib/inventory/finder';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Item = Tables<'inventory_items'>;
 type Location = Tables<'home_locations'>;
@@ -44,6 +45,7 @@ export function InventoryModule() {
   const money = moneyIn(locale.code);
   const fmtDate = fmtDateIn(locale.code);
   const tr = useTranslations();
+  const askConfirm = useConfirm();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -92,7 +94,7 @@ export function InventoryModule() {
   const memberName = (id: string | null) => members.find((m) => m.id === id)?.display_name ?? null;
 
   async function deleteItem(item: Item) {
-    if (!confirm(`Remove ${item.name} from the inventory?`)) return;
+    if (!(await askConfirm({ title: tr('confirm.removeNamed', { name: item.name }), body: tr('confirm.cannotBeUndone') }))) return;
     const { error } = await createClient().from('inventory_items').delete().eq('id', item.id);
     if (error) return toastError(describeDbError(error));
     success(tr('inventoryModule.itemRemoved'));
@@ -120,7 +122,7 @@ export function InventoryModule() {
 
   async function deleteLocation(location: Location) {
     const count = itemsIn(location.id);
-    if (!confirm(`Delete “${location.name}”?${count ? ` ${count} item${count === 1 ? '' : 's'} will lose their location.` : ''}`)) return;
+    if (!(await askConfirm({ title: tr('confirm.deleteNamed', { name: location.name }), body: count ? tr('inventory.itemsLoseLocation') : tr('confirm.cannotBeUndone') }))) return;
     const { error } = await createClient().from('home_locations').delete().eq('id', location.id);
     if (error) return toastError(describeDbError(error));
     success(tr('inventoryModule.locationDeleted'));
