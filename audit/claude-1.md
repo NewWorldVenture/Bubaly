@@ -2106,3 +2106,59 @@ corrected to the merged call sequence (`[[0,999],[1000,1999],[2000,2500]]`).
   child still reads the family's health records, still records their own
   symptom, and still corrects a log about themselves that a parent wrote; a
   manager still corrects and deletes all nine.
+
+### [CLAUDE-1][HIGH][RLS/LOCATOR] "Strictly self-only" was true of the action and false of the database
+
+- **File/path:** `app/(app)/dashboard/locator/actions.ts:30`;
+  `member_locations`, `location_events` (both `for all using
+  (is_family_member(family_id))`) and `safety_check_ins` (the same predicate on
+  every write verb).
+- **Raised by:** Claude-3.
+- **Problem:** the action's own doc comment states the rule — *"Strictly
+  self-only — a member can only post their own location"* — and
+  `updateMyLocation` and `setLocationSharing` both keep it, writing
+  `member_id: member.id` from `requireUserContext()`. But
+  `components/modules/locator-module.tsx` and
+  `components/family/{check-in,find-phone}-view.tsx` all use `createClient()`
+  and talk to PostgREST directly with the anon key, so the action was never the
+  boundary. **The same shape as every CRITICAL in this sweep: the rule stated
+  where a user can see it, absent from the layer that enforces it.**
+- **Evidence:** on the replayed database (321/321), as a real `authenticated`
+  child: moving a parent's dot → UPDATE 1; setting a parent's `is_sharing` to
+  false → UPDATE 1; deleting their own departure event → DELETE 1; deleting a
+  parent's safety check-in → DELETE 1. Inserting a fabricated `arrived` event
+  for another member also succeeded — and that path notifies the whole family
+  as **urgent**.
+- **Impact:** a child can move a parent's dot, take a parent off the map, post
+  a false arrival that pushes an urgent notification to everyone, erase the
+  record of having left somewhere, and delete another member's "I am safe".
+  The last two are the sharpest: a trail you can delete is not a trail, and
+  `check-in-view.tsx`'s `remove(id)` deletes **by id with no author check at
+  all**.
+- **Recommended fix / taken:** `0308_a_location_is_only_your_own_to_post.sql`,
+  three shapes because these are three different things:
+  - `member_locations` — where you are *now*. INSERT/UPDATE require
+    `is_self_member(member_id)`, which is exactly the action's own claim written
+    where it binds. DELETE also allows a manager, for a stale row left by a
+    member who has gone.
+  - `location_events` — the trail. **Append-only**, in `wallet_audit_logs`'
+    idiom: you append your own, **no UPDATE policy exists at all**, and only a
+    manager deletes. A child erasing their own "left School" is precisely what
+    a geofence exists to prevent.
+  - `safety_check_ins` — "I am safe". `member_id` is nullable here (the view
+    writes `selfMember?.id ?? null`), so self is established by `created_by =
+    auth.uid()` **as well as** by member_id; requiring member_id alone would
+    break a check-in from anyone without a member row.
+  Reads stay family-wide on all three — seeing where the family is IS the
+  feature, and every one of these surfaces renders the whole family's rows.
+- **Status:** FIXED. `docs/audit/locator-write-boundary-check.sql`, 29/29
+  probes, 321/321 migrations. Non-vacuity proven **three times, once per
+  shape**: restoring `for all is_family_member` on member_locations → *"a child
+  moved a parent's dot on the family map (1)"*; adding `is_self_member` to the
+  trail's DELETE → *"a child erased their own departure event (1)"*; check-in
+  DELETE back to any member → *"a child deleted a parent's safety check-in
+  (1)"*. The middle one matters most: it proves the append-only rule is
+  deliberately **stricter** than self-only, rather than a copy of it.
+  Positive controls assert the child still sees the family map, still posts and
+  stops sharing their own location, still checks in and withdraws their own
+  check-in; and a parent still clears a trail and a stale dot.
