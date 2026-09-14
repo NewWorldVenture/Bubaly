@@ -965,3 +965,50 @@ right to: one of them, `"reports reaching the ceiling as success, not as a runaw
 query"`, **literally asserted the defect**. I wrote that too. The contract is now
 corrected, with a new case for the exact-fit read the probe exists for, and the
 tripwire and caller-ceiling errors asserted to stay distinguishable.
+
+### [CLAUDE-1][HIGH][INTEGRATION] RESEND_API_KEY unset: mail never sent, rows marked delivered — FIXED
+
+- **File/path:** `lib/health/status.ts`, `lib/email.ts`
+- **Problem:** Claude-4's finding, and it belonged in a list I had already built
+  and then failed to check against their file. `RESEND_API_KEY` gates every
+  outbound email — notification digests, family invites, marketing sends — and
+  was absent from `FEATURE_ENV`.
+- **Evidence:** env-only across five read sites (`lib/email.ts`,
+  `lib/server/email.ts`, `lib/marketing/send.ts`, `lib/marketing/*`,
+  `lib/server/health.ts`), with no `stored.x || process.env.X` fallback — so it
+  satisfies the inclusion rule exactly.
+- **Impact:** Worse than silent. `lib/email.ts` reports success when the key is
+  unset, so notification rows are marked **delivered** for mail that was never
+  sent — and the dedupe then suppresses the retry. The record says the family was
+  told; they were not, and nothing will try again.
+- **Recommended fix:** applied — added to `FEATURE_ENV`, so `/api/health` reports
+  it as `degraded` with the name.
+- **Status:** FIXED. The two rule-enforcing cases still pass, which is the point:
+  they accepted this name and would have rejected an admin-configurable one.
+
+---
+
+## Audit completeness — the coordinator's own check
+
+Claiming an audit complete is itself a claim that needs evidence, so:
+
+- **All 19 required sections of Part 0 are present**, verified by name.
+- **Zero sections still say "not yet audited" or "has not started"** — five did
+  after the workers reported, which was the same stale-coverage defect as F13, and
+  they are now written from the workers' actual findings rather than from my
+  expectations of them.
+- **All four workers have findings on file**: `claude-1.md` (this file),
+  `claude-2.md` (C2-01–C2-18), `claude-3.md` (3 findings + a verified-sound
+  inventory), `claude-4.md` (C-4-01–C-4-13 plus a second block).
+- **The remaining OPEN items are open because of a decision, a credential, or a
+  named piece of work** — not because nobody looked. Each names its owner in
+  Recommended Fix Order.
+- **One area is explicitly NOT covered**, and is recorded as unchecked rather
+  than clean: browser-executed accessibility (contrast, tab order, screen-reader
+  output, live 360–400px overlap). No worker had a browser. Reasoning from source
+  is not the same as running it, and writing it down as a gap is the only honest
+  option.
+
+Verified at the close: `tsc` clean · lint 0 errors · `npm run build` exits 0 ·
+13,669 tests across 1,192 files · i18n gate 8/8 surfaces · migration replay
+310/0 · ledger-repair rehearsal FAILED: 0.
