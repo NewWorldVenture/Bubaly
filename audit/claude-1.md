@@ -3671,3 +3671,90 @@ finding asked for.
 **Claude-4's third point stands as filed and is the reason this was worth doing:**
 the pagination defect was *structurally invisible* to the old guard. No string in
 it mentioned recipients, pages or counts. A guard can only fail on what it looks at.
+
+---
+
+## Pass AZ — five of the six named sites were fine, and the real one was a layer down
+
+**Status: FIXED** (the shared helper + one route), **CORRECTED** (five false positives),
+**VERIFIED-OPEN** (two, each needing a design decision rather than a mechanical edit).
+
+### `[CLAUDE-2 → CLAUDE-1][MEDIUM][RESILIENCE]` the census counted a shape, not a behaviour
+
+Claude-2 counted **47 pages** with a raw `Promise.all` over Supabase reads, named six
+as the worst, and called the fix *"mechanical — `Promise.all` → `settleAll` at each
+site"*. The evidence was three signals: a `Promise.all`, no `settle` import, and no
+`.error` substring.
+
+**I read the six. Five are false positives**, and the reason is the same in each
+case: they solved the problem another way, which is exactly what makes all three
+signals fire.
+
+| site | why it is already safe |
+|---|---|
+| `dashboard/dining` | a local `safe()` — `try { (await q).data ?? [] } catch { [] }` around each query, so nothing ever rejects into the batch |
+| `dashboard/planning` | its own `async function safe<T>` doing the same |
+| `dashboard/food` | `makeDegradeRead('food')`, the shared version, which additionally **logs** every failure |
+| `guardian` | **already uses `settleAll`** and reads all eight errors — the `.error` signal missed it because the bindings are named `commsError`, `scamsBlockedError`, … |
+| `(marketing)/blog` | `getAllPosts` / `getFeaturedPost` / `getCategoryCounts` each `try`/`catch` internally, and the catch is more careful than `settleAll` would be — it re-throws Next's static-bailout signal first |
+
+Only **`referrals`** of the six is genuinely exposed.
+
+### The recommended fix is not mechanical, and applying it blindly would make pages worse
+
+Two reasons, both worth keeping:
+
+1. **`settleAll` only helps a page that then ACTS on the error.** For a page that
+   ignores it, the conversion trades a visible failure — the error boundary, which at
+   least tells the reader something broke — for a **silent empty world**, which lies.
+   That is the defect class this audit has spent Passes AT and AU closing. Measured:
+   of 81 `Promise.all` batches in `app/`, **five** destructure an error and use it.
+2. **A batch that mixes a query with a domain helper cannot be settled without
+   deciding the degraded value.** `admin/marketing/settings` batches a settled query
+   with `getAIConfigView(supabase)`; `wallet/allowance` batches three settled queries
+   with `resolveFamilyPlanLevel(...)`. `settleAll` would type those as
+   `AIConfigView | SettledFallback`, and what the page renders in the second case is a
+   design question, not a rename.
+
+### The real defect was one layer down, in a shared helper
+
+`lib/supabase/chunked-in.ts` `readInChunks` says of itself:
+
+> *"The first error wins and the rows gathered so far are still returned, which
+> matches how the single-request version behaves for callers that log the error and
+> render what they have."*
+
+and then batched its chunks with `Promise.all`. One rejected chunk rejected the whole
+read, the caller received nothing, and its `if (error)` branch never ran — **the
+sentence above was false in precisely the outage it was written for.** Another
+primitive documenting a guarantee it did not hold, and one fix covers all five
+callers rather than five page-level edits.
+
+**The compiler made the fix honest.** Settling means a transport rejection arrives as
+`{ message }`, which is not the caller's `Err`, and `tsc` refused the change until the
+return type said so. Widening it to `Err | { message: string } | null` is the truthful
+signature; no caller needed changing, and any future one that reaches for a
+PostgrestError-only field is now a compile error rather than a runtime `undefined`.
+
+Also converted: `app/api/ai/health/coach/route.ts`, whose four grounding reads are raw
+queries and whose `groundingError` check already exists — so settling is a strict
+improvement there with no new silent-empty-world risk. Its own comment says *"A
+refused read is not an empty medical record"*; a transport rejection meant that check
+never ran.
+
+### Verified open, and why each is not a rename
+
+- **`app/(app)/referrals/page.tsx`** — `getReferralConfig` does a bare read with no
+  catch and returns a `ReferralConfig`, not `{ data, error }`. There is a
+  `getReferralConfigResult` that returns the error, so the fix exists; what the page
+  shows a family when their referral code cannot be read is a design decision.
+- **`app/api/blog/save/route.ts`** — two raw queries with no error handling at all.
+
+### And my own guard from Pass AY was wrong in a way worth writing down
+
+`nothing reaches for an unpaginated listUsers again` matched raw file text, so it went
+red on the **helper's own header comment**, which names the API it exists to replace.
+It passed every time I ran it while writing, and failed on the next run — because
+`git ls-files` cannot see an untracked file, and the helper only entered the scan once
+it was committed. **A guard that reads source as text has to read code as text**; it
+strips comments now, and the reason is written beside it.

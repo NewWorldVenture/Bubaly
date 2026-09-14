@@ -8,6 +8,7 @@ import { scopeFromUserContext } from '@/lib/services/scope';
 import { resolveProvider, describeAIError } from '@/lib/ai/provider';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
+import { settleAll } from '@/lib/supabase/settle';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -64,7 +65,7 @@ export async function POST(req: Request) {
     { data: profile, error: profileError },
     { data: meds, error: medsError },
     { data: symptoms, error: symptomsError },
-  ] = await Promise.all([
+  ] = await settleAll([
     memberId ? supabase.from('family_members').select('display_name, birthday').eq('id', memberId).eq('family_id', familyId).maybeSingle() : Promise.resolve({ data: null, error: null }),
     memberId ? supabase.from('medical_profiles').select('blood_type, allergies, conditions, current_medications').eq('member_id', memberId).eq('family_id', familyId).maybeSingle() : Promise.resolve({ data: null, error: null }),
     memberId
@@ -75,6 +76,9 @@ export async function POST(req: Request) {
       : Promise.resolve({ data: null, error: null }),
   ]);
 
+  // settleAll rather than Promise.all: a transport rejection would otherwise
+  // reject the batch and the grounding check below would never run at all.
+  //
   // A refused read is not an empty medical record. Coaching over one silently
   // drops the allergy, the condition or the medication the answer needed to
   // account for, and nothing on the page says the grounding was incomplete.

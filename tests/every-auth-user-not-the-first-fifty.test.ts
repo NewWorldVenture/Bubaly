@@ -92,9 +92,18 @@ describe('every auth user, not the first fifty', () => {
   });
 
   it('nothing reaches for an unpaginated listUsers again', () => {
+    // Comments are stripped first, and that is not a detail. The first version
+    // of this matched raw text and went red on the helper's own header, which
+    // NAMES the API it exists to replace — but only after the file was committed,
+    // because `git ls-files` cannot see an untracked file. It passed while I
+    // wrote it and failed on the next run: a guard that reads source as text has
+    // to read CODE as text.
     const files = execSync("git ls-files 'app/**/*.ts' 'lib/**/*.ts'", { encoding: 'utf8' })
       .split('\n').filter(Boolean);
-    const bare = files.filter((f) => /\.listUsers\(\s*\)/.test(readFileSync(f, 'utf8')));
+    const code = (file: string) => readFileSync(file, 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/(^|[^:])\/\/.*$/gm, '$1');
+    const bare = files.filter((f) => /\.listUsers\(\s*\)/.test(code(f)));
     expect(bare, 'listUsers() with no arguments is one page of fifty').toEqual([]);
   });
 
