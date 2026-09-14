@@ -5702,6 +5702,7 @@
   "guardianRules.deterministicRulesThatOverrideAiDecisions": "Deterministische Regeln, die KI-Entscheidungen übersteuern",
   "guardianRules.routingRules": "Weiterleitungsregeln",
   "guardianSettings.configuration": "Konfiguration",
+  "guardianSettings.couldnTLoadYourGuardianSettings": "Ihre Guardian-Einstellungen konnten nicht geladen werden. Bitte aktualisieren und erneut versuchen – ein Speichern würde jetzt Ihre Anrufweiterleitung durch die Standardwerte ersetzen.",
   "guardianSettings.guardianSettings": "Guardian-Einstellungen",
   "guardianSettings.twilioRoutesCallsToBubalyAn": "Twilio leitet Anrufe an Bubaly weiter. Ein KI-Schlüssel (Anthropic oder OpenAI) betreibt die Prüfgespräche.",
   "habits.30d": "% · 30d",

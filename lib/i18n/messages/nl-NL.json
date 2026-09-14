@@ -5702,6 +5702,7 @@
   "guardianRules.deterministicRulesThatOverrideAiDecisions": "Deterministische regels die AI-beslissingen overrulen",
   "guardianRules.routingRules": "Routeringsregels",
   "guardianSettings.configuration": "Configuratie",
+  "guardianSettings.couldnTLoadYourGuardianSettings": "Kon je Guardian-instellingen niet laden. Ververs en probeer het opnieuw — nu opslaan zou je oproeproutering vervangen door de standaardwaarden.",
   "guardianSettings.guardianSettings": "Guardian-instellingen",
   "guardianSettings.twilioRoutesCallsToBubalyAn": "Twilio routeert oproepen naar Bubaly. Een AI-sleutel (Anthropic of OpenAI) voedt de screeninggesprekken.",
   "habits.30d": "% · 30d",

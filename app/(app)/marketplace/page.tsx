@@ -38,7 +38,7 @@ const ACTIONS: { label: string; sub: string; href: string; icon: typeof Shopping
   { label: 'Request', sub: 'Request an item', href: `${BASE}/browse?post=1&kind=wanted`, icon: HelpCircle, tint: 'text-rose-500 bg-rose-500/12' },
   { label: 'Donate', sub: 'Give for free', href: `${BASE}/browse?post=1&kind=donate`, icon: Gift, tint: 'text-pink-500 bg-pink-500/12' },
   { label: 'Swap', sub: 'Trade items', href: `${BASE}/browse?post=1&kind=swap`, icon: Repeat, tint: 'text-teal-500 bg-teal-500/12' },
-  { label: 'Create Store', sub: 'Build your brand', href: `${BASE}/store`, icon: Building2, tint: 'text-brand-text bg-brand/12' },
+  { label: 'Create Store', sub: 'Build your brand', href: `${BASE}/store`, icon: Building2, tint: 'text-brand-text bg-brand/10' },
 ];
 
 const CATEGORY_ICON: Record<string, typeof Shirt> = {
@@ -219,7 +219,7 @@ export default async function MarketplaceHomePage() {
               <div className="flex shrink-0 gap-2.5 overflow-x-auto">
                 {hero.map((l) => (
                   <Link key={l.id} href={`${BASE}/item/${l.id}`} className="w-36 shrink-0 rounded-xl border border-border bg-surface/80 p-3 transition hover:border-brand/40">
-                    <span className="inline-block rounded-md bg-brand/12 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-text">
+                    <span className="inline-block rounded-md bg-brand/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-text">
                       {KIND_LABELS[l.kind as ListingKind]}
                     </span>
                     <p className="mt-1.5 line-clamp-2 text-xs font-medium">{l.title}</p>

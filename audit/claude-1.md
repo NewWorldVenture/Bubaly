@@ -783,3 +783,236 @@ No finding. Status: VERIFIED.
 fix produced the finding. A fix is a new thing in the codebase and deserves the
 same question as everything else: what is the most plausible wrong change
 someone makes next, and does anything stop it?
+
+---
+
+## Pass P — the Guardian settings page (merged from Claude-2, plus two found while fixing it)
+
+Claude-2 reported the first of these and did not modify a source file, per the
+board's rule 9. I verified it, fixed it, and found two more defects in the same
+save path while reading it. All three have the same shape: **the form reports
+"Settings saved" and the value never reaches the column.**
+
+### [CLAUDE-2 / verified by CLAUDE-1][HIGH][STATE] A failed profile read rendered the factory defaults, and Save overwrote the family's real call routing
+
+- **File/path:** `app/(app)/guardian/settings/page.tsx:23` →
+  `components/guardian/routing-settings.tsx:103` → `app/(app)/guardian/actions.ts:220`
+- **Problem:** the page destructured only `data`
+  (`const [{ data: profile }, …] = await Promise.all([…])`), so a failed read
+  arrived as `profile === null` — **the same value** that means "this member has
+  no profile row yet". `RoutingSettings` seeded itself from a hard-coded
+  `defaults` object and Save posted that form through an
+  `.upsert(payload, { onConflict: 'family_id,member_id' })`.
+- **Evidence (behavioural, not a reading):**
+  `tests/guardian-settings-failed-read-is-not-an-empty-profile.test.ts` renders
+  the real page against the real form with the read in each state. Against the
+  pre-fix code, **the failed-read page and the absent-row page are byte-identical
+  strings** — the assertion `expect(failed).not.toEqual(absent)` fails — and the
+  failed-read markup contains all six routing rows seeded from the defaults, the
+  guardian-number form with an empty field, and a live `Save Settings` button.
+  3 of 6 cases fail on the original code; 5 of 6 with only the page reverted.
+- **Impact:** a transient read failure turned the settings page into a silent
+  reset of `ai_persona_name`, `ai_greeting_template`, `voicemail_greeting`,
+  `context_overrides` and every routing mode the form sends, unrecoverable from
+  the UI. A household that had set unknown callers to `blocked` became
+  `ai_handle_first` — unknown callers start getting through. The empty
+  guardian-number field is the same lie about a different column.
+- **Fix (applied):** the read goes through `settleAll`, so a transport rejection
+  arrives in the same shape as a query error rather than taking the page to the
+  error boundary; `profileError` is destructured, logged, and returns an
+  `ErrorState` **before** anything savable is rendered. The prop changed from
+  `Profile | null` to `RoutingProfileSource`
+  (`{status:'ok'|'absent'|'error'}`) in the new `lib/guardian/routing-form.ts`,
+  and `initialRoutingForm` returns `null` for `error` — so the component refuses
+  the form too, and a future caller cannot re-conflate the two by forgetting a
+  check. Claude-2's recommendation, followed as written.
+- **Status:** FIXED.
+
+### [CLAUDE-1][HIGH][STATE] Three of the six routing rows the form renders had no writer anywhere in the application
+
+- **File/path:** `components/guardian/routing-settings.tsx:116` (`save()`),
+  `app/(app)/guardian/actions.ts:191` (the action's input type)
+- **Problem:** the Routing Rules tab renders an editable row for six trust tiers.
+  `save()` listed three fields by hand — `default_mode_unknown`,
+  `default_mode_known`, `default_mode_suspected_spam` — and the action's input
+  type accepted exactly those three. **`default_mode_immediate`,
+  `default_mode_close` and `default_mode_trusted` were never written by anything.**
+- **Evidence:** `grep` for each of the three across the repository returns the
+  column definition in `01370_ai_call_guardian.sql`, the read in
+  `app/api/guardian/inbound/voice/route.ts:69`, the routing decision in
+  `lib/guardian/pipeline.ts:144` (`immediate_family: profile.default_mode_immediate`),
+  two type declarations and one test fixture — **and no writer**. The columns
+  could only ever hold their `DEFAULT 'immediate_ring'`.
+  `tests/guardian-routing-saves-every-row-it-shows.test.ts` drives the real
+  buttons and the real Save handler: with the old `save()` body restored, the
+  three tiers fail and the other three pass — 7 failed, 10 passed.
+- **Impact:** changing any of those three rows highlighted the new mode, answered
+  "Settings saved", and reverted on the next load. The tiers affected are exactly
+  the ones a member is most likely to want to change for a personal reason — a
+  relative in the immediate-family tier they need to stop ringing through. The
+  pipeline kept ringing.
+- **Fix (applied):** `routingUpdate(form, memberId)` derives the fields from
+  `EDITABLE_TRUST_LEVELS` — the same list the JSX maps over — so the form cannot
+  render a row it does not send. The action's payload is built by
+  `guardianProfilePayload`, one loop over a declared writable set, replacing
+  twelve hand-written `if (input.x !== undefined) payload.x = input.x` lines.
+- **Status:** FIXED. Proved load-bearing from both ends independently: the old
+  `save()` body → 7 failed; removing the three columns from the writable set →
+  5 failed.
+
+### [CLAUDE-1][MEDIUM][STATE] A greeting the family deleted came straight back
+
+- **File/path:** `components/guardian/routing-settings.tsx:119-120` (was)
+- **Problem:** `ai_greeting_template: form.ai_greeting_template || undefined`.
+  Clearing the field made it `''`, `''` became `undefined`, and `undefined` meant
+  the key was omitted from the payload — so the upsert left the old text in place.
+- **Evidence:** three cases in the new test clear the AI greeting, the voicemail
+  greeting, and type whitespace only; all three fail against the old body. The
+  fourth types real text and passes both before and after, which is what makes the
+  first three about *clearing* rather than about saving.
+- **Impact:** neither greeting could be removed once set. Both columns are
+  nullable, so there was a correct value to write.
+- **Fix (applied):** cleared (or whitespace-only) sends `null`; the key is always
+  present. Omitting a key still means "leave this column alone", which is what
+  `updateContextAction`'s single-field write relies on — one case pins that too.
+- **Status:** FIXED.
+
+### Left open deliberately
+
+- **`ai_persona_name` can still be saved blank.** The form sends it as typed, and
+  `''` is a legal value in a `NOT NULL` column, so the AI would introduce itself
+  as nothing. Unlike the greetings there is no obviously right write: blank could
+  mean "use Bubaly" or it could mean the field should be required. That is a
+  product decision, not a defect with one answer, so it is recorded rather than
+  guessed at. LOW.
+- **The Guardian surface is not in `GATED_SURFACES`.** `routing-settings.tsx`
+  still hardcodes 'Routing Rules', 'AI Persona', 'Context Modes', 'Saving…',
+  'Save Settings' and the five context labels, and `lib/guardian/trust.ts` +
+  `pipeline.ts` hold English catalogues. Claude-2 has this as its own finding; not
+  duplicated here beyond noting that the new error copy went through `t()` and the
+  catalogue, so this fix did not add to the debt.
+
+**Method note.** The finding I added was found by reading the code the reported
+defect pointed at, not by scanning for a pattern. Claude-2's finding named the
+save path; the save path had two more defects in it. Worth doing every time a
+worker hands over a file: the thing they found is rarely the only thing there.
+
+---
+
+## Pass Q — the stylesheet (merged from Claude-2, plus a finding its evidence led to)
+
+### [CLAUDE-2 / verified by CLAUDE-1][HIGH][A11Y] `.focus-ring` painted a ring that was always on and removed the one that means "focused"
+
+- **File/path:** `app/globals.css:179` (was); 202 bare call sites, including
+  `components/ui/input.tsx:5` — the shared `Input`, `Textarea` and `Select`
+- **Verified by compiling, independently of Claude-2's compile.** The emitted rule
+  is `.focus-ring { outline: 2px solid transparent; … --tw-ring-shadow: …; }` with
+  **no focus selector at all**, and the whole sheet holds 11 `:focus-visible`
+  rules, none of which restores an outline. The 218/16/202 split is confirmed
+  exactly: `grep -o` over `app` + `components` gives 202 bare and 16
+  `focus-visible:focus-ring`.
+- **Impact:** two failures in one declaration. The ring is painted at all times,
+  so it carries no information; and `outline: 2px solid transparent` is
+  author-origin, so it beats the UA's `:focus-visible` outline and the native
+  indicator is gone too. A keyboard user cannot see where focus is on every text
+  input, textarea and select in the product. WCAG 2.1 AA 2.4.7.
+- **Fix (applied):** Claude-2's one-liner — scope the DECLARATION, not the 202
+  call sites. Verified by compiling before and after: the only rules that change
+  are `.focus-ring`, `.btn-cta`, `.btn-inline` and the escaped variant. Tailwind
+  **splits** each component class that `@apply`s it into `.btn-cta:focus-visible`
+  (carrying the ring) and `.btn-cta` (carrying everything else), which is the
+  mechanism that makes this a one-line fix.
+- **Status:** FIXED, with a guard that compiles the real stylesheet with the real
+  config and asserts on emitted CSS
+  (`tests/the-focus-ring-only-shows-on-focus.test.ts`, 6 cases, 1.6 s).
+  Reverted → 4 of 6 fail.
+- **One correction to the report, recorded because the next reader will check the
+  line numbers:** Claude-2 cites "`app/globals.css:414` (`.btn-primary`) and
+  `:419` (`.chip`)" as call sites. Those lines are `.btn-cta` and `.btn-inline`.
+  **`.btn-primary` and `.chip` are not defined in any CSS file in the
+  repository** — which turned out to be the more interesting fact; see below. The
+  substance of the finding is unaffected: two component classes do `@apply
+  focus-ring`, and both are handled.
+
+### [CLAUDE-1][MEDIUM][FRONTEND] Classes the app uses that compile to nothing at all
+
+Found by following the correction above. If `.btn-primary` is used in markup and
+defined nowhere, then **the button it styles has no styling** — and nothing in the
+build says so, because an unknown class is not an error in CSS or in Tailwind.
+
+- **Method:** compile `app/globals.css` with the project's own config, using the
+  class tokens found in `className` literals as the content, then ask which tokens
+  produced **no rule**. A token Tailwind does not recognise and `globals.css` does
+  not define is a class that styles nothing. Each one below was then confirmed
+  individually: `bg-brand/10` emits, `bg-brand/12` does not.
+- **Confirmed and fixed in this pass:**
+
+  | class | where | why it emits nothing | fixed to |
+  |---|---|---|---|
+  | `btn-primary` | `app/(app)/admin/settings/social-links/social-links-form.tsx:130` | defined in no CSS file | `btn-cta` |
+  | `no-scrollbar` | **13 sites** (tab strips and scrolling rows in `app` and `components`) | defined in no CSS file | defined it in `@layer utilities` |
+  | `bg-card` | `app/(app)/admin/notifications/page.tsx:56` | no `card` colour in the theme | `bg-surface/40` |
+  | `prose-family` | `app/(marketing)/blog/[slug]/page.tsx:249` | defined nowhere, and no typography plugin (`plugins: []`) | removed — every block in that body already carries its own type classes |
+  | `bg-emerald-500/12` ×2 | `app/(app)/dashboard/family-operating-index/page.tsx` | **12 is not on the opacity scale** (…5, 10, 20, 25…), so the modifier resolves to nothing | `/10` |
+  | `bg-brand/12` ×2 | `app/(app)/marketplace/page.tsx` | same | `/10` |
+  | `bg-violet-500/12`, `border-white/12` | `app/(marketing)/pricing/pricing-content.tsx` | same — **on the public pricing page** | `/10` |
+  | `divide-white/8` | `app/(marketing)/security/page.tsx` | same — **public** | `/10` |
+
+- **Impact:** each is an element rendering with no background, no border colour, no
+  divider, or in `no-scrollbar`'s case a scrollbar under thirteen tab strips. Two
+  are on the signed-out marketing site.
+- **Status:** FIXED for the eight above. **The inventory is NOT complete** — see
+  the next entry, which is the honest state of it.
+
+### [CLAUDE-1][MEDIUM][FRONTEND][OPEN] P-04 — the same defect is systemic: 47 class names style nothing
+
+`scripts/audit-unstyled-classes.mjs` (written for this) now gives an exact
+inventory: **47 distinct class names, across ~1,216 files, that compile to no rule
+at all.** Three families:
+
+1. **Theme tokens this theme does not define** — shadcn's vocabulary, used as if it
+   were installed: `bg-card`, `bg-background`, `bg-background/40`,
+   `bg-background/60`, `bg-primary`, `bg-primary/10`, `border-primary`,
+   `text-foreground`, `bg-surface-2`, `bg-brand-500/15`. This theme names them
+   `brand`, `fg`, `bg`, `surface`, `elevated`. `bg-card` alone appears widely.
+2. **`tailwindcss-animate` classes with `plugins: []`** — `animate-in`, `fade-in`,
+   `slide-in-from-bottom-2` (`onboarding-wizard.tsx:240`), `zoom-in-95`
+   (`service-tooltip.tsx:93`). The entry animations simply do not run.
+3. **Values that are not on a scale** — 23 colour-opacity modifiers (`/8`, `/12`,
+   `/15`, `/58`, `/63`, `/73`, `/92`, `/98`), `duration-400`, `h-4.5`, `w-4.5`,
+   `bg-current/10` and `text-current/70` (`currentColor` takes no opacity
+   modifier), and `btn-secondary` / `reference-page` defined nowhere.
+
+**How the number became trustworthy** — four separate corrections, each of which
+had the sweep reporting a defect that was not there, or missing one that was:
+
+- **157 → 65.** The first pass was a regex over `className={…}` and read the
+  comparison operand in `className={kind === 'high' ? … }` as a class. Replaced
+  with a TypeScript AST walk that rejects comparison operands, lookup indices and
+  `case` tests.
+- **65 → 35.** Tailwind escapes a comma in an arbitrary value as the CSS hex escape
+  `\2c ` — **with a trailing space**, which belongs to the escape. Reading the
+  emitted class name with `[\w-]` truncated there, so every
+  `grid-cols-[minmax(0,1fr)_300px]` in the app looked unstyled. Twenty-odd false
+  positives from one space.
+- **35 → 51.** The "at least one recognised token" test could not see a literal
+  whose tokens are ALL unstyled: `className="h-4.5 w-4.5"` and
+  `className="btn-secondary"` were skipped in silence. A guard that cannot see its
+  own worst case is not a guard. Fixed by trusting POSITION inside a `className`,
+  and keeping the heuristic only for class maps declared at module scope.
+- **51 → 47.** Position was then too generous: an argument to a function that
+  COMPUTES a class is not a class. `placeBgFor(p?.icon ?? 'other')`,
+  `kindMeta('bug').tone` and `cfg.color.split(' ')[1].replace('text', 'bg')` gave
+  four more. Only `cn`/`clsx`/`cx`/`classNames`/`twMerge`/`twJoin` arguments count.
+
+- **Why it is still open:** each of the 47 needs a replacement chosen, and the
+  177 grep hits behind them span roughly 40 files. That is its own change, and it
+  should land with the auditor wired in as a test so the list cannot grow back.
+- **Status:** OPEN, inventory exact and reproducible (`node
+  scripts/audit-unstyled-classes.mjs`, exits 1 with the list). `group`, `peer` and
+  named groups like `group/snooze` are allow-listed, because Tailwind correctly
+  emits nothing for them.
+
+**Method note.** The finding came from checking a line number in someone else's
+report. It would have been easy to read "globals.css:414 (.btn-primary)", see a
+`focus-ring` on line 414, and move on.

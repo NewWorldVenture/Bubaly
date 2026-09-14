@@ -112,14 +112,18 @@ as the next task in `audit/claude-1.md`.
 # 3. High Priority
 
 **Fixed and live:** F1, F9 (closed as a recorded decision), F10, F15, F16, F18,
-F20, C-01 … C-05, C-07, E-01, F-a, F-b, H-01, L-01, L-02, L-03, **P-01**.
+F20, C-01 … C-05, C-07, E-01, F-a, F-b, H-01, L-01, L-02, L-03, **P-01**,
+**U-02**, **P-02**, **P-03**, **U-03**.
 
 | id | finding | found by | state |
 |---|---|---|---|
 | **P-01** | **Vacation Planner and Weekend Planner gated on hrefs the catalog did not contain**, so `resolveFeatureEntitlement` returned `allowed: true` for every family at all 21 call sites. The sidebar rendered both as unlocked (it reads the resolved tier, not `minLevel`), and `/api/vacations/ai` and `/api/weekend/discover` — a model call and a Ticketmaster/SeatGeek fan-out on the deployment's own keys — were open to Free. Neither feature appeared on the published `/pricing` grid, which is generated from the same catalog: the product sold neither and the code gave both away | **Claude-4**, verified by Claude-1 | **Fixed** |
 
-| **U-02** | A failed Guardian profile read renders the **factory defaults**, and Save is an `upsert onConflict: family_id,member_id` — so saving over a failed read **overwrites the family's real call-routing configuration**, `default_mode_unknown` included. The E-01 class with teeth: not a wrong answer, a destroyed setting | **Claude-2** | OPEN |
-| **U-03** | `.focus-ring` (`app/globals.css:179`) emits `outline: 2px solid transparent` plus an unconditional ring and **no `:focus-visible` selector** — so the ring is always on and the native focus indicator is suppressed. 218 uses, **16 correct**, and all 16 are on the marketing surface plus kid login: the public site was fixed, the signed-in app was not. One-line fix, no call-site edits | **Claude-2** | OPEN |
+| **U-02** | A failed Guardian profile read renders the **factory defaults**, and Save is an `upsert onConflict: family_id,member_id` — so saving over a failed read **overwrites the family's real call-routing configuration**, `default_mode_unknown` included. The E-01 class with teeth: not a wrong answer, a destroyed setting | **Claude-2**, verified + fixed by Claude-1 | **Fixed** |
+| **P-02** | **Three of the six routing rows the Guardian settings form renders had no writer anywhere in the application.** `save()` named three fields by hand and the action's input type accepted the same three, so `default_mode_immediate`, `default_mode_close` and `default_mode_trusted` only ever held their column DEFAULT — while `resolveFromProfile` (`lib/guardian/pipeline.ts:144`) routes every inbound call from immediate family, close family and trusted friends through exactly those three. Changing one highlighted the new mode, answered "Settings saved", and reverted on reload | **Claude-1** (found reading U-02's save path) | **Fixed** |
+| **P-03** | A greeting the family **deleted came back**: `form.ai_greeting_template \|\| undefined` turned a cleared field into an omitted key, and the upsert left the old text in the column. Neither the AI greeting nor the voicemail greeting could be removed once set; both columns are nullable, so there was a correct value to write | **Claude-1** (same path) | **Fixed** |
+| **U-03** | `.focus-ring` (`app/globals.css:179`) emits `outline: 2px solid transparent` plus an unconditional ring and **no `:focus-visible` selector** — so the ring is always on and the native focus indicator is suppressed. 218 uses, **16 correct**, and all 16 are on the marketing surface plus kid login: the public site was fixed, the signed-in app was not. One-line fix, no call-site edits | **Claude-2**, verified + fixed by Claude-1 | **Fixed** |
+| **P-04** | **Classes the app uses that compile to nothing.** `btn-primary` (one admin button), `no-scrollbar` (**13** tab strips), `bg-card`, `prose-family`, and six colour-opacity modifiers off the scale (`/12`, `/8` — `bg-brand/10` emits, `bg-brand/12` does not), two of them on the **public** pricing and security pages: each renders with no background, border, divider or scrollbar suppression, and neither CSS nor the build reports an unknown class. **Eight fixed.** Three further families are confirmed by compiling each token — shadcn-style tokens this theme never defines (`bg-primary`, `text-foreground`, `bg-background`, `bg-surface-2`), `tailwindcss-animate` classes with `plugins: []`, and more off-scale values — and are **OPEN with an exact inventory**: `scripts/audit-unstyled-classes.mjs` reports **47** class names across ~40 files that compile to no rule — 23 off-scale opacity modifiers, ten shadcn theme tokens this theme never defines (`bg-card`, `bg-primary`, `text-foreground`, `bg-background`…), four `tailwindcss-animate` classes with `plugins: []`, and the rest. Getting that number honest took four corrections: 157→65 (a regex read `k === 'high'` as a class), 65→35 (Tailwind escapes a comma as `\2c ` **with a trailing space**, truncating every `grid-cols-[minmax(0,1fr)_…]`), 35→51 (the sweep could not see a literal whose tokens are ALL unstyled — `className="h-4.5 w-4.5"`), 51→47 (an argument to a function that *computes* a class is not a class) | **Claude-1** (found checking a line number in U-03's report) | **Part fixed, part OPEN** |
 | **U-04** | The whole AI Call Guardian surface — five pages — discards every read error, and none appears in the 127 `*-read-boundary` guards. A failed read renders **"0 scams blocked"** on the safety dashboard | **Claude-2** | OPEN |
 | **U-05** | Calendar events, note cards and photo rows are bare `<div onClick>` — mouse-only, WCAG 2.1.1 | **Claude-2** | OPEN |
 
@@ -235,7 +239,7 @@ whose error is discarded, and an empty state shown in its place. Six surfaces:
 | surface | what a failed read renders |
 |---|---|
 | `/guardian` (5 pages) | "0 scams blocked" on the safety dashboard; "No communications match your filters" over a possibly-full log |
-| `/guardian/settings` | the factory defaults — and Save then **upserts them over the family's real config** (**U-02**) |
+| `/guardian/settings` | ~~the factory defaults — and Save then **upserts them over the family's real config**~~ (**U-02** — **FIXED**: the read goes through `settleAll`, `profileError` returns an `ErrorState` before anything savable renders, and the prop is now `{status:'ok'\|'absent'\|'error'}` so a failed read cannot be mistaken for an absent row again) |
 | `/family/members` | "No members yet." — provably unreachable by any *successful* read, since `requireUserContext()` guarantees the caller is an active member. That branch fires **only** on failure |
 | `/family/activity` | "No activity recorded yet" over the audit trail |
 | `/family/permissions` | misdiagnoses a failed read as an unapplied database seed |
@@ -324,10 +328,16 @@ reads the **JWT** email and not `profiles.email`, so it is not an escalation.
 
 # 11. UX / Accessibility
 
-- **U-03 — focus is invisible across the signed-in app.** `.focus-ring` suppresses
-  the native outline and paints its ring unconditionally, with no
-  `:focus-visible`. 202 of 218 uses are the bare form. Keyboard users cannot see
-  where they are.
+- **U-03 — focus is invisible across the signed-in app. FIXED.** `.focus-ring`
+  suppressed the native outline and painted its ring unconditionally, with no
+  `:focus-visible`; 202 of 218 uses are the bare form, including the shared
+  `Input`, `Textarea` and `Select`. Keyboard users could not see where they were.
+  The DECLARATION is now scoped, which fixes all 202 call sites without editing
+  one of them — and Tailwind hoists the pseudo-class onto the two component
+  classes that `@apply focus-ring`, so `.btn-cta` and `.btn-inline` split into a
+  focus rule carrying the ring and a base rule carrying everything else.
+  `tests/the-focus-ring-only-shows-on-focus.test.ts` compiles the real stylesheet
+  with the real config and asserts on the emitted CSS; reverted, 4 of 6 fail.
 - **U-05 — 74 icon-only buttons have no accessible name**, and the destructive
   ones are the majority. A screen-reader user is offered an unlabelled control
   that deletes.

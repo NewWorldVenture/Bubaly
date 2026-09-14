@@ -176,7 +176,7 @@ function HowTrialWorks() {
           {TRIAL_STEPS.map((s, i) => (
             <li key={s.title} className="relative flex flex-col rounded-2xl border border-white/10 bg-white/[0.03] p-4">
               <span className="absolute right-3 top-3 text-xs font-black text-white/25">{i + 1}</span>
-              <span className="grid h-10 w-10 place-items-center rounded-xl bg-violet-500/12 ring-1 ring-violet-400/25">{s.icon}</span>
+              <span className="grid h-10 w-10 place-items-center rounded-xl bg-violet-500/10 ring-1 ring-violet-400/25">{s.icon}</span>
               <p className="mt-3 text-sm font-bold">{tr(s.title)}</p>
               <p className="mt-1 text-xs leading-relaxed text-white/65">{tr(s.desc)}</p>
             </li>
@@ -519,7 +519,7 @@ export function PricingContent({
           </p>
 
           <div className="mt-6 flex justify-center sm:mt-7">
-            <div className="inline-flex max-w-full flex-wrap items-center justify-center gap-1 rounded-full border border-white/12 bg-white/[0.04] p-1 text-sm">
+            <div className="inline-flex max-w-full flex-wrap items-center justify-center gap-1 rounded-full border border-white/10 bg-white/[0.04] p-1 text-sm">
               <button
                 onClick={() => setPeriod('monthly')}
                 className={cn('inline-flex items-center justify-center rounded-full px-5 py-2 font-bold transition coarse:min-h-11 sm:px-6', period === 'monthly' ? 'bg-violet-600 text-brand-fg' : 'text-white/65 hover:text-white')}

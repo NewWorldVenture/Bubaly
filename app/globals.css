@@ -155,6 +155,23 @@ body::before {
     radial-gradient(50rem 50rem at -10% 110%, rgb(var(--accent) / 0.10), transparent 55%);
 }
 
+@layer utilities {
+  /* Used at 13 sites — horizontal tab strips and scrolling rows — and defined
+     nowhere, so every one of them showed a scrollbar under the tabs. The scroll
+     itself stays: `overflow-x-auto` is beside it at every call site, and only the
+     bar is hidden. Found by compiling the stylesheet and asking which class
+     tokens in the app emit no rule at all; the same sweep found `bg-card`,
+     `prose-family`, `btn-primary` and five colour opacities (/12 and /8) that are
+     not on the scale, all of which rendered nothing. */
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 @layer components {
   /* Glassmorphism surface — the core visual primitive. */
   .glass {
@@ -176,7 +193,21 @@ body::before {
     background-color: rgb(var(--elevated));
     border: 1px solid rgb(var(--border));
   }
-  .focus-ring {
+  /* The focus indicator, and ONLY on focus.
+     This was declared without a selector of its own, which compiles to
+     `outline: 2px solid transparent` plus an unconditional ring: the ring was
+     painted on every such element at all times (so it said nothing), and the
+     transparent outline is author-origin and therefore beat the browser's own
+     :focus-visible outline (so the native indicator was gone too). 202 of 218
+     call sites are bare `focus-ring` — including components/ui/input.tsx, which
+     is every Input, Textarea and Select in the product. WCAG 2.1 AA 2.4.7.
+     Scoping the DECLARATION fixes all of them without touching a call site, and
+     Tailwind hoists the pseudo-class onto the two component classes that
+     `@apply focus-ring` (.btn-cta, .btn-inline) as well. The 16 sites that write
+     `focus-visible:focus-ring` compile to `:focus-visible:focus-visible`, which
+     still matches. Guarded by tests/the-focus-ring-only-shows-on-focus.test.ts,
+     which compiles this file and asserts on the emitted CSS. */
+  .focus-ring:focus-visible {
     @apply outline-none ring-2 ring-brand/60 ring-offset-2 ring-offset-bg;
   }
   .gradient-text {

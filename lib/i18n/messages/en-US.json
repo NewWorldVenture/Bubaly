@@ -5702,6 +5702,7 @@
   "guardianRules.deterministicRulesThatOverrideAiDecisions": "Deterministic rules that override AI decisions",
   "guardianRules.routingRules": "Routing Rules",
   "guardianSettings.configuration": "Configuration",
+  "guardianSettings.couldnTLoadYourGuardianSettings": "Couldn’t load your Guardian settings. Refresh and try again — saving now would replace your call routing with the defaults.",
   "guardianSettings.guardianSettings": "Guardian Settings",
   "guardianSettings.twilioRoutesCallsToBubalyAn": "Twilio routes calls to Bubaly. An AI key (Anthropic or OpenAI) powers the screening conversations.",
   "habits.30d": "% · 30d",

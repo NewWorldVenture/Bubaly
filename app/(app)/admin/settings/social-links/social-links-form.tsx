@@ -127,7 +127,7 @@ export function SocialLinksForm({ links }: { links: SocialLinks }) {
       <button
         type="submit"
         disabled={saving}
-        className="btn-primary inline-flex items-center gap-2 disabled:opacity-60"
+        className="btn-cta"
       >
         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
         {t('socialLinksForm.saveSocialLinks')}

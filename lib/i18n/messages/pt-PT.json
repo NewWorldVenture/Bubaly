@@ -5702,6 +5702,7 @@
   "guardianRules.deterministicRulesThatOverrideAiDecisions": "Regras deterministas que se sobrepõem às decisões da IA",
   "guardianRules.routingRules": "Regras de encaminhamento",
   "guardianSettings.configuration": "Configuração",
+  "guardianSettings.couldnTLoadYourGuardianSettings": "Não foi possível carregar as suas definições do Guardian. Atualize e tente novamente — guardar agora substituiria o encaminhamento de chamadas pelos valores predefinidos.",
   "guardianSettings.guardianSettings": "Definições do Guardian",
   "guardianSettings.twilioRoutesCallsToBubalyAn": "O Twilio encaminha as chamadas para o Bubaly. Uma chave de IA (Anthropic ou OpenAI) alimenta as conversas de filtragem.",
   "habits.30d": "% · 30d",
