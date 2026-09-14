@@ -1132,3 +1132,51 @@ rather than oversights:
                        edit are editable by that child. Same fix shape as 0299.
                        Next, after the owner decisions above.
 ```
+
+## A3-010 — Claude-3's grades/screen-time MEDIUM, closed with two different rules
+
+```
+[CLAUDE-1][MEDIUM][RLS] The two records a child has the most motive to edit were the child's to edit
+Path:     supabase/migrations/0004_rls.sql (generic loop)
+          · components/modules/screen-time-module.tsx · components/modules/school-module.tsx
+Source:   Claude-3 of the parallel session, [CLAUDE-3][MEDIUM][RLS].
+Problem:  `grades` and `screen_time_limits` each carried ONE
+          `FOR ALL … is_family_member` policy, and both are written directly from
+          the browser. Neither module has a role gate of ANY kind — grep for
+          isManager or canEdit in either returns nothing — so unlike the
+          medications module, the UI was not even claiming a boundary the
+          database failed to keep. There simply was none, at any layer.
+Evidence: as the child on the replay (seeded 'D'/55 and 60 minutes):
+            update grades set grade='A', score=98;            -> UPDATE 1
+            update screen_time_limits set daily_minutes=1440; -> UPDATE 1
+Fix:      0300, and DELIBERATELY NOT THE SAME RULE FOR BOTH:
+          · screen_time_limits is unambiguous. A limit is set ON a child BY a
+            parent; there is no reading in which the child raising their own is
+            the product working. Writes become can_manage_family. Reads stay
+            family-wide — a limit nobody can see is not a limit.
+          · grades are not. A teen entering "I got a B on the chemistry test" is
+            a plausible use of a family school tracker, and manager-only INSERT
+            would remove it. What is not plausible is rewriting a grade a parent
+            recorded. `grades.created_by` makes the narrower rule expressible:
+            INSERT stays open to any member; UPDATE and DELETE require
+            `can_manage_family(family_id) or created_by = auth.uid()`. A teen
+            adds and corrects their own entry; nobody silently rewrites someone
+            else's. A null created_by (rows predating the column, or the trusted
+            server's) is a manager's to edit, not anyone's.
+          Fixing what is defective without quietly removing a feature while
+          doing it is the standard the rest of this sweep has held to.
+          The screen-time module now gates its limit control on isManager too —
+          both the button and `saveLimit` itself — so the control is absent
+          rather than present-and-failing for everyone it does not belong to.
+          The school module is left alone: recording a grade stays open, which
+          is exactly what 0300 preserves.
+Status:   FIXED — migration 0300
+Guard:    docs/audit/child-record-write-boundary-check.sql asserts BOTH rules and
+          what each still allows: the child's rewrite and delete of a parent's
+          grade refused (and the stored value re-read as 'D', so the assertion
+          cannot pass on an unmatched row), recording a new grade and correcting
+          THEIR OWN accepted, the limit raise and insert refused, and the child's
+          READ of their limit intact. Non-vacuity proven by restoring
+          `Members manage …` on both — the probe then fails at "a child rewrote
+          a grade their parent recorded". 21/21 probes with it in place.
+```

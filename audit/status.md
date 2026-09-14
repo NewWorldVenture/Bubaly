@@ -222,18 +222,25 @@ COMPLETED:
   - Claude-3's medication HIGH: the write half closed (0299 — prescriptions and
     their schedules are managers-only), with the two halves I would not guess at
     filed as owner decisions rather than taken (see A3-009).
-NEXT: two owner decisions on the medical surface (narrowing READS; whether
-  logging a vaccination is any member's to do), then grades/screen_time_limits,
-  then the child_logins policy whose name and predicate disagree.
+  - Claude-3's grades/screen-time MEDIUM closed (0300), with two different rules
+    rather than one blunt one — see A3-010.
+NEXT: the child_logins policy whose name and predicate disagree, then the
+  remaining membership-only self-log tables (behavior_logs, kid_progress,
+  habit_logs, care_log). Two owner decisions are filed and not mine to take:
+  narrowing medical READS, and whether logging a vaccination is any member's
+  to do.
   `family_credentials` is already closed on main by 0296 from the other session.
 FILES-TOUCHED (third session only):
   - .env.example, components/wallet/treasury-view.tsx
   - supabase/migrations/0297_invite_terms_are_not_the_invitees_to_write.sql
   - supabase/migrations/0298_allowance_and_gift_writes_are_managers_only.sql
   - supabase/migrations/0299_a_prescription_is_a_parents_to_write.sql
+  - supabase/migrations/0300_a_childs_own_record_is_not_theirs_to_rewrite.sql
   - docs/audit/invite-terms-boundary-check.sql
   - docs/audit/allowance-rule-write-boundary-check.sql
   - docs/audit/prescription-write-boundary-check.sql
+  - docs/audit/child-record-write-boundary-check.sql
+  - components/modules/screen-time-module.tsx
   - app/api/cron/wallet-allowance/route.ts
   - lib/database.types.ts, lib/supabase/guardian-tables.ts (deleted),
     lib/guardian/{ai-screen,pipeline,trust,learning-run}.ts,
@@ -247,7 +254,7 @@ BLOCKERS: none of my own. The owner-blocked set is unchanged — F5/F-001 (no
   working path to apply a migration to production), F6 (inbound-email secret and
   MX), F19 (AI metering is a pricing decision).
 VERIFICATION: tsc clean · eslint clean on every changed file · full vitest suite
-  green · 311 migrations replayed, 0 failed · 20/20 boundary probes · non-vacuity
+  green · 312 migrations replayed, 0 failed · 21/21 boundary probes · non-vacuity
   proven for every new guard by reverting the fix and watching it go red.
 LAST-UPDATE: 2026-09-14T12:05Z
 

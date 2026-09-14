@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { MonitorSmartphone, Plus, Trash2, Flame, Gauge, Settings2 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
+import { isManager } from '@/lib/constants/roles';
 import { progressBarA11y } from '@/lib/ui/a11y';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -30,7 +31,11 @@ const blank = () => ({ id: '', member_id: '', entry_date: today(), minutes: '30'
 
 export function ScreenTimeModule() {
   const t = useTranslations();
-  const { familyId, userId, members } = useApp();
+  const { familyId, userId, members, role } = useApp();
+  // A daily limit is set ON a child BY a parent. 0300 makes that the rule in the
+  // database; this is the same rule in the interface, so the control is absent
+  // rather than present-and-failing for everyone it does not belong to.
+  const canSetLimits = isManager(role);
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
@@ -88,7 +93,7 @@ export function ScreenTimeModule() {
 
   async function saveLimit(e: React.FormEvent) {
     e.preventDefault();
-    if (!limitFor) return;
+    if (!limitFor || !canSetLimits) return;
     const minutes = Math.max(0, Math.min(1440, parseInt(limitFor.minutes, 10) || 0));
     const { error } = await createClient()
       .from('screen_time_limits')
@@ -128,9 +133,11 @@ export function ScreenTimeModule() {
               <div className="flex items-center gap-2">
                 <Avatar name={m?.display_name ?? 'Member'} size={28} />
                 <p className="font-semibold">{m?.display_name ?? 'Member'}</p>
-                <button onClick={() => setLimitFor({ memberId: mid, minutes: String(limit || 120) })} className="ml-auto text-muted hover:text-fg" title={t('screenTime.setDailyLimit')}>
-                  <Settings2 className="h-4 w-4" />
-                </button>
+                {canSetLimits && (
+                  <button onClick={() => setLimitFor({ memberId: mid, minutes: String(limit || 120) })} className="ml-auto text-muted hover:text-fg" title={t('screenTime.setDailyLimit')}>
+                    <Settings2 className="h-4 w-4" />
+                  </button>
+                )}
               </div>
               <div className="mt-3 flex items-end justify-between">
                 <div>
