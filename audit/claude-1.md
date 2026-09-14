@@ -1426,3 +1426,71 @@ re-pinning a formatting choice.
   `memory.md` forbids touching the sidebar without being asked, which settles who
   chooses.
 - **Status:** the user-facing copy is FIXED; the empty feature is OPEN for the owner.
+
+---
+
+## Pass W — the erasure path (merged from Claude-3's S-05, scoped)
+
+### [CLAUDE-3][HIGH][DB] Deleting a family scans a whole table per dependent — 36 times over
+
+- **Verified from the catalogue, not from the finding.** Against a replay of all
+  314 migrations, counting CASCADE/SET NULL constraints whose referencing column
+  has no index leading on it:
+
+  | parent | CASCADE | SET NULL | **unindexed** |
+  |---|---|---|---|
+  | `families` | 391 | 12 | **36** (28 + 8) |
+  | `family_members` | 55 | 123 | **158** (41 + 117) |
+  | `vacations` | 26 | 2 | **22** |
+  | `child_wallets` | 13 | — | **11** |
+
+  Claude-3's numbers for `families` and `family_members` match exactly. The total
+  across the four hot parents is **227**, not the "~100" the finding estimated —
+  worth stating, because the estimate is what a scope decision would have been
+  made on.
+- **Measured myself, on `ai_messages` at 200,050 rows with 50 belonging to the
+  family being closed — the exact statement the RI trigger issues:**
+
+  ```
+  as shipped   LockRows → Seq Scan    4,990 buffers   21.4 ms   (200,008 rows removed by filter)
+  with index   LockRows → Index Scan     55 buffers    0.064 ms
+  ```
+
+  Claude-3 measured the identical shape on `sync_webhook_events`: 5,765 → 54
+  buffers, 52.9 → 0.18 ms, whole family delete 189 ms.
+- **The part worth reading twice.** `ai_messages` is the example ON PURPOSE:
+  `docs/audit/family-scoped-index-check.sql` names it as one of four tables
+  *"checked and left alone"*, with a stated reason — its page query carries another
+  selective column (`conversation_id`), so a `family_id` index buys that query
+  nothing and costs write throughput. **That reasoning is correct about the READ
+  and silent about the DELETE.** The RI trigger has no other column. All four
+  tables the earlier pass excluded (`ai_messages`, `member_badges`,
+  `marketplace_listing_shares`, `social_publish_jobs`) are in the erasure path,
+  which I confirmed from the catalogue before writing anything.
+- **Fix (applied), deliberately scoped to 36 of 227:**
+  - `0301_family_erasure_indexes.sql` — the 36 `families` constraints, **generated
+    from the catalogue query rather than hand-listed**. 32 are on `family_id`, the
+    column every RLS policy on those tables already filters on, so each index pays
+    for itself on ordinary reads too: this is the low-regret set. Applied to a
+    fresh replay: 0 errors, and the remaining count for `families` goes 36 → **0**.
+  - `docs/audit/family-erasure-indexes-concurrently.sql` — the same 36 as
+    `create index concurrently`, for production. A migration file runs inside a
+    transaction and `concurrently` cannot, which is why 0301 itself uses the plain
+    form; plain creation takes ACCESS EXCLUSIVE for the duration of the build,
+    which on a live `ai_messages` is a write outage. Includes how to find and drop
+    the INVALID index a cancelled concurrent build leaves behind.
+  - `docs/audit/family-scoped-index-check.sql` gains a **generic** half: no
+    CASCADE/SET NULL constraint referencing `families` may lack a leading index.
+    It names no table, so the child table added next month is caught by CI instead
+    of by an erasure request that times out half-way. It carries its own
+    can-this-fail self-test, matching the A-14 half above it.
+- **NOT included, and this is a decision rather than an omission:** the **191**
+  constraints on `family_members` (158), `vacations` (22) and `child_wallets` (11).
+  Those are member-reference columns — `member_id`, `assignee_id`, `created_by` —
+  **not** the RLS predicate, so indexing them accelerates member removal and
+  nothing else, at 191 indexes' worth of write amplification on the platform's
+  busiest tables. Recorded for the owner with the measured split. Asserting it in
+  the probe would encode a decision nobody has made.
+- **Status:** the `families` half is FIXED in the repository and **NOT applied to
+  production** (F-001). Fresh replay 314 migrations / 0 failed, probes **23/23**,
+  both new assertions verified to be able to fail.

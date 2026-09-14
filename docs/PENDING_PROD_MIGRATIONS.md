@@ -501,8 +501,8 @@ passed; production application of the atomic `0240-0254` release remains pending
 ## Migrations added since this document's stated baseline (2026-09-12)
 
 The status line at the top of this file is dated **2026-09-05** against main
-`01881fb2`. **Seventy-six** migration files have landed since, `0255` through
-`0300`, and none of them appear anywhere above. (This read "thirty-one, `0255`
+`01881fb2`. **Seventy-seven** migration files have landed since, `0255` through
+`0301`, and none of them appear anywhere above. (This read "thirty-one, `0255`
 through `0285`" until 2026-09-13, then "seventy-two, `0255` through `0296`" and
 "seventy-four … `0298`" the same day; the range simply keeps growing past the
 sentence.)
@@ -566,6 +566,32 @@ pins `is_family_member(family_id) and actor_id = auth.uid()` rather than droppin
 member INSERT the way `0260` did for `trust_audit_logs`, because fourteen callers
 here append on the caller's own client — all fourteen already pass their own
 `ctx.user.id`, so the pin costs them nothing.
+
+**`0301_family_erasure_indexes.sql` is the one that must NOT be applied as
+written.** It adds the 36 missing indexes behind `delete from families` — each RI
+check issues `select 1 from <child> where <fkcol> = $1 for key share`, and with no
+leading index there is no plan but a full scan of the whole table inside the
+erasure transaction, taking row locks as it goes. Measured on `ai_messages` at
+200,050 rows: 4,990 buffers / 21.4 ms → 55 / 0.064 ms. At the volume the `sync_*`,
+`social_*` and `marketplace_*` tables are designed for, 36 of those scans in one
+transaction is a statement timeout, and a deletion that times out half-way is the
+one that leaves an account partly erased.
+
+The file uses plain `create index` because a migration runs inside a transaction
+and `create index concurrently` cannot — and plain creation takes ACCESS EXCLUSIVE
+on each table for the whole build, which on a live `ai_messages` is a write outage.
+So on production run **`docs/audit/family-erasure-indexes-concurrently.sql`**
+instead: one statement at a time, outside any transaction, `if not exists` so it is
+resumable, and a no-op afterwards if `0301` is ever replayed. A cancelled
+concurrent build leaves an INVALID index behind (`select indexrelid::regclass from
+pg_index where not indisvalid`) — drop those before re-running, because an invalid
+index is ignored by the planner and still maintained on write.
+
+191 further constraints on `family_members` (158), `vacations` (22) and
+`child_wallets` (11) are deliberately NOT in that file: they are member-reference
+columns rather than the RLS predicate, so they buy member-removal speed and nothing
+else, at 191 indexes' worth of write amplification. That is a tradeoff for the
+owner, recorded in `finalaudit.md` under S-05.
 
 Nothing here authorizes applying any of them; this section exists so the gap is
 visible rather than inferred from the absence of a row.
