@@ -76,7 +76,13 @@ NOTE FOR OTHER WORKERS:
 LAST-UPDATE: 2026-09-13
 
 ## Claude-2
-CURRENT: RUNNING — launched by Claude-1 as a parallel worker. Status block lives at the top of audit/claude-2.md; mirrored here on completion.
+CURRENT: **BLOCKED — did not complete.** Launched in parallel; terminated by `rate_limit / HTTP 429: session limit, resets 3:10am UTC` before writing any finding.
+Last action before termination: "Now let me survey the frontend surface area."
+COMPLETED: nothing — audit/claude-2.md still holds only the template.
+NEXT: re-run after the limit resets, or run as a separate account as the brief describes. Scope unchanged: Frontend · UI/UX · Responsive · Accessibility.
+FILES-TOUCHED: none.
+BLOCKERS: account session limit.
+LAST-UPDATE: 2026-09-14
 COMPLETED:
 NEXT:
 FILES-TOUCHED:
@@ -84,7 +90,13 @@ BLOCKERS:
 LAST-UPDATE:
 
 ## Claude-3
-CURRENT: RUNNING — launched by Claude-1 as a parallel worker. Status block lives at the top of audit/claude-3.md; mirrored here on completion.
+CURRENT: **BLOCKED — did not complete.** Launched in parallel; terminated by `rate_limit / HTTP 429: session limit, resets 3:10am UTC` before writing any finding.
+Last action before termination: "Now let me build the route inventory and start the authorization sweep."
+COMPLETED: nothing — audit/claude-3.md still holds only the template.
+NEXT: re-run after the limit resets, or run as a separate account as the brief describes. Scope unchanged: Backend · API · Database · Auth · Security.
+FILES-TOUCHED: none.
+BLOCKERS: account session limit.
+LAST-UPDATE: 2026-09-14
 COMPLETED:
 NEXT:
 FILES-TOUCHED:
@@ -92,7 +104,13 @@ BLOCKERS:
 LAST-UPDATE:
 
 ## Claude-4
-CURRENT: RUNNING — launched by Claude-1 as a parallel worker. Status block lives at the top of audit/claude-4.md; mirrored here on completion.
+CURRENT: **BLOCKED — did not complete.** Launched in parallel; terminated by `rate_limit / HTTP 429: session limit, resets 3:10am UTC` before writing any finding.
+Last action before termination: "Let me record the findings so far."
+COMPLETED: nothing — audit/claude-4.md still holds only the template.
+NEXT: re-run after the limit resets, or run as a separate account as the brief describes. Scope unchanged: QA · Features · Flows · Performance · Edge cases.
+FILES-TOUCHED: none.
+BLOCKERS: account session limit.
+LAST-UPDATE: 2026-09-14
 COMPLETED:
 NEXT:
 FILES-TOUCHED:

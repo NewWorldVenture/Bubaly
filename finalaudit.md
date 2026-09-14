@@ -421,9 +421,14 @@ worker has audited yet is recorded as *not yet audited*, never as "clean" —
 | Public surface, SEO, entitlement, child sign-in | Pass A (F1–F22) | deep |
 | Data layer, RLS, grants, cron, query plans, money concurrency | Pass B (F-001–F-020) | deep |
 | Architecture / integration seams | Claude-1 | in progress — config contract, cron auth, service-role boundary done |
-| Frontend / UI / responsive / accessibility | Claude-2 | **running** |
-| Backend / API / auth / security | Claude-3 | **running** |
-| QA / flows / performance / edge cases | Claude-4 | **running** |
+| Frontend / UI / responsive / accessibility | Claude-2 | **not audited — worker hit the account session limit** |
+| Backend / API / auth / security | Claude-3 | **not audited — worker hit the account session limit** |
+| QA / flows / performance / edge cases | Claude-4 | **not audited — worker hit the account session limit** |
+
+All three workers were launched and all three terminated with HTTP 429 (session
+limit) before writing a finding. Their files hold only templates. Nothing in this
+document is attributed to them, and their three areas stay marked *not yet
+audited* below rather than being quietly folded into the "clean" column.
 
 # Executive Summary
 
@@ -519,6 +524,7 @@ highest-yield check in this repository.
 | **F13** | Unknown top-level paths redirect to login | **SUPERSEDED — see below** |
 | CLAUDE-1 | The service-role boundary was real but inherited from an incidental `next/headers` import rather than declared | fixed (hardening) |
 | CLAUDE-1 | Mobile imported from a folder Metro does not watch; safe only because the import is type-only, and no CI job bundles the app | fixed (guard added) |
+| CLAUDE-1 | `generateStaticParams` read the whole blog table on every build while `force-dynamic` made it incapable of prerendering anything | fixed |
 
 # Architecture
 

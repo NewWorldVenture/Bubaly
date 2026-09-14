@@ -1067,3 +1067,228 @@ LAST-UPDATE: 2026-09-13
   per-family `loadCompareLine` reads into one cohort query outside the loop. The bounded-batch pattern
   in `provider-sync` is the in-repo precedent to copy.
 - **Status:** OPEN
+
+### [CLAUDE-4][HIGH][INTEGRATION] With `RESEND_API_KEY` unset every email reports success, and notification rows are marked delivered forever
+
+- **File/path:** `lib/email.ts:48-51`; `lib/server/notification-emails.ts:100-115`;
+  `lib/health/status.ts:21-25,68-75`; the seven other `sendReactEmail` call sites
+- **Problem:** `sendReactEmail` short-circuits when the key is absent and returns
+  **`{ ok: true, skipped: true }`**:
+
+      if (!emailEnabled()) {
+        console.info(`[email skipped — no RESEND_API_KEY] to=${to} subject="${subject}"`);
+        return { ok: true, skipped: true };
+      }
+
+  The `skipped` flag exists precisely so a caller can tell "sent" from "not sent". **No caller reads
+  it.** Every one of the nine call sites destructures `{ ok }` only, and two ignore the result
+  entirely. So a deployment missing one env var has every email path report success.
+
+  `RESEND_API_KEY` is in neither health tier — not `REQUIRED_ENV` (correct, it must not 503) and not
+  the `FEATURE_ENV` tier Claude-1 added for exactly this failure shape. It is the seventh secret of
+  that kind and the one that got missed.
+
+- **Evidence:**
+
+      $ grep -rn "sendReactEmail(" app/ lib/ --include=*.ts --include=*.tsx | grep -v '\.test\.'
+      app/api/cron/weekly-digest/route.ts:93:    const { ok } = await sendReactEmail({
+      app/api/cron/chore-reminders/route.ts:119:  const { ok } = await sendReactEmail({
+      app/api/email/welcome/route.ts:27:          const { ok } = await sendReactEmail({
+      app/api/email/invite/route.ts:35:           const { ok } = await sendReactEmail({
+      app/(app)/admin/actions.ts:349:            const { ok } = await sendReactEmail({
+      app/(app)/referrals/actions.ts:81:          const { ok } = await sendReactEmail({
+      app/onboarding/actions.ts:575:                  await sendReactEmail({     <- result discarded
+      app/onboarding/actions.ts:750:                  await sendReactEmail({     <- result discarded
+      lib/server/notification-emails.ts:100:      const { ok } = await sendReactEmail({
+
+      $ grep -rn "skipped" app/ lib/ --include=*.ts | grep -v '\.test\.' | grep sendReactEmail
+      (no output — nothing destructures it)
+
+      $ sed -n '21,25p;68,75p' lib/health/status.ts
+      export const REQUIRED_ENV = ['NEXT_PUBLIC_SUPABASE_URL','NEXT_PUBLIC_SUPABASE_ANON_KEY','SUPABASE_SERVICE_ROLE_KEY']
+      export const FEATURE_ENV  = ['CRON_SECRET','CHILD_LOGIN_SECRET','INTERNAL_SECRET',
+                                   'CONTACT_CENTER_INBOUND_SECRET','MARKETING_UNSUB_SECRET','GUARDIAN_INTERNAL_SECRET']
+      # RESEND_API_KEY is in neither list.
+
+  The consequence in `lib/server/notification-emails.ts` is not a missed send but a destroyed one:
+
+      :105  if (ok) { sent++; resolvedIds.push(...ids); } else { failed++; }
+      :114  await supabase.from('notifications').update({ sent_at: nowIso }).in('id', resolvedIds);
+
+  `ok` is true, so every pending notification is stamped `sent_at = now()`. `sent_at` is the
+  already-handled marker, so those rows are **never selected again**.
+
+- **Impact:** One unset variable and:
+  - every family notification email is permanently marked delivered and never sent, with no retry;
+  - `/api/cron/notifications` answers 200 with `emailed: N, emailFailures: 0` — a fabricated number
+    that looks healthier than a real run;
+  - the weekly digest reports `sent: <every family>, failed: 0`;
+  - `/api/email/invite` answers `{ sent: true }` 200, so the invite UI says the invite went out;
+  - `/api/health` says `ok`.
+
+  Every signal a deployment has agrees that email is working. This is the same failure Claude-1 closed
+  for `CRON_SECRET` — with the difference that a 401'd cron leaves the data intact and retries next
+  night, while this one writes `sent_at` and is unrecoverable per row.
+- **Recommended fix:** three parts, smallest first.
+  1. Add `RESEND_API_KEY` to `FEATURE_ENV` in `lib/health/status.ts`, so a deployment without it
+     reports `degraded`/200 instead of `ok`. One line; the tier already exists.
+  2. Make `notification-emails.ts` treat `skipped` as not-sent: `if (ok && !skipped)` before pushing
+     into `resolvedIds`, leaving `sent_at` null so the next run retries once the key is configured.
+     Count it in a third bucket so `emailSkipped` in `/api/cron/notifications` is truthful.
+  3. Consider inverting the default in `lib/email.ts`: `ok: false, skipped: true`. The current
+     signature was chosen so "local/dev flows never break", which is right, but it makes the safe
+     local default the dangerous production default. If it stays, every caller must read `skipped`.
+  Prove load-bearing by clearing the env var and asserting `notifications.sent_at` stays null.
+- **Status:** OPEN
+
+### [CLAUDE-4][HIGH][FLOW] A family can be left with zero managers, and nothing can restore one
+
+- **File/path:** `components/modules/family-module.tsx:255-266` (the per-member Edit/Remove menu),
+  `:499-548` (`MemberModal`), `:94` (`ROLE_OPTIONS`);
+  `supabase/migrations/0003_functions_triggers.sql:22-29` (`can_manage_family`);
+  `supabase/migrations/0211_family_members_update_rls.sql`
+- **Problem:** The Family screen shows an Edit/Remove menu on **every** member card whenever
+  `canManage`, with no exclusion for the signed-in user and no check on how many managers remain.
+  `MemberModal`'s role `<Select>` offers all six roles including `child`, and both actions are direct
+  browser PostgREST writes. So the only manager of a family can, in two clicks, either deactivate
+  themselves or set their own role to `child`.
+
+  Once that lands, `can_manage_family(family_id)` is false for everyone in the family, and it is the
+  `USING` **and** `WITH CHECK` clause of `fm_update`, `fm_insert` and `fm_delete`. Nobody can promote
+  anyone, add anyone, or reactivate anyone. There is no unwind.
+
+- **Evidence:**
+
+      components/modules/family-module.tsx:263
+        <button onClick={() => { setMenuId(null); setEditMember(m); setAddOpen(true); }}>Edit</button>
+      components/modules/family-module.tsx:264
+        <button onClick={() => { setMenuId(null); setRemoveMember(m); }}>Remove</button>
+      -- rendered inside `visibleMembers.map(...)` under `{canManage && ...}`; `m` is every member,
+      -- self included. Contrast `components/modules/settings-module.tsx:355`, which does exclude
+      -- self: `{admin && m.user_id !== userId && (<button onClick={() => removeMember(m.id)} ...`
+      -- Two screens remove members; only one of them thought about this.
+
+      components/modules/family-module.tsx:94
+        const ROLE_OPTIONS: MemberRole[] = ['parent','adult','teen','child','caregiver','guest'];
+      components/modules/family-module.tsx:520
+        await sb.from('family_members').update(payload).eq('id', member.id)   // payload.role
+
+      supabase/migrations/0003_functions_triggers.sql:22
+        create or replace function public.can_manage_family(p_family_id uuid) ... select exists (
+          select 1 from public.family_members
+          where family_id = p_family_id and user_id = auth.uid()
+            and role in ('parent','adult') and is_active );
+
+  Nothing guards the count. Verified by searching every layer that could:
+
+      $ grep -rni "last manager|last parent|only manager|at least one manager|sole manager" \
+          app/ lib/ components/ supabase/migrations/
+      (3 hits, all unrelated comments about manager-only writes; no guard)
+
+      $ grep -rn "on public.family_members" supabase/migrations/*.sql | grep -i trigger
+      (no output — family_members carries no trigger at all)
+
+  Both self-demotion and self-removal pass RLS: `can_manage_family` is a `stable` `security definer`
+  function, so within the statement it reads the pre-update snapshot in which the caller is still a
+  manager. The two-manager case needs no such reasoning — A demotes B (plainly allowed), then A
+  demotes A.
+
+- **Impact:** The family is permanently frozen in a half-working state. `is_family_member` also
+  requires `is_active`, so a manager who removes themselves loses the family outright — every read
+  returns zero rows. What stays broken for everyone else: no reward redemption can be approved
+  (0295's trigger requires `can_manage_family`), no wallet funding or allowance change (0217/0218),
+  no member added or edited, no invite sent, no family settings changed. Children keep signing in to
+  a household nobody can administer. Recovery requires a Super Admin or direct database access — and
+  since F-001 blocks schema access in production, the operator path is the only one.
+- **Recommended fix:** a database-level guard, because both write paths are unguarded browser writes
+  and a client check would be bypassed by the same PostgREST call the UI makes. Add a
+  `before update on public.family_members` trigger that raises `42501` when the statement would leave
+  the family with zero rows matching `role in ('parent','adult') and is_active` — the shape 0295's
+  redemption guard already uses, so it has a precedent and a probe pattern to copy. Then hide the
+  affordance too: exclude self from the Remove menu as `settings-module.tsx:355` already does, and
+  disable the `parent`/`adult` -> other-role transition in `MemberModal` when this is the last
+  manager. Add `docs/audit/last-manager-check.sql` asserting both directions (the last manager is
+  blocked; a manager with a co-manager is not) so `run-probes.sh` picks it up by glob.
+- **Status:** OPEN — established from source and the RLS/function definitions. No live database in
+  this sandbox to execute the transition against.
+
+### [CLAUDE-4][MEDIUM][BROKEN FEATURE] The Family screen tells users to share a family code, and nothing in the product redeems one
+
+- **File/path:** `components/modules/family-module.tsx:182-183,388-391,447,588-602`;
+  `lib/i18n/messages/en-US.json:4802`; `supabase/migrations/01100_family_profile.sql:19-42`
+- **Problem:** `families.family_code` is generated and uniquely indexed by `01100`, rendered on the
+  Family screen, copyable to the clipboard, and is the entire content of the **Invite Family** modal.
+  The English string is explicit: *"Share your family code so a new member can join, or manage invites
+  in Members."* No route, server action, RPC, or migration function anywhere reads `family_code` as an
+  input. The only working join path is `/join?token=…` -> `rpc('accept_invite', p_token)`, which
+  matches `invites.token` — a DB-generated per-invite token with no relationship to the family code.
+- **Evidence:**
+
+      $ grep -rn "family_code" app/ lib/ components/ supabase/ scripts/ mobile/ \
+          --include=*.ts --include=*.tsx --include=*.sql --include=*.mjs | grep -v database.types
+      # every hit is a WRITE, a DISPLAY, or the migration that creates it:
+      components/modules/family-module.tsx:183  navigator.clipboard.writeText(family.family_code)
+      components/modules/family-module.tsx:389  <p ...>{family?.family_code ?? '—'}</p>
+      components/modules/family-module.tsx:447  <InviteModal code={family?.family_code ?? null} .../>
+      supabase/migrations/01100_family_profile.sql:19-42   add column + backfill + unique index
+      # zero reads of it as an input. No `.eq('family_code', …)`, no RPC parameter.
+
+      $ grep -n -A12 "function public.accept_invite" supabase/migrations/0005_rpcs.sql
+      create or replace function public.accept_invite(p_token text) ...
+        select * into v_invite from public.invites
+        where token = p_token and status = 'pending' and expires_at > now() for update;
+
+  The contrast inside the same repository settles it: `marketplace_circles.join_code` — the same idea,
+  for circles — **does** have a redemption path, at
+  `supabase/migrations/0176_marketplace_circles.sql:177`: `where join_code = upper(trim(p_code))`.
+  Someone built the code-redemption RPC for circles and never for families.
+- **Impact:** The most prominent invite affordance on the Family screen hands the user a string that
+  nothing can consume. Whoever receives it has nowhere to type it — `/join` reads only `?token=`, and
+  entering a code produces "This invite link is missing its token." The working path exists but is the
+  secondary link in the same modal ("Manage Members & Invites"), so the failure is a confident
+  wrong answer rather than a missing feature. Not higher than MEDIUM only because a working path is
+  one click away.
+- **Recommended fix:** decide one way and make the screen agree. Either add the redemption —
+  a `join_family_by_code(p_code text)` RPC mirroring `0176`'s, plus a code field on `/join` — or drop
+  the code from the invite modal and make Invite Family open the email invite form directly. The
+  current middle state is the only option that misleads. Whichever is chosen, the guard should be a
+  test asserting that every code the UI displays has a consumer, so this cannot recur for the next
+  code-shaped column.
+- **Status:** OPEN
+
+### [CLAUDE-4][MEDIUM][FLOW] The invite email result is discarded, the success toast is unconditional, and there is no resend or copy-link
+
+- **File/path:** `components/family/invite-form.tsx:113-121`;
+  `components/modules/settings-module.tsx:417`; `app/api/email/invite/route.ts:44`
+- **Problem:** `/api/email/invite` is careful — it answers **502** when the provider rejects the send.
+  The client throws that away:
+
+      void fetch('/api/email/invite', { method: 'POST', ... });   // response never read
+      setLoading(false);
+      onSent();                                                    // -> success('Invite sent')
+
+  There is no pending-invite list on any family-facing screen, no resend button, and no way to see or
+  copy the token. `invites` rows are listed only under `/admin/users`, which is Super Admin only.
+- **Evidence:**
+
+      $ grep -rn "invite" "app/(app)/family/members/" -i
+      app/(app)/family/members/page.tsx:36:   <Settings .../> {t('familyMembers.manageInvite')}    # a link, not a list
+
+      $ grep -rn "from('invites')" app/ lib/ components/ --include=*.ts --include=*.tsx | grep -v '\.test\.'
+      components/family/invite-form.tsx:104   insert                       <- the only family-facing write
+      app/(app)/admin/*                       list / resend                <- Super Admin only
+      # no family-facing read of `invites` anywhere.
+
+  Combined with the previous finding, this compounds: with `RESEND_API_KEY` unset the route answers
+  `{ sent: true }` 200 and there is nothing to discard, so even a client that *did* read the response
+  would be told the invite went out.
+- **Impact:** An invite that fails to send is indistinguishable from one that succeeded, from the
+  inviter's side and from the product's. The invitee waits for an email that will never arrive; the
+  inviter has no list showing a pending invite, no resend, and no link to hand over another way. The
+  family-growth flow — the one journey that turns a single account into a household — has no
+  user-recoverable failure path.
+- **Recommended fix:** await the fetch and branch on the status: on 502 keep the modal open and offer
+  Retry plus a copyable `/join?token=…` link built from the row that was already inserted. Add a
+  pending-invites list to the members screen (email, role, sent-at, expiry, resend, revoke), reading
+  `invites` scoped to the family. The admin console already has all of this; the family does not.
+- **Status:** OPEN

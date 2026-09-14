@@ -4,7 +4,7 @@ import Image from 'next/image';
 import { notFound } from 'next/navigation';
 import { ArrowLeft, ArrowRight, Calendar, ChevronRight, Clock, Mail, User } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { getAllPosts, getPost, getRelatedPosts, getAdjacentPosts, extractHeadings, type BlogCategory } from '@/lib/blog/posts';
+import { getPost, getRelatedPosts, getAdjacentPosts, extractHeadings, type BlogCategory } from '@/lib/blog/posts';
 import { articleHashtags } from '@/lib/blog/engagement';
 import { BlogPostStructuredData, FaqStructuredData } from '@/components/marketing/structured-data';
 import { localizeAeoQuestions, readAeoQuestionsForCategoryCached, readAeoQuestionsForPathCached } from '@/lib/marketing/aeo';
@@ -35,6 +35,24 @@ type Params = { params: Promise<{ slug: string }> };
 export const dynamic = 'force-dynamic';
 export const dynamicParams = true;
 
+// There is deliberately NO generateStaticParams here, and removing it was a
+// behaviour-neutral change rather than a cleanup.
+//
+// It cannot do its job under `force-dynamic` above: every slug renders on
+// demand, so no prerendered output is produced for it to enumerate. What it DID
+// do was read all published posts on every build — the whole table, discarded.
+// Measured by building both ways: the route moves from `●` (SSG) to `ƒ`
+// (Dynamic) in the route table, which is what it actually is; the static page
+// count is identical (245 → 245); and the build's `[blog] getAllPosts failed`
+// line disappears, because nothing calls it at build time any more.
+//
+// That read was also a build-time dependency on Supabase for no benefit: with
+// the database unreachable it logged a stack of connection failures and returned
+// an empty list, which looked like a broken build and changed nothing.
+//
+// If `force-dynamic` is ever removed, re-add it deliberately — and re-read the
+// comment above first, because `force-dynamic` is what fixed F-005.
+
 const CATEGORY_COLORS: Record<BlogCategory, string> = {
   'Parenting': 'border-violet-400/20 bg-violet-500/15 text-violet-300',
   'Organization': 'border-blue-400/20 bg-blue-500/15 text-blue-300',
@@ -59,9 +77,6 @@ const ACCENT_BG: Record<BlogCategory, string> = {
   'Home & Seasonal': 'from-teal-600/30 to-teal-900/10',
 };
 
-export async function generateStaticParams() {
-  return (await getAllPosts()).map((p) => ({ slug: p.slug }));
-}
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const tr = await getTranslations();

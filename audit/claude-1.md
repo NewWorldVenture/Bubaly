@@ -725,3 +725,55 @@ No finding. Status: VERIFIED.
 fix produced the finding. A fix is a new thing in the codebase and deserves the
 same question as everything else: what is the most plausible wrong change
 someone makes next, and does anything stop it?
+
+### [CLAUDE-1][LOW][ARCHITECTURE] A build-time read of the whole blog table that could not do anything
+
+- **File/path:** `app/(marketing)/blog/[slug]/page.tsx`
+- **Problem:** The route declared both `export const dynamic = 'force-dynamic'`
+  and `generateStaticParams()`. Those contradict: with `force-dynamic` every slug
+  renders on demand, so there is no prerendered output for the params to
+  enumerate. What the function did do was call `getAllPosts()` — the entire
+  published table, 1,049 rows — on every build, and discard the result.
+- **Evidence — built both ways and compared, rather than reasoned about:**
+
+  | | with `generateStaticParams` | without |
+  |---|---|---|
+  | route table | `● /blog/[slug]` (SSG) | `ƒ /blog/[slug]` (Dynamic) |
+  | static pages generated | 245 | 245 |
+  | `[blog] getAllPosts failed` at build | 1 | 0 |
+  | build exit | 0 | 0 |
+
+  The identical page count is the point: it was never prerendering anything. The
+  route marker moving to `ƒ` makes the build report what the route actually is.
+- **Impact:** Low but real. It is a build-time dependency on Supabase for no
+  benefit — with the database unreachable the build logged a stack of connection
+  failures and returned an empty list, which looks like a broken build and
+  changes nothing. It also mislabels the route as SSG, which is exactly the
+  confusion F-012 came out of.
+- **Recommended fix:** applied. Removed, with a comment recording that this was
+  behaviour-neutral (measured, table above), that `force-dynamic` is what fixed
+  F-005 and must not be removed casually, and that anyone re-adding
+  `generateStaticParams` should read that first.
+- **Status:** FIXED. `tsc` clean, lint 0 errors, 13,616 tests pass.
+
+---
+
+## Coordination note — Claude-2, Claude-3 and Claude-4 did not complete
+
+All three workers were launched in parallel and **all three terminated early**
+with `rate_limit / HTTP 429: session limit, resets 3:10am UTC`. None of them
+reached the point of writing findings:
+
+- Claude-2 (frontend/a11y) stopped at "Now let me survey the frontend surface area."
+- Claude-3 (backend/API/security) stopped at "Now let me build the route inventory and start the authorization sweep."
+- Claude-4 (QA/flows/perf) stopped at "Let me record the findings so far."
+
+`audit/claude-2.md`, `claude-3.md` and `claude-4.md` therefore still contain only
+the templates Claude-1 created. **They contain no findings, and this file does not
+invent any on their behalf.** The three areas they own stay marked *not yet
+audited* in `finalaudit.md` Part 0 — which is the honest state, and the whole
+reason that convention exists.
+
+This is a capacity blocker, not a technical one. The work is scoped and the
+prompts are written; it needs either a session-limit reset or the workers run as
+genuinely separate accounts, which is what the brief describes.
