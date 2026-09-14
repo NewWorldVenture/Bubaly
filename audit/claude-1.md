@@ -2908,3 +2908,75 @@ same: anchor on something inside the target, or verify the match is within it.
 inside it. Its **only** caller is `app/api/ai/home/utility-savings/route.ts`, which feeds
 the model — the exempt category. No threading needed, and threading would have been
 speculative.
+
+---
+
+## Pass AP — the hand-prefixed dollar sign was six files, not one
+
+**Status: FIXED.** 8 sites, 14 surfaces. Ceiling 88 → **80**.
+
+### `[CLAUDE-1][MEDIUM][I18N]` a defect a locale sweep would have counted as fixed
+
+Pass AO found `lib/home/home-data.ts` writing the `"$"` by hand. It is **six modules**,
+all carrying the same line:
+
+```ts
+`$${(cents / 100).toLocaleString('en-US', { maximumFractionDigits: 0 })}`
+```
+
+`lib/career/hub.ts`, `lib/moving/planner.ts`, `lib/projects/planner.ts`,
+`lib/vacations/meta.ts`, `lib/weekend/meta.ts`, `lib/twin/simulate.ts` — a salary band, a
+move's budget, a home project's forecast, a trip's spend, a weekend event's price, and the
+digital twin's "can we afford it" verdict.
+
+**The ratchet would have gone down either way.** Swapping `'en-US'` for the reader's
+locale — the exact move this ceiling rewards — renders `"$2.768"` in German: the American
+symbol position with German separators. `style: 'currency'` puts the symbol where the
+locale puts it, and the guard asserts both the exact string and
+`de.startsWith('$') === false`, because neither is visible to `toContain`.
+
+Converted with them: `lib/declutter/missions.ts` (the weekday chip on the seven-day plan)
+and `lib/memories/timeline.ts` (the `"July 2026"` month heading — where the **order**
+matters as much as the words, since several locales put the year first).
+
+### How each reaches a reader
+
+The three modules' `money` and the trip `dollars` are bound in 11 client components.
+`lib/twin/simulate.ts` builds **prose** (`"That would blow the Fun budget by $200."`), so
+the locale rides in on `SimContext` — the same shape `BuildTimelineInput` uses — and
+`simulateDecisionAction` reads `getLocaleContext()`. `lib/weekend/meta.ts priceRange`
+needed both halves: the amounts from the locale, and `"from"` / `"up to"` from two new
+catalogue keys with an English fallback when no translator is supplied.
+
+### `[CLAUDE-1][LOW][DEAD]` a second tested export nothing renders
+
+`lib/memories/timeline.ts groupByMonth` is imported **only by its own test**. No page, no
+component. That is the second such find after `lib/location/geo.ts timeAgo`, and both were
+found the same way — by looking for the callers before changing a signature.
+
+### `[CLAUDE-1][MEDIUM][TEST]` the fifth guard asserting the solution, and this one failed *because the work succeeded*
+
+`tests/hardcoded-locales-only-go-down.test.ts` carried a control:
+
+```ts
+expect(scan(sourceFiles()).length).toBeGreaterThan(50);
+```
+
+Its purpose was to prove the scanner is not blind. But it was keyed to a number **that
+falls as the defect is fixed**, and it went red at exactly 50 files — so *finishing the
+job* would have looked identical to *the scanner breaking*. It now asserts the property by
+name: the scan must see `lib/services/scope.ts`, `lib/schedule/zoned.ts` and
+`lib/time/zoned.ts`, which pin a locale **on purpose** and are therefore never going away.
+
+### And the non-breaking separator caught me a third time
+
+Four expectations in the new test were written with a plain space where Intl emits U+00A0,
+and the failure prints two strings that look **identical** in the diff. The separators are
+now written as ` ` / ` ` escapes, with a note in the file header saying why.
+
+### An anchor guard that earned its keep
+
+The binding inserter asserts its "insert after the translator" match falls within 400
+characters of the component start. On `ProjectDetail` it fired — that component declares no
+`useTranslations()`, so the match belonged to a component further down. Pass AO learned
+that from a tsc error; this time the script refused before writing.

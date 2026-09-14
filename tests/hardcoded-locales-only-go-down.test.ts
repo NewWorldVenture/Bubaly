@@ -71,7 +71,15 @@ const FORMATTER_WITH_LOCALE =
 /**
  * The ceiling, measured when the shared formatter was made locale-aware.
  *
- * Now 88. The Family Wallet hub (fmtUsd, fmtCount, fmtTxnDate), the Home dashboard
+ * Now 80, and the eight that fell name a CLASS rather than a coincidence: SIX modules
+ * — career, moving, projects, vacations, weekend and twin — wrote the currency symbol
+ * BY HAND and localised only the digits. A locale swap alone, which is what this
+ * ceiling rewards, would have rendered "$2.768" in German: the American symbol
+ * position with German separators. The ratchet would have counted every one of them
+ * converted. See tests/the-hand-prefixed-dollar-sign.test.ts, which asserts the exact
+ * string AND that the symbol does not lead where the locale puts it last.
+ *
+ * Before that, 88. The Family Wallet hub (fmtUsd, fmtCount, fmtTxnDate), the Home dashboard
  * (lib/home/home-data.ts) and Utility Tracking (lib/home/utilities.ts) follow the
  * reader — and home-data's carried a second defect behind the hardcoded locale: it
  * prefixed the "$" BY HAND and localised only the digits, so a European locale would
@@ -106,7 +114,7 @@ const FORMATTER_WITH_LOCALE =
  * Getting those three numbers to disagree is how a ratchet starts life already
  * broken, which is why the derivation is written down rather than the result.
  */
-const CEILING = 88;
+const CEILING = 80;
 
 /**
  * Comments stripped first, and this is not a detail.
@@ -234,7 +242,24 @@ describe('hardcoded locales only go down', () => {
     ).toBe(MECHANISM_SITES);
   });
 
-  it('found something at all, so it is checking the real tree', () => {
-    expect(scan(sourceFiles()).length).toBeGreaterThan(50);
+  /**
+   * The scan reaches the real tree — asserted by NAME, not by magnitude.
+   *
+   * This used to be `toBeGreaterThan(50)`, and it failed the moment the file count
+   * reached exactly 50: a control meant to prove the scanner is not blind was keyed
+   * to a number that FALLS as the work succeeds, so finishing the job would have
+   * looked identical to the scanner breaking. That is the fifth guard in this audit
+   * to assert the solution instead of the property.
+   *
+   * The property is that the scan sees files it must always see. The sixteen pinned
+   * timezone-and-parts engines are exactly that: they are never going away, because
+   * localising one would be a defect. So the control rides on them.
+   */
+  it('reaches the real tree, named rather than counted', () => {
+    const seen = new Set(scan(sourceFiles()).map((f) => f.file));
+    for (const file of ['lib/services/scope.ts', 'lib/schedule/zoned.ts', 'lib/time/zoned.ts']) {
+      expect(seen, `${file} pins a locale on purpose and the scan must see it`).toContain(file);
+    }
+    expect(sourceFiles().length).toBeGreaterThan(500);
   });
 });

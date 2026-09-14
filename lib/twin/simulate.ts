@@ -9,6 +9,8 @@
 // outcome. Fully unit-testable. Honest: a decision with no downside reads as
 // "clear", and it never invents a conflict that isn't there.
 
+import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
+
 /** A timed event on a member's calendar (subset of calendar_events). */
 export interface SimEvent {
   id: string;
@@ -66,13 +68,30 @@ export interface SimContext {
   heavyWeek?: number;
   /** Known vacation/trip windows (for the activity projection's vacation check). */
   vacationWindows?: { start: string; end: string; label: string }[];
+  /**
+   * The reader's locale, for the amounts the impact copy holds. Optional because
+   * the simulation maths does not depend on it — a caller with no reader (a test,
+   * a model prompt) leaves it off and gets DEFAULT_LOCALE.
+   */
+  locale?: LocaleCode;
 }
 
 const MIN = 60_000;
 const TIGHT_GAP_MIN = 15;
 
-function money(cents: number): string {
-  return `$${(Math.abs(cents) / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+/**
+ * Whole dollars for the reader.
+ *
+ * The "$" used to be prefixed BY HAND with only the digits localised, which is a
+ * defect a locale swap alone would not fix: handed a European locale that shape
+ * renders "$2.767" — the American symbol position with German separators, a
+ * notation nobody writes. `style: 'currency'` puts the symbol where the locale puts
+ * it. Six modules carried the same line; this is one of them.
+ */
+function moneyIn(locale: LocaleCode) {
+  return (cents: number): string =>
+    new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 2 })
+      .format(Math.abs(cents) / 100);
 }
 
 /** ISO week key so "this week" load is counted per distinct week. */
@@ -147,6 +166,7 @@ function simulateCommitment(d: Extract<SimDecision, { kind: 'commitment' }>, ctx
 }
 
 function simulateSpend(d: Extract<SimDecision, { kind: 'spend' }>, ctx: SimContext): SimResult {
+  const money = moneyIn(ctx.locale ?? DEFAULT_LOCALE);
   const budget = ctx.budgets.find((b) => b.category.toLowerCase() === d.category.toLowerCase());
   const impacts: SimImpact[] = [];
 

@@ -12604,6 +12604,8 @@
   "weatherModule.couldNotLoadTheForecast": "No se ha podido cargar el pronóstico.",
   "weatherModule.defaultCitySet": "Ciudad por defecto establecida",
   "weatherModule.liveConditionsAndForecastsFor": "Condiciones en directo y pronósticos de tus ubicaciones.",
+  "weekend.priceFrom": "desde {price}",
+  "weekend.priceUpTo": "hasta {price}",
   "weekend.active": "Activo",
   "weekend.addAnyReliableLocalCalendarA": "Añade cualquier calendario local fiable (la página de eventos de la ciudad, la biblioteca, parques y ocio o el distrito escolar) como",
   "weekend.family": "Familia",

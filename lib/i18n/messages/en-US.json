@@ -12604,6 +12604,8 @@
   "weatherModule.couldNotLoadTheForecast": "Could not load the forecast.",
   "weatherModule.defaultCitySet": "Default city set",
   "weatherModule.liveConditionsAndForecastsFor": "Live conditions and forecasts for your locations.",
+  "weekend.priceFrom": "from {price}",
+  "weekend.priceUpTo": "up to {price}",
   "weekend.active": "Active",
   "weekend.addAnyReliableLocalCalendarA": "Add any reliable local calendar — a city events page, library, parks & rec, or school district — as an",
   "weekend.family": "Family",

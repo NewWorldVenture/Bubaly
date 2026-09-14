@@ -19,7 +19,7 @@ import { isMoveDate, moveDateContextKey, type MoveDateResult } from '@/lib/movin
 import type { Tables, MoveBoxStatus, MoveKind, MoveStatus, MoveTaskCategory } from '@/lib/database.types';
 import {
   MOVE_STATUSES, MOVE_KINDS, TASK_CATEGORIES, BOX_STATUSES, BOX_ORDER, categoryMeta, planTasks, timeline, suggestedStatus, budgetHealth, moveSummary,
-  nextBoxNumber, boxesByRoom, findInBoxes, money, isoDate, addDays, dayDiff,
+  nextBoxNumber, boxesByRoom, findInBoxes, money as moneyIn, isoDate, addDays, dayDiff,
 } from '@/lib/moving/planner';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
@@ -44,6 +44,8 @@ export function MovingWorkspace() {
   const fmtDate = fmtDateIn(locale.code);
   const fmtLong = fmtLongIn(locale.code);
   const tr = useTranslations();
+  // Money follows the reader; the currency stays the money's own.
+  const money = (cents: number | null | undefined) => moneyIn(cents, locale.code);
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const context = { familyId, userId, memberId: selfMember?.id ?? null, role: selfMember?.role ?? null, active: selfMember?.is_active === true };

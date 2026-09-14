@@ -2,7 +2,7 @@
 
 import { Ticket, CalendarCheck } from 'lucide-react';
 import { TripCrudSection, type FieldDef } from './shared';
-import { dollars } from '@/lib/vacations/meta';
+import { dollars as dollarsIn } from '@/lib/vacations/meta';
 import type { Tables } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
@@ -39,6 +39,8 @@ const reservationFields: FieldDef[] = [
 
 export function TripActivities({ vacationId }: { vacationId: string }) {
   const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const dollars = (cents: number | null | undefined) => dollarsIn(cents, locale.code);
   const fmtDT = fmtDTIn(locale.code);
   const t = useTranslations();
   return (

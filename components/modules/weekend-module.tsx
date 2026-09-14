@@ -229,7 +229,7 @@ export function WeekendModule() {
                 {dayEvents.map((e) => {
                   const cat = categoryMeta(e.category);
                   const saved = planByEvent.get(e.id);
-                  const price = priceRange(e.price_min_cents, e.price_max_cents);
+                  const price = priceRange(e.price_min_cents, e.price_max_cents, locale.code, t);
                   return (
                     <div key={e.id} className="flex flex-col overflow-hidden rounded-2xl border border-border bg-surface/40">
                       {e.image_url

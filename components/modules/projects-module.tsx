@@ -18,7 +18,7 @@ import { cn } from '@/lib/utils/cn';
 import type { Tables, HomeProjectKind, HomeProjectPriority, HomeProjectStatus, ProjectQuoteStatus } from '@/lib/database.types';
 import {
   PROJECT_KINDS, PROJECT_STATUSES, PRIORITIES, QUOTE_STATUSES, BOARD, kindMeta, statusLabel, columnFor, suggestScope, materialsTotals, materialLineCents,
-  compareQuotes, budgetHealth, schedule, nextAction, projectsSummary, money, isoDate, type ScopeTemplate,
+  compareQuotes, budgetHealth, schedule, nextAction, projectsSummary, money as moneyIn, isoDate, type ScopeTemplate,
 } from '@/lib/projects/planner';
 import { compareQuotes as rankQuotes } from '@/lib/services/providers/compare';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
@@ -38,6 +38,8 @@ export function ProjectsModule() {
   const locale = useLocale();
   const fmtDate = fmtDateIn(locale.code);
   const tr = useTranslations();
+  // Money follows the reader; the currency stays the money's own.
+  const money = (cents: number | null | undefined) => moneyIn(cents, locale.code);
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -295,6 +297,8 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
   const locale = useLocale();
   const fmtDate = fmtDateIn(locale.code);
   const tr = useTranslations();
+  // Money follows the reader; the currency stays the money's own.
+  const money = (cents: number | null | undefined) => moneyIn(cents, locale.code);
   const { success, error: toastError } = useToast();
   const [tab, setTab] = useState<'materials' | 'quotes'>(project.is_diy ? 'materials' : 'quotes');
   const [materialForm, setMaterialForm] = useState<{ open: boolean; material: Material | null }>({ open: false, material: null });

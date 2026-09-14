@@ -12604,6 +12604,8 @@
   "weatherModule.couldNotLoadTheForecast": "Kan de voorspelling niet laden.",
   "weatherModule.defaultCitySet": "Standaardstad ingesteld",
   "weatherModule.liveConditionsAndForecastsFor": "Actuele omstandigheden en voorspellingen voor je locaties.",
+  "weekend.priceFrom": "vanaf {price}",
+  "weekend.priceUpTo": "tot {price}",
   "weekend.active": "Actief",
   "weekend.addAnyReliableLocalCalendarA": "Voeg elke betrouwbare lokale agenda toe — een evenementenpagina van de stad, bibliotheek, parken en recreatie of schooldistrict — als",
   "weekend.family": "Gezin",

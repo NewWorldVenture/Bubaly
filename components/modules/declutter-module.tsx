@@ -68,7 +68,7 @@ export function DeclutterModule() {
   const todayIso = isoDate(today);
   const activeZones = useMemo(() => zones.data.filter((z) => z.is_active), [zones.data]);
   const summary = useMemo(() => declutterSummary(zones.data, missions.data, sessions.data, today), [zones.data, missions.data, sessions.data, today]);
-  const plan = useMemo(() => weeklyPlan(zones.data, missions.data, members.map((m) => m.id), today), [zones.data, missions.data, members, today]);
+  const plan = useMemo(() => weeklyPlan(zones.data, missions.data, members.map((m) => m.id), today, 2, locale.code), [zones.data, missions.data, members, today, locale.code]);
   const nameOf = (id: string | null) => members.find((m) => m.id === id)?.display_name ?? null;
   const zoneOf = (id: string | null) => zones.data.find((z) => z.id === id) ?? null;
 

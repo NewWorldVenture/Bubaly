@@ -11,11 +11,11 @@ import { Input, Textarea, Field, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ErrorState, LoadingBlock, EmptyState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
-import { ITEM_KINDS, DAY_PARTS, dollars, lookup } from '@/lib/vacations/meta';
+import { ITEM_KINDS, DAY_PARTS, dollars as dollarsIn, lookup } from '@/lib/vacations/meta';
 import { dateRange } from '@/lib/vacations/dates';
 import { detectConflicts, type ItemLike } from '@/lib/vacations/conflicts';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type Trip = Tables<'vacations'>;
 type Day = Tables<'vacation_itinerary_days'>;
@@ -25,6 +25,9 @@ const blankItem = (day_id: string, day_part: string) => ({ id: '', day_id, day_p
 
 export function TripItinerary({ vacationId }: { vacationId: string }) {
   const t = useTranslations();
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const dollars = (cents: number | null | undefined) => dollarsIn(cents, locale.code);
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
 

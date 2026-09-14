@@ -12604,6 +12604,8 @@
   "weatherModule.couldNotLoadTheForecast": "Die Vorhersage konnte nicht geladen werden.",
   "weatherModule.defaultCitySet": "Standardstadt festgelegt",
   "weatherModule.liveConditionsAndForecastsFor": "Aktuelle Bedingungen und Vorhersagen für Ihre Orte.",
+  "weekend.priceFrom": "ab {price}",
+  "weekend.priceUpTo": "bis {price}",
   "weekend.active": "Aktiv",
   "weekend.addAnyReliableLocalCalendarA": "Fügen Sie einen beliebigen verlässlichen lokalen Kalender hinzu – eine städtische Veranstaltungsseite, Bibliothek, Parkverwaltung oder Schulbezirk – als",
   "weekend.family": "Familie",
