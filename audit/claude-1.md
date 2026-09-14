@@ -1344,3 +1344,57 @@ Not done: Claude-4's second recommendation — scoping or aggregating the two
           left for whoever owns that page. With `failOnMax` the wrong answer is
           now an error rather than a green tick, which was the defect.
 ```
+
+## A3-015 — Claude-4's timezone HIGH: the two surfaces that matter most, and a ratchet for the rest
+
+```
+[CLAUDE-1][HIGH][CORRECTNESS] "Today" was the server's today on the child's own dashboard and in every notification
+Path:     app/(app)/kids/page.tsx:22 · lib/server/notifications.ts:34
+          (+ 17 more server-side sites, now tracked)
+Source:   Claude-4 of this session, [CLAUDE-4][HIGH][KIDS/CORRECTNESS] C-4-02.
+Problem:  `new Date(); d.setHours(0,0,0,0)` is the SERVER's midnight. On a UTC
+          host that is 17:00 in California, so a "today" built this way runs
+          17:00 yesterday → 17:00 today.
+          F-017 fixed the kitchen display and left a guard behind, but
+          tests/family-day-not-greenwich-day.test.ts flags ONE signature —
+          `toISOString().slice(0,10)` beside a filter on a DATE column. These
+          sites use `setHours` against TIMESTAMPTZ columns, so both halves of the
+          pattern miss and it reports clean. Its own header calls itself "a floor
+          rather than a proof"; this is what was under the floor.
+Evidence: app/(app)/kids/page.tsx is `force-dynamic` and not a client component
+          (checked), so the clock is the host's. A child in California opening it
+          after 5pm saw TOMORROW's events and lost today's, every day.
+          lib/server/notifications.ts:34 built "today"/"tomorrow" by comparing
+          `toDateString()` against that same server midnight — and rendered the
+          clock time with NO timeZone at all. A Pacific family was told an 8pm
+          event was "tomorrow" (20:00 PT is 03:00 UTC the next day) and shown the
+          wrong hour beside it. The same file already resolves
+          `families.timezone` at line 63, with a header explaining exactly this
+          reasoning for the medication window: the value was simply never
+          threaded into `timeLabel`.
+Fix:      Both routed through `dayKeyInTz` / `zonedDayBoundsMs`, the way
+          display/page.tsx already does. The kids page takes
+          `ctx.active.family.timezone`; `timeLabel` takes the `tz` that function
+          had already resolved, and uses it for the weekday and the clock time as
+          well as the day comparison — fixing the day and not the time would have
+          been half a fix.
+Status:   FIXED (2 of 19 server-side sites)
+Guard:    tests/server-midnight-is-not-the-familys-midnight.test.ts is a RATCHET,
+          and says so. It lists the 17 sites that remain, fails on an eighteenth,
+          fails on a STALE entry (an allowlist that outlives its defect is how a
+          ratchet turns back into a rubber stamp — it would readmit a regression
+          into a file already fixed), and asserts the two converted surfaces stay
+          converted. Comments are stripped before scanning: both fixed files
+          describe `setHours(0,0,0,0)` in prose directly above the correct code.
+          Non-vacuity proven in both directions — reverting the kids page fails
+          two of the four cases; the scan finding zero sites fails the first.
+Why not all 19: each remaining site needs its own decision about WHICH family's
+          day it means. Some have a familyId in hand (guardian/page.tsx,
+          home-data.ts, chores/dashboard.ts); some are pure helpers whose CALLER
+          owns the zone (lib/capture/parse.ts, lib/calendar/scheduling.ts,
+          lib/pantry/logic.ts). Converting a pure helper by guessing at a zone
+          would be a worse defect than the one it replaces, and a timezone change
+          shifts behaviour for every user of that surface. The ratchet stops the
+          list growing while it is worked down; shrinking it is the only edit it
+          should ever receive.
+```
