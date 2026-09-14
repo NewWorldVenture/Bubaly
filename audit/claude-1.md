@@ -4347,3 +4347,178 @@ Drives the real handler against a fake PostgREST that can fail mid-page.
 second case went red while the other four stayed green. The control case is the
 one that matters here — an earlier version of this guard would have passed on any
 route that 503'd unconditionally.
+
+---
+
+## Pass BH — the retry module had one caller, and it was not the forty-seven that needed it
+
+**[CLAUDE-1][MEDIUM][ARCHITECTURE] `lib/ai/retry.ts` is applied at 1 of 48 eligible
+provider call sites. — OPEN (measured; fix designed, built and reverted unfinished)**
+
+Recorded rather than shipped. The fix was written, the guard was planted and
+proven, and then **three existing tests went red**; resolving each on its merits
+is the rest of this pass, and none of it is work to rush. Nothing was pushed.
+
+### The measurement
+
+| | |
+| --- | --- |
+| `withBackoff` call sites outside its own module | **1** — `lib/ai/structured.ts:110` |
+| `provider.complete(...)` call sites in `app/` + `lib/` | **47**, none retried |
+| retry anywhere else in the chain | **none** — `fetchExternal` has no retry, `OpenAIProvider` has none internally |
+| `new OpenAIProvider(` construction sites | **3**, all in `lib/ai/provider.ts` (2) and `lib/ai/routing.ts` (1) |
+
+`lib/ai/retry.ts` is 141 careful lines — full-jitter exponential backoff,
+abort-aware through every sleep, an explicit non-retry list (401, 402, 404,
+`insufficient_quota`) — and its own header names its intended callers:
+
+> *"Only wrap calls with no side effects: `complete()` without tools,
+> `structuredCompletion()`, embeddings, classification."*
+
+Forty-seven of those never reached it. So on a 429 — the most common provider
+failure by a wide margin, and one that clears in milliseconds — the family gets
+`describeAIError`'s
+
+> *"The AI engine is busy right now (rate limit). Wait a few seconds and try again."*
+
+which is the application asking a person to do by hand the thing the module was
+written to do automatically. **Same class as BC-01**: a correct, well-documented
+mechanism that nothing calls.
+
+### The fix, as built (reverted; rebuild from here)
+
+`lib/ai/retrying-provider.ts` — a plain delegate applied at the three
+construction sites, so no call site changes:
+
+```ts
+export function retryingProvider(provider: AIProvider): AIProvider {
+  return {
+    id: provider.id,
+    model: provider.model,
+    complete: (input) => withBackoff(() => provider.complete(input), { signal: input.signal ?? null }),
+    structuredCompletion: (input) => provider.structuredCompletion(input),
+    runTools: (input) => provider.runTools(input),
+    runToolsStream: (input) => provider.runToolsStream(input),
+  };
+}
+```
+
+**What is deliberately NOT wrapped matters more than what is.**
+
+- `complete` — wrapped. Side-effect-free *by construction*: it posts one chat
+  completion and **returns** any `toolCalls` for the caller to execute; it never
+  executes them. (All 47 sites happen to pass `tools: []`, but the safety does
+  not rest on that.)
+- `structuredCompletion` — not wrapped. `lib/ai/structured.ts` already runs it
+  through `withBackoff`, inside a two-pass repair loop. Nesting would be 3 × 3 ×
+  2 = **eighteen paid provider calls for one planner decision**.
+- `runTools` / `runToolsStream` — not wrapped, and this is load-bearing. Both
+  **execute** tools, and the failures worth retrying (429, 5xx, a dropped socket)
+  are exactly the ones where the first attempt may already have reached OpenAI
+  and had effects before the response was lost. A blind retry double-creates the
+  calendar event. Those paths get at-most-once from the `ai_tool_calls`
+  idempotency ledger, not from here.
+
+An explicit delegate was chosen over a `Proxy` **because** the exclusions are the
+point: a Proxy forwards everything transparently and would hide the one thing a
+reader needs to see. `tsc` catches a method omitted from the delegate, since the
+return type is `AIProvider`.
+
+### A second finding, measured in passing: the attempt budget is honest only for fast failures
+
+`OPENAI_TIMEOUT_MS` is **60_000** and the AI routes declare **`maxDuration = 60`**.
+So on those routes a first attempt that *times out* has already spent the whole
+platform budget — the function is killed before a second attempt could return.
+
+This is **not** a reason to withhold the retry: a 429 or a 5xx comes back in
+milliseconds, which is the case it exists for, and the timeout case is left
+exactly as it was. It **is** a reason not to reach for a bigger `attempts` number
+later expecting more resilience, and it means `lib/ai/structured.ts`'s existing
+3 attempts are, on a 60-second route, effectively 1 whenever the provider hangs.
+
+### Guard — planted and proven, then removed with the fix
+
+`tests/a-transient-provider-failure-is-retried-not-shown.test.ts` drove the real
+`getProvider()` / `providerFromConfig()` seam against a mocked `fetchExternal`
+that scripts one response per attempt — deliberately not calling the decorator
+directly, because the defect was never in `withBackoff`; it was in nothing
+reaching it. Seven cases: a 429 then a 200 (2 fetches); a 401 (1 fetch, no
+retry); a 503 (exactly 3, the budget); `runTools` on a 429 (**1**);
+`structuredCompletion` on a 429 (**1**, no double-wrap); `id`/`model` survive
+the decoration; a mid-flight abort stops further attempts.
+
+**Proven**: with the decorator unwired, **2 failed and 5 passed** — the five
+being precisely the exclusion and identity controls, which is what makes them
+controls rather than restatements of the fix.
+
+### Why this is OPEN and not FIXED — the three that went red
+
+1. **`tests/provider-stub.test.ts:135`** — `expect(await resolveProviderForTask('plan')).toBeInstanceOf(OpenAIProvider)`.
+   A delegate is not an instance. The test's *intent* ("returns the real provider,
+   not the scripted stub") still holds; its *assertion* is narrower than its
+   intent. The honest repair asserts the discriminator directly — `provider.id`
+   is `'openai'`, not the stub's `'scripted'` — which is **stronger**, because it
+   also catches a decorator that drops `id`. It must be argued as that, not
+   quietly relaxed.
+   **And it is a correction to my own method**: I cleared this seam with
+   `grep -rn "instanceof OpenAIProvider"`, which cannot see vitest's
+   `toBeInstanceOf` matcher form. I reported "no instanceof checks" from a search
+   that structurally could not find them. The suite caught what my grep did not.
+2. **`tests/ai-observability-coverage.test.ts:371`** — asserts
+   `readFileSync('lib/ai/routing.ts')` contains the literal
+   `return new OpenAIProvider(`. A source-text pin on a line the fix rewrites.
+   Its surrounding comment is explicit that the floor of three silent files is
+   deliberate and that `lib/ai/routing.ts` "builds an OpenAIProvider and hands it
+   back without ever calling one" — still true after the change, so the
+   *property* survives and only the *spelling* does not. Needs re-expressing
+   against the property.
+3. **`tests/ai-prompt-injection.test.ts`** — *"the obedient provider makes no
+   write call."* **Not caused by this change at all.** I wrote it up as the one
+   that might be telling the truth about the fix; it is not, and this paragraph
+   is the correction. Diagnosed after reverting: it fails **`Test timed out in
+   5000ms`**, not on an assertion, **with the tree clean at `b756f1e2`** — and
+   3/3 in isolation, so it is not the Pass BF flake either. See below.
+
+### A pre-existing failure the full suite cannot see — and the reason it cannot
+
+**[CLAUDE-1][LOW][TESTING] `tests/ai-prompt-injection.test.ts` passes in the full
+suite and fails 3/3 standalone. — OPEN**
+
+Measured on a clean tree at the pushed commit:
+
+| run | result | duration | of which transform |
+| --- | --- | --- | --- |
+| full suite (1,229 files) | **pass** | 229s total | shared |
+| standalone ×3 | **fail**, timeout at 5,000ms | 6.16s / 5.88s / 6.03s | **4.47s / 4.15s / 4.21s** |
+
+The mechanism is visible in that last column. The case does its imports **inside
+the test body** —
+
+```ts
+it('fences the hostile title, …', async () => {
+  const { buildContext } = await import('@/lib/ai/context/builder');
+```
+
+— so module transform is charged to the test's own 5s budget. Across a full run
+vitest's transform cache is already warm from the other files that import the
+same modules, and the case finishes well inside it; alone, ~4.2s of transform
+lands inside the budget and ~0.8s of actual work tips it over.
+
+**This is the inverse of Pass BF's flake, and worth keeping the pair.** There the
+file passed alone and failed under load; here it passes under load and fails
+alone. What they share is a 5-second default that was never chosen for these
+cases. The consequence here is sharper than a red CI run, because CI is *green*:
+the failure appears only to a developer running the one file they are debugging,
+which is the exact command that situation calls for.
+
+**Fix** (not applied — outside this pass, and a green suite is not the place to
+land a test change unannounced): hoist the imports to module scope like the rest
+of the file's siblings, or give the case an explicit budget. Hoisting is better —
+it removes the cost from the measurement rather than widening the ruler.
+
+### Where to pick it up
+
+Rebuild the module above, rewire the three construction sites, restore the guard,
+then work failures **#1 and #2** — both stale assertions, both to be argued
+rather than relaxed. **#3 is not part of this pass**; it is the separate
+standalone-timeout finding recorded immediately above.
