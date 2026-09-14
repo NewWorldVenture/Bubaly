@@ -3515,6 +3515,24 @@ shapes this repository already uses (`0272`, `0266`, `0296`).
 The count is the finding. A 66-table list that the database honours on 8 of
 them is a policy that exists in one layer only.
 
+**Two checks were run before publishing this list, because a catalogue reading
+is not a measurement.**
+
+*Is the permissive union really the whole gate?* A RESTRICTIVE policy ANDs with
+the permissive ones, so a manager-gated restrictive read policy would make the
+entry wrong. **Zero** of the 55 carry one: the permissive union is the gate.
+
+*Does a child actually get the rows?* Spot-checked behaviourally against a
+replayed database, as a real child auth user with the impersonation asserted:
+
+```
+child sees 1 financial_accounts row(s)   [policy.ts: "account numbers"]
+child sees 1 member_locations row(s) for a PARENT   [policy.ts: "live location"]
+```
+
+That is the household's bank account with its balance, and a parent's
+location-sharing row, read by a child.
+
 | Table | policy.ts reason |
 |---|---|
 | `ai_messages` | other conversations |
