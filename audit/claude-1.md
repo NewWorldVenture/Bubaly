@@ -863,3 +863,105 @@ probes. The result is mostly a clean bill, which is worth recording as such.
   removed, 4 pass.
 - **Status:** VERIFIED (infrastructure sound) · FIXED (guard added).
   13,662 tests pass.
+
+---
+
+## Consolidation pass — fixes applied from Claude-2, -3 and -4's findings
+
+Correcting my own earlier record first: this file previously stated that
+Claude-2/3/4 "did not complete" and their files "hold only the template". That
+was true of the moment I checked and is **false now**. Other parallel sessions had
+already populated all three files and pushed; `finalaudit.md` carries Passes A–K
+and is ~3,957 lines. My rebases pulled that in without my noticing, and
+`audit/status.md` went on asserting "not audited" afterwards. Recorded rather than
+quietly edited, because a stale coverage claim in an audit document is the same
+defect as F13.
+
+Four HIGH findings applied this pass. Three are the same shape — **a call whose
+error or escaping is skipped, then success reported** — which is now the most
+frequently recurring defect in this repository after the vacuous guard.
+
+### [CLAUDE-1][HIGH][SECURITY] Inbound email routed by an unescaped wildcard — FIXED
+
+Claude-3's finding; verified and fixed. `lib/contact-center/server.ts`
+`resolveFamilyByEmailLocalResult` matched `.ilike('email_local', local)` where
+`local` is parsed from the inbound message's **`To` header** — supplied by the
+sender. `_` is both a legal local-part character (`LOCAL_RE` permits it) and
+LIKE's single-character wildcard.
+
+Measured in PostgreSQL 16 on the harness rather than reasoned about:
+
+```
+'smith'  ilike 'smit_'    -> t     <- mail reaches another family's inbox
+'smith'  ilike 'smit\_'   -> f     <- escaped
+'smith'  ilike 's%'       -> t     <- one message reaches any family
+'smit_h' ilike 'smit\_h'  -> t     <- a REAL underscore still routes
+```
+
+Impact: a sender guessing a family name and substituting one character with `_`
+reaches that family's Contact Center — their AI concierge, their planner rows,
+potentially their urgent-SMS escalation, and an auto-reply from their own
+identity confirming the match. Same class as the child sign-in ILIKE bug this
+repo already fixed; the fix had not reached this call site, where the input is
+not merely guessable but attacker-supplied.
+
+Fixed by escaping, **not** by switching to `.eq`: the fourth row above is why —
+addresses containing an underscore must keep routing — and `.eq` would also drop
+case-insensitivity while the unique index is on `lower(email_local)`.
+`tests/contact-center-email-routing-wildcards.test.ts`, 6 cases; reverting the
+escape fails 5 of them.
+
+### [CLAUDE-1][HIGH][INTEGRATION] Google Calendar reported connected, and could wipe preferences — FIXED
+
+Claude-2's C2-17, plus a worse consequence they had not reached.
+`app/api/google/calendar/callback/route.ts` discarded the error from BOTH the
+preferences read and the token upsert, inside a `try/catch` that cannot see
+either, since a PostgREST call resolves with `{ data, error }` rather than
+throwing.
+
+The upsert writes the **whole** `notification_prefs` object. So a refused *read*
+falls back to `{}` and the upsert then overwrites every other notification
+preference the user has set — a transient read failure silently resets their
+settings as a side effect of connecting a calendar. A refused *write* told them
+the calendar was connected while no token was stored, so every later sync failed
+for a reason the screen denied. Both now redirect to the error state.
+
+### [CLAUDE-1][HIGH][INTEGRATION] Blog unsubscribe confirmed consent it had not recorded — FIXED
+
+Claude-2's C2-16. Recorded in `finalaudit.md` Pass F-a as fixed — but that fix is
+on #541's branch, which has not merged, so `main` still carried it. Worth noting
+as a coordination hazard: a finding marked FIXED on an unmerged branch is not
+fixed in production.
+
+`app/api/blog/unsubscribe/route.ts` discarded both results. A refused SELECT
+rendered *"that unsubscribe link doesn't look right"* at a real subscriber
+holding a real link — sending them to check the one thing that was never wrong.
+A refused UPDATE rendered *"you've been unsubscribed"* over a row still marked
+subscribed, so the mail kept arriving after they had been told it would stop.
+Both now route to a third state whose copy says the link is fine and we were not.
+
+### [CLAUDE-1][HIGH][DATA] readAll returned a truncated ledger as a complete one — FIXED
+
+Claude-4's F-F01, **in code I wrote**, and the comment defending it was mine:
+*"A ceiling the CALLER chose is a destination… Reaching the first is success."*
+That is wrong. A caller's `max` is a bound they expect the data to fit under, so
+reaching it exactly does not mean the read finished — it means rows may exist
+past it that were never read.
+
+`readAll` returned `{ rows: rows.slice(0, max), error: null }` on truncation:
+indistinguishable from a complete read. `admin/wallet/reconciliation/page.tsx`
+reads with `{max: 20000}` and its own header says *"this page RECONCILES the
+ledger, so reading part of it is worse than not reading it at all"* — it would
+have reported that a ledger it had only partly read balanced. Ten call sites pass
+a `max`, including three nightly crons paging families.
+
+Fixed by reading **one row past** the ceiling. That single extra row is what
+separates "there were exactly `max` rows" (complete) from "there were more"
+(truncated), and it is discarded from the result — only its existence is used.
+Truncation now returns an error the callers already know how to render.
+
+Four existing cases in `tests/supabase-read-all.test.ts` failed, and they were
+right to: one of them, `"reports reaching the ceiling as success, not as a runaway
+query"`, **literally asserted the defect**. I wrote that too. The contract is now
+corrected, with a new case for the exact-fit read the probe exists for, and the
+tripwire and caller-ceiling errors asserted to stay distinguishable.

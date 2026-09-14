@@ -60,6 +60,32 @@ export async function resolveFamilyByNumber(admin: Admin, toNumber: string): Pro
   return result.familyId;
 }
 
+/**
+ * `_` is a legal character in a local-part AND the single-character wildcard in
+ * LIKE/ILIKE. `local` here comes from the inbound message's `To` header, which
+ * is attacker-controlled: without escaping, mail addressed to `smit_@bubaly.com`
+ * resolves to the family that owns `smith`.
+ *
+ * Measured in Postgres 16 rather than reasoned about:
+ *
+ *   'smith'  ilike 'smit_'    -> t     <- another family's inbox
+ *   'smith'  ilike 'smit\_'   -> f     <- escaped
+ *   'smith'  ilike 's%'       -> t     <- one message reaches any family
+ *   'smit_h' ilike 'smit\_h'  -> t     <- a real underscore still matches
+ *
+ * That last row is why this escapes rather than switching to `.eq`: addresses
+ * containing an underscore are valid (see LOCAL_RE in ./address) and must keep
+ * routing. `.eq` would also change the match from case-insensitive to
+ * case-sensitive, and the unique index is on `lower(email_local)`.
+ *
+ * This is the defect class the child sign-in fix closed on the auth path; the
+ * fix had not reached this call site, where the input is not merely guessable
+ * but supplied by the sender.
+ */
+function escapeLike(value: string): string {
+  return value.replace(/[%_]/g, (m) => `\\${m}`);
+}
+
 /** Resolve the family that owns a bubaly.com local-part (inbound email routing). */
 export async function resolveFamilyByEmailLocalResult(admin: Admin, local: string): Promise<{
   familyId: string | null;
@@ -68,7 +94,7 @@ export async function resolveFamilyByEmailLocalResult(admin: Admin, local: strin
   const { data, error } = await admin
     .from('family_contact_channels')
     .select('family_id')
-    .ilike('email_local', local)
+    .ilike('email_local', escapeLike(local))
     .maybeSingle();
   return { familyId: data?.family_id ?? null, error };
 }

@@ -1418,3 +1418,36 @@ LAST-UPDATE: 2026-09-13
   pending-invites list to the members screen (email, role, sent-at, expiry, resend, revoke), reading
   `invites` scoped to the family. The admin console already has all of this; the family does not.
 - **Status:** OPEN
+
+---
+
+## Session 3 closing note (Sonnet relaunch, 2026-09-14)
+
+No new CRITICAL/HIGH defect surfaced this session that isn't already recorded
+above or in `finalaudit.md` Pass F-K. That is reported plainly rather than
+padded out, per the brief's own instruction that a clean pass is a valid
+result when the examined ground is recorded.
+
+What this session adds on top of sessions 1-2: a third independent vacuous-test
+sweep (different heuristics — commented-out `expect(`, a flat one-assertion-
+per-`it` scan, a `when others` re-grep against all 22 `docs/audit/*.sql` files
+rather than the 16 session 2 counted) converges on the same small set of real
+instances session 2 already found and Claude-1 already fixed (G1/Pass F-F06),
+plus two new files worth naming for how they resist the class on purpose:
+`tests/paid-features-enforced-server-side.test.ts` strips comments before
+matching source *and cites F11 by name* as the reason, and
+`docs/audit/family-credentials-boundary-check.sql` /
+`sensitive-role-boundary-check.sql` carry G1's `insufficient_privilege`
+narrowing already, with the broad `when others` surviving only inside an
+explanatory comment. Read together with sessions 1-2, this is now reasonably
+strong evidence that "the guard that cannot fail" is a contained, catalogued
+class in this repository rather than a systemic one — real, found, mostly
+fixed, and the test-authors have visibly started writing the next guard
+defensively against it.
+
+The five items already on record above as OPEN (F-F01 caller-`max` truncation,
+F-F02 Greenwich-day survivors incl. `kids/page.tsx`, RESEND_API_KEY absent from
+FEATURE_ENV, the family-code dead invite affordance, the zero-managers
+lockout) were each re-checked against the current tree in this session and are
+still open — see the STATUS block at the top of this file for the exact
+grep/read that confirmed each.

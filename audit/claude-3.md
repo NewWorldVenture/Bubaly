@@ -2,25 +2,31 @@
 
 ## STATUS (this run — 2026-09-14, continuation session)
 
-CURRENT: In progress. A prior Claude-3 session (content preserved below, under
-"Findings" and the "parallel audit session" delimiter) already did a full
-141-route AUTHENTICATION mapping (Pass E, F-E01–F-E09, indexed in
-finalaudit.md) and Claude-1 has since done substantial additional backend/authz
-work in this same run (Pass G/H/I/J/K in finalaudit.md: the 58-sensitive-tables
-RLS sweep now at `0297`, service-role route inventory, cron/Twilio/rate-limiter
-verification, the auth-user pagination ceiling, wallet reconciliation vacuity,
-Stripe webhook ack semantics). Read all of that first. This session's marginal
-contribution is targeted at what neither covered in depth: **authorization**
-(not just authentication) on a **per-resource** basis — does a route/query that
-knows who the caller is also verify the specific row belongs to them — plus a
-fresh sweep of the ILIKE-escaping fix's actual reach.
-NEXT: continue the per-route resource-ownership check on the ~70
-non-service-client routes; spot-check a few more `SENSITIVE_TABLES` outcomes;
-review storage bucket policies beyond `family-media`/`feedback-attachments`
-(already F-E03/F-E05).
-FILES-TOUCHED: audit/claude-3.md only. No source files modified.
+CURRENT: Done. A prior Claude-3 session (content preserved below, under
+"Findings (prior session, preserved)") already did a full 141-route
+AUTHENTICATION mapping (Pass E, F-E01–F-E09, indexed in finalaudit.md) and
+Claude-1 has since done substantial additional backend/authz work in this same
+run (Pass G/H/I/J/K in finalaudit.md: the 58-sensitive-tables RLS sweep now at
+`0297`, service-role route inventory, cron/Twilio/rate-limiter verification,
+the auth-user pagination ceiling, wallet reconciliation vacuity, Stripe webhook
+ack semantics). This session's marginal contribution targeted what neither
+covered in depth: **authorization** (not just authentication) on a
+**per-resource** basis — does a route/query that knows who the caller is also
+verify the specific row belongs to them — plus a fresh check of how far the
+ILIKE-escaping fix (child sign-in) actually reached.
+COMPLETED: 4 new findings (1 HIGH, 1 MEDIUM, 2 recorded as
+VERIFIED/LOW-hygiene rather than open vulnerabilities, tested against the
+negative case rather than assumed); an 8-item "Verified healthy" section
+covering the `ServiceScope` abstraction (45 call sites, zero unsafe `extra`
+overrides in the wild), money/missions/inbox/billing/sync service-role
+authorization, and public-write scoping.
+NEXT: nothing queued. Possible follow-up for another worker: extend the
+ILIKE-escape fix (MEDIUM finding below) to the 5 listed call sites; fix the
+HIGH email-routing finding (`.eq()` instead of unescaped `.ilike()`).
+FILES-TOUCHED: audit/claude-3.md only. No source files modified, consistent
+with the audit-only brief.
 BLOCKERS: none.
-LAST-UPDATE: 2026-09-14 (in progress)
+LAST-UPDATE: 2026-09-14
 
 ---
 
@@ -186,6 +192,119 @@ only one that binds.
   (m) => \`\\${m}\`)`) at all five sites above, before interpolating into the
   ILIKE pattern.
 - **Status:** OPEN
+
+### [CLAUDE-3][LOW][AUTHZ] Two server actions trust a client-supplied `familyId` with no session cross-check — backstopped by RLS, tested rather than assumed
+
+- **File/path:** `app/(app)/dashboard/moment-actions.ts` —
+  `addMomentGroceryAction` (`input.familyId`, line ~61-92) and
+  `createMomentReminderAction` (`input.familyId`, line ~107-124).
+- **Problem:** Both actions take `familyId` as a plain argument from the
+  client-side call (a server action's arguments are chosen by the calling
+  browser JS, not re-derived from the session) and use it directly in
+  `supabase.from('grocery_items'|'grocery_lists'|'reminders').insert({family_id:
+  input.familyId, ...})` via `createServer()` — with no
+  `requireUserContext()`-derived `ctx.active.familyId` comparison anywhere in
+  either function. This is the one inconsistency found against an otherwise
+  extremely uniform convention: every other sampled action/route in this audit
+  (`lib/wallet/server.ts` callers, `app/(app)/money/actions.ts`,
+  `lib/services/inbox/index.ts`, and all 40+ `scopeFromUserContext(ctx, ...)`
+  call sites — see Verified healthy) either derives `familyId` from `ctx`
+  directly or re-validates a passed one against it.
+- **Evidence:** Confirmed this is **not** exploitable against a family the
+  caller does not belong to, rather than assumed — checked the actual RLS
+  policy rather than trusting the convention:
+
+      $ grep -n "reminders\|grocery_lists\|grocery_items" supabase/migrations/0004_rls.sql
+      23:  'meals','meal_plans','grocery_lists','grocery_items',
+      26:  'documents','notes','goals','reminders',
+      ...
+      create policy %1$s_insert on public.%1$I for insert
+        with check (public.is_family_member(family_id))
+
+  All three tables are in `0004`'s generic family-scoped loop, so every insert
+  the RLS layer sees is checked against `is_family_member(family_id)` using
+  `auth.uid()` from the caller's own session — a `family_id` for a family the
+  caller does not belong to is rejected with `new row violates row-level
+  security policy`, regardless of what the action code does or doesn't check.
+  This matches the pattern Pass E already verified sound (no `using(true)` on
+  any family-scoped table) and the design position the codebase states
+  explicitly (`lib/constants/roles.ts`: *"the database RLS is the real
+  enforcement boundary"*).
+- **Impact:** **None against a stranger's family** — tested, not assumed. The
+  only live consequence: a caller who is a genuine member of **more than one**
+  family (the app supports this — co-parents, helpers) could write a grocery
+  item or reminder into a family that is not their currently *active* one if
+  they (or a compromised/buggy client) sent a different, still-own `familyId`.
+  That is a membership they already hold, so it is not a boundary crossing —
+  at most a confusing misfile, not a security bypass. Recorded because it is a
+  single point of failure (RLS alone, no defense in depth) in a codebase that
+  otherwise consistently double-checks, and because RLS regressing on exactly
+  these two functions would turn a LOW into something worse with no second
+  layer to catch it — unlike every other sampled write path.
+- **Recommended fix:** For consistency and defense-in-depth (not urgency),
+  derive `familyId` from `ctx.active.familyId` in both functions instead of
+  accepting it as a parameter, the same way `removeMomentGroceryAction` in the
+  same file already relies on RLS alone for a delete-by-id but at least takes
+  no writable identifier as input.
+- **Status:** VERIFIED (sound today; hygiene recommendation only)
+
+---
+
+## Verified healthy — this session
+
+Recorded so a later pass does not re-derive them. Each is a positive finding
+sampled and, where practical, checked against a negative case rather than
+inferred from convention.
+
+1. **The `ServiceScope`/`scopeFromUserContext` abstraction cannot be handed a
+   spoofed `familyId` in practice.** `lib/services/scope.ts:29` builds
+   `{ familyId: ctx.active.familyId, ... , ...extra }` — `extra` is spread
+   *last*, so a caller technically *could* override `familyId` through it.
+   Checked whether any of them do:
+
+       $ grep -rn "scopeFromUserContext(" app lib --include=*.ts --include=*.tsx | grep -v '\.test\.'
+       <45 call sites>
+
+   Every call site passes either `(ctx, db)` or `(ctx, db, { now })` — the one
+   `extra` in live use is a clock override for a scheduling feature, never
+   `familyId`. So while the function's signature *permits* the unsafe override,
+   nothing in the tree exercises it. Worth a type-level guard
+   (`Omit<Partial<ServiceScope>, 'familyId' | 'db'>` for `extra`) so a future
+   caller cannot introduce the bug the signature currently allows, but there is
+   no live instance today.
+2. **Money-moving server actions double-check every client-supplied id.**
+   `app/(app)/money/actions.ts` — `issueCardAction`, `setCardFrozenAction`,
+   `updateCardControlsAction`, `createCardRevealAction`,
+   `prepareCardRevealAction` — every one combines the client-supplied
+   `cardId`/`childWalletId` with `.eq('family_id', ctx.active.familyId)` in the
+   *same* service-role query before acting on it, i.e. authorization is
+   re-proven per call even though `createServiceClient()` bypasses RLS
+   entirely for these.
+3. **Chore/mission actions** (`app/(app)/missions/actions.ts`) scope every
+   `chore_assignments`/`chore_submissions`/`chore_disputes` read and write with
+   `.eq('id', X).eq('family_id', familyId)` from `ctx`, including the
+   service-role escalation path (line 180+).
+4. **Inbox service functions** (`lib/services/inbox/index.ts`
+   `markInboxMessageHandled`/`setInboxMessageStatus`) re-derive
+   `scope.familyId` and additionally gate on role (`mayFile`) before any write.
+5. **Billing** (`app/api/billing/{cancel,change-plan,checkout}/route.ts`):
+   `familyId` is always `ctx.active.familyId`; `change-plan`'s
+   `expectedFamilyId`/`expectedUserId` "review" path is a *confirmation* that a
+   freshly-refetched session still matches what the client last saw (guards a
+   stale-tab plan change), not a trust boundary — it is checked **against** a
+   fresh `getUserContext()`, never substituted for it.
+6. **Sync routes** (`app/api/sync/[provider]/{callback,disconnect,status}`,
+   `app/api/sync/google/*`): every service-role query is
+   `.eq('family_id', ctx.active.familyId).eq('user_id', ctx.user.id)`
+   together, so even a shared/family-visible `sync_accounts` row cannot be
+   disconnected by a different member's request carrying the same provider name.
+7. **Public unauthenticated writes** (`app/api/blog/{like,save}`,
+   `app/api/ai/gift`, `app/api/push/test`): each is IP- or user-scoped and
+   rate-limited (`enforceRequestRateLimit`), and `blog/save` correctly 401s
+   with no session rather than falling back to a visitor id.
+8. **`app/api/ai/{flyer,pantry-chef}`, `app/api/notifications/generate`**: all
+   three derive `familyId` from `ctx.active.familyId` via `createServer()`
+   (RLS-backed), never from the request body.
 
 ---
 

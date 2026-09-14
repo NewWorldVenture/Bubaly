@@ -2,27 +2,65 @@
 
 ## STATUS (session 2, 2026-09-14)
 
-CURRENT: in progress. IMPORTANT CONTEXT FOR CLAUDE-1: this file already held a
+CURRENT: **done.** IMPORTANT CONTEXT FOR CLAUDE-1: this file already held a
 complete 14-finding pass (C2-01–C2-14, below) from an earlier parallel session,
 merged into `finalaudit.md` as **Pass D (F-D01–F-D14)**. `audit/status.md`'s
 top board and `finalaudit.md`'s Part 0 coverage table both currently say
 Frontend/UX-Accessibility is "not audited — worker hit the account session
-limit" — **that line is stale**; Pass D exists and is substantial. This
-session does NOT repeat that pass. It reads C2-01–C2-14 first (done) and then
-audits the specific angles the new brief calls out that Pass D did not cover:
-failed-read states surfaced as empty/silent rather than errors, success
-toasts after discarded write errors, i18n key leakage, and responsive/modal
-behaviour beyond the CI device-matrix gate. New findings are numbered
-continuing from C2-15 and appear in a clearly marked "Session 2" section below
-the original pass, so nothing from the first pass is disturbed.
-COMPLETED SO FAR: swept all 113 `useRealtimeQuery` consumers for dropped/
-unrendered `error` (systemic pattern is sound — see C2-15 for the two real
-exceptions); confirmed the blog-unsubscribe discarded-write-error bug the
-brief named is still live (C2-16).
-NEXT: i18n key-leak sweep, responsive/modal-at-360px pass, alt-text in the
-authenticated app, error-boundary granularity.
-FILES TOUCHED: none (audit-only, per hard rules).
-LAST-UPDATE: 2026-09-14 (in progress — updated incrementally)
+limit" — **that line is stale**; Pass D exists and is substantial. Please
+update Part 0's coverage table and the board when you next rebuild them.
+This session did NOT repeat that pass. It read C2-01–C2-14 first and then
+audited the specific angles the new brief called out that Pass D did not
+cover: failed-read states surfaced as empty/silent rather than errors,
+success toasts after discarded write errors, i18n key leakage, and
+responsive/modal/error-boundary behaviour beyond what Pass D measured. New
+findings are C2-15–C2-18, in a clearly marked "Session 2" section below the
+original pass so nothing from the first pass is disturbed.
+
+COMPLETED:
+  - Swept all 113 `useRealtimeQuery` consumers for dropped/unrendered `error`.
+    Systemic pattern is sound (every module importing the hook also imports
+    and correctly sequences `ErrorState`) — two real exceptions found: C2-15.
+  - Confirmed the blog-unsubscribe discarded-write-error bug the brief named
+    as historically shipped is STILL LIVE, unfixed, in the current tree: C2-16.
+  - Found the same false-success shape in the Google Calendar OAuth callback
+    (higher blast radius — a whole integration silently not-connected while
+    the UI says "connected"): C2-17.
+  - Verified the i18n raw-key-leak class (brief: "this repo has shipped that")
+    has real, working, non-vacuous regression tests covering exactly that
+    shape, with two genuine historical incidents behind them; ran both
+    targeted test files, both pass.
+  - Verified non-English locale catalogues do not leak into client JS bundles
+    (checked against the existing 2026-09-13 production build already on
+    disk — did not run a build myself).
+  - Verified alt-text is clean in the authenticated app (0/57 `<img>`, 0/6
+    `<Image>` missing alt; one apparent miss was a regex false-positive on a
+    code comment, corrected before recording).
+  - Found zero component-level error-boundary isolation anywhere in the app
+    (0 `ErrorBoundary` usages, 6 total `<Suspense>` app-wide, none on Home):
+    C2-18 — a render throw in any one of Home's 13 composed widgets currently
+    takes down the whole dashboard, not just that widget.
+  - Attempted an independent re-check of icon-only-button labelling (C2-11
+    territory) with a fast regex; it produced ~900 candidates, spot-checked
+    two, both were false positives (JSX text inside `{}` expressions, and a
+    `title=` attribute my regex mis-scoped) — this independently confirms
+    WHY the original C2-11 pass had to build a brace-aware structural parser
+    rather than grep, and I deferred to its count (2) rather than publish an
+    unverified one of my own. Recorded under Method notes below.
+  - Checked sticky-positioned elements (13 files) for content-covering risk:
+    all read as intentional headers/toolbars with correct z-index and blur;
+    flagged explicitly as a source-reading judgement, not a live-viewport
+    measurement (no browser available in this environment).
+SEVERITY COUNT THIS SESSION: 1 HIGH (C2-17), 1 MEDIUM (C2-15), 1 HIGH (C2-16),
+  1 MEDIUM (C2-18) → 2 HIGH, 2 MEDIUM, 0 LOW, 0 CRITICAL. Combined with the
+  first pass (C2-01–C2-14: 3 HIGH, 7 MEDIUM, 4 LOW): **18 findings total in
+  this file, 5 HIGH / 9 MEDIUM / 4 LOW / 0 CRITICAL.**
+NEXT: nothing queued. Not reached (needs a real browser, not available in
+  this environment): colour contrast, actual tab order, screen-reader output,
+  live confirmation that no sticky element overlaps content at 360-400px.
+FILES TOUCHED: none (audit-only, per hard rules — no source file edited, no
+  build run, no commit).
+LAST-UPDATE: 2026-09-14
 
 ---
 
@@ -989,6 +1027,20 @@ Status:   OPEN
   element actually overlaps scrollable content at 360-400px needs the app
   running in a real viewport, which this pass did not do (no browser
   available). Not claimed as verified in the same sense as the items above.
+
+**A note on method, since it changed a conclusion.** I re-ran an independent,
+fast regex sweep for icon-only buttons with no accessible name (C2-11's
+territory — the first pass reported exactly 2). Mine reported ~900. I did not
+report that number. Spot-checking the first two hits
+(`components/modules/decisions-module.tsx:113`, `components/modules/devices-module.tsx:92`)
+showed both were false positives — one because the visible label was inside a
+`{tr(...)}` expression my regex's "has text" check couldn't see through, the
+other because it already carries `title={tr('devices.cycleStatus')}` and my
+attribute-scope capture mis-bounded around it. This is the identical failure
+mode the first pass's "Method" section already documents and built a
+brace-aware parser to avoid. I trust C2-11's count over mine and did not
+re-litigate it; recorded here so nobody re-derives a wrong ~900-item version
+of this finding later.
 
 ---
 

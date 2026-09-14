@@ -61,13 +61,27 @@ export async function readAll<T, E = { message: string }>(
   options: { max?: number } = {},
 ): Promise<{ rows: T[]; error: E | { message: string } | null }> {
   // A ceiling the CALLER chose is a destination; the default one is a tripwire.
-  // Reaching the first is success, reaching the second means the query is not
-  // terminating — so the two must not share an exit.
+  // Reaching the second means the query is not terminating. Reaching the first
+  // used to be treated as success — and that was wrong, which is the whole point
+  // of the `probe` below.
+  //
+  // A caller's `max` is a bound they expect the data to FIT UNDER. Stopping
+  // exactly on it and returning `error: null` makes a truncated read
+  // indistinguishable from a complete one, which is the same silent-partial-read
+  // defect this module was written to end (F-008, F-011, F-013) reappearing one
+  // level up. The admin wallet reconciliation page reads 20,000 rows this way
+  // and its own header says reading part of the ledger is worse than not reading
+  // it at all — it would have reported "everything reconciles" over a prefix.
+  //
+  // So read ONE row past the ceiling. That single extra row is what separates
+  // "there were exactly `max` rows" (complete, no error) from "there were more
+  // than `max`" (truncated, an error the caller already knows how to render).
   const ceiling = options.max ?? DEFAULT_MAX_ROWS;
+  const probe = ceiling + 1;
   const rows: T[] = [];
 
-  for (let from = 0; rows.length < ceiling; ) {
-    const want = Math.min(PAGE_SIZE, ceiling - rows.length);
+  for (let from = 0; rows.length < probe; ) {
+    const want = Math.min(PAGE_SIZE, probe - rows.length);
     // A query builder RESOLVES with `{ data, error }` for anything the database
     // answers, and REJECTS only when the request never completed — DNS, TCP,
     // TLS, an aborted fetch. A reader that passed that rejection on would put
@@ -90,9 +104,18 @@ export async function readAll<T, E = { message: string }>(
     from += data.length;
   }
 
-  if (options.max !== undefined) return { rows: rows.slice(0, options.max), error: null };
+  if (options.max !== undefined) {
+    return {
+      rows: rows.slice(0, ceiling),
+      error: {
+        message: `readAll reached the caller's max of ${ceiling} rows and more remain. `
+          + 'These rows are a PREFIX, not the whole set — treat this as a failed read, '
+          + 'or raise the max.',
+      },
+    };
+  }
   return {
-    rows,
+    rows: rows.slice(0, ceiling),
     error: { message: `readAll stopped at ${ceiling} rows; the query is probably not terminating.` },
   };
 }

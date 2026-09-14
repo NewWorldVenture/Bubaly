@@ -421,14 +421,16 @@ worker has audited yet is recorded as *not yet audited*, never as "clean" —
 | Public surface, SEO, entitlement, child sign-in | Pass A (F1–F22) | deep |
 | Data layer, RLS, grants, cron, query plans, money concurrency | Pass B (F-001–F-020) | deep |
 | Architecture / integration seams | Claude-1 | in progress — config contract, cron auth, service-role boundary done |
-| Frontend / UI / responsive / accessibility | Claude-2 | **not audited — worker hit the account session limit** |
-| Backend / API / auth / security | Claude-3 | **not audited — worker hit the account session limit** |
-| QA / flows / performance / edge cases | Claude-4 | **not audited — worker hit the account session limit** |
+| Frontend / UI / responsive / accessibility | Claude-2 | deep — `audit/claude-2.md`, consolidated as Pass D |
+| Backend / API / auth / security | Claude-3 | deep — `audit/claude-3.md`, consolidated as Pass E |
+| QA / flows / performance / edge cases | Claude-4 | deep — `audit/claude-4.md`, consolidated as Pass F |
 
-All three workers were launched and all three terminated with HTTP 429 (session
-limit) before writing a finding. Their files hold only templates. Nothing in this
-document is attributed to them, and their three areas stay marked *not yet
-audited* below rather than being quietly folded into the "clean" column.
+**Correction.** An earlier revision of this table said all three were "not
+audited — worker hit the account session limit". One dispatch of those workers did
+hit a 429, but other parallel sessions had already completed those passes and
+pushed them; this document carries them as Passes C–K. The stale line is recorded
+here rather than silently replaced, because a wrong coverage claim in an audit is
+the same defect as F13 — a reader trusts it and stops looking.
 
 # Executive Summary
 
@@ -494,6 +496,10 @@ highest-yield check in this repository.
 | CLAUDE-1 | `/api/health` reported `ok` while a missing `CRON_SECRET` silently 401'd all 24 scheduled jobs, and a missing `CHILD_LOGIN_SECRET` disabled child sign-in | fixed |
 | CLAUDE-1 | Five nightly jobs answered HTTP 200 while counting their own failures; no cron route writes a durable run record | fixed |
 | CLAUDE-1 | `i18n:gate` calls itself a CI gate and ran in no workflow, while this document listed it as a passing check | fixed |
+| CLAUDE-3 → CLAUDE-1 | Inbound email routed by an unescaped ILIKE wildcard from the sender's own `To` header, reaching another family's Contact Center | **fixed** |
+| CLAUDE-4 → CLAUDE-1 | `readAll` returned a truncated ledger with `error: null`; the wallet reconciliation page would report that a partly-read ledger balanced | **fixed** |
+| CLAUDE-2 → CLAUDE-1 | Google Calendar callback discarded both its read and write errors — reported "connected" with no token stored, and could wipe every other notification preference | **fixed** |
+| CLAUDE-2 → CLAUDE-1 | Blog unsubscribe confirmed consent it had not recorded, and told real subscribers their valid link was wrong | **fixed** |
 
 # Medium Priority
 
