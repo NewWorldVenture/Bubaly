@@ -213,7 +213,13 @@ export async function saveFamilyDetailsAction(input: {
       .from('profiles').select('display_name, full_name, email, phone').eq('id', auth.user.id).maybeSingle();
     await upsertOnboardingContact(admin, {
       userId: auth.user.id,
-      email: profile?.email ?? auth.user.email ?? null,
+      // The VERIFIED address first. `profiles.email` is a plain text column the
+      // owner may rewrite at will (profiles_update_self constrains the row, not
+      // its columns), and downstream this value is the key that decides WHICH
+      // crm_contacts row gets overwritten — through the service role, past
+      // admin-only RLS. Preferring it let someone point their profile at a
+      // stranger's address, or at a LIKE wildcard, and take that contact over.
+      email: auth.user.email ?? profile?.email ?? null,
       firstName: profile?.display_name ?? profile?.full_name ?? null,
       phone: profile?.phone ?? null,
       familyId: d.familyId,
@@ -231,7 +237,10 @@ export async function saveFamilyDetailsAction(input: {
     });
     await fireAutomationEvent(admin, {
       trigger: 'onboarding_completed',
-      email: profile?.email ?? auth.user.email ?? null,
+      // Verified first here too: runSteps sends `to: recipient.email` through
+      // Resend from the product's own FROM_EMAIL, so an unverified writable
+      // column decides who receives branded mail on our behalf.
+      email: auth.user.email ?? profile?.email ?? null,
       name: profile?.display_name ?? profile?.full_name ?? null,
       subjectKey: eventSubjectKey('onboarding_completed', [d.familyId]),
       context: { familyId: d.familyId, goals: cleanGoals(d.goals), referral_source: cleanReferralSource(d.referralSource) },
@@ -762,7 +771,8 @@ export async function finalizeOnboardingAction(input: {
       .from('profiles').select('display_name, full_name, email, phone').eq('id', auth.user.id).maybeSingle();
     await upsertOnboardingContact(admin, {
       userId: auth.user.id,
-      email: prof?.email ?? profile.email ?? auth.user.email ?? null,
+      // The verified address first — see the note on the other call site.
+      email: auth.user.email ?? prof?.email ?? profile.email ?? null,
       firstName: prof?.display_name ?? profile.firstName ?? null,
       lastName: profile.lastName ?? null,
       phone: prof?.phone ?? profile.phone ?? null,
@@ -786,7 +796,8 @@ export async function finalizeOnboardingAction(input: {
     });
     await fireAutomationEvent(admin, {
       trigger: 'onboarding_completed',
-      email: prof?.email ?? profile.email ?? auth.user.email ?? null,
+      // Verified first — see the note on the other call site.
+      email: auth.user.email ?? prof?.email ?? profile.email ?? null,
       name: prof?.display_name ?? prof?.full_name ?? profile.firstName ?? null,
       subjectKey: eventSubjectKey('onboarding_completed', [familyId]),
       context: { familyId, goals, referral_source: referralSource, value_engaged: valueEngaged, completeness },

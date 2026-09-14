@@ -4058,3 +4058,80 @@ unidentified single failure reported in Pass J).
 **Status: FIXED IN CODE, NOT YET IN PRODUCTION.** This is a migration, so like
 0296 and 0297 it is inert until the F5 ledger blocker is cleared. **The
 escalation is live in production until then.**
+
+---
+
+## Pass M — a CRM identity decided by a column its subject can rewrite
+
+**F-M01 — a stranger's `crm_contacts` row could be taken over and overwritten.**
+
+Generalised the ILIKE-wildcard class that `f462cc7e` had just fixed in inbound
+email routing ("the fix had not reached this call site"), and swept all 27
+`.ilike`/`.like` call sites. Most are family-scoped searches where a wildcard
+only broadens your *own* search — not a boundary. Three were not: identity
+lookups against `crm_contacts`, run through the **service role**, past
+admin-only RLS, where the matched row is the row that then gets **overwritten**.
+
+Two independent faults, each sufficient on its own:
+
+1. **The identity key was user-writable.** Both `upsertOnboardingContact`
+   callers resolved `email: profile?.email ?? auth.user.email`. `profiles.email`
+   is a plain `text` column, and `profiles_update_self` constrains *which row*
+   you may update, not *which columns* — so its owner sets it to anything,
+   including a stranger's exact address. No wildcard needed.
+2. **The pattern was unescaped.** That value went straight into
+   `.ilike('email', email)`, so `%` matched every contact and `.limit(1)` picked
+   one.
+
+**Measured** on a database replayed from the migrations, as `authenticated`:
+
+| Step | Result |
+|---|---|
+| attacker rewrites their own `profiles.email` to `%` | **1 row** |
+| server reads `profiles.email` (preferred over the verified address) | `%` |
+| `.ilike` matches a contact they never owned | **yes** |
+| service-role `update` overwrites the victim's row | **1 row** — `first_name=Attacker` |
+
+Controls, same session, proving `crm_contacts` stayed shut to ordinary users
+throughout — so the only way in is the service-role path the app itself takes:
+
+| Control | Result |
+|---|---|
+| rows an ordinary user can read | **0** |
+| rows changed by a direct write | **0** (value verified untouched afterwards) |
+
+A correction worth recording: my first version of that second control tested for
+an `insufficient_privilege` exception and reported "blocked: f". That was
+**wrong** — an UPDATE matching no RLS-visible row changes 0 rows and raises
+nothing. Re-measured on `ROW_COUNT`.
+
+**A third consequence, same root cause.** `fireAutomationEvent` took the same
+writable column, and `runSteps` sends `to: recipient.email` through Resend from
+the product's own `FROM_EMAIL` — so it also chose who receives branded mail on
+the product's behalf.
+
+**The fix.**
+- `lib/db/like.ts` — one `escapeLike`, used by all three identity lookups. It
+  escapes the **backslash** as well, and first: LIKE's default escape character
+  is the backslash, so a value containing one swallows the next character.
+  Measured: `'ab' ilike 'a\b'` is **true**. All four pre-existing local copies of
+  this helper escape only `%` and `_` and still have that hole; they are left
+  alone here rather than widening this change, and are worth consolidating next.
+- The verified `auth.user.email` now wins at all four call sites (two contact
+  upserts, two automation events). `saveUserProfile`'s own `email: profile.email`
+  is untouched — that is the user writing their own row, which is the point.
+
+Escaping alone would **not** have been enough: the exact-address takeover needs
+no wildcard. The preference change is the load-bearing half.
+
+**Verification.** 9 new tests; **4 fail against the original code**. Escaping
+behaviour checked against Postgres 16 directly, including that a *real*
+underscore still matches (`'j_hn@…' ilike E'j\\_hn@…'` → true), so legitimate
+addresses keep resolving. Full suite **13,678 / 13,678** under pinned UTC and
+`TZ=America/Los_Angeles`. `tsc`, eslint and the Supabase query audit clean.
+
+One run of the suite reported a single failure I did not capture before it
+scrolled; three subsequent full runs were green. Recorded as unidentified rather
+than assumed to be the known `api-ai-runs` flake.
+
+**Status: FIXED.** No migration, so it reaches production with the deploy.
