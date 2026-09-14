@@ -83,7 +83,10 @@ begin
   begin
     insert into public.transactions (family_id, account_id, name, amount)
     values (fam, acct, 'Pocket money', -50.00);
-  exception when others then blocked := true;
+  -- Only the RLS refusal proves the boundary. `when others` would report this
+  -- held after a future migration renames a column here — verified: renaming
+  -- `name` leaves the probe printing "money write boundary check passed".
+  exception when insufficient_privilege then blocked := true;
   end;
   if not blocked then raise exception 'a teen wrote a household transaction'; end if;
 
