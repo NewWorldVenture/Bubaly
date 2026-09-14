@@ -2241,3 +2241,72 @@ model), the crons and CSV exports (no reader whose language is known), the Super
 pages (the platform's own currency), and `lib/i18n`'s locale codes, which are data. The
 next pass should classify those explicitly rather than convert blindly, so the ceiling
 can stop at the honest floor instead of zero.
+
+---
+
+## Pass AG — classifying the last 123, and two things a sweep to zero would have broken
+
+### [CLAUDE-1][HIGH][I18N] A family's language choice cannot reach anything Bubaly sends them
+
+- **Status:** OPEN — **owner-owned**, needs a migration
+- **Evidence:** no locale column exists on any member or profile table. `git grep locale
+  -- supabase/migrations` returns only the AEO marketing-translation tables. The
+  preference lives in one place: `LOCALE_COOKIE = 'bubaly-locale'`
+  (`lib/i18n/locales.ts:54`).
+
+`lib/i18n/server.ts:47` states the design assumption in its own words — cron handlers
+and background jobs *"have no request and **no user to have a language preference**"*,
+so falling back to the default locale is *"the correct answer"*.
+
+**That assumption is false for eight sites across five files**, every one of which sends
+something to a family:
+
+| file | sites | what it sends |
+|---|---|---|
+| `lib/emails/weekly-digest.tsx` | 2 | the weekly digest **email** |
+| `lib/emails/notification-digest.tsx` | 1 | the notification digest **email** |
+| `lib/server/notifications.ts` | 3 | notification bodies |
+| `lib/notifications/deadline-reminders.ts` | 1 | deadline reminders |
+| `lib/moments/notify.ts` | 1 | moment notifications |
+
+A family switches Bubaly to German in the UI and every email and push it then receives
+is in English with US dates — and nothing in the product says so. Two further
+consequences of a cookie-only preference, worth stating because they are not about
+formatting at all: **the choice does not follow the user to a second device**, and it is
+lost when site data is cleared.
+
+**I cannot fix this.** Persisting a locale per member is a schema change, and migrations
+are the owner's (F-001 has the ledger gated regardless). What code *can* do once the
+column exists is thread it into these five files exactly as the component surfaces were
+threaded. Recorded rather than half-built, because a formatter that takes a locale no
+caller can supply is the "optional parameter nobody passes" that would make the ratchet
+lie.
+
+### The classification, so the ratchet can stop at an honest floor
+
+123 sites remain. **41 are correct as `en-US` and must not be converted:**
+
+| kind | sites | why en-US is right |
+|---|---|---|
+| `app/api/ai/*` prompt construction | 17 | read by the model, not a person — verified by reading `chat/route.ts:110`, which builds `fmtDate` inside the prompt |
+| `lib/ai/*` context and result builders | 13 | same |
+| Super Admin / operator pages | 9 | the platform's own books in its own currency |
+| **`lib/onboarding/ics-time.ts`** | **2** | **not a display formatter at all** |
+
+**`ics-time.ts` is the one a sweep to zero would have broken.** Its two
+`Intl.DateTimeFormat('en-US', …)` calls are a *mechanism*, not output:
+`resolvedOptions().timeZone` canonicalises an IANA zone name, and the second pins
+`calendar: 'gregory'`, `numberingSystem: 'latn'` and `hourCycle: 'h23'` to extract
+numeric parts for an ICS payload. Localising it could change the numbering system or the
+calendar under a parser that reads those parts positionally. A ratchet demanding zero
+would have forced someone to either break this or delete the guard.
+
+**82 are genuine defects**, and of those **8 are blocked** by the finding above. The
+remaining 74: `lib/` shared helpers reached by a family surface (54), family-facing pages
+(18), the activity feed's compact relative time, and the feedback board.
+
+### The honest floor is 41, not 0
+
+Recorded in `tests/hardcoded-locales-only-go-down.test.ts` so the next person converting
+knows where to stop, and knows which four categories to leave alone and why. A ratchet
+that demands zero where zero is wrong is a ratchet someone deletes.

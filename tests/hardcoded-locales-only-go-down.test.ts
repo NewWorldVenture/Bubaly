@@ -20,12 +20,29 @@
 // THE NUMBER MAY ONLY GO DOWN. If a change adds a hardcoded formatter this fails and
 // names the file; if a change converts one, lower the number in the same commit.
 //
-// Not every one of these is a defect, which is why this is a ceiling and not zero:
-//   * lib/i18n/* holds 'en-US' as the DEFAULT LOCALE CODE — data, not a formatter.
-//   * Crons, CSV exports and the text of a prompt sent to a model have no reader
-//     whose language is known; the source language is correct there.
-//   * Super Admin pages render to whoever operates Bubaly, in the platform's own
-//     currency — 16 of the 20 fmtMoney files are these.
+// components/ IS AT ZERO: every date, time and money value a component renders follows
+// the reader. What is left is app/ and lib/, and it has been classified rather than
+// assumed — THE HONEST FLOOR IS 41, NOT 0, and a ratchet that demands zero where zero is
+// wrong is a ratchet someone deletes. The four categories to leave alone:
+//
+//   17  app/api/ai/* prompt construction — read by the MODEL, not a person. Verified by
+//       reading chat/route.ts:110, which builds its fmtDate inside the prompt text.
+//   13  lib/ai/* context and result builders — same.
+//    9  Super Admin / operator pages — the platform's own books in its own currency.
+//    2  lib/onboarding/ics-time.ts — NOT A DISPLAY FORMATTER. Its two calls are a
+//       mechanism: resolvedOptions().timeZone canonicalises an IANA zone, and the second
+//       pins calendar 'gregory', numberingSystem 'latn' and hourCycle 'h23' to extract
+//       numeric parts for an ICS payload. Localising it could change the numbering
+//       system or calendar under a parser that reads those parts positionally. This is
+//       the one a sweep to zero would have BROKEN.
+//
+// Of the 82 genuine defects, EIGHT ARE BLOCKED and not by effort: a family's language
+// choice lives only in a cookie (LOCALE_COOKIE, lib/i18n/locales.ts:54) with no column
+// on any member or profile table, so the five files that send emails, pushes and
+// reminders cannot know the recipient's language. lib/i18n/server.ts:47 states that
+// assumption outright — background jobs have "no user to have a language preference" —
+// and the weekly digest email is the counterexample. Persisting it is a migration, which
+// is the owner's. See audit/claude-1.md, Pass AG.
 // Deciding which of the remaining fall in those categories is the conversion work.
 // This test does not pretend to know; it only refuses to let the total grow.
 //
