@@ -384,6 +384,15 @@ export async function disputeSubmissionAction(formData: FormData): Promise<void>
 /** Parent creates a chore (with AI/reward/safety config) and assigns it. */
 export async function createChoreAction(formData: FormData): Promise<void> {
   const ctx = await requireUserContext();
+  // "Parent creates a chore" is what the line above has always said, and until
+  // now nothing checked it. The sibling action in dashboard/chores/actions.ts
+  // opens with refuseUnlessManager and is pinned by a test; this one — reached
+  // from /missions, which gates on PLAN and never on role — did not. A chore is
+  // the price list for the chores economy (points, cash_cents,
+  // auto_approve_score), so authoring one is a manager's act. 0303 is the real
+  // boundary; this is the same rule where the screen's claim lives, so the
+  // control fails here rather than as an RLS error the form cannot explain.
+  if (!isManager(ctx.active.role)) return;
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
   const title = str(formData, 'title');

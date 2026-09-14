@@ -1067,3 +1067,517 @@ LAST-UPDATE: 2026-09-13
   per-family `loadCompareLine` reads into one cohort query outside the loop. The bounded-batch pattern
   in `provider-sync` is the in-repo precedent to copy.
 - **Status:** OPEN
+
+---
+---
+
+# ═══ SESSION 4 (2026-09-14) — Claude-4, NEW GROUND ═══
+
+Everything below this delimiter is from the third-session relaunch. Nothing
+above it is edited. Scope handed to me: broken/incomplete features · the UNHAPPY
+branches of each flow · edge cases · N+1 and index coverage · test quality
+proven by mutation. Explicitly excluded (already fixed or owned elsewhere):
+C-4-01/C-4-02 and PR #548's six, the 17 remaining server-midnight sites, the
+Guardian typed layer and screening validation, `.env.example` drift, the
+contact-centre double escalation, and the seven named RLS findings.
+
+**New capability this session:** a live PostgreSQL 16 with all 314 migrations
+replayed was already running on `127.0.0.1:54402` (database `bubaly`, 491
+tables) — Claude-3's harness. I used it READ-ONLY (`EXPLAIN`, `pg_indexes`,
+`pg_policy`, `pg_trigger`) and wrote nothing to it. That turned three index
+claims from "grep says so" into "the planner says so", and — just as usefully —
+**disproved one finding I had already written down** (see "Disproved" below).
+
+---
+
+## C-4-14
+
+```
+[CLAUDE-4][HIGH][FLOWS] The parent's Approve and Reject on a chore submission
+                        fail in complete silence — seven ways
+File:     app/(app)/missions/actions.ts:287-353
+          app/(app)/missions/review-card.tsx:104-118
+Problem:  `approveSubmissionAction` is typed `Promise<void>` and has SEVEN bare
+          `return;` statements, one per failure mode, none of which tells the
+          parent anything:
+
+            293  if (!isManager(ctx.active.role)) return;          not a manager
+            297  if (!submissionId) return;                        bad form data
+            300  if (!submission) return;                          row gone / wrong family
+            303  if (!assignment || !chore) return;                parent row deleted
+            306  if (!await setSubmissionStatus(...)) return;      the status write FAILED
+            310  if (disputeError) { rollback; return; }           the dispute write FAILED
+            322  catch { rollback; return; }                       finalizeApproval THREW
+
+          `revalidatePath('/missions')` and `revalidatePath('/kids')` are on the
+          success path only (324-325). So on every one of those seven branches
+          the server does nothing observable: no toast, no error, not even a
+          re-render. The spinner stops and the card sits exactly where it was.
+
+          `rejectSubmissionAction` (329), `disputeSubmissionAction` (355) and
+          `createChoreAction` (385) are the same shape — five, five and three
+          silent returns respectively. `disputeSubmissionAction` is the CHILD's
+          "that's not fair" button.
+Evidence: - Read all four function bodies end to end, not grepped. Every exit
+            that is not the final `revalidatePath` pair is a bare `return;`.
+          - Ruled out "the error surfaces elsewhere" three ways:
+            (a) the signature. `Promise<void>` has no channel to carry a
+                failure. The caller in review-card.tsx:104 is
+                `start(async () => { await approveSubmissionAction(fd); })` —
+                there is no value to inspect and it does not inspect one.
+            (b) nothing throws out of these functions. `finalizeApproval` does
+                throw, and line 317 catches it. `app/(app)/missions/error.tsx`
+                exists but an error boundary can only catch a throw, and none
+                escapes. I checked for `throw` in each body: none at top level.
+            (c) no toast/router hook in review-card.tsx — the file imports
+                `useTransition`, `useState`, icons, Badge, Avatar and the two
+                actions. No `useToast`, no `useRouter`.
+          - The CONTRAST is the proof this is a defect and not a house style:
+            `submitProofAction` in the SAME FILE (line 100) returns
+            `Promise<{ ok: boolean; error?: string }>` with eight distinct
+            messages, and `app/(app)/kids/submit/[assignmentId]/submit-form.tsx`
+            renders them (`{error && <p className="…text-danger">{error}</p>}`).
+            The CHILD is told why their submission failed. The PARENT is told
+            nothing when the approval fails.
+          - Double-submit is NOT the gap here: `useTransition`'s `pending`
+            disables all three buttons. That guard exists; the feedback does not.
+Impact:   The chore → complete → approve → points → reward loop is the product's
+          headline flow. A parent clicks Approve on a proof photo; if the wallet
+          credit, the status write, or the dispute resolution fails, the child
+          is never paid and the parent has no idea — the card just stays in the
+          queue. They will click again, which re-runs the same failing path.
+          Worst case is line 322: `finalizeApproval` threw AFTER the assignment
+          row flipped to approved, the rollback ran, and the queue silently
+          keeps the item — a reward that is owed, recorded nowhere, with no
+          error anywhere a human will look.
+Fix:      Change the four to `Promise<{ ok: boolean; error?: string }>` — the
+          shape `submitProofAction` in the same file already uses — give each
+          return its catalogue message, and have `ReviewCard` render it the way
+          `SubmitProofForm` does. `createChoreAction` needs the same before it
+          can be moved off `<form action={createChoreAction}>`.
+Status:   OPEN
+```
+
+---
+
+## C-4-15
+
+```
+[CLAUDE-4][HIGH][FEATURE/AUTHZ] The manager gate landed on ONE of the two
+                        chore-creation actions; a child owns the other one
+File:     app/(app)/missions/actions.ts:385-431   (ungated)
+          app/(app)/missions/new/page.tsx:21      (page: requireUserContext only)
+          app/(app)/missions/page.tsx:19          (page: requireFeature, plan not role)
+          cf. app/(app)/dashboard/chores/actions.ts (gated, and TESTED)
+Problem:  There are two independent server actions named `createChoreAction`.
+          The one in `dashboard/chores/actions.ts` calls `refuseUnlessManager`
+          twice and is locked in by `tests/chore-manager-only-writes.test.ts`.
+          The one in `missions/actions.ts` — reached from `/missions/new` —
+          has NO role check at all. It reads the form, inserts into `chores`,
+          and inserts `chore_assignments`.
+
+          Nothing behind it disagrees, either:
+            chores_insert            WITH CHECK is_family_member(family_id)
+            chores_update  / _delete USING      is_family_member(family_id)
+            chore_assignments_*      is_family_member(family_id)   (all four)
+          and neither page in front of it checks a role: `/missions/new` calls
+          plain `requireUserContext()`, `/missions` calls `requireFeature()`
+          which is a PLAN gate (lib/supabase/auth.ts:237-250 — plan level and
+          `off`, no role anywhere).
+
+          So a signed-in child can:
+            · open /missions/new and mint a chore, choosing its `reward_mode`,
+              `points`, `cash_cents`, `proof_required`, `requires_approval`
+              and `auto_approve_score`, assigned to themselves or a sibling;
+            · edit or DELETE any chore a parent created (chores_update/_delete);
+            · open /missions and read the whole family review queue — every
+              sibling's proof photos, every AI safety flag, every dispute
+              reason — with Approve/Reject buttons that (per C-4-14) do nothing
+              and say nothing.
+Evidence: - Read `createChoreAction` (missions) in full: 47 lines, no
+            `isManager`, no `refuseUnlessManager`, no role reference.
+          - Live catalogue, not grep:
+              psql … "select polname,polcmd,pg_get_expr(polqual,polrelid),
+                      pg_get_expr(polwithcheck,polrelid) from pg_policy
+                      where polrelid='public.chores'::regclass"
+            → chores_insert `a` WITH CHECK is_family_member(family_id); update
+              `w`, delete `d` both USING is_family_member(family_id). Same four
+              for chore_assignments.
+          - Ruled out a database trigger catching it:
+              pg_trigger on chores / chore_assignments → trg_set_updated_at ×2
+              and trg_chore_assignment_decision_guard. I read the guard's
+              definition: it fires ONLY on `new.status in ('approved','rejected')`
+              and it exempts `service_role`. It does not touch INSERT of a
+              todo assignment and it does not touch `chores` at all.
+          - Ruled out "the page is unreachable for a child": `/missions` has no
+            role gate and `app/(app)/missions/layout.tsx` is `<AppFrame>` only.
+            `family_members` shows what a role gate looks like when it is
+            present — fm_insert/_update/_delete are all `can_manage_family`.
+          - The precedent is in the repo and names this exact reasoning.
+            `tests/chore-approval-authz.test.ts` locks the `isManager` line into
+            `approveSubmissionAction` and `rejectSubmissionAction` — in THIS
+            file — with the rationale "RLS on chore_submissions is family-scoped
+            (any member, including the child who submitted), so the ONLY thing
+            stopping a child … is the app-level manager gate in these server
+            actions." That argument is true word-for-word of `chores` and
+            `chore_assignments`, and the gate was never extended to them.
+            `tests/chore-manager-only-writes.test.ts` then closed the identical
+            hole on the dashboard board — and did not look at this file.
+Impact:   A child can author the family's chore catalogue and its rewards, and
+          can delete chores they were assigned (the chore, and the record that
+          it was ever owed, both vanish — the exact harm that test calls out).
+          The self-payment chain is reachable but not unconditional: a
+          self-created chore with `proof_required: 'none'` and
+          `auto_approve_score: 0` goes to `submitProofAction`, whose
+          auto-approve branch runs `finalizeApproval` under the SERVICE ROLE
+          (missions/actions.ts:216), which is precisely what the decision-guard
+          trigger exempts — so `points_awarded`, `cash_awarded_cents`, XP,
+          streak and badges are all written on the child's own say-so. The one
+          remaining brake is the AI verdict (`lib/chores/ai.ts:80`), and the
+          child controls the title, instructions and note it judges. Real cash
+          still needs a parent to press Pay (`payChoreRewardAction` IS
+          `isManager`-gated) — but that button pays `cash_awarded_cents`, which
+          by then is a number the child chose.
+Fix:      Add `if (!isManager(ctx.active.role)) return { ok:false, error: … }`
+          to `createChoreAction` in `app/(app)/missions/actions.ts` (together
+          with C-4-14's result type), add a manager check to
+          `app/(app)/missions/new/page.tsx` and `app/(app)/missions/page.tsx`,
+          and extend `tests/chore-approval-authz.test.ts` to cover
+          `createChoreAction` in the file it already reads. The durable fix is
+          the RLS half — `chores` and `chore_assignments` write policies moved
+          to `can_manage_family` — which is Claude-3/Claude-1 territory and is
+          flagged to them rather than claimed here.
+Status:   OPEN
+```
+
+---
+
+## C-4-16
+
+```
+[CLAUDE-4][HIGH][GUARDIAN/EDGE CASE] Two families may hold the same Guardian
+                        number, and then every inbound call, SMS and WhatsApp
+                        to it is dropped and marked handled
+File:     app/(app)/guardian/actions.ts:277-286   (the clash check)
+          app/api/guardian/inbound/voice/route.ts:70-79
+          app/api/guardian/inbound/sms/route.ts:57-65
+          app/api/guardian/inbound/whatsapp/route.ts:64-…
+Problem:  `assignGuardianPhoneAction` takes a FREE-TEXT phone number from a
+          parent (components/guardian/guardian-number-form.tsx:22-28 is a plain
+          controlled input) and guards against a clash like this:
+
+            .from('guardian_member_profiles').select('member_id')
+            .eq('family_id', familyId)          ← scoped to ONE family
+            .eq('guardian_phone', phone)
+            .neq('member_id', input.member_id).maybeSingle()
+
+          There is no global uniqueness — not in the app and not in the
+          database. The three inbound Twilio webhooks then resolve the family
+          the other way round, ACROSS all families, under the service role:
+
+            .eq('guardian_phone', to).eq('is_active', true).maybeSingle()
+
+          With two matching rows `maybeSingle()` returns `data: null` and a
+          PGRST116 error. All three routes destructure `{ data: memberProfile }`
+          and discard the error, so `!memberProfile` is taken to mean "unknown
+          number": the SMS route calls `markGuardianCallbackProcessed` and
+          answers 200, and the voice route sends the caller to voicemail.
+Evidence: - Live catalogue: `select indexname, indexdef from pg_indexes where
+            tablename='guardian_member_profiles'` → exactly three:
+            `_pkey (id)`, `_family_id_member_id_key (family_id, member_id)`,
+            and nothing else. No unique constraint on `guardian_phone`, no
+            index on it.
+          - The two sides genuinely disagree about scope. The writer uses
+            `createServer()` (RLS-bound — it could not see another family even
+            if the `.eq('family_id')` were removed); the readers use
+            `createServiceClient()` (sms/route.ts:47), which sees every family.
+            So this cannot be fixed in the action: only a database constraint
+            can see both families at once.
+          - `maybeSingle()`'s >1-row behaviour verified in the installed
+            library, not assumed:
+            node_modules/@supabase/postgrest-js/src/PostgrestBuilder.ts:519-531
+              `if (this.isMaybeSingle && Array.isArray(data)) {
+                 if (data.length > 1) { error = { code: 'PGRST116', … };
+                                        data = null; status = 406 } … }`
+            — so `data` is null and the discarded `error` is the only witness.
+          - Ruled out "Bubaly provisions the number so a collision cannot
+            happen": the value comes from `input.phone` typed by a parent and
+            is only normalised to E.164 (actions.ts:264-274). Any parent can
+            type any number, including one another family already uses — by
+            mistake (their own mobile) or deliberately.
+          - Ruled out an upstream guard: the routes' only checks before the
+            lookup are the Twilio signature, `isValidGuardianEventId(smsSid)`
+            and `!to`. Nothing counts profiles.
+Impact:   Cross-tenant and silent. Family B typing a number family A already
+          uses takes family A's Guardian offline — scam screening, elder-call
+          routing, voicemail — with no error on either side, no log, and Twilio
+          told 200 so nothing is retried. Guardian is a safety feature; the
+          failure mode is "the call just never arrives".
+Fix:      `create unique index concurrently uq_guardian_profiles_phone on
+          public.guardian_member_profiles (guardian_phone) where guardian_phone
+          is not null;` (attempted-not-forced, in the style of 0285's
+          `uq_subscriptions_family` block, so it reports rather than deletes if
+          duplicates already exist), surface the 23505 in
+          `assignGuardianPhoneAction` as "that number is already in use", and
+          stop discarding the read error in all three inbound routes —
+          `if (profileError) return 503` so Twilio retries instead of the event
+          being consumed. The index also fixes C-4-17's second instance.
+Status:   OPEN
+```
+
+---
+
+## C-4-17
+
+```
+[CLAUDE-4][MEDIUM][PERF] Three hot predicates have no usable index at all —
+                        proven by the planner, not by reading migrations
+File:     app/(auth)/actions.ts:125 and
+          app/(app)/family/child-login-actions.ts:46   (child_logins.username)
+          app/api/guardian/inbound/{voice,sms,whatsapp}/route.ts
+                                                       (guardian_phone)
+          lib/wallet/server.ts:171 and :190            (wallet_transactions.stripe_ref)
+Problem:  Each of these is a service-role query (no RLS predicate to help the
+          planner) on a table that spans every family on the platform, and each
+          one has to scan the whole table.
+
+          1. `child_logins` — EVERY child sign-in.
+             The only username index is
+             `create unique index idx_child_logins_username_lower … (lower(username))`
+             (migration 01051:26). Both call sites query `.eq('username', …)`,
+             which emits `username = $1`. An expression index on
+             `lower(username)` cannot serve that predicate.
+          2. `guardian_member_profiles.guardian_phone` — EVERY inbound call,
+             SMS and WhatsApp. No index contains the column (see C-4-16).
+          3. `wallet_transactions.stripe_ref` — the Issuing idempotency read in
+             `debitCardSpend` and the `releaseCardHold` UPDATE. No index
+             contains the column; `wallet_transactions` is the fastest-growing
+             money table in the schema.
+Evidence: Run against the replayed PG16 on 127.0.0.1:54402/bubaly, read-only.
+          The test is deliberately hostile to my own claim: `enable_seqscan=off`
+          charges a sequential scan 1e10, so if ANY index could serve the
+          predicate the planner would take it.
+
+            set enable_seqscan=off;
+            explain select username from public.child_logins
+              where username = 'alice' limit 1;
+            →  Seq Scan on child_logins  (cost=1e10..1e10+16.50)
+                 Filter: (username = 'alice'::text)
+
+            -- control, same table, same session:
+            explain select username from public.child_logins
+              where lower(username) = 'alice' limit 1;
+            →  Index Scan using idx_child_logins_username_lower (cost=0.15..8.17)
+                 Index Cond: (lower(username) = 'alice'::text)
+
+            set enable_seqscan=off;
+            explain select id from public.guardian_member_profiles
+              where guardian_phone='+15551234567' and is_active;
+            →  Seq Scan on guardian_member_profiles (cost=1e10..1e10+13.25)
+
+          `select indexdef from pg_indexes where tablename='wallet_transactions'`
+          → `_pkey(id)`, `(family_id, child_wallet_id, created_at desc)`,
+            `(family_id, status)`, `(bucket_id)`. `stripe_ref` appears in none.
+
+          Ruled out: (a) case normalisation making the `lower()` index usable —
+          `normalizeUsername` (lib/onboarding/child-login.ts:12) lowercases both
+          on write and on read, so every stored value already equals its own
+          `lower()`, and the planner STILL cannot use the expression index for a
+          bare-column predicate; that is what the control query above shows.
+          (b) RLS supplying the missing leading column — all three call sites
+          use `createServiceClient()`, so no policy predicate is added.
+          (c) the money case being a correctness bug as well — it is not: the
+          Issuing webhook dedupes on the Stripe event id via `recordEvent`'s
+          claim token (app/api/webhooks/money/route.ts:52-60), so the
+          unindexed `stripe_ref` read is belt-and-braces, not the only guard.
+          This is a cost finding, not a double-debit finding.
+
+          The residual inventory, for completeness — 26 further equality
+          predicates hit no index, but every one is an admin console page over a
+          small table (`crm_lead_scores.band`, `subscriptions.status`,
+          `marketing_*.status/deleted_at`, `sync_*`, `invites.status`,
+          `profiles.email`) or a genuinely low-frequency route
+          (`blog_subscribers.unsubscribe_token` — one-click unsubscribe, a
+          compliance path worth an index but not a hot one). Method:
+          every `.from('t')…eq/in/match('c')` chain in `app/` and `lib/`
+          cross-referenced against every key column of every index in the live
+          catalogue (`pg_index.indkey`, not just the leading column — the first
+          pass used the leading column only and over-reported, see "Disproved").
+Impact:   (1) is the worst: a full table scan of a platform-wide table on every
+          child sign-in AND on every FAILED attempt, so the brute-force
+          throttle's own bookkeeping is the cheap half of a request whose
+          expensive half the attacker triggers for free. (2) sits inside
+          Twilio's real-time window with a caller on the line. (3) grows without
+          bound with transaction volume, and the `releaseCardHold` instance is
+          an UPDATE, so it scans on the write path too.
+Fix:      Three indexes, all additive and safe to run concurrently:
+            create index concurrently … on public.child_logins (username);
+              -- or change both call sites to `.eq('username', …)` against a
+              -- normalised column with a plain unique index; the expression
+              -- index can then be dropped. One or the other, not neither.
+            create unique index concurrently … on public.guardian_member_profiles
+              (guardian_phone) where guardian_phone is not null;   -- also C-4-16
+            create index concurrently … on public.wallet_transactions
+              (stripe_ref) where stripe_ref is not null;
+Status:   VERIFIED (planner output above; no source or database modified)
+```
+
+---
+
+## C-4-18
+
+```
+[CLAUDE-4][MEDIUM][FLOWS] A removed family member is silently handed a brand-new
+                        empty family instead of being told they were removed
+File:     lib/supabase/auth.ts:185-206      (requireUserContext)
+          lib/server/ensure-family.ts:54-92 (ensureActiveFamily)
+          components/modules/family-module.tsx:457 (the removal itself)
+Problem:  Removing a member is `update({ is_active: false })` on their
+          `family_members` row, issued straight from the client. Their session
+          is untouched and nothing notifies them.
+
+          On their next page load `getUserContext()` finds no ACTIVE membership
+          and returns `needsFamily`. `requireUserContext` treats that as a
+          brand-new signup — "Never trap a signed-in user in an onboarding
+          loop" — and calls `ensureActiveFamily`, which checks only
+          `.eq('is_active', true)` (ensure-family.ts:65), sees none, and
+          provisions a NEW family via `ensure_family_for_user` with the user as
+          its parent. They land on a dashboard that looks like theirs and is
+          completely empty.
+Evidence: - Read all three files end to end. The `is_active` filter in
+            `ensureActiveFamily` is the whole of it: a deactivated membership is
+            indistinguishable from never having had one.
+          - Ruled out an interstitial: there is no "you were removed" screen,
+            no check for an inactive membership anywhere on the path, and no
+            notification write in the removal handler (family-module.tsx:455-457
+            is `update` + a local state refresh, nothing else).
+          - Ruled out the removal being manager-only-and-therefore-rare as a
+            mitigation — it is correctly manager-only (pg_policy on
+            `family_members`: fm_update/_delete/_insert are all
+            `can_manage_family`), which makes this the NORMAL path, not an edge
+            one. The super-admin console does the same at
+            app/(app)/admin/actions.ts:164.
+          - The one thing I could not settle from the code: whether the new
+            family also starts a fresh 5-day trial. `computeEntitlement` keys
+            off `families.trial_ends_at`, and `ensure_family_for_user` is an
+            RPC I read only through its call site, so I am not claiming it.
+Impact:   A removed co-parent, teen or caregiver sees no message, no
+          explanation, and no trace of the family they were in — just an empty
+          Bubaly that looks like a fresh install. Every support ticket this
+          produces starts with "all my family's data is gone". The person who
+          removed them also gets no confirmation that anything reached them.
+Fix:      In `requireUserContext`, before provisioning, look for an INACTIVE
+          membership (`family_members` where `user_id = …` with no `is_active`
+          filter). If one exists, render a "you're no longer part of <family>"
+          screen with sign-out and "start my own family" rather than silently
+          provisioning. `ensureActiveFamily` already uses the service client, so
+          the extra read is one query on a path that already runs several.
+Status:   OPEN
+```
+
+---
+
+## Disproved this session — recorded so nobody re-derives them
+
+These looked like findings, and the evidence killed them. Each is here because
+the wrong version is easy to re-derive from a grep.
+
+- **"14 vacation tables are seq-scanned per concierge request."**
+  `app/api/vacations/ai/route.ts:61-74` reads fourteen `vacation_*` tables
+  filtering on `vacation_id` alone, and every index on those tables LEADS with
+  `family_id`. That is not enough to conclude anything. The planner:
+  `set enable_seqscan=off; explain select * from vacation_flights where
+  vacation_id = …` → `Index Scan using idx_vacation_flights_trip`,
+  `Index Cond: (vacation_id = …)`. Postgres will use a multi-column btree with
+  a non-leading equality column. Worse for my draft finding: with the RLS
+  predicate in place the plan is a nested loop whose inner Index Cond is
+  `(family_id = family_members.family_id AND vacation_id = …)` — a fully
+  indexed lookup. The route is fine, and "the leading column must match" is the
+  wrong rule. My first sweep used it and over-reported by an order of magnitude;
+  the numbers in C-4-17 come from the corrected sweep (any key column of any
+  index) plus per-case `EXPLAIN`.
+- **`tests/display-render.test.ts` — eight `it` blocks whose only assertion is
+  `expect(() => render(…)).not.toThrow()`.** This matches the "test that cannot
+  fail" shape exactly and is not one. The file's subject IS totality: a client
+  component that throws during SSR is caught by the route error boundary and
+  retried forever (the "Reconnecting…" loop the header documents), and React
+  error boundaries cannot catch an SSR throw. `not.toThrow()` is the behaviour
+  under test, not a weak stand-in for one. Sound as written.
+- **A child stuck behind the trial paywall with no way forward.**
+  `TrialPaywallGate` replaces the whole `(app)` tree for every member, and its
+  Choose buttons POST to `/api/billing/checkout`, which is `isAdmin`-only. But
+  the 403 body is `checkout.onlyAParentCanStart` = "Only a parent can start a
+  subscription." (lib/i18n/messages/en-US.json:3002, present in every locale),
+  the gate renders it through `toastError`, and both Log out (a real POST form,
+  not a link) and Close account are available. It says the right thing.
+  `closeAccountAction`/`reopenAccountAction` are both `isAdmin`-gated, so a
+  child cannot close the family's account from that screen either.
+- **`persistSubscription` drops a subscription event with no `family_id`.**
+  `app/api/webhooks/stripe/route.ts:20` is `if (!familyId) return;` and the
+  event is then marked processed — a family could pay and get nothing. I could
+  not find a path that produces such an event: both places that create a
+  subscription set it (`checkout/route.ts:95` and `change-plan/route.ts:176`
+  pass `subscription_data: { metadata: { family_id } }`, and the in-place
+  update at change-plan:122 re-sends `metadata: { family_id }`), and Stripe
+  preserves subscription metadata across updates. Left alone.
+- **A double-debit race on `debitCardSpend`'s unindexed `stripe_ref` read.**
+  Read-then-insert with no unique constraint is the classic shape, but
+  `/api/webhooks/money` claims every event through `recordEvent` first
+  (route.ts:52-60) and an active concurrent delivery is acknowledged without
+  repeating side effects. The idempotency is held one level up. Only the cost
+  survives, and it is in C-4-17.
+- **A second `subscriptions` row breaking `change-plan`.** `maybeSingle()` at
+  change-plan/route.ts:96 errors on two rows and answers 503 forever, while the
+  webhook was deliberately hardened for duplicates (update-then-insert). Real,
+  but migration 0285 already states this in its own text ("`use-billing-
+  subscription.ts` reads it with `.maybeSingle()`, which errors outright on a
+  second row") and creates `uq_subscriptions_family` when it can. Present in the
+  live catalogue. Not a new finding.
+- **Missing double-submit guards.** Swept all 441 client components for "calls a
+  server action, renders no `disabled=`". 121 candidates, and the money/reward
+  ones are guarded: `ReviewCard` disables all three buttons on `useTransition`'s
+  `pending`, `SubmitProofForm` disables on `pending`, `TrialPaywallGate` guards
+  on `busy` and returns early. The double-submit risk is not where the damage
+  is; the missing FEEDBACK is (C-4-14).
+- **N+1 in request-path loops.** Re-ran the await-in-loop sweep over
+  `app/(app)` and `app/api` excluding cron. Everything that survived reading is
+  either a pure JS reduction the regex mistook for a query loop
+  (`dashboard/moments/page.tsx:61`, `playbook-actions.ts`), a chunked
+  `i += 500` insert, or already logged as C-4-03. The one new loop with real
+  awaits, `app/(app)/wallet/actions.ts:80`, is one-time wallet provisioning
+  bounded by family size and idempotent on retry (all three writes are upserts
+  with an `onConflict` target). No new finding.
+- **`grandparent-portal` fanning out per household.** `Promise.all` over
+  `ctx.memberships` — bounded by how many families one grandparent belongs to,
+  and the comment explains why it is per-household (failure isolation). Fine.
+
+---
+
+## Method (session 4)
+
+- Read `audit/status.md` and my own file first; nothing here restates C-4-01…13
+  or anything on PR #548's closed list.
+- Live PG16 at `127.0.0.1:54402/bubaly` used READ-ONLY for every schema claim:
+  `pg_indexes`, `pg_index.indkey`, `pg_policy`, `pg_trigger`,
+  `pg_get_functiondef`, and `EXPLAIN` under `set enable_seqscan=off` so that a
+  "no usable index" claim is the planner's and not mine. No `insert`, `update`,
+  `create` or `drop` was issued — the harness belongs to Claude-3.
+- Four scripted sweeps, all in the scratchpad, none in the repo: sequential
+  independent awaits in server components; per-row async fan-out
+  (`Promise.all(rows.map(async …))`); every `.from(t)…eq/in/match(c)` predicate
+  against every index key column; `void` server actions with ≥2 bare returns;
+  plus a client-component double-submit sweep and a weak-assertion sweep over
+  all 1,194 test files.
+- Every finding was then confirmed by reading the whole function or route, and
+  each one carries the alternative I ruled out and how. Seven candidates died
+  that way and are written up above rather than dropped.
+
+**Not reached.** No running app and no browser, so the flow claims are from the
+code and the schema, not from clicking. I did not mutate any source file to
+prove a test vacuous — one shared working tree with three other workers in it
+made that the wrong trade; where I needed non-vacuity I used the live catalogue
+or the absence of any importing test instead (C-4-15 cites
+`tests/chore-approval-authz.test.ts` reading the very file whose third action it
+does not cover).
+
+**No source code was modified. No database row was written.**

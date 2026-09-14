@@ -1502,3 +1502,72 @@ Guard:    tests/a-failed-read-is-not-an-empty-table.test.ts is a RATCHET and say
           pass by finding nothing. Non-vacuity proven: reverting the conflicts
           page fails two of the four cases.
 ```
+
+## A3-018 — Claude-3's and Claude-4's chore CRITICAL, reached from two directions
+
+```
+[CLAUDE-1][CRITICAL][RLS/MONEY] A child could rewrite the price of their own chores, and every payout path read the price back off the row they rewrote
+Path:     public.chores (chores_update) · public.chore_assignments (chore_assignment_decision_guard)
+          · app/(app)/wallet/actions.ts:205 · app/(app)/missions/actions.ts:203-262
+          · lib/rewards/points.ts:29 · lib/chores/logic.ts:85
+Source:   Claude-3 ([CLAUDE-3][CRITICAL][RLS/MONEY], proven live) and Claude-4
+          ([CLAUDE-4][HIGH] C-4-15, from the app side) found this in the same
+          window from opposite directions. Claude-4 explicitly deferred the RLS
+          half as overlapping Claude-3's area rather than claiming it — the
+          collision rule working as intended.
+Problem:  The chores economy's PRICE LIST is `public.chores` (points, cash_cents,
+          cash_min/max_cents, points_min/max, reward_mode, auto_approve_score)
+          and the amount paid is `chore_assignments.points_awarded` /
+          `.cash_awarded_cents`. Both were UPDATE-able by `is_family_member` —
+          by the child who gets paid.
+          Three cash-out paths re-read the tampered value instead of re-deriving
+          it: payChoreRewardAction takes `assignment.cash_awarded_cents ??
+          chore.cash_cents` with no upper bound (evaluateTrust's cap is an opt-in
+          policy row that does not exist by default); auto-approve fires as soon
+          as `quality_score >= chore.auto_approve_score`, which was child-writable,
+          and then stamps the payout under the SERVICE ROLE; and the points
+          balance is Σ points_awarded over approved assignments, which is what
+          reward redemptions spend.
+Evidence: Verified independently here before acting. `pg_policies` showed
+          `chores_update` and `chore_assignments_update` both
+          `is_family_member(family_id)` on qual AND check.
+          `pg_get_functiondef(chore_assignment_decision_guard)` showed 0223's
+          body guards `new.status` only, inside
+          `new.status is distinct from old.status` — so an UPDATE changing ONLY
+          `cash_awarded_cents` on an already-approved row never entered the
+          branch. Claude-3's live run: "CHILD set cash_awarded_cents on its own
+          APPROVED assignment rows=1 (decision guard did NOT fire)".
+          And `app/(app)/missions/actions.ts:385` carried the doc comment "Parent
+          creates a chore" with no role check at all, while /missions gates on
+          PLAN and never on role.
+Fix:      0303, and deliberately NOT the same shape for the two tables.
+          · `chores` is authored by a parent and read by everyone: writes become
+            can_manage_family outright, reads stay family-wide.
+          · `chore_assignments` is different — a member MUST still move their own
+            assignment through the member statuses and record ai_score and
+            submitted_at on submit. So the restriction is BY COLUMN: the decision
+            guard now also refuses a non-manager touching points_awarded,
+            cash_awarded_cents, approved_by or approved_at, on INSERT or UPDATE,
+            whether or not status moved. Verified no legitimate path writes them:
+            every insert sets only family_id/chore_id/member_id/due_at, and the
+            submit path sets only ai_score and submitted_at.
+          Plus the app-layer half Claude-4 named: `isManager` on the missions
+          `createChoreAction`, where the screen's claim lives, so a refusal can
+          be explained instead of arriving as an RLS error the form cannot
+          render.
+Status:   FIXED — migration 0303
+Guard:    docs/audit/chore-price-write-boundary-check.sql asserts the price
+          rewrite, the chore mint, the parent's-chore delete, the self-approval,
+          all three payout-column writes WITHOUT a status change, and the
+          payout-already-filled INSERT — and separately re-reads the stored
+          values, so none of it can pass on a row that merely went unmatched. It
+          also asserts what still works: the child submits their own chore with
+          ai_score and submitted_at, and the parent approves and prices it.
+          Non-vacuity proven by restoring both the old policies and 0223's guard
+          body — the probe then fails at "a child rewrote the chore price list".
+          24/24 probes with it in place.
+          tests/chore-price-is-a-managers-to-write.test.ts pins the app half,
+          scoped to the function body up to its first write (this file has
+          several isManager checks belonging to other actions — which is how the
+          missing one was overlooked). Removing the check fails it.
+```

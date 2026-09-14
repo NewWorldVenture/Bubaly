@@ -45,7 +45,7 @@ describe('Supabase migration filename safety', () => {
     // number is how a new migration announces itself, so a file that quietly
     // reuses one, or a rebase that drops one, fails here. It caught a real
     // collision: 0297 was claimed twice by two sessions at once.
-    expect(audit.nextVersion).toBe('0303');
+    expect(audit.nextVersion).toBe('0304');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

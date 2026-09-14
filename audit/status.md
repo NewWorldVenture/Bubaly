@@ -76,28 +76,173 @@ NOTE FOR OTHER WORKERS:
 LAST-UPDATE: 2026-09-13
 
 ## Claude-2
-CURRENT: RUNNING — launched by Claude-1 as a parallel worker. Status block lives at the top of audit/claude-2.md; mirrored here on completion.
+CURRENT: COMPLETED session 5 (2026-09-14). Frontend/UI/UX/responsive/a11y. Seven new
+  findings appended to audit/claude-2.md under the SESSION 5 delimiter (C2-18..C2-24),
+  plus ten areas recorded as verified clean. No source file was modified.
 COMPLETED:
-NEXT:
+  - HIGH  C2-18 The whole 13,458-key en-US catalogue ships as JS on EVERY page
+    (818 KB raw / 244,556 B gzip). 62.4% of the marketing home page's first-load
+    JS, 52.9% of /login, 48.6% of /dashboard. Root cause is one line:
+    translate()'s `?? SOURCE_MESSAGES[key]` in lib/i18n/messages.ts:129 keeps
+    en-US.json alive in the client chunk that carries LocaleProvider, which sits
+    in the ROOT layout's chunk list. This defeats the lib/i18n/scopes.ts work,
+    which cut the same catalogue out of the RSC payload only. Numbers are gzip of
+    the union of .next/app-build-manifest.json chunk lists down each layout chain.
+  - MED   C2-19 Fifteen create/edit forms await a Supabase write with no pending
+    state and no re-entrance guard -> double-tap writes the row twice, and nothing
+    acknowledges the first tap. 14 files across components/modules and
+    components/vacations. Four of them already use `loading={busy}` on their AI
+    button, so the pattern is known and just missing on the primary write.
+  - MED   C2-20 The shared `Field` wrapper (1,066 call sites, 124 files) wires no
+    aria-invalid and no aria-describedby; 61 hints and 13 error messages are
+    visually adjacent but programmatically unlinked. Fixable in one file via
+    cloneElement, no call-site churn.
+  - MED   C2-21 Fifteen text inputs kill the focus outline with nothing in its
+    place — verified against Tailwind focus-within ancestors, the one CSS
+    focus-within rule (.ai-composer), tabIndex={-1} containers and scanner
+    mis-attribution. Distinct from C2-15.
+  - MED   C2-22 The i18n gate's 'app-shell' surface scans ONE file, not the
+    components that file renders. quick-capture.tsx + command-bar.tsx carry ten
+    English strings (the four capture tabs, their placeholders, "Undo") on all 354
+    signed-in pages. Confirmed with the project's own scanner.
+  - LOW   C2-23 Toasts auto-dismiss on a fixed timer with no pause on hover/focus
+    (WCAG 2.2.1); the three Undo toasts are the only undo path for a capture and
+    sit at the very end of the tab order.
+  - LOW   C2-24 The global reduced-motion reset zeroes duration but omits
+    animation-iteration-count, so 185 infinite spinners keep cycling. The 10 places
+    that add motion-reduce:animate-none by hand are the tell.
+  VERIFIED CLEAN (items 9-18 in audit/claude-2.md, do not re-derive):
+    prefers-reduced-motion IS honoured globally; lucide-react/date-fns are already
+    barrel-optimised by Next 15.5's DEFAULT optimizePackageImports list (adding the
+    option changes nothing); dark/light tokens are complete AND `dark:` variants do
+    fire (theme-script always adds a literal light|dark class); no fixed width or
+    min-w anywhere causes horizontal scroll at 375px; the shared Modal is a correct
+    mobile bottom sheet and DOES restore focus to the trigger; loading/error states
+    are wired on 107/111 realtime surfaces; toast live-region roles are right;
+    Button meets 44px on coarse pointers; RTL is a non-issue today and correctly
+    prepared (all 11 locales are ltr, <html dir> is wired); signup-form is the model
+    the other forms should copy.
+NEXT: nothing in flight. If a later pass wants ground I did not reach: measured
+  colour contrast, real tab order and screen-reader output all need a running
+  browser, which this pass did not have.
 FILES-TOUCHED:
+  - audit/claude-2.md (append only, SESSION 5 block), audit/status.md (this section)
+  - NO source file was read-modified. Audit-only, per the parallel-run protocol.
 BLOCKERS:
-LAST-UPDATE:
+  - No browser. C2-23 and C2-24 each say explicitly which half is code-derived
+    rather than observed; nothing else depends on execution.
+  - No `next build` was run on purpose — four workers share one .next. C2-18's
+    numbers come from the existing build (2026-09-13 13:44), which was sufficient.
+LAST-UPDATE: 2026-09-14
 
 ## Claude-3
-CURRENT: RUNNING — launched by Claude-1 as a parallel worker. Status block lives at the top of audit/claude-3.md; mirrored here on completion.
-COMPLETED:
-NEXT:
-FILES-TOUCHED:
-BLOCKERS:
-LAST-UPDATE:
+CURRENT: DONE (session 3, 2026-09-14) — new-ground pass on backend / API / DB / auth / security.
+  All findings appended under the "SESSION 3" delimiter in audit/claude-3.md. Audit-only:
+  no source file, migration or test was modified.
+HARNESS: private PG16 on PGHOST=/tmp/pg3 PGPORT=54403 PGUSER=postgres PGDATABASE=bubaly.
+  315 migrations applied / 0 failed (installed postgresql-16-pgvector, so 0237 and its two
+  dependants replay too — the earlier harness skipped them). SEED_ALL applied.
+  docs/audit/run-probes.sh 23/23 PASS before probing. Every RLS finding was run as a real
+  `authenticated` session, i.e. what PostgREST does for a browser holding the anon key.
+COMPLETED (9 new findings — 1 CRITICAL, 4 HIGH, 3 MEDIUM, 1 LOW; none overlap PR #548/0296-0301):
+  - CRITICAL economy_redemptions: the INSERT policy lets a CHILD write their own redemption
+    row with any `cost`, `member_id` and `status`, and economy_decide_redemption() debits
+    `v_redemption.cost` instead of the reward's cost. Proven: child redeemed a 5000-star
+    reward for 1 star; also forged a `fulfilled` row with decided_by=parent, and billed a
+    parent's balance. Sibling table reward_redemptions HAS a decision-guard trigger; this
+    one does not.
+  - HIGH subscriptions/families: `subs_manage` grants ALL to is_family_admin, and
+    subscriptions.plan/status is exactly what resolveEntitlement()/resolveFamilyPlanLevel()
+    sum into paidLevel. Proven: an expired-trial parent self-granted plus_annual/active,
+    rewrote families.trial_ends_at, and cleared families.closed_at. No client code writes
+    this table — the privilege is pure excess.
+  - HIGH billing: billing_customers.customer_ref and subscriptions.provider_ref are
+    client-writable and are passed straight to stripe.billingPortal.sessions.create() and
+    stripe.subscriptions.update() with NO ownership check against Stripe. change-plan also
+    rewrites metadata.family_id, which is the field the webhook trusts.
+  - HIGH health: 9 tables (health_visits, immunizations, symptom_logs, health_metrics,
+    health_goals, care_log, sleep_logs, sleep_checkins, nutrition_logs) are still one
+    permissive `FOR ALL … is_family_member`. 0299 fixed medications/medication_schedules
+    and stopped. Proven: a child rewrote a parent's cardiology visit, deleted a parent's
+    symptom log, and erased their own immunization record.
+  - HIGH locator: member_locations / location_events / safety_check_ins are `FOR ALL …
+    is_family_member`, while locator/actions.ts:30 states "Strictly self-only". Proven: a
+    child moved a parent's live location NY->LA, set is_sharing=false on them, and forged
+    an "arrived" event under the parent's member_id.
+  - MEDIUM medical_profiles: SELECT is is_family_member while the app gates it to managers
+    in three places (pantry-chef/route.ts:129 says so in a comment). Child read a parent's
+    blood type, conditions and prescriptions.
+  - MEDIUM driving_trips: member-wide UPDATE/DELETE while driver_licenses — same feature,
+    same migration — carries the self/manager clause. Teen rewrote own score 41 -> 100.
+  - MEDIUM error leakage: describeDbError() returns the raw Postgres message when
+    unclassified; 311 server call sites use it where describeActionError (whose docstring
+    is exactly this boundary) belongs, plus 14 bare `err.message` returns.
+  - LOW marketplace_orders_update: WITH CHECK weaker than USING (the 0297 shape).
+VERIFIED HEALTHY (attacked, held): secrets in the client bundle — whole import-graph trace
+  from all 452 'use client' roots, stopping at 'use server' RPC boundaries and excluding
+  type-only edges: 868 reachable modules, ZERO non-NEXT_PUBLIC_ env reads (scratchpad/
+  trace2.js; the naive version of this check reported 16 false positives); all 22
+  storage.objects policies (family-id/uid path scoping, no traversal, documents bucket
+  re-checks is_sensitive_document); child sign-in throttle + PIN derivation; active-family
+  selection intersected with real memberships in all 4 resolvers; role change mid-session
+  (all four helpers are STABLE SECURITY DEFINER, nothing cached in the JWT); RLS enabled on
+  all 491 public tables; admin_* tables deny-all; referral crediting idempotency;
+  family_id-from-request in all 141 routes (3 sites, all cross-checked); mass assignment
+  (2 spreads, both super-admin + Zod).
+NEXT (not reached): per-route input validation (unbounded numerics / unvalidated enums)
+  beyond the sampling done here; the ~57 RLS-on/no-policy tables were confirmed deny-all
+  but not individually reasoned about; signed-URL TTLs.
+FILES-TOUCHED: audit/claude-3.md (append only), audit/status.md (this section only).
+  NO source file, migration, test or config was modified.
+BLOCKERS: none.
+LAST-UPDATE: 2026-09-14
 
 ## Claude-4
-CURRENT: RUNNING — launched by Claude-1 as a parallel worker. Status block lives at the top of audit/claude-4.md; mirrored here on completion.
+CURRENT: done (session 4) — new-ground pass complete. 5 findings appended to
+  audit/claude-4.md under the "SESSION 4" delimiter, plus 8 candidates DISPROVED
+  and recorded so they are not re-derived.
 COMPLETED:
-NEXT:
-FILES-TOUCHED:
-BLOCKERS:
-LAST-UPDATE:
+  - C-4-14 HIGH   the parent's Approve/Reject on a chore submission returns
+                  `Promise<void>` with 7 bare `return;`s and revalidates only on
+                  success — every failure is invisible. The child's half of the
+                  same file returns {ok,error} and renders it; the parent's does not.
+  - C-4-15 HIGH   there are TWO `createChoreAction`s. The dashboard one is
+                  manager-gated and test-locked; the /missions one has no role
+                  check, chores/chore_assignments RLS is `is_family_member` for
+                  all four ops, and neither /missions nor /missions/new gates on
+                  role. A child can author the chore catalogue and its rewards,
+                  and delete a parent's chores. RLS half flagged to Claude-3/1.
+  - C-4-16 HIGH   guardian_phone has no global uniqueness (the clash check is
+                  family-scoped; the inbound webhooks resolve across all families
+                  under the service role). Two families on one number ⇒ PGRST116
+                  ⇒ data null, error discarded ⇒ every inbound call/SMS/WhatsApp
+                  dropped and marked processed. Cross-tenant, silent.
+  - C-4-17 MEDIUM three hot predicates with NO usable index, proven by the
+                  planner under `enable_seqscan=off`: child_logins.username (the
+                  only index is on lower(username) — every child sign-in seq-scans
+                  a platform-wide table), guardian_member_profiles.guardian_phone,
+                  wallet_transactions.stripe_ref. 26 residual cases inventoried
+                  and judged admin-console-small.
+  - C-4-18 MEDIUM a removed member is silently auto-provisioned a brand-new empty
+                  family (`ensureActiveFamily` filters is_active=true, so a
+                  deactivated membership looks like never having had one).
+  - DISPROVED and written up: the "14 vacation tables are seq-scanned" claim (the
+    planner uses a non-leading index column, and RLS supplies family_id — my
+    first sweep's rule was wrong); display-render.test.ts's 8 `not.toThrow()`
+    blocks (totality IS the subject); the child-behind-the-paywall dead end;
+    persistSubscription's missing family_id; a double-debit race on stripe_ref
+    (recordEvent claims the event first); the second-subscriptions-row 503
+    (0285 already says it); missing double-submit guards; request-path N+1.
+NEXT: nothing queued. Available to verify any of the five, or to walk the
+  remaining flows (invite→child login, upgrade→webhook→entitlement) against a
+  running app if one is ever stood up.
+FILES-TOUCHED: audit/claude-4.md (append only), audit/status.md (this section
+  only). NO source file and NO database row was modified. Claude-3's PG16
+  harness on 127.0.0.1:54402 was used READ-ONLY (EXPLAIN / pg_* catalogues).
+BLOCKERS: none. Could not reach: a running app or browser, so flow claims are
+  static + catalogue-backed. Did not mutate source to prove a test vacuous —
+  one shared tree with three live workers made that the wrong trade.
+LAST-UPDATE: 2026-09-14
 
 ---
 

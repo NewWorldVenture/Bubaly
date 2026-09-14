@@ -773,3 +773,519 @@ Fix:      Replace the one FOR ALL policy with member-scoped ones:
           already exists (0266) and is used this way elsewhere.
 Status:   VERIFIED (proven on the live replay)
 ```
+
+---
+---
+
+# ══ SESSION 3 (2026-09-14) — new ground ══════════════════════════════════════
+
+Nothing below re-derives anything above, and nothing closed by PR #548 /
+0296–0301 is re-reported. Harness: a private PG16 on `/tmp/pg3:54403`,
+`docs/audit/pg-bootstrap.sh`, **315 migrations applied / 0 failed**
+(pgvector installed, so 0237 and its dependants replay too), SEED_ALL applied,
+`docs/audit/run-probes.sh` **23/23 PASS** before any probing began.
+
+Every RLS finding below was run as a real `authenticated` session
+(`set_config('request.jwt.claim.sub', …)` + `set local role authenticated`) —
+i.e. exactly what PostgREST does for a browser holding the anon key. A child is
+a real Supabase auth user (`app/(app)/family/child-login-actions.ts`), so RLS is
+the only boundary on that path.
+
+Probe scripts: `scratchpad/probe1.sql` (health/location), `probe2.sql`
+(economy), `probe3.sql` / `probe4.sql` (billing).
+
+## Findings
+
+```
+[CLAUDE-3][CRITICAL][RLS/MONEY] A child sets the price of their own reward redemption, and the approval RPC debits the price they wrote
+Path:     policy `economy_redemptions_insert` (INSERT, with check `is_family_member(family_id)`)
+          function public.economy_decide_redemption(uuid,boolean,text)  — SECURITY DEFINER
+          app/(app)/economy/actions.ts:159-166 (requestRedemptionAction)
+          app/(app)/economy/page.tsx:30 (what the approving parent is shown)
+Problem:  `requestRedemptionAction` is careful: it reads `economy_rewards.cost`
+          server-side and copies it onto the redemption row. But the row is a
+          plain table the child can INSERT into directly through PostgREST —
+          the INSERT policy constrains only `family_id`, not `cost`, not
+          `member_id`, not `status`. And `economy_decide_redemption` debits
+          `v_redemption.cost` — the value ON THE ROW — never re-reading
+          `economy_rewards.cost` for `v_redemption.reward_id`, even though it
+          already SELECTs that reward row (for `stock`) two statements earlier.
+          The parent's approval screen renders `title` and `cost` from the same
+          child-written row, so the forgery is invisible at the moment of consent.
+Evidence: live, as real sessions (scratchpad/probe2.sql). Parent creates a
+          "PlayStation 5" reward at 5000 stars and credits the child 10 stars:
+            NOTICE: child balance before: 10 stars; the reward costs 5000
+            NOTICE: 1 child INSERTED a pending redemption for "PlayStation 5" at cost=1
+            NOTICE: 2 child self-INSERTED a row already marked fulfilled/decided_by=parent: 1 row(s)
+            NOTICE: 3 child INSERTED a redemption whose member_id is the PARENT: 1 row(s)
+            NOTICE: 4 parent approval result: {"ok": true, "status": "fulfilled", "txn_id": "de19…"}
+            NOTICE: 4 redemption status=fulfilled ; child balance AFTER redeeming a 5000-star reward: 9 stars
+            NOTICE: 4 the debit the ledger recorded: 1 stars
+          `cost > 0` is the only constraint (`economy_redemptions_cost_check`),
+          so 1 is the floor, not 0.
+          Ruled out a guard elsewhere:
+            · pg_trigger on economy_redemptions = `trg_economy_redemptions_updated_at`
+              only (set_updated_at). No decision guard — unlike `reward_redemptions`,
+              which DOES carry `trg_reward_redemption_decision_guard`. The sibling
+              table got the trigger; this one did not.
+            · The three other policies (`_mng_update`, `_mng_delete`, `_select`)
+              are manager-gated; only INSERT is open, and INSERT is the whole attack.
+            · The RPC's own manager check (`can_manage_family`) is intact — it
+              gates WHO approves, not WHAT is approved.
+            · The UI path is irrelevant: `components/modules/…` reach this table
+              with lib/supabase/client's anon key.
+Impact:   Any child in any family drains the reward catalogue for ~nothing, and
+          the household ledger records a debit that reconciles perfectly against
+          a forged price. Two further variants in the same probe: a child can
+          insert a row already `status='fulfilled'` with `decided_by` set to a
+          parent (a forged approval no parent ever gave), and can insert a
+          redemption whose `member_id` is a SIBLING or PARENT — billing someone
+          else's balance for their own reward.
+Fix:      Two changes, both small.
+          1. In `economy_decide_redemption`, when `reward_id is not null`, take
+             cost from the reward row it already locks:
+               select id, stock, cost into v_reward … ;
+               if v_has_reward then v_cost := v_reward.cost; else v_cost := v_redemption.cost; end if;
+             and use `v_cost` for the balance check and the debit.
+          2. Tighten the INSERT policy so a member can only ask for themselves,
+             in the pending state:
+               with check ( is_family_member(family_id)
+                            and is_self_member(member_id)
+                            and status = 'pending'
+                            and requested_by = auth.uid() )
+             (`is_self_member` exists since 0266.) Managers requesting on a
+             child's behalf keep working via an added `or can_manage_family(family_id)`.
+Status:   VERIFIED (proven on the live replay)
+```
+
+```
+[CLAUDE-3][HIGH][RLS/BILLING] A family admin writes their own `subscriptions` row, and that row IS the paywall
+Path:     policy `subs_manage` — ALL, roles {public}, using/with check `is_family_admin(family_id)`
+          lib/server/entitlement.ts:86-95 (resolveEntitlement)
+          lib/server/plan.ts:36-51 (resolveFamilyPlanLevel)
+Problem:  Entitlement is computed from `subscriptions.plan` + `.status`:
+          `paidLevel = max(planLevel(s.plan))` over rows with
+          `status in ('active','trialing')`. That table is directly writable by
+          the customer: `subs_manage` grants ALL to anyone `is_family_admin`,
+          which is every `role='parent'` member of the family. No trigger, no
+          check constraint, no restrictive guard. The row that decides whether a
+          family has paid is written by the family.
+Evidence: live, as a real parent session (scratchpad/probe3.sql), on a family
+          whose 5-day trial expired 30 days ago (so `computeEntitlement` would
+          return locked):
+            NOTICE: the auto-provisioned row says: free / trialing
+            NOTICE: self-granted Family+ subscription: 1 row(s) REWRITTEN by a PARENT via RLS
+            NOTICE: subscriptions now reads: plus_annual / active  -- exactly the row resolveEntitlement() sums into paidLevel
+            NOTICE: parent also rewrote their own families.trial_ends_at: 1 row(s)
+            NOTICE: parent can clear families.closed_at: 1 row(s)
+          Catalogue: `select … from pg_policies where tablename='subscriptions'`
+          returns exactly `subs_manage` (ALL) and `subs_select`; `pg_trigger`
+          returns only `trg_set_updated_at`; `pg_constraint` returns two FKs and
+          the PK. `information_schema.role_table_grants` shows `authenticated`
+          holds INSERT/UPDATE/DELETE (Supabase default privileges).
+          Ruled out a guard elsewhere: every legitimate writer of this table is
+          server-side and service-role — app/api/webhooks/stripe/route.ts:73,79,
+          app/api/billing/{change-plan,cancel}/route.ts, app/(app)/admin/actions.ts.
+          `grep -rn "from('subscriptions')" app lib components` finds NO client
+          component writing it. The client write privilege is pure excess; nothing
+          in the product needs it.
+          The same is true of `families_update` (`can_manage_family(id)`), which
+          is how `trial_ends_at` and `closed_at` — the other two inputs to
+          `computeEntitlement` — are also self-writable.
+Impact:   Revenue. Any parent bypasses the paywall permanently with one PostgREST
+          call and the public anon key: Family+ (level 2), never expiring,
+          nothing charged. The same write also un-closes a soft-closed account,
+          which is the lever an operator pulls for abuse or non-payment.
+Fix:      Revoke the client write. Replace `subs_manage` with a select-only
+          posture and let the service role (which bypasses RLS) keep doing the
+          writing it already does:
+            drop policy subs_manage on public.subscriptions;
+            revoke insert, update, delete on public.subscriptions from authenticated, anon;
+          Same for `billing_customers` (`billing_manage`) — see the next finding.
+          For `families`, keep the update policy but stop it moving the billing
+          columns, e.g. a restrictive UPDATE guard asserting
+          `trial_ends_at is not distinct from old` is not expressible in RLS, so
+          use a BEFORE UPDATE trigger that resets `trial_ends_at`/`closed_at` to
+          their prior values unless the writer is the service role.
+Status:   VERIFIED (proven on the live replay)
+```
+
+```
+[CLAUDE-3][HIGH][BILLING/AUTHZ] The Stripe object ids the server hands to the Stripe API are client-writable, and neither billing route checks ownership
+Path:     policy `billing_manage` on public.billing_customers (ALL, `is_family_admin(family_id)`)
+          policy `subs_manage` on public.subscriptions (ALL, `is_family_admin(family_id)`)
+          app/api/billing/portal/route.ts:20-45
+          app/api/billing/change-plan/route.ts:94-124, 144-168
+          lib/billing/plans.ts:14-16 (canChangeSubscriptionInPlace)
+Problem:  Both routes authenticate the caller correctly, then read a Stripe
+          identifier out of a table the caller can write and pass it straight to
+          Stripe without ever asking Stripe whether that object belongs to this
+          family.
+            · portal: `stripe.billingPortal.sessions.create({ customer: data.customer_ref })`
+              where `customer_ref` comes from `billing_customers` — writable.
+            · change-plan: `stripe.subscriptions.update(sub.provider_ref, { …, metadata: { family_id: familyId } })`
+              where `provider_ref` and `status` come from `subscriptions` — writable.
+              `canChangeSubscriptionInPlace` only checks `provider_ref` is
+              non-null and `status in ('active','trialing','past_due')`; both are
+              attacker-set. It never compares `stripeSub.customer` or
+              `stripeSub.metadata.family_id` against the caller's family.
+            · change-plan's checkout branch: `stripe.checkout.sessions.create({ customer: customerId })`
+              with the same writable `customer_ref`.
+Evidence: live, as a real parent session (scratchpad/probe4.sql):
+            NOTICE: parent wrote their own billing_customers row: 1 row(s)
+            NOTICE: parent repointed customer_ref at another Stripe customer: 1 row(s); now reads cus_SOMEONE_ELSE
+            NOTICE: parent repointed subscriptions.provider_ref: 1 row(s); now reads sub_SOMEONE_ELSE / active
+          Code read for the ownership check that would stop it: portal/route.ts
+          is 55 lines end to end and contains no Stripe-side verification;
+          change-plan verifies the PRICE against Stripe (`verifyStripePlanPrice`)
+          but never the subscription's owner.
+          Ruled out a guard elsewhere: the Stripe webhook is NOT the mitigation —
+          it resolves the family from `sub.metadata.family_id`
+          (app/api/webhooks/stripe/route.ts:19), which is precisely the field
+          `change-plan` lets the caller overwrite on someone else's subscription.
+          `grep -rn "billing_customers" app lib` shows all five other call sites
+          are server-side; nothing in the product needs the client write.
+Impact:   With a victim's `cus_…` id, a portal session is minted for THEIR Stripe
+          customer: saved payment methods, invoice history, and the ability to
+          cancel their plan. With a victim's `sub_…` id, `change-plan` re-prices
+          their subscription (prorated against their card) and rewrites its
+          `metadata.family_id` to the attacker's family, so the next webhook
+          marks the ATTACKER paid off the victim's money. Exploitation needs a
+          Stripe id the attacker does not normally see, which is the only thing
+          keeping this below CRITICAL — the authorization boundary itself is
+          simply absent, and a Stripe id is not a secret (it appears on invoices,
+          receipts, and in support threads).
+Fix:      1. Revoke the client write (same one-liner as the previous finding) —
+             this alone closes it.
+          2. Defence in depth, 3 lines each: in portal, retrieve the customer and
+             assert `customer.metadata.family_id === familyId`; in change-plan,
+             after `stripe.subscriptions.retrieve`, assert
+             `stripeSub.metadata.family_id === familyId` before updating.
+             Both objects are already created WITH that metadata
+             (change-plan/route.ts:159, checkout/route.ts), so the check is free.
+Status:   VERIFIED (write proven on the live replay; the missing check read from source)
+```
+
+```
+[CLAUDE-3][HIGH][RLS/HEALTH] Nine health tables are `FOR ALL … is_family_member` — a child rewrites and deletes a parent's medical record
+Path:     policies `Members manage health_visits`, `Members manage immunizations`,
+          `symptom_logs_all`, `Members can manage health_metrics`, `health_goals_all`,
+          `Members can manage care_log`, `sleep_logs_all`, `sleep_checkins_all`,
+          and `nutrition_logs_{insert,update,delete}` — all `is_family_member(family_id)`
+Problem:  0299 closed `medications` and `medication_schedules` with three
+          restrictive manager guards each. The nine sibling tables in the same
+          health feature did not get them. Each is one permissive `FOR ALL`
+          policy keyed on membership, so every row — including rows whose
+          `member_id` is somebody else — is writable and deletable by any member,
+          a child included. `lib/ai/context/policy.ts` names all nine SENSITIVE
+          and forbids the AI from reading them; the browser reaches them directly.
+Evidence: live, as real sessions (scratchpad/probe1.sql). Parent records a
+          cardiology visit and a symptom log for THEMSELVES and an MMR
+          immunization for the child; then, as the child:
+            NOTICE: B child UPDATE own immunization: 1 row(s)
+            NOTICE: B child DELETE own immunization: 1 row(s)
+            NOTICE: C child REWRITES the PARENT's cardiology visit: 1 row(s)
+            NOTICE: C child DELETES the PARENT's symptom log: 1 row(s)
+          Catalogue confirming the shape:
+            select tablename,cmd,permissive,qual from pg_policies
+             where tablename in (…) ;
+          returns exactly one PERMISSIVE `ALL` row per table with
+          `qual = with_check = is_family_member(family_id)`, and
+          `select … from pg_policies where permissive='RESTRICTIVE'` (62 rows)
+          contains none of these nine.
+          Ruled out a guard elsewhere: `pg_trigger` on these tables returns only
+          `set_updated_at`. The read/write surfaces are client components
+          (components/modules/medical-records-module.tsx,
+          components/modules/care-module.tsx) using the anon key, so there is no
+          server proxy in front. The *reads* are gated in two server pages
+          (family-health, family-emergency) — which is the point: the app knows
+          this data is manager-only and expresses it in the wrong layer.
+Impact:   A child can erase their own immunization record (the row a school or a
+          clinician asks for), rewrite a parent's visit outcome, and delete the
+          symptom log a parent is keeping to decide whether to go to the ER. It
+          is the `medications` defect with a different table name, and 0299's fix
+          is a copy-paste away.
+Fix:      Apply 0299's pattern verbatim to the nine, splitting them the way 0300
+          split `grades` from `screen_time_limits`:
+            · care records ABOUT a person — health_visits, immunizations,
+              health_metrics, health_goals, care_log → manager-gated write
+              (`can_manage_family(family_id)` restrictive INSERT/UPDATE/DELETE).
+            · self-logged records — symptom_logs, sleep_logs, sleep_checkins,
+              nutrition_logs → author-or-manager, i.e.
+              `can_manage_family(family_id) or is_self_member(member_id)`,
+              mirroring `behavior_logs_author_update_guard`.
+Status:   VERIFIED (proven on the live replay)
+```
+
+```
+[CLAUDE-3][HIGH][RLS/SAFETY] A child can move a parent's dot on the family map, silence their sharing, and forge their arrivals
+Path:     policies `Members can manage member_locations`, `Members can manage location_events`,
+          `safety_check_ins_{insert,update,delete}` — all `is_family_member(family_id)`
+          app/(app)/dashboard/locator/actions.ts:28-31 and :58-63
+Problem:  The server action says so itself, at line 30:
+            "Strictly self-only — a member can only post their own location."
+          and enforces it properly, writing `member_id: member.id` from the
+          session. The RLS under it enforces nothing of the kind: one permissive
+          `FOR ALL … is_family_member` policy per table. Any member can upsert
+          ANY member's `member_locations` row, insert `location_events` under
+          anyone's `member_id`, and edit or delete anyone's `safety_check_ins`.
+          The stated rule exists in the one layer the browser does not have to go
+          through.
+Evidence: live, as a real child session (scratchpad/probe1.sql). Parent's live
+          location is seeded at 40.7128 / -74.0060 (New York):
+            NOTICE: D child SPOOFS the PARENT's live location + stops their sharing: 1 row(s)
+            NOTICE: D parent now appears at latitude 34.0522          ← Los Angeles
+            NOTICE: D child FORGES a location event for the PARENT: 1 row(s)
+          The update set `is_sharing=false` in the same statement, so the parent
+          also drops off the map for everyone else.
+          Ruled out a guard elsewhere: `components/modules/locator-module.tsx:91-100`
+          and `components/family/find-phone-view.tsx:24` are 'use client' and read
+          through the anon key — the table is on the public API surface whether or
+          not the action is used. `pg_trigger` on both tables is `set_updated_at`
+          only. No restrictive policy on either (checked against the 62-row
+          RESTRICTIVE catalogue).
+Impact:   This is the safety feature. A teenager makes themselves appear at home,
+          fabricates an "arrived at School" event on the timeline a parent checks,
+          or hides a parent from the map. It also runs the other way: a member can
+          plant a false location trail for someone else, which is the shape of the
+          record a custody or safeguarding dispute would later rely on.
+Fix:      Pin the subject to the writer and let managers see everything:
+            member_locations / location_events / safety_check_ins:
+              using      ( is_family_member(family_id) )                    -- reads unchanged
+              with check ( is_family_member(family_id) and is_self_member(member_id) )
+            and restrict UPDATE/DELETE to
+              `is_self_member(member_id) or can_manage_family(family_id)`.
+          A child writing their own position keeps working; writing someone
+          else's stops.
+Status:   VERIFIED (proven on the live replay)
+```
+
+```
+[CLAUDE-3][MEDIUM][RLS/PRIVACY] `medical_profiles` is manager-gated in three places in the app and member-readable in the policy
+Path:     policy `Members can read medical_profiles` (SELECT, `is_family_member(family_id)`)
+          app/api/ai/pantry-chef/route.ts:128-130
+          app/(app)/dashboard/family-health/page.tsx:26-32
+          app/(app)/dashboard/family-emergency/page.tsx:24-31
+Problem:  The repo states the rule plainly — pantry-chef/route.ts:129 reads the
+          allergies with the SERVICE client and explains why: "(medical_profiles
+          is manager-gated to clients)". family-health/page.tsx:26 says "Health
+          data is sensitive — surfaced only to managers in summary form here" and
+          gates the read on `isManager(ctx.active.role)`; family-emergency does
+          the same. The write policies ARE manager-gated (three `Managers can …`
+          policies). The SELECT policy is not: any member reads every row.
+Evidence: live, as a real child session (scratchpad/probe1.sql), against a
+          profile the parent wrote for themselves:
+            NOTICE: A medical_profiles rows a CHILD can SELECT: 1
+            NOTICE: A child reads parent profile: AB- / Epilepsy / Lamotrigine 200mg
+          The columns reachable are blood_type, conditions, current_medications,
+          primary_physician, preferred_pharmacy, pharmacy_phone, and the three
+          emergency_contact_* fields.
+          Ruled out a guard elsewhere: no RESTRICTIVE policy on the table (62-row
+          catalogue); `pg_trigger` returns `set_medical_profiles_updated` only;
+          `components/modules/medical-records-module.tsx:28` types straight off
+          `Tables<'medical_profiles'>` and reads with the anon key, so the two
+          server pages' `manager ?` ternaries are not on the only path.
+Impact:   A child reads every family member's diagnoses, prescriptions and
+          physician. It is the exact case §4 and the AI deny-list are written to
+          prevent, and it is worth noting the deny-list only binds the model —
+          the human with a browser was never in scope.
+Fix:      Give SELECT the shape `documents_select` already uses:
+            using ( is_family_member(family_id)
+                    and (can_manage_family(family_id) or is_self_member(member_id)) )
+          A member keeps their own profile; managers keep everything; the
+          allergy projections that meals/groceries need already go through the
+          service client (pantry-chef) or a services-layer projection
+          (lib/services/meals/index.ts:656), so nothing else breaks.
+Status:   VERIFIED (proven on the live replay)
+```
+
+```
+[CLAUDE-3][MEDIUM][RLS/SAFETY] A teen driver can rewrite their own driving score — the sibling table in the same feature got the rule this one is missing
+Path:     policies `driving_trips_{select,insert,update,delete}` — all `is_family_member(family_id)`
+          components/family/driving-safety-view.tsx:29-40, 115
+Problem:  `driver_licenses` and `driving_trips` are the two tables of the driving
+          feature. `driver_licenses` carries the right rule on all four commands:
+          `is_family_member(family_id) and (can_manage_family(family_id) or
+          is_self_member(member_id))`. `driving_trips` — hard brakes, max speed,
+          phone-use seconds, the score a parent looks at — is plain membership.
+          The driver grades their own driving.
+Evidence: live, as a real child session (scratchpad/probe1.sql), on a trip the
+          parent recorded (score 41, 78 mph, 5 hard brakes, 240s phone use):
+            NOTICE: E child rewrites their OWN driving score: 1 row(s)
+            NOTICE: E driving score is now 100
+            NOTICE: E child DELETES their own trip: 1 row(s)
+          Side-by-side catalogue of the two tables' policies is in the session
+          log; `driver_licenses` has the self/manager clause on all four,
+          `driving_trips` on none.
+          Ruled out a guard elsewhere: `components/family/driving-safety-view.tsx`
+          is a client component writing through `createClient()` (anon key) at
+          :40 and :115 — no server action, no route, so RLS is the whole boundary.
+          `pg_trigger` on driving_trips is `set_driving_trips_updated` only.
+Impact:   The safe-driving report a parent uses to decide about car keys or an
+          insurance discount is editable by the teenager it is about, and a bad
+          trip can simply be deleted.
+Fix:      Copy `driver_licenses`' clause onto `driving_trips`' UPDATE and DELETE:
+            using ( is_family_member(family_id) and can_manage_family(family_id) )
+          — or, if a driver should be able to label their own trip,
+            `can_manage_family(family_id) or is_self_member(member_id)` on UPDATE
+          with the telemetry columns held by a trigger. INSERT can stay member-wide
+          (the phone posts the trip); it is the after-the-fact edit that matters.
+Status:   VERIFIED (proven on the live replay)
+```
+
+```
+[CLAUDE-3][MEDIUM][API/ERROR-LEAK] `describeDbError` falls through to the raw Postgres message, and 311 server call sites use it where `describeActionError` is the documented boundary
+Path:     lib/supabase/errors.ts:28-80 (describeDbError), :83-89 (describeActionError)
+          311 call sites in 56 files under app/ and lib/ (server), e.g.
+          lib/ai/planner/index.ts:253,446,519,582,595 · lib/ai/tools/*.ts ·
+          app/(app)/dashboard/{kitchen,trip-intel}/actions.ts
+          plus 14 sites returning `err.message` with no wrapper at all:
+          app/(app)/dashboard/locator/actions.ts:64 ·
+          app/(app)/dashboard/recipes/vote/actions.ts:40,123 ·
+          lib/planning/prep-server.ts:28,46,49,62 · lib/twin/project-server.ts:177,192,223,252 ·
+          lib/network/aggregate-server.ts:145,215,218
+Problem:  `describeDbError`'s last line is `return raw.trim() || fallback` — an
+          unclassified error is returned verbatim. The repo already knows this:
+          `describeActionError` exists two functions below with the docstring
+          "Describe an error for a server-action/API response WITHOUT exposing
+          unclassified database or provider details to the browser or model", and
+          its whole body is the guard `raw && described === raw ? fallback : described`.
+          Only a minority of server paths use it. The `raw.trim()` branch is not
+          hypothetical: the classifier matches ten specific shapes, and anything
+          else — an enum coercion, a numeric overflow, a function-not-found, a
+          provider error re-thrown as an Error — goes through untouched.
+Evidence: classification gap demonstrated on the live database:
+            insert … status='bogus'  → ERROR: invalid input value for enum redemption_status: "bogus"
+          No branch of describeDbError matches that string (no 42501/23505/23503/
+          23502/23514 code, and none of the ten substrings), so it is returned to
+          the browser verbatim, disclosing the enum type name and value grammar.
+          By contrast `symptom_logs_severity_check` IS caught ("violates check").
+          Counts: `grep -rn "describeDbError(" app lib | grep -v errors.ts` → 311
+          call sites across 56 files; the raw-`.message` grep → 14.
+          Ruled out a guard elsewhere: there is no response middleware that
+          rewrites action results — `lib/supabase/errors.ts` is the only
+          normaliser in the repo, and the AI tool paths
+          (lib/ai/tools/*.ts, lib/ai/planner/index.ts) put the string into
+          `fail(...)`, which reaches both the browser AND the model context.
+Impact:   Schema disclosure (type names, column names, constraint names, function
+          signatures) to any authenticated user, and into AI prompt context on the
+          planner/tool paths. Not exploitable on its own; it is reconnaissance,
+          and it contradicts a boundary the codebase has already written down.
+Fix:      Two lines of policy, mechanically applied:
+          1. Make `describeDbError`'s fallback non-leaking by default — change the
+             last line to `return fallback` and add
+             `describeDbErrorVerbose` for the client components that genuinely
+             want the raw string for their own query.
+             (Safer variant if that is too wide: leave describeDbError alone and
+             switch the 311 server call sites to `describeActionError`, which
+             already composes over it.)
+          2. Replace the 14 bare `err.message` returns with `describeActionError(err)`.
+          Either way, add a lint/test ratchet: no file under `app/api/**`,
+          `app/**/actions.ts` or `lib/**-server.ts` may return `.message`
+          directly — the same shape as the existing context-policy static ratchet.
+Status:   OPEN (classification gap proven live; the leak is a source-level property)
+```
+
+```
+[CLAUDE-3][LOW][RLS] `marketplace_orders` UPDATE has a WITH CHECK weaker than its USING
+Path:     policy `marketplace_orders_update`
+            using      ( is_family_member(family_id) and (buyer_member = marketplace_member_id(family_id)
+                                                          or seller_member = marketplace_member_id(family_id)) )
+            with check ( is_family_member(family_id) )
+Problem:  The USING clause is careful — only the buyer or the seller may touch
+          the row. The WITH CHECK drops the condition entirely, so the row they
+          are allowed to touch can be rewritten into a row they would not have
+          been allowed to touch: reassign `buyer_member`/`seller_member` to
+          another member, change `amount_cents`, or flip `status`. This is the
+          same asymmetry 0297 fixed on `invites_update`.
+Evidence: read from `pg_policies` on the live replay (qual and with_check quoted
+          above verbatim). Not escalated to a behavioural probe because the
+          impact is bounded: `marketplace_orders.family_id` is NOT NULL and the
+          WITH CHECK still pins it, so the row cannot leave the family, and the
+          module is an intra-family lending/selling ledger with no wallet or
+          Stripe path behind it (`grep -rn "marketplace_orders" app lib` returns
+          only the two cron reminder routes, the orders page, and
+          app/(app)/marketplace/actions.ts:147, which sets `status` alone).
+Impact:   A family member can reassign or re-price an order they are party to —
+          a bookkeeping integrity issue inside one household, not a tenant break.
+Fix:      Make the WITH CHECK the same expression as the USING, exactly as 0297
+          did for invites.
+Status:   OPEN (policy read; impact deliberately bounded rather than probed)
+```
+
+## Verified healthy this session (each was attacked, and held)
+
+- **Secrets in the client bundle — SOUND, by whole-graph trace, not by grep.**
+  Built the real import graph from all **452 `'use client'` entry files**,
+  following value imports only (type-only `import type`/`export type` edges
+  excluded) and **stopping at every `'use server'` file**, because Next replaces
+  a server action with an RPC stub rather than bundling it. 868 modules are
+  reachable. **Zero** of them read a non-`NEXT_PUBLIC_` environment variable.
+  The first two runs of this trace reported 16 "leaks"; every one was an
+  artefact of not modelling those two boundaries — worth recording, because that
+  is exactly the false positive a grep-based check ships.
+  (`scratchpad/trace2.js`.)
+- **Storage object policies — SOUND.** All 22 `storage.objects` policies scope on
+  `is_family_member((storage.foldername(name))[1]::uuid)` or
+  `auth.uid()::text = (storage.foldername(name))[1]`. Path traversal is not
+  reachable: a key whose first segment is not a UUID makes the cast raise, which
+  denies rather than admits. The `documents` bucket additionally re-checks
+  `is_sensitive_document(d.is_secure, d.category)` against the `documents` row on
+  SELECT/UPDATE/DELETE — the storage layer and the table layer agree. (The two
+  public buckets are already filed above from an earlier session.)
+- **Child sign-in — SOUND.** `app/(auth)/actions.ts:76-147`. IP rate limit, then
+  a durable per-username throttle read BEFORE the password is derived (and read
+  for unknown usernames too, so it is not a lookup oracle), `eq` not `ilike` on
+  both the throttle key and the lookup, vague failure text, throttle cleared on
+  success. The 4-digit PIN never becomes the password — `deriveChildPassword`
+  mixes it with `CHILD_LOGIN_SECRET`, so the Supabase password endpoint cannot be
+  brute-forced directly either.
+- **Active-family selection — SOUND.** `user_preferences` is self-writable
+  (`prefs_all`), so `active_family_id` is attacker-controlled. All four resolvers
+  intersect it with real memberships before use:
+  lib/supabase/auth.ts:175, lib/supabase/bearer.ts:83,
+  lib/server/entitlement.ts:78, lib/services/paperwork/link-access.ts:73.
+  Setting it to a stranger's family selects nothing.
+- **Role changes mid-session — SOUND.** `is_family_member` / `can_manage_family` /
+  `is_family_admin` / `is_self_member` are all STABLE SECURITY DEFINER over
+  `family_members` with `SET search_path = public`, so a demotion or an
+  `is_active=false` takes effect on the next statement; no role is cached in the
+  JWT. `family_members` itself is manager-gated on all of insert/update/delete
+  (`fm_*`), so a child cannot promote themselves.
+- **RLS coverage — SOUND.** `select relname from pg_class where relnamespace='public'
+  and relkind='r' and not relrowsecurity` → **0 rows**. Every one of the 491
+  public tables has RLS on. The 30 policies whose `roles` is `{public}` rather
+  than `{authenticated}` are not a hole: their expressions all reduce to
+  `is_family_member`/`can_manage_family`, which are false when `auth.uid()` is
+  null, so `anon` gets nothing (and `run-probes.sh`'s rls-isolation-check asserts
+  this behaviourally).
+- **Admin surface — SOUND.** `admin_integrations`, `admin_notifications`,
+  `super_admins` have RLS on and **no policy at all** → deny-all for `anon` and
+  `authenticated`; only the service role (which bypasses RLS) reaches them.
+  `admin_users` carries one `service_role`-only policy. `feature_flags` is
+  authenticated-readable by design.
+- **Referral crediting — SOUND.** `lib/referrals/server.ts`. `applyReferralCode`
+  is guarded by a unique index on `referred_family_id` and handles the 23505 race
+  explicitly; `markReferralConverted` only acts on a still-`signed_up` row;
+  reward fulfilment is keyed by `rewardIdempotencyKey` and flips to `rewarded`
+  only once Stripe confirms both sides, so webhook redelivery re-credits nobody.
+  `referral_codes` has no client write policy and is written service-side.
+- **`family_id` from the request — SOUND.** Across all 141 `app/api/**/route.ts`,
+  only three handlers take a family id from the caller, and all three reject a
+  mismatch against the session or a provider signature:
+  moving/recalculate:132, vacations/confirmation-import:74-76, and
+  contact-center/voice/transcription:26 (whose `?familyId=` is inside the URL the
+  Twilio signature covers).
+- **Mass assignment — SOUND.** `grep` for a request body spread into a write
+  (`{...body}` / `{...payload}` / `{...input}` into insert/update/upsert) returns
+  two sites, both in `app/(app)/admin/marketing/**`, both behind the super-admin
+  gate and both over a Zod-parsed `payload` rather than the raw body.
+- **`reward_redemptions` — SOUND, and the contrast that found the economy bug.**
+  It carries `trg_reward_redemption_decision_guard`, which is why
+  `run-probes.sh`'s reward-redemption-decision-check passes. `economy_redemptions`
+  is the same shape with no such trigger; noticing the asymmetry is what produced
+  the CRITICAL above.
+```
+
+<!-- end of Claude-3 session 3 block -->
+```
