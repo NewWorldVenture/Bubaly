@@ -53,6 +53,7 @@ import { countFromResult, countMatchingResult } from '@/lib/outcomes/discovery';
 import { FIRST_VALUE_MILESTONE } from '@/lib/analytics/activation';
 import { nextBirthdayDate, daysUntil } from '@/lib/moments/birthdays';
 import { getTranslations } from '@/lib/i18n/server';
+import { WidgetBoundary } from '@/components/ui/widget-boundary';
 
 export const metadata: Metadata = { title: 'Home' };
 export const dynamic = 'force-dynamic';
@@ -473,8 +474,12 @@ export default async function HomePage() {
       </div>
 
       {/* M30 — one real next step for a family that has not reached first value. */}
+      {/* Each widget below reads its own data and is additive to the page. A
+          boundary between them is what stops the fourteenth, meeting an
+          unexpected shape, from taking the other thirteen to error.tsx —
+          the failure mode the kiosk already fixed for itself. */}
       {firstThing && <DoOneThingCard thing={firstThing} />}
-      <OutcomesStrip href="/home" snapshot={outcomeSnapshot} />
+      <WidgetBoundary label="outcomes"><OutcomesStrip href="/home" snapshot={outcomeSnapshot} /></WidgetBoundary>
 
       {/* Finish-setup nudge → /dashboard/setup (needs-setup / reset cohort). */}
       {setupNudge && (
@@ -501,7 +506,7 @@ export default async function HomePage() {
 
       {/* R6 — intent-based entry, made primary: one NL bar routes to the reasoning
           engine ("plan Emma's party"), a page, or the assistant. */}
-      <AskBar />
+      <WidgetBoundary label="ask-bar"><AskBar /></WidgetBoundary>
 
       {/* §16 Command Center: what needs a person, what Bubaly is doing, the
           family's day, what is coming, and what Bubaly finished. Home shows the
@@ -517,7 +522,7 @@ export default async function HomePage() {
         seeAllHref="/dashboard/needs-you"
       />
 
-      <WorkingOn familyId={familyId} initial={workingRuns} historyHref="/dashboard/concierge/runs" />
+      <WidgetBoundary label="working-on"><WorkingOn familyId={familyId} initial={workingRuns} historyHref="/dashboard/concierge/runs" /></WidgetBoundary>
 
       <Card>
         <CardHead icon={Clock} title={tr('home.today')} href="/dashboard/calendar" action="View calendar" />
@@ -595,22 +600,22 @@ export default async function HomePage() {
         </div>
       </Card>
 
-      <CompletedByBubaly items={completedItems} error={completedError} historyHref="/dashboard/concierge/runs?state=done" retryHref="/home" />
+      <WidgetBoundary label="completed"><CompletedByBubaly items={completedItems} error={completedError} historyHref="/dashboard/concierge/runs?state=done" retryHref="/home" /></WidgetBoundary>
 
       {/* R11 — the category metric: "N hours saved this week" */}
-      <TimeSavedBanner result={timeSaved} retryHref="/home" />
-      <FamilyValueComparison initial={{ familyId, result: valueComparison }} />
+      <WidgetBoundary label="time-saved"><TimeSavedBanner result={timeSaved} retryHref="/home" /></WidgetBoundary>
+      <WidgetBoundary label="value-comparison"><FamilyValueComparison initial={{ familyId, result: valueComparison }} /></WidgetBoundary>
 
       {/* Time-of-day "Focus now" strip — surfaces what matters at this hour
           (morning: schedule/weather/school · night: tomorrow/prep/reflect). */}
-      <TimeOfDayFocus role={me.role} />
+      <WidgetBoundary label="time-of-day"><TimeOfDayFocus role={me.role} /></WidgetBoundary>
 
       {/* Anticipatory "Get ready" banner — the next imminent moment's prep, or
           nothing when the horizon is clear. See /dashboard/moments. */}
-      <HomeMomentCard />
+      <WidgetBoundary label="moment"><HomeMomentCard /></WidgetBoundary>
 
       {/* Delight: today's memories from past years, or nothing on an ordinary day. */}
-      <OnThisDayCard />
+      <WidgetBoundary label="on-this-day"><OnThisDayCard /></WidgetBoundary>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         {/* My Family */}

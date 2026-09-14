@@ -17,9 +17,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Read from .nvmrc rather than pinning a floating major here. `node-version: 22`
+      # let the runner drift within 22.x independently of contributors, which is
+      # how a runtime-sensitive test came to pass in CI and fail locally on
+      # 22.22.2 — the suite's result depended on which patch each machine had.
+      # One file now decides it for CI, nvm and `engines`.
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
 
       - name: Install dependencies
@@ -117,7 +122,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: mobile/package-lock.json
 
@@ -254,7 +259,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
 
       - name: Install dependencies
