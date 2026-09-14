@@ -24,6 +24,7 @@ import { recordActivitySafely } from '../activity';
 import { keyedProbe, makeKey, withIdempotency } from '../idempotency';
 import { dayKeyInTz, dayKeysBetween, scopeNow, zonedTimeMs } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
+import { escapeLike } from '@/lib/supabase/escape-like';
 
 export type CalendarEvent = Tables<'calendar_events'>;
 
@@ -382,10 +383,7 @@ export async function searchEvents(scope: ServiceScope, input: SearchEventsInput
   if (input.assigneeId) query = query.eq('assignee_id', input.assigneeId);
   if (input.categories?.length) query = query.in('category', input.categories);
   if (input.query?.trim()) {
-    // Escape the PostgREST pattern wildcards so a title containing '%' does not
-    // silently widen the search.
-    const term = input.query.trim().replace(/[%_]/g, (m) => `\\${m}`);
-    query = query.ilike('title', `%${term}%`);
+    query = query.ilike('title', `%${escapeLike(input.query.trim())}%`);
   }
 
   const { data, error } = await query;
@@ -665,7 +663,7 @@ export async function findEventByTitle(
     .from('calendar_events')
     .select('id, title, starts_at, family_id')
     .eq('family_id', familyId)
-    .ilike('title', `%${needle}%`)
+    .ilike('title', `%${escapeLike(needle)}%`)
     .gte('starts_at', nowIso)
     .order('starts_at', { ascending: true })
     .limit(RSVP_TITLE_CANDIDATES);

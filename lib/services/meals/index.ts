@@ -35,6 +35,7 @@ import { recordActivitySafely } from '../activity';
 import { getMembers } from '../family';
 import { withIdempotency } from '../idempotency';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
+import { escapeLike } from '@/lib/supabase/escape-like';
 
 export type Meal = Tables<'meals'>;
 export type MealPlanRow = Tables<'meal_plans'>;
@@ -518,7 +519,7 @@ export async function listRecipes(
   if (input.category && RECIPE_CATEGORIES.includes(input.category)) q = q.eq('category', input.category);
   if (input.favoritesOnly) q = q.eq('is_favorite', true);
   const term = input.query?.trim().replace(/[%_]/g, (m) => `\\${m}`);
-  if (term) q = q.ilike('name', `%${term}%`);
+  if (term) q = q.ilike('name', `%${escapeLike(term)}%`);
 
   const { data, error } = await q;
   if (error) {
