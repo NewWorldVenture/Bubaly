@@ -23,7 +23,8 @@ import {
   WARDROBE_CATEGORIES, WARDROBE_STATUSES, SEASONS, OCCASIONS, categoryMeta, statusMeta, occasionMeta,
   suggestOutfit, closetSummary, neglectedItems, costPerWear, tempBand, weatherLabelFromTemp, dayDiff,
 } from '@/lib/closet/outfits';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 type Item = Tables<'wardrobe_items'>;
 type Outfit = Tables<'outfits'>;
@@ -35,9 +36,9 @@ const cToF = (c: number) => Math.round((c * 9) / 5 + 32);
 const todayIso = () => new Date().toISOString().slice(0, 10);
 const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
-function fmtDate(d: string): string {
-  return new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
+const fmtDateIn = (locale: LocaleCode) => (d: string): string => {
+  return new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+};
 
 function photoUrl(path: string | null): string | null {
   if (!path) return null;
@@ -45,6 +46,8 @@ function photoUrl(path: string | null): string | null {
 }
 
 export function ClosetModule() {
+  const locale = useLocale();
+  const fmtDate = fmtDateIn(locale.code);
   const t = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();

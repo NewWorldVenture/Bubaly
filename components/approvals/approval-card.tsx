@@ -55,12 +55,12 @@ export function formatAmount(
   }
 }
 
-export function formatWhen(iso: string | null | undefined): string | null {
+const formatWhenIn = (locale: LocaleCode) => (iso: string | null | undefined): string | null => {
   if (!iso) return null;
   const ms = Date.parse(iso);
   if (!Number.isFinite(ms)) return null;
-  return new Date(ms).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-}
+  return new Date(ms).toLocaleString(locale, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+};
 
 /** "Expires in 2 days" / "Expires in 3h" / "Expired" — the deadline a parent is deciding against. */
 export function formatExpiry(iso: string | null | undefined, now: number = Date.now()): string | null {
@@ -145,6 +145,7 @@ export function ApprovalCard({
   }, [approval.id, busy, onResult, router, success, toastError]);
 
   const locale = useLocale();
+  const formatWhen = formatWhenIn(locale.code);
   const amount = formatAmount(approval.amountCents, 'USD', locale.code);
   const when = formatWhen(approval.requestedAt);
   const expiry = formatExpiry(approval.expiresAt);

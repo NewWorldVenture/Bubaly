@@ -45,6 +45,7 @@ import { buildInsightCandidates, rankInsights, type InsightKind, type InsightSou
 import { InsightHero } from '@/components/dashboard/insight-hero';
 import { getLocaleContext } from '@/lib/i18n/server';
 import { translate } from '@/lib/i18n/messages';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 function greeting() {
   const h = new Date().getHours();
@@ -53,8 +54,8 @@ function greeting() {
   return 'Good evening';
 }
 
-function todayLabel() {
-  return new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+function todayLabel(locale: LocaleCode) {
+  return new Date().toLocaleDateString(locale, { weekday: 'long', month: 'long', day: 'numeric' });
 }
 
 export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
@@ -442,7 +443,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       {/* Greeting header */}
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-sm text-muted">{todayLabel()}</p>
+          <p className="text-sm text-muted">{todayLabel(locale.code)}</p>
           <h1 className="mt-0.5 text-2xl font-bold sm:text-3xl">{greeting()}, {name.split(' ')[0]}.</h1>
         </div>
         <Link href="/dashboard/assistant" className="flex items-center gap-1.5 rounded-full bg-brand/10 px-3 py-1.5 text-xs font-semibold text-brand-text hover:bg-brand/20 transition">
@@ -666,7 +667,7 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
                 <span className="text-xs text-muted">
                   {item.kind === 'event'
                     ? calendarLabel(item.at, true, item.allDay)
-                    : new Date(item.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                    : new Date(item.at).toLocaleDateString(locale.code, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
                 </span>
               </Link>
             ))}

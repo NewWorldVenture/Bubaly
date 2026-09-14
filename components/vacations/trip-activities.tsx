@@ -4,12 +4,13 @@ import { Ticket, CalendarCheck } from 'lucide-react';
 import { TripCrudSection, type FieldDef } from './shared';
 import { dollars } from '@/lib/vacations/meta';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 type Activity = Tables<'vacation_activities'>;
 type Reservation = Tables<'vacation_reservations'>;
 
-const fmtDT = (s: string | null) => (s ? new Date(s).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Unscheduled');
+const fmtDTIn = (locale: LocaleCode) => (s: string | null) => (s ? new Date(s).toLocaleString(locale, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Unscheduled');
 
 const activityFields: FieldDef[] = [
   { name: 'name', label: 'Activity', type: 'text', required: true },
@@ -37,6 +38,8 @@ const reservationFields: FieldDef[] = [
 ];
 
 export function TripActivities({ vacationId }: { vacationId: string }) {
+  const locale = useLocale();
+  const fmtDT = fmtDTIn(locale.code);
   const t = useTranslations();
   return (
     <div className="space-y-8">

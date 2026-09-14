@@ -5,12 +5,13 @@ import { fmtDate } from '@/lib/utils/format';
 import { TripCrudSection, type FieldDef } from './shared';
 import { TRANSPORT_KINDS, dollars, lookup } from '@/lib/vacations/meta';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 type Flight = Tables<'vacation_flights'>;
 type Transport = Tables<'vacation_transportation'>;
 
-const fmtDT = (s: string | null) => (s ? new Date(s).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—');
+const fmtDTIn = (locale: LocaleCode) => (s: string | null) => (s ? new Date(s).toLocaleString(locale, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—');
 
 const flightFields: FieldDef[] = [
   { name: 'airline', label: 'Airline', type: 'text', half: true },
@@ -44,6 +45,8 @@ const transportFields: FieldDef[] = [
 ];
 
 export function TripTravel({ vacationId }: { vacationId: string }) {
+  const locale = useLocale();
+  const fmtDT = fmtDTIn(locale.code);
   const tr = useTranslations();
   return (
     <div className="space-y-8">

@@ -22,23 +22,27 @@ import {
   LOCATION_KINDS, ITEM_CATEGORIES, ITEM_STATUSES, CONFIRM_REASON, categoryMeta, statusMeta, locationKindMeta, locationLabel, locationTree,
   searchItems, lentOut, warrantyAlerts, valueSummary, inventorySummary, lastConfirmed,
 } from '@/lib/inventory/finder';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 type Item = Tables<'inventory_items'>;
 type Location = Tables<'home_locations'>;
 type Move = Tables<'inventory_moves'>;
 
-const money = (cents: number) => `$${(cents / 100).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+const moneyIn = (locale: LocaleCode) => (cents: number) => `$${(cents / 100).toLocaleString(locale, { maximumFractionDigits: 0 })}`;
 const todayIso = () => new Date().toISOString().slice(0, 10);
-function fmtDate(d: string): string {
-  return new Date(d.length <= 10 ? `${d}T00:00:00` : d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
+const fmtDateIn = (locale: LocaleCode) => (d: string): string => {
+  return new Date(d.length <= 10 ? `${d}T00:00:00` : d).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+};
 function photoUrl(path: string | null): string | null {
   if (!path) return null;
   return createClient().storage.from('family-media').getPublicUrl(path).data.publicUrl;
 }
 
 export function InventoryModule() {
+  const locale = useLocale();
+  const money = moneyIn(locale.code);
+  const fmtDate = fmtDateIn(locale.code);
   const tr = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();

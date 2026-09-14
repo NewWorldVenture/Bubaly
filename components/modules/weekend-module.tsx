@@ -12,7 +12,8 @@ import { Button } from '@/components/ui/button';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { RADIUS_OPTIONS, DEFAULT_RADIUS, DEFAULT_DAYS, categoryMeta, priceRange, isValidZip, PLAN_STATUSES } from '@/lib/weekend/meta';
 import type { Tables, WeekendPlanStatus, WeekendFeedKind } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 type Event = Tables<'weekend_events'>;
 type Plan = Tables<'weekend_plans'>;
@@ -27,10 +28,13 @@ function sourceLabel(source: string): string {
 }
 
 const dayKey = (iso: string) => iso.slice(0, 10);
-const fmtDay = (iso: string) => new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
-const fmtTime = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : 'Time TBA');
+const fmtDayIn = (locale: LocaleCode) => (iso: string) => new Date(iso + 'T00:00:00').toLocaleDateString(locale, { weekday: 'long', month: 'short', day: 'numeric' });
+const fmtTimeIn = (locale: LocaleCode) => (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' }) : 'Time TBA');
 
 export function WeekendModule() {
+  const locale = useLocale();
+  const fmtDay = fmtDayIn(locale.code);
+  const fmtTime = fmtTimeIn(locale.code);
   const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();

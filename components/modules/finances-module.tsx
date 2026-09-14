@@ -69,7 +69,7 @@ const usd0In = (locale: LocaleCode) => (n: number) =>
   new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
 const num = (v: unknown) => (typeof v === 'number' ? v : Number(v ?? 0)) || 0;
 function ymd(d: Date) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
-function shortDate(s: string) { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); }
+const shortDateIn = (locale: LocaleCode) => (s: string) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString(locale, { month: 'short', day: 'numeric' }); };
 
 const MANAGE = '/dashboard/billing?view=manage';
 
@@ -77,6 +77,7 @@ export function FinancesModule() {
   const tr = useTranslations();
   // Money follows the reader's locale; the currency does not.
   const locale = useLocale();
+  const shortDate = shortDateIn(locale.code);
   // Memoised on the locale code, not rebuilt per render: usdIn returns a NEW
   // function each call, and an unstable identity in a useMemo dependency list
   // either defeats the memo or leaves a stale closure behind it.
@@ -500,6 +501,7 @@ export function FinancesModule() {
 }
 
 function BillsCalendar({ month, bills, onPrev, onNext }: { month: Date; bills: Bill[]; onPrev: () => void; onNext: () => void }) {
+  const locale = useLocale();
   const tr = useTranslations();
   const y = month.getFullYear(), m = month.getMonth();
   const daysInMonth = new Date(y, m + 1, 0).getDate();
@@ -524,7 +526,7 @@ function BillsCalendar({ month, bills, onPrev, onNext }: { month: Date; bills: B
     <div>
       <div className="mb-2 flex items-center justify-between">
         <button onClick={onPrev} aria-label={tr('finances.previousMonth')} className="rounded p-1 hover:bg-elevated"><ChevronLeft className="h-3.5 w-3.5" /></button>
-        <span className="text-sm font-semibold">{month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
+        <span className="text-sm font-semibold">{month.toLocaleDateString(locale.code, { month: 'long', year: 'numeric' })}</span>
         <button onClick={onNext} aria-label={tr('finances.nextMonth')} className="rounded p-1 hover:bg-elevated"><ChevronRight className="h-3.5 w-3.5" /></button>
       </div>
       <div className="grid grid-cols-7 gap-0.5 text-center">

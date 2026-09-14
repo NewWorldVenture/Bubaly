@@ -18,7 +18,8 @@ import { PageHeader } from '@/components/app/page-header';
 import { SkeletonList, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 type Call = Tables<'call_logs'> & { contact?: Tables<'family_contacts'> | null };
 
@@ -97,15 +98,15 @@ const HOW_IT_WORKS = [
   { icon: Sparkles,      text: 'Handle it files the message with the planner',   textKey: 'frontDesk.handleItFilesTheMessage' },
 ] as const;
 
-function fmtTime(iso: string) {
+const fmtTimeIn = (locale: LocaleCode) => (iso: string) => {
   const d = new Date(iso);
   const diffMs = Date.now() - d.getTime();
   const diffH = diffMs / 3_600_000;
   if (diffH < 1) return `${Math.max(1, Math.round(diffMs / 60_000))}m ago`;
   if (diffH < 24) return `${Math.round(diffH)}h ago`;
   if (diffH < 48) return 'Yesterday';
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
+  return d.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+};
 
 function fmtDuration(secs: number | null) {
   if (!secs) return null;
@@ -136,6 +137,8 @@ export function FrontDeskModule({ channel, voice, unavailable }: {
   voice: FrontDeskVoiceMessage[];
   unavailable?: FrontDeskUnavailable;
 }) {
+  const locale = useLocale();
+  const fmtTime = fmtTimeIn(locale.code);
   const tr = useTranslations();
   const { familyId, userId } = useApp();
   const [filterTab, setFilterTab] = useState<FilterTab>('all');
@@ -529,6 +532,8 @@ export function FrontDeskModule({ channel, voice, unavailable }: {
 function CallDetail({ call, familyId, userId, onClose }: {
   call: Call; familyId: string; userId: string; onClose: () => void;
 }) {
+  const locale = useLocale();
+  const fmtTime = fmtTimeIn(locale.code);
   const tr = useTranslations();
   const { success, error: toastError } = useToast();
   const st = STATUS_CONFIG[call.status] ?? STATUS_CONFIG.screened;

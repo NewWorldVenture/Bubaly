@@ -22,7 +22,8 @@ import { PageHeader } from '@/components/app/page-header';
 import { SkeletonList, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 type Comm = Tables<'family_communications'> & { contact?: Tables<'family_contacts'> | null };
 type Contact = Tables<'family_contacts'>;
@@ -46,17 +47,19 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 type FilterTab = 'all' | 'unread' | 'call' | 'sms' | 'school' | 'sports' | 'email' | 'archived';
 
-function fmtTime(iso: string) {
+const fmtTimeIn = (locale: LocaleCode) => (iso: string) => {
   const d = new Date(iso);
   const diffMs = Date.now() - d.getTime();
   const diffH = diffMs / 3_600_000;
   if (diffH < 1) return `${Math.max(1, Math.round(diffMs / 60_000))}m ago`;
   if (diffH < 24) return `${Math.round(diffH)}h ago`;
   if (diffH < 48) return 'Yesterday';
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
+  return d.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+};
 
 export function InboxModule() {
+  const locale = useLocale();
+  const fmtTime = fmtTimeIn(locale.code);
   const tr = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
@@ -366,6 +369,8 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
   comm: Comm; familyId: string; userId: string;
   onClose: () => void; onArchive: () => void; onRefresh: () => void;
 }) {
+  const locale = useLocale();
+  const fmtTime = fmtTimeIn(locale.code);
   const tr = useTranslations();
   const { success, error: toastError } = useToast();
   const ch = CHANNELS[comm.channel] ?? CHANNELS.other;

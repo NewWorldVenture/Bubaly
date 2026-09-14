@@ -78,9 +78,9 @@ function amountIn(locale: LocaleCode, cents: number | null) {
   if (cents == null) return null;
   return new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(cents / 100);
 }
-function fmtWhen(iso: string) {
-  return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-}
+const fmtWhenIn = (locale: LocaleCode) => (iso: string) => {
+  return new Date(iso).toLocaleString(locale, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+};
 function timeLeft(iso: string) {
   const ms = new Date(iso).getTime() - Date.now();
   if (ms <= 0) return 'expired';
@@ -174,6 +174,8 @@ function ApprovalsTab({ approvals, members, canManage, needsYouHref, basedOn }: 
   /** Context slice names per approval id (M24); absent for a viewer who may not see them. */
   basedOn?: Record<string, BasedOn>;
 }) {
+  const locale = useLocale();
+  const fmtWhen = fmtWhenIn(locale.code);
   const tr = useTranslations();
   const router = useRouter();
   // Optimistic: a decided card leaves the inbox at once; router.refresh()
@@ -573,6 +575,8 @@ function PermissionsTab({ members, grants, canManage }: { members: Member[]; gra
 
 // ─── Delegations ─────────────────────────────────────────────────────────────
 function DelegationsTab({ delegations, members, canManage }: { delegations: Delegation[]; members: Member[]; canManage: boolean }) {
+  const locale = useLocale();
+  const fmtWhen = fmtWhenIn(locale.code);
   const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
@@ -680,6 +684,8 @@ function DelegationModal({ members, onClose, onSaved }: { members: Member[]; onC
 
 // ─── Emergency ────────────────────────────────────────────────────────────────
 function EmergencyTab({ active, canManage }: { active: Emergency | null; canManage: boolean }) {
+  const locale = useLocale();
+  const fmtWhen = fmtWhenIn(locale.code);
   const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
@@ -764,6 +770,8 @@ function EmergencyTab({ active, canManage }: { active: Emergency | null; canMana
 
 // ─── Audit ────────────────────────────────────────────────────────────────────
 function AuditTab({ audit, members, policies }: { audit: Audit[]; members: Member[]; policies: Policy[] }) {
+  const locale = useLocale();
+  const fmtWhen = fmtWhenIn(locale.code);
   const tr = useTranslations();
   const nameById = useMemo(() => new Map(members.map(m => [m.id, m.name])), [members]);
   const policyById = useMemo(() => new Map(policies.map(p => [p.id, p])), [policies]);

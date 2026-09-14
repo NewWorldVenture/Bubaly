@@ -20,7 +20,8 @@ import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, GradeType } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 type SchoolEvent = Tables<'school_events'>;
 type SchoolClass = Tables<'school_classes'>;
@@ -75,15 +76,15 @@ const GRADE_DIST_COLORS = [
   { label: 'F (Below 60%)', min: 0, color: '#f87171' },
 ];
 
-function fmtDue(iso: string) {
+const fmtDueIn = (locale: LocaleCode) => (iso: string) => {
   const d = new Date(iso);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const diff = Math.ceil((d.getTime() - today.getTime()) / 86400000);
-  if (diff <= 0) return { label: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), sub: 'Today', urgent: true };
-  if (diff === 1) return { label: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), sub: 'Tomorrow', urgent: true };
-  return { label: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), sub: `${diff} days left`, urgent: false };
-}
+  if (diff <= 0) return { label: d.toLocaleDateString(locale, { month: 'short', day: 'numeric' }), sub: 'Today', urgent: true };
+  if (diff === 1) return { label: d.toLocaleDateString(locale, { month: 'short', day: 'numeric' }), sub: 'Tomorrow', urgent: true };
+  return { label: d.toLocaleDateString(locale, { month: 'short', day: 'numeric' }), sub: `${diff} days left`, urgent: false };
+};
 
 function timeAgo(iso: string) {
   const diff = Date.now() - new Date(iso).getTime();
@@ -124,6 +125,8 @@ function gpaFromPct(pct: number): number {
 }
 
 export function SchoolModule() {
+  const locale = useLocale();
+  const fmtDue = fmtDueIn(locale.code);
   const tr = useTranslations();
   const { familyId, userId, members } = useApp();
   const { toast, success, error: toastError } = useToast();
@@ -639,7 +642,7 @@ export function SchoolModule() {
                               </span>
                             ) : g.grade ?? '—'}
                           </td>
-                          <td className="px-4 py-3 text-muted">{new Date(g.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</td>
+                          <td className="px-4 py-3 text-muted">{new Date(g.date).toLocaleDateString(locale.code, { month: 'short', day: 'numeric' })}</td>
                         </tr>
                       );
                     })}
@@ -724,11 +727,11 @@ export function SchoolModule() {
                 return (
                   <div key={e.id} className="flex items-start gap-3">
                     <div className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-lg text-center text-fg', ACCENT[i % ACCENT.length])}>
-                      <div><p className="text-[9px] font-bold uppercase">{d.toLocaleDateString('en-US', { month: 'short' })}</p><p className="text-sm font-black leading-none">{d.getDate()}</p></div>
+                      <div><p className="text-[9px] font-bold uppercase">{d.toLocaleDateString(locale.code, { month: 'short' })}</p><p className="text-sm font-black leading-none">{d.getDate()}</p></div>
                     </div>
                     <div>
                       <p className="text-sm font-semibold">{e.title}</p>
-                      <p className="text-xs text-muted">{d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</p>
+                      <p className="text-xs text-muted">{d.toLocaleDateString(locale.code, { weekday: 'long', month: 'short', day: 'numeric' })}</p>
                       {e.notes && <p className="text-xs text-muted/60">{e.notes}</p>}
                     </div>
                   </div>
@@ -779,9 +782,9 @@ export function SchoolModule() {
                 return (
                   <div key={e.id} className="flex items-start gap-3">
                     <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand/15 text-center">
-                      <div><p className="text-[9px] font-bold uppercase text-brand-text">{d.toLocaleDateString('en-US', { month: 'short' })}</p><p className="text-sm font-black text-violet-200 leading-none">{d.getDate()}</p></div>
+                      <div><p className="text-[9px] font-bold uppercase text-brand-text">{d.toLocaleDateString(locale.code, { month: 'short' })}</p><p className="text-sm font-black text-violet-200 leading-none">{d.getDate()}</p></div>
                     </div>
-                    <div><p className="text-sm font-semibold">{e.title}</p><p className="text-xs text-muted">{d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</p></div>
+                    <div><p className="text-sm font-semibold">{e.title}</p><p className="text-xs text-muted">{d.toLocaleDateString(locale.code, { weekday: 'long', month: 'short', day: 'numeric' })}</p></div>
                   </div>
                 );
               })}

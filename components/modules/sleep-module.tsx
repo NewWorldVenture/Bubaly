@@ -19,7 +19,8 @@ import { ageOn } from '@/lib/members/age';
 import {
   SLEEP_SOURCES, durationMinutes, fmtHours, habitCorrelations, recentLogs, recommendedSleepHours, routineStepIdeas, sleepSummary, weeklyProgram, dayDiff,
 } from '@/lib/sleep/coach';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 type Log = Tables<'sleep_logs'>;
 type Routine = Tables<'bedtime_routines'>;
@@ -30,11 +31,14 @@ const localInput = (d: Date) => {
   const p = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 };
-const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-const fmtDay = (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { weekday: 'short' });
+const fmtTimeIn = (locale: LocaleCode) => (iso: string) => new Date(iso).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
+const fmtDayIn = (locale: LocaleCode) => (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { weekday: 'short' });
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export function SleepModule() {
+  const locale = useLocale();
+  const fmtTime = fmtTimeIn(locale.code);
+  const fmtDay = fmtDayIn(locale.code);
   const t = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();

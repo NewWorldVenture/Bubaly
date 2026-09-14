@@ -16,7 +16,8 @@ import {
   type Forecast, type GeoResult,
 } from '@/lib/weather/open-meteo';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 type SavedLocation = Tables<'weather_locations'>;
 
@@ -44,13 +45,15 @@ function placeLabel(p: Place): string {
   return [p.name, p.admin1, p.country].filter(Boolean).slice(0, 2).join(', ');
 }
 
-function dayName(date: string, i: number): string {
+const dayNameIn = (locale: LocaleCode) => (date: string, i: number): string => {
   if (i === 0) return 'Today';
   if (i === 1) return 'Tomorrow';
-  return new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-}
+  return new Date(date + 'T00:00:00').toLocaleDateString(locale, { weekday: 'short', month: 'short', day: 'numeric' });
+};
 
 export function WeatherModule() {
+  const locale = useLocale();
+  const dayName = dayNameIn(locale.code);
   const t = useTranslations();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();

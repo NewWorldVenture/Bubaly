@@ -21,14 +21,15 @@ import {
   MOVE_STATUSES, MOVE_KINDS, TASK_CATEGORIES, BOX_STATUSES, BOX_ORDER, categoryMeta, planTasks, timeline, suggestedStatus, budgetHealth, moveSummary,
   nextBoxNumber, boxesByRoom, findInBoxes, money, isoDate, addDays, dayDiff,
 } from '@/lib/moving/planner';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 type Move = Tables<'moves'>;
 type Task = Tables<'move_tasks'>;
 type Box = Tables<'move_boxes'>;
 
-const fmtDate = (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-const fmtLong = (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+const fmtDateIn = (locale: LocaleCode) => (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+const fmtLongIn = (locale: LocaleCode) => (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 const statusLabel = (s: MoveStatus) => MOVE_STATUSES.find((x) => x.value === s)?.label ?? s;
 const boxStatusLabel = (s: MoveBoxStatus) => BOX_STATUSES.find((x) => x.value === s)?.label ?? s;
 
@@ -39,6 +40,9 @@ export function MovingModule() {
 }
 
 export function MovingWorkspace() {
+  const locale = useLocale();
+  const fmtDate = fmtDateIn(locale.code);
+  const fmtLong = fmtLongIn(locale.code);
   const tr = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
@@ -446,6 +450,8 @@ function MoveForm({ familyId, userId, move, onClose, onSaved }: { familyId: stri
 }
 
 function TaskForm({ familyId, userId, move, members, task, onClose, onSaved }: { familyId: string; userId: string; move: Move; members: { id: string; display_name: string }[]; task: Task | null; onClose: () => void; onSaved: () => void }) {
+  const locale = useLocale();
+  const fmtDate = fmtDateIn(locale.code);
   const tr = useTranslations();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);

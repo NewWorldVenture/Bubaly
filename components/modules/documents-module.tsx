@@ -23,7 +23,8 @@ import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { preOpenWindow } from '@/lib/utils/open-url';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 type Document = Tables<'documents'>;
 
@@ -40,10 +41,10 @@ function fmtSize(bytes: number | null): string {
   return `${(bytes / GB).toFixed(1)} GB`;
 }
 function fmtGb(bytes: number): string { return `${(bytes / GB).toFixed(1)} GB`; }
-function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
-function timeAgo(iso: string): string {
+const fmtDateIn = (locale: LocaleCode) => (iso: string): string => {
+  return new Date(iso).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
+};
+const timeAgoIn = (locale: LocaleCode) => (iso: string): string => {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60000);
   if (mins < 60) return mins <= 1 ? 'just now' : `${mins} minutes ago`;
@@ -52,8 +53,8 @@ function timeAgo(iso: string): string {
   const days = Math.floor(hrs / 24);
   if (days === 1) return 'Yesterday';
   if (days < 7) return `${days} days ago`;
-  return fmtDate(iso);
-}
+  return fmtDateIn(locale)(iso);
+};
 
 // ── File-type detection → icon + color, and coarse storage group ────────────
 type FileMeta = { Icon: typeof FileText; color: string; tint: string };
@@ -121,6 +122,9 @@ type SortKey = (typeof SORTS)[number]['value'];
 const PAGE_SIZE = 10;
 
 export function DocumentsModule() {
+  const locale = useLocale();
+  const fmtDate = fmtDateIn(locale.code);
+  const timeAgo = timeAgoIn(locale.code);
   const tr = useTranslations();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();

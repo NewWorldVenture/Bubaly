@@ -19,18 +19,21 @@ import {
   WATCH_KINDS, WATCH_SERVICES, WATCH_STATUSES, AGE_RATINGS, TIME_PRESETS, kindMeta, serviceLabel, ratingMinAge,
   ageOn, pickTonight, watchlistAudienceAges, watchlistSummary,
 } from '@/lib/watchlist/picker';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 type Title = Tables<'watchlist_titles'>;
 type Vote = Tables<'watchlist_votes'>;
 type Session = Tables<'watch_sessions'>;
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
-function fmtDate(d: string): string {
-  return new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
+const fmtDateIn = (locale: LocaleCode) => (d: string): string => {
+  return new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+};
 
 export function WatchlistModule() {
+  const locale = useLocale();
+  const fmtDate = fmtDateIn(locale.code);
   const tr = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();

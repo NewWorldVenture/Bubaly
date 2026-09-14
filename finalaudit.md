@@ -413,7 +413,7 @@ reads the **JWT** email and not `profiles.email`, so it is not an escalation.
   matching the `useTranslations()`/`getTranslations()` idiom, built on `Intl` rather
   than date-fns-with-a-locale because a pattern like `'EEE, MMM d'` hardcodes the
   **order** as well as the names — date-fns with a German locale gives German names in
-  American order. Converted so far: the shared formatter, the Family Wallet's 79 money sites, and 60 date sites across 26 components — **252 → 180**, of which ~39 of the remainder are correct as en-US (AI prompts, Super Admin, the locale as data);
+  American order. **`components/` is now at zero** — every date, time and money value a component renders follows the reader: the shared formatter, the Family Wallet's 79 money sites, and 117 date sites across 60 components. **252 → 123**, and what remains is `app/` (44) and `lib/` (79), a meaningful share of which is correct as en-US (AI prompts, crons and exports, Super Admin, the locale as data);
   `tests/hardcoded-locales-only-go-down.test.ts` holds the remainder as a ceiling that
   can only fall. **The currency is deliberately NOT localised**: a US family's wallet
   is in dollars whichever language they read, so the currency stays a caller's argument

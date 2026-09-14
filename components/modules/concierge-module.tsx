@@ -47,10 +47,10 @@ const STATUS_STYLES: Record<string, string> = {
   cancelled: 'bg-red-500/15 text-red-400 border border-red-500/30',
 };
 
-function fmtDate(d: string | null) {
+const fmtDateIn = (locale: LocaleCode) => (d: string | null) => {
   if (!d) return null;
-  return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
+  return new Date(d).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
+};
 
 function centsIn(locale: LocaleCode, cents: number | null) {
   if (!cents) return null;
@@ -63,6 +63,7 @@ export function ConciergeModule() {
   const t = useTranslations();
   // Money follows the reader's locale; the currency does not.
   const locale = useLocale();
+  const fmtDate = fmtDateIn(locale.code);
   const fmtCents = (cents: number | null) => centsIn(locale.code, cents);
   const { familyId, userId, selfMember, family } = useApp();
   const { success, error: toastError } = useToast();
@@ -417,6 +418,7 @@ function PlanDetail({ plan, onClose, onDelete, onRefresh }: {
   const t = useTranslations();
   // Money follows the reader's locale; the currency does not.
   const locale = useLocale();
+  const fmtDate = fmtDateIn(locale.code);
   const fmtCents = (cents: number | null) => centsIn(locale.code, cents);
   const { success, error: toastError } = useToast();
   const [editStatus, setEditStatus] = useState(plan.status);

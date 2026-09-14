@@ -18,15 +18,18 @@ import type { Tables, CefrLevel, LanguageSessionKind } from '@/lib/database.type
 import {
   CEFR, SESSION_KINDS, LANGUAGES, GRADES, cefrMeta, kindMeta, languageMeta, starterDeck, sm2, dueCards, deckStats, weekProgress, streak, levelEstimate, suggestToday, languageSummary, isoDate, type Grade,
 } from '@/lib/language/practice';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 type Goal = Tables<'language_goals'>;
 type Session = Tables<'language_sessions'>;
 type Card = Tables<'vocab_cards'>;
 
-const fmtDate = (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+const fmtDateIn = (locale: LocaleCode) => (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
 
 export function LanguageModule() {
+  const locale = useLocale();
+  const fmtDate = fmtDateIn(locale.code);
   const tr = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();

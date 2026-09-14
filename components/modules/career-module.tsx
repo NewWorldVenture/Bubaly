@@ -18,13 +18,14 @@ import type { Database, Tables, CareerEmploymentType, CareerStatus, CareerWorkMo
 import {
   JOB_STAGES, CAREER_STATUSES, WORK_MODES, EMPLOYMENT_TYPES, OPEN_STAGES, stageMeta, parseKeywords, atsScore, pipelineStats, followUps, salaryFit, careerMap, careerSummary, money, isoDate,
 } from '@/lib/career/hub';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 type Profile = Tables<'career_profiles'>;
 type Application = Tables<'job_applications'>;
 type Resume = Tables<'resume_versions'>;
 
-const fmtDate = (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+const fmtDateIn = (locale: LocaleCode) => (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
 const dollarsToCents = (v: FormDataEntryValue | null) => { const raw = String(v ?? '').trim(); if (!raw) return null; const n = Number(raw.replace(/[^0-9.]/g, '')); return Number.isFinite(n) ? Math.round(n * 100) : null; };
 const centsToDollars = (c: number | null | undefined) => (c === null || c === undefined ? '' : String(c / 100));
 const STAGE_STYLE: Record<JobStage, string> = {
@@ -34,6 +35,8 @@ const STAGE_STYLE: Record<JobStage, string> = {
 };
 
 export function CareerModule() {
+  const locale = useLocale();
+  const fmtDate = fmtDateIn(locale.code);
   const tr = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();

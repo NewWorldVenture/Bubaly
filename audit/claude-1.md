@@ -2190,3 +2190,54 @@ run `tsc` and `eslint`, commit, repeat. 31 files at roughly 2 sites each — slo
 sweep and the only way it stays correct.
 
 The ratchet holds at 180 either way, so none of this can regress silently while it waits.
+
+---
+
+## Pass AF — components/ reaches zero, one file at a time as Pass AE said it had to
+
+### [CLAUDE-1][HIGH][I18N] Every date, time and money value a component renders now follows the reader
+
+- **Status:** FIXED — **components/ is at 0**. Ratchet 180 → **123**, 57 sites across 34 files.
+
+Pass AE established that this could not be a sweep and named the four facts to check per
+file. Working that way it went through cleanly:
+
+| shape | files | approach |
+|---|---|---|
+| one `function` helper, client, clean | 12 | curried factory + per-component binding |
+| `const` arrow helpers, client, clean | 10 | same; the tool gained the second declaration form |
+| a chained helper | 1 | the fixed point passes the locale through to the inner factory |
+| a pre-existing `locale` | 4 | binding moved **below** that declaration |
+| async **server** components | 2 | `getLocaleContext()`, not a hook |
+| component-level uses as well | 5 | the Pass AD tool, after the helpers |
+
+The 23 clean files converted with **tsc and eslint clean on the first attempt** — the
+difference from Pass AE being that the four facts were established first rather than
+discovered by breakage.
+
+### The three that still needed reading
+
+**`ai-home-dashboard.tsx` already had `getLocaleContext()`** and a `locale` in scope. My
+assertion refused to add a second one, which is the only reason a duplicate did not land.
+The inspector had reported the file as async but *not* as having a locale, because its
+regex required `const { locale } =` and the file writes `const { locale, messages } =`.
+Another pattern too narrow for its subject — the fourth this session.
+
+**Four files had the binding inserted above the `locale` it depends on**
+(`Block-scoped variable 'locale' used before its declaration`), and `approval-card.tsx`
+got a duplicate declaration outright. Fixed by hand: the binding belongs after the
+existing declaration, not at the top of the body. Exactly the ordering failure Pass AE
+predicted, and cheap to fix once it is four files rather than twenty-one.
+
+**`completed-by-bubaly.tsx`** says in its own header *"No hooks: the server page renders
+it from rows it is given"* — so its helper takes the locale as a parameter and the
+component reads `getLocaleContext()`. The file documented its own constraint.
+
+### What is left, and how much of it is a defect
+
+123 sites: **app/ 44 in 25 files, lib/ 79 in 52 files, components/ 0.** A meaningful
+share is correct rather than outstanding — the AI prompt builders (the reader is the
+model), the crons and CSV exports (no reader whose language is known), the Super Admin
+pages (the platform's own currency), and `lib/i18n`'s locale codes, which are data. The
+next pass should classify those explicitly rather than convert blindly, so the ceiling
+can stop at the honest floor instead of zero.

@@ -26,8 +26,13 @@
 //     whose language is known; the source language is correct there.
 //   * Super Admin pages render to whoever operates Bubaly, in the platform's own
 //     currency — 16 of the 20 fmtMoney files are these.
-// Deciding which of the 145 fall in those categories is the conversion work. This
-// test does not pretend to know; it only refuses to let the total grow.
+// Deciding which of the remaining fall in those categories is the conversion work.
+// This test does not pretend to know; it only refuses to let the total grow.
+//
+// components/ is now at ZERO — every date, time and money value a component renders
+// follows the reader. What is left is app/ (44) and lib/ (79), and a meaningful share of
+// that is correct: the AI prompt builders, the crons and exports, the Super Admin pages,
+// and lib/i18n's locale codes, which are data rather than a formatter.
 import { readFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
@@ -39,7 +44,7 @@ const FORMATTER_WITH_LOCALE =
 /**
  * The ceiling, measured when the shared formatter was made locale-aware.
  *
- * 180, and every step to that number was a way to get it wrong. A `git grep -c`
+ * 123, and every step to that number was a way to get it wrong. A `git grep -c`
  * says 247, because git grep counts matching LINES and several of these hold two
  * formatters. Counting matches instead says 252 — but that reads COMMENTS, and one
  * of them is this pass's own explanation of the defect. Stripping comments gives
@@ -48,7 +53,7 @@ const FORMATTER_WITH_LOCALE =
  * Getting those three numbers to disagree is how a ratchet starts life already
  * broken, which is why the derivation is written down rather than the result.
  */
-const CEILING = 180;
+const CEILING = 123;
 
 /**
  * Comments stripped first, and this is not a detail.

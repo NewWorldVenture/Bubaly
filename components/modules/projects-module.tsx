@@ -21,19 +21,22 @@ import {
   compareQuotes, budgetHealth, schedule, nextAction, projectsSummary, money, isoDate, type ScopeTemplate,
 } from '@/lib/projects/planner';
 import { compareQuotes as rankQuotes } from '@/lib/services/providers/compare';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 type Project = Tables<'home_projects'>;
 type Material = Tables<'project_materials'>;
 type Quote = Tables<'project_quotes'>;
 type Contractor = Pick<Tables<'home_contractors'>, 'id' | 'name' | 'company' | 'trade' | 'phone' | 'is_preferred'>;
 
-const fmtDate = (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+const fmtDateIn = (locale: LocaleCode) => (d: string) => new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
 const dollarsToCents = (v: FormDataEntryValue | null) => { const raw = String(v ?? '').trim(); if (!raw) return null; const n = Number(raw.replace(/[^0-9.]/g, '')); return Number.isFinite(n) ? Math.round(n * 100) : null; };
 const centsToDollars = (c: number | null | undefined) => (c === null || c === undefined ? '' : String(c / 100));
 const PRIORITY_STYLE: Record<HomeProjectPriority, string> = { high: 'border-rose-500/30 bg-rose-500/10 text-rose-200', medium: 'border-amber-500/30 bg-amber-500/10 text-amber-200', low: 'border-border bg-surface/60 text-muted' };
 
 export function ProjectsModule() {
+  const locale = useLocale();
+  const fmtDate = fmtDateIn(locale.code);
   const tr = useTranslations();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
@@ -289,6 +292,8 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
   project: Project; familyId: string; userId: string; members: { id: string; display_name: string }[]; contractors: Contractor[]; materials: Material[]; quotes: Quote[]; today: Date;
   onClose: () => void; onEdit: () => void; onStatus: (s: HomeProjectStatus) => void; onDelete: () => void;
 }) {
+  const locale = useLocale();
+  const fmtDate = fmtDateIn(locale.code);
   const tr = useTranslations();
   const { success, error: toastError } = useToast();
   const [tab, setTab] = useState<'materials' | 'quotes'>(project.is_diy ? 'materials' : 'quotes');
