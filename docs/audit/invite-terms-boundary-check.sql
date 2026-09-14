@@ -28,6 +28,13 @@ declare
   got_family  uuid;
   got_role    text;
 begin
+  -- Re-runnable against a database that already holds a previous run's rows.
+  -- CI replays into a fresh database, but a probe a person cannot run twice is
+  -- a probe they stop running.
+  delete from public.invites where token like tok || '%';
+  delete from public.family_members where user_id in (parent_uid, invitee_uid);
+  delete from public.families where id in (fam_a, fam_b);
+
   insert into public.families (id, name) values (fam_a, 'Issuer'), (fam_b, 'Bystander')
     on conflict do nothing;
   insert into auth.users (id, email) values

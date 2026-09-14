@@ -186,3 +186,65 @@ NEXT: nothing queued. Available for follow-up if Claude-1 wants any OPEN item cl
 FILES-TOUCHED: audit/claude-4.md, audit/status.md (no source code modified)
 BLOCKERS: none. Could not reach: live database, running app, Playwright e2e matrix
 LAST-UPDATE: 2026-09-13T23:40Z
+
+---
+
+# Board from the third audit session (appended 2026-09-14)
+
+A third session ran this protocol against the same repository. Nothing above is
+edited — this block is appended, and where a finding duplicates one already on
+the board it says so and gives the disposition.
+
+## Claude-1 (third session)
+CURRENT: Architecture/integration sweep, and applying the parallel session's
+  CRITICAL. Workers 2/3/4 were launched here and all three hit the account's
+  session rate limit mid-run (resets 03:10 UTC); their partial findings are in
+  `audit/claude-{2,3,4}.md` and were read before acting.
+COMPLETED:
+  - PR #545 merged (F22: a child's username matched as a pattern, not a value).
+  - PR #548 opened, carrying six findings:
+      A3-002 HIGH     every child row on /wallet/treasury was a 404
+      A3-001 MEDIUM   two integrations with no documented switch, one on a cron
+      A3-003 CRITICAL an invitee could rewrite their invite and join any family
+                      as parent (migration 0297) — the same defect Claude-3 of
+                      the parallel session found; confirmed independently before
+                      acting, then fixed and proven
+      A3-004 MEDIUM   Guardian queried outside the typed layer, behind 180 lines
+                      of types that could not apply
+      A3-005 HIGH     a scam call could be transferred instead of hung up
+      A3-006 MEDIUM   three Twilio callbacks consumed the event before checking
+                      which family it was for
+  - Six areas verified sound and recorded so nobody re-derives them: cron auth
+    (24/24), cron schedule↔route parity, all 72 /api references, all 103 catalog
+    hrefs, client-component env hygiene, morning-brief timezone handling.
+NEXT: Claude-3's remaining OPEN findings, in severity order — the allowance_rules
+  CRITICAL (a child writes a rule, the service-role cron mints the money), then
+  health/medication child write access, then grades/screen_time_limits.
+  `family_credentials` is already closed on main by 0296 from the other session.
+FILES-TOUCHED (third session only):
+  - .env.example, components/wallet/treasury-view.tsx
+  - supabase/migrations/0297_invite_terms_are_not_the_invitees_to_write.sql
+  - docs/audit/invite-terms-boundary-check.sql
+  - lib/database.types.ts, lib/supabase/guardian-tables.ts (deleted),
+    lib/guardian/{ai-screen,pipeline,trust,learning-run}.ts,
+    app/(app)/guardian/**, app/api/guardian/**, app/api/cron/guardian-learning/route.ts,
+    components/guardian/guardian-dashboard.tsx
+  - tests/{env-example-covers-runtime-config,internal-links-resolve,
+    guardian-screening-decision-is-validated}.test.ts (new),
+    tests/{guardian-action-error-boundaries,guardian-audit-log-service-role,
+    migration-version-safety}.test.ts (updated)
+BLOCKERS: none of my own. The owner-blocked set is unchanged — F5/F-001 (no
+  working path to apply a migration to production), F6 (inbound-email secret and
+  MX), F19 (AI metering is a pricing decision).
+VERIFICATION: tsc clean · eslint clean on every changed file · full vitest suite
+  green · 309 migrations replayed, 0 failed · 18/18 boundary probes · non-vacuity
+  proven for every new guard by reverting the fix and watching it go red.
+LAST-UPDATE: 2026-09-14T12:05Z
+
+## Claude-2 / Claude-3 / Claude-4 (third session)
+STATUS: stopped early — all three hit the account session limit mid-run. Their
+  findings so far are in their own files and are NOT complete sweeps. Claude-3's
+  partial run is the most valuable: it bootstrapped a throwaway PG16, replayed
+  all 308 migrations, and probed RLS as a real child session, producing two
+  CRITICALs (one now fixed here as A3-003, one still OPEN) and two HIGHs.
+LAST-UPDATE: 2026-09-14T12:05Z
