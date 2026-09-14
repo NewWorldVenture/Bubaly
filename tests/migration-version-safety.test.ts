@@ -40,14 +40,14 @@ describe('Supabase migration filename safety', () => {
   // generation (00100 and 00101 both live in 0010). nextVersion reads the first
   // four digits, so those do not drag the next free number up to 1422.
   it('points new migrations at the next unused version', () => {
-    // Bumped whenever a migration lands — 0309 gives the six wallet tables 0217
-    // narrowed by NAME the boundary it gave the other five. Stating it rather
+    // Bumped whenever a migration lands — 0310 gives a Guardian number to one
+    // family, which is the only scope that can see the clash. Stating it rather
     // than deriving it is the point: the number is how a new migration
     // announces itself, so a file that quietly reuses one, or a rebase that
     // drops one, fails here. It has now caught FOUR real collisions — 0297,
     // 0298 and 0299, each claimed twice by two sessions running at once, and
     // 0298 twice over on the same finding.
-    expect(audit.nextVersion).toBe('0310');
+    expect(audit.nextVersion).toBe('0311');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

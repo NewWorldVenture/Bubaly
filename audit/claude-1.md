@@ -2397,3 +2397,68 @@ because **the new trigger is what exposed it** — it was invisible before.
   THREE times in a row** — once on a fresh database and twice more against its
   own leftovers, because "passes once" was exactly the property that was not
   holding.
+
+### [CLAUDE-1][HIGH][GUARDIAN] Two families could hold the same Guardian number, and every call to it was dropped
+
+- **File/path:** `app/(app)/guardian/actions.ts:277-286` (the clash check);
+  `app/api/guardian/inbound/{voice,sms,whatsapp}/route.ts`;
+  `guardian_member_profiles`.
+- **Raised by:** Claude-4 as C-4-16, with the postgrest-js source read rather
+  than assumed. Verified and fixed as reported.
+- **Problem:** the two sides disagree about scope, and **the writer cannot be
+  taught otherwise**. `assignGuardianPhoneAction` guards
+  `.eq('family_id', familyId).eq('guardian_phone', phone)` — one family — on a
+  `createServer()` client that is RLS-bound and could not see another family's
+  row even with the `.eq()` removed. The three inbound webhooks resolve the same
+  column **across every family** under the service role. Only a constraint sees
+  both families at once, and there was none: `pg_indexes` for the table listed
+  exactly two, neither on `guardian_phone`.
+  The number is free text — a plain controlled input, normalised to E.164 — so
+  any parent can type a number another household already uses.
+- **What made it a safety bug rather than a data-quality one:** `maybeSingle()`
+  answers `data: null` **plus a PGRST116 error** on more than one row. All three
+  routes destructured `{ data: memberProfile }` and dropped the error, so a
+  FAILED lookup and an UNKNOWN NUMBER were the same observation — and the
+  unknown-number branch tells Twilio **200**, consuming the event so nothing is
+  ever retried.
+- **Impact:** cross-tenant and silent. Family B typing a number family A already
+  uses takes family A's Guardian offline — scam screening, elder-call routing,
+  voicemail — with no error on either side and no log. Guardian is a safety
+  feature and the failure mode is "the call just never arrives".
+- **Recommended fix / taken:** all three parts C-4-16 proposed.
+  `0310_a_guardian_number_belongs_to_one_family.sql` adds the unique index,
+  **attempted-not-forced in 0285's idiom**: on a database that already holds
+  duplicates it REPORTS them and leaves the data alone, because choosing which
+  household loses its number is a person's decision. The
+  `where guardian_phone is not null` predicate matters — a profile with no
+  number is the normal state for a member Guardian is not watching, and many
+  must coexist. The action surfaces 23505 as "already in use" rather than a
+  generic failure, and all three routes keep the error and answer **503**, so
+  Twilio retries instead of the event being consumed.
+- **One thing the fix had to get right:** the voice route's `finish()` helper
+  **calls `markGuardianCallbackProcessed`**, so routing the refusal through it
+  would have been the same bug wearing a different name. The guard returns a raw
+  TwiML 503 instead, and the test asserts `not.toMatch(/\breturn finish\(/)` as
+  well as the absence of the marker call.
+- **Status:** FIXED. `docs/audit/guardian-number-uniqueness-check.sql` (**31/31
+  probes, 323/323 migrations, probe suite run twice**) and
+  `tests/a-guardian-number-lookup-failure-is-not-an-unknown-number.test.ts`.
+  Non-vacuity proven three ways: dropping the index → *"two families hold the
+  same Guardian number"*; restoring the sms route's `200 + markProcessed` →
+  the 5xx assertion fails; and **both branches of the migration exercised** —
+  on a clean database it creates the index, and on one seeded with a duplicate
+  it warns, leaves both rows in place, and does not create the index.
+  The probe asserts what still works alongside what does not: two profiles with
+  NO number coexist, a family still moves its own number between members,
+  re-saving the same number on the same row is fine, and a second family still
+  claims a different number.
+
+### [CLAUDE-1][NOTE][TESTING] The prose-vs-code trap, for the third time
+
+The Guardian guard's first run failed on its own explanation: the voice route's
+comment says it must NOT call `markGuardianCallbackProcessed`, and a literal
+search read that sentence as the call. Same shape as the `process.env.X` inside
+a doc comment that failed `env-example-covers-runtime-config`, and the same fix
+— strip comments before scanning. Worth a third mention because the assertion
+was *right* and the reading was wrong, which is the failure mode that looks
+most like a real finding.

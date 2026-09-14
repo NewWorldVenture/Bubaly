@@ -292,6 +292,15 @@ export async function assignGuardianPhoneAction(input: {
       { onConflict: 'family_id,member_id' },
     );
 
+  // 23505 is the GLOBAL clash that the check above cannot see. That check is
+  // scoped to one family and runs on an RLS-bound client, so another
+  // household's claim on this number is invisible to it by construction —
+  // 0310's unique index is the only thing that sees both families at once.
+  // Surfacing it as "already in use" tells the parent to pick another number
+  // instead of showing them a generic failure for a correctable mistake.
+  if (error && (error.code === '23505' || error.message?.includes('uq_guardian_profiles_phone'))) {
+    return { ok: false, error: t('actions.thatNumberIsAlreadyAssigned') };
+  }
   if (error) return actionFailure('assign the Guardian phone', t('guardian.couldNotAssignTheGuardianPhone'), error);
 
   await logGuardianAudit({

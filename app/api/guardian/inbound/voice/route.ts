@@ -67,11 +67,30 @@ export async function POST(req: NextRequest) {
   };
 
   // Find which family/member this number belongs to
-  const { data: memberProfile } = await supabase.from('guardian_member_profiles')
+  const { data: memberProfile, error: profileError } = await supabase.from('guardian_member_profiles')
     .select('id, family_id, member_id, ai_persona_name, ai_greeting_template, current_context, default_mode_immediate, default_mode_close, default_mode_trusted, default_mode_known, default_mode_unknown, default_mode_suspected_spam, default_mode_blocked, context_overrides, voicemail_greeting, guardian_phone')
     .eq('guardian_phone', to)
     .eq('is_active', true)
     .maybeSingle();
+
+  // A FAILED lookup is not an unknown number. `maybeSingle()` answers
+  // `data: null` plus PGRST116 when MORE THAN ONE profile holds this number —
+  // which is exactly the state 0310's unique index exists to prevent, and which
+  // a production database may already be in, because 0310 reports duplicates
+  // rather than choosing which household loses its number. Dropping the error
+  // turned that into "we do not know this number", and sent the caller to voicemail. Answering 5xx
+  // instead leaves the event unconsumed so Twilio retries it, and puts the
+  // reason somewhere a person can find.
+  if (profileError) {
+    console.error('[guardian-voice] Guardian number lookup failed', { to, error: profileError });
+    // NOT `finish()`: that calls markGuardianCallbackProcessed, which is
+    // precisely what must not happen here. The event has to stay unconsumed so
+    // Twilio retries it once the duplicate is resolved.
+    return new NextResponse(
+      wrapTwiml(twimlSay('Sorry, we cannot take this call right now. Please try again shortly.')),
+      { status: 503, headers: { 'content-type': 'application/xml; charset=utf-8' } },
+    );
+  }
 
   if (!memberProfile) {
     // Unknown number — just record to voicemail

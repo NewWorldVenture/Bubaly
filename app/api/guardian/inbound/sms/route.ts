@@ -53,11 +53,24 @@ export async function POST(req: NextRequest) {
   if (claim !== 'claimed') return new NextResponse('', { status: 200 });
 
   // Find which family member this number belongs to
-  const { data: memberProfile } = await supabase.from('guardian_member_profiles')
+  const { data: memberProfile, error: profileError } = await supabase.from('guardian_member_profiles')
     .select('id, family_id, member_id, default_mode_suspected_spam, default_mode_blocked, default_mode_unknown')
     .eq('guardian_phone', to)
     .eq('is_active', true)
     .maybeSingle();
+
+  // A FAILED lookup is not an unknown number. `maybeSingle()` answers
+  // `data: null` plus PGRST116 when MORE THAN ONE profile holds this number —
+  // which is exactly the state 0310's unique index exists to prevent, and which
+  // a production database may already be in, because 0310 reports duplicates
+  // rather than choosing which household loses its number. Dropping the error
+  // turned that into "we do not know this number", and marked the message handled and answered 200, so nothing was ever retried. Answering 5xx
+  // instead leaves the event unconsumed so Twilio retries it, and puts the
+  // reason somewhere a person can find.
+  if (profileError) {
+    console.error('[guardian-sms] Guardian number lookup failed', { to, error: profileError });
+    return new NextResponse('', { status: 503 });
+  }
 
   if (!memberProfile) {
     await markGuardianCallbackProcessed(supabase, smsSid);
