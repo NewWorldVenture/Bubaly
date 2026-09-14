@@ -81,13 +81,20 @@ function amountIn(locale: LocaleCode, cents: number | null) {
 const fmtWhenIn = (locale: LocaleCode) => (iso: string) => {
   return new Date(iso).toLocaleString(locale, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 };
-function timeLeft(iso: string) {
-  const ms = new Date(iso).getTime() - Date.now();
-  if (ms <= 0) return 'expired';
-  const h = Math.floor(ms / 3_600_000);
-  if (h < 1) return `${Math.max(1, Math.round(ms / 60_000))}m left`;
-  if (h < 48) return `${h}h left`;
-  return `${Math.round(h / 24)}d left`;
+/**
+ * How long a delegation has left. FORWARD-facing, so it is not `fmtTimeAgo` —
+ * and every rung was an English literal, which the hardcoded-locale scan cannot
+ * see. The words come from the catalogue now; the caller supplies the translator.
+ */
+function timeLeftIn(t: (key: string, params?: Record<string, string | number>) => string) {
+  return (iso: string) => {
+    const ms = new Date(iso).getTime() - Date.now();
+    if (ms <= 0) return t('trust.expired');
+    const h = Math.floor(ms / 3_600_000);
+    if (h < 1) return t('trust.minutesLeft', { count: Math.max(1, Math.round(ms / 60_000)) });
+    if (h < 48) return t('trust.hoursLeft', { count: h });
+    return t('trust.daysLeft', { count: Math.round(h / 24) });
+  };
 }
 
 export function TrustModule({ data, canManage, needsYouHref }: { data: TrustData; canManage: boolean; needsYouHref?: string }) {
@@ -578,6 +585,7 @@ function DelegationsTab({ delegations, members, canManage }: { delegations: Dele
   const locale = useLocale();
   const fmtWhen = fmtWhenIn(locale.code);
   const tr = useTranslations();
+  const timeLeft = timeLeftIn(tr);
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [adding, setAdding] = useState(false);

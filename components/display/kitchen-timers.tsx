@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Plus, Timer as TimerIcon, X } from 'lucide-react';
 import { TIMER_PRESETS, formatDuration } from '@/lib/display/ambient';
 import { cn } from '@/lib/utils/cn';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type RunningTimer = {
   id: string;
@@ -62,6 +62,9 @@ function chime() {
 
 export function KitchenTimers() {
   const tr = useTranslations();
+  const locale = useLocale();
+  const minutesLabel = (m: number) =>
+    new Intl.NumberFormat(locale.code, { style: 'unit', unit: 'minute', unitDisplay: 'short' }).format(m);
   const [timers, setTimers] = useState<RunningTimer[]>([]);
   const [picking, setPicking] = useState(false);
   const [customMin, setCustomMin] = useState('');
@@ -120,7 +123,9 @@ export function KitchenTimers() {
           onSubmit={(e) => {
             e.preventDefault();
             const m = parseInt(customMin, 10);
-            if (Number.isFinite(m) && m > 0 && m <= 24 * 60) start(`${m} min`, '⏱️', m * 60);
+            // The timer's NAME, which the family reads. "min" is an abbreviation that
+            // differs by locale (de "Min."), and Intl knows all eleven.
+            if (Number.isFinite(m) && m > 0 && m <= 24 * 60) start(minutesLabel(m), '⏱️', m * 60);
           }}
         >
           <input value={customMin} onChange={(e) => setCustomMin(e.target.value.replace(/\D/g, ''))}
@@ -158,7 +163,7 @@ export function KitchenTimers() {
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-xs font-semibold text-white">{t.label}</p>
                       <p className={cn('text-xl font-black tabular-nums leading-tight', t.done ? 'text-emerald-200' : 'text-white')}>
-                        {t.done ? 'Done!' : formatDuration(remaining)}
+                        {t.done ? tr('kitchenTimers.done') : formatDuration(remaining)}
                       </p>
                     </div>
                     <button onClick={() => dismiss(t.id)} aria-label={`Dismiss ${t.label} timer`}

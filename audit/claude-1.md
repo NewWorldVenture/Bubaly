@@ -2748,3 +2748,70 @@ forward-facing and correct as it is) and **5** composite durations
 (`lib/marketplace/auction.ts` `"2d 4h"`, `lib/sleep/coach.ts` `"7h 30m"`,
 `lib/analytics/{journey,onboarding}.ts` `"1m 05s"`), which `Intl.RelativeTimeFormat` cannot
 express at all.
+
+---
+
+## Pass AM — the instrument was the defect: three false positives, two hidden ladders, one pass reverted
+
+**Status: FIXED.** No production behaviour depended on this except two English-literal
+countdowns it uncovered. The point of the pass is that **pinning a number turns a scanner
+into a contract**, so its blind spots become false assurance — and this one had them in
+both directions.
+
+### Bounding the window to the enclosing declaration
+
+The scanner took a ±character window around each millisecond divisor. That window read
+across **three unrelated functions**. `lib/location/geo.ts` has `distanceLabel` (metres →
+km, `/ 1000`) sitting between `timeAgo` above and `isStale` below, so the window picked up
+`Date` from one and `60_000` from the other — and a **distance** label satisfied every
+signal for a time ladder. Bounded to the enclosing top-level declaration, the signals now
+have to be true *of the same function*.
+
+That one change removed three false positives and **surfaced two English-only ladders the
+wide window had mis-classified as localised**, because it had seen the word `locale`
+somewhere else in the file:
+
+- **`components/modules/trust-module.tsx` `timeLeft`** — `'expired'`, `` `${n}m left` ``,
+  `` `${n}h left` ``, `` `${n}d left` ``. A delegation's remaining time, in English, on a
+  **trust** surface. Forward-facing, so `fmtTimeAgo` is the wrong tool: it takes the
+  translator instead, with four new catalogue keys.
+- **`components/display/kitchen-timers.tsx`** — `'Done!'` on the Kitchen Display, and a
+  custom timer's own **name** built as `` `${m} min` ``. "min" is an abbreviation that
+  differs by locale (German writes "Min."), and `Intl.NumberFormat` with
+  `style: 'unit'` knows all eleven — en-US still renders "15 min".
+
+### Two more things the widened divisor got wrong
+
+Widening `MINUTE_DIVISOR` to accept `/ 1000` (so a ladder that goes via seconds is visible)
+made **every** `/ 1000` a candidate. Besides `distanceLabel`, `lib/blog/engagement.ts`
+`formatLikeCount` renders `"1.2k"` and `"1.2m"` — and `` `${…}m` `` reads exactly like
+"1.2 minutes" to a regex. Added: a ladder must also **be about a time** (`Date`,
+`getTime()`, `now`, `iso`, `ms` in the same declaration).
+
+### And one pass I built and then reverted
+
+Tightening the window cost visibility of `lib/sleep/coach.ts` `fmtHours`, which renders
+`"7h 30m"` from **minutes** and so has no millisecond divisor to anchor on. I added an
+independent scan over two-unit templates to get it back. It found 18 "composite durations"
+— and the new ones were `lib/calendar/heatmap.ts`'s prose (*"3 packed days in the last 4
+weeks"*), `lib/watchlist/picker.ts`'s `` `${n} min fits` ``, and single-unit labels matched
+across template boundaries in `lib/library/feed-parse.ts`.
+
+**Reverted.** A count I cannot defend is worse than a name I can: the miss is one helper,
+and it is now written by name into the scanner's header and asserted by the guard, which
+requires the scanner to keep naming it. Three widenings, three crops of false positives —
+that is the signal to stop widening.
+
+### Also fixed while there
+
+Six `lib/` modules had their new `createFormat` import land **mid-file** (after a
+function, or inside `geo.ts`'s header comment) because the anchor I inserted against was
+the declaration rather than the top. All moved to the top. tsc never minded; a reader
+would have.
+
+### Counts
+
+**0** English-only ladders · **6** localised-but-private (five worth folding into
+`fmtTimeAgo`; the sixth, `countdownLabel`, is forward-facing and correct) · **3** files of
+composite durations plus one named miss · **1** browser-locale date, the email blocked on
+I18N-001.

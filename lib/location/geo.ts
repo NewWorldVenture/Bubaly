@@ -2,6 +2,9 @@
 // No Supabase / React so haversine, geofence membership, transition detection,
 // and labels stay deterministically unit-testable.
 
+import { createFormat } from '@/lib/utils/format';
+import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
+
 export interface LatLng { latitude: number; longitude: number }
 
 export interface PlaceLike extends LatLng {
@@ -55,9 +58,6 @@ export function classifyTransition(prevPlaceId: string | null, nextPlaceId: stri
   if (prevPlaceId && !nextPlaceId) return 'left';
   return 'moved';
 }
-
-import { createFormat } from '@/lib/utils/format';
-import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
 
 /**
  * Compact "time ago" label from an ISO timestamp relative to `now`.

@@ -9,6 +9,9 @@
 //   • rankCreators  — "Top Creators": stores ranked by rating × volume.
 // Deterministic + DB-free; the server feeds real rows.
 
+import { createFormat } from '@/lib/utils/format';
+import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
+
 export type PickListing = {
   id: string;
   kind: string;
@@ -118,9 +121,6 @@ export type ActivityItem = { id: string; text: string; when: string; at: string 
 const ORDER_VERB: Record<string, string> = {
   rent: 'rented', buy: 'bought', borrow: 'borrowed', swap: 'swapped for', donate: 'received', free: 'picked up',
 };
-
-import { createFormat } from '@/lib/utils/format';
-import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
 
 /**
  * Coarse "time ago" for the marketplace feed, in the reader's language.

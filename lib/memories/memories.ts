@@ -3,6 +3,9 @@
 // inputs so it can be tested in the node-only vitest environment, and the
 // server component stays a thin data-fetch + render shell.
 
+import { createFormat } from '@/lib/utils/format';
+import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
+
 import type { ComponentType } from 'react';
 import { Image as ImageIcon, Video, LayoutGrid, BookOpen } from 'lucide-react';
 
@@ -62,9 +65,6 @@ export function relativeDay(iso: string, now: Date): string {
   if (days >= 2 && days <= 6) return `Last ${WEEKDAY[new Date(iso).getDay()]}`;
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
-
-import { createFormat } from '@/lib/utils/format';
-import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
 
 /**
  * Compact "time ago" for share attributions: "just now", "5m ago", "2h ago",

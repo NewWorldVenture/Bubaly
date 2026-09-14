@@ -5,6 +5,9 @@
 // function is a pure transform of already-fetched rows so the math is unit-tested
 // directly and reused by the client module.
 
+import { createFormat } from '@/lib/utils/format';
+import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
+
 import type { LatLng } from './geo';
 
 export type Projected = { id: string; xPct: number; yPct: number };
@@ -90,8 +93,6 @@ export function batteryTone(pct: number | null): 'ok' | 'low' | 'critical' | 'un
  * "Since" label for a member's current stay: "Now" when very recent, else the
  * clock time they were last placed ("Since 8:15 AM").
  */
-import { createFormat } from '@/lib/utils/format';
-import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
 
 /**
  * "Since 3:04 PM" for the locator list — the CLOCK follows the reader.

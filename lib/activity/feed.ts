@@ -2,6 +2,9 @@
 // The feed is derived at read time from existing family tables; nothing is
 // written. Each source contributes ActivityItems which are merged + sorted.
 
+import { createFormat } from '@/lib/utils/format';
+import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
+
 export type ActivityKind = 'announcement' | 'event' | 'chore' | 'photo' | 'note' | 'grocery';
 
 export type ActivityItem = {
@@ -28,8 +31,6 @@ export function mergeActivity(sources: ActivityItem[][], limit = 50): ActivityIt
  * "30m ago" for the reader, switching to a date past five weeks — which is where
  * this feed's own ladder switched, so en-US reads exactly as it did.
  */
-import { createFormat } from '@/lib/utils/format';
-import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
 
 export function relativeTime(iso: string, now: Date = new Date(), locale: LocaleCode = DEFAULT_LOCALE): string {
   return createFormat(locale).fmtTimeAgo(iso, { now, absoluteAfterDays: 35, absolutePattern: 'MMM d' });

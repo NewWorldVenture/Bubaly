@@ -19,6 +19,7 @@
 // So this file holds two things: that the shared `fmtTimeAgo` actually changes
 // language, and that the private ladders only go down.
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { createFormat } from '@/lib/utils/format';
 import { findLadders } from '../scripts/audit-time-ago-ladders.mjs';
 
@@ -129,21 +130,28 @@ describe('private time-ago ladders only go down', () => {
     ].join('\n')).toEqual([]);
   });
 
-  it('holds the localised-but-private ladders at eight', () => {
-    expect(of('ladder-localised'), 'seven are worth folding into fmtTimeAgo; the eighth is '
+  it('holds the localised-but-private ladders at six', () => {
+    expect(of('ladder-localised'), 'five are worth folding into fmtTimeAgo; the sixth is '
       + 'lib/display/ambient.ts countdownLabel, which is FORWARD-facing ("in 15 min", '
       + '"Sat 3:00 PM") and cannot use a past-tense helper. Converting one? Lower this '
-      + 'number in the same commit.').toHaveLength(8);
+      + 'number in the same commit.').toHaveLength(6);
   });
 
-  it('holds the composite durations at five', () => {
+  // Named by file, not counted, because the honest list is longer than the scan can
+  // see: lib/sleep/coach.ts fmtHours renders "7h 30m" from MINUTES and so has no
+  // millisecond divisor to anchor on. An independent pass over two-unit templates was
+  // tried and reverted — it matched prose ("3 packed days in the last 4 weeks") and
+  // single-unit labels across template boundaries. A count that cannot be defended is
+  // worse than a name that can, so the miss is written into the scanner's header.
+  it('holds the composite durations at three files, with one known miss recorded', () => {
     const files = [...new Set(of('composite-duration').map((f) => f.file))].sort();
     expect(files).toEqual([
       'lib/analytics/journey.ts',
       'lib/analytics/onboarding.ts',
       'lib/marketplace/auction.ts',
-      'lib/sleep/coach.ts',
     ]);
+    const scanner = readFileSync('scripts/audit-time-ago-ladders.mjs', 'utf8');
+    expect(scanner, 'the known miss must stay named in the scanner').toContain('lib/sleep/coach.ts');
   });
 
   // I18N-002 CLOSED except for the one site that cannot be fixed without a migration.

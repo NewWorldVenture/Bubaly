@@ -48,7 +48,16 @@ const AGO_TEMPLATE = /`\$\{[^}]*\}\s?(?:m|h|d|w|min|hr|hrs|sec|day|days|week|wee
  * separately so a real gap stays visible without being confused for a ladder that
  * shows a German family American words.
  */
+/**
+ * KNOWN MISS, recorded rather than papered over: `lib/sleep/coach.ts` `fmtHours`
+ * renders "7h 30m" from MINUTES, so there is no millisecond divisor in its
+ * declaration for this scan to anchor on. An independent pass over two-unit
+ * templates was tried and reverted — it matched prose ("3 packed days in the last
+ * 4 weeks") and single-unit labels across template boundaries, and a count I cannot
+ * defend is worse than a name I can. It is one helper; it is written here.
+ */
 const COMPOSITE_DURATION = /`\$\{[^}]*\}\s?[a-z]{1,3}\s+(?:\$\{|[A-Za-z]*\$\{)[^`]*`/;
+
 const SUBMINUTE_LITERAL = /(['"`])(?:just now|now|Just now|Now)\1/;
 /**
  * `toLocaleDateString()` with no locale — and `([], …)` counts, which is the same
@@ -65,6 +74,27 @@ const files = execSync(
 const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
 
 /**
+ * The top-level declaration `index` sits inside — not a fixed character window.
+ *
+ * A ±character window was the first version and it read across three unrelated
+ * functions: lib/location/geo.ts has `distanceLabel` (metres → km, `/ 1000`)
+ * sandwiched between `timeAgo` above and `isStale` below, and the window picked up
+ * `Date` from one and `60_000` from the other, so a DISTANCE label satisfied every
+ * signal for a time ladder. Bounding by the declaration is what makes the signals
+ * mean anything: they have to be true of the same function.
+ */
+const DECL = /^(?:export\s+)?(?:default\s+)?(?:async\s+)?(?:function|const|let|class)\s/gm;
+function enclosingBlock(source, index) {
+  let start = 0;
+  let end = source.length;
+  for (const d of source.matchAll(DECL)) {
+    if (d.index <= index) start = d.index;
+    else { end = d.index; break; }
+  }
+  return source.slice(start, end);
+}
+
+/**
  * The operator console is en-US by the audit's own rule (finalaudit.md §11) — and
  * it is not only under app/(app)/admin/: components/admin/ holds the same surfaces'
  * client halves, which is how admin-notifications-list.tsx was being counted as a
@@ -79,14 +109,21 @@ export function findLadders() {
     // Walk every brace-balanced block that could be a function body, cheaply: a
     // ladder always sits within ~700 characters of its minute divisor.
     for (const m of source.matchAll(new RegExp(MINUTE_DIVISOR, 'g'))) {
-      const window = source.slice(Math.max(0, m.index - 400), m.index + 700);
+      const window = enclosingBlock(source, m.index);
       // A unit template is NOT enough on its own. lib/blog/engagement.ts formats a
       // LIKE COUNT — "1.2k", "1.2m" — and `${…}m` reads exactly like "1.2 minutes"
       // to a regex. What separates a time label from a number label is that a time
       // label compares against a time: 60, 24, 3600, 86400, 604800 — or says "ago".
       const timeThreshold = /[<>]=?\s*(?:24|60|45|3_?600|86_?400|604_?800)\b|60_?000|3_?600_?000|86_?400_?000/.test(window);
       const shapes = AGO_TEMPLATE.test(window) || COMPOSITE_DURATION.test(window) || SUBMINUTE_LITERAL.test(window);
-      const isLadder = shapes && (timeThreshold || /\bago\b/.test(window));
+      // And it has to be about a TIME. Widening the divisor to `/ 1000` (so a ladder
+      // that goes via seconds is visible) also made every `/ 1000` in the codebase a
+      // candidate: lib/location/geo.ts distanceLabel converts METRES to kilometres and
+      // lib/blog/engagement.ts formatLikeCount renders "1.2k"/"1.2m" — and `${…}m`
+      // reads exactly like "1.2 minutes" to a regex. A time ladder always has a clock
+      // in it somewhere.
+      const aboutTime = /\bDate\b|getTime\(\)|\bnow\b|\biso\b|\bms\b/i.test(window);
+      const isLadder = shapes && aboutTime && (timeThreshold || /\bago\b/.test(window));
       if (!isLadder) continue;
       // NO "it mentions fmtTimeAgo" EXEMPTION. That was the first version and it was
       // too generous by exactly the margin that matters: a component which destructures

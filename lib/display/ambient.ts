@@ -5,6 +5,9 @@
 // Supabase, no `Date.now()` inside the pure fns (callers pass `now`). Unit-tested
 // in tests/display-ambient.test.ts.
 
+import { createFormat } from '@/lib/utils/format';
+import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
+
 // ── Day parts ────────────────────────────────────────────────────────────────
 export type DayPart = 'dawn' | 'morning' | 'afternoon' | 'evening' | 'night';
 
@@ -169,9 +172,6 @@ export function nowAndNext<T extends TimedEvent>(
   }
   return { current, next };
 }
-
-import { createFormat } from '@/lib/utils/format';
-import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
 
 /**
  * Human countdown/time label for an event relative to `now` — the Kitchen

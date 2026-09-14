@@ -1,6 +1,9 @@
 // lib/family/safety.ts — pure, tested helpers for the Family safety pages
 // (Check In, Driving Safety, Play Dates). No Supabase/React here.
 
+import { createFormat } from '@/lib/utils/format';
+import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
+
 export interface DrivingInputs {
   distance_miles: number;
   max_mph: number;
@@ -72,9 +75,6 @@ export function splitPlayDates<T extends PlayDateLike>(rows: T[], now: Date = ne
   past.sort((a, b) => b.starts_at.localeCompare(a.starts_at));
   return { upcoming, past };
 }
-
-import { createFormat } from '@/lib/utils/format';
-import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
 
 export function fmtDateTime(iso: string, locale: LocaleCode = DEFAULT_LOCALE): string {
   const d = new Date(iso);
