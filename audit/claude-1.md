@@ -1012,3 +1012,36 @@ Claiming an audit complete is itself a claim that needs evidence, so:
 Verified at the close: `tsc` clean · lint 0 errors · `npm run build` exits 0 ·
 13,669 tests across 1,192 files · i18n gate 8/8 surfaces · migration replay
 310/0 · ledger-repair rehearsal FAILED: 0.
+
+### [CLAUDE-1][HIGH][UX/ACCESSIBILITY] A dialog that claimed the page was inert and did nothing to make it so — FIXED
+
+- **File/path:** `components/marketing/consent-manager.tsx`, `components/ui/modal.tsx`
+- **Problem:** The privacy preference centre declared `role="dialog"` and
+  `aria-modal="true"` on hand-rolled markup. Focus never entered it, Tab walked
+  the page behind it, Escape did nothing, and on close focus stayed wherever it
+  had been rather than returning to the control that opened it.
+- **Evidence:** the component contained no `useRef`, no `.focus()`, no `Escape`
+  handler and no `tabIndex` — only the two ARIA attributes. Meanwhile
+  `components/ui/modal.tsx` implements the entire contract and says so in its
+  header: focus trap, Escape, scroll lock, focus restore, and labelling by id.
+- **Impact:** For a keyboard or screen-reader user this is **worse than a plain
+  `div`**: `aria-modal="true"` tells assistive technology to ignore a background
+  the user can still reach, so the announced structure and the operable one
+  disagree. And of every surface to get this wrong, a cookie preference centre is
+  the one whose entire job is recording a deliberate choice.
+- **Recommended fix:** applied — it now uses the shared `Modal`. Same lesson as
+  the four duplicated `escapeLike` helpers and the kiosk's private error
+  boundary: the fix already existed and had not reached this call site. The
+  bespoke header icon went with it, and labelling improved from a repeated
+  `aria-label` to `aria-labelledby`.
+- **Status:** FIXED.
+- **The larger finding it surfaced:** eleven other components declare
+  `aria-modal` themselves, and of those only `components/app/command-bar.tsx`
+  calls `.focus()` at all — the rest promise inertness and implement none of it,
+  including three gates and the exit-intent overlay. They are **listed, not swept**:
+  each has bespoke layout and some (the gates) may deliberately refuse Escape, so
+  converting them unexamined would be a worse change than the defect.
+  `tests/consent-preference-centre-focus.test.ts` holds the list so it can only
+  **shrink** — a new offender fails, and an entry that has been converted but
+  left in the list also fails, so it cannot rot into a licence nobody is using.
+- **Status of the eleven:** OPEN, enumerated, contained.
