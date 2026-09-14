@@ -3469,3 +3469,128 @@ genuine instance (F-F06). That is worth recording as a positive: this suite's
 grep-style guards mostly carry explicit non-vacuity blocks, which is unusual
 and means the earlier findings (F4, F-004, F-015, F-019) were the exception
 rather than the pattern.
+
+---
+
+# Pass G — the audit's own instruments, and the list the database ignores
+
+Two findings, one shape: a boundary that is stated somewhere and enforced
+nowhere.
+
+## G1 — Three boundary probes passed while testing nothing
+
+`document-vault-boundary-check.sql`, `money-write-boundary-check.sql` and
+`wallet-write-rls-check.sql` each guarded a security boundary with
+`when others`, so ANY error counted as "the boundary held". Renaming one column
+in each guarded statement left all three printing a pass; the wallet probe
+printed `sqlstate 42703` (undefined_column) inside a message claiming RLS had
+rejected a valid $9,999.99 credit.
+
+**Status: fixed.** Narrowed to `insufficient_privilege`; the wallet probe now
+asserts the sqlstate it was already capturing; a renamed money table now fails
+loudly instead of reading as locked.
+
+This is the same defect that made the `0296` vault probe vacuous in CI, which
+is why the whole `docs/audit` suite was swept for it. `approval-dedupe`,
+`family-scoped-index` and `rls-isolation` were checked and are correct.
+
+## G2 — 58 of the 66 tables the code calls sensitive are readable by children
+
+`lib/ai/context/policy.ts` carries `SENSITIVE_TABLES`: 66 tables, curated and
+reasoned, under a header stating *"§4 says a child must not inspect household
+finances or confidential documents"*. It governs what an AI context slice may
+read. **It does not govern the database.**
+
+Measured against the RLS catalogue of a replayed database: **58 of the 66** are
+readable by any family member, children included, because their read policies
+gate on `is_family_member`, which ignores role. `0297` fixes three
+(`child_logins`, `social_account_tokens`, `driver_licenses`); **55 remain**.
+
+These are NOT all defects. A child should see their own wallet, their own
+medications, their own sleep log. That is exactly why they are recorded here
+rather than swept: each needs a decision of the form *"none", "own row only"
+(`is_self_member`), or "managers only"* (`can_manage_family`) — the three
+shapes this repository already uses (`0272`, `0266`, `0296`).
+
+The count is the finding. A 66-table list that the database honours on 8 of
+them is a policy that exists in one layer only.
+
+| Table | policy.ts reason |
+|---|---|
+| `ai_messages` | other conversations |
+| `auto_insurance_policies` | policy numbers |
+| `babysitter_payments` | payment detail |
+| `behavior_logs` | behaviour notes about children |
+| `billing_customers` | billing identity |
+| `care_log` | care notes |
+| `checkout_sessions` | payment sessions |
+| `child_wallets` | child balances |
+| `driving_trips` | driving telemetry |
+| `family_emergency_contacts` | emergency contacts |
+| `family_emergency_plans` | emergency plans |
+| `family_inbox_messages` | inbound mail bodies |
+| `family_insurance_policies` | policy numbers |
+| `family_wallets` | wallet balances |
+| `financial_accounts` | account numbers |
+| `gift_payments` | payment detail |
+| `health_goals` | health targets |
+| `health_metrics` | measurements |
+| `health_providers` | clinicians |
+| `health_visits` | visit notes |
+| `home_warranties` | warranty account numbers |
+| `household_info` | rows flagged is_sensitive (alarm codes, wifi keys) |
+| `immunizations` | vaccination records |
+| `insurance_policies` | policy numbers |
+| `invest_holdings` | investment positions |
+| `invest_orders` | investment orders |
+| `journal_entries` | private journals |
+| `location_events` | location history |
+| `medical_profiles` | conditions, physicians, emergency contacts |
+| `medication_doses` | prescriptions |
+| `medication_schedules` | prescriptions |
+| `medications` | prescriptions |
+| `member_locations` | live location |
+| `nutrition_logs` | per-person intake |
+| `paperwork_items` | scanned paperwork bodies |
+| `pay_handles` | payment handles |
+| `rides` | ride locations |
+| `safety_check_ins` | check-in locations |
+| `sleep_checkins` | sleep tracking |
+| `sleep_logs` | sleep tracking |
+| `stripe_authorizations` | card authorisations |
+| `stripe_cardholders` | cardholder identity |
+| `stripe_connected_accounts` | payout accounts |
+| `stripe_financial_accounts` | account numbers |
+| `stripe_issuing_cards` | card numbers |
+| `symptom_logs` | symptoms |
+| `tax_documents` | tax filings |
+| `vacation_documents` | passport and ticket scans |
+| `vacation_emergency_contacts` | emergency contacts |
+| `vacation_medical_information` | travel medical detail |
+| `vehicle_registrations` | registration numbers |
+| `wallet_cards` | card details |
+| `wallet_passes` | stored passes |
+| `wallet_transactions` | per-child card activity |
+| `weather_locations` | stored coordinates |
+
+**Suggested triage**, for an owner to confirm rather than for an agent to
+assume:
+
+* **Managers only** — the money instruments and account numbers
+  (`financial_accounts`, the `stripe_*` group, `pay_handles`, `invest_*`,
+  `wallet_cards`, `home_warranties`, the `*insurance_policies` group,
+  `tax_documents`, `paperwork_items`, `vacation_documents`).
+* **Own row only** — the per-person health and telemetry tables, which have a
+  member column and a real first-person use (`medications`,
+  `medication_schedules`, `medication_doses`, `health_*`, `immunizations`,
+  `symptom_logs`, `sleep_*`, `nutrition_logs`, `journal_entries`,
+  `member_locations`, `location_events`, `safety_check_ins`, `driving_trips`,
+  `rides`, `child_wallets`, `wallet_transactions`).
+* **Needs a column-aware rule**, as `0266` did for documents —
+  `household_info`, whose own reason names only the rows "flagged
+  is_sensitive (alarm codes, wifi keys)".
+
+**Status: 3 fixed by `0297` and proved by
+`docs/audit/sensitive-role-boundary-check.sql`; 55 OPEN, owner decision.**
+Like every migration since `0255`, `0297` is inert in production until F5 and
+F-C08 are cleared.

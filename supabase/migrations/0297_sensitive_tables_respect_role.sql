@@ -5,11 +5,11 @@
 -- of 66 tables whose own header says "§4 says a child must not inspect
 -- household finances or confidential documents". That list governs what an AI
 -- context slice may read. It does not govern the database, and the database
--- disagrees with it: 49 of those 66 tables are readable by ANY family member,
+-- disagrees with it: 58 of those 66 tables are readable by ANY family member,
 -- children included, because their policies gate on is_family_member, which
 -- answers "is this user in the family" and ignores role.
 --
--- Most of those 49 need a product decision rather than a migration — a child
+-- Most of those 58 need a product decision rather than a migration — a child
 -- SHOULD see their own wallet, their own medications, their own sleep log, and
 -- a blanket manager-only sweep would break the app. They are recorded in the
 -- audit instead of changed here.

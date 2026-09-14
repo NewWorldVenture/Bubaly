@@ -1,7 +1,7 @@
 -- ── 0297: three sensitive tables answer to role, not just to membership ─────
 --
 -- lib/ai/context/policy.ts lists 66 tables a child must not see. The database
--- disagreed with that list on 49 of them. 0297 fixes the three that need no
+-- disagreed with that list on 58 of them. 0297 fixes the three that need no
 -- product decision; this proves those three, and proves them the way the vault
 -- probe had to be taught to prove things — by first checking that the
 -- impersonation TOOK. A probe that cannot tell "denied because child" from
