@@ -725,3 +725,61 @@ predicates and therefore safe by Postgres's own default; the two above are
 recorded and neither is an escalation. **The invite policy was the only one
 where a disjunction let a caller move a row into a scope they did not hold.**
 - **Status:** VERIFIED
+<!-- Two sessions wrote this file; both sides of the merge are kept. -->
+### [CLAUDE-1][VERIFIED][ARCHITECTURE] Platform and security-header configuration — examined, sound
+
+Recorded because an audit that lists only defects says nothing about what was
+looked at, and the next worker needs to know which stones are already turned.
+
+- **`next.config.mjs` headers.** `X-Content-Type-Options: nosniff`,
+  `Referrer-Policy: strict-origin-when-cross-origin`, a `Permissions-Policy`
+  scoped to `self` for camera/microphone/geolocation, and HSTS at two years with
+  `includeSubDomains`. `preload` is deliberately omitted, with the reason stated
+  — it is an irreversible commitment for every subdomain. Correct call.
+- **CSP** is composed in `lib/security/csp.mjs`, and `frame-ancestors` mirrors the
+  `X-Frame-Options` split so the two headers cannot disagree about who may frame
+  a page.
+- **`'unsafe-eval'` is dev-only** — `isProduction ? [] : ["'unsafe-eval'"]`.
+  `'unsafe-inline'` remains in `script-src`, documented: Next hydrates through
+  inline scripts and there is no nonce pipeline. That is a real, acknowledged
+  trade-off rather than an oversight.
+- **The test is load-bearing, verified rather than assumed.** Planting
+  `'unsafe-eval'` unconditionally into the production policy fails
+  `tests/csp-header.test.ts` — 1 failed, 6 passed. Restored, 7 pass.
+- **`vercel.json` carries only `crons`** — no header or redirect layer that could
+  silently contradict `next.config.mjs`. One place to read, which is the right
+  shape.
+
+No finding. Status: VERIFIED.
+
+### [CLAUDE-1][MEDIUM][INTEGRATION] The obvious extension of my own FEATURE_ENV fix would have broken it
+
+- **File/path:** `lib/health/status.ts`, `lib/ai/settings.ts`,
+  `tests/health-feature-secrets.test.ts`
+- **Problem:** Found while auditing the AI provider seam — a self-check on the
+  health fix recorded above. `FEATURE_ENV` reports secrets whose absence silently
+  disables a subsystem. The AI provider keys look exactly like they qualify, and
+  adding them would be wrong.
+- **Evidence:** `resolveAiSettings` reads admin-saved values from the database
+  **first** and falls back to the environment:
+  `stored.anthropicKey || process.env.ANTHROPIC_API_KEY`. So a deployment that
+  configures its key in the admin console has no such env var and a fully working
+  assistant.
+- **Impact:** Had anyone extended the list the obvious way, every such deployment
+  would report `degraded` permanently. A field that is always red is a field
+  operators stop reading — which would quietly undo the CRON_SECRET reporting the
+  tier exists for. The fix would have destroyed itself by being extended in good
+  faith.
+- **Recommended fix:** applied. The inclusion rule is stated at the list:
+  *a name belongs here only if the environment is the ONLY place it can come
+  from.* Two test cases enforce it — one names the AI keys explicitly, one
+  asserts generically that no listed secret has a `stored.x || process.env.X`
+  fallback, so the rule holds for names added later.
+- **Status:** FIXED.
+- **Proved load-bearing:** adding `ANTHROPIC_API_KEY` to `FEATURE_ENV` fails both
+  new cases (2 failed, 10 passed). Restored, 12 pass.
+
+**Method note.** This is the second time in this session that auditing my *own*
+fix produced the finding. A fix is a new thing in the codebase and deserves the
+same question as everything else: what is the most plausible wrong change
+someone makes next, and does anything stop it?

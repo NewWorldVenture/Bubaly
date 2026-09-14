@@ -75,6 +75,34 @@ describe('health reports the secrets whose absence silently kills a subsystem', 
     }
   });
 
+  it('excludes secrets an admin can configure in the product', () => {
+    // resolveAiSettings reads the database FIRST and falls back to env, so a
+    // deployment with its key set in the admin console has no env var and a
+    // working assistant. Listing these would report it degraded forever — and a
+    // field that is always red is a field nobody reads.
+    const settings = readFileSync('lib/ai/settings.ts', 'utf8');
+    expect(settings).toMatch(/stored\.anthropicKey\s*\|\|\s*process\.env\.ANTHROPIC_API_KEY/);
+    for (const name of ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'AI_MODEL']) {
+      expect(FEATURE_ENV as readonly string[], `${name} has a database fallback and must not gate health`).not.toContain(name);
+    }
+  });
+
+  it('every listed secret is env-only, with no stored fallback', () => {
+    // The property that makes absence meaningful. If any of these gained a
+    // database fallback, its absence from env would stop proving anything.
+    const { execSync } = require('node:child_process') as typeof import('node:child_process');
+    for (const name of FEATURE_ENV) {
+      const hits = execSync(
+        `grep -rn "process.env.${name}" app lib --include=*.ts --include=*.tsx || true`,
+        { encoding: 'utf8' },
+      );
+      expect(hits.trim().length, `${name} is read nowhere`).toBeGreaterThan(0);
+      // A stored-value fallback looks like `stored.x || process.env.NAME`.
+      expect(hits, `${name} has a stored fallback — absence from env no longer proves it is unconfigured`)
+        .not.toMatch(new RegExp(`stored\\.\\w+\\s*\\|\\|\\s*process\\.env\\.${name}`));
+    }
+  });
+
   it('CRON_SECRET gates every job vercel.json schedules', () => {
     const vercel = JSON.parse(readFileSync('vercel.json', 'utf8')) as { crons?: { path: string }[] };
     const crons = vercel.crons ?? [];

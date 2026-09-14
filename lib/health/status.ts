@@ -50,6 +50,21 @@ export type EnvCheck = { ok: boolean; missing: string[] };
  * rotation. A preview deployment that legitimately runs no crons will show
  * degraded with the names listed, which is accurate rather than noisy.
  */
+/**
+ * The inclusion rule, because the obvious extension of this list is wrong.
+ *
+ * A name belongs here only if the environment is the ONLY place it can come
+ * from. The AI provider keys look like they qualify and do not:
+ * `resolveAiSettings` reads admin-saved values from the database FIRST and falls
+ * back to env (`stored.anthropicKey || process.env.ANTHROPIC_API_KEY`). A
+ * deployment that configures its key in the admin console has no such env var
+ * and a perfectly working assistant — listing it here would report that healthy
+ * deployment as degraded forever, which trains operators to ignore the field.
+ *
+ * Same test for anything added later: if an admin can set it in the product,
+ * absence from the environment proves nothing. Every name below is read only as
+ * `process.env.X`, with no stored fallback.
+ */
 export const FEATURE_ENV = [
   'CRON_SECRET',
   'CHILD_LOGIN_SECRET',
