@@ -13,7 +13,7 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
-import { FAMILY_MEDIA_MAX_LABEL, partitionBySize } from '@/lib/storage/family-media';
+import { FAMILY_MEDIA_MAX_LABEL, partitionBySize, familyMediaPath } from '@/lib/storage/family-media';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -108,12 +108,7 @@ export function PhotosModule() {
     for (let i = 0; i < valid.length; i++) {
       const file = valid[i];
       const isVideo = file.type.startsWith('video/');
-      const ext = file.name.split('.').pop();
-      const folder = isVideo ? 'videos' : 'photos';
-      const unique = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      const path = `${familyId}/${folder}/${unique}.${ext}`;
+      const path = familyMediaPath(familyId, isVideo ? 'videos' : 'photos', file.name);
       const { data: stored, error: upErr } = await supabase.storage
         .from('family-media')
         .upload(path, file, { upsert: false, cacheControl: '31536000' });

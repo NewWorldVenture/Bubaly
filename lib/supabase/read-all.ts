@@ -63,11 +63,13 @@ type PageResult<T, E> = { data: T[] | null; error: E | null };
  * caller's own number on it. `truncated` says which happened, and
  * `failOnMax: true` turns it into the error shape the caller already handles.
  *
- * Telling the two apart costs ONE extra round trip, and only when the ceiling is
- * actually reached: a request for a single row past it. A table of exactly `max`
- * rows answers it empty and is reported complete. This is the same trade the
- * short-page rule above makes, for the same reason — a count that might be the
- * end and might be a cap is not an answer.
+ * Telling the two apart costs ONE extra ROW, not an extra round trip: the paging
+ * loop runs to `max + 1` and the final range simply reaches one past the
+ * ceiling. A table of exactly `max` rows answers that page empty and is reported
+ * complete; a larger one hands back the extra row, which is dropped from the
+ * result and used only as evidence. This is the same trade the short-page rule
+ * above makes, for the same reason — a count that might be the end and might be
+ * a cap is not an answer.
  *
  * Use `failOnMax` wherever the rows are SUMMED rather than listed. A truncated
  * list is a display bug; a truncated sum is a wrong number presented as a right
@@ -79,13 +81,27 @@ export async function readAll<T, E = { message: string }>(
   options: { max?: number; failOnMax?: boolean } = {},
 ): Promise<{ rows: T[]; error: E | { message: string } | null; truncated: boolean }> {
   // A ceiling the CALLER chose is a destination; the default one is a tripwire.
-  // Reaching the first is success, reaching the second means the query is not
-  // terminating — so the two must not share an exit.
+  // Reaching the second means the query is not terminating. Reaching the first
+  // used to be treated as success — and that was wrong, which is the whole point
+  // of the `probe` below.
+  //
+  // A caller's `max` is a bound they expect the data to FIT UNDER. Stopping
+  // exactly on it and returning `error: null` makes a truncated read
+  // indistinguishable from a complete one, which is the same silent-partial-read
+  // defect this module was written to end (F-008, F-011, F-013) reappearing one
+  // level up. The admin wallet reconciliation page reads 20,000 rows this way
+  // and its own header says reading part of the ledger is worse than not reading
+  // it at all — it would have reported "everything reconciles" over a prefix.
+  //
+  // So read ONE row past the ceiling. That single extra row is what separates
+  // "there were exactly `max` rows" (complete, no error) from "there were more
+  // than `max`" (truncated, an error the caller already knows how to render).
   const ceiling = options.max ?? DEFAULT_MAX_ROWS;
+  const probe = ceiling + 1;
   const rows: T[] = [];
 
-  for (let from = 0; rows.length < ceiling; ) {
-    const want = Math.min(PAGE_SIZE, ceiling - rows.length);
+  for (let from = 0; rows.length < probe; ) {
+    const want = Math.min(PAGE_SIZE, probe - rows.length);
     // A query builder RESOLVES with `{ data, error }` for anything the database
     // answers, and REJECTS only when the request never completed — DNS, TCP,
     // TLS, an aborted fetch. A reader that passed that rejection on would put
@@ -108,36 +124,36 @@ export async function readAll<T, E = { message: string }>(
     from += data.length;
   }
 
+  // Falling out of the loop means `probe` rows arrived — one MORE than the
+  // ceiling — so the set is demonstrably larger than the ceiling. A table of
+  // exactly `max` rows never reaches here: it exits above on the empty page,
+  // reported complete. That is what the extra row buys, and it costs no extra
+  // round trip because it rides along on the last page's range.
+  const capped = rows.slice(0, ceiling);
+
   if (options.max === undefined) {
     return {
-      rows,
+      rows: capped,
       error: { message: `readAll stopped at ${ceiling} rows; the query is probably not terminating.` },
       truncated: true,
     };
   }
 
-  // The caller's ceiling was reached. Whether that is "the table ends here" or
-  // "there is more and you cannot see it" takes one more request to know, and
-  // guessing is what made this exit silent. Ask for the row after the last.
-  const capped = rows.slice(0, options.max);
-  let truncated = false;
-  try {
-    const { data: beyond, error: beyondError } = await page(options.max, options.max);
-    // A failed probe is not proof of a complete read, so say truncated rather
-    // than report success we did not establish.
-    truncated = !!beyondError || (beyond?.length ?? 0) > 0;
-  } catch {
-    truncated = true;
-  }
-
-  if (truncated && options.failOnMax) {
+  if (options.failOnMax) {
     return {
       rows: capped,
-      error: { message: `readAll reached its ${options.max}-row ceiling and the table holds more; this read is a prefix, not the table.` },
+      error: {
+        message: `readAll reached the caller's max of ${ceiling} rows and more remain. `
+          + 'These rows are a PREFIX, not the whole set — treat this as a failed read, '
+          + 'or raise the max.',
+      },
       truncated: true,
     };
   }
-  return { rows: capped, error: null, truncated };
+  // Without `failOnMax` the read still succeeds and `truncated` carries the
+  // fact. `wallet/activity` wants exactly this: it LISTS recent rows rather
+  // than summing them, so a prefix of the newest is the right answer there.
+  return { rows: capped, error: null, truncated: true };
 }
 
 /**

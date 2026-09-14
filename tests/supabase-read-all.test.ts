@@ -111,24 +111,30 @@ describe('readAll with a ceiling the caller chose', () => {
   // yields 1,000 and reads like a considered choice. Measured on a live
   // project: a 6,500-row table answered `.limit(5000)` with exactly 1,000.
   // `max` is the same number, honoured.
-  it('reads up to the ceiling and no further', async () => {
+  it('reads up to the ceiling, and says so when rows remain past it', async () => {
     const page = table(6500);
     const { rows, error } = await readAll<{ id: number }>(page, { max: 5000 });
-    expect(error).toBeNull();
     expect(rows).toHaveLength(5000);
     // Not the 1,000 the server would have handed a `.limit(5000)`.
     expect(rows).not.toHaveLength(PAGE);
     expect(rows.at(-1)).toEqual({ id: 4999 });
+    // The rows are a PREFIX of a 6,500-row table. Returning them with no error
+    // is what let the admin wallet reconciliation page report that a ledger it
+    // had only partly read balanced.
+    expect(error).not.toBeNull();
+    expect(error?.message).toMatch(/PREFIX/);
   });
 
-  it('asks for only the remainder on the last page, then one row past the ceiling', async () => {
+  it('reaches exactly one row past the ceiling on the last page, and drops it', async () => {
     const page = table(6500);
     const { rows } = await readAll<{ id: number }>(page, { max: 2500 });
-    // 1000 + 1000 + 500 to fill the ceiling, then [2500, 2500]: the single-row
-    // probe that tells "the table ends here" from "there is more and you cannot
-    // see it". Guessing between those is what made the ceiling exit silent.
-    expect(page.mock.calls).toEqual([[0, 999], [1000, 1999], [2000, 2499], [2500, 2500]]);
-    // The probe's row is never part of the answer — the ceiling still holds.
+    // 1000 + 1000 + 501. The final range asks for ONE row more than the ceiling,
+    // and that row is what tells "the table ends here" from "there is more and
+    // you cannot see it" — guessing between those is what made this exit silent.
+    // It rides along on a page that had to be fetched anyway, so knowing costs
+    // no extra round trip.
+    expect(page.mock.calls).toEqual([[0, 999], [1000, 1999], [2000, 2500]]);
+    // The extra row is never part of the answer — the ceiling still holds.
     expect(rows).toHaveLength(2500);
     expect(rows.at(-1)).toEqual({ id: 2499 });
   });
@@ -161,20 +167,18 @@ describe('readAll with a ceiling the caller chose', () => {
     expect(error).toBeNull();
   });
 
-  it('calls a probe that fails truncated rather than reporting a completeness it did not establish', async () => {
-    let call = 0;
+  it('reports a failed last page as a read failure, never as a complete table', async () => {
+    // The page carrying the probe row is an ordinary page, so losing it is an
+    // ordinary read failure. What must NOT happen is `error: null` with
+    // `truncated: false` — completeness the read never established.
     const page = async (from: number, to: number) => {
-      call += 1;
-      // Fill the ceiling, then fail the probe.
-      if (from >= 2500) return { data: null, error: { message: 'connection reset' } };
+      if (from >= 2000) return { data: null, error: { message: 'connection reset' } };
       const rows = Array.from({ length: to - from + 1 }, (_, i) => ({ id: from + i }));
       return { data: rows, error: null };
     };
-    const { truncated, error } = await readAll<{ id: number }>(page, { max: 2500 });
-    expect(call).toBeGreaterThan(3);
-    expect(truncated).toBe(true);
-    // Without failOnMax the read still succeeds — `truncated` is the signal.
-    expect(error).toBeNull();
+    const { error, truncated } = await readAll<{ id: number }>(page, { max: 2500 });
+    expect(error?.message).toContain('connection reset');
+    expect(truncated).toBe(false);
   });
 
   it('stops early when the table ends before the ceiling', async () => {
@@ -184,11 +188,19 @@ describe('readAll with a ceiling the caller chose', () => {
     expect(rows).toHaveLength(12);
   });
 
-  it('reports reaching the ceiling as success, not as a runaway query', async () => {
-    // The default ceiling is a tripwire and must still report one.
-    const page = table(6500);
-    const { error } = await readAll<{ id: number }>(page, { max: 1000 });
-    expect(error).toBeNull();
+  it('distinguishes a caller ceiling from the runaway-query tripwire', async () => {
+    // Both now report an error, and they must not report the SAME one: one says
+    // "raise your max", the other says "this query is not terminating".
+    //
+    // This case previously asserted `error` was null — it encoded the defect.
+    // A caller's max is a bound they expect the data to fit under, so reaching
+    // it is not success; it means rows exist that were never read.
+    const truncated = await readAll<{ id: number }>(table(6500), { max: 1000 });
+    expect(truncated.error?.message).toMatch(/max of 1000 rows and more remain/);
+    expect(truncated.error?.message).not.toMatch(/not terminating/);
+
+    const runaway = await readAll<{ id: number }>(table(2_000_000));
+    expect(runaway.error?.message).toMatch(/not terminating/);
   });
 });
 
@@ -234,6 +246,15 @@ describe('readAllAsQuery', () => {
     const { data, truncated } = await readAllAsQuery<{ id: number }>(table(6500), { max: 5000 });
     expect(data).toHaveLength(5000);
     expect(truncated).toBe(true);
+  });
+
+  it('leaves a read that fits under the ceiling complete', async () => {
+    // The case the extra row exists for, at the readAllAsQuery layer: a table
+    // smaller than the ceiling is complete and must not be flagged.
+    const complete = await readAllAsQuery<{ id: number }>(table(4000), { max: 5000 });
+    expect(complete.error).toBeNull();
+    expect(complete.truncated).toBe(false);
+    expect(complete.data).toHaveLength(4000);
   });
 
   it('reports a truncated read as a failed read when the caller asks', async () => {

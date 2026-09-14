@@ -1,3 +1,4 @@
+import { unguessableObjectName } from './object-name';
 // Client-side size guard for the `family-media` Storage bucket (Photos,
 // Create Memory, Messages attachments). Matches the bucket's 25 MB
 // file_size_limit so oversize files fail fast with a friendly message instead
@@ -18,4 +19,34 @@ export function partitionBySize<T extends { size: number }>(files: T[]): { ok: T
 export function oversizeMessage(count: number): string | null {
   if (count <= 0) return null;
   return `${count} file${count === 1 ? '' : 's'} skipped — over the ${FAMILY_MEDIA_MAX_LABEL} limit.`;
+}
+
+/**
+ * A storage path for an object in the `family-media` bucket.
+ *
+ * The object NAME must be unguessable, because this is the one bucket created
+ * with `public = true` (0216: reads stay public so the stored getPublicUrl links
+ * keep working; hardening them to signed URLs needs a data migration and is
+ * tracked as the LB-009 follow-up). Until that lands, the only thing standing
+ * between a stored object and anyone on the internet is that they cannot guess
+ * its URL — and the first path segment, the family id, is not secret: it appears
+ * in every public URL the family already shares.
+ *
+ * Four modules built this path as `${familyId}/${folder}/${Date.now()}.${ext}`.
+ * A millisecond timestamp is enumerable: a day is 86.4 million values and the
+ * extension set is tiny, but nobody has to sweep a whole day — a single shared
+ * link reveals the family id AND the naming scheme, and a batch of uploads lands
+ * in adjacent milliseconds. `messages` and `reminders` are the pointed cases:
+ * those attachments are private conversations.
+ *
+ * `Date.now()` also collides. Two uploads inside one millisecond produce the
+ * same path, and every caller passes `upsert: false`, so the second fails with a
+ * storage error that reads like a bug rather than a name clash.
+ *
+ * randomUUID is 122 random bits. The fallback covers browsers without it (it is
+ * unavailable on insecure origins) and still mixes in randomness rather than
+ * leaning on the clock alone.
+ */
+export function familyMediaPath(familyId: string, folder: string, fileName: string): string {
+  return `${familyId}/${folder}/${unguessableObjectName(fileName)}`;
 }

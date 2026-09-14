@@ -22,10 +22,23 @@ const STALE_EVENT_MS = 10 * 60 * 1000;
 /**
  * Record the event for idempotency, replay-safely (audit PAY-2). Inserts the id
  * with status 'processing'. Returns 'fresh' for the first delivery, a failed
- * delivery, or a stale abandoned claim. An active concurrent delivery and a
- * fully 'processed' event both return 'duplicate'.
+ * delivery, or a stale abandoned claim.
+ *
+ * 'duplicate' means FINISHED — the event reached status 'processed' — and is the
+ * only outcome a caller may acknowledge with a 2xx.
+ *
+ * 'in_flight' means someone else holds the claim and has not finished. That is
+ * NOT the same thing, and conflating the two loses money: an event whose handler
+ * threw, and whose markEventError call then also failed, stays 'processing'. The
+ * provider's next retry — inside STALE_EVENT_MS, so not yet reclaimable — used to
+ * be answered 200, at which point the provider considers the event delivered and
+ * stops retrying. The transaction it carried is then never applied, and the row
+ * sits in 'processing' with nothing left to reprocess it. A caller must answer
+ * 'in_flight' with a non-2xx so the retry keeps coming: if the holder succeeds
+ * the next one sees 'processed' and is acknowledged, and if the holder died the
+ * claim goes stale and is reclaimed.
  */
-export type StripeEventClaim = { outcome: 'fresh' | 'duplicate'; claimToken?: string };
+export type StripeEventClaim = { outcome: 'fresh' | 'duplicate' | 'in_flight'; claimToken?: string };
 
 export async function recordEvent(supabase: DB, event: Stripe.Event): Promise<StripeEventClaim> {
   const now = new Date().toISOString();
@@ -59,7 +72,7 @@ export async function recordEvent(supabase: DB, event: Stripe.Event): Promise<St
       .select('stripe_event_id')
       .maybeSingle();
     if (claimError) throw new Error('Stripe webhook event ledger unavailable');
-    return claimed ? { outcome: 'fresh', claimToken } : { outcome: 'duplicate' };
+    return claimed ? { outcome: 'fresh', claimToken } : { outcome: 'in_flight' };
   }
 
   if (prior.status === 'processing') {
@@ -81,11 +94,11 @@ export async function recordEvent(supabase: DB, event: Stripe.Event): Promise<St
         .select('stripe_event_id')
         .maybeSingle();
       if (reclaimError) throw new Error('Stripe webhook event ledger unavailable');
-      return reclaimed ? { outcome: 'fresh', claimToken } : { outcome: 'duplicate' };
+      return reclaimed ? { outcome: 'fresh', claimToken } : { outcome: 'in_flight' };
     }
   }
 
-  return { outcome: 'duplicate' };
+  return { outcome: 'in_flight' };
 }
 
 /** Mark an event as fully processed (so future deliveries short-circuit). */

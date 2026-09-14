@@ -1636,3 +1636,473 @@ Guard:    docs/audit/economy-redemption-price-check.sql: the self-priced insert,
           Non-vacuity proven by dropping the trigger — the probe then fails at
           "a child priced their own redemption". 25/25 probes.
 ```
+
+---
+
+<!-- Two sessions appended to this file concurrently. Both blocks are kept in
+     full and in the order they were written; neither displaces the other. -->
+
+### [CLAUDE-1][LOW][ARCHITECTURE] A build-time read of the whole blog table that could not do anything
+
+- **File/path:** `app/(marketing)/blog/[slug]/page.tsx`
+- **Problem:** The route declared both `export const dynamic = 'force-dynamic'`
+  and `generateStaticParams()`. Those contradict: with `force-dynamic` every slug
+  renders on demand, so there is no prerendered output for the params to
+  enumerate. What the function did do was call `getAllPosts()` — the entire
+  published table, 1,049 rows — on every build, and discard the result.
+- **Evidence — built both ways and compared, rather than reasoned about:**
+
+  | | with `generateStaticParams` | without |
+  |---|---|---|
+  | route table | `● /blog/[slug]` (SSG) | `ƒ /blog/[slug]` (Dynamic) |
+  | static pages generated | 245 | 245 |
+  | `[blog] getAllPosts failed` at build | 1 | 0 |
+  | build exit | 0 | 0 |
+
+  The identical page count is the point: it was never prerendering anything. The
+  route marker moving to `ƒ` makes the build report what the route actually is.
+- **Impact:** Low but real. It is a build-time dependency on Supabase for no
+  benefit — with the database unreachable the build logged a stack of connection
+  failures and returned an empty list, which looks like a broken build and
+  changes nothing. It also mislabels the route as SSG, which is exactly the
+  confusion F-012 came out of.
+- **Recommended fix:** applied. Removed, with a comment recording that this was
+  behaviour-neutral (measured, table above), that `force-dynamic` is what fixed
+  F-005 and must not be removed casually, and that anyone re-adding
+  `generateStaticParams` should read that first.
+- **Status:** FIXED. `tsc` clean, lint 0 errors, 13,616 tests pass.
+
+---
+
+## Coordination note — Claude-2, Claude-3 and Claude-4 did not complete
+
+All three workers were launched in parallel and **all three terminated early**
+with `rate_limit / HTTP 429: session limit, resets 3:10am UTC`. None of them
+reached the point of writing findings:
+
+- Claude-2 (frontend/a11y) stopped at "Now let me survey the frontend surface area."
+- Claude-3 (backend/API/security) stopped at "Now let me build the route inventory and start the authorization sweep."
+- Claude-4 (QA/flows/perf) stopped at "Let me record the findings so far."
+
+`audit/claude-2.md`, `claude-3.md` and `claude-4.md` therefore still contain only
+the templates Claude-1 created. **They contain no findings, and this file does not
+invent any on their behalf.** The three areas they own stay marked *not yet
+audited* in `finalaudit.md` Part 0 — which is the honest state, and the whole
+reason that convention exists.
+
+This is a capacity blocker, not a technical one. The work is scoped and the
+prompts are written; it needs either a session-limit reset or the workers run as
+genuinely separate accounts, which is what the brief describes.
+
+### [CLAUDE-1][HIGH][TESTING] A gate that calls itself a CI gate ran in no workflow
+
+- **File/path:** `scripts/i18n-gate.mjs`, `.github/workflows/ci.yml`, `finalaudit.md`
+- **Problem:** `scripts/i18n-gate.mjs` opens with *"CI gate for surfaces declared
+  translated"* and ends *"Nothing else in the build would notice, so this does."*
+  It appeared in **no workflow**. Meanwhile `finalaudit.md`'s status summary
+  listed it as a passing check — so the audit reported a guard that never ran.
+- **Evidence:**
+  - `grep -rn "i18n" .github/workflows/` → **no match in any workflow**.
+  - Every `run:` line in `ci.yml` enumerated; `npm run i18n:gate` is absent.
+  - The gate itself is sound: 8 declared surfaces, all clean, exit 0.
+- **Impact:** This is the defect class this repository keeps finding, in its
+  purest form — not a check that fails to observe its property, but one that
+  **cannot fail because it is never invoked**. What it protects is real: the
+  repo has shipped raw English on translated surfaces before, and the gate's own
+  header explains the mechanism (someone adds a button, types the label inline,
+  every non-English visitor silently gets English on a page that was clean
+  yesterday).
+- **Recommended fix:** applied — wired beside `Lint` in the
+  `Typecheck · Lint · Test · Build` job. It is a static scan with no network or
+  database, so it belongs in the fast job.
+- **Status:** FIXED.
+- **Proved load-bearing, after one invalid attempt of my own.** My first plant
+  was `const x = "…"` rendered as `{x}` — a JSX *expression*, which is outside
+  the scanner's stated rules, so its passing proved nothing about the gate. The
+  fair test is the mistake the gate exists for: an inline JSX text node. Planting
+  `<span>Start your free trial today</span>` in
+  `components/marketing/site-header.tsx` fails it by file, line and string across
+  both covering surfaces, exit 1. Removed, exit 0.
+
+### [CLAUDE-1][MEDIUM][TESTING] A second CI-intended gate is unwired — and wiring it naively would make it vacuous
+
+- **File/path:** `scripts/verify-oauth-config.mjs`, `.github/workflows/ci.yml`
+- **Problem:** Its header states *"Exit 1 on any error so CI or a deploy hook can
+  gate on it."* No workflow runs it.
+- **Evidence:** measured in both environments rather than assumed.
+  - With this sandbox's `.env.local`: **exit 1**, 4 errors (`GOOGLE_SYNC_CLIENT_ID`
+    and three others *set but blank* — the script correctly distinguishes blank
+    from unset).
+  - With `.env.local` moved away, i.e. what the PR job actually has: **exit 0**,
+    1 warning, 3 notes.
+- **Impact:** The naive fix is the wrong one. Wiring it to the PR job would add a
+  green check that has no configuration to inspect — a guard that cannot fail,
+  which is exactly what the finding above is about. Adding it there would make
+  the audit's coverage *look* better while proving nothing.
+- **Recommended fix:** NOT applied deliberately. It belongs in a deploy-time hook
+  or a job that actually carries the OAuth environment. The script itself already
+  says what it does and does not prove: *"Shape is all this proves… run the live
+  round-trip in docs/runbooks/LB-006-provider-callback-smoke.md."*
+- **Status:** OPEN — recommended, with the reason the obvious fix is refused.
+
+**Also examined, not findings:** the three `marketing:verify:*:remote` scripts are
+likewise absent from the PR job, and correctly so — each makes network calls
+against a deployed URL (3, 4 and 6 env/fetch references respectively). The e2e job
+runs the two that work against its isolated Supabase.
+
+### [CLAUDE-1][VERIFIED][TESTING] The boundary-probe infrastructure — examined, sound, with one narrow gap closed
+
+Applying the lens that found the i18n gate (a guard nothing invokes) to the SQL
+probes. The result is mostly a clean bill, which is worth recording as such.
+
+- **All 18 `docs/audit/*-check.sql` genuinely assert.** Counted per file:
+  `wallet-write-rls` 15, `sensitive-role-boundary` 12, `money-write-boundary` 11,
+  `family-credentials-boundary` 10, `document-vault-boundary` 9, down to
+  `household-trail` 1. None is report-only.
+- **The four files outside the glob are report-only by design** —
+  `migration-ledger-state`, `money-boundary-state`, `money-policy-diagnostic`,
+  `demo-mode-teardown`. Their `-state` / `-diagnostic` / `-teardown` names are
+  load-bearing, and none contains an assertion, so nothing is parked where the
+  runner cannot see it. Verified, not assumed.
+- **`run-probes.sh` already refuses to pass vacuously.** With an empty glob it
+  exits 1 — *"no probes found in docs/audit — the boundary proofs have been
+  deleted"*. Without that branch, `shopt -s nullglob` would report `0/0 passed`
+  and exit 0. Someone here had already thought about exactly this defect class,
+  which is worth saying out loud given how often it is the finding.
+- **The gap, now closed:** nothing stopped a *future* `*-check.sql` from
+  asserting nothing, or an assertion from being written into a report-only file.
+  `tests/boundary-probes-actually-assert.test.ts` covers both.
+- **Proved load-bearing:** a planted `tmp-vacuous-check.sql` containing only
+  `select 1;` fails with *"runs in CI but asserts nothing — it can only ever
+  pass"*; a `raise exception` appended to `money-boundary-state.sql` fails with
+  *"does not end in -check.sql, so run-probes.sh never executes it"*. Both
+  removed, 4 pass.
+- **Status:** VERIFIED (infrastructure sound) · FIXED (guard added).
+  13,662 tests pass.
+
+---
+
+## Consolidation pass — fixes applied from Claude-2, -3 and -4's findings
+
+Correcting my own earlier record first: this file previously stated that
+Claude-2/3/4 "did not complete" and their files "hold only the template". That
+was true of the moment I checked and is **false now**. Other parallel sessions had
+already populated all three files and pushed; `finalaudit.md` carries Passes A–K
+and is ~3,957 lines. My rebases pulled that in without my noticing, and
+`audit/status.md` went on asserting "not audited" afterwards. Recorded rather than
+quietly edited, because a stale coverage claim in an audit document is the same
+defect as F13.
+
+Four HIGH findings applied this pass. Three are the same shape — **a call whose
+error or escaping is skipped, then success reported** — which is now the most
+frequently recurring defect in this repository after the vacuous guard.
+
+### [CLAUDE-1][HIGH][SECURITY] Inbound email routed by an unescaped wildcard — FIXED
+
+Claude-3's finding; verified and fixed. `lib/contact-center/server.ts`
+`resolveFamilyByEmailLocalResult` matched `.ilike('email_local', local)` where
+`local` is parsed from the inbound message's **`To` header** — supplied by the
+sender. `_` is both a legal local-part character (`LOCAL_RE` permits it) and
+LIKE's single-character wildcard.
+
+Measured in PostgreSQL 16 on the harness rather than reasoned about:
+
+```
+'smith'  ilike 'smit_'    -> t     <- mail reaches another family's inbox
+'smith'  ilike 'smit\_'   -> f     <- escaped
+'smith'  ilike 's%'       -> t     <- one message reaches any family
+'smit_h' ilike 'smit\_h'  -> t     <- a REAL underscore still routes
+```
+
+Impact: a sender guessing a family name and substituting one character with `_`
+reaches that family's Contact Center — their AI concierge, their planner rows,
+potentially their urgent-SMS escalation, and an auto-reply from their own
+identity confirming the match. Same class as the child sign-in ILIKE bug this
+repo already fixed; the fix had not reached this call site, where the input is
+not merely guessable but attacker-supplied.
+
+Fixed by escaping, **not** by switching to `.eq`: the fourth row above is why —
+addresses containing an underscore must keep routing — and `.eq` would also drop
+case-insensitivity while the unique index is on `lower(email_local)`.
+`tests/contact-center-email-routing-wildcards.test.ts`, 6 cases; reverting the
+escape fails 5 of them.
+
+### [CLAUDE-1][HIGH][INTEGRATION] Google Calendar reported connected, and could wipe preferences — FIXED
+
+Claude-2's C2-17, plus a worse consequence they had not reached.
+`app/api/google/calendar/callback/route.ts` discarded the error from BOTH the
+preferences read and the token upsert, inside a `try/catch` that cannot see
+either, since a PostgREST call resolves with `{ data, error }` rather than
+throwing.
+
+The upsert writes the **whole** `notification_prefs` object. So a refused *read*
+falls back to `{}` and the upsert then overwrites every other notification
+preference the user has set — a transient read failure silently resets their
+settings as a side effect of connecting a calendar. A refused *write* told them
+the calendar was connected while no token was stored, so every later sync failed
+for a reason the screen denied. Both now redirect to the error state.
+
+### [CLAUDE-1][HIGH][INTEGRATION] Blog unsubscribe confirmed consent it had not recorded — FIXED
+
+Claude-2's C2-16. Recorded in `finalaudit.md` Pass F-a as fixed — but that fix is
+on #541's branch, which has not merged, so `main` still carried it. Worth noting
+as a coordination hazard: a finding marked FIXED on an unmerged branch is not
+fixed in production.
+
+`app/api/blog/unsubscribe/route.ts` discarded both results. A refused SELECT
+rendered *"that unsubscribe link doesn't look right"* at a real subscriber
+holding a real link — sending them to check the one thing that was never wrong.
+A refused UPDATE rendered *"you've been unsubscribed"* over a row still marked
+subscribed, so the mail kept arriving after they had been told it would stop.
+Both now route to a third state whose copy says the link is fine and we were not.
+
+### [CLAUDE-1][HIGH][DATA] readAll returned a truncated ledger as a complete one — FIXED
+
+Claude-4's F-F01, **in code I wrote**, and the comment defending it was mine:
+*"A ceiling the CALLER chose is a destination… Reaching the first is success."*
+That is wrong. A caller's `max` is a bound they expect the data to fit under, so
+reaching it exactly does not mean the read finished — it means rows may exist
+past it that were never read.
+
+`readAll` returned `{ rows: rows.slice(0, max), error: null }` on truncation:
+indistinguishable from a complete read. `admin/wallet/reconciliation/page.tsx`
+reads with `{max: 20000}` and its own header says *"this page RECONCILES the
+ledger, so reading part of it is worse than not reading it at all"* — it would
+have reported that a ledger it had only partly read balanced. Ten call sites pass
+a `max`, including three nightly crons paging families.
+
+Fixed by reading **one row past** the ceiling. That single extra row is what
+separates "there were exactly `max` rows" (complete) from "there were more"
+(truncated), and it is discarded from the result — only its existence is used.
+Truncation now returns an error the callers already know how to render.
+
+Four existing cases in `tests/supabase-read-all.test.ts` failed, and they were
+right to: one of them, `"reports reaching the ceiling as success, not as a runaway
+query"`, **literally asserted the defect**. I wrote that too. The contract is now
+corrected, with a new case for the exact-fit read the probe exists for, and the
+tripwire and caller-ceiling errors asserted to stay distinguishable.
+
+### [CLAUDE-1][HIGH][INTEGRATION] RESEND_API_KEY unset: mail never sent, rows marked delivered — FIXED
+
+- **File/path:** `lib/health/status.ts`, `lib/email.ts`
+- **Problem:** Claude-4's finding, and it belonged in a list I had already built
+  and then failed to check against their file. `RESEND_API_KEY` gates every
+  outbound email — notification digests, family invites, marketing sends — and
+  was absent from `FEATURE_ENV`.
+- **Evidence:** env-only across five read sites (`lib/email.ts`,
+  `lib/server/email.ts`, `lib/marketing/send.ts`, `lib/marketing/*`,
+  `lib/server/health.ts`), with no `stored.x || process.env.X` fallback — so it
+  satisfies the inclusion rule exactly.
+- **Impact:** Worse than silent. `lib/email.ts` reports success when the key is
+  unset, so notification rows are marked **delivered** for mail that was never
+  sent — and the dedupe then suppresses the retry. The record says the family was
+  told; they were not, and nothing will try again.
+- **Recommended fix:** applied — added to `FEATURE_ENV`, so `/api/health` reports
+  it as `degraded` with the name.
+- **Status:** FIXED. The two rule-enforcing cases still pass, which is the point:
+  they accepted this name and would have rejected an admin-configurable one.
+
+---
+
+## Audit completeness — the coordinator's own check
+
+Claiming an audit complete is itself a claim that needs evidence, so:
+
+- **All 19 required sections of Part 0 are present**, verified by name.
+- **Zero sections still say "not yet audited" or "has not started"** — five did
+  after the workers reported, which was the same stale-coverage defect as F13, and
+  they are now written from the workers' actual findings rather than from my
+  expectations of them.
+- **All four workers have findings on file**: `claude-1.md` (this file),
+  `claude-2.md` (C2-01–C2-18), `claude-3.md` (3 findings + a verified-sound
+  inventory), `claude-4.md` (C-4-01–C-4-13 plus a second block).
+- **The remaining OPEN items are open because of a decision, a credential, or a
+  named piece of work** — not because nobody looked. Each names its owner in
+  Recommended Fix Order.
+- **One area is explicitly NOT covered**, and is recorded as unchecked rather
+  than clean: browser-executed accessibility (contrast, tab order, screen-reader
+  output, live 360–400px overlap). No worker had a browser. Reasoning from source
+  is not the same as running it, and writing it down as a gap is the only honest
+  option.
+
+Verified at the close: `tsc` clean · lint 0 errors · `npm run build` exits 0 ·
+13,669 tests across 1,192 files · i18n gate 8/8 surfaces · migration replay
+310/0 · ledger-repair rehearsal FAILED: 0.
+
+---
+
+# Continued: the paywall (appended after the second session's block)
+
+### [CLAUDE-1][CRITICAL][RLS/BILLING] The row that decides what a family paid for was that family's to write
+
+- **File/path:** `supabase/migrations/0004_rls.sql:144-150`, re-asserted verbatim
+  by `0118_rls_drift_repair.sql:128-135`; `0118:58` (`families_update`);
+  `lib/server/plan.ts:36-37`; `app/api/billing/portal/route.ts:20-46`.
+- **Raised by:** Claude-3, as `[CLAUDE-3][HIGH][RLS/BILLING]`. Verified
+  independently here and **raised to CRITICAL**, because the third consequence
+  below is cross-tenant and Claude-3's report did not reach it.
+- **Problem:** `subs_manage` grants `for all` on `subscriptions` to
+  `is_family_admin(family_id)` — the parent being charged — and `billing_manage`
+  does the same for `billing_customers`. `families_update` is
+  `can_manage_family(id)` with no column restriction. `lib/server/plan.ts` then
+  reads all three with the **service-role client, deliberately**, and its own
+  header says why: *"Reading the family's own plan is a trusted, server-side
+  gating concern, so we use the SERVICE-ROLE client to bypass RLS entirely and
+  read the real plan."* The real plan was the customer's to write.
+- **Evidence:** on a database replayed from these migrations, as a real
+  `authenticated` parent session under RLS (`/tmp/pgaudit3`, 319/319 applied):
+
+  ```
+  update subscriptions set plan='family_plus', status='active' ..... UPDATE 1
+    stored plan afterwards ......................................... family_plus
+  update families set trial_ends_at = now() + '3650 days' .......... UPDATE 1
+  insert billing_customers (customer_ref='cus_<other family>') ..... INSERT 1
+    stored customer_ref afterwards ................................. cus_VICTIM
+  ```
+
+- **Impact:** three consequences, ascending:
+  1. **The paid product, for free.** `planLevel(s.plan)` over active/trialing
+     rows IS the entitlement. One UPDATE puts the family on Family+.
+  2. **The trial never ends** — and the sharpest form is not extending it but
+     `trial_ends_at = null`. `computeEntitlement` reads NULL as GRANDFATHERED
+     ("existing free families are never locked"), so one word turns "trial
+     expired, locked, must buy" into permanently unlocked. Clearing `closed_at`
+     likewise reopens a closed account.
+  3. **Another family's Stripe account.** `/api/billing/portal` reads
+     `billing_customers.customer_ref` and hands it to
+     `stripe.billingPortal.sessions.create({ customer })` with no check that the
+     ref belongs to the caller — reasonably, because until now the only writer
+     was supposed to be the code that had just created that customer. A parent
+     who writes another family's `cus_…` into their own row opens the Stripe
+     billing portal **on that customer**: their invoices, their card, their
+     cancellation. Cross-tenant, and not about money the attacker saves.
+- **Recommended fix / taken:** `0306_a_family_cannot_write_its_own_entitlement.sql`.
+  A **revoke, not a narrower predicate**, because there is no narrower predicate
+  to write: no legitimate session-client write to either table exists anywhere in
+  the repo. Every writer was already the service role (`webhooks/stripe`,
+  `billing/{change-plan,cancel}` syncs, `admin/actions.ts`, `account/actions.ts`,
+  `ensure-family.ts`, and `handle_new_family`, which is SECURITY DEFINER owned by
+  a BYPASSRLS role). The two that were not — the `billing_customers` upserts in
+  `billing/checkout` and `billing/change-plan` — moved to `createServiceClient()`
+  in the same commit. **The database was simply behind the code.**
+  `families` cannot be revoked (a manager legitimately renames the family), so
+  the restriction is **by column**, in 0303's idiom: a trigger refusing an
+  untrusted writer touching `trial_ends_at` or `closed_at`, with `is distinct
+  from` precisely so that writing NULL is refused too.
+  Reads are left alone on `subscriptions` (`entitlement.ts` shows a member their
+  own plan) and narrowed to managers on `billing_customers` (every reader is
+  already `isAdmin`-gated or service-role, and `lib/ai/context/policy.ts` has
+  always excluded the table by name as "billing identity").
+- **Status:** FIXED. `docs/audit/paywall-write-boundary-check.sql`, 27/27 probes.
+  Non-vacuity proven three times over, each revert naming its own defect:
+  restore `subs_manage` → *"a parent granted their own family a paid plan"*;
+  drop the families trigger → *"a parent extended their own free trial"*;
+  restore `billing_manage` → *"a parent claimed another family's Stripe
+  customer"*. The probe also asserts the trusted server is **not** locked out —
+  it still records a paid plan, closes and reopens an account, and writes a
+  billing customer — because a guard that broke the Stripe webhook would be a
+  worse bug than the one it fixed.
+  Second lock on the same door:
+  `tests/entitlement-is-never-written-by-its-own-customer.test.ts`, which resolves
+  the CLIENT each write was built on (F5 means code reaches production before
+  migrations do). It reads backwards from `.from(` to the receiver, resolves a
+  local binding at the call site rather than per file — `billing/change-plan`
+  legitimately holds both clients — and accepts a parameter annotated
+  `ReturnType<typeof createServiceClient>`, which the type system enforces at
+  every call site. Non-vacuity: reverting the checkout upsert names
+  `app/api/billing/checkout/route.ts (built on createServer)`.
+
+### [CLAUDE-1][NOTE][PROCESS] The probe caught a hole in itself
+
+The first draft of `paywall-write-boundary-check.sql` asserted that a parent
+cannot clear `closed_at` — and passed, on a family whose `closed_at` was already
+NULL. `is distinct from` is not violated by writing the value a column already
+holds, so the refusal never fired and the probe read the no-op as a guard. The
+setup now closes the account first, so the case is a real transition. Worth
+recording because it is the failure mode boundary probes are most prone to:
+asserting a refusal against a write that had nothing to do.
+
+A second one in the same file: `reset role` is **not** the service role. The JWT
+claim set by `set_config(..., true)` survives it, so `auth.uid()` still answers
+and the trigger still sees that parent. The trusted-server section now clears the
+claim and takes `set local role service_role` — otherwise "the server can still
+write it" would have been asserted against a writer the trigger was refusing.
+
+### [CLAUDE-1][NOTE][COORDINATION] Two sessions, one `readAll`, one `0298`
+
+Main landed `0298_invites_update_manager_only.sql` while this branch held
+`0298_invite_terms_are_not_the_invitees_to_write.sql` — the **third** version
+collision this sweep, and the second on the same finding. Both sessions reached
+the same policy shape from the same evidence. Disposition, as with `child_logins`
+before it: **0298 keeps the policy**, and my migration is renumbered to **0305**,
+rewritten to carry only the half 0298 does not — the trigger fixing an invite's
+`family_id`, `token` and `email` at issue and making acceptance terminal.
+Re-asserting an identical policy would have replaced their named, documented
+object with an indistinguishable copy and cost the repo the account that goes
+with it, for no change in behaviour.
+
+`lib/supabase/read-all.ts` was fixed by both sessions at once, and the merge is a
+genuine **union rather than a choice**. Main's loop runs to `max + 1` so the
+probe row rides along on the last page's range — one fewer round trip than my
+separate follow-up request, and I took it. My `truncated` flag and `failOnMax`
+are kept on top, because main's version makes **every** truncated read an error,
+and `wallet/activity` wants the opposite: it LISTS recent rows rather than
+summing them, so a prefix of the newest is the right answer there. Neither
+session's insight is lost, and the tests from both sides are kept, with mine
+corrected to the merged call sequence (`[[0,999],[1000,1999],[2000,2500]]`).
+
+### [CLAUDE-1][HIGH][RLS/HEALTH] Nine health tables let any member rewrite any other member's record
+
+- **File/path:** `care_log`, `health_goals`, `health_metrics`, `health_visits`,
+  `immunizations`, `nutrition_logs`, `sleep_checkins`, `sleep_logs`,
+  `symptom_logs` — all `for all using (is_family_member(family_id))`. Written
+  from `components/modules/{health,sleep,care,immunizations,health-visits}-module.tsx`
+  and `components/meals/nutrition-view.tsx`.
+- **Raised by:** Claude-3. 0300 narrowed `medications` and
+  `medication_schedules` and stopped there, deliberately — its header filed two
+  owner decisions rather than guessing.
+- **Problem:** the same shape 0300 closed, on nine tables it did not reach. All
+  nine are written **directly from the browser** with `createClient()`, and
+  `grep -n 'isManager\|role ===' ` over all six modules that write them returns
+  **nothing** — there is no role check anywhere in the client, so RLS was the
+  only boundary and it said membership.
+- **Evidence:** on the replayed database (320/320), as a real `authenticated`
+  child session: `update symptom_logs set status='resolved' where id=<sibling's>`
+  → UPDATE 1. Same for deleting a sibling's sleep log and a sibling's
+  vaccination record.
+- **Impact:** a child can mark a sibling's symptom resolved, delete their sleep
+  history, or erase a vaccination record. The last is a record of medical fact
+  that a parent may later rely on.
+- **Recommended fix / taken:** `0307_a_health_record_is_not_a_siblings_to_rewrite.sql`,
+  with **two rules, because these are not one kind of record**:
+  - **Rule A** — a log you keep about yourself (`symptom_logs`,
+    `health_metrics`, `health_goals`, `sleep_logs`, `sleep_checkins`,
+    `nutrition_logs`): a manager, the author, **or the member the row is
+    about**. The subject matters here because three of these tables are written
+    with `upsert(..., { onConflict: 'member_id,<date>' })`, so the second entry
+    of a day IS an update — an author-only rule would refuse a child correcting
+    their own sleep log the moment a parent had recorded one for them first.
+  - **Rule B** — a record of medical fact kept about someone (`health_visits`,
+    `immunizations`, `care_log`): a manager or the author, and **not** the
+    subject. A child deleting the record of their own vaccination is the defect,
+    not the feature.
+  **INSERT is deliberately unchanged on all nine**, and so are reads: 0300 filed
+  "is logging a vaccination any member's to do?" and "should health reads
+  narrow?" as owner decisions, and this answers neither. Only the part that
+  needs no product decision is closed — nobody rewrites or deletes a health
+  record that is neither theirs nor theirs to manage.
+  `health_metrics` was the one table of the nine with no author column at all,
+  so it gains a `created_by`; existing rows keep NULL, which under Rule A leaves
+  them editable by the subject or a manager and by nobody else — the safe
+  reading of "we do not know who wrote this". Its insert in `health-module.tsx`
+  now sets `created_by`, as its eight siblings already did.
+- **Status:** FIXED. `docs/audit/health-record-write-boundary-check.sql`,
+  28/28 probes, 320/320 migrations replayed. Non-vacuity proven **twice, and the
+  second revert proves the two rules are genuinely different rather than one
+  rule copied**: restoring `symptom_logs_all` → *"a child rewrote a sibling's
+  symptom log (1)"*; giving `immunizations` Rule A's predicate instead of Rule
+  B's → *"a child deleted the record of their own vaccination (1)"*.
+  The probe asserts what a member may STILL do alongside what they may not: a
+  child still reads the family's health records, still records their own
+  symptom, and still corrects a log about themselves that a parent wrote; a
+  manager still corrects and deletes all nine.

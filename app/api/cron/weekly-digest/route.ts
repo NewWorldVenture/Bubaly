@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { listAllAuthUsers } from '@/lib/server/list-all-auth-users';
 import { readAll } from '@/lib/supabase/read-all';
 import { settleAll } from '@/lib/supabase/settle';
 import { sendReactEmail } from '@/lib/email';
@@ -35,13 +36,16 @@ export async function GET(req: NextRequest) {
   }
   if (!families?.length) return NextResponse.json({ sent: 0 });
 
-  const { data: authUsers, error: authUsersError } = await supabase.auth.admin.listUsers();
+  // Every auth user, not GoTrue's default first 50: `families` above is read
+  // with readAll, so a truncated recipient map silently drops the digest for
+  // every family whose members sit past the first page.
+  const { users: allAuthUsers, error: authUsersError } = await listAllAuthUsers(supabase);
   if (authUsersError) {
     console.error('Weekly digest user read error:', authUsersError);
     return NextResponse.json({ error: t('weeklyDigest.weeklyDigestProcessingFailed') }, { status: 500 });
   }
   const emailByUserId = new Map(
-    (authUsers?.users ?? []).map((u) => [u.id, u.email ?? null]),
+    allAuthUsers.map((u) => [u.id, u.email ?? null]),
   );
 
   let sent = 0;

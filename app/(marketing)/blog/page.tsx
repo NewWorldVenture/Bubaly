@@ -110,7 +110,7 @@ export default async function BlogPage({ searchParams }: Props) {
   const activeCategory = ALL_CATEGORIES.find((c) => c === params.category) ?? null;
   const activeTag = params.tag ? toHashtag(params.tag) : null;
   const page = Math.max(1, Number.parseInt(params.page ?? '1', 10) || 1);
-  const unsubscribed = params.unsubscribed === '1' ? 'done' : params.unsubscribed === 'invalid' ? 'invalid' : null;
+  const unsubscribed = params.unsubscribed === '1' ? 'done' : params.unsubscribed === 'invalid' ? 'invalid' : params.unsubscribed === 'error' ? 'error' : null;
 
   const [allPostsRaw, featured, categoryCounts] = await Promise.all([
     activeCategory ? getPostsByCategory(activeCategory) : getAllPosts(),
@@ -164,7 +164,12 @@ export default async function BlogPage({ searchParams }: Props) {
           )} role="status">
             {unsubscribed === 'done'
               ? 'You’ve been unsubscribed from blog updates. Sorry to see you go — you can rejoin anytime below.'
-              : 'That unsubscribe link doesn’t look right. If you keep getting emails, contact support and we’ll sort it out.'}
+              : unsubscribed === 'error'
+                // Distinct from 'invalid' on purpose: the link was fine, we were not.
+                // Telling someone their link is wrong when the database refused sends
+                // them to check the one thing that was never the problem.
+                ? 'We couldn’t complete that just now — your link is fine. Please try again in a moment, and contact support if the emails keep arriving.'
+                : 'That unsubscribe link doesn’t look right. If you keep getting emails, contact support and we’ll sort it out.'}
           </div>
         </Container>
       )}

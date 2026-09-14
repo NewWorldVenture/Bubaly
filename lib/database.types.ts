@@ -1240,8 +1240,8 @@ export interface Database {
       >;
       // ── Health ──────────────────────────────────────────────
       health_metrics: T<
-        { id: string; family_id: string; member_id: string; type: MetricType; value: number; unit: string | null; recorded_at: string; created_at: string },
-        { id?: string; family_id: string; member_id: string; type: MetricType; value: number; unit?: string | null; recorded_at?: string },
+        { id: string; family_id: string; member_id: string; type: MetricType; value: number; unit: string | null; recorded_at: string; created_by: string | null; created_at: string },
+        { id?: string; family_id: string; member_id: string; type: MetricType; value: number; unit?: string | null; recorded_at?: string; created_by?: string | null },
         Partial<{ type: MetricType; value: number; unit: string | null; recorded_at: string }>
       >;
       health_visits: T<
