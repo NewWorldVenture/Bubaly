@@ -777,3 +777,59 @@ reason that convention exists.
 This is a capacity blocker, not a technical one. The work is scoped and the
 prompts are written; it needs either a session-limit reset or the workers run as
 genuinely separate accounts, which is what the brief describes.
+
+### [CLAUDE-1][HIGH][TESTING] A gate that calls itself a CI gate ran in no workflow
+
+- **File/path:** `scripts/i18n-gate.mjs`, `.github/workflows/ci.yml`, `finalaudit.md`
+- **Problem:** `scripts/i18n-gate.mjs` opens with *"CI gate for surfaces declared
+  translated"* and ends *"Nothing else in the build would notice, so this does."*
+  It appeared in **no workflow**. Meanwhile `finalaudit.md`'s status summary
+  listed it as a passing check — so the audit reported a guard that never ran.
+- **Evidence:**
+  - `grep -rn "i18n" .github/workflows/` → **no match in any workflow**.
+  - Every `run:` line in `ci.yml` enumerated; `npm run i18n:gate` is absent.
+  - The gate itself is sound: 8 declared surfaces, all clean, exit 0.
+- **Impact:** This is the defect class this repository keeps finding, in its
+  purest form — not a check that fails to observe its property, but one that
+  **cannot fail because it is never invoked**. What it protects is real: the
+  repo has shipped raw English on translated surfaces before, and the gate's own
+  header explains the mechanism (someone adds a button, types the label inline,
+  every non-English visitor silently gets English on a page that was clean
+  yesterday).
+- **Recommended fix:** applied — wired beside `Lint` in the
+  `Typecheck · Lint · Test · Build` job. It is a static scan with no network or
+  database, so it belongs in the fast job.
+- **Status:** FIXED.
+- **Proved load-bearing, after one invalid attempt of my own.** My first plant
+  was `const x = "…"` rendered as `{x}` — a JSX *expression*, which is outside
+  the scanner's stated rules, so its passing proved nothing about the gate. The
+  fair test is the mistake the gate exists for: an inline JSX text node. Planting
+  `<span>Start your free trial today</span>` in
+  `components/marketing/site-header.tsx` fails it by file, line and string across
+  both covering surfaces, exit 1. Removed, exit 0.
+
+### [CLAUDE-1][MEDIUM][TESTING] A second CI-intended gate is unwired — and wiring it naively would make it vacuous
+
+- **File/path:** `scripts/verify-oauth-config.mjs`, `.github/workflows/ci.yml`
+- **Problem:** Its header states *"Exit 1 on any error so CI or a deploy hook can
+  gate on it."* No workflow runs it.
+- **Evidence:** measured in both environments rather than assumed.
+  - With this sandbox's `.env.local`: **exit 1**, 4 errors (`GOOGLE_SYNC_CLIENT_ID`
+    and three others *set but blank* — the script correctly distinguishes blank
+    from unset).
+  - With `.env.local` moved away, i.e. what the PR job actually has: **exit 0**,
+    1 warning, 3 notes.
+- **Impact:** The naive fix is the wrong one. Wiring it to the PR job would add a
+  green check that has no configuration to inspect — a guard that cannot fail,
+  which is exactly what the finding above is about. Adding it there would make
+  the audit's coverage *look* better while proving nothing.
+- **Recommended fix:** NOT applied deliberately. It belongs in a deploy-time hook
+  or a job that actually carries the OAuth environment. The script itself already
+  says what it does and does not prove: *"Shape is all this proves… run the live
+  round-trip in docs/runbooks/LB-006-provider-callback-smoke.md."*
+- **Status:** OPEN — recommended, with the reason the obvious fix is refused.
+
+**Also examined, not findings:** the three `marketing:verify:*:remote` scripts are
+likewise absent from the PR job, and correctly so — each makes network calls
+against a deployed URL (3, 4 and 6 env/fetch references respectively). The e2e job
+runs the two that work against its isolated Supabase.

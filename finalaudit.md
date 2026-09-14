@@ -493,6 +493,7 @@ highest-yield check in this repository.
 | CLAUDE-1 | A merge would have reopened the child-self-approval hole | fixed |
 | CLAUDE-1 | `/api/health` reported `ok` while a missing `CRON_SECRET` silently 401'd all 24 scheduled jobs, and a missing `CHILD_LOGIN_SECRET` disabled child sign-in | fixed |
 | CLAUDE-1 | Five nightly jobs answered HTTP 200 while counting their own failures; no cron route writes a durable run record | fixed |
+| CLAUDE-1 | `i18n:gate` calls itself a CI gate and ran in no workflow, while this document listed it as a passing check | fixed |
 
 # Medium Priority
 
@@ -512,6 +513,7 @@ highest-yield check in this repository.
 | F-016 | The documented crawl workflow drops a live session cookie into the tree | fixed |
 | CLAUDE-1 | `/api/contact-center` was public as a prefix, not as exact paths | fixed |
 | CLAUDE-1 | A runtime gate fails on this Node and passes on CI's | **OPEN — worker collision** |
+| CLAUDE-1 | `verify:oauth` is also unwired — but wiring it to the PR job would make it vacuous, so the obvious fix is refused | **OPEN — recommended** |
 
 # Low Priority
 
@@ -629,7 +631,9 @@ Claude-1's scope, in progress.
 
 - 13,641 unit tests across 1,187 files on #541's merged tree; 15,806 on #510's.
 - 19 SQL boundary probes; E2E with a mobile device matrix.
-- **The recurring defect class is vacuous guards** — see the Executive Summary.
+- **The recurring defect class is vacuous guards** — see the Executive Summary. Its
+  purest form turned up this pass: `i18n:gate` could not fail because no workflow
+  invoked it. When auditing a guard, check first that something runs it.
   Claude-4 should treat "revert the fix and confirm the test fails" as the
   standard for any guard it reviews, not an optional extra.
 - Open: `tests/stream-cancellation-runtime.test.ts` is Node-patch-sensitive.
@@ -1970,7 +1974,7 @@ F-002 records reasoning that was wrong and what replaced it.
 | Migration names | `db:audit:migrations` | ✅ 307 files, no collisions |
 | Migration replay | fresh DB, 0 → 307 | ✅ all applied, 0 failed |
 | Migration **re**-apply | populated DB, replay from `0004` | ✅ 0 failed (was 18 — F-020) |
-| i18n | `i18n:gate` | ✅ all declared surfaces clean |
+| i18n | `i18n:gate` | ✅ 8 surfaces clean — **and now actually runs in CI**; it was wired to no workflow (CLAUDE-1) |
 | RLS boundaries | 15 probes, fresh 307-migration replay, run 2× | ✅ 15/15 each time (F-015 made it repeatable) |
 | Authenticated routes | 353-route crawl | ✅ 351 ok, 1 gate redirect, 0 failures |
 | Public content routes | unknown-slug probe | ✅ 404s (was one 500 — see F-005) |

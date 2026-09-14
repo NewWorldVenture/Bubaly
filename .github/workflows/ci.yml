@@ -44,6 +44,22 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # scripts/i18n-gate.mjs describes itself as "CI gate for surfaces declared
+      # translated", and ends "Nothing else in the build would notice, so this
+      # does." It was in no workflow, so nothing ran it — the guard that cannot
+      # fail, in its purest form: a check that cannot fail because it is never
+      # invoked. finalaudit.md meanwhile listed it as a passing check.
+      #
+      # It is load-bearing, verified rather than assumed: a JSX text node planted
+      # in components/marketing/site-header.tsx is caught by name, file and line
+      # across both surfaces that cover it, exit 1. Removed, exit 0 across all
+      # eight declared surfaces.
+      #
+      # Cheap (a static scan, no network, no database), so it runs beside lint
+      # rather than in the slower jobs.
+      - name: i18n gate (declared surfaces carry no hardcoded copy)
+        run: npm run i18n:gate
+
       - name: Unit tests
         run: npm test
 

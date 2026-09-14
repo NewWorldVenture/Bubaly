@@ -76,7 +76,7 @@ NOTE FOR OTHER WORKERS:
 LAST-UPDATE: 2026-09-13
 
 ## Claude-2
-CURRENT: **BLOCKED — did not complete.** Launched in parallel; terminated by `rate_limit / HTTP 429: session limit, resets 3:10am UTC` before writing any finding.
+CURRENT: **RELAUNCHED on a different model.** First attempt terminated by `rate_limit / HTTP 429` (the error named claude-opus-5; Opus resets 03:10 UTC, ~6h away). Retried on Sonnet, which carries a separate limit. Instructed to write findings incrementally so a second cut-off cannot cost everything.
 Last action before termination: "Now let me survey the frontend surface area."
 COMPLETED: nothing — audit/claude-2.md still holds only the template.
 NEXT: re-run after the limit resets, or run as a separate account as the brief describes. Scope unchanged: Frontend · UI/UX · Responsive · Accessibility.
@@ -90,7 +90,7 @@ BLOCKERS:
 LAST-UPDATE:
 
 ## Claude-3
-CURRENT: **BLOCKED — did not complete.** Launched in parallel; terminated by `rate_limit / HTTP 429: session limit, resets 3:10am UTC` before writing any finding.
+CURRENT: **RELAUNCHED on a different model.** First attempt terminated by `rate_limit / HTTP 429` (the error named claude-opus-5; Opus resets 03:10 UTC, ~6h away). Retried on Sonnet, which carries a separate limit. Instructed to write findings incrementally so a second cut-off cannot cost everything.
 Last action before termination: "Now let me build the route inventory and start the authorization sweep."
 COMPLETED: nothing — audit/claude-3.md still holds only the template.
 NEXT: re-run after the limit resets, or run as a separate account as the brief describes. Scope unchanged: Backend · API · Database · Auth · Security.
@@ -104,7 +104,7 @@ BLOCKERS:
 LAST-UPDATE:
 
 ## Claude-4
-CURRENT: **BLOCKED — did not complete.** Launched in parallel; terminated by `rate_limit / HTTP 429: session limit, resets 3:10am UTC` before writing any finding.
+CURRENT: **RELAUNCHED on a different model.** First attempt terminated by `rate_limit / HTTP 429` (the error named claude-opus-5; Opus resets 03:10 UTC, ~6h away). Retried on Sonnet, which carries a separate limit. Instructed to write findings incrementally so a second cut-off cannot cost everything.
 Last action before termination: "Let me record the findings so far."
 COMPLETED: nothing — audit/claude-4.md still holds only the template.
 NEXT: re-run after the limit resets, or run as a separate account as the brief describes. Scope unchanged: QA · Features · Flows · Performance · Edge cases.
