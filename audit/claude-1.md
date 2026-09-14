@@ -4097,3 +4097,59 @@ verification, not a side effect of a submit button.
 Explicit `type="submit"` **and** the bare `<button>`, because the implicit one is
 precisely what a scan of the obvious kind cannot see — and this pass exists because
 that blind spot was in my own first attempt.
+
+---
+
+## Pass BE — ARCH-001 measured, and the measurement does not say what it looks like it says
+
+**Status: VERIFIED** (the split is real), **BLOCKED on its own pass** (the repair),
+**and one number deliberately NOT reported as a finding.**
+
+### The split, confirmed from both sides
+
+| | version | who runs it |
+|---|---|---|
+| `node_modules/react`, `react-dom` | **18.3.1** | vitest, and anything resolving the hoisted copy |
+| `next/dist/compiled/react`, `react-dom` | **19.2.0-canary-0bdb9206** | the App Router, i.e. production |
+
+`package.json` declares `react: ^18.3.1` with `next: ^15.5.25`. Next 15 wants React
+19 and papers over the mismatch by compiling its own. `require('react-dom').useFormStatus`
+is `undefined`; `require('next/dist/compiled/react-dom').useFormStatus` is a function.
+That is how Pass BD found it — the filed fix named a React 19 hook, the import
+**compiled**, and the tests were the only thing that objected.
+
+### The experiment, and the trap in reading it
+
+I aliased `react`, `react-dom`, `react-dom/server`, `react-dom/client` and both JSX
+runtimes in `vitest.config.ts` to Next's compiled build, ran the suite, and restored
+the config. Result: **43 files / 641 tests failed.**
+
+**That number is not "641 assertions that disagree with production", and recording it
+as one would have been the whole mistake.** The failures classify as:
+
+```
+24 ×  Objects are not valid as a React child (found: object with keys {$$typeof, …})
+10 ×  Cannot read properties of null (reading 'useState' / 'useContext')
+```
+
+Both are the signature of **two React copies coexisting**, not of React 19 semantics:
+an element minted by one copy is unrecognisable to the other, and a component reached
+through the second copy has a null dispatcher. My alias covered the entry points I
+listed and evidently not every path that resolves React — so the experiment measured
+**my own incomplete alias**, and says nothing yet about how many tests would disagree
+with React 19 once the resolution is consistent.
+
+What it does establish, which is worth having:
+
+- The repair is **not a config line**. Every React-resolving path has to move together,
+  transitive dependencies included, or the cure is worse than the split.
+- Until it is done, the suite's green is evidence about **React 18**, and production
+  renders under a **19 canary**. That is a real gap in what the 1,227 files prove —
+  stated as a gap, not as a count.
+
+### Why this is recorded rather than fixed
+
+Changing what every rendering test runs against, on a branch carrying nine other
+passes, is not something to bundle. It needs its own pass: move the resolution
+wholesale, then read the failures that survive — **those** would be the real finding,
+and only then is there a number worth writing down.
