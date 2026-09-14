@@ -983,3 +983,74 @@ Evidence: expected a finding here — the notifications cron is scheduled once
           TOMORROW's brief after 6pm local. Quiet hours apply to the filed
           instant, not the tick. Sound, and deliberately so.
 ```
+
+## A3-008 — Claude-3's second CRITICAL, confirmed and closed
+
+```
+[CLAUDE-1][CRITICAL][RLS/MONEY] A child could write an allowance rule, and the service-role cron minted the money
+Path:     supabase/migrations/0088_family_wallet.sql (the "Members manage" loop)
+          · app/api/cron/wallet-allowance/route.ts:36-104
+Source:   found and evidenced by Claude-3 of the parallel session
+          (audit/claude-3.md, [CLAUDE-3][CRITICAL][RLS/MONEY]). Independently
+          re-confirmed here against pg_policies on a fresh 309-migration replay
+          and against the cron's own source before acting.
+Problem:  0217 narrowed writes to can_manage_family on FIVE wallet tables, and
+          0254/0275 re-assert that set with RESTRICTIVE guards. SIX tables from
+          the same 0088 loop were never on the list and still carried its
+          permissive `FOR ALL … USING is_family_member WITH CHECK
+          is_family_member`:
+            allowance_rules  wallet_goals  gift_links
+            gift_payments    babysitter_profiles  babysitter_payments
+          allowance_rules is the one that moves money, and the route around 0217
+          is one level UP rather than through it: a child cannot insert a
+          wallet_transaction, but they could insert a RULE — and the nightly
+          cron runs `createServiceClient()`, bypasses RLS, and calls
+          `creditChildWallet(… amountCents: rule.amount_cents)` with no check on
+          who wrote it.
+Evidence: pg_policies on the replay, before the fix:
+            allowance_rules | Members manage allowance_rules | ALL | PERMISSIVE
+                            | q=is_family_member(family_id) | c=is_family_member(family_id)
+          and the same single row for the other five.
+          Claude-3's probe as a real child session: the wallet_transactions
+          insert is REFUSED (0217/0254 hold) while
+          `insert into allowance_rules (… amount_cents 999999 …)` returns
+          INSERT 0 1 and `update … set amount_cents = 5000000` returns UPDATE 1.
+          The cron does not re-validate: route.ts:36-44 selects every active rule
+          with `next_run_on <= today`, and line 91 credits `rule.amount_cents`.
+          The only gate is the family's plan tier, not the rule's author.
+          That manager-only is INTENDED is not inferred: all eleven app write
+          paths to the six tables open with `if (!isManager(ctx.active.role))`,
+          and isManager is parent|adult — exactly can_manage_family.
+Impact:   Any child or non-manager member on a Basic+ family could give
+          themselves an arbitrary recurring wallet credit that a Bubaly Issuing
+          card would honour. Precisely the harm 0217's header describes — "give
+          themselves unlimited spendable money" — routed around the fix.
+Fix:      0298, in 0275's idiom and for the same reason: SELECT stays
+          is_family_member (a child seeing their own allowance and savings goal
+          is the product working); INSERT/UPDATE/DELETE become
+          can_manage_family; three RESTRICTIVE manager guards per table; then a
+          sweep by SHAPE rather than by name of every other permissive write
+          policy, and a verification block that fails the migration if one
+          survives. Sweeping by shape is the point — 0217 narrowed five tables
+          by name and left these six behind, which is how this got here.
+          No legitimate flow breaks. The one non-manager write in the product is
+          the public gift pledge (app/gift/actions.ts), and it goes through
+          createServiceClient() — service role, RLS bypassed — so it is
+          unaffected.
+          Plus a second lock on the same door: the cron now reads
+          `created_by`, builds the set of active parents/adults for the due
+          families in one query, and skips a rule whose author is not one of
+          them — counting it in the response rather than dropping it silently. A
+          null author stays payable: that is the seed and service-role path, not
+          a rule somebody wrote. This matters because F5 means migrations are
+          not applied on merge here, so the code reaches production first.
+Status:   FIXED — migration 0298
+Guard:    docs/audit/allowance-rule-write-boundary-check.sql — a child refused on
+          all six tables, a parent's write accepted (positive control), the
+          child's READ of their own rule and goal asserted INTACT, and no stray
+          permissive write policy surviving. Non-vacuity proven: restoring
+          0088's `Members manage allowance_rules` on the replayed database fails
+          it at "a child inserted an allowance rule". 19/19 probes with it in.
+          tests/allowance-cron-pays-only-manager-written-rules.test.ts pins the
+          cron half; deleting the guard fails two of its five cases.
+```
