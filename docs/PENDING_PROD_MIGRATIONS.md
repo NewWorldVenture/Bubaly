@@ -501,8 +501,8 @@ passed; production application of the atomic `0240-0254` release remains pending
 ## Migrations added since this document's stated baseline (2026-09-12)
 
 The status line at the top of this file is dated **2026-09-05** against main
-`01881fb2`. **Seventy-five** migration files have landed since, `0255` through
-`0299`, and none of them appear anywhere above. (This read "thirty-one, `0255`
+`01881fb2`. **Seventy-six** migration files have landed since, `0255` through
+`0300`, and none of them appear anywhere above. (This read "thirty-one, `0255`
 through `0285`" until 2026-09-13, then "seventy-two, `0255` through `0296`" and
 "seventy-four … `0298`" the same day; the range simply keeps growing past the
 sentence.)
@@ -547,6 +547,25 @@ writes) and refuses when `child_logins` disagrees with it or when the named memb
 is a manager. That closes the escalation on production today. What the migration
 still buys is the rest of the boundary — the sibling lockout, and planting a
 mapping — neither of which any application code can prevent.
+
+**`0300_audit_logs_says_who_wrote_it.sql` is the one with no code-side
+mitigation at all, which is why it is named here too.** `audit_insert` on
+`audit_logs` pins `family_id` and nothing else, so `actor_id` is free: a child
+files a row reading `actor_id = <the parent's uid>, action = 'delete', resource =
+'wallet_transactions'` and `/family/activity` renders it as the parent's doing.
+The `family_id is null` branch also lets any authenticated user write rows no RLS
+reader can see, while `app/(app)/admin/security/page.tsx` renders the newest 25 of
+them with the service client — twenty-five inserts from one session replace the
+platform security feed with fabricated events. Proved in
+`docs/audit/audit-log-says-who-wrote-it-check.sql`.
+
+Unlike `0299`, **nothing in the application can stand in front of this one**: the
+forgery is a direct PostgREST INSERT by the attacker, not a read the app performs,
+so the trail remains forgeable in production until this is applied. The migration
+pins `is_family_member(family_id) and actor_id = auth.uid()` rather than dropping
+member INSERT the way `0260` did for `trust_audit_logs`, because fourteen callers
+here append on the caller's own client — all fourteen already pass their own
+`ctx.user.id`, so the pin costs them nothing.
 
 Nothing here authorizes applying any of them; this section exists so the gap is
 visible rather than inferred from the absence of a row.

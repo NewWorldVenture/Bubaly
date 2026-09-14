@@ -1230,3 +1230,56 @@ that was fixed hours ago and reports it as open.
   ones that are clean AND reachable, then `git worktree prune`.
 - **Status:** S-02 FIXED (not by me — recorded so it is not re-fixed). The
   worktree hazard is OPEN and is the owner's call, not an agent's.
+
+---
+
+## Pass T — the audit trail says who wrote it (merged from Claude-3)
+
+### [CLAUDE-3][HIGH][RLS] Any member could sign an audit row with someone else's name — and flood the platform security feed
+
+- **File/path:** `supabase/migrations/0118_rls_drift_repair.sql:116` (originally
+  `0004_rls.sql:132`), policy `audit_insert` on `public.audit_logs`
+- **Verified against a replay of 313 migrations.** The check is
+  `family_id is null or public.is_family_member(family_id)` — `family_id` and
+  nothing else. `actor_id`, `action`, `resource`, `resource_id` and `metadata`
+  are all free.
+- **Executed, both directions.** `docs/audit/audit-log-says-who-wrote-it-check.sql`
+  passes against the fixed schema; with the old check restored its negative
+  control reports:
+  > *a child ATTRIBUTED a wallet deletion to the parent | a child wrote a
+  > family_id IS NULL row into the platform security feed | a PARENT attributed
+  > an action to the child — the pin is a role check, not an identity check*
+- **Impact:** the trail is writable by the people it exists to hold accountable.
+  A child can attribute an action to a parent in `/family/activity`, bury a real
+  entry under noise, and write `family_id = null` rows that **no** RLS reader can
+  see while `app/(app)/admin/security/page.tsx` renders the newest 25 of them with
+  `createServiceClient()`. That page claims *"Append-only audit log — Sensitive
+  actions are recorded permanently"*. It is append-only (no UPDATE/DELETE
+  policies) and read-restricted. What it was not is **authentic**.
+- **Why 0300 pins rather than drops, unlike 0260.** `0260_trust_ledger_lockdown.sql`
+  fixed this exact defect on `trust_audit_logs` by dropping member INSERT
+  outright, because every legitimate writer there held the service role. Here
+  that is false: **fourteen callers append on the caller's own cookie-bound
+  client**, and `docs/audit/household-trail-check.sql` states the intent
+  deliberately — *"ANY member may append … while only a parent or adult may read
+  it back"*. A trail a child cannot write has holes in it exactly where the work
+  happens. So 0300 pins the shape instead:
+  `is_family_member(family_id) and actor_id = auth.uid()`. Checked all fourteen
+  callers first: every one already passes its own `ctx.user.id`, so the pin costs
+  the honest callers nothing.
+- **The `family_id is null` branch, and the one caller that used it.** Exactly one
+  client-side writer relied on it — `app/onboarding/actions.ts`' reset row, when
+  the user has no active family — and it now writes with the service client it
+  already held two lines above, which is the right client for a row the server
+  authors about itself. Every other null-family writer (`adminAuditLog`, the
+  benchmarks export) was already on the service role. `scopeForSystem` documents
+  that crons pass the service client, so the `actor_id = null` system rows keep
+  working: service_role bypasses RLS.
+- **No application half exists here, and that is worth stating.** S-03's takeover
+  could be closed in code because the dangerous read was one the app performed.
+  This one is a direct PostgREST INSERT by the attacker; only RLS can refuse it.
+  So `audit_logs` stays forgeable in production until 0300 is applied — recorded
+  in `docs/PENDING_PROD_MIGRATIONS.md` rather than softened.
+- **Status:** FIXED in the repository, **NOT applied to production** (F-001).
+  Probes **23/23** — including `household-trail-check.sql`, whose "any member may
+  append" assertion is the one the pin could plausibly have broken, and did not.
