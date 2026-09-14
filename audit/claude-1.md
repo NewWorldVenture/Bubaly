@@ -1358,3 +1358,71 @@ re-pinning a formatting choice.
   (Pass Q). Both times the shape is the same: a test that names an implementation
   detail of the code under test, so correcting the code breaks the test.
 - **Status:** FIXED.
+
+---
+
+## Pass V — two features that disagree with themselves (merged from Claude-4)
+
+### [CLAUDE-4][HIGH][ENTITLEMENT][OPEN] `/dashboard/home` is sold as Plus, listed for Basic, and opened for Basic
+
+- **Verified in the current tree; three declarations, three answers:**
+
+  | declaration | says | file |
+  |---|---|---|
+  | the plan catalogue (which generates `/pricing`) | **plus** (level 2) | `lib/constants/feature-catalog.ts:95` |
+  | the sidebar | `minLevel: 1` (Basic) | `lib/constants/navigation.ts:149` |
+  | the pages themselves | `requirePlanLevel(1)` (Basic) | `app/(app)/dashboard/home/**` |
+
+- **Consequence:** `/pricing` sells Home & Maintenance as Plus, the sidebar offers
+  it to a Basic family, the page opens for them — and the AI routes behind it gate
+  on the **catalogue**, so every AI button on a screen they were invited into
+  answers 403. Same family of defect as L-01 and P-01: three declarations of one
+  fact with nothing comparing them.
+- **Why I did not fix it.** The direction is a product decision, and it is not the
+  same decision P-01 was. P-01's catalogue was *missing* two entries, so amending
+  it was restoring a fact. Here the catalogue and the published pricing page agree
+  with each other and the code is the outlier — so the consistent fix RAISES the
+  gate to Plus and takes a screen away from Basic families who have it today. That
+  is a comms decision, not a code one. Recorded with the three-way table so
+  whoever decides has the whole picture.
+- **What is worth building either way:** a guard that compares all three
+  declarations per route. It would fail today, which is the honest state, so it
+  belongs with the decision rather than before it.
+- **Status:** OPEN, owner's decision.
+
+### [CLAUDE-4][HIGH][BROKEN][part fixed] `/dashboard/experience` can only ever be empty, and its empty state told the family to run a SQL file
+
+- **Verified:** `git grep experience_audits -- app lib` returns **only**
+  `lib/database.types.ts` and the reader in
+  `components/modules/experience-scorecard-module.tsx`. **Nothing writes the
+  table.** The nav entry is `minLevel: 0`
+  (`lib/constants/navigation.ts:218`), so the page is in *every* household's
+  sidebar, Free included.
+- **The half that needed no decision, and is fixed.** The only state that page can
+  reach ended with:
+
+  > *"Run seed_experience_audits_one_family.sql to populate a baseline."*
+
+  An internal seed-script filename, rendered to every user of the product, in
+  hardcoded English on a surface where everything else goes through `t()`. Replaced
+  with copy that describes the feature and names no file, lifted into all seven
+  catalogues.
+- **And a guard, because the class generalises.**
+  `tests/no-user-facing-copy-names-an-internal-file.test.ts` sweeps the catalogue
+  for anything that reads like a file to run or a path into the repository. It
+  found exactly one other, and that one is **allowed with its reason**:
+  `users.runSupabaseSeedSqlAgainst` renders on Super Admin → Users, where the
+  reader is whoever deploys Bubaly and running the seed is genuinely the remedy.
+  The distinction the guard encodes is not "no filenames anywhere" but "no
+  filenames in front of a family" — and the allowance is itself asserted to stay
+  true, so a stale exception fails rather than lingering (the
+  `KNOWN_DUPLICATE_MIGRATIONS` lesson). Positive controls pin that the pattern
+  still sees the string it was written for and does not flag ordinary copy with a
+  full stop in it.
+- **Proved load-bearing:** planting the old sentence back into the catalogue fails
+  the sweep; removed, 3 pass.
+- **The half that IS a decision, and is not mine:** a page in every sidebar whose
+  table has no writer. Either build the writer or take it out of the nav — and
+  `memory.md` forbids touching the sidebar without being asked, which settles who
+  chooses.
+- **Status:** the user-facing copy is FIXED; the empty feature is OPEN for the owner.

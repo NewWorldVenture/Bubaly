@@ -4735,6 +4735,7 @@
   "experienceScorecard.byDimension": "Par dimension",
   "experienceScorecard.experienceScorecard": "Tableau de bord de l'expérience",
   "experienceScorecard.noAuditsYet": "Aucun audit",
+  "experienceScorecard.onceSurfacesAreAuditedThisScorecard": "Une fois les surfaces auditées, ce tableau note chacune d’elles selon les six dimensions premium et suit la tendance.",
   "experienceScorecard.overall": "Global",
   "experienceScorecard.score": "Score",
   "experienceScorecard.sinceLastAudit": "Depuis le dernier audit :",

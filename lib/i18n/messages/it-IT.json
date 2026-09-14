@@ -4735,6 +4735,7 @@
   "experienceScorecard.byDimension": "Per dimensione",
   "experienceScorecard.experienceScorecard": "Scorecard dell'esperienza",
   "experienceScorecard.noAuditsYet": "Ancora nessun audit",
+  "experienceScorecard.onceSurfacesAreAuditedThisScorecard": "Una volta verificate le superfici, questa scheda valuta ciascuna secondo le sei dimensioni premium e ne segue l’andamento.",
   "experienceScorecard.overall": "Complessivo",
   "experienceScorecard.score": "Punteggio",
   "experienceScorecard.sinceLastAudit": "Dall'ultimo audit:",

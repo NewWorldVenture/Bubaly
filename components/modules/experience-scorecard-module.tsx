@@ -86,7 +86,14 @@ export function ExperienceScorecardModule() {
         <EmptyState
           icon={ClipboardCheck}
           title={t('experienceScorecard.noAuditsYet')}
-          description="Once surfaces are audited, this scorecard grades each one across the six premium dimensions and tracks the trend. Run seed_experience_audits_one_family.sql to populate a baseline."
+          // The previous copy ended "Run seed_experience_audits_one_family.sql to
+          // populate a baseline." — an internal seed-script filename, shown to
+          // every family, in the only state this page can currently reach:
+          // NOTHING in app/ or lib/ writes experience_audits, and the nav entry is
+          // minLevel 0, so every household has this in its sidebar. Whether the
+          // page should ship at all is the owner's call (recorded in
+          // finalaudit.md); a user being told to run a SQL file is not.
+          description={t('experienceScorecard.onceSurfacesAreAuditedThisScorecard')}
         />
       ) : (
         <>

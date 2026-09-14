@@ -113,7 +113,7 @@ as the next task in `audit/claude-1.md`.
 
 **Fixed and live:** F1, F9 (closed as a recorded decision), F10, F15, F16, F18,
 F20, C-01 … C-05, C-07, E-01, F-a, F-b, H-01, L-01, L-02, L-03, **P-01**,
-**U-02**, **P-02**, **P-03**, **U-03**, **P-04**, **U-04**, **S-03** (app half), **S-04** (repo), **W-01**, **W-02**.
+**U-02**, **P-02**, **P-03**, **U-03**, **P-04**, **U-04**, **S-03** (app half), **S-04** (repo), **W-01**, **W-02**, **W-04** (copy half).
 
 | id | finding | found by | state |
 |---|---|---|---|
@@ -137,6 +137,9 @@ F20, C-01 … C-05, C-07, E-01, F-a, F-b, H-01, L-01, L-02, L-03, **P-01**,
 **P-01 is the mirror of L-01.** L-01 gated a feature the plans sell; P-01 gave
 away two the plans never mention. Same file, opposite direction, and both
 invisible because three declarations disagreed and nothing compared them.
+
+| **W-03** | **`/dashboard/home` is sold as Plus, listed for Basic, and opened for Basic.** Three declarations of one fact: the catalogue that generates `/pricing` says `plus`, the sidebar says `minLevel: 1`, the pages say `requirePlanLevel(1)` — and the AI routes behind them gate on the catalogue, so a Basic family is invited into a screen where every AI button answers 403. Same family as L-01 and P-01 | **Claude-4**, verified by Claude-1 | **OPEN — owner's decision.** Unlike P-01 the catalogue is not the outlier here: it agrees with the published pricing page, so the consistent fix RAISES the gate and takes a screen away from Basic families who have it today. That is a comms decision, not a code one; the three-way table is recorded in `audit/claude-1.md` so whoever decides has the whole picture |
+| **W-04** | **`/dashboard/experience` can only ever be empty, and its empty state told the family to run a SQL file.** Nothing in `app/` or `lib/` writes `experience_audits` — only `database.types.ts` and the reader mention it — while the nav entry is `minLevel: 0`, so the page is in **every** household's sidebar. Its only reachable state ended *"Run seed_experience_audits_one_family.sql to populate a baseline."*, in hardcoded English | **Claude-4**, verified by Claude-1 | **Copy FIXED** — replaced and lifted into all seven catalogues, with `tests/no-user-facing-copy-names-an-internal-file.test.ts` sweeping the catalogue for anything that reads like a file to run. It found one other, allowed with its reason (Super Admin → Users, where the reader deploys Bubaly and running the seed IS the remedy) — the rule is "no filenames in front of a family", not "no filenames". **The empty feature is OPEN**: build the writer or take it out of the nav, and `memory.md` forbids an agent touching the sidebar unasked |
 
 **Open, and owner-owned:**
 
@@ -589,7 +592,7 @@ Run before calling any of this done:
 ```bash
 npx tsc --noEmit                       # clean
 npm run lint                           # 0 errors (4 pre-existing warnings)
-npx vitest run                         # 1,205 files / 13,810 tests
+npx vitest run                         # 1,206 files / 13,813 tests
 npm run db:audit:queries               # 491 tables, 78 functions, 141 routes resolve
 npm run db:audit:migrations            # no version collisions
 bash docs/audit/pg-bootstrap.sh        # 313 migrations, 0 failed

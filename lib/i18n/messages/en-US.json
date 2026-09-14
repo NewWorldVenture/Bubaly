@@ -4735,6 +4735,7 @@
   "experienceScorecard.byDimension": "By dimension",
   "experienceScorecard.experienceScorecard": "Experience Scorecard",
   "experienceScorecard.noAuditsYet": "No audits yet",
+  "experienceScorecard.onceSurfacesAreAuditedThisScorecard": "Once surfaces are audited, this scorecard grades each one across the six premium dimensions and tracks the trend.",
   "experienceScorecard.overall": "Overall",
   "experienceScorecard.score": "Score",
   "experienceScorecard.sinceLastAudit": "Since last audit:",

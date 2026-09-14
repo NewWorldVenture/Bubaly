@@ -4735,6 +4735,7 @@
   "experienceScorecard.byDimension": "Nach Dimension",
   "experienceScorecard.experienceScorecard": "Erlebnis-Scorecard",
   "experienceScorecard.noAuditsYet": "Noch keine Prüfungen",
+  "experienceScorecard.onceSurfacesAreAuditedThisScorecard": "Sobald Oberflächen geprüft sind, bewertet diese Scorecard jede einzelne anhand der sechs Premium-Dimensionen und verfolgt den Trend.",
   "experienceScorecard.overall": "Insgesamt",
   "experienceScorecard.score": "Punktzahl",
   "experienceScorecard.sinceLastAudit": "Seit der letzten Prüfung:",
