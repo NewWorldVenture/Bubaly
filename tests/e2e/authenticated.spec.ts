@@ -211,6 +211,18 @@ test.describe('authenticated first-value journey', () => {
         const { data: transaction, error: createError } = await member.from('wallet_transactions')
           .insert(credit).select('id').single();
         if (createError) throw createError;
+        // 0299 refuses, at commit, an end state where a family has members but no
+        // active parent/adult — the lockout it exists to prevent. This probe is
+        // about the signed-in MEMBER being a child, not about the family losing
+        // its last manager, so give the household a second manager for the
+        // duration. Without it the demotion below fails 23514 and the probe never
+        // runs. `user_id: null` is the same managed-profile row the 'Probe child'
+        // above uses; the unique (family_id, user_id) index treats NULLs as
+        // distinct, so a second one is fine.
+        const { data: standInManager, error: standInError } = await service.from('family_members')
+          .insert({ family_id: familyId, user_id: null, display_name: 'Probe co-parent', role: 'parent' })
+          .select('id').single();
+        if (standInError) throw standInError;
         const { error: childRoleError } = await service.from('family_members')
           .update({ role: 'child' }).eq('id', membership.id);
         if (childRoleError) throw childRoleError;
@@ -233,9 +245,15 @@ test.describe('authenticated first-value journey', () => {
             .insert({ ...credit, amount_cents: 75 });
           expect(serverCreditError).toBeNull();
         } finally {
+          // Restore FIRST, then drop the stand-in: removing it while the signed-in
+          // member is still a child would leave the family managerless again, and
+          // 0299 would refuse that delete.
           const { error: restoreError } = await service.from('family_members')
             .update({ role: 'parent' }).eq('id', membership.id);
           if (restoreError) throw restoreError;
+          const { error: standInCleanupError } = await service.from('family_members')
+            .delete().eq('id', standInManager.id);
+          if (standInCleanupError) throw standInCleanupError;
         }
         const { data: managerChange, error: managerError } = await member.from('wallet_transactions')
           .update({ amount_cents: 125 }).eq('id', transaction.id).select('amount_cents').single();
