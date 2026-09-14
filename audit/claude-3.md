@@ -596,3 +596,180 @@ recommendation instead of editing.
 ## Findings
 
 _(none yet)_
+
+---
+---
+
+# ══════════════════════════════════════════════════════════════════════════
+# SESSION 3 — 2026-09-14 (parallel audit, Claude-3)
+# New ground only. Nothing above this line is edited or removed.
+#
+# Out of scope by instruction (already closed by PR #548 / 0296): the
+# family_credentials vault, invites_update's missing `with check` (0297),
+# allowance_rules + the five sibling wallet tables (0298), medications /
+# medication_schedules (0299), grades / screen_time_limits (0300),
+# child_logins / behavior_logs (0301). Also already proven sound elsewhere and
+# not re-derived here: Stripe webhook signature verification, the SSRF
+# defences, notification recipient scoping, AI-memory trait privacy, all 24
+# cron routes' hasCronAuthorization, the wallet/marketplace/circle SECURITY
+# DEFINER RPCs, bearer/AAL2/middleware checks, rate_limits being RPC-only.
+#
+# Every DB statement below was run against the live replay
+# (PGHOST=/tmp PGPORT=54401 PGDATABASE=bubaly, 313 migrations, SEED_ALL,
+# 22/22 existing probes green) as a real `authenticated` session:
+#   perform set_config('request.jwt.claim.sub', '<uid>', true); set local role authenticated;
+# which is exactly what PostgREST does for a browser holding the anon key. A
+# child IS a real Supabase auth user here (child-login-actions.ts calls
+# admin.auth.admin.createUser), so a child can call PostgREST directly and RLS
+# is the only boundary that binds.
+# ══════════════════════════════════════════════════════════════════════════
+
+```
+[CLAUDE-3][CRITICAL][RLS/MONEY] A child can rewrite the price of their own chores, and every payout path reads the price back off the row they rewrote
+Path:     public.chores — policy `chores_update` (UPDATE, qual+check = is_family_member(family_id))
+          public.chore_assignments — policy `chore_assignments_update` (same)
+          app/(app)/wallet/actions.ts:205-206   amount = assignment.cash_awarded_cents ?? chore?.cash_cents ?? 0
+          app/(app)/missions/actions.ts:255-262 finalizeApproval → computeReward(rewardConfig(chore), score)
+          app/(app)/missions/actions.ts:203-221 auto-approve, run under createServiceClient()
+          lib/rewards/points.ts:29-30           points balance = Σ points_awarded where status='approved'
+          lib/chores/logic.ts:51-75             computeReward — Math.max(0, …) is the ONLY bound
+          lib/chores/logic.ts:85-95             canAutoApprove — returns score >= chore.auto_approve_score
+Problem:  The chores economy's PRICE LIST lives in `public.chores`
+          (points, cash_cents, cash_min_cents, cash_max_cents, points_min,
+          points_max, reward_mode, auto_approve_score) and in
+          `public.chore_assignments` (points_awarded, cash_awarded_cents).
+          Both tables are UPDATE-able by `is_family_member(family_id)` — i.e.
+          by the child who gets paid. The app gates chore authoring to managers
+          (`refuseUnlessManager`, app/(app)/dashboard/chores/actions.ts:92-99,
+          whose own comment says "the check sits here … because here is where
+          the screen's claim lives"), but the browser talks to PostgREST with
+          the anon key, so the server action is not the boundary — the policy is.
+
+          Three cash-out paths all re-read the tampered value instead of
+          re-deriving it:
+            1. payChoreRewardAction (manager-only, but the AMOUNT is the child's
+               number): `amount = assignment.cash_awarded_cents ?? chore.cash_cents`,
+               then creditChildWallet. No upper bound, no comparison with what the
+               chore was originally worth. evaluateTrust's `maxAmountCents` is a
+               per-family policy row that does not exist by default
+               (lib/trust/engine.ts:232 — the cap is opt-in).
+            2. auto-approve: `canAutoApprove` returns true as soon as
+               `verdict.quality_score >= chore.auto_approve_score`, and
+               auto_approve_score is child-writable. Set it to 0 and the parent is
+               out of the loop entirely; finalizeApproval then runs under the
+               SERVICE ROLE and writes points_awarded / cash_awarded_cents from the
+               tampered chore row.
+            3. points: lib/rewards/points.ts sums `points_awarded` over approved
+               assignments; that total is what reward_redemptions spends.
+
+          0223's trigger `chore_assignment_decision_guard` does not cover this.
+          It fires only on a transition INTO 'approved'/'rejected'
+          (`new.status is distinct from old.status`), so an UPDATE that changes
+          only cash_awarded_cents on an already-approved row passes untouched.
+Evidence: Live, as a real child session (scratchpad p2-chore-price.sql). Parent
+          creates the chore at $2.00 / 5 pts / no auto-approve; child then:
+
+            perform set_config('request.jwt.claim.sub', child_uid::text, true);
+            set local role authenticated;
+            update public.chores set cash_cents = 5000000, points = 99999,
+                   auto_approve_score = 0, cash_max_cents = 5000000,
+                   points_max = 99999, reward_mode = 'fixed_cash' where id = ch;
+            update public.chore_assignments
+               set cash_awarded_cents = 4242424, points_awarded = 88888 where id = asg;
+
+          returned:
+            NOTICE: CHILD rewrote the PARENT-created chore price rows=1
+            NOTICE: CHILD set cash_awarded_cents/points_awarded on its own
+                    APPROVED assignment rows=1 (decision guard did NOT fire)
+            NOTICE: AFTER: chores.cash_cents=5000000 points=99999
+                    auto_approve_score=0 | assignment.status=approved
+                    cash_awarded_cents=4242424
+
+          Ruled out a guard elsewhere:
+            · `select tgname from pg_trigger … relname='chores' and not tgisinternal`
+              → only `trg_set_updated_at`. No decision guard on the price table.
+            · chore_assignments' two triggers are `trg_set_updated_at` and
+              `trg_chore_assignment_decision_guard`; the latter's body was dumped
+              with pg_get_functiondef and guards `new.status` only.
+            · payChoreRewardAction was read end to end (wallet/actions.ts:191-236):
+              it checks isManager, checks for an existing wallet_transaction on the
+              same assignment (so it is idempotent), and calls evaluateTrust — but
+              never re-derives the amount or bounds it.
+            · lib/services/tasks/index.ts:417 rejects NEGATIVE points; there is no
+              upper bound anywhere, and that path is the manager-gated one anyway.
+Impact:   A child with the ordinary Bubaly app (no tooling beyond the anon key the
+          app already ships to their browser) can (a) mint unlimited points and
+          spend them on rewards, (b) set the price a parent is shown and pays on
+          the chores board, and (c) with auto_approve_score = 0 take the parent
+          out of the approval loop so the service role stamps the payout. This is
+          the same class as the closed allowance_rules CRITICAL — a child-writable
+          input that a trusted server path later treats as authority — on the
+          surface that fix did not cover.
+Fix:      Narrow the write side of both policies to managers and keep the reads:
+            drop policy chores_update on public.chores;
+            create policy chores_update on public.chores for update
+              using (can_manage_family(family_id)) with check (can_manage_family(family_id));
+            -- chore_assignments: members must still move their OWN assignment
+            -- through the member-driven statuses, so restrict the columns rather
+            -- than the row — extend chore_assignment_decision_guard to raise when
+            -- a non-manager changes points_awarded, cash_awarded_cents or
+            -- approved_by/approved_at at all, on INSERT or UPDATE, regardless of
+            -- whether status also changed.
+          Belt and braces in the payout path: in payChoreRewardAction, take the
+          amount from the chore's price as a manager last saved it and reject an
+          assignment whose cash_awarded_cents exceeds it.
+Status:   VERIFIED (proven on the live replay)
+```
+
+```
+[CLAUDE-3][MEDIUM][RLS/PRIVACY] `journal_entries.is_private` is honoured nowhere — any family member can read, edit, delete and forge another member's journal
+Path:     public.journal_entries — single policy "Members manage journal_entries"
+          (ALL, qual = check = is_family_member(family_id))
+          components/modules/journal-module.tsx:47-62
+          lib/trust/sharing-presets.ts:19-31 (the repo's own TODO for this)
+Problem:  The table carries a `member_id` and an `is_private boolean`, and the
+          module calls itself "a private space to reflect". Neither column is
+          consulted by anything that enforces:
+            · RLS is a single FOR ALL policy on family membership;
+            · the module scopes reads client-side with `.eq('member_id', memberId)`;
+            · `remove(id)` is `.delete().eq('id', id)` — no member predicate at all.
+          `is_private` appears in the whole repo only in lib/database.types.ts.
+          It is a dead column that reads, to anyone maintaining this, like a guard.
+Evidence: `grep -rn "is_private" app lib components` → 3 hits, all in
+          lib/database.types.ts:827-829 (the generated Row/Insert/Update types).
+          No query filters on it.
+
+          Live, as a real child session (scratchpad p1-journal.sql) — parent
+          writes an entry with is_private = true, then the child:
+            NOTICE: CHILD sees parent private journal rows: 1
+            NOTICE: CHILD read body: I am worried about the divorce and money.
+            NOTICE: CHILD updated parent private journal rows: 1
+            NOTICE: CHILD deleted parent private journal rows: 1
+            NOTICE: CHILD inserted an entry under the PARENT member_id: ok
+
+          Ruled out a guard elsewhere: the only two readers of the table are
+          components/modules/journal-module.tsx (a 'use client' component using
+          lib/supabase/client's anon key — so RLS is the only boundary) and
+          app/api/ai/journal/route.ts. There is no server proxy in front of it.
+          The repo KNOWS about the read half: lib/trust/sharing-presets.ts:19-22
+          says "Per-member read scoping is M23's RLS migration (documents/notes/
+          journal on member_id …) … Neither is shipped". That note covers READS
+          only, and explicitly not the destructive half — a sibling silently
+          deleting a parent's journal is not read-scoping.
+          The sibling table proves the pattern is available: `documents_select`
+          is `is_family_member(family_id) AND (NOT is_sensitive_document(...) OR
+          can_manage_family(family_id))`.
+Impact:   Every family member reads every other member's journal, including a
+          child reading a parent's, and can destroy or forge entries. The forge
+          is the worst of the three: an entry written by a child under a parent's
+          member_id is indistinguishable from the parent's own in every surface
+          that renders the journal.
+Fix:      Replace the one FOR ALL policy with member-scoped ones:
+            using ( is_family_member(family_id)
+                    and (member_id is null or is_self_member(member_id)
+                         or (not is_private and can_manage_family(family_id))) )
+          and a `with check` that pins member_id to `is_self_member(member_id)`
+          so an entry cannot be written under someone else's name. `is_self_member`
+          already exists (0266) and is used this way elsewhere.
+Status:   VERIFIED (proven on the live replay)
+```

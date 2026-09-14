@@ -754,3 +754,310 @@ recommendation instead of editing.
 ## Findings
 
 _(none yet)_
+
+---
+---
+
+# ═══════════════════════════════════════════════════════════════════
+# SESSION 4 (2026-09-14) — new ground: responsive, states, forms,
+# focus/motion, colour & theming, client-boundary cost, RTL.
+# Everything above this line is from an earlier session and is NOT
+# restated here. PR #548's closed items are excluded by instruction.
+# ═══════════════════════════════════════════════════════════════════
+
+## C2-15
+
+```
+[CLAUDE-2][HIGH][A11Y] `.focus-ring` paints its ring unconditionally and kills the outline, so 202 controls have no focus indicator at all
+File:     app/globals.css:179-181  (definition)
+          components/ui/button.tsx:39, components/ui/input.tsx:5,
+          components/ui/modal.tsx:106, components/ui/otp-input.tsx:105 (the
+          four shared primitives that carry it)
+Problem:  `.focus-ring` is declared in `@layer components` with no state
+          selector:
+
+            .focus-ring { @apply outline-none ring-2 ring-brand/60
+                                 ring-offset-2 ring-offset-bg; }
+
+          `outline-none` compiles to `outline: 2px solid transparent`, which
+          suppresses the browser's native `:focus-visible` outline. The ring
+          that is supposed to replace it is painted ALWAYS, not on focus. Net
+          effect on every element carrying the bare class: a permanent 2px
+          brand halo, and **zero visual change when the element receives
+          keyboard focus**. WCAG 2.4.7 (Focus Visible) fails on all of them.
+Evidence: 1. The shipped stylesheet, not just the source. The last build in
+             `.next/` contains the rule with no `:focus`/`:focus-visible`
+             qualifier anywhere in the selector:
+
+               $ grep -o '\.focus-ring[^{]*{[^}]*}' \
+                   .next/static/css/efe55d1639ee1e52.css
+               .focus-ring{outline:2px solid transparent;outline-offset:2px;
+                 --tw-ring-offset-shadow:var(--tw-ring-inset) 0 0 0
+                   var(--tw-ring-offset-width) var(--tw-ring-offset-color);
+                 --tw-ring-shadow:var(--tw-ring-inset) 0 0 0
+                   calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color);
+                 box-shadow:var(--tw-ring-offset-shadow),var(--tw-ring-shadow),
+                   var(--tw-shadow,0 0 #0000);
+                 --tw-ring-color:rgb(var(--brand)/0.6);
+                 --tw-ring-offset-width:2px;
+                 --tw-ring-offset-color:rgb(var(--bg)/1)}
+
+             The selector is `.focus-ring`, full stop.
+
+          2. I ruled out the ring being inert. Tailwind's ring machinery needs
+             `--tw-ring-inset` to be *defined* (as an empty value) or the
+             `box-shadow` would be invalid at computed-value time and render
+             nothing. Preflight defines it in the same stylesheet:
+
+               $ grep -o '\*,:after,:before{--tw[^}]*}' <same file>
+               …--tw-ring-inset: ;--tw-ring-offset-width:0px;…
+
+             So the shadow is valid and the ring genuinely paints.
+
+          3. I ruled out a state-scoped redefinition elsewhere. `.focus-ring`
+             is defined exactly once in the repo:
+               $ grep -rn "\.focus-ring" --include="*.css" . \
+                   --exclude-dir=node_modules --exclude-dir=mobile
+               ./app/globals.css:179
+             and `app/globals.css` contains no global `:focus-visible` rule at
+             all — the only `:focus`-family selector in the whole file is
+             `.ai-composer:focus-within` at line 296:
+               $ grep -n "focus-visible\|:focus" app/globals.css
+               296:  .ai-composer:focus-within {
+
+          4. I ruled out call sites gating it behind a variant. Of 218 uses,
+             202 are bare:
+               $ grep -rno "[a-zA-Z0-9:-]*focus-ring" --include="*.tsx" \
+                   --include="*.ts" app components lib \
+                 | sed 's/.*[0-9]:\(.*\)/\1/' | sort | uniq -c
+                 202 focus-ring
+                  16 focus-visible:focus-ring
+             The 16 correct uses (e.g. app/(marketing)/page.tsx:108) prove the
+             intended spelling was known — this is a slip, not a convention.
+
+          5. Blast radius is not 202 elements but 202 *call sites*, four of
+             which are the shared primitives every screen is built from:
+               components/ui/button.tsx:39   → imported by 199 files
+               components/ui/input.tsx:5     → imported by 134 files
+                 (the `base` string is shared by Input, Textarea AND Select)
+               components/ui/modal.tsx:106   → every modal's close button
+               components/ui/otp-input.tsx:105
+             `.btn-cta` and `.btn-inline` in globals.css:414,419 `@apply
+             focus-ring` too, so they inherit it; I checked the compiled
+             `.btn-cta` and the ring survives the later `shadow-glow`
+             box-shadow because both declarations read the same
+             `--tw-ring-*` custom properties.
+Impact:   Two separate harms from one line.
+          (a) Accessibility, the serious one: keyboard-only users, switch
+              users and anyone who does not use a mouse cannot tell where
+              focus is on essentially every button, text input, textarea,
+              select and OTP box in the product — including the login and
+              signup forms. The native outline that would have saved them is
+              explicitly removed. This is the single highest-reach a11y defect
+              I found in this pass.
+          (b) Visual: every one of those controls renders a permanent 2px
+              brand-violet halo with a 2px `--bg`-coloured gap. On a card
+              (`bg-surface`) the gap is the wrong colour, so it reads as a
+              double ring.
+Fix:      One line. Scope the ring to focus-visible and keep a fallback:
+
+            .focus-ring { @apply outline-none; }
+            .focus-ring:focus-visible {
+              @apply ring-2 ring-brand/60 ring-offset-2 ring-offset-bg;
+            }
+
+          (Do NOT instead rewrite the 202 call sites to
+          `focus-visible:focus-ring` — that spelling also leaves
+          `outline-none` unapplied in the default state, which is fine, but it
+          is 202 edits for what one rule fixes. The 16 existing
+          `focus-visible:focus-ring` uses keep working under the fix above,
+          harmlessly double-scoped.)
+          Worth adding a companion guard: a test asserting `app/globals.css`
+          never defines a `.focus-ring` rule without a `:focus` selector.
+Status:   OPEN
+```
+
+---
+
+## C2-16
+
+```
+[CLAUDE-2][HIGH][THEMING] 49 colour utilities name theme tokens that do not exist, so they compile to nothing — including the background of two full-screen mobile overlays
+File:     components/modules/inbox-module.tsx:299
+          components/modules/front-desk-module.tsx:484   (the worst two)
+          + 29 × `bg-card`, 6 × `text-foreground`, 3 × `bg-primary`,
+            2 × `border-primary`, 4 more × `bg-background`
+Problem:  The Tailwind theme (tailwind.config.ts) defines exactly twelve custom
+          colour names: bg, surface, elevated, border, fg, muted, brand(+fg,
+          soft, text), accent, success, warning, danger, info. Forty-nine class
+          usages spell shadcn/ui's names instead — `card`, `background`,
+          `foreground`, `primary`. Tailwind generates no rule for an unknown
+          colour, so these classes are inert: the element silently renders with
+          no background / inherited text colour, and nothing warns.
+Evidence: 1. The names are absent from the theme. `tailwind.config.ts` uses
+             `theme.extend.colors`, so the palette is Tailwind's defaults plus
+             the twelve above. Tailwind 3.4.19's default colour names are:
+               $ node -e "const c=require('tailwindcss/colors');
+                          console.log(Object.keys(c).filter(k=>/^[a-z]+$/.test(k)).join(' '))"
+               inherit current transparent black white slate gray zinc neutral
+               stone red orange amber yellow lime green emerald teal cyan sky
+               blue indigo violet purple fuchsia pink rose
+             No `card`, no `background`, no `foreground`, no `primary`.
+
+          2. The shipped stylesheet confirms they generated nothing, while the
+             real tokens did:
+               $ for c in bg-background text-foreground border-primary \
+                          bg-primary bg-card bg-muted text-muted; do
+                   printf "%s: " "$c";
+                   grep -c -- "$c" .next/static/css/efe55d1639ee1e52.css; done
+               bg-background: 0
+               text-foreground: 0
+               border-primary: 0
+               bg-primary: 0
+               bg-card: 0
+               bg-muted: 1
+               text-muted: 1
+             (Search is a plain substring over the whole file, so a 0 means the
+             string does not occur at all, not that I mis-built a selector.)
+
+          3. I ruled out a hand-written rule supplying them. `app/globals.css`
+             defines `.glass-card`, not `.bg-card`; grepping every non-vendor
+             `.css` file for these class names finds nothing, and the compiled
+             stylesheet above is the union of Tailwind output and globals.css.
+
+          4. I ruled out them being prose rather than markup by reading each
+             site. A scanner over app/, components/ and lib/ that strips
+             numeric shades and compares the base name against the default
+             palette + the twelve custom names produced the counts above; I
+             then read every hit for `card`, `background`, `foreground` and
+             `primary` and confirmed each is inside a `className` string:
+               components/modules/decisions-module.tsx:118
+                 selected?.id === d.id ? 'border-primary bg-primary/10'
+                                       : 'border-border hover:bg-muted/5'
+               components/modules/graph-module.tsx:141   (same shape)
+               components/modules/decisions-module.tsx:182
+                 cn('h-full rounded-full', r.feasible ? 'bg-primary'
+                                                      : 'bg-rose-400')
+               app/(app)/admin/notifications/page.tsx:56
+                 "rounded-xl border border-border bg-card p-4"
+             `bg-card` appears 29 times across 12 files — decisions,
+             intelligence, contact-center, readiness, life-events, graph,
+             routines-panel, experience-scorecard, playbook, planning,
+             admin-notifications-list and admin/notifications.
+
+          The worst instance, and why this is HIGH rather than MEDIUM:
+
+            components/modules/inbox-module.tsx:299
+            components/modules/front-desk-module.tsx:484
+              <div className="fixed inset-0 z-50 bg-background flex flex-col
+                   pt-[var(--safe-top)] … lg:static lg:inset-auto lg:z-auto
+                   lg:w-[400px] … lg:bg-surface/30 …">
+
+          Below `lg` (so: every phone, and tablets under 1024px) this is the
+          Inbox message-detail pane and the Front Desk call-detail pane,
+          rendered as a full-screen `fixed inset-0` overlay whose ONLY
+          background is `bg-background`. It compiles to nothing, so the pane is
+          transparent and the message list it covers shows straight through the
+          message body. I checked the child (`CommDetail`,
+          inbox-module.tsx:293-310) for a background of its own: its root is
+          `<div className="flex flex-col h-full">` and its header is
+          `border-b border-border` — neither paints one. At `lg` and above the
+          `lg:bg-surface/30` variant is a real token and the panel is fine,
+          which is exactly why this would survive desktop review.
+Impact:   Mobile users of Inbox and Front Desk — two core modules — read
+          message and call detail over a bleed-through of the list behind it.
+          Separately, 29 "cards" across ten modules render with a border and no
+          surface, `text-foreground` leaves text at whatever it inherits, and
+          in Decisions and Graph the *selected* row has no selected styling at
+          all (`border-primary bg-primary/10` → nothing), while
+          decisions-module.tsx:182 draws the "feasible" score bar with no fill
+          colour and the infeasible one in `bg-rose-400`, so a feasible option
+          looks like an empty bar.
+Fix:      Mechanical, per token:
+            bg-background  → bg-bg        (the page background token)
+            bg-card        → bg-surface   (matches the sibling `bg-surface/…`
+                                           cards in the same components)
+            text-foreground→ text-fg
+            bg-primary     → bg-brand
+            border-primary → border-brand
+          Then add a guard, because nothing here fails loudly: a test that
+          scans app/ + components/ for `(bg|text|border|ring|fill|stroke|
+          from|to|via|divide)-<name>` and fails on any `<name>` that is neither
+          a Tailwind default nor a key of `theme.extend.colors`. Without it the
+          next shadcn-shaped snippet pasted in is silently invisible again.
+Status:   OPEN
+```
+
+---
+
+## C2-17
+
+```
+[CLAUDE-2][MEDIUM][THEMING] Design tokens hold raw RGB channels, and 14 places use them as if they were colours — so two empty-state charts and the default calendar dot render invisible
+File:     components/modules/finances-module.tsx:263
+          components/modules/todos-module.tsx:506
+          components/modules/calendar-module.tsx:580, 858
+          + 10 × `accent-[var(--brand)]` (8 files)
+Problem:  Every token in `app/globals.css` is stored as a space-separated RGB
+          channel triplet, not a colour — `--brand: 116 75 232;`,
+          `--elevated: 18 26 40;` — precisely so Tailwind can inject
+          `<alpha-value>` (`rgb(var(--brand) / <alpha-value>)`,
+          tailwind.config.ts:19-36). A triplet is only a colour once wrapped in
+          `rgb()`. Fourteen places use the bare `var(--token)` as a colour
+          value. CSS discards the declaration as invalid at computed-value
+          time, silently.
+Evidence: 1. The token format, read from source:
+               app/globals.css:37  --brand: 116 75 232;
+               app/globals.css:33  --elevated: 18 26 40;
+             and the config that consumes them correctly:
+               tailwind.config.ts:23  elevated: 'rgb(var(--elevated) / <alpha-value>)'
+
+          2. The four inline-style sites, each read in context:
+               finances-module.tsx:263
+                 style={{ background: spendByCat.length
+                   ? `conic-gradient(${donutStops})`
+                   : 'var(--elevated,#2a2a33)' }}
+                 → when there is no spend yet, `background: 18 26 40` — invalid.
+               todos-module.tsx:504-506
+                 const stops = sum === 0
+                   ? 'var(--elevated, #2a2a33) 0% 100%'  → a colour stop of
+                   `18 26 40 0% 100%` makes the whole conic-gradient() invalid,
+                   so the ring's `background` drops entirely.
+               calendar-module.tsx:580 and :858
+                 style={{ backgroundColor: row.color ?? 'var(--brand, #7c5cff)' }}
+                 → a calendar row with no colour of its own gets
+                   `background-color: 116 75 232` — invalid — and its 10px dot
+                   is invisible.
+
+          3. I ruled out the `#hex` fallbacks saving it. `var(--x, fallback)`
+             uses the fallback only when `--x` is *not defined*. `--elevated`
+             and `--brand` are both defined on `:root` (globals.css:33,37), so
+             the fallback is never reached and the invalid triplet is what
+             lands.
+
+          4. The ten `accent-[var(--brand)]` checkboxes are the same mistake in
+             class form, and the shipped stylesheet shows both spellings side
+             by side — proof the correct one exists in this codebase:
+               $ grep -o 'accent-color:[^;}]*' \
+                   .next/static/css/efe55d1639ee1e52.css | sort -u
+               accent-color:rgb(var(--brand)/1)     ← from `accent-brand`
+               accent-color:rgb(var(--danger)/1)
+               accent-color:var(--brand)            ← from `accent-[var(--brand)]`
+             Counts are exactly even, 10 correct and 10 broken:
+               $ grep -rno "accent-\[var(--brand)\]" --include="*.tsx" app components | wc -l
+               10
+               $ grep -rno "accent-brand\b" --include="*.tsx" app components | wc -l
+               10
+Impact:   The two donut cases land specifically on the **empty state**, which
+          is the first thing a new family sees: Finances shows an opaque inner
+          disc with the total, floating with no ring around it, and Todos the
+          same — it reads as a half-rendered chart rather than "nothing yet".
+          The calendar dot case affects any calendar row whose `color` is null.
+          The checkbox case is cosmetic: those ten checkboxes render in the
+          browser's default blue instead of brand violet, next to ten others
+          that are correct.
+Fix:      Wrap the token: `rgb(var(--elevated))`, `rgb(var(--brand))`, and
+          `accent-brand` for the class form. If a literal fallback is still
+          wanted, it has to go inside: `rgb(var(--elevated, 42 42 51))`.
+Status:   OPEN
+```
