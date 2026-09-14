@@ -2,7 +2,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { decideStitch, shouldCarryConsent, type StitchDecision } from './identity-core';
-import { escapeLike } from '@/lib/db/like';
+import { escapeLike } from '@/lib/supabase/escape-like';
 
 type Admin = SupabaseClient<Database>;
 

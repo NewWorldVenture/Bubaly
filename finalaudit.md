@@ -4111,12 +4111,11 @@ the product's own `FROM_EMAIL` — so it also chose who receives branded mail on
 the product's behalf.
 
 **The fix.**
-- `lib/db/like.ts` — one `escapeLike`, used by all three identity lookups. It
-  escapes the **backslash** as well, and first: LIKE's default escape character
-  is the backslash, so a value containing one swallows the next character.
-  Measured: `'ab' ilike 'a\b'` is **true**. All four pre-existing local copies of
-  this helper escape only `%` and `_` and still have that hole; they are left
-  alone here rather than widening this change, and are worth consolidating next.
+- All three identity lookups now call the shared `escapeLike` from
+  `lib/supabase/escape-like.ts`. I had written my own copy first; while I was
+  working, a parallel session landed `a50433ce`, which consolidates the four
+  private copies into exactly that module and enforces uniqueness by test. Mine
+  was deleted and its call sites repointed rather than shipping a fifth.
 - The verified `auth.user.email` now wins at all four call sites (two contact
   upserts, two automation events). `saveUserProfile`'s own `email: profile.email`
   is untouched — that is the user writing their own row, which is the point.
@@ -4135,3 +4134,49 @@ scrolled; three subsequent full runs were green. Recorded as unidentified rather
 than assumed to be the known `api-ai-runs` flake.
 
 **Status: FIXED.** No migration, so it reaches production with the deploy.
+
+**F-M02 — a double-escape shipped 40 minutes earlier, and a guard that could not see it.**
+
+`a50433ce` consolidated `escapeLike` and added `tests/ilike-patterns-are-escaped.test.ts`
+to enforce it. Its matcher requires a **template literal**
+(`` /\.(i?like)\(…,\s*`[^`]*\$\{[^`]*`\)/ ``), so two shapes were invisible to it.
+
+*Bare-value call sites.* `.ilike('email', email)` has no backticks. Four were
+left raw — the three `crm_contacts` identity lookups above, plus
+`.ilike('category', b.category)` in the digital twin and raw search terms in
+meals and finances.
+
+*Values escaped twice.* Four sites already escaped by hand upstream then got
+`escapeLike()` added at the call site:
+
+```js
+const term = title.trim().replace(/[%_]/g, (m) => `\\${m}`);  // once
+... .ilike('title', `%${escapeLike(term)}%`)                   // twice
+```
+
+`50%` becomes `50\\\%`, which LIKE reads as a literal backslash then a literal
+percent. Measured in Postgres 16:
+
+| pattern | matches `50% off groceries` |
+|---|---|
+| `%50\% off groceries%` (once) | **t** |
+| `%50\\\% off groceries%` (twice) | **f** |
+
+So on `main` the assistant's `findReminder`, the task search, and the grocery and
+meal searches stopped finding any row whose name contains `%` or `_`. Not
+hypothetical and not mine — live on `main` for the ~40 minutes before this.
+
+**Fix.** The redundant upstream escapes are removed (escaping stays at the call
+site, which is that commit's own stated convention), the four raw sites now
+escape, and the guard gains two rules: one for bare-value patterns, one
+forbidding a hand-rolled `[%_]` escape anywhere outside the helper. Both **fail
+against `main`** and pass here.
+
+**Two of those double-escapes were mine**, introduced minutes earlier when a
+scripted inline→helper conversion overlapped a scripted raw-site fix and each
+added an escape. Caught by typecheck and a follow-up scan for
+`const x = escapeLike(...)` feeding `escapeLike(x)`, then fixed — recorded
+because the guard now makes that class impossible to reintroduce quietly.
+
+**Verification.** Full suite **13,682 / 13,682** under pinned UTC and
+`TZ=America/Los_Angeles`. `tsc`, eslint and the Supabase query audit clean.

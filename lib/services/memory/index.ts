@@ -45,6 +45,7 @@ import { recordActivitySafely } from '../activity';
 import { getAISettings } from '../ai-settings';
 import { scopeNow } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
+import { escapeLike } from '@/lib/supabase/escape-like';
 
 export type FamilyFact = Tables<'family_facts'>;
 export type MemorySuggestion = Tables<'family_playbook_suggestions'>;
@@ -257,7 +258,7 @@ async function rememberConfirmed(
     .from('family_facts')
     .select('*')
     .eq('family_id', scope.familyId)
-    .ilike('label', input.key.replace(/[%_]/g, (m) => `\\${m}`))
+    .ilike('label', escapeLike(input.key))
     .limit(1);
   probe = input.memberId ? probe.eq('member_id', input.memberId) : probe.is('member_id', null);
   const { data: existing, error: probeError } = await probe.maybeSingle();

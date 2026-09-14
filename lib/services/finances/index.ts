@@ -33,6 +33,7 @@ import { recordActivitySafely } from '../activity';
 import { withIdempotency } from '../idempotency';
 import { dayKeyInTz, scopeNow } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
+import { escapeLike } from '@/lib/supabase/escape-like';
 import {
   createTransactionIntent, FINANCE_TRANSACTION_TOOL_NAME, readTransactionOperationReply,
   transactionIntentFromToolInputs, type TransactionOperationMetadata,
@@ -175,8 +176,8 @@ async function loadTransactions(
     if (opts?.type) q = q.eq('type', opts.type);
     if (opts?.memberId) q = q.eq('member_id', opts.memberId);
     if (opts?.category?.trim()) {
-      const term = opts.category.trim().replace(/[%_]/g, (m) => `\\${m}`);
-      q = q.ilike('category', term);
+      const term = opts.category.trim();
+      q = q.ilike('category', escapeLike(term));
     }
     return q;
   };
@@ -678,7 +679,7 @@ export async function updateBudget(
     .from('budgets')
     .select('*')
     .eq('family_id', scope.familyId)
-    .ilike('category', category.replace(/[%_]/g, (m) => `\\${m}`))
+    .ilike('category', escapeLike(category))
     .limit(1)
     .maybeSingle();
   if (readError) {
@@ -983,7 +984,7 @@ export async function createSavingsGoal(scope: ServiceScope, input: CreateSaving
           .from('savings_goals')
           .select('*')
           .eq('family_id', scope.familyId)
-          .ilike('name', name.replace(/[%_]/g, (m) => `\\${m}`))
+          .ilike('name', escapeLike(name))
           .limit(1)
           .maybeSingle();
         if (error) {

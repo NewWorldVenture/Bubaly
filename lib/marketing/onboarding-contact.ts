@@ -1,7 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { escapeLike } from '@/lib/db/like';
+import { escapeLike } from '@/lib/supabase/escape-like';
 
 type DB = SupabaseClient<Database>;
 

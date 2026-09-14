@@ -123,12 +123,12 @@ export async function ensureMealByName(
   if (!name) return fail('A meal needs a name.', { code: SERVICE_CODES.invalidInput });
   const mealType = isMealType(input.mealType) ? input.mealType : 'dinner';
 
-  const term = name.replace(/[%_]/g, (m) => `\\${m}`);
+  const term = name;
   const { data: existing, error: lookupError } = await scope.db
     .from('meals')
     .select('*')
     .eq('family_id', scope.familyId)
-    .ilike('name', term)
+    .ilike('name', escapeLike(term))
     .order('created_at', { ascending: true })
     .limit(1)
     .maybeSingle();
@@ -518,7 +518,10 @@ export async function listRecipes(
     .limit(Math.min(Math.max(input.limit ?? 50, 1), 200));
   if (input.category && RECIPE_CATEGORIES.includes(input.category)) q = q.eq('category', input.category);
   if (input.favoritesOnly) q = q.eq('is_favorite', true);
-  const term = input.query?.trim().replace(/[%_]/g, (m) => `\\${m}`);
+  // Escaped once, at the call site. Escaping here too produced `50\\\%`, which
+  // LIKE reads as a literal backslash then a literal percent, so a row actually
+  // named "50% off" stopped matching.
+  const term = input.query?.trim();
   if (term) q = q.ilike('name', `%${escapeLike(term)}%`);
 
   const { data, error } = await q;
@@ -566,7 +569,7 @@ export async function createRecipe(scope: ServiceScope, input: CreateRecipeInput
           .from('family_recipes')
           .select('*')
           .eq('family_id', scope.familyId)
-          .ilike('name', name.replace(/[%_]/g, (m) => `\\${m}`))
+          .ilike('name', escapeLike(name))
           .limit(1)
           .maybeSingle();
         if (error) {

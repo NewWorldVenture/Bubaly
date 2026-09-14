@@ -7,7 +7,7 @@ import type { Database } from '@/lib/database.types';
 import {
   normalizeAnswer, type ProfileField, type KnownProfile,
 } from '@/lib/marketing/progressive-profile';
-import { escapeLike } from '@/lib/db/like';
+import { escapeLike } from '@/lib/supabase/escape-like';
 
 type Admin = SupabaseClient<Database>;
 
