@@ -974,3 +974,299 @@ Status:   FIXED — and the fix was watched to fail before it was trusted
 branch's. It is fixed here anyway because it is three lines, because a red suite
 on main makes every future CI signal ambiguous, and because an unverified
 prompt-injection defence is not something to hand back as a comment.
+
+---
+
+> **Union of two parallel audit sessions.** Everything above is this
+> session's record; everything below arrived on `main` from the session
+> that ran alongside it. Neither side is edited or dropped — rule 2 applies
+> across sessions as much as within one.
+
+---
+
+### [CLAUDE-1][LOW][ARCHITECTURE] A build-time read of the whole blog table that could not do anything
+
+- **File/path:** `app/(marketing)/blog/[slug]/page.tsx`
+- **Problem:** The route declared both `export const dynamic = 'force-dynamic'`
+  and `generateStaticParams()`. Those contradict: with `force-dynamic` every slug
+  renders on demand, so there is no prerendered output for the params to
+  enumerate. What the function did do was call `getAllPosts()` — the entire
+  published table, 1,049 rows — on every build, and discard the result.
+- **Evidence — built both ways and compared, rather than reasoned about:**
+
+  | | with `generateStaticParams` | without |
+  |---|---|---|
+  | route table | `● /blog/[slug]` (SSG) | `ƒ /blog/[slug]` (Dynamic) |
+  | static pages generated | 245 | 245 |
+  | `[blog] getAllPosts failed` at build | 1 | 0 |
+  | build exit | 0 | 0 |
+
+  The identical page count is the point: it was never prerendering anything. The
+  route marker moving to `ƒ` makes the build report what the route actually is.
+- **Impact:** Low but real. It is a build-time dependency on Supabase for no
+  benefit — with the database unreachable the build logged a stack of connection
+  failures and returned an empty list, which looks like a broken build and
+  changes nothing. It also mislabels the route as SSG, which is exactly the
+  confusion F-012 came out of.
+- **Recommended fix:** applied. Removed, with a comment recording that this was
+  behaviour-neutral (measured, table above), that `force-dynamic` is what fixed
+  F-005 and must not be removed casually, and that anyone re-adding
+  `generateStaticParams` should read that first.
+- **Status:** FIXED. `tsc` clean, lint 0 errors, 13,616 tests pass.
+
+---
+
+## Coordination note — Claude-2, Claude-3 and Claude-4 did not complete
+
+All three workers were launched in parallel and **all three terminated early**
+with `rate_limit / HTTP 429: session limit, resets 3:10am UTC`. None of them
+reached the point of writing findings:
+
+- Claude-2 (frontend/a11y) stopped at "Now let me survey the frontend surface area."
+- Claude-3 (backend/API/security) stopped at "Now let me build the route inventory and start the authorization sweep."
+- Claude-4 (QA/flows/perf) stopped at "Let me record the findings so far."
+
+`audit/claude-2.md`, `claude-3.md` and `claude-4.md` therefore still contain only
+the templates Claude-1 created. **They contain no findings, and this file does not
+invent any on their behalf.** The three areas they own stay marked *not yet
+audited* in `finalaudit.md` Part 0 — which is the honest state, and the whole
+reason that convention exists.
+
+This is a capacity blocker, not a technical one. The work is scoped and the
+prompts are written; it needs either a session-limit reset or the workers run as
+genuinely separate accounts, which is what the brief describes.
+
+### [CLAUDE-1][HIGH][TESTING] A gate that calls itself a CI gate ran in no workflow
+
+- **File/path:** `scripts/i18n-gate.mjs`, `.github/workflows/ci.yml`, `finalaudit.md`
+- **Problem:** `scripts/i18n-gate.mjs` opens with *"CI gate for surfaces declared
+  translated"* and ends *"Nothing else in the build would notice, so this does."*
+  It appeared in **no workflow**. Meanwhile `finalaudit.md`'s status summary
+  listed it as a passing check — so the audit reported a guard that never ran.
+- **Evidence:**
+  - `grep -rn "i18n" .github/workflows/` → **no match in any workflow**.
+  - Every `run:` line in `ci.yml` enumerated; `npm run i18n:gate` is absent.
+  - The gate itself is sound: 8 declared surfaces, all clean, exit 0.
+- **Impact:** This is the defect class this repository keeps finding, in its
+  purest form — not a check that fails to observe its property, but one that
+  **cannot fail because it is never invoked**. What it protects is real: the
+  repo has shipped raw English on translated surfaces before, and the gate's own
+  header explains the mechanism (someone adds a button, types the label inline,
+  every non-English visitor silently gets English on a page that was clean
+  yesterday).
+- **Recommended fix:** applied — wired beside `Lint` in the
+  `Typecheck · Lint · Test · Build` job. It is a static scan with no network or
+  database, so it belongs in the fast job.
+- **Status:** FIXED.
+- **Proved load-bearing, after one invalid attempt of my own.** My first plant
+  was `const x = "…"` rendered as `{x}` — a JSX *expression*, which is outside
+  the scanner's stated rules, so its passing proved nothing about the gate. The
+  fair test is the mistake the gate exists for: an inline JSX text node. Planting
+  `<span>Start your free trial today</span>` in
+  `components/marketing/site-header.tsx` fails it by file, line and string across
+  both covering surfaces, exit 1. Removed, exit 0.
+
+### [CLAUDE-1][MEDIUM][TESTING] A second CI-intended gate is unwired — and wiring it naively would make it vacuous
+
+- **File/path:** `scripts/verify-oauth-config.mjs`, `.github/workflows/ci.yml`
+- **Problem:** Its header states *"Exit 1 on any error so CI or a deploy hook can
+  gate on it."* No workflow runs it.
+- **Evidence:** measured in both environments rather than assumed.
+  - With this sandbox's `.env.local`: **exit 1**, 4 errors (`GOOGLE_SYNC_CLIENT_ID`
+    and three others *set but blank* — the script correctly distinguishes blank
+    from unset).
+  - With `.env.local` moved away, i.e. what the PR job actually has: **exit 0**,
+    1 warning, 3 notes.
+- **Impact:** The naive fix is the wrong one. Wiring it to the PR job would add a
+  green check that has no configuration to inspect — a guard that cannot fail,
+  which is exactly what the finding above is about. Adding it there would make
+  the audit's coverage *look* better while proving nothing.
+- **Recommended fix:** NOT applied deliberately. It belongs in a deploy-time hook
+  or a job that actually carries the OAuth environment. The script itself already
+  says what it does and does not prove: *"Shape is all this proves… run the live
+  round-trip in docs/runbooks/LB-006-provider-callback-smoke.md."*
+- **Status:** OPEN — recommended, with the reason the obvious fix is refused.
+
+**Also examined, not findings:** the three `marketing:verify:*:remote` scripts are
+likewise absent from the PR job, and correctly so — each makes network calls
+against a deployed URL (3, 4 and 6 env/fetch references respectively). The e2e job
+runs the two that work against its isolated Supabase.
+
+### [CLAUDE-1][VERIFIED][TESTING] The boundary-probe infrastructure — examined, sound, with one narrow gap closed
+
+Applying the lens that found the i18n gate (a guard nothing invokes) to the SQL
+probes. The result is mostly a clean bill, which is worth recording as such.
+
+- **All 18 `docs/audit/*-check.sql` genuinely assert.** Counted per file:
+  `wallet-write-rls` 15, `sensitive-role-boundary` 12, `money-write-boundary` 11,
+  `family-credentials-boundary` 10, `document-vault-boundary` 9, down to
+  `household-trail` 1. None is report-only.
+- **The four files outside the glob are report-only by design** —
+  `migration-ledger-state`, `money-boundary-state`, `money-policy-diagnostic`,
+  `demo-mode-teardown`. Their `-state` / `-diagnostic` / `-teardown` names are
+  load-bearing, and none contains an assertion, so nothing is parked where the
+  runner cannot see it. Verified, not assumed.
+- **`run-probes.sh` already refuses to pass vacuously.** With an empty glob it
+  exits 1 — *"no probes found in docs/audit — the boundary proofs have been
+  deleted"*. Without that branch, `shopt -s nullglob` would report `0/0 passed`
+  and exit 0. Someone here had already thought about exactly this defect class,
+  which is worth saying out loud given how often it is the finding.
+- **The gap, now closed:** nothing stopped a *future* `*-check.sql` from
+  asserting nothing, or an assertion from being written into a report-only file.
+  `tests/boundary-probes-actually-assert.test.ts` covers both.
+- **Proved load-bearing:** a planted `tmp-vacuous-check.sql` containing only
+  `select 1;` fails with *"runs in CI but asserts nothing — it can only ever
+  pass"*; a `raise exception` appended to `money-boundary-state.sql` fails with
+  *"does not end in -check.sql, so run-probes.sh never executes it"*. Both
+  removed, 4 pass.
+- **Status:** VERIFIED (infrastructure sound) · FIXED (guard added).
+  13,662 tests pass.
+
+---
+
+## Consolidation pass — fixes applied from Claude-2, -3 and -4's findings
+
+Correcting my own earlier record first: this file previously stated that
+Claude-2/3/4 "did not complete" and their files "hold only the template". That
+was true of the moment I checked and is **false now**. Other parallel sessions had
+already populated all three files and pushed; `finalaudit.md` carries Passes A–K
+and is ~3,957 lines. My rebases pulled that in without my noticing, and
+`audit/status.md` went on asserting "not audited" afterwards. Recorded rather than
+quietly edited, because a stale coverage claim in an audit document is the same
+defect as F13.
+
+Four HIGH findings applied this pass. Three are the same shape — **a call whose
+error or escaping is skipped, then success reported** — which is now the most
+frequently recurring defect in this repository after the vacuous guard.
+
+### [CLAUDE-1][HIGH][SECURITY] Inbound email routed by an unescaped wildcard — FIXED
+
+Claude-3's finding; verified and fixed. `lib/contact-center/server.ts`
+`resolveFamilyByEmailLocalResult` matched `.ilike('email_local', local)` where
+`local` is parsed from the inbound message's **`To` header** — supplied by the
+sender. `_` is both a legal local-part character (`LOCAL_RE` permits it) and
+LIKE's single-character wildcard.
+
+Measured in PostgreSQL 16 on the harness rather than reasoned about:
+
+```
+'smith'  ilike 'smit_'    -> t     <- mail reaches another family's inbox
+'smith'  ilike 'smit\_'   -> f     <- escaped
+'smith'  ilike 's%'       -> t     <- one message reaches any family
+'smit_h' ilike 'smit\_h'  -> t     <- a REAL underscore still routes
+```
+
+Impact: a sender guessing a family name and substituting one character with `_`
+reaches that family's Contact Center — their AI concierge, their planner rows,
+potentially their urgent-SMS escalation, and an auto-reply from their own
+identity confirming the match. Same class as the child sign-in ILIKE bug this
+repo already fixed; the fix had not reached this call site, where the input is
+not merely guessable but attacker-supplied.
+
+Fixed by escaping, **not** by switching to `.eq`: the fourth row above is why —
+addresses containing an underscore must keep routing — and `.eq` would also drop
+case-insensitivity while the unique index is on `lower(email_local)`.
+`tests/contact-center-email-routing-wildcards.test.ts`, 6 cases; reverting the
+escape fails 5 of them.
+
+### [CLAUDE-1][HIGH][INTEGRATION] Google Calendar reported connected, and could wipe preferences — FIXED
+
+Claude-2's C2-17, plus a worse consequence they had not reached.
+`app/api/google/calendar/callback/route.ts` discarded the error from BOTH the
+preferences read and the token upsert, inside a `try/catch` that cannot see
+either, since a PostgREST call resolves with `{ data, error }` rather than
+throwing.
+
+The upsert writes the **whole** `notification_prefs` object. So a refused *read*
+falls back to `{}` and the upsert then overwrites every other notification
+preference the user has set — a transient read failure silently resets their
+settings as a side effect of connecting a calendar. A refused *write* told them
+the calendar was connected while no token was stored, so every later sync failed
+for a reason the screen denied. Both now redirect to the error state.
+
+### [CLAUDE-1][HIGH][INTEGRATION] Blog unsubscribe confirmed consent it had not recorded — FIXED
+
+Claude-2's C2-16. Recorded in `finalaudit.md` Pass F-a as fixed — but that fix is
+on #541's branch, which has not merged, so `main` still carried it. Worth noting
+as a coordination hazard: a finding marked FIXED on an unmerged branch is not
+fixed in production.
+
+`app/api/blog/unsubscribe/route.ts` discarded both results. A refused SELECT
+rendered *"that unsubscribe link doesn't look right"* at a real subscriber
+holding a real link — sending them to check the one thing that was never wrong.
+A refused UPDATE rendered *"you've been unsubscribed"* over a row still marked
+subscribed, so the mail kept arriving after they had been told it would stop.
+Both now route to a third state whose copy says the link is fine and we were not.
+
+### [CLAUDE-1][HIGH][DATA] readAll returned a truncated ledger as a complete one — FIXED
+
+Claude-4's F-F01, **in code I wrote**, and the comment defending it was mine:
+*"A ceiling the CALLER chose is a destination… Reaching the first is success."*
+That is wrong. A caller's `max` is a bound they expect the data to fit under, so
+reaching it exactly does not mean the read finished — it means rows may exist
+past it that were never read.
+
+`readAll` returned `{ rows: rows.slice(0, max), error: null }` on truncation:
+indistinguishable from a complete read. `admin/wallet/reconciliation/page.tsx`
+reads with `{max: 20000}` and its own header says *"this page RECONCILES the
+ledger, so reading part of it is worse than not reading it at all"* — it would
+have reported that a ledger it had only partly read balanced. Ten call sites pass
+a `max`, including three nightly crons paging families.
+
+Fixed by reading **one row past** the ceiling. That single extra row is what
+separates "there were exactly `max` rows" (complete) from "there were more"
+(truncated), and it is discarded from the result — only its existence is used.
+Truncation now returns an error the callers already know how to render.
+
+Four existing cases in `tests/supabase-read-all.test.ts` failed, and they were
+right to: one of them, `"reports reaching the ceiling as success, not as a runaway
+query"`, **literally asserted the defect**. I wrote that too. The contract is now
+corrected, with a new case for the exact-fit read the probe exists for, and the
+tripwire and caller-ceiling errors asserted to stay distinguishable.
+
+### [CLAUDE-1][HIGH][INTEGRATION] RESEND_API_KEY unset: mail never sent, rows marked delivered — FIXED
+
+- **File/path:** `lib/health/status.ts`, `lib/email.ts`
+- **Problem:** Claude-4's finding, and it belonged in a list I had already built
+  and then failed to check against their file. `RESEND_API_KEY` gates every
+  outbound email — notification digests, family invites, marketing sends — and
+  was absent from `FEATURE_ENV`.
+- **Evidence:** env-only across five read sites (`lib/email.ts`,
+  `lib/server/email.ts`, `lib/marketing/send.ts`, `lib/marketing/*`,
+  `lib/server/health.ts`), with no `stored.x || process.env.X` fallback — so it
+  satisfies the inclusion rule exactly.
+- **Impact:** Worse than silent. `lib/email.ts` reports success when the key is
+  unset, so notification rows are marked **delivered** for mail that was never
+  sent — and the dedupe then suppresses the retry. The record says the family was
+  told; they were not, and nothing will try again.
+- **Recommended fix:** applied — added to `FEATURE_ENV`, so `/api/health` reports
+  it as `degraded` with the name.
+- **Status:** FIXED. The two rule-enforcing cases still pass, which is the point:
+  they accepted this name and would have rejected an admin-configurable one.
+
+---
+
+## Audit completeness — the coordinator's own check
+
+Claiming an audit complete is itself a claim that needs evidence, so:
+
+- **All 19 required sections of Part 0 are present**, verified by name.
+- **Zero sections still say "not yet audited" or "has not started"** — five did
+  after the workers reported, which was the same stale-coverage defect as F13, and
+  they are now written from the workers' actual findings rather than from my
+  expectations of them.
+- **All four workers have findings on file**: `claude-1.md` (this file),
+  `claude-2.md` (C2-01–C2-18), `claude-3.md` (3 findings + a verified-sound
+  inventory), `claude-4.md` (C-4-01–C-4-13 plus a second block).
+- **The remaining OPEN items are open because of a decision, a credential, or a
+  named piece of work** — not because nobody looked. Each names its owner in
+  Recommended Fix Order.
+- **One area is explicitly NOT covered**, and is recorded as unchecked rather
+  than clean: browser-executed accessibility (contrast, tab order, screen-reader
+  output, live 360–400px overlap). No worker had a browser. Reasoning from source
+  is not the same as running it, and writing it down as a gap is the only honest
+  option.
+
+Verified at the close: `tsc` clean · lint 0 errors · `npm run build` exits 0 ·
+13,669 tests across 1,192 files · i18n gate 8/8 surfaces · migration replay
+310/0 · ledger-repair rehearsal FAILED: 0.

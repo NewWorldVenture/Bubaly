@@ -15,6 +15,7 @@ import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '
 import { describeDbError } from '@/lib/supabase/errors';
 import { resolveAssigneeId } from './family';
 import { defineTool, describeWhen, plural, type ToolDefinition } from './types';
+import { escapeLike } from '@/lib/supabase/escape-like';
 
 const KINDS = ['time', 'location', 'recurring', 'medication', 'bill', 'school', 'chore'] as const;
 const RECURRENCES = ['none', 'daily', 'weekdays', 'weekly', 'biweekly', 'monthly', 'yearly'] as const;
@@ -46,7 +47,7 @@ async function findReminder(scope: ServiceScope, title: string): Promise<Service
     .select('id, title')
     .eq('family_id', scope.familyId)
     .in('status', ['active', 'snoozed'])
-    .ilike('title', `%${term}%`)
+    .ilike('title', `%${escapeLike(term)}%`)
     .order('remind_at', { ascending: true, nullsFirst: false })
     .limit(1);
   if (error) {

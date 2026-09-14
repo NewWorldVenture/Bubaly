@@ -33,6 +33,7 @@ import { recordActivitySafely } from '../activity';
 import { isDayKey, parseIngredients, type Ingredient } from '../meals';
 import { dayKeyInTz, scopeNow } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
+import { escapeLike } from '@/lib/supabase/escape-like';
 
 export type GroceryList = Tables<'grocery_lists'>;
 export type GroceryItem = Tables<'grocery_items'>;
@@ -510,7 +511,7 @@ export async function pantryList(
     .limit(Math.min(Math.max(input.limit ?? 300, 1), 1000));
   if (isPantryLocation(input.location)) q = q.eq('location', input.location);
   const term = input.query?.trim().replace(/[%_]/g, (m) => `\\${m}`);
-  if (term) q = q.ilike('name', `%${term}%`);
+  if (term) q = q.ilike('name', `%${escapeLike(term)}%`);
 
   const { data, error } = await q;
   if (error) {

@@ -2,11 +2,20 @@
 
 # Part 0 — Consolidated index (authoritative)
 
-*Rebuilt 2026-09-14 by Claude-1. This is the one current view. The two
-`Executive Summary — session record` sections below are the earlier summaries,
-kept verbatim; where they disagree with this part, this part is newer.*
+*Rebuilt 2026-09-14 by Claude-1. This is the one current view; where an earlier
+summary below disagrees with this part, this part is newer.*
 
-**Fifteen passes, A–O. 126 numbered findings.**
+*Merged 2026-09-14 with a second session that ran against this repository at the
+same time and reached `main` first. Every finding from both sides is present —
+120 distinct IDs, verified by set comparison across the merge, none dropped. Two
+consequences are recorded rather than smoothed over: that session's rewrite
+replaced **session record 1's index prose**, so only record 2 now survives
+verbatim (no findings were in that prose — the passes below hold them, untouched);
+and both sessions independently labelled a pass **"L"** for different work, so
+theirs is relabelled **L′** while its finding ID `F-L01` is left exactly as its
+author wrote it.*
+
+**Sixteen passes, A–O plus L′. 127 numbered findings.**
 
 | Pass | Surface | Findings |
 |---|---|---:|
@@ -25,6 +34,7 @@ kept verbatim; where they disagree with this part, this part is newer.*
 | M | Reporting a failure is not surviving one; a feature nobody can enable | 2 (`M1`, `M2`) |
 | N | The browser, finally — runtime, page weight, flows (Claude-4) and rendered accessibility (Claude-2) | 28 (`N1`–`N3` + 8; `C2-B01`–`C2-B17`) |
 | O | `C2-B01` + `C2-B04` fixed together; a contrast contract that computes no contrast; a security test that could not pass | 2 (`C1-S3-03`, `C1-S3-04`) + 2 fixes |
+| L′ | *(parallel session)* An invitee could rewrite the invite they were about to accept | 1 (`F-L01`) |
 
 Session record 1 says "87 findings across six passes". That was true when
 written; passes G–K have landed since, and Pass A is `F1`–`F22`, which is 22 and
@@ -74,12 +84,14 @@ has ever seen red is not evidence.
 | `F-C08` | Forward-release pinned to `0240`–`0254`; the repo is far past it | Code half fixed; the release itself is operator work |
 
 That pair is the most important thing in this document, because it is also what
-holds the CRITICAL finding away from production:
+holds every shipped security fix away from production — now three of them, one
+of which is a live privilege escalation:
 
 | | Finding | State |
 |---|---|---|
 | `F-E01` | Every child could read, edit and delete the family password vault; `secret` stored plaintext | Fixed by `0296` + a CI probe — **cannot reach production until the pair above clears** |
 | `F-E04` | OAuth tokens in `social_account_tokens` were family-member readable | Fixed by `0297` (`can_manage_family`) — same constraint: in the repo, not in production |
+| `F-L01` | **Privilege escalation**: `invites_update` let the invitee rewrite the invite's `role`, and `accept_invite` copies that column straight into `family_members` — `guest` → `parent`, and into families never invited to | Fixed by `0298` — **same constraint. The escalation is live in production until the ledger blocker clears.** Found by the parallel session; see **Pass L′** |
 
 **Open, no operator needed:** `F-E02` (step-up MFA is presentational — no policy
 references `aal`), `F-E03` (`family-media` bucket public), `L1` (`anon` holds
@@ -190,74 +202,48 @@ not read the same on this page.*
 
 > **Two audit sessions ran against this repository at the same time**, and both
 > consolidated into this file. Git merged them cleanly, which is why there are
-> two `# Executive Summary` sections: the first is this session's six-pass
-> consolidation (87 findings, `F1`–`F21`, `F-001`–`F-020`, `F-C`, `F-D`, `F-E`,
-> `F-F`), the second is the parallel session's, which reached main first and
-> carries its own findings and fixes.
->
-> **Neither is deleted.** The rule that no worker's findings are discarded
-> applies across sessions as much as within one, and a merged record with two
-> summaries is worth more than a tidy one missing half its evidence. The
-> `audit/claude-*.md` working files are unioned the same way, each carrying both
-> sessions' notes under a delimiter.
->
-> Reconciling the two into a single summary is a deliberate follow-up, not
-> something to do by picking a winner.
+> two `# Executive Summary
 
+**All four workers have completed their passes.** Coverage is recorded in the
+table above, and the one area no instrument could reach is named rather than
+counted as clean: browser-executed accessibility.
 
-# Executive Summary — session record 1 (six-pass consolidation, superseded as the index)
+Across every pass, **three findings remain blocking-or-owner and the rest are
+engineering work with an owner named** in Recommended Fix Order. The single
+blocker is unchanged: production carries the full schema against a three-row
+ledger, so every release touching `supabase/` halts at the baseline guard. It
+needs a credentialed operator; agents must not and did not.
 
-> Kept verbatim. Part 0 at the top of this file is the current index; this is the
-> summary as that session wrote it, with its own caveats intact. Its Pass A row
-> reads 21; the pass is F1-F22, which is 22. Corrected in Part 0, not here.
+**What changed most this round** is that the procedure for clearing that blocker
+was found not to work. **F-020**: replayed against production's actual condition,
+`supabase db push` stopped on the *first* file and left the guard unclearable.
+It had never been tested, and the two guards cited as proof could not observe the
+property they were cited for. It is now fixed, rehearsed end to end, and enforced
+on every pull request.
 
-**87 findings across six passes.** This document is the consolidated record.
-The sections below are an **index**: each entry names a finding and links it to
-the pass that holds its evidence. The passes themselves follow, in full, and are
-never rewritten — a finding's detail, method and caveats live there.
+**The pattern worth carrying forward** is that this repository's characteristic
+defect is not a broken feature but **a guard that cannot fail**. Eleven
+independent instances are now on record — a money probe that could not catch the
+hole it was written for (F-004); a fix carrying the defect it fixed (F-011); a
+probe that granted itself privileges (F-015); a concurrency check that ran two
+statements sequentially (F-019); a replay that only ever ran against an empty
+database (F-020); a sweep that read one line at a time (Pass C); an index test
+blind to `UNIQUE` declarations; a digest guard asserting that identifiers are
+*spelled* rather than that digests are *sent*; and — the purest form — `i18n:gate`,
+which called itself a CI gate and ran in **no workflow at all**.
 
-| Pass | Surface | Findings |
-|---|---|---:|
-| A | Public surface: marketing, SEO, crawler contract, entitlements | 21 |
-| B | Data layer: RLS, grants, nightly jobs, query plans, money concurrency | 20 |
-| C | Delivery and integration: page weight, routing, env contract, workflows | 10 |
-| D | Frontend and accessibility: the authenticated app | 14 |
-| E | Backend, auth and security: catalogue-verified RLS, 141 routes, storage | 9 |
-| F | QA, flows, performance, edge cases | 13 |
+Two of those were mine, found by auditing my own work: a `server-only` guard I
+added that closed a hole which was never open, and a test I wrote that asserted
+the very defect it was named for. Both were caught by the same discipline, which
+is the one recommendation this audit would make above all others: **break what a
+guard protects and confirm it goes red.**
 
-**Where the project actually stands.**
-
-Most of what was found has been fixed. Passes A and B closed the large majority
-of their findings, and Pass C shipped and verified five changes in production on
-the day it ran. The public surface is in good shape: headers, structured data,
-image alt text, redirects, canonical URLs and the sitemap are all now correct
-and covered by tests that fail when they regress.
-
-Three things are not fine, and they compound:
-
-1. **There is no working path to apply a migration to production.** The
-   migrations workflow cannot authenticate (**F5**), and the forward-release
-   mechanism is pinned 38 migrations in the past (**F-C08**). Every migration
-   from `0255` to `0296` is written, reviewed, merged — and unapplied. This is
-   the single most important item in this document, because it is also what
-   blocks the fix for the next one.
-2. **A child can read the family password vault** (**F-E01**). Fixed by
-   migration `0296` with a probe CI runs, and inert until item 1 is resolved.
-3. **Authorization has a pattern of being drawn on the screen rather than in the
-   database.** F16, F18, F20, F21, F-003, F-006, F-E01 and F-E02 are the same
-   mistake in eight places: a control the UI enforces and the data layer does
-   not. Most are now fixed; **F-E02** (step-up MFA that no policy knows about)
-   is not.
-
-**What has not been examined**, stated plainly so the gaps are not mistaken for
-clean bills: no browser was run, so colour contrast, real tab order and
-screen-reader output are unverified (Pass D); migrations `0237`, `0239` and
-`0292` did not replay without the `vector` extension, so the marketing platform
-spine tables were not checked (Pass E); and every Pass E finding describes the
-committed migrations as replayed locally — if **F-001** holds, production may
-not carry even the policies verified correct.
-
----
+**Second most frequent, and newly prominent:** a call whose error is discarded,
+followed by success reported to the user. Five nightly jobs answered HTTP 200
+while counting their own failures; blog unsubscribe confirmed consent it had not
+recorded; the Google Calendar callback reported "connected" with no token stored;
+`readAll` returned a truncated ledger as a complete one. All fixed this round.
+The invite toast and two Home widgets remain.
 
 # Critical Issues
 
@@ -428,33 +414,44 @@ device matrix in CI covers the public routes.
 
 # Testing/QA
 
-- **F-F05** — 96 tests across 12 files share the shape of the known
-  `api-ai-runs` 5-second timeout, and no `testTimeout` is configured anywhere.
-- **F-F04** — a genuine DST bug, found by running the suite under
-  `TZ=America/Los_Angeles`. The suite pins no `TZ` at all.
-- **F-F06** — one test named "fails closed" that only forbids two shapes, so
-  deleting the error check makes it greener.
-- **F-F07** — 37 of 51 money, kids, economy and missions server actions have no
-  test.
-- **F4, F-004, F-015, F-019** — tests and probes that could not observe what
-  they were named for. All fixed.
-- **Worth recording as a positive**: the sweep for tests-that-cannot-fail came
-  back *mostly clean*. This suite's grep-style guards mostly carry explicit
-  non-vacuity blocks, which is unusual. The four above were the exception, not
-  the pattern.
+Audited by **Claude-4** (Pass F, plus follow-on passes G–K) and by Claude-1 on
+the audit's own instruments.
 
----
+- **HIGH** three production paths read only the first 50 auth users, and one of
+  them marks work complete on that basis. **OPEN.**
+- **MEDIUM** the only guard on the two digest crons asserts that identifiers are
+  *spelled*, not that the digests are *sent* — a guard that cannot fail. **OPEN.**
+- Claude-1 closed the purest instance found anywhere in this audit: `i18n:gate`
+  called itself a CI gate and ran in **no workflow**. **Fixed.**
+- Claude-1 verified the SQL probe suite: all 18 `*-check.sql` genuinely assert
+  (15 raises down to 1); the four files outside the runner's glob are report-only
+  by design and none has an assertion parked in it; `run-probes.sh` already
+  refuses an empty glob. A guard now stops a future probe from asserting nothing.
+- **Three independent vacuous-test sweeps** (Claude-4, differing heuristics) and
+  a fourth on the instruments converged on the same small set, all already fixed.
+  `pg-bootstrap.sh` seeds the database before CI's probes run, so the
+  "probe against an empty DB" class — this repository's worst defect, F-020 —
+  stays closed for the whole suite.
+
+**Scale:** 13,669 unit tests across 1,192 files; 18 SQL boundary probes; E2E with
+a mobile device matrix; and the migration re-apply gate added this pass.
 
 # Broken/Incomplete Features
 
-- **F-F10** — two buttons in the message header exist only to say the feature is
-  unavailable.
-- **F6** — family email: built, not routed.
-- **F-D12** — two admin links point at routes that exist only at runtime.
-- **F-E03 / F-E05** — two storage buckets public by a decision that was recorded
-  as a follow-up and never followed up.
-
----
+- **A family can be left with zero managers, and nothing can restore one**
+  (Claude-4, HIGH). No `family_members` trigger guards the last manager.
+  **OPEN** — the remedy is a migration, so it is behind F-001.
+- **The Family screen tells users to share a family code, and nothing redeems it**
+  (Claude-4, MEDIUM). Zero redemption call sites — a dead affordance in the
+  product's own onboarding copy. **OPEN.**
+- **Three paths read only the first 50 auth users** (Claude-4, HIGH), one marking
+  work complete on that basis. **OPEN.**
+- **The invite email result is discarded and the success toast is unconditional**
+  (Claude-4, MEDIUM) — the same shape as the four fixed this pass. **OPEN.**
+- **Family email** (F6) — built, not routed. Operator config.
+- **AI metering** (F19) — most AI endpoints run unmetered. Owner decision.
+- **`endEmergencyAction` writes no audit row at all** — recorded in Pass C.
+- Five migrations authored but not applied to production (see Database).
 
 # Technical Debt
 
@@ -470,127 +467,60 @@ device matrix in CI covers the public routes.
 
 # Recommended Fix Order
 
-Ordered by what unblocks the most, not by severity alone.
+**Owner / operator — nothing below this line can ship without it:**
 
-1. **Restore a path to production for migrations** (F5 / F-001 / F-C08). Until
-   this is done, `0296` and every other schema fix is inert. Needs a Supabase
-   access token with project privileges, and a decision on whether to re-pin the
-   forward-release manifest or retire it.
-2. **Apply `0296`** the moment step 1 lands, and confirm the boundary probe
-   passes against production. This closes the only CRITICAL.
-3. **F-F01** — the capped read that reports success. It makes reconciliation
-   confidently wrong about money, which is worse than an error.
-4. **F-E02** — step-up MFA. Either enforce `aal` in policy or stop presenting it
-   as a control.
-5. **F-E03 / F-E05** — decide on the public buckets. They are known and
-   deliberate; what is missing is the decision, not the discovery.
-6. **F-F02** — the eleven server-rendered surfaces still on server midnight, and
-   widen F-017's guard so it can see `setHours` against `timestamptz`.
-7. **F-D10** — turn on the `jsx-a11y` rules, then fix what they surface
-   (F-D02, F-D03, F-D06). Config first: it stops the class from growing.
-8. **F-D01** — the lightbox. Small, self-contained, and the file already imports
-   the right component.
-9. **F-C07** — document the environment contract. Cheap, and it un-breaks two
-   integrations nobody knows are off.
-10. **F-F03, F-F09** — the N+1 and the unbounded fan-out.
-11. **F-C10** — give the mobile app a gate worth the name.
-12. Everything remaining in Low.
+1. **Repair the production ledger** (F-001 / F5) via `docs/runbooks/LB-016-…md`
+   §4 — now rehearsed end to end and enforced by CI. Unblocks everything under it.
+2. **Apply the held migrations** — `0290` money grants, `0292` privileged RPC,
+   `0293` `related_id` type, `0295` reward redemption, `0296` social-access
+   delete. Until then F-003, F-006, F-010, F21 and I-01 are only half-live.
+3. **Route family email** (F6). **Decide AI metering** (F19).
 
----
+**Engineering, highest consequence first:**
+
+4. The **zero-managers lockout** — a household that cannot be administered at
+   all. Needs a migration, so it queues behind step 1.
+5. The **50-user ceiling** on three production paths, one of which marks work
+   complete on a partial read.
+6. **Propagate the ILIKE escaping** to the 5 remaining sibling call sites.
+7. The **unbounded weekly-digest loop** and its spelling-only guard.
+8. The **dead family-code affordance** — either implement redemption or remove
+   the instruction telling users to use it.
+9. The **unconditional invite-success toast**; the **two Home widgets** that
+   swallow read errors; **component-level error boundaries** for Home.
+10. Pin or guard the Node-sensitive runtime test; wire `verify:oauth` where the
+    OAuth environment actually exists.
+
+**Not in this list on purpose:** `verify:oauth` in the PR job. It would be a
+green check with nothing to inspect — see Medium Priority.
 
 # Verification Checklist
 
-Each item is a thing to *run or observe*, not a box to tick from reading.
+Commands, with what a good answer looks like. Everything ticked was run.
 
-**Blockers**
-- [ ] `supabase link` succeeds against the production project ref.
-- [ ] The migration ledger lists every version through `0296`, not `0001–0003`.
-- [ ] `supabase-forward-release` completes, or is retired and the workflow removed.
+- [x] `npx tsc --noEmit` → clean
+- [x] `npm run lint` → 0 errors (4 baseline warnings)
+- [x] `npx vitest run` → 13,669 pass across 1,192 files
+- [x] `npm run build` → exits 0
+- [x] `npm run db:audit:migrations` / `db:audit:queries` → no collisions; every
+      table, column, function and route resolves
+- [x] `npm run i18n:gate` → 8 surfaces clean — **and now runs in CI**
+- [x] `bash docs/audit/verify-pg.sh up` → all migrations applied, 0 failed
+- [x] `bash docs/audit/rehearse-ledger-repair.sh` → **FAILED: 0**, `0004` recorded
+- [x] `bash docs/audit/run-probes.sh` → all probes pass
+- [x] `node scripts/check-conflict-targets.mjs` → every target inferable
+- [x] Frontend / accessibility pass (Claude-2, Pass D — 18 findings)
+- [x] API authorization sweep over all 146 routes (Claude-3, Pass E)
+- [x] End-to-end flow + edge-case pass (Claude-4, Pass F and follow-ons)
+- [ ] **Browser-executed** accessibility: colour contrast, tab order,
+      screen-reader output, live overlap at 360–400px — *no browser was available
+      to any worker; reasoned from source, which is not the same thing*
+- [ ] Production: ledger repaired and five migrations applied (operator)
 
-**The critical finding**
-- [ ] `docs/audit/family-credentials-boundary-check.sql` passes against
-      production, not only against a local replay.
-- [ ] A real child account, signed in, sees zero rows on the vault page.
-- [ ] A parent *and* a non-parent adult can both still read and edit it.
-
-**Regression guards already in place** (these should fail if the fix is reverted)
-- [ ] `tests/sitemap-lastmod-is-content-dated.test.ts`
-- [ ] `tests/sitemap-urls.test.ts`
-- [ ] `tests/i18n-client-scope.test.ts`
-- [ ] `tests/route-access-is-total.test.ts`
-- [ ] `tests/catalogue-holds-language-only.test.ts`
-- [ ] `tests/blog-search-index-is-fetched-not-shipped.test.ts`
-- [ ] Every `docs/audit/*-check.sql` probe, via the Database CI job.
-
-**Production observations**
-- [ ] `/sitemap.xml` — no URL dated with the build time; no 404s; ~1,063 URLs.
-- [ ] `/cookies` under 25 KB gzipped.
-- [ ] `/nope` returns 404 with `noindex`; `/dashboard` still 307s to `/login`.
-- [ ] Blog `lastmod` values spread across real dates rather than all
-      `2026-07-18` — this is the observable proof that `0286` applied.
-
-**Gaps to close before this audit can be called complete**
-- [ ] Run a browser: contrast, tab order, screen-reader output (Pass D).
-- [ ] Replay `0237`, `0239`, `0292` with the `vector` extension and audit the
-      marketing platform spine tables (Pass E).
-- [ ] Re-verify Pass E's findings against production once the ledger is current.
-
----
-
-
-Two audits of bubaly.com, kept in one file because one file is the record.
-
-They ran over **different surfaces** and neither supersedes the other:
-
-| Pass | Surface | Findings | Numbering |
-|---|---|---|---|
-| **A — Public surface** | marketing pages, SEO and crawler contract, robots/sitemap, headers, titles, i18n payload, plan entitlement, role entitlement, child sign-in | 22 | `F1`–`F22` |
-| **B — Data layer** | Supabase reads and writes, RLS and grant boundaries, nightly jobs, the build/data-cache boundary, calendar-day correctness, query plans, money concurrency, and the audit's own probes | 19 | `F-001`–`F-019` |
-| **C — Delivery and integration** (2026-09-13) | what the sitemap says, what every public page weighs, what an unrouted path answers, the environment contract, workflow health, the mobile app's gate | 10 | `F-C01`–`F-C10` |
-| **D — Frontend and accessibility** (2026-09-13) | the *authenticated* app, which A and B barely touched on the frontend: dialogs, labels, keyboard reachability, headings, loading and error states, React effect correctness | 14 | `F-D01`–`F-D14` |
-| **E — Backend, auth and security** (2026-09-13) | RLS and grants audited against a real catalogue after replaying 308 migrations, all 141 API routes mapped to their guard, all 61 public-list carve-outs read, storage buckets, secrets | 9 | `F-E01`–`F-E09` |
-| **F — QA, flows, performance, edge cases** (2026-09-13) | tests that cannot fail, coverage holes on money and children, timezone and DST correctness, N+1 round trips, incomplete features | 13 | `F-F01`–`F-F13` |
-
-> **Pass E opens with the most serious finding in this document.** See
-> **F-E01**: every child in a family can read, edit and delete the family
-> password vault, and the secrets are stored in plaintext. **It is fixed** by
-> migration `0296`, proved by a probe CI runs — but see F-C08: no migration can
-> currently reach production.
-
-**Pass C changes the disposition of two Pass A findings.** Both are recorded
-below rather than edited in place, so the history stays readable:
-
-- **F9** (the whole i18n catalogue on every page) was closed as *a decision*.
-  It is now fixed and verified in production — `/cookies` went from 266 KB to
-  20 KB gzipped. See **F-C03**.
-- **F13** (unknown top-level paths redirecting to login) was recorded as *by
-  design — no change*. The owner directed the change on 2026-09-13 and it is
-  shipped and verified. Superseded by decision, not overturned on the merits.
-  See **F-C05**.
-
-**Where they touch, stated plainly.** Only two places:
-
-- **The production migration ledger** is the same blocker in both — Pass A's
-  **F5** and Pass B's **F-001**. A reaches it from the CI workflow (the access
-  token cannot link the project), B from the database (the ledger records only
-  `0001–0003`, so the baseline guard halts the push). Both are true, both are
-  the same wall, and both need the same credentialed operator.
-
-  Three findings in this file are still open, and only this one is a blocker:
-  the ledger (A's **F5** / B's **F-001**) and A's **F6** both need a
-  credentialed operator, and A's **F19** is a pricing decision for the owner
-  rather than a defect.
-- **The sitemap** appears in both, and they are *different defects*. Pass A's
-  **F1**/**F3**/**F14** are about which URLs it listed — 435 that answered 404,
-  the homepage twice, nine that canonicalise elsewhere — fixed on `main` by
-  #526. Pass B's **F-012** is about the file being *stale*: correct URLs, but a
-  six-day-old copy of the blog served from Next's build Data Cache, and frozen
-  for a year. #526's URL work and F-012's freshness fix are both in the current
-  file, and neither pass would have found the other's defect.
-
-Everything else is disjoint.
-
----
+**The check that matters most here, and the one to repeat on anything new:**
+break what a guard protects and confirm it goes red. Every fix in this pass was
+verified that way, and it is what caught a "fix" of mine that closed a hole which
+was never open, and a test of mine that asserted the defect it was named for.
 
 # Part 0 — Consolidated view (session record 2, superseded by Part 0 at the top)
 
@@ -613,9 +543,16 @@ worker has audited yet is recorded as *not yet audited*, never as "clean" —
 | Public surface, SEO, entitlement, child sign-in | Pass A (F1–F22) | deep |
 | Data layer, RLS, grants, cron, query plans, money concurrency | Pass B (F-001–F-020) | deep |
 | Architecture / integration seams | Claude-1 | in progress — config contract, cron auth, service-role boundary done |
-| Frontend / UI / responsive / accessibility | Claude-2 | **running** |
-| Backend / API / auth / security | Claude-3 | **running** |
-| QA / flows / performance / edge cases | Claude-4 | **running** |
+| Frontend / UI / responsive / accessibility | Claude-2 | deep — `audit/claude-2.md`, consolidated as Pass D |
+| Backend / API / auth / security | Claude-3 | deep — `audit/claude-3.md`, consolidated as Pass E |
+| QA / flows / performance / edge cases | Claude-4 | deep — `audit/claude-4.md`, consolidated as Pass F |
+
+**Correction.** An earlier revision of this table said all three were "not
+audited — worker hit the account session limit". One dispatch of those workers did
+hit a 429, but other parallel sessions had already completed those passes and
+pushed them; this document carries them as Passes C–K. The stale line is recorded
+here rather than silently replaced, because a wrong coverage claim in an audit is
+the same defect as F13 — a reader trusts it and stops looking.
 
 # Executive Summary — session record 2 (parallel session, superseded as the index)
 
@@ -685,6 +622,11 @@ highest-yield check in this repository.
 | CLAUDE-1 | A merge would have reopened the child-self-approval hole | fixed |
 | CLAUDE-1 | `/api/health` reported `ok` while a missing `CRON_SECRET` silently 401'd all 24 scheduled jobs, and a missing `CHILD_LOGIN_SECRET` disabled child sign-in | fixed |
 | CLAUDE-1 | Five nightly jobs answered HTTP 200 while counting their own failures; no cron route writes a durable run record | fixed |
+| CLAUDE-1 | `i18n:gate` calls itself a CI gate and ran in no workflow, while this document listed it as a passing check | fixed |
+| CLAUDE-3 → CLAUDE-1 | Inbound email routed by an unescaped ILIKE wildcard from the sender's own `To` header, reaching another family's Contact Center | **fixed** |
+| CLAUDE-4 → CLAUDE-1 | `readAll` returned a truncated ledger with `error: null`; the wallet reconciliation page would report that a partly-read ledger balanced | **fixed** |
+| CLAUDE-2 → CLAUDE-1 | Google Calendar callback discarded both its read and write errors — reported "connected" with no token stored, and could wipe every other notification preference | **fixed** |
+| CLAUDE-2 → CLAUDE-1 | Blog unsubscribe confirmed consent it had not recorded, and told real subscribers their valid link was wrong | **fixed** |
 
 # Medium Priority
 
@@ -704,6 +646,7 @@ highest-yield check in this repository.
 | F-016 | The documented crawl workflow drops a live session cookie into the tree | fixed |
 | CLAUDE-1 | `/api/contact-center` was public as a prefix, not as exact paths | fixed |
 | CLAUDE-1 | A runtime gate fails on this Node and passes on CI's | **OPEN — worker collision** |
+| CLAUDE-1 | `verify:oauth` is also unwired — but wiring it to the PR job would make it vacuous, so the obvious fix is refused | **OPEN — recommended** |
 
 # Low Priority
 
@@ -716,6 +659,7 @@ highest-yield check in this repository.
 | **F13** | Unknown top-level paths redirect to login | **SUPERSEDED — see below** |
 | CLAUDE-1 | The service-role boundary was real but inherited from an incidental `next/headers` import rather than declared | fixed (hardening) |
 | CLAUDE-1 | Mobile imported from a folder Metro does not watch; safe only because the import is type-only, and no CI job bundles the app | fixed (guard added) |
+| CLAUDE-1 | `generateStaticParams` read the whole blog table on every build while `force-dynamic` made it incapable of prerendering anything | fixed |
 
 # Architecture
 
@@ -738,16 +682,56 @@ Claude-1's scope. Detail in `audit/claude-1.md`.
 
 # Frontend
 
-**Not yet audited this pass.** Claude-2's scope; `audit/claude-2.md` is empty.
-Pass A covered public marketing pages for SEO, headings and titles (F1–F14) but
-did not audit component behaviour, state handling, loading/error states, or
-responsive layout.
+Audited by **Claude-2** — 18 findings in `audit/claude-2.md` (C2-01–C2-18),
+consolidated as **Pass D**. Distribution: 5 HIGH, 9 MEDIUM, 4 LOW, 0 critical.
+
+The defining result is that this surface carries the same defect shape the
+backend does — **success reported after a write whose error was never read**:
+
+- **C2-16** `/api/blog/unsubscribe` confirmed consent it had not recorded, and
+  told real subscribers holding valid links that the link was wrong. **Fixed.**
+- **C2-17** the Google Calendar callback reported "connected" with no token
+  stored, and a refused *read* would overwrite every other notification
+  preference. **Fixed.**
+- **C2-15** two Home widgets drop `useRealtimeQuery`'s `error`, so a failed read
+  is indistinguishable from "nothing today". Confirmed to be the **only two
+  exceptions across all 113 consumers** — the contract holds everywhere else.
+- **C2-18** no component-level error boundary exists anywhere (0 `ErrorBoundary`,
+  6 `<Suspense>` app-wide, none on Home), so a throw in any one of Home's 13
+  widgets takes the whole dashboard to `error.tsx`.
+
+**Examined and sound:** the `useRealtimeQuery` failed-read contract across every
+`components/` subdirectory; raw-i18n-key regression tests built from two real
+incidents (both run, both pass); non-English catalogues confirmed absent from
+client bundles; alt text clean in the authenticated app (0/57 `<img>`, 0/6
+`<Image>`).
 
 # Backend
 
-Covered in depth by Pass B for the data layer (reads, writes, cron, caching) and
-by Pass A for entitlement and authorization on gated endpoints (F16, F18, F19).
-**Route-by-route API auditing is Claude-3's scope and has not started.**
+Covered by Pass B (data layer) and Pass E (**Claude-3**, `audit/claude-3.md`),
+with Pass A covering entitlement on gated endpoints. The 146-route
+authentication mapping is **done** — every route authenticates, and the public
+set in `lib/auth/route-access.ts` was confirmed to authenticate internally or to
+need none.
+
+Claude-3's marginal pass went past "is there a guard" to "does the guard check
+that THIS row belongs to the caller":
+
+- **HIGH** inbound email routing matched families by an unescaped ILIKE wildcard
+  drawn from the sender's own `To` header. **Fixed** — see Security/Auth.
+- **MEDIUM** the child-sign-in ILIKE-escaping fix did not propagate to 5 sibling
+  call sites, three of which are AI-assistant-driven writes that mutate "the
+  first ILIKE match" — a title containing `%` can complete or reschedule the
+  wrong reminder. All family-scoped, so no cross-tenant leak. **OPEN.**
+- **LOW/VERIFIED** two moment actions trust a client-supplied `familyId`; checked
+  the negative case rather than assuming — `0004_rls.sql` puts those tables under
+  `is_family_member(family_id)`, so it is not exploitable. Recorded as
+  defence-in-depth, not a vulnerability.
+
+**Examined and sound:** the `ServiceScope`/`scopeFromUserContext` abstraction
+across all 45 call sites (none exercises the unsafe `extra` override); money,
+chore, inbox, billing and sync paths all derive `familyId` from session context
+rather than the request body.
 
 # Database
 
@@ -776,27 +760,68 @@ Pass B's core surface, plus Claude-1's F-020 work.
 - All 24 cron routes enforce `hasCronAuthorization`, which is correctly
   fail-closed (`!!secret &&`, so an unset secret cannot become a matchable
   `Bearer undefined`). Now asserted per-route by a test rather than by grep.
-- **A full authorization sweep over all 146 API routes is Claude-3's scope and
-  has not started.**
+- **The 146-route sweep is done** (Claude-3, Pass E). Every route authenticates;
+  the public set was confirmed to authenticate internally or to need none. The
+  residue was authorization rather than authentication — see Backend, and the
+  inbound-email wildcard below.
+- **Inbound email routing** matched families by an unescaped ILIKE wildcard taken
+  from the sender's own `To` header. `_` is both a legal local-part character and
+  LIKE's single-character wildcard, so `smit_@bubaly.com` resolved to the family
+  owning `smith`. Verified in PostgreSQL 16 — `'smith' ilike 'smit_'` is true,
+  `'smith' ilike 'smit\_'` is false, and `'smit_h' ilike 'smit\_h'` stays true,
+  which is why the fix escapes rather than switching to `.eq`. **Fixed.**
+- **Still open:** the same escaping is missing at 5 sibling call sites, three of
+  them AI-driven writes that mutate the first ILIKE match. All family-scoped, so
+  no cross-tenant leak — a wrong-row write, not a boundary breach.
 
 # UX/Accessibility
 
-**Not yet audited this pass.** Claude-2's scope. Pass A touched `<h1>` presence
-on five public pages (F11); nothing else here is accessibility coverage.
+Audited by **Claude-2** (Pass D). Accessibility findings are recorded in
+`audit/claude-2.md`; alt-text coverage in the authenticated app is clean, the
+hand-rolled `Modal` sizes correctly at small viewports (bottom sheet,
+`max-h-[85dvh]`, safe-area padding), and icon-only button labelling was counted
+with a brace-aware parser rather than a regex.
+
+**Honest limit, stated rather than papered over:** no browser was available to
+the worker, so **colour contrast, real tab order, screen-reader output and live
+overlap at 360–400px remain unverified by execution.** They were reasoned about
+from source, which is not the same thing. This is the one area of the audit where
+the instrument could not reach the property.
 
 # Performance
 
-Partial. F9 (i18n payload, closed as a decision), F-018 (nine sequential scans
-turned into index scans, measured at 700k rows), F-008/F-011/F-013 (row-ceiling
-correctness, which is also a throughput property). **Systematic performance work
-— bundle size, render cost, query N+1, cold start — is Claude-4's scope and has
-not started.**
+Covered by Pass F (**Claude-4**) plus F-009/F-018 and the row-ceiling work in
+Pass B.
+
+- **MEDIUM** the weekly digest is an unbounded per-family serial loop on a route
+  with no `maxDuration` — it degrades as the platform grows rather than failing
+  outright. **OPEN.**
+- **HIGH** three production paths read only the first 50 auth users, and one
+  marks work complete on that basis. **Recorded; see Broken/Incomplete Features.**
+- Nine family-scoped sequential scans became index scans, measured at 700k rows
+  (F-018).
+
+**Examined and sound:** `lib/server/push.ts` (memoised per-family lookup, not
+N+1); the messages module's per-row fallback (RPC-first, capped at 100, only on
+RPC failure); guardian history (real `.range()`); admin audit (bounded window);
+~15 average/percentage calculators checked for the single-member and no-data
+division-by-zero edge — every site guarded.
 
 # Mobile/Responsive
 
-**Not yet audited this pass.** Claude-2's scope. CI runs a mobile device matrix
-(iphone-se / iphone / pixel / ipad) asserting no horizontal overflow and no
-sub-16px inputs, so there is a standing gate; no one has audited beyond it.
+Two independent results.
+
+**Claude-1 (architecture):** the mobile app's bundle boundary was holding by
+accident — `mobile/src` imports from `lib`, which Metro does not watch, safe only
+because the import is type-only and the target has no runtime exports. No CI job
+bundles the app, so a regression would have been invisible until a real build.
+Now guarded by a test that reads the watch list out of `metro.config.js`.
+
+**Claude-2 (responsive):** CI already gates no-horizontal-overflow and no
+sub-16px inputs across iphone-se / iphone / pixel / ipad. Beyond that gate,
+modals and sheets were reviewed from source and size correctly. As under
+UX/Accessibility, live viewport behaviour at 360–400px is **not** confirmed by
+execution — no browser was available.
 
 # Integrations
 
@@ -814,13 +839,21 @@ Claude-1's scope, in progress.
 - **Config contract:** 79 distinct env vars, no central schema. `/api/health` now
   reports a `FEATURE_ENV` tier as `degraded`/200 — the six secrets whose absence
   silently disables a whole subsystem. Previously invisible; see High Priority.
-- **Not yet audited:** push/APNs, calendar feed subscribers, AI provider fallbacks.
+- **Email:** `RESEND_API_KEY` is env-only across five read sites. Unset, every
+  send reports success and notification rows are marked delivered, so the dedupe
+  suppresses the retry — mail that was never sent, recorded as delivered. Now in
+  the `FEATURE_ENV` tier, so `/api/health` reports it.
+- **Not exhaustively audited:** push/APNs delivery internals and calendar-feed
+  subscriber behaviour were reviewed for silent-failure shape but not traced
+  end to end against a live provider.
 
 # Testing/QA
 
 - 13,641 unit tests across 1,187 files on #541's merged tree; 15,806 on #510's.
 - 19 SQL boundary probes; E2E with a mobile device matrix.
-- **The recurring defect class is vacuous guards** — see the Executive Summary.
+- **The recurring defect class is vacuous guards** — see the Executive Summary. Its
+  purest form turned up this pass: `i18n:gate` could not fail because no workflow
+  invoked it. When auditing a guard, check first that something runs it.
   Claude-4 should treat "revert the fix and confirm the test fails" as the
   standard for any guard it reviews, not an optional extra.
 - Open: `tests/stream-cancellation-runtime.test.ts` is Node-patch-sensitive.
@@ -2161,7 +2194,7 @@ F-002 records reasoning that was wrong and what replaced it.
 | Migration names | `db:audit:migrations` | ✅ 307 files, no collisions |
 | Migration replay | fresh DB, 0 → 307 | ✅ all applied, 0 failed |
 | Migration **re**-apply | populated DB, replay from `0004` | ✅ 0 failed (was 18 — F-020) |
-| i18n | `i18n:gate` | ✅ all declared surfaces clean |
+| i18n | `i18n:gate` | ✅ 8 surfaces clean — **and now actually runs in CI**; it was wired to no workflow (CLAUDE-1) |
 | RLS boundaries | 15 probes, fresh 307-migration replay, run 2× | ✅ 15/15 each time (F-015 made it repeatable) |
 | Authenticated routes | 353-route crawl | ✅ 351 ok, 1 gate redirect, 0 failures |
 | Public content routes | unknown-slug probe | ✅ 404s (was one 500 — see F-005) |
@@ -4897,3 +4930,100 @@ rather than running out of time — and restoring it byte-for-byte returns
 That last detail is the whole argument for this audit's method. The difference
 between a test that times out and a test that fails an assertion is the
 difference between not knowing and knowing.
+
+---
+
+> **Two sessions both labelled a pass “L”, for different work.** Everything
+> above (passes L–O) is this session's; what follows arrived on `main` from the
+> session running alongside it, and is relabelled **L′** so the two do not
+> collide. Its finding ID `F-L01` is left exactly as its author wrote it —
+> renumbering another worker's finding breaks every reference to it. Neither
+> side is dropped.
+
+---
+
+# Pass L′ (parallel session) — an invitee could rewrite the invite they were about to accept
+
+**F-L01 — privilege escalation: `guest` → `parent`, and into families never invited to.**
+
+`accept_invite` copies the invite's `role` straight into `family_members`. So
+whoever controls that column controls the role. `invites_update`, as 0118 left
+it, handed that control to the invitee:
+
+```sql
+create policy invites_update on public.invites for update
+  using (public.can_manage_family(family_id)
+         or lower(email) = lower(coalesce(auth.jwt()->>'email','')));
+```
+
+Two faults compound. The second arm gives the **invitee** update rights over
+their own invite row, with nothing constraining which columns. And because the
+policy declares `USING` with **no `WITH CHECK`**, Postgres reuses the USING
+expression as the check on the NEW row — an expression still satisfied by "the
+email is mine", so `family_id` and `expires_at` are unconstrained too.
+
+**Measured**, not argued: on a database replayed from these migrations, as
+`authenticated`, with controls proving RLS was live throughout.
+
+| | |
+|---|---|
+| invite role after the invitee's own UPDATE | **parent** |
+| `family_members.role` they ended up with | **parent** |
+| `can_manage_family` afterwards | **true** |
+| rows repointed to an **unrelated** family | **1** |
+| role obtained in that unrelated family | **parent** |
+
+The controls that make those numbers mean something — each run in the same
+session, as the same impersonated invitee:
+
+| Control | Result |
+|---|---|
+| `current_user` | `authenticated` (not the table owner) |
+| another person's invite visible | 0 rows — SELECT policy holding |
+| direct `family_members` insert | refused, 42501 |
+| updating someone else's invite | 0 rows — USING holding |
+| **updating my own invite** | **1 row — the hole** |
+
+So a person invited at the product's *lowest* privilege promotes themselves to
+family manager; and anyone holding a single pending invite can repoint it at any
+family id and become a manager of a household that never invited them.
+
+**The fix — 0298.** The invitee arm is not needed by anything: `accept_invite`
+is SECURITY DEFINER and writes `status`/`accepted_by` itself, and the only other
+update in the product is the admin revoke, which runs as the service role. So
+the policy now says what was meant, with an explicit `WITH CHECK` so a manager
+cannot push an invite into a family they do not manage either:
+
+```sql
+create policy invites_update on public.invites for update
+  using (public.can_manage_family(family_id))
+  with check (public.can_manage_family(family_id));
+```
+
+SELECT is deliberately unchanged — seeing an invite addressed to your own email
+is the invite flow working, not a leak.
+
+**Verification.** After 0298, on the same database: role rewrite **0 rows**,
+family pivot **0 rows**, expiry extension **0 rows**, while the invitee still
+reads their own invite, `accept_invite` still lands them at the **granted**
+role (`guest`), and re-accepting is still idempotent (0136 intact). Managers
+still revoke and amend their own invites and are refused (42501) when moving one
+out of their family.
+
+`docs/audit/invite-role-escalation-check.sql` makes it permanent and is
+**non-vacuous in both directions**: restoring the 0118 policy fails it with
+`INVITE-ESC FAIL: the invitee rewrote their own invite role (1 rows)`, and it
+passes again once 0298 is re-applied. 0298 applied twice is clean (LB-016 §4).
+
+No regression: the probe suite fails the same 6 probes with and without this
+change on this local harness — a pre-existing local-only artefact of the 3
+migrations that need pgvector, which CI has and this container does not.
+
+Full suite **13,658 / 13,658** under pinned UTC and `TZ=America/Los_Angeles`
+(one run in each zone hit **F-F05**, the known `api-ai-runs` 5s-timeout flake,
+which passes in isolation and on re-run — it is also, retroactively, the
+unidentified single failure reported in Pass J).
+
+**Status: FIXED IN CODE, NOT YET IN PRODUCTION.** This is a migration, so like
+0296 and 0297 it is inert until the F5 ledger blocker is cleared. **The
+escalation is live in production until then.**

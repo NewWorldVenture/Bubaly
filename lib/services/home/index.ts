@@ -23,6 +23,7 @@ import { recordActivitySafely } from '../activity';
 import { withIdempotency } from '../idempotency';
 import { dayKeyInTz, scopeNow } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
+import { escapeLike } from '@/lib/supabase/escape-like';
 
 export type ContractorRow = Tables<'home_contractors'>;
 export type ServiceRecordRow = Tables<'home_service_records'>;
@@ -34,10 +35,6 @@ const DAY_MS = 86_400_000;
 const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
 const PRIORITIES: Priority[] = ['low', 'medium', 'high'];
 const TRADE_VALUES = new Set(TRADES.map((t) => t.value));
-
-function escapeLike(value: string): string {
-  return value.replace(/[%_]/g, (m) => `\\${m}`);
-}
 
 // ── pure: issue → trade ───────────────────────────────────────────────────────
 

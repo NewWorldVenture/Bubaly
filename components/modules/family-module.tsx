@@ -171,6 +171,17 @@ export function FamilyModule() {
 
   const visibleMembers = showAllMembers ? activeMembers : activeMembers.slice(0, 12);
 
+  // can_manage_family() — the USING and WITH CHECK clause of fm_update, fm_insert
+  // and fm_delete — is true only for an ACTIVE parent/adult. Demote, deactivate
+  // or remove the last one and every household write evaluates false for
+  // everybody, with no way back from inside the product. Migration 0299 refuses
+  // it in the database, which is where the real guard has to live because these
+  // are direct PostgREST writes. This hides the menu so the screen stops
+  // offering an action the database will reject.
+  const managerCount = activeMembers.filter((m) => MANAGER_ROLES.includes(m.role)).length;
+  const isLastManager = (m: typeof activeMembers[number]) =>
+    managerCount <= 1 && MANAGER_ROLES.includes(m.role);
+
   if (loading) return <SkeletonList />;
   if (loadError) return <ErrorState message={loadError} onRetry={() => { setLoading(true); void load(); }} />;
 
@@ -251,7 +262,7 @@ export function FamilyModule() {
                 const age = memberAge(m.birthday);
                 return (
                   <div key={m.id} className="group relative flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-surface/20 p-4 text-center">
-                    {canManage && (
+                    {canManage && !isLastManager(m) && (
                       <div className="absolute right-1.5 top-1.5">
                         <button onClick={() => setMenuId(menuId === m.id ? null : m.id)} aria-label={`Manage ${m.display_name}`} className="grid h-6 w-6 place-items-center rounded-lg text-muted/60 opacity-0 transition hover:bg-elevated group-hover:opacity-100">
                           <MoreHorizontal className="h-4 w-4" />

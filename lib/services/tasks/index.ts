@@ -18,6 +18,7 @@ import { describeDbError } from '@/lib/supabase/errors';
 import { recordActivitySafely } from '../activity';
 import { keyedProbe, withIdempotency, type IdempotencyProbe } from '../idempotency';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
+import { escapeLike } from '@/lib/supabase/escape-like';
 
 export type TodoList = Tables<'todo_lists'>;
 export type TodoItem = Tables<'todo_items'>;
@@ -295,7 +296,7 @@ export async function searchTodos(scope: ServiceScope, input: SearchTodosInput =
   if (input.dueBefore) query = query.lte('due_date', input.dueBefore);
   if (input.query?.trim()) {
     const term = input.query.trim().replace(/[%_]/g, (m) => `\\${m}`);
-    query = query.ilike('title', `%${term}%`);
+    query = query.ilike('title', `%${escapeLike(term)}%`);
   }
 
   const { data, error } = await query;

@@ -1,5 +1,35 @@
 # Claude-3 — Backend / API / Database / Auth / Security
 
+## STATUS (this run — 2026-09-14, continuation session)
+
+CURRENT: Done. A prior Claude-3 session (content preserved below, under
+"Findings (prior session, preserved)") already did a full 141-route
+AUTHENTICATION mapping (Pass E, F-E01–F-E09, indexed in finalaudit.md) and
+Claude-1 has since done substantial additional backend/authz work in this same
+run (Pass G/H/I/J/K in finalaudit.md: the 58-sensitive-tables RLS sweep now at
+`0297`, service-role route inventory, cron/Twilio/rate-limiter verification,
+the auth-user pagination ceiling, wallet reconciliation vacuity, Stripe webhook
+ack semantics). This session's marginal contribution targeted what neither
+covered in depth: **authorization** (not just authentication) on a
+**per-resource** basis — does a route/query that knows who the caller is also
+verify the specific row belongs to them — plus a fresh check of how far the
+ILIKE-escaping fix (child sign-in) actually reached.
+COMPLETED: 4 new findings (1 HIGH, 1 MEDIUM, 2 recorded as
+VERIFIED/LOW-hygiene rather than open vulnerabilities, tested against the
+negative case rather than assumed); an 8-item "Verified healthy" section
+covering the `ServiceScope` abstraction (45 call sites, zero unsafe `extra`
+overrides in the wild), money/missions/inbox/billing/sync service-role
+authorization, and public-write scoping.
+NEXT: nothing queued. Possible follow-up for another worker: extend the
+ILIKE-escape fix (MEDIUM finding below) to the 5 listed call sites; fix the
+HIGH email-routing finding (`.eq()` instead of unescaped `.ilike()`).
+FILES-TOUCHED: audit/claude-3.md only. No source files modified, consistent
+with the audit-only brief.
+BLOCKERS: none.
+LAST-UPDATE: 2026-09-14
+
+---
+
 Findings only. Format:
 
 ```
@@ -42,7 +72,243 @@ only one that binds.
 
 ---
 
-## Findings
+## Findings — this session (2026-09-14 continuation)
+
+### [CLAUDE-3][HIGH][AUTHZ] Inbound email routing matches families by an unescaped ILIKE wildcard — one family's message can be filed into another's Contact Center inbox
+
+- **File/path:** `lib/contact-center/server.ts:62-73` (`resolveFamilyByEmailLocalResult`),
+  called from `app/api/contact-center/email/route.ts:83`; the attacker-controlled
+  input is parsed by `lib/contact-center/address.ts:120-125` (`parseRecipientLocal`).
+- **Problem:** `resolveFamilyByEmailLocalResult` resolves which family owns an
+  inbound `@bubaly.com` address with `.ilike('email_local', local)` where `local`
+  is used **as the ILIKE pattern itself**, not escaped, and not wrapped in a
+  fixed `%...%` — an exact case-insensitive match was clearly intended (the
+  function's own comment: "Resolve the family that owns a bubaly.com
+  local-part"). `local` comes straight from the inbound email's `To` header via
+  `parseRecipientLocal`, whose extraction regex explicitly **permits `_`**
+  (`[a-z0-9._-]*`) in the local-part it returns — `_` is the ILIKE
+  single-character wildcard. `%` is excluded by that same regex, so the
+  match-everything case is not reachable this way, but the single-character
+  wildcard is, and email local-parts are unauthenticated, provider-parsed
+  attacker input (this route's whole job is to accept mail from strangers).
+  This is the same defect class as the child sign-in ILIKE hole this repo
+  already shipped and fixed once (noted in Pass H's "Verified healthy" — "The
+  `ilike` wildcard hole is fixed and documented in place") — the fix did not
+  propagate here.
+- **Evidence:** Reproduced the actual ILIKE semantics (Postgres `_`/`%`, no
+  escaping) against representative stored values shaped exactly like this
+  table's real rows (`lib/contact-center/provision.ts` `candidateLocals`
+  produces `smith`, `smith2`, `smith-family`, `smith-home`, `smith-<hash>`):
+
+      $ node -e '
+      function ilikeToRegex(pattern) {
+        const esc = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+        return new RegExp("^" + esc.replace(/%/g, ".*").replace(/_/g, ".") + "$", "i");
+      }
+      const stored = ["smith","smith2","smith-family","jones","oconnor","patel3"];
+      for (const input of ["smit_","jone_","smith_family","_mith"]) {
+        console.log(JSON.stringify(input), "->", stored.filter(s => ilikeToRegex(input).test(s)));
+      }'
+      "smit_" -> [ 'smith' ]
+      "jone_" -> [ 'jones' ]
+      "smith_family" -> [ 'smith-family' ]     <- '_' matched the real '-'
+      "_mith" -> [ 'smith' ]
+
+  `parseRecipientLocal`'s regex (`lib/contact-center/address.ts:121`,
+  `[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?`) confirmed to accept every one of these
+  inputs verbatim ahead of the `@bubaly.com` it matches against — nothing
+  upstream strips or rejects the underscore.
+- **Impact:** An external sender (no account, no session — this is the
+  unauthenticated inbound-mail webhook, gated only by
+  `CONTACT_CENTER_INBOUND_SECRET`, which authenticates the *provider*, not the
+  *sender of the email the provider forwards*) who sends to an address that is
+  mostly-right but wrong by exactly one character, substituted with `_`, gets
+  routed to whichever real family's `email_local` happens to match — filing
+  their message into that family's private inbox
+  (`recordInboundMessage`), running the AI concierge over attacker-controlled
+  text, potentially firing the `🚨 Urgent` SMS escalation to the family's real
+  phone (`shouldNotifyFamily`), creating planner/paperwork rows
+  (`routeInboundToPlanner`, `fileInboundPaperwork`), and sending an auto-reply
+  **from the family's own identity** back to the attacker that confirms the
+  match and discloses the family's display name
+  (`familyLabel` in the reply). Because a `.maybeSingle()` 2-or-more-row
+  collision surfaces as a distinguishable `503` (`routed.error`) versus a clean
+  `200 {ok:true, skipped:'unknown address'}` for zero rows versus a normal
+  filed response for exactly one, the three-way response difference is a
+  working oracle for enumerating other families' `email_local` values
+  character-by-character with `_` substitution — no guessing required beyond a
+  plausible base name, which the feature already treats as non-secret (it's
+  handed to schools/doctors), but the exact-match guarantee is what stops a
+  near-miss from landing on a stranger.
+- **Recommended fix:** Escape `_` and `%` in `local` before using it as an
+  ILIKE pattern (`local.replace(/[%_]/g, (m) => `\\${m}`)`), matching the
+  pattern already used correctly elsewhere in this codebase (e.g.
+  `lib/services/calendar/index.ts:388`, `lib/services/groceries/index.ts:521`).
+  Better still: this call wants an *exact* case-insensitive match, not a
+  pattern match at all — `.eq('email_local', local.toLowerCase())` is both
+  simpler and removes the wildcard surface entirely (the unique index is
+  already on `lower(email_local)`, so case-insensitive equality is exactly
+  what the schema guarantees uniqueness for).
+- **Status:** OPEN
+
+### [CLAUDE-3][MEDIUM][DATA INTEGRITY] The ILIKE-escaping fix from the child sign-in bug was not applied to several free-text lookups that also drive writes
+
+- **File/path:** `lib/assistant/tools.ts:247,289,498,532` (reminder + RSVP
+  tools: `complete_reminder`, `snooze_reminder`, `get_event_rsvps`,
+  `rsvp_to_event`), `lib/services/calendar/index.ts:668` (`findEventByTitle`),
+  `lib/social/queries.ts:59` (`getFeed` search).
+- **Problem:** Each builds an ILIKE pattern as `` `%${title}%` `` (or
+  `` `%${opts.search}%` ``) directly from user/AI-supplied free text, with no
+  escaping of `%`/`_`. The sibling function
+  `lib/services/calendar/index.ts:388` (`listEvents`) escapes exactly this in
+  the same file, with a comment explaining why — "so a title containing '%'
+  does not silently widen the search" — so this is a known, previously-applied
+  fix that did not reach every call site that needed it, the same shape as
+  F-004/F-011 elsewhere in this audit (a fix that did not generalize).
+- **Evidence:**
+
+      $ grep -n "ilike('title'" lib/services/calendar/index.ts
+      388:      query = query.ilike('title', `%${term}%`);   // term is escaped 2 lines up
+      668:    .ilike('title', `%${needle}%`)                  // needle = title.trim() — NOT escaped
+
+  All affected call sites are already scoped with `.eq('family_id', ...)`
+  (verified by reading each — `ctx.familyId` in `assistant/tools.ts`,
+  `familyId` param in `calendar/index.ts:668`, `familyId` param in
+  `social/queries.ts`), so this is **not** a cross-family read; it never
+  reaches a row outside the caller's own family, unlike the finding above.
+- **Impact:** Within one family, a title/search term containing `%` or `_`
+  matches far more broadly than typed. Three of the five sites are **writes
+  driven by an ILIKE lookup** (`complete_reminder`, `snooze_reminder`,
+  `rsvp_to_event` in `assistant/tools.ts`): the AI assistant resolves "which
+  reminder/event did they mean" via this exact pattern and then mutates the
+  first match. A title that happens to contain `%` (copy-pasted from a coupon,
+  a grade, a percentage in an event name like "50% off — teacher conf") turns
+  "complete reminder about the 50% off sale" into a broadened match that can
+  silently complete or reschedule the **wrong** reminder, or RSVP to the wrong
+  event, with no error — a correctness/data-integrity bug, not an
+  authorization bypass, since it stays inside the caller's own family.
+- **Recommended fix:** Apply the same one-line escape already used at
+  `calendar/index.ts:388` and throughout `lib/services/*` (`term.replace(/[%_]/g,
+  (m) => \`\\${m}\`)`) at all five sites above, before interpolating into the
+  ILIKE pattern.
+- **Status:** OPEN
+
+### [CLAUDE-3][LOW][AUTHZ] Two server actions trust a client-supplied `familyId` with no session cross-check — backstopped by RLS, tested rather than assumed
+
+- **File/path:** `app/(app)/dashboard/moment-actions.ts` —
+  `addMomentGroceryAction` (`input.familyId`, line ~61-92) and
+  `createMomentReminderAction` (`input.familyId`, line ~107-124).
+- **Problem:** Both actions take `familyId` as a plain argument from the
+  client-side call (a server action's arguments are chosen by the calling
+  browser JS, not re-derived from the session) and use it directly in
+  `supabase.from('grocery_items'|'grocery_lists'|'reminders').insert({family_id:
+  input.familyId, ...})` via `createServer()` — with no
+  `requireUserContext()`-derived `ctx.active.familyId` comparison anywhere in
+  either function. This is the one inconsistency found against an otherwise
+  extremely uniform convention: every other sampled action/route in this audit
+  (`lib/wallet/server.ts` callers, `app/(app)/money/actions.ts`,
+  `lib/services/inbox/index.ts`, and all 40+ `scopeFromUserContext(ctx, ...)`
+  call sites — see Verified healthy) either derives `familyId` from `ctx`
+  directly or re-validates a passed one against it.
+- **Evidence:** Confirmed this is **not** exploitable against a family the
+  caller does not belong to, rather than assumed — checked the actual RLS
+  policy rather than trusting the convention:
+
+      $ grep -n "reminders\|grocery_lists\|grocery_items" supabase/migrations/0004_rls.sql
+      23:  'meals','meal_plans','grocery_lists','grocery_items',
+      26:  'documents','notes','goals','reminders',
+      ...
+      create policy %1$s_insert on public.%1$I for insert
+        with check (public.is_family_member(family_id))
+
+  All three tables are in `0004`'s generic family-scoped loop, so every insert
+  the RLS layer sees is checked against `is_family_member(family_id)` using
+  `auth.uid()` from the caller's own session — a `family_id` for a family the
+  caller does not belong to is rejected with `new row violates row-level
+  security policy`, regardless of what the action code does or doesn't check.
+  This matches the pattern Pass E already verified sound (no `using(true)` on
+  any family-scoped table) and the design position the codebase states
+  explicitly (`lib/constants/roles.ts`: *"the database RLS is the real
+  enforcement boundary"*).
+- **Impact:** **None against a stranger's family** — tested, not assumed. The
+  only live consequence: a caller who is a genuine member of **more than one**
+  family (the app supports this — co-parents, helpers) could write a grocery
+  item or reminder into a family that is not their currently *active* one if
+  they (or a compromised/buggy client) sent a different, still-own `familyId`.
+  That is a membership they already hold, so it is not a boundary crossing —
+  at most a confusing misfile, not a security bypass. Recorded because it is a
+  single point of failure (RLS alone, no defense in depth) in a codebase that
+  otherwise consistently double-checks, and because RLS regressing on exactly
+  these two functions would turn a LOW into something worse with no second
+  layer to catch it — unlike every other sampled write path.
+- **Recommended fix:** For consistency and defense-in-depth (not urgency),
+  derive `familyId` from `ctx.active.familyId` in both functions instead of
+  accepting it as a parameter, the same way `removeMomentGroceryAction` in the
+  same file already relies on RLS alone for a delete-by-id but at least takes
+  no writable identifier as input.
+- **Status:** VERIFIED (sound today; hygiene recommendation only)
+
+---
+
+## Verified healthy — this session
+
+Recorded so a later pass does not re-derive them. Each is a positive finding
+sampled and, where practical, checked against a negative case rather than
+inferred from convention.
+
+1. **The `ServiceScope`/`scopeFromUserContext` abstraction cannot be handed a
+   spoofed `familyId` in practice.** `lib/services/scope.ts:29` builds
+   `{ familyId: ctx.active.familyId, ... , ...extra }` — `extra` is spread
+   *last*, so a caller technically *could* override `familyId` through it.
+   Checked whether any of them do:
+
+       $ grep -rn "scopeFromUserContext(" app lib --include=*.ts --include=*.tsx | grep -v '\.test\.'
+       <45 call sites>
+
+   Every call site passes either `(ctx, db)` or `(ctx, db, { now })` — the one
+   `extra` in live use is a clock override for a scheduling feature, never
+   `familyId`. So while the function's signature *permits* the unsafe override,
+   nothing in the tree exercises it. Worth a type-level guard
+   (`Omit<Partial<ServiceScope>, 'familyId' | 'db'>` for `extra`) so a future
+   caller cannot introduce the bug the signature currently allows, but there is
+   no live instance today.
+2. **Money-moving server actions double-check every client-supplied id.**
+   `app/(app)/money/actions.ts` — `issueCardAction`, `setCardFrozenAction`,
+   `updateCardControlsAction`, `createCardRevealAction`,
+   `prepareCardRevealAction` — every one combines the client-supplied
+   `cardId`/`childWalletId` with `.eq('family_id', ctx.active.familyId)` in the
+   *same* service-role query before acting on it, i.e. authorization is
+   re-proven per call even though `createServiceClient()` bypasses RLS
+   entirely for these.
+3. **Chore/mission actions** (`app/(app)/missions/actions.ts`) scope every
+   `chore_assignments`/`chore_submissions`/`chore_disputes` read and write with
+   `.eq('id', X).eq('family_id', familyId)` from `ctx`, including the
+   service-role escalation path (line 180+).
+4. **Inbox service functions** (`lib/services/inbox/index.ts`
+   `markInboxMessageHandled`/`setInboxMessageStatus`) re-derive
+   `scope.familyId` and additionally gate on role (`mayFile`) before any write.
+5. **Billing** (`app/api/billing/{cancel,change-plan,checkout}/route.ts`):
+   `familyId` is always `ctx.active.familyId`; `change-plan`'s
+   `expectedFamilyId`/`expectedUserId` "review" path is a *confirmation* that a
+   freshly-refetched session still matches what the client last saw (guards a
+   stale-tab plan change), not a trust boundary — it is checked **against** a
+   fresh `getUserContext()`, never substituted for it.
+6. **Sync routes** (`app/api/sync/[provider]/{callback,disconnect,status}`,
+   `app/api/sync/google/*`): every service-role query is
+   `.eq('family_id', ctx.active.familyId).eq('user_id', ctx.user.id)`
+   together, so even a shared/family-visible `sync_accounts` row cannot be
+   disconnected by a different member's request carrying the same provider name.
+7. **Public unauthenticated writes** (`app/api/blog/{like,save}`,
+   `app/api/ai/gift`, `app/api/push/test`): each is IP- or user-scoped and
+   rate-limited (`enforceRequestRateLimit`), and `blog/save` correctly 401s
+   with no session rather than falling back to a visitor id.
+8. **`app/api/ai/{flyer,pantry-chef}`, `app/api/notifications/generate`**: all
+   three derive `familyId` from `ctx.active.familyId` via `createServer()`
+   (RLS-backed), never from the request body.
+
+---
+
+## Findings (prior session, preserved)
 
 ```
 [CLAUDE-3][CRITICAL][DATABASE/AUTHZ] Every child can read, edit and delete the family password vault
