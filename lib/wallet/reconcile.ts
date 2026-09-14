@@ -10,7 +10,22 @@
 //  3. Orphan reversal              — a `reversal` row pointing at a missing txn
 //  4. Reversal amount mismatch     — a reversal whose cents ≠ the row it reverses
 //  5. Stuck pending                — a non-completed txn older than the threshold
-//  6. Bucket sum drift             — Σ(bucket balances) ≠ wallet total (rounding leak)
+//  6. Unattributed money           — a completed entry that belongs to no bucket
+//
+// Check 6 replaces a "bucket sum drift" check that compared Σ(bucket balances)
+// against the wallet total. Both sides were accumulated from the same `v` in the
+// same loop — every entry added `v` to exactly one bucket AND to the total — so
+// the two could never disagree and the check could not fire for any input. It
+// reported a clean ledger by construction rather than by reconciliation.
+//
+// What it was reaching for is real, and this is it: an entry whose bucket is
+// unknown. `wallet_transactions.bucket_id` is ON DELETE SET NULL and the
+// allocation writer stores `bucketByKind.get(k) ?? null`, so completed money can
+// legitimately end up attached to no bucket. Folding it into `spend` — as the
+// display path in lib/wallet/ledger.ts deliberately does — is wrong HERE: this
+// module exists to surface what does not reconcile, and hiding the gap inside a
+// real bucket also corrupts that bucket's figure. So it is counted apart, and
+// the wallet total still includes it: total = Σ(buckets) + unattributed.
 
 import { signedValue, type Direction, type BucketKind } from '@/lib/wallet/ledger';
 
@@ -32,7 +47,7 @@ export type AnomalyKind =
   | 'orphan_reversal'
   | 'reversal_mismatch'
   | 'stuck_pending'
-  | 'bucket_drift';
+  | 'unattributed_bucket';
 
 export type Anomaly = {
   kind: AnomalyKind;
@@ -50,6 +65,8 @@ export type ReconReport = {
   netCents: number;
   pendingCount: number;
   reversalCount: number;
+  /** Completed cents that belong to no bucket. Counted in the wallet total, in no bucket. */
+  unattributedCents: number;
   anomalies: Anomaly[];
   healthy: boolean;
 };
@@ -68,10 +85,12 @@ export function reconcileLedger(txns: ReconTxn[], now: Date = new Date()): Recon
   let debitVolumeCents = 0;
   let pendingCount = 0;
   let reversalCount = 0;
+  let unattributedCents = 0;
 
   // Per-wallet aggregation
   const walletTotals = new Map<string, number>();
   const walletBuckets = new Map<string, Record<BucketKind, number>>();
+  const walletUnattributed = new Map<string, number>();
   const wallets = new Set<string>();
 
   for (const t of txns) {
@@ -118,13 +137,20 @@ export function reconcileLedger(txns: ReconTxn[], now: Date = new Date()): Recon
     if (t.child_wallet_id) {
       const v = signedValue({ direction: t.direction, amount_cents: t.amount_cents, status: t.status, bucket_kind: t.bucket_kind });
       walletTotals.set(t.child_wallet_id, (walletTotals.get(t.child_wallet_id) ?? 0) + v);
-      const buckets = walletBuckets.get(t.child_wallet_id) ?? { spend: 0, save: 0, give: 0, invest: 0, goal: 0 };
-      buckets[t.bucket_kind ?? 'spend'] += v;
-      walletBuckets.set(t.child_wallet_id, buckets);
+      if (t.bucket_kind) {
+        const buckets = walletBuckets.get(t.child_wallet_id) ?? { spend: 0, save: 0, give: 0, invest: 0, goal: 0 };
+        buckets[t.bucket_kind] += v;
+        walletBuckets.set(t.child_wallet_id, buckets);
+      } else if (v !== 0) {
+        // Completed, non-zero, and attached to no bucket. A pending row scores 0
+        // through signedValue and is the stuck-pending check's business, not this one.
+        walletUnattributed.set(t.child_wallet_id, (walletUnattributed.get(t.child_wallet_id) ?? 0) + v);
+        unattributedCents += v;
+      }
     }
   }
 
-  // Per-wallet anomalies: negative total, negative bucket, sum drift
+  // Per-wallet anomalies: negative total, negative bucket, unattributed money
   for (const walletId of wallets) {
     const total = walletTotals.get(walletId) ?? 0;
     if (total < 0) {
@@ -134,9 +160,7 @@ export function reconcileLedger(txns: ReconTxn[], now: Date = new Date()): Recon
       });
     }
     const buckets = walletBuckets.get(walletId) ?? { spend: 0, save: 0, give: 0, invest: 0, goal: 0 };
-    let bucketSum = 0;
     for (const k of Object.keys(buckets) as BucketKind[]) {
-      bucketSum += buckets[k];
       if (buckets[k] < 0) {
         anomalies.push({
           kind: 'negative_bucket', severity: 'high', childWalletId: walletId,
@@ -144,11 +168,16 @@ export function reconcileLedger(txns: ReconTxn[], now: Date = new Date()): Recon
         });
       }
     }
-    if (bucketSum !== total) {
+    // Medium, not high: the money is present and the wallet total is right — it
+    // is the attribution that is missing. Only a figure that is actually wrong
+    // (a negative balance, a broken reversal) should turn the ledger unhealthy.
+    const unattributed = walletUnattributed.get(walletId) ?? 0;
+    if (unattributed !== 0) {
       anomalies.push({
-        kind: 'bucket_drift', severity: 'low', childWalletId: walletId,
-        detail: `Wallet ${walletId} bucket sum (${bucketSum}¢) ≠ total (${total}¢)`,
-        amountCents: bucketSum - total,
+        kind: 'unattributed_bucket', severity: 'medium', childWalletId: walletId,
+        detail: `Wallet ${walletId} has ${unattributed}¢ completed in no bucket `
+          + `(total ${total}¢); its bucket_id is null or names a bucket that no longer exists`,
+        amountCents: unattributed,
       });
     }
   }
@@ -161,6 +190,7 @@ export function reconcileLedger(txns: ReconTxn[], now: Date = new Date()): Recon
     netCents: creditVolumeCents - debitVolumeCents,
     pendingCount,
     reversalCount,
+    unattributedCents,
     anomalies,
     healthy: anomalies.filter((a) => a.severity === 'high').length === 0,
   };
@@ -172,7 +202,7 @@ const ANOMALY_LABELS: Record<AnomalyKind, string> = {
   orphan_reversal: 'Orphan reversal',
   reversal_mismatch: 'Reversal amount mismatch',
   stuck_pending: 'Stuck pending transaction',
-  bucket_drift: 'Bucket sum drift',
+  unattributed_bucket: 'Money in no bucket',
 };
 
 export function anomalyLabel(kind: AnomalyKind): string {
