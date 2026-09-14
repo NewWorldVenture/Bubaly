@@ -3513,7 +3513,15 @@ edited or removed.
 | | Severity | Finding | Source |
 |---|---|---|---|
 | **F-G09** | HIGH | Health records readable **and writable** by a child. The **write half on prescriptions is fixed** by `0299`: `medications` and `medication_schedules` are managers-only, proven behaviourally. Still open, and filed as owner decisions rather than guessed at — **reads** (a child can still read a parent's prescription; narrowing SELECT would hide family-wide rows from children), and **`immunizations` / `health_visits`**, whose modules carry no role gate at all, so tightening the database alone would leave a UI whose Add button fails. `medication_doses` is deliberately left member-writable: the person taking the medicine records it. | `0299` + `docs/audit/prescription-write-boundary-check.sql`; the rest in `audit/claude-1.md` A3-009 |
+| **F-G12** | LOW | **Two icon-only buttons had no accessible name; one deletes a guardian contact.** Found by Pass G's Claude-2. Fixed with `aria-label` following the house pattern, the two strings taking each locale's own existing translation of "Edit" and "Delete" rather than an invented one. Guarded by a scan of every single-line `<button>` in `app/` and `components/`: two unnamed controls out of several hundred icon buttons, so this is a guard against the third rather than a campaign. | `tests/icon-only-buttons-have-a-name.test.ts` |
 | F-G07 | LOW | `demo_sessions` and `demo_email_uses` exist in the schema and no code reads them. Deliberately not actioned: dropping production tables is not worth the risk for tidiness. | `audit/claude-1.md` |
+
+One Pass G finding is recorded as **not** a defect: C2-12 reported `/sitemap.xml`
+and `/robots.txt` as links to routes that do not exist. Next serves both from
+file conventions — `app/sitemap.ts` and `app/robots.ts` are metadata routes the
+framework mounts — so a scanner looking for `{page,route}` files could not match
+them. The correction sits beside the original claim in `audit/claude-1.md`
+rather than replacing it in Claude-2's file.
 
 Pass G's Claude-2 recorded 17 frontend findings (dead Tailwind utilities verified
 against the built CSS, keyboard access on content rows, icon-only control names,

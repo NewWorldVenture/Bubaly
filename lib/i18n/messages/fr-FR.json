@@ -3579,6 +3579,8 @@
   "contactList.allTrustLevels": "Tous les niveaux de confiance",
   "contactList.cancel": "Annuler",
   "contactList.contactRemoved": "Contact supprimé",
+  "contactList.delete": "Supprimer",
+  "contactList.edit": "Modifier",
   "contactList.emailOptional": "E-mail (facultatif)",
   "contactList.name": "Nom *",
   "contactList.noContactsFound": "Aucun contact trouvé.",

@@ -1234,3 +1234,55 @@ NOT INCLUDED, deliberately:
                  what chores exist for.
   habit_logs     A habit log is the logger's own record by construction.
 ```
+
+## A3-012 — Claude-2's two unnamed destructive buttons, and one correction
+
+```
+[CLAUDE-1][LOW][A11Y] Two icon-only buttons had no accessible name; one deletes a contact
+Path:     components/guardian/contact-list.tsx:242-243
+Source:   Claude-2 of this session, [CLAUDE-2][LOW][A11Y] C2-11. Verified here.
+Problem:  Edit and Delete rendered as a bare <Pencil/> and <Trash2/> with no
+          aria-label, no title and no sr-only text. A screen reader reads
+          "button" twice, and one of them deletes a guardian contact.
+Fix:      aria-label on both, following the house pattern at
+          devices-module.tsx:97-98. The two strings are added to every locale
+          that carries the catalogue, each taking that file's OWN existing
+          translation of "Edit" and "Delete" (its `devices.edit`/`devices.delete`
+          values) rather than an invented one. The four regional overlays
+          (en-GB, es-MX, es-US, fr-CA) carry neither key and fall back, which is
+          how every other key in those files already works.
+Status:   FIXED
+Guard:    tests/icon-only-buttons-have-a-name.test.ts scans every single-line
+          <button> in app/ and components/ and flags one whose body is nothing
+          but self-closing elements and which carries no aria-label,
+          aria-labelledby, title, sr-only text or translation call. Non-vacuity
+          proven: removing the two aria-labels fails it, naming
+          contact-list.tsx:245 and :246.
+          Claude-2's overall result stands and is worth keeping visible: two
+          unnamed controls out of several hundred icon buttons. This is a guard
+          against the third, not a campaign.
+```
+
+## A3-013 — a correction to a finding, recorded rather than edited into someone else's file
+
+```
+[CLAUDE-1][INFO][CORRECTION] C2-12 ("two admin links point at routes that exist only at runtime") is a false positive
+Path:     app/(app)/admin/marketing/seo/page.tsx:86-87 · app/sitemap.ts · app/robots.ts
+Claim:    Claude-2's link scanner reported /sitemap.xml and /robots.txt as the
+          only two literal internal hrefs with no matching page.tsx, route.ts or
+          public/ file.
+Why it is not a defect:
+          Next.js serves both from FILE CONVENTIONS, not from route files.
+          `app/sitemap.ts` and `app/robots.ts` are metadata routes: they export a
+          default function and the framework mounts them at /sitemap.xml and
+          /robots.txt. `ls app/sitemap* app/robots*` shows both present. The
+          scanner was looking for `{page,route}.{tsx,ts}` and public/ files, so
+          these two could not match by construction.
+          My own tests/internal-links-resolve.test.ts hits the same edge and
+          allowlists them by name with that reason written down, which is why it
+          passes on a tree where C2-12 reports two failures.
+Disposition: No change. Recorded here rather than edited into audit/claude-2.md —
+          rule 1 says a worker's file is theirs, and a correction that erases the
+          original claim is worth less than one that sits beside it.
+Status:   VERIFIED (not a defect)
+```
