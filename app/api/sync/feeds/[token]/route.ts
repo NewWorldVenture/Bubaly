@@ -57,7 +57,7 @@ export async function GET(
   // `.limit(2000)` is not a bound — PostgREST caps a response at db-max-rows
   // whatever the client asked for, so a busy calendar published 1,000 events and
   // called that the feed. `id` breaks ties so two pages cannot overlap or skip.
-  const { rows } = await readAll((from, to) => supabase
+  const { rows, error: eventsError } = await readAll((from, to) => supabase
     .from('sync_calendar_events')
     .select('id, uid, title, description, location, starts_at, ends_at, all_day, recurrence_rule, status, updated_at')
     .eq('calendar_id', calendar.id)
@@ -66,6 +66,28 @@ export async function GET(
     .order('starts_at', { ascending: true })
     .order('id')
     .range(from, to), { max: 2000 });
+
+  // A short feed is not a short calendar — it is a DELETION instruction.
+  //
+  // An ICS subscription is authoritative for the calendar it names: Apple
+  // Calendar, Outlook and Google reconcile their local copy against whatever the
+  // feed returns, so an event absent from a 200 is an event the client removes.
+  // Answering with the rows gathered before a failed page would therefore empty
+  // a family's subscribed calendar on every device that polls it, silently, and
+  // the next successful poll would put them back — an appointment that vanishes
+  // and reappears is worse than one that never loaded.
+  //
+  // 503 with Retry-After is the honest answer: every subscriber keeps the copy
+  // it has. The cron on the other side of this seam
+  // (app/api/cron/calendar-feeds) already checks this same read's error; this
+  // route was the one that did not.
+  if (eventsError) {
+    console.error('[sync-feed] event read failed; refusing to publish a short feed', { calendarId: calendar.id, error: eventsError });
+    return new NextResponse('Calendar temporarily unavailable', {
+      status: 503,
+      headers: { 'Retry-After': '300', 'Cache-Control': 'no-store' },
+    });
+  }
 
   const events: IcsEvent[] = (rows ?? []).map((e) => ({
     uid: e.uid ?? `${e.id}@bubaly.com`,

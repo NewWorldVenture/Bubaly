@@ -4256,3 +4256,94 @@ first appears inside `ensureVapid`, eighty lines **above**. The slice was empty 
 the case passed on nothing until I asserted its length. Searching forward from the
 marker fixes it. Same family as the binding-in-the-wrong-function mistakes earlier in
 this audit: an anchor that matches an earlier occurrence than the one meant.
+
+---
+
+## Pass BG — a public feed that answered 200 with someone else's calendar deleted
+
+**[CLAUDE-1][HIGH][INTEGRATIONS] `app/api/sync/feeds/[token]/route.ts:60` discarded
+`readAll`'s error and published whatever rows it had gathered. — FIXED**
+
+The second half of a seam I named on my own status board long ago and had never
+closed. No other worker reached it: Claude-2 does not audit route handlers,
+Claude-3's integration sweep stopped at the OAuth adapters, Claude-4's flow work
+covers the in-app calendar and not the subscription.
+
+### Why a partial read is worse here than anywhere else in the repo
+
+Forty-odd `readAll` sites in this codebase; roughly a third drop the error. On a
+page that renders a list, that is a display bug — the user sees less than there
+is and reloads. This one is different in kind, and the difference is the ICS
+protocol, not the code:
+
+> **A subscriber does not merge a feed. It reconciles against it.**
+
+Apple Calendar, Outlook, Google ("From URL") and Alexa treat the feed as the
+authoritative statement of that calendar's contents. An event that was present
+last poll and is absent from this 200 is an event the client **removes from the
+user's calendar**. So the failure mode was not "the feed looks short". It was:
+
+- a transport blip on page two of a 1,500-event calendar →
+- `readAll` returns 1,000 rows **and** the error →
+- the route reads only `rows` and serves them with `200 text/calendar` →
+- every subscribed device deletes the other 500 appointments, silently →
+- the next successful poll puts them all back.
+
+An appointment that vanishes and reappears costs more trust than one that never
+loaded, because the family stops believing the calendar rather than the network.
+
+### The asymmetry that made this findable
+
+`app/api/cron/calendar-feeds/route.ts:26` — the **other side of the same seam**,
+reading the same way through the same helper — does check:
+
+```ts
+if (error) {
+  console.error('Calendar-feed cron read failed:', error);
+  return NextResponse.json({ error: t('…') }, { status: 500 });
+}
+```
+
+The inbound half was careful; the outbound half was not. An isolated omission on
+the one route where it costs the most.
+
+### Fix
+
+Destructure `error: eventsError` and answer **503 with `Retry-After: 300` and
+`Cache-Control: no-store`** rather than publish a short feed. 503 is the honest
+answer because it leaves every subscriber holding the copy it already has —
+which, for a reconciling client, is the *only* non-destructive response to "I
+could not read the calendar". The reasoning is written into the route so the
+next person to touch it does not reintroduce the destructure.
+
+### A second, quieter deletion instruction — measured, left as designed
+
+`{ max: 2000 }` is a **silent** ceiling: `readAll` returns exactly 2,000 rows and
+`error: null`, so a calendar holding more publishes a truncated feed with no
+failure anywhere. That is the same deletion instruction by another route.
+
+I did not raise it, because the ordering makes it safe and the ordering is the
+reason: the read is `.order('starts_at', { ascending: true })`, so the cut falls
+at the far end of a 400-day horizon, where the rolling window recovers it on a
+later poll. That safety is **load-bearing and undocumented** — reorder this read
+by `id` (which reads like a harmless stability tweak, and `id` is already the
+tiebreaker on the next line) and the cut lands on arbitrary events: next week's
+dentist appointment as readily as a birthday fourteen months out. So the guard
+pins the ordering as a property, not the ceiling as a number.
+
+### Guard — `tests/a-calendar-feed-never-publishes-a-short-list.test.ts`
+
+Drives the real handler against a fake PostgREST that can fail mid-page.
+
+| Case | Asserts |
+| --- | --- |
+| healthy read | 200, `text/calendar`, every UID present |
+| **page two fails** | **not 200**; 503 + `Retry-After: 300` + `no-store`; body carries no `BEGIN:VCALENDAR` and none of the 1,000 rows it *did* hold |
+| 1,500 events, nothing failing | 200 with `evt-0` **and** `evt-1499` — **not blind**: the 503 is keyed on the error, not on a multi-page read |
+| ordering | first `.order()` on the events read is `starts_at` ascending |
+| unknown token | 404 preserved |
+
+**Planted and proven**: with the fix stashed, the route answered **200** and the
+second case went red while the other four stayed green. The control case is the
+one that matters here — an earlier version of this guard would have passed on any
+route that 503'd unconditionally.
