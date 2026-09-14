@@ -370,7 +370,10 @@ export function MigrateWizard() {
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => { e.preventDefault(); addFiles(e.dataTransfer.files); }}
             onClick={() => inputRef.current?.click()}
-            className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border bg-surface/30 p-8 text-center transition hover:border-brand/40 hover:bg-elevated"
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); inputRef.current?.click(); } }}
+            role="button"
+            tabIndex={0}
+            className="focus-ring flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border bg-surface/30 p-8 text-center transition hover:border-brand/40 hover:bg-elevated"
           >
             <Upload className="h-8 w-8 text-muted" />
             <p className="mt-2 text-sm font-medium">{tr('migrateWizard.dropFilesHereOrClickTo')}</p>

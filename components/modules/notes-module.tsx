@@ -267,14 +267,22 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
           return (
             <div key={note.id} onClick={() => onOpen(note)}
               className="group flex cursor-pointer items-center gap-4 px-4 py-3 hover:bg-elevated/30 transition">
-              <div className="flex-1 min-w-0">
+              {/* The row's onClick is a mouse convenience and stays. This button is
+                  the control: a real <button> rather than role="button" on the row,
+                  because the row holds the pin, copy and delete buttons and a role
+                  with presentational children would tell assistive technology to
+                  ignore them. It wraps the content region that was already the
+                  visual target, so its accessible name is the note's title and
+                  preview and nothing moves. */}
+              <button type="button" onClick={(e) => { e.stopPropagation(); onOpen(note); }}
+                className="focus-ring flex-1 min-w-0 rounded text-left">
                 <div className="flex items-center gap-2">
                   {checklist && <CheckSquare className="h-3.5 w-3.5 flex-shrink-0 text-success" />}
                   <p className="truncate text-sm font-semibold">{note.title ?? 'Untitled'}</p>
                   {note.is_pinned && <Pin className="h-3 w-3 flex-shrink-0 text-brand-text" />}
                 </div>
                 <p className="truncate text-xs text-muted">{note.body?.replace(/^\[[ x]\]\s*/gim, '').slice(0, 80)}</p>
-              </div>
+              </button>
               {checklist && <span className="text-xs text-success">{checkCount}/{totalCheck}</span>}
               <span className="hidden text-xs text-muted sm:block">{fmtRelative(note.updated_at)}</span>
               <div className="flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 transition" onClick={(e) => e.stopPropagation()}>
@@ -314,6 +322,13 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
               color.bg, color.ring,
             )}>
             {note.is_pinned && <Pin className="absolute right-3 top-3 h-3.5 w-3.5 text-brand-text" />}
+            {/* Same reasoning as the list row: the card's footer holds the pin and
+                delete buttons, so the card itself must not take role="button". The
+                button wraps the title and the body preview — the region that was
+                already the click target — so a titleless note is still named by its
+                body text and no card gains a label it did not show before. */}
+            <button type="button" onClick={(e) => { e.stopPropagation(); onOpen(note); }}
+              className="focus-ring flex flex-1 flex-col rounded text-left">
             {note.title && <p className="mb-2 pr-5 text-sm font-bold leading-tight">{note.title}</p>}
             {checklist ? (
               <div className="flex-1 space-y-0.5 overflow-hidden">
@@ -336,6 +351,7 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
             ) : (
               <p className="flex-1 line-clamp-5 text-xs leading-relaxed text-muted">{note.body}</p>
             )}
+            </button>
             <div className="mt-3 flex items-center justify-between border-t border-border/30 pt-2">
               <div className="flex items-center gap-1.5 text-[10px] text-muted">
                 {checklist && <span className="text-success">{checkCount}/{totalCheck}</span>}

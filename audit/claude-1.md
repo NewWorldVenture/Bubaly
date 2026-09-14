@@ -1572,3 +1572,162 @@ component fails a test about authentication copy, for a reason unrelated to the
 author's intent. 28 short strings in the active locale is a few hundred bytes
 against the marketing scope's 2 KB, and the alternative is a guard that punishes the
 right change.
+
+---
+
+## Pass Y — the other half of U-05: controls a mouse can operate and a keyboard cannot
+
+### [CLAUDE-1][HIGH][A11Y] 22 click targets were reachable by mouse only — and the obvious fix would have undone Pass X
+
+- **Status:** FIXED (all 22), commit in this branch
+- **Files:** `components/modules/calendar-module.tsx:620,639,687,732,816` ·
+  `notes-module.tsx:268,311` · `photos-module.tsx:327,376,404` ·
+  `recipes-module.tsx:308` · `contacts-module.tsx:191` · `meals-module.tsx:372,413` ·
+  `goals-module.tsx:134` · `documents-module.tsx:613` · `scan-module.tsx:115` ·
+  `components/migrate/migrate-wizard.tsx:369` · `chores-module.tsx:225` ·
+  `locator-module.tsx:221` · `components/guardian/contact-list.tsx:276` ·
+  `rules-editor.tsx:253`
+- **Problem:** `<div onClick={…} className="cursor-pointer …">` with no `role`, no
+  `tabIndex` and no key handler. Not focusable, so Tab never reaches it and Enter
+  never fires. WCAG 2.1.1 Keyboard, **Level A**.
+
+**Claude-2 recorded 44 sites and estimated "roughly half" were harmless dismiss
+catchers.** Recounted with an AST scanner against the current tree: 49 non-native
+`onClick` elements, of which 21 are empty `inset-0` catchers, 7 are
+`stopPropagation`-only wrappers, and **22 are defects**. Claude-2's list also named
+`files-hub-module.tsx`, which is already correct — its dropzone is a real
+`<button type="button">` (line 302) and its only div-onClick is an empty catcher. It
+was the one entry listed without a line number, which was the tell.
+
+Five sites its list did not reach: `components/app/blog-launcher.tsx`,
+`marketing/consent-manager.tsx`, `ui/modal.tsx` (all three already correct — `aria-hidden`
+scrims), and `guardian/contact-list.tsx` + `rules-editor.tsx`, which are not.
+
+### Why `role="button"` on the row is the wrong fix, and this is the point of the pass
+
+Claude-2's recommended fix was `role="button" tabIndex={0} onKeyDown` plus an
+`aria-label`. That is right for a leaf and **wrong for 8 of the 22**, because
+`role="button"` has **presentational children**: ARIA states that assistive
+technology may drop the semantics of every descendant, and that authors MUST NOT put
+interactive elements inside such a role. The note row holds the Pin, Copy and Delete
+buttons whose `aria-label`s Pass X had just added. Putting `role="button"` on that row
+would have traded a Level A failure for silencing the labels from the previous tranche.
+
+So the fix splits by shape, and the scanner reports which shape each site is:
+
+| shape | sites | fix |
+|---|---|---|
+| leaf activation | 6 | `role="button" tabIndex={0} onKeyDown` — name comes from its own contents |
+| upload dropzone | 3 | same; the hidden `<input>` is `display:none`, so not a descendant that can be silenced |
+| row holding its own buttons | 8 | a real nested `<button>` over the content region; the row keeps its `onClick` as a mouse convenience |
+| empty-slot cell | 2 | a real `<button>`, because the cell's handler fired only when the cell was empty and the remove button only when it was full — never both |
+| mouse-only dismissal | 3 | Escape, not a tab stop |
+
+No `aria-label` where the element already shows text: `role="button"` takes its name
+from its contents, and the calendar chip already shows the title and the time. A fixed
+label would replace that with something less useful and break WCAG 2.5.3 Label in Name.
+Three new keys only, in all seven catalogues, for the two cases with no visible text
+(a photo tile, an empty meal slot) and the lightbox's dialog name.
+
+### The keyboard trap the pass surfaced on the way
+
+`photos-module.tsx`'s lightbox covers the screen and had **no key handling at all** —
+Escape did nothing, and the only way out was clicking the backdrop. WCAG 2.1.2 No
+Keyboard Trap, Level A. It mattered more the moment the tiles that open it became
+operable: the fix for 2.1.1 would have walked users into a trap. It now closes on
+Escape and moves with the arrows, since the Previous/Next buttons already sit either
+side of the image.
+
+Both Guardian editors (`contact-list.tsx`, `rules-editor.tsx`) declare
+`role="dialog" aria-modal="true"` and build the shell by hand instead of through
+`components/ui/modal.tsx`, **which handles Escape** — so neither closed on Escape and
+both scrims were mouse-only and in the accessibility tree. Fixed in place; that they
+duplicate `ui/modal.tsx` rather than use it is recorded, not refactored.
+
+### The instrument, and five bugs in it
+
+`scripts/audit-keyboard-operable.mjs`. Every exemption is **structural**, derived from
+the code — a list of filenames would go stale the first time one of those files gained
+a real control and nothing would say so. The dismissal exemption is conditional on
+Escape being wired somewhere in the same file, which is deliberately coarse in the
+direction that over-reports.
+
+Getting the count honest took five corrections, each now a comment in the script and a
+test case:
+
+1. **A zero-argument call is not a dismissal.** `onlyDismisses` looked for a non-off
+   argument and found none in `inputRef.current?.click()` — silently exempting all
+   three upload dropzones.
+2. **`hidden sm:inline-flex` is not `hidden`.** Reading a bare `/hidden/` made the
+   contacts row look like a leaf when it holds a call button and a mailto link — the
+   one distinction that decides whether the row may take `role="button"`.
+3. **`aria-hidden` is the airtight exemption for a scrim**, not "the handler is named
+   onClose". Three of the five newly-surfaced sites were already correct that way.
+4. **The nested-button exemption must match the ACTION, not the shape.** Compared by
+   called-function name, ignoring `stopPropagation`/`preventDefault` — the contacts row
+   toggles, so its nested button must stop propagation or the row's handler fires second
+   and toggles straight back.
+5. **And that exemption must not cover a dismissal.** The lightbox backdrop dismisses
+   with `setLightboxIdx(null)` and its Previous/Next buttons navigate with the **same
+   setter**, so the exemption matched and hid a full-screen overlay with no Escape
+   handler. Caught only by noticing the reverted count was 21 where the first probe said
+   22.
+
+`tests/every-click-can-be-made-with-a-keyboard.test.ts` — 20 cases: the sweep must be
+empty, 6 positive controls, 12 negative controls, and the two ways the nested-button
+exemption was too generous. Reverted all 14 component files: the sweep fails naming all
+22 sites and the other 19 cases still pass, which is the proof they are decoupled.
+
+### One defect this pass introduced, caught by lint
+
+The `chores-module.tsx` Escape effect landed **after** `if (loading) return …` — a
+conditionally-called hook, which breaks the hook order on the first render that resolves.
+`react-hooks/rules-of-hooks` named it. Moved above the early returns. Third time this
+session a mechanical insertion needed a compiler or linter rather than a reading to catch.
+
+### Declined
+
+`git checkout -- lib/i18n/messages/` was **not** used to revert the catalogues for the
+proof — earlier in this session that exact command discarded an uncommitted new key and
+broke six locales' parity. The 14 component files were copied out first and restored
+from the copies.
+
+The initial catalogue edit sorted the keys, which reordered all seven files: a
+**5,700-line diff for 3 keys**. Reverted and redone by inserting each key after its
+nearest existing namespace sibling: 21 insertions, 3 per file. The catalogues are not
+sorted and this pass does not sort them.
+
+### A third guard that made a correct fix look like a regression
+
+`tests/photos-a11y-labels.test.ts:55` failed on the photos list row. Its last case
+re-implemented the icon-button check as a **line heuristic**: for each `<button`, join
+the next five lines and call it unnamed if that window holds an icon component and no
+visible text.
+
+The window is the flaw. The list row's open button begins with a conditional
+thumbnail — five lines of `<Play />` and an `<img>` — and the caption that **names**
+it is eleven lines further down. So the guard reported a button whose accessible name
+is its own visible text.
+
+Adding an `aria-label` to satisfy it would have been wrong twice: it overrides that
+visible caption (WCAG 2.5.3 Label in Name) and invents a name for a control that
+already has a better one. Instead the case now delegates to
+`scripts/audit-icon-button-labels.mjs`, which parses the real JSX and is **strictly
+more accurate** than the window it replaces — the same scanner that already sweeps
+the whole app in `tests/every-icon-button-has-a-name.test.ts`, kept here pinned to
+the file where A-05 was found. The three cases that pin specific label strings are
+untouched.
+
+Proved it still catches what it was written for, rather than merely made to pass:
+stripping `aria-label={tr('photos.editPhotoDetails')}` fails 2 of 4 cases and names
+`components/modules/photos-module.tsx:385`.
+
+**Third instance of this class in the session** — after
+`tests/mobile-fullscreen-panel-safe-area.test.ts` anchoring on a dead CSS class
+(P-04) and `tests/wallet-allowance-persistence.test.ts` asserting the exact text of a
+defective UPDATE (W-02). The shape is always the same: a guard that pins an
+implementation detail rather than the property it is named for, so the correct fix is
+what turns it red.
+
+`fs` has been an unused import in that file since before this pass; eslint does not
+flag it and it is left alone rather than widening the diff.

@@ -612,9 +612,12 @@ export function DocumentsModule() {
           <input ref={fileInputRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0] ?? null; setFile(f); if (f && !form.title) setForm((prev) => ({ ...prev, title: f.name })); }} />
           <div
             onClick={() => fileInputRef.current?.click()}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInputRef.current?.click(); } }}
+            role="button"
+            tabIndex={0}
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0] ?? null; setFile(f); if (f && !form.title) setForm((prev) => ({ ...prev, title: f.name })); }}
-            className="cursor-pointer rounded-xl border-2 border-dashed border-border p-8 text-center transition hover:border-brand/50"
+            className="focus-ring cursor-pointer rounded-xl border-2 border-dashed border-border p-8 text-center transition hover:border-brand/50"
           >
             <Upload className="mx-auto mb-3 h-8 w-8 text-muted/60" />
             {file ? (

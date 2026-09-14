@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, Trash2, ToggleLeft, ToggleRight, ChevronDown, ChevronUp, GripVertical } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { TRUST_LABELS, TRUST_LEVELS, TRUST_ICONS, type TrustLevel } from '@/lib/guardian/trust';
@@ -248,9 +248,19 @@ function NewRuleModal({ onSave, onClose }: { onSave: (f: NewRuleForm) => void; o
     setForm(p => ({ ...p, contexts: p.contexts.includes(c) ? p.contexts.filter(x => x !== c) : [...p.contexts, c] }));
   }
 
+  // Both Guardian editors declare role="dialog" aria-modal="true" and build the
+  // shell by hand rather than through components/ui/modal.tsx, which handles this
+  // — so neither closed on Escape. A keyboard user could open the editor and the
+  // only way out was the Cancel button; the backdrop was mouse-only.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} aria-hidden />
       <div
         role="dialog"
         aria-modal="true"

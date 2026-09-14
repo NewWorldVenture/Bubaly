@@ -334,8 +334,13 @@ export function RecipesModule() {
                   </button>
                 </div>
 
-                {/* Info */}
-                <div className="flex flex-1 flex-col p-4">
+                {/* The card's onClick stays for the mouse. The control is this
+                    button over the info region: the card also holds the favourite
+                    toggle, and role="button" on the card would have presentational
+                    children, so assistive technology may drop that toggle. Its
+                    accessible name is the recipe name and description. */}
+                <button type="button" onClick={(e) => { e.stopPropagation(); setViewing(recipe); }}
+                  className="focus-ring flex flex-1 flex-col p-4 text-left">
                   <h3 className="mb-1 line-clamp-2 font-semibold leading-tight">{recipe.name}</h3>
                   {recipe.description && <p className="mb-2 line-clamp-2 text-xs text-muted">{recipe.description}</p>}
 
@@ -349,7 +354,7 @@ export function RecipesModule() {
                       <span className="ml-auto text-success">{recipe.times_made}{tr('recipes.made')}</span>
                     )}
                   </div>
-                </div>
+                </button>
               </div>
             );
           })}

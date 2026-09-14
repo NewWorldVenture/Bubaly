@@ -87,6 +87,18 @@ export function LocatorModule() {
 
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 30000); return () => clearInterval(t); }, []);
 
+  // Both dropdowns were dismissed by clicking the page wrapper — mouse only, so
+  // a keyboard user could open the map-style or More menu and not close it. The
+  // wrapper's onClick stays for the mouse; Escape is the keyboard equivalent.
+  useEffect(() => {
+    if (!styleOpen && !moreOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setStyleOpen(false); setMoreOpen(false); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [styleOpen, moreOpen]);
+
   const { data: locations, loading: locationsLoading, error: locationsError, refresh: refreshLocations } = useRealtimeQuery<MemberLocation>({
     table: 'member_locations', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('member_locations').select('*').eq('family_id', familyId),

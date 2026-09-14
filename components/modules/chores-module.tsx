@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useRef } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Plus, LayoutTemplate, Trophy, Flame, Gift, Star, MoreVertical,
@@ -206,6 +206,17 @@ export function ChoresModule() {
     if (!result.ok) return toastError(result.error);
     success(manager ? 'Reward redeemed!' : 'Redemption requested');
   }
+
+// The open row menu was dismissed by clicking anywhere on the page wrapper —
+  // a mouse-only dismissal. A keyboard user could open the menu and had no way
+  // to close it. The wrapper's onClick stays as the mouse convenience; Escape is
+  // the keyboard's equivalent, and neither is a control worth a tab stop.
+  useEffect(() => {
+    if (!menuFor) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuFor(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [menuFor]);
 
   if (loading) return <SkeletonList count={6} />;
   // The rewards read matters too: it is what the redemption list is priced

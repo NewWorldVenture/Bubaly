@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readUiSource } from './helpers/i18n-source';
 import fs from 'node:fs';
+import { auditIconButtonLabels } from '../scripts/audit-icon-button-labels.mjs';
 
 // A-05 (agent-05 / CLAUDE-FRONTEND-01, PLA-0822): the Photos module had 8 icon-only
 // controls with NO accessible name (WCAG 2.2 AA 4.1.2 Name/Role/Value) — the photo
@@ -38,20 +39,27 @@ describe('photos module icon-only controls have accessible names (A-05 a11y)', (
   });
 
   it('no icon-only <button> is left without an accessible name', () => {
-    // Every <button ...> that renders only an icon component must carry aria-label.
-    // Heuristic: buttons whose 4-line block contains a JSX icon and no visible text
-    // and no aria-label are failures. (Text-labeled tab/album/back buttons are ok.)
-    const lines = src.split('\n');
-    const offenders: number[] = [];
-    for (let i = 0; i < lines.length; i++) {
-      if (!/<button\b/.test(lines[i])) continue;
-      const block = lines.slice(i, i + 5).join(' ');
-      const hasLabel = /aria-label|title=/.test(block);
-      // visible text = a JSX expression like {k.label}/{album.name}/{label} or a bare word after >
-      const hasText = /\{[^}]*\b(label|name|title|Albums)\b[^}]*\}|>\s*[A-Za-z]/.test(block);
-      const iconOnly = /<[A-Z][a-zA-Z]+ (class|className)/.test(block) && !hasText;
-      if (iconOnly && !hasLabel) offenders.push(i + 1);
-    }
-    expect(offenders, `icon-only buttons missing aria-label at lines: ${offenders.join(', ')}`).toEqual([]);
+    // This case used to re-implement the check as a line heuristic: for each
+    // `<button`, join the next five lines and call it unnamed if that window holds
+    // an icon component and no visible text. The window is the flaw. The list row's
+    // open button opens with a conditional thumbnail — five lines of `<Play />` and
+    // an `<img>` — and the caption that NAMES it is eleven lines down, so the
+    // heuristic reported a button whose accessible name is its own visible text.
+    //
+    // Adding an aria-label to satisfy it would have been the wrong fix twice over:
+    // it would override that visible caption, which is WCAG 2.5.3 Label in Name,
+    // and it would invent a name for a control that already has a better one.
+    //
+    // So this delegates to the AST scanner instead, which parses the real JSX and
+    // is strictly more accurate than the window it replaces — it knows a button's
+    // whole subtree, and treats any non-JSX `{expression}` child as a name because
+    // `{t('…')}` and `{label}` both put one there. The same scanner runs over the
+    // entire app in tests/every-icon-button-has-a-name.test.ts; this case keeps the
+    // assertion pinned to this file, where A-05 was found.
+    const offenders = auditIconButtonLabels(['components/modules/photos-module.tsx']);
+    expect(
+      offenders.map((o) => `${o.file}:${o.line}  ${o.text}`),
+      'icon-only buttons with no accessible name',
+    ).toEqual([]);
   });
 });
