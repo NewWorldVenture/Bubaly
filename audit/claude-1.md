@@ -2360,3 +2360,60 @@ books), **1** `app/api/cron/admin-digest` (no reader). Nothing family-facing is 
 **Remaining overall: 104**, of which the floor is 41. So 63 real defects, all in `lib/` —
 54 shared helpers reached by a family surface, 8 blocked on I18N-001 (the cookie-only
 locale), and the activity feed's compact relative time.
+
+---
+
+## Pass AI — the floor was wrong: 16 of these formatters are parsers, and one says so itself
+
+### [CLAUDE-1][HIGH][I18N] Correcting my own number, and a guard for the failure a ceiling cannot see
+
+- **Status:** the documented floor moves **41 → 55**; convertible defects **63 → 41**.
+  Ratchet unchanged at 104. New guard added and proved.
+
+Surveying `lib/` for the next conversion tranche turned up a category I had not separated,
+and it changes the target rather than the schedule.
+
+**Sixteen of the remaining sites are not display formatters at all.** They use
+`Intl.DateTimeFormat('en-US', { timeZone })` as a **timezone-and-parts engine**, and the
+pinned locale is load-bearing:
+
+| module | what it actually does |
+|---|---|
+| `lib/services/scope.ts` | `hourInTz` parses the hour with `parseInt` — and **already carries a comment** that `'en-US'` renders midnight as `'24'` in some ICU versions, which it normalises |
+| `lib/schedule/zoned.ts` | `tzOffsetMs` reads `formatToParts` for a DST-correct offset "without a tz database" |
+| `lib/time/zoned.ts` | `isValidTimezone` uses the **constructor itself** as a validity probe |
+| `lib/onboarding/ics-time.ts` | `resolvedOptions().timeZone` canonicalises a zone; the second pins `calendar`/`numberingSystem`/`hourCycle` for positional ICS part reads |
+| `lib/guardian/rules.ts` | parses hour and minute out of a fixed-format string **to decide call routing** |
+| `lib/services/trips/confirmation-import.ts` | comment: *"h23 and explicit calendar/numerals keep midnight and early years unambiguous"* |
+| + `routines/schedule`, `onboarding-calendar`, `first-brief`, `first-brief-display`, `assistant/answers` | part extraction and validity probes |
+
+Localising any of those changes **arithmetic, not wording**. Quiet hours, Guardian call
+routing, trip import, routine scheduling and onboarding all read them. `scope.ts` is the
+sharpest case: the code itself documents that the pinned locale's ICU quirk is what it
+normalises against.
+
+**So my earlier floor of 41 was wrong, and in the dangerous direction.** Had someone taken
+it as a target they would have converted 14 parsers. Corrected to **55** (39 exempt by
+category + 16 mechanism).
+
+### The guard, and why a ceiling could not have caught this
+
+A ratchet counts hardcoded locales and only refuses increases. **Localising a parser makes
+it go DOWN** — the ceiling looks better while the code breaks. That is a failure mode the
+shape of the guard cannot see.
+
+So the mechanism count is now **pinned rather than minimised**, with the five signals that
+identify one (`resolvedOptions`, `formatToParts`, `hour12: false`/`h23`, a pinned
+`calendar`/`numberingSystem`, output parsed back into a number) and a bare-constructor
+case for validity probes. If the count **falls**, the test fails naming the reason:
+
+> *"a timezone/parts engine has been localised — read the note above before "fixing" this.
+> These calls compute offsets, hours and ICS parts; the locale is load-bearing, and
+> lib/services/scope.ts says so in its own comment."*
+
+Proved by localising `scope.ts`'s `hourInTz`: **expected 15 to be 16**, with that message.
+
+### Where the count actually stands
+
+104 total = **55 correct** (39 exempt + 16 mechanism) + **8 blocked** on I18N-001 + **41
+convertible defects**, all display formatters in `lib/` reached by a family surface.

@@ -22,9 +22,11 @@
 //
 // components/ IS AT ZERO and app/ IS AT ITS FLOOR OF 25 — every remaining site under app/
 // is one of the exempt categories below. What is left that is real is lib/ (79 sites in 52
-// files), and it has been classified rather than assumed — THE HONEST FLOOR IS 41, NOT 0, and a ratchet that demands zero where zero is
+// files), and it has been classified rather than assumed — THE HONEST FLOOR IS 55, NOT 0, and a ratchet that demands zero where zero is
 // wrong is a ratchet someone deletes. The four categories to leave alone:
 //
+//   16  timezone-and-parts ENGINES — pinned and asserted by the case below, because
+//       localising one changes arithmetic rather than wording.
 //   17  app/api/ai/* prompt construction — read by the MODEL, not a person. Verified by
 //       reading chat/route.ts:110, which builds its fmtDate inside the prompt text.
 //   13  lib/ai/* context and result builders — same.
@@ -141,6 +143,61 @@ describe('hardcoded locales only go down', () => {
     for (const line of notFormatters) {
       expect(line.match(FORMATTER_WITH_LOCALE), line).toBeNull();
     }
+  });
+
+  // ── The sites that must KEEP 'en-US' ──────────────────────────────────────────
+  //
+  // The ceiling above counts every hardcoded locale, which makes it look as though the
+  // target is zero. It is not. This codebase deliberately uses
+  // Intl.DateTimeFormat('en-US', { timeZone }) as a TIMEZONE-AND-PARTS ENGINE in eleven
+  // modules, several with comments saying so:
+  //
+  //   lib/services/scope.ts       hourInTz parses the hour with parseInt — and already
+  //                               carries a comment that 'en-US' renders midnight as
+  //                               '24' in some ICU versions, which it normalises
+  //   lib/schedule/zoned.ts       tzOffsetMs reads formatToParts for a DST-correct offset
+  //   lib/time/zoned.ts           isValidTimezone uses the CONSTRUCTOR as a validity probe
+  //   lib/onboarding/ics-time.ts  resolvedOptions().timeZone canonicalises a zone; the
+  //                               second pins calendar/numberingSystem/hourCycle so an
+  //                               ICS parser can read parts positionally
+  //   lib/guardian/rules.ts       parses hour and minute out of a fixed-format string to
+  //                               decide call routing
+  //   … and confirmation-import, routines/schedule, onboarding-calendar, first-brief,
+  //     first-brief-display, assistant/answers
+  //
+  // Localising any of those changes arithmetic, not wording: a different numbering
+  // system or calendar, or a clock label where a number was expected. Quiet hours,
+  // Guardian routing, trip import and onboarding all read these.
+  //
+  // So the count is PINNED rather than minimised. If it FALLS, someone has localised a
+  // parser and this fails with the reason — which is the failure mode a ceiling alone
+  // cannot see, because converting a parser makes the ceiling look better.
+  it('keeps the timezone-and-parts engines on a pinned locale', () => {
+    const MECHANISM_SITES = 16;
+    const SIGNALS: [RegExp, string][] = [
+      [/\.resolvedOptions\(\)/, 'resolvedOptions — canonicalising a zone'],
+      [/formatToParts/, 'formatToParts — reading parts out'],
+      [/hour12:\s*false|hourCycle:\s*'h23'/, 'a numeric clock, not a label'],
+      [/calendar:\s*'gregory'|numberingSystem:\s*'latn'/, 'pinned for a parser'],
+      [/parseInt|Number\.parseInt|Number\(/, 'output parsed back into a number'],
+    ];
+    let found = 0;
+    for (const file of sourceFiles()) {
+      if (/^lib\/(i18n|ai)\/|\/admin\/|api\/ai\/|api\/cron\//.test(file)) continue;
+      const text = withoutComments(readFileSync(file, 'utf8'));
+      for (const m of text.matchAll(FORMATTER_WITH_LOCALE)) {
+        const window = text.slice(Math.max(0, m.index! - 260), m.index! + 420);
+        const bare = /Intl\.DateTimeFormat\(\s*'en-US'[^;]*\);/.test(text.slice(m.index!, m.index! + 160))
+          && !/\.format/.test(text.slice(m.index!, m.index! + 200));
+        if (bare || SIGNALS.some(([re]) => re.test(window))) found += 1;
+      }
+    }
+    expect(found, found < MECHANISM_SITES
+      ? 'a timezone/parts engine has been localised — read the note above before "fixing" '
+        + 'this. These calls compute offsets, hours and ICS parts; the locale is load-bearing, '
+        + 'and lib/services/scope.ts says so in its own comment.'
+      : 'new mechanism sites are fine — raise MECHANISM_SITES to match, and say why in the note',
+    ).toBe(MECHANISM_SITES);
   });
 
   it('found something at all, so it is checking the real tree', () => {
