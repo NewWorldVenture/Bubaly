@@ -17,12 +17,13 @@ import { AiInsight } from '@/components/ai/ai-insight';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { ErrorState, Spinner } from '@/components/ui/states';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { cn } from '@/lib/utils/cn';
 import type { AdviceReason, OwnedMatch, OwnedSource, PurchaseVerdict } from '@/lib/purchases/advisor';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
-const usd = (cents: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: cents % 100 === 0 ? 0 : 2 }).format(cents / 100);
+const usdIn = (locale: LocaleCode) => (cents: number) =>
+  new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', maximumFractionDigits: cents % 100 === 0 ? 0 : 2 }).format(cents / 100);
 
 const VERDICT_STYLES: Record<PurchaseVerdict, string> = {
   clear: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
@@ -83,6 +84,9 @@ type Props = {
 
 export function BeforeYouBuy({ text, priceDollars, url, wishId, className }: Props) {
   const t = useTranslations();
+  // Money follows the reader's locale; the currency does not.
+  const locale = useLocale();
+  const usd = usdIn(locale.code);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<BeforeYouBuyResult | null>(null);

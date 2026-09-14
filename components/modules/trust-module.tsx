@@ -27,9 +27,10 @@ import {
   setPermissionGrantAction, createDelegationAction, revokeDelegationAction,
   decideApprovalAction, activateEmergencyAction, endEmergencyAction,
 } from '@/app/(app)/dashboard/trust/actions';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { explainTrustDecision, isAcceptedPolicy } from '@/lib/ai/explanation';
 import { TrustSharingSection } from '@/components/modules/trust-sharing-section';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 type Member = { id: string; name: string; role: string; color: string | null };
 type Policy = {
@@ -73,9 +74,9 @@ const DECISION_STYLES: Record<string, string> = {
 
 type Tab = 'approvals' | 'activity' | 'policies' | 'permissions' | 'delegations' | 'emergency' | 'audit';
 
-function fmtAmount(cents: number | null) {
+function amountIn(locale: LocaleCode, cents: number | null) {
   if (cents == null) return null;
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(cents / 100);
+  return new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(cents / 100);
 }
 function fmtWhen(iso: string) {
   return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
@@ -234,6 +235,7 @@ function ApprovalsTab({ approvals, members, canManage, needsYouHref, basedOn }: 
 // ─── Policies ────────────────────────────────────────────────────────────────
 function PoliciesTab({ policies, members, canManage }: { policies: Policy[]; members: Member[]; canManage: boolean }) {
   const tr = useTranslations();
+  const locale = useLocale();
   const router = useRouter();
   const { success, error: toastError } = useToast();
   const [editing, setEditing] = useState<Policy | null>(null);
@@ -296,7 +298,7 @@ function PoliciesTab({ policies, members, canManage }: { policies: Policy[]; mem
                     <span>{tr('trust.priority')} {p.priority}</span>
                   </div>
                   {Object.keys(p.conditions ?? {}).length > 0 && (
-                    <div className="mt-1 text-[10px] text-muted">when {conditionSummary(p.conditions, tr)}</div>
+                    <div className="mt-1 text-[10px] text-muted">when {conditionSummary(p.conditions, tr, locale.code)}</div>
                   )}
                 </div>
                 {canManage && (
@@ -323,9 +325,9 @@ function PoliciesTab({ policies, members, canManage }: { policies: Policy[]; mem
   );
 }
 
-function conditionSummary(c: Record<string, unknown>, tr: (key: string, params?: Record<string, string | number>) => string): string {
+function conditionSummary(c: Record<string, unknown>, tr: (key: string, params?: Record<string, string | number>) => string, locale: LocaleCode): string {
   const parts: string[] = [];
-  if (typeof c.maxAmountCents === 'number') parts.push(`under ${fmtAmount(c.maxAmountCents)}`);
+  if (typeof c.maxAmountCents === 'number') parts.push(`under ${amountIn(locale, c.maxAmountCents)}`);
   if (typeof c.minConfidence === 'number') parts.push(`AI ≥ ${Math.round((c.minConfidence as number) * 100)}% sure`);
   if (typeof c.timeStart === 'string' && typeof c.timeEnd === 'string') parts.push(`between ${c.timeStart}–${c.timeEnd}`);
   // A tag-scoped policy — the narrow kind Autopilot learns — names the one tool it covers.

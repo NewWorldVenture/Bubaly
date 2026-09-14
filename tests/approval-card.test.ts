@@ -171,4 +171,22 @@ describe('formatting', () => {
     expect(formatAmount(1050)).toBe('$10.50');
     expect(formatAmount(null)).toBeNull();
   });
+
+  // The approval card shows an amount a parent is being asked to authorise, and it
+  // rendered "$10.50" to every locale. The currency stays the money's — a US family
+  // is authorising dollars whichever language they read, and converting it would
+  // misstate what they are approving — while the separators follow the reader.
+  it('formats the amount the reader\'s way, and keeps the money\'s currency', () => {
+    // A NON-BREAKING space (U+00A0) between amount and symbol — German typography,
+    // and what keeps "10,50" and "$" from being split across a line break.
+    expect(formatAmount(1050, 'USD', 'de-DE')).toBe('10,50\u00a0$');
+    expect(formatAmount(1050, 'USD', 'fr-FR')).toMatch(/10,50/);
+    expect(formatAmount(1050, 'USD', 'en-US')).toBe('$10.50');
+    // An explicit currency is honoured rather than swapped for the locale's own.
+    expect(formatAmount(1050, 'EUR', 'de-DE')).toBe('10,50\u00a0€');
+    expect(formatAmount(1050, 'EUR', 'en-US')).toBe('€10.50');
+    // And the default is still en-US, which is what the un-localised callers and
+    // the crons rely on.
+    expect(formatAmount(1050)).toBe(formatAmount(1050, 'USD', 'en-US'));
+  });
 });

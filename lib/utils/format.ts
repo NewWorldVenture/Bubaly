@@ -48,8 +48,20 @@ function toDate(value: string | Date): Date | null {
  * versions used an ordinary space. Normalised so this module's output does not
  * change shape when the runtime's ICU is upgraded under it — and so a test may
  * assert "9:05 AM" and mean it.
+ *
+ * DATES AND TIMES ONLY, and the first version of this got that wrong. It also
+ * replaced U+00A0, and applied to money and numbers — where both characters are
+ * meaningful rather than incidental:
+ *
+ *   de-DE   12,50<NBSP>$        a NON-BREAKING space, so the amount cannot be split
+ *   fr-FR   1<NARROW>234<NARROW>567   U+202F is French's thousands separator
+ *   pt-PT   1<NBSP>234<NBSP>567       U+00A0 is Portuguese's
+ *
+ * Flattening those gives an amount that can break across a line and grouping that
+ * is wrong for the locale. Found only by writing a behavioural test for the
+ * approval card's amount — the ratchet and the typechecker were both green over it.
  */
-const normalise = (text: string) => text.replace(/[  ]/g, ' ');
+const normaliseClock = (text: string) => text.replace(/ /g, ' ');
 
 /**
  * The date-fns patterns this app actually passes to `fmtDate`, mapped to the Intl
@@ -119,7 +131,7 @@ export function createFormat(code: LocaleCode = DEFAULT_LOCALE, t?: Translator):
     const options = PATTERNS[pattern];
     // An unmapped pattern keeps today's behaviour rather than guessing at one.
     if (!options) return format(d, pattern);
-    return normalise(dateTime(options).format(d));
+    return normaliseClock(dateTime(options).format(d));
   };
 
   const fmtTime = (value: string | Date | null | undefined): string =>
@@ -161,8 +173,8 @@ export function createFormat(code: LocaleCode = DEFAULT_LOCALE, t?: Translator):
     // grouping and decimal separators follow the locale — "12,50 $" is how German
     // writes twelve and a half US dollars, and "$12.50" is not.
     fmtMoney: (cents: number, currency = 'USD') =>
-      normalise(new Intl.NumberFormat(code, { style: 'currency', currency }).format(cents / 100)),
-    fmtNumber: (value: number) => normalise(new Intl.NumberFormat(code).format(value)),
+      new Intl.NumberFormat(code, { style: 'currency', currency }).format(cents / 100),
+    fmtNumber: (value: number) => new Intl.NumberFormat(code).format(value),
   };
 }
 

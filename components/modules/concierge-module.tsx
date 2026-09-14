@@ -21,7 +21,8 @@ import { PlanWriteBacks } from '@/components/concierge/plan-write-backs';
 import { AutopilotPanel } from '@/components/concierge/autopilot-panel';
 import { planAcceptedAction } from '@/app/(app)/dashboard/concierge/actions';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 type Plan = Tables<'concierge_plans'>;
 
@@ -51,15 +52,18 @@ function fmtDate(d: string | null) {
   return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function fmtCents(cents: number | null) {
+function centsIn(locale: LocaleCode, cents: number | null) {
   if (!cents) return null;
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(cents / 100);
+  return new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(cents / 100);
 }
 
 // ─── Main Module ──────────────────────────────────────────────────────────────
 export function ConciergeModule() {
   const tr = useTranslations();
   const t = useTranslations();
+  // Money follows the reader's locale; the currency does not.
+  const locale = useLocale();
+  const fmtCents = (cents: number | null) => centsIn(locale.code, cents);
   const { familyId, userId, selfMember, family } = useApp();
   const { success, error: toastError } = useToast();
   const [activeKind, setActiveKind] = useState<string | null>(null);
@@ -411,6 +415,9 @@ function PlanDetail({ plan, onClose, onDelete, onRefresh }: {
   plan: Plan; familyId: string; userId: string; onClose: () => void; onDelete: (p: Plan) => void; onRefresh: () => void;
 }) {
   const t = useTranslations();
+  // Money follows the reader's locale; the currency does not.
+  const locale = useLocale();
+  const fmtCents = (cents: number | null) => centsIn(locale.code, cents);
   const { success, error: toastError } = useToast();
   const [editStatus, setEditStatus] = useState(plan.status);
   const cfg = KIND_CONFIG[plan.kind] ?? KIND_CONFIG.general;

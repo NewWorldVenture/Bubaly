@@ -56,8 +56,9 @@ import {
 } from '@/lib/billing/plans';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, SubscriptionStatus, AccountType, TransactionType, BudgetPeriod, BillStatus } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { FamilyDeliveredValue } from '@/components/billing/family-delivered-value';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 type FinancialAccount = Tables<'financial_accounts'>;
 type Transaction = Tables<'transactions'>;
@@ -188,9 +189,11 @@ const TABS = ['Overview', 'Transactions', 'Budgets', 'Bills', 'Savings Goals', '
 type Tab = (typeof TABS)[number];
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
-function fmtCurrency(n: number, showSign = false): string {
+// Takes the locale rather than pinning en-US. Each component that renders money
+// shadows this with a binding of the same name, so the call sites read unchanged.
+function currencyIn(locale: LocaleCode, n: number, showSign = false): string {
   const sign = showSign && n > 0 ? '+' : '';
-  return sign + new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Math.abs(n));
+  return sign + new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(Math.abs(n));
 }
 
 const ACCOUNT_TYPE_COLORS: Record<string, string> = {
@@ -512,6 +515,9 @@ function AddSavingsGoalModal({ open, onClose, familyId, userId, onDone }: {
 
 export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: string | null } = {}) {
   const tr = useTranslations();
+  // Money follows the reader's locale; the currency does not.
+  const locale = useLocale();
+  const fmtCurrency = (n: number, showSign = false) => currencyIn(locale.code, n, showSign);
   const { familyId, family, userId, role, members } = useApp();
   const admin = isAdmin(role);
   const { success, error: toastError } = useToast();

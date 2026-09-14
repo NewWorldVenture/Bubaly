@@ -23,7 +23,8 @@ import { ErrorState, SkeletonList } from '@/components/ui/states';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, TransactionType, AccountType } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 type Account = Tables<'financial_accounts'>;
 type Txn = Tables<'transactions'>;
@@ -62,8 +63,10 @@ const ACCOUNT_TINT: Record<string, string> = {
 
 const CATEGORIES = ['Groceries', 'Dining Out', 'Housing', 'Transportation', 'Utilities', 'Kids', 'Entertainment', 'Shopping', 'Subscriptions', 'Healthcare', 'Insurance', 'Education', 'Income', 'Transfer'];
 
-const usd = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n);
-const usd0 = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
+const usdIn = (locale: LocaleCode) => (n: number) =>
+  new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(n);
+const usd0In = (locale: LocaleCode) => (n: number) =>
+  new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
 const num = (v: unknown) => (typeof v === 'number' ? v : Number(v ?? 0)) || 0;
 function ymd(d: Date) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
 function shortDate(s: string) { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); }
@@ -72,6 +75,13 @@ const MANAGE = '/dashboard/billing?view=manage';
 
 export function FinancesModule() {
   const tr = useTranslations();
+  // Money follows the reader's locale; the currency does not.
+  const locale = useLocale();
+  // Memoised on the locale code, not rebuilt per render: usdIn returns a NEW
+  // function each call, and an unstable identity in a useMemo dependency list
+  // either defeats the memo or leaves a stale closure behind it.
+  const usd = useMemo(() => usdIn(locale.code), [locale.code]);
+  const usd0 = useMemo(() => usd0In(locale.code), [locale.code]);
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const selfId = selfMember?.id ?? null;
@@ -162,7 +172,7 @@ export function FinancesModule() {
     if (spendByCat.length === 0) return 'Add a few transactions to unlock spending insights.';
     const top = spendByCat.find((r) => r.category !== 'Other') ?? spendByCat[0];
     return `Your biggest category this month is ${top.category} at ${usd(top.total)}. Set a budget to stay on track.`;
-  }, [spendByCat]);
+  }, [spendByCat, usd]);
 
   const loading = la || lt || lb || lbi || lg;
   const readError = accountsError || txnsError || budgetsError || billsError || goalsError;

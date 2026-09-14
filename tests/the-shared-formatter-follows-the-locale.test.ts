@@ -98,6 +98,21 @@ describe('the shared formatter follows the locale', () => {
       expect(createFormat('en-US').fmtNumber(1234567)).toBe('1,234,567');
       expect(createFormat('de-DE').fmtNumber(1234567)).toBe('1.234.567');
     });
+
+    // The first version of this module normalised U+202F AND U+00A0 to an ordinary
+    // space, across every helper. That is right for the AM/PM gap, whose character
+    // changed with ICU 72, and WRONG here: these separators are non-breaking on
+    // purpose, and French and Portuguese use them for thousands. Flattening them
+    // gives an amount that can break across a line and grouping that is wrong for
+    // the locale. Both the ratchet and the typechecker were green over it; only a
+    // behavioural assertion on the rendered string found it.
+    it('keeps the non-breaking separators the locale asks for', () => {
+      expect(createFormat('de-DE').fmtMoney(1250)).toBe('12,50\u00a0$');
+      expect(createFormat('fr-FR').fmtNumber(1234567)).toBe('1\u202f234\u202f567');
+      expect(createFormat('pt-PT').fmtNumber(1234567)).toBe('1\u00a0234\u00a0567');
+      // And the clock gap IS normalised, which is the one case that needed it.
+      expect(createFormat('en-US').fmtTime('2026-07-14T09:05:00Z')).not.toContain('\u202f');
+    });
   });
 
   describe('a relative label is translated', () => {

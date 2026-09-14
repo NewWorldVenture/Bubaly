@@ -1922,3 +1922,74 @@ Python's serialiser puts each array element on its own line. Reverted and done a
 surgical text replacement asserting **exactly one** occurrence, which also proves the
 dark block (different values) was not touched. Second time this session a serialiser
 turned a four-value edit into a whole-file diff, after the i18n catalogue sort.
+
+---
+
+## Pass AB — the money formatters, and a defect in Pass Z that only a rendered string could find
+
+### [CLAUDE-1][HIGH][I18N] Eight money surfaces converted, and the ratchet lowered for behaviour rather than for shape
+
+- **Status:** FIXED (8 sites); ratchet 249 → **241**
+- **Files:** `components/modules/{billing,finances,trust,concierge}-module.tsx`,
+  `components/wishlists/before-you-buy.tsx`, `components/approvals/approval-card.tsx`,
+  `app/(app)/dashboard/family-cfo/page.tsx`, `components/modules/finances-module.tsx`
+
+All six client money helpers were **module-scope functions**, outside any component,
+so a hook could not reach them. Rather than thread a parameter through 59 call sites
+(31 in billing alone), each became a factory taking the locale, shadowed inside the
+component by a binding of the same name — so **every call site reads unchanged** and
+the typechecker names any scope that still needs a binding. `tsc` found them all: one
+component in billing and finances, two in concierge, and in `trust-module` the use is
+inside `conditionSummary`, a plain function where a hook cannot go, so the locale is a
+parameter there exactly as the translator already was.
+
+`app/(app)/dashboard/family-cfo/page.tsx`'s helper took **dollars** where
+`getFormat().fmtMoney` takes cents. Rather than reason about the conversion, the
+equivalence was checked numerically across 11 values including the half-cent rounding
+boundaries (`1234.565`, `0.005`, `999999.999`) — all identical.
+
+### The Pass Z defect this pass found
+
+Writing a behavioural assertion for the approval card's amount — `formatAmount(1050,
+'USD', 'de-DE')` — failed against an expectation that *looked identical* to what came
+back. The difference was **U+00A0**.
+
+`createFormat`'s `normalise` replaced both U+202F and U+00A0 with an ordinary space,
+across every helper. That is right for the AM/PM gap, whose character changed with ICU
+72, and **wrong everywhere else**:
+
+    de-DE   12,50<U+00A0>$              a NON-BREAKING space — the amount cannot be split
+    fr-FR   1<U+202F>234<U+202F>567     U+202F is French's thousands separator
+    pt-PT   1<U+00A0>234<U+00A0>567     U+00A0 is Portuguese's
+
+So Pass Z shipped money that can break across a line mid-amount, and French and
+Portuguese numbers whose grouping character was replaced. `normaliseClock` now applies
+to U+202F in the date/time path only.
+
+**Both the ratchet and the typechecker were green over it**, and so were the 16 cases
+in `the-shared-formatter-follows-the-locale.test.ts` — because they asserted
+`toContain('12,50')` and `toContain('$')`, which a flattened separator still satisfies.
+Only an assertion on the **exact rendered string** could see it. That is the case for
+`toBe` over `toContain` on a formatter, and it is now pinned: restoring the broad
+normalisation fails the new case.
+
+### Why the ratchet fell by exactly eight
+
+The remaining money formatters are pure exported functions in `lib/` —
+`lib/wallet/ledger.ts formatCents` alone has **137 calls across 22 files outside
+`lib/`**, `lib/finance/{hub,splits,timeline}.ts`, `lib/home/utilities.ts`,
+`lib/purchases/answer.ts`, `lib/services/finances/index.ts`, `lib/wallet/hub.ts`.
+
+Adding an optional `locale` parameter to each, defaulting to `en-US`, would have
+dropped the ratchet by nine more **without changing a single thing a family sees** —
+the callers would still pass nothing. That would make my own ratchet lie, which is
+worse than a higher number. So they are untouched and the count stands at 241.
+
+`lib/ai/context/render.ts` is a separate case and is **correctly** `en-US`: it renders
+the context sent to the model, and the reader is the model.
+
+### Next tranche, with its numbers
+
+`formatCents` (137 calls / 22 files) and the six other `lib/` money functions, each
+converted **together with its callers** so the ratchet falls only for sites whose
+output actually changed. Then the 70 client and 74 server date surfaces.

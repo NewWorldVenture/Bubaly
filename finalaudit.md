@@ -413,12 +413,23 @@ reads the **JWT** email and not `profiles.email`, so it is not an escalation.
   matching the `useTranslations()`/`getTranslations()` idiom, built on `Intl` rather
   than date-fns-with-a-locale because a pattern like `'EEE, MMM d'` hardcodes the
   **order** as well as the names — date-fns with a German locale gives German names in
-  American order. Five family-facing money and date surfaces converted (252 → 249);
+  American order. Thirteen family-facing money and date surfaces converted (252 → **241**);
   `tests/hardcoded-locales-only-go-down.test.ts` holds the remainder as a ceiling that
   can only fall. **The currency is deliberately NOT localised**: a US family's wallet
   is in dollars whichever language they read, so the currency stays a caller's argument
   (eight tables carry a `currency` column) while only the separators follow the
   locale — `"12,50 $"` is how German writes twelve and a half US dollars.
+  **And the non-breaking separators are load-bearing.** The first version of the shared
+  formatter normalised U+202F *and* U+00A0 to an ordinary space across every helper —
+  correct for the AM/PM gap, whose character changed with ICU 72, and wrong for money
+  and numbers: `de-DE` puts a NON-BREAKING space between amount and symbol so the
+  figure cannot be split across a line, and `fr-FR` and `pt-PT` use U+202F and U+00A0
+  as their *thousands separator*. The ratchet, the typechecker and sixteen existing
+  formatter cases were all green over it, because those cases asserted
+  `toContain('12,50')` — which a flattened separator still satisfies. Only an assertion
+  on the exact rendered string found it. Normalisation is now scoped to the date/time
+  path and the property is pinned. The lesson generalises: on a formatter, assert the
+  whole string.
 - **Guardian's safety vocabulary** — scam types, trust levels, routing labels —
   is 45 hardcoded English strings in `lib/`, on a surface `GATED_SURFACES`
   cannot see. The same blind spot as Claude-1's finding on `lib/server/ai-access.ts`:

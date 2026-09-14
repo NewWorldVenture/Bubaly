@@ -27,7 +27,8 @@ import { DOMAIN_LABELS } from '@/lib/trust/engine';
 import { decideApproval, editAndApproveApproval } from '@/app/(app)/dashboard/approvals-actions';
 import type { ApprovalCardData, EditableField } from '@/lib/approvals/card-data';
 import { sliceLabel, sliceLabelKey } from '@/lib/trust/slice-labels';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import type { LocaleCode } from '@/lib/i18n/locales';
 
 /** A context slice in the family's words; the raw name when it is not one we ship. */
 function sliceLabelOf(slice: string, t: (key: string) => string): string {
@@ -41,10 +42,14 @@ export type ApprovalCardResult =
 
 type Busy = 'approving' | 'declining' | 'editing' | null;
 
-export function formatAmount(cents: number | null | undefined, currency = 'USD'): string | null {
+export function formatAmount(
+  cents: number | null | undefined,
+  currency = 'USD',
+  locale: LocaleCode = 'en-US',
+): string | null {
   if (cents == null) return null;
   try {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: cents % 100 === 0 ? 0 : 2 }).format(cents / 100);
+    return new Intl.NumberFormat(locale, { style: 'currency', currency, maximumFractionDigits: cents % 100 === 0 ? 0 : 2 }).format(cents / 100);
   } catch {
     return `$${(cents / 100).toFixed(2)}`;
   }
@@ -139,7 +144,8 @@ export function ApprovalCard({
     });
   }, [approval.id, busy, onResult, router, success, toastError]);
 
-  const amount = formatAmount(approval.amountCents);
+  const locale = useLocale();
+  const amount = formatAmount(approval.amountCents, 'USD', locale.code);
   const when = formatWhen(approval.requestedAt);
   const expiry = formatExpiry(approval.expiresAt);
   const expired = expiry === 'Expired';
