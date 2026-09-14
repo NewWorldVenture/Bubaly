@@ -2138,3 +2138,55 @@ change it is guarding. Fixed by testing for the *import statement* specifically.
 180, of which **~39 are correct**: 13 AI-prompt sites (the reader is the model), 8
 Super Admin, and the locale-as-data uses in `lib/i18n`. The real remainder is the 34
 mixed component files (57), `lib/` (66), app pages (18) and api routes (18).
+
+---
+
+## Pass AE — attempted, reverted: why the 34 mixed component files are not a mechanical sweep
+
+### [CLAUDE-1][MEDIUM][PROCESS] The remaining 57 component date sites need per-file judgement, and here is the evidence
+
+- **Status:** NOT DONE — attempted, reverted, tree clean. Ratchet unchanged at **180**.
+
+The previous four locale passes were all mechanical: find the hardcoded literal, thread
+the locale, let `tsc` and `eslint` name the gaps. This one is not, and it is worth
+recording *why* rather than leaving the next attempt to rediscover it.
+
+A curried-factory tool was built and trialled on three files, converting a module helper
+into `const fmtDateIn = (locale: LocaleCode) => (d: string) => …` with a per-component
+binding so every call site reads unchanged. It worked on those three. Run across all 31
+candidate files it produced **21 conversions and errors in four distinct classes**:
+
+1. **Chained helpers.** `documents-module.tsx` has a relative-time helper that falls
+   through to `fmtDate` for anything older than a week. Converting `fmtDate` alone leaves
+   the caller referring to a name that no longer exists. Fixed in the tool with a
+   fixed-point loop — a helper that *calls* a converted helper must itself become a
+   factory, to any depth. That part now works.
+2. **A pre-existing `locale`.** Several components already declare `locale`, from
+   `useLocale()` or otherwise, and further into the body than the 500-character window
+   the tool checked. Result: `Cannot redeclare block-scoped variable 'locale'`.
+3. **Declaration order.** Where the existing `locale` came *after* the insertion point,
+   `Block-scoped variable 'locale' used before its declaration`.
+4. **Another async server component.** `dashboard/ai-home-dashboard.tsx`, like the two
+   dashboards in Pass AD, is a server component and cannot take a hook.
+
+**Reverted rather than patched**, for the same reason as the wallet attempt in Pass AC:
+once a mechanical edit has misfired in several distinct ways across twenty-one files,
+every subsequent patch is guesswork about which of my own insertions were sound. The
+difference from Pass AC is that there the *approach* was recoverable — the AST knew what
+a component was. Here four independent per-file facts have to be established first, so
+the honest conclusion is that this is a per-file job, not a sweep.
+
+**Ten of the 31 files were also skipped outright**, reported as "no module helper":
+their helpers are declared as `const fmtDate = (d) => …` rather than
+`function fmtDate()`, which the detector did not cover —
+`declutter-module.tsx:27` is the example. That is a fifth thing a sweep has to handle.
+
+### What the next attempt should do
+
+Per file, in this order: (1) does it already declare `locale`, and where; (2) is the
+component async, i.e. server — `getLocaleContext()`, not a hook; (3) are the helpers
+`function` or `const` declarations; (4) does any helper call another. Convert one file,
+run `tsc` and `eslint`, commit, repeat. 31 files at roughly 2 sites each — slower than a
+sweep and the only way it stays correct.
+
+The ratchet holds at 180 either way, so none of this can regress silently while it waits.
