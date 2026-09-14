@@ -3814,3 +3814,68 @@ misclassification near a family's midnight, not a wrong time. Left alone rather
 than widened into.
 
 **Status: FIXED.** No migration, so it reaches production with the deploy.
+
+---
+
+## Pass J — a reconciliation check that reconciled nothing
+
+**F-J01 — `bucket_drift` could not fire for any input (wallet reconciliation).**
+
+`lib/wallet/reconcile.ts` documents six integrity checks and is the module behind
+`/admin/wallet/reconciliation`, the page whose stated job is to *prove* the
+Family Wallet ledger is internally consistent. Check 6 — "Bucket sum drift —
+Σ(bucket balances) ≠ wallet total (rounding leak)" — was structurally incapable
+of detecting anything.
+
+**The mechanism.** Both sides of the comparison were accumulated from the same
+value, in the same loop, for every row:
+
+```js
+const v = signedValue({ ... });
+walletTotals.set(id, (walletTotals.get(id) ?? 0) + v);   // the total
+buckets[t.bucket_kind ?? 'spend'] += v;                  // exactly one bucket
+```
+
+Every entry adds `v` to exactly one bucket **and** to the total, so
+`bucketSum !== total` is unreachable. The check reported a clean ledger *by
+construction* rather than by reconciliation — the same vacuity class as the
+0296 probe in Pass F, this time in production code rather than in a probe.
+
+**Proved before changing anything**, not argued:
+
+| Sweep | Result |
+|---|---|
+| Exhaustive single-txn (6 bucket kinds × 2 directions × 4 statuses × 7 amounts) | **0** drift / 240 cases |
+| Randomised multi-txn, 1–6 rows, mixed wallets/kinds/statuses/signs | **0** drift / 4,000 ledgers |
+
+Corroborating evidence it was never real: `tests/wallet-reconcile.test.ts` had
+**no** case for `bucket_drift`. Nobody could write one.
+
+**The real defect underneath it.** `wallet_transactions.bucket_id` is
+`ON DELETE SET NULL`, and the allocation writer stores
+`bucketByKind.get(k) ?? null` (`lib/wallet/server.ts:253`,
+`app/(app)/wallet/actions.ts:157`), so completed money can legitimately end up
+attached to no bucket. The reconciler silently folded it into `spend` — so the
+one screen built to surface unreconciled money *hid* it, and corrupted the spend
+figure at the same time (unattributed money could mask a genuinely negative
+spend bucket, or manufacture one).
+
+**The fix.** `bucket_drift` is replaced by `unattributed_bucket`, which counts
+unbucketed completed money apart from the five real buckets and reports it per
+wallet. The wallet total still includes it, so `Σ(buckets) + unattributed =
+total`. Severity is **medium**, not high: the money is present and the total is
+right — it is the attribution that is missing — so it does not flip the ledger
+to unhealthy, which stays reserved for figures that are actually wrong.
+
+`bucketBalances` in `lib/wallet/ledger.ts` still folds unbucketed entries into
+`spend` and is deliberately **left alone**: that is the display path, the
+behaviour is documented there, and a child's bucket view is a different contract
+from an operator's reconciliation view.
+
+**Verification.** 7 new tests, all of which **fail against the old module** and
+pass against the new one — including the two the old check could never have
+supported: that unbucketed money is not hidden inside `spend`, and that it does
+not mask a negative spend bucket. Full suite **13,650 / 13,650** under pinned UTC
+and again under `TZ=America/Los_Angeles`. `npx tsc --noEmit` and eslint clean.
+
+**Status: FIXED.** No migration, so it reaches production with the deploy.
