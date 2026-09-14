@@ -18,7 +18,11 @@ export async function GET(req: NextRequest) {
   }
   try {
     const summary = await runDueRecurringAds(createServiceClient());
-    return NextResponse.json({ ok: true, ...summary });
+  // A failed run must be visible in the status code: nothing in this directory
+  // writes a durable run record, so Vercel Cron's status is the only signal, and
+  // a 200 with a non-zero failure count reads as a clean run.
+    const ok = summary.failures === 0;
+    return NextResponse.json({ ...summary, ok }, { status: ok ? 200 : 502 });
   } catch (err) {
     console.error('[cron/marketing-social] recurring ad run failed', err);
     return NextResponse.json({ error: 'Recurring ad run failed.' }, { status: 500 });

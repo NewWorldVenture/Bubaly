@@ -1,5 +1,351 @@
 # Bubaly — Final Audit
 
+> **Two audit sessions ran against this repository at the same time**, and both
+> consolidated into this file. Git merged them cleanly, which is why there are
+> two `# Executive Summary` sections: the first is this session's six-pass
+> consolidation (87 findings, `F1`–`F21`, `F-001`–`F-020`, `F-C`, `F-D`, `F-E`,
+> `F-F`), the second is the parallel session's, which reached main first and
+> carries its own findings and fixes.
+>
+> **Neither is deleted.** The rule that no worker's findings are discarded
+> applies across sessions as much as within one, and a merged record with two
+> summaries is worth more than a tidy one missing half its evidence. The
+> `audit/claude-*.md` working files are unioned the same way, each carrying both
+> sessions' notes under a delimiter.
+>
+> Reconciling the two into a single summary is a deliberate follow-up, not
+> something to do by picking a winner.
+
+
+# Executive Summary
+
+**87 findings across six passes.** This document is the consolidated record.
+The sections below are an **index**: each entry names a finding and links it to
+the pass that holds its evidence. The passes themselves follow, in full, and are
+never rewritten — a finding's detail, method and caveats live there.
+
+| Pass | Surface | Findings |
+|---|---|---:|
+| A | Public surface: marketing, SEO, crawler contract, entitlements | 21 |
+| B | Data layer: RLS, grants, nightly jobs, query plans, money concurrency | 20 |
+| C | Delivery and integration: page weight, routing, env contract, workflows | 10 |
+| D | Frontend and accessibility: the authenticated app | 14 |
+| E | Backend, auth and security: catalogue-verified RLS, 141 routes, storage | 9 |
+| F | QA, flows, performance, edge cases | 13 |
+
+**Where the project actually stands.**
+
+Most of what was found has been fixed. Passes A and B closed the large majority
+of their findings, and Pass C shipped and verified five changes in production on
+the day it ran. The public surface is in good shape: headers, structured data,
+image alt text, redirects, canonical URLs and the sitemap are all now correct
+and covered by tests that fail when they regress.
+
+Three things are not fine, and they compound:
+
+1. **There is no working path to apply a migration to production.** The
+   migrations workflow cannot authenticate (**F5**), and the forward-release
+   mechanism is pinned 38 migrations in the past (**F-C08**). Every migration
+   from `0255` to `0296` is written, reviewed, merged — and unapplied. This is
+   the single most important item in this document, because it is also what
+   blocks the fix for the next one.
+2. **A child can read the family password vault** (**F-E01**). Fixed by
+   migration `0296` with a probe CI runs, and inert until item 1 is resolved.
+3. **Authorization has a pattern of being drawn on the screen rather than in the
+   database.** F16, F18, F20, F21, F-003, F-006, F-E01 and F-E02 are the same
+   mistake in eight places: a control the UI enforces and the data layer does
+   not. Most are now fixed; **F-E02** (step-up MFA that no policy knows about)
+   is not.
+
+**What has not been examined**, stated plainly so the gaps are not mistaken for
+clean bills: no browser was run, so colour contrast, real tab order and
+screen-reader output are unverified (Pass D); migrations `0237`, `0239` and
+`0292` did not replay without the `vector` extension, so the marketing platform
+spine tables were not checked (Pass E); and every Pass E finding describes the
+committed migrations as replayed locally — if **F-001** holds, production may
+not carry even the policies verified correct.
+
+---
+
+# Critical Issues
+
+| | Finding | Status |
+|---|---|---|
+| **F-E01** | Every child can read, edit and delete the family password vault; `secret` is plaintext | **Fixed by `0296` + a CI probe — cannot reach production until F5/F-C08** |
+
+---
+
+# High Priority
+
+| | Finding | Status |
+|---|---|---|
+| F5 / F-001 | Production migrations cannot be applied — the ledger records only `0001–0003` | **BLOCKED — operator** |
+| F-C08 | The forward-release mechanism is pinned to `0240–0254`; the repo is 38 migrations past it | **OPEN — owner** |
+| F-E02 | Step-up MFA is presentational; no policy references `aal`, and guarded pages fetch straight from PostgREST | OPEN |
+| F-E03 | The `family-media` bucket is public; photos and attachments are served with no session | OPEN (known, tracked as LB-009) |
+| F-F01 | A caller-supplied `max` truncates a money read and reports success; reconciliation renders "Everything reconciles" from a prefix | OPEN |
+| F-F02 | F-017's timezone bug still live on eleven server-rendered surfaces, including the kids page | OPEN |
+| F-F03 | `/missions` issues up to 240 sequential storage round trips on the parent approval queue | OPEN |
+| F-D01 | The photo lightbox strands keyboard users: no `role="dialog"`, no Escape, no focus trap | OPEN |
+| F-D02 / F-D03 | 55 labels detached from their control; 65 `<select>` with no accessible name | OPEN |
+| F21 | A child could grant themselves a reward | Half fixed and live, half awaiting the operator |
+| F1, F9, F10, F15, F16, F18, F20 | sitemap dead URLs; whole i18n catalogue per page; seeded records shown as real customer stories; Autopilot running for every family; paid features enforced by a padlock; ungated endpoints; a child clearing the chore board | **all fixed** |
+| F-C01, F-C02, F-C03 | sitemap dated by generation time; 445 non-indexable URLs; the catalogue on every public page | **all fixed and verified in production** |
+
+---
+
+# Medium Priority
+
+F2, F4, F6, F7, F11, F17, F19 (Pass A) · F-002, F-004, F-005, F-007, F-008,
+F-009, F-010, F-011, F-012, F-013, F-014, F-015, F-016, F-018, F-019, F-020
+(Pass B) · F-C04, F-C07, F-C10 (Pass C) · F-D04–F-D10 (Pass D) · F-E04–F-E07
+(Pass E) · F-F04–F-F09 (Pass F).
+
+Still open among them: **F-C07** (19 undocumented env vars, including one whose
+absence silently rejects every inbound email), **F-C10** (the Expo app has no
+tests), **F19** (unmetered AI endpoints — a pricing decision), **F6** (family
+email built but not routed), and the Pass D/E/F entries listed in their own
+sections below.
+
+---
+
+# Low Priority
+
+F3, F8, F12, F13, F14 (Pass A) · F-C06, F-C09 (Pass C) · F-D11–F-D14 (Pass D) ·
+F-E08, F-E09 (Pass E) · F-F10–F-F13 (Pass F).
+
+---
+
+# Architecture
+
+- **F-C09** — Supabase credentials fail at first use, not at boot; a
+  misconfigured deploy degrades into scattered 500s. OPEN.
+- **Verified clean**: the server/client boundary holds (no client module
+  imports `createServiceClient` or the service-role key); the CSP matches every
+  host the browser actually calls; `npm audit --production` reports zero
+  advisories at every severity.
+
+---
+
+# Frontend
+
+Pass D in full. The root cause is **F-D10**: `.eslintrc.json` is
+`next/core-web-vitals` alone, which enables none of the `jsx-a11y` rules that
+describe F-D02, F-D03 and F-D06 — so `next lint` runs clean over ~1,000 files
+and the gap reads as a green light. Fixing the config is worth more than fixing
+any single finding beneath it.
+
+Also here: **F-D05** (19 authenticated pages render no `<h1>`; 11 render no
+heading at all), **F-D08** (all 354 authenticated pages share one loading
+skeleton), **F-D09** (ten components set state from an un-cancelled async
+effect), **F-D12** (two admin links point at routes that exist only at runtime).
+
+---
+
+# Backend
+
+**F-F01** (a capped read reporting success) is the most consequential, because
+it produces a *confidently wrong* answer about money rather than an error.
+**F-E09** (an authorization failure answering 500 rather than 403) and
+**F-F08** (`addFundsAction` writing the balance directly) sit alongside it.
+
+Pass B's twenty findings are the bulk of this area and are almost entirely
+closed.
+
+---
+
+# Database
+
+- **F-001 / F5** — the production ledger. The blocker everything else waits on.
+- **F-E01** — the vault policies. Fixed by `0296`.
+- **F-003** (`anon` held write grants on all five money tables), **F-006**
+  (cross-household AI job claiming), **F-018** (nine sequential scans),
+  **F-013** (fifty-nine over-sized reads) — all fixed.
+- **Verified**: no table is actually missing RLS once the catalogue is read
+  rather than grepped. A text scan claims 216 are; the catalogue says none.
+  Recorded because the grep result is a trap a later pass would fall into.
+
+---
+
+# Security/Auth
+
+| | Finding | Status |
+|---|---|---|
+| F-E01 | The family password vault, open to children, secrets in plaintext | Fixed by `0296`, unapplied |
+| F-E02 | Step-up MFA is a redirect; no policy knows `aal` | OPEN |
+| F-E03 | `family-media` is a public bucket | OPEN |
+| F-E04 | OAuth tokens family-member readable, while `sync_tokens` is service-only | OPEN |
+| F-E05 | `feedback-attachments` is a public bucket | OPEN |
+| F-E06 | The Contact Center secret is accepted in the query string, where it lands in logs | OPEN |
+| F-E07 | Twilio signature verification is off outside production | OPEN |
+| F-E08 | Shared-secret comparisons are not constant time | OPEN |
+| F16, F18, F20, F21, F-003, F-006 | authorization drawn on screen rather than in the database | fixed |
+
+---
+
+# UX/Accessibility
+
+Pass D. **F-D01** (the lightbox) is the one a keyboard user hits first.
+**F-D07** — 92 destructive actions guarded only by `window.confirm()` — is the
+one with the widest blast radius. **F-F11** (a discarded signing error showing a
+parent a blank frame rather than a reason) belongs here too.
+
+**Unverified, not clean**: contrast, tab order and screen-reader output.
+
+---
+
+# Performance
+
+- **F-C03** — the i18n catalogue on every public page. Fixed: `/cookies`
+  266 KB → 20 KB gzipped, `/` 291 → 45 KB.
+- **F-C04** — `/blog` shipped all 1,048 posts to the browser. Fixed:
+  89 → 40 KB gzipped, verified in production.
+- **F-F03** — up to 240 sequential storage round trips on `/missions`. OPEN.
+- **F-F09** — unbounded concurrent fan-out to an external drive-time API. OPEN.
+- **F-018** — nine family-scoped reads doing sequential scans. Fixed.
+
+---
+
+# Mobile/Responsive
+
+**F-C10** — the Expo app is 42 TypeScript files with **zero** tests, behind a CI
+job that installs, typechecks and validates config. No lint, no unit tests, no
+build. Nothing audits its dependency tree either: `npm audit` there reports 14
+moderate advisories while the web tree reports none.
+
+Responsive behaviour of the web app was checked by reading source only; the
+device matrix in CI covers the public routes.
+
+---
+
+# Integrations
+
+- **F-C07** — 19 undocumented environment variables. `CONTACT_CENTER_INBOUND_SECRET`
+  is the sharpest: the endpoint is correctly fail-closed, so unset it silently
+  rejects every inbound email. Apple calendar sync is configured by two
+  undocumented variables and is simply off until someone reads the source.
+- **F6** — family email is built but not routed. Operator config.
+- **F-E07** — Twilio signature verification depends on `NEXT_PUBLIC_APP_URL`
+  being exactly right.
+- **Workflow health**: `cron-dispatch`, `supabase-schema-audit`,
+  `finance-transaction-operation-runtime` and `travel-confirmation-runtime` are
+  all healthy. `supabase-forward-release` and `supabase-production-migrations`
+  are not — see F-C08 and F5.
+
+---
+
+# Testing/QA
+
+- **F-F05** — 96 tests across 12 files share the shape of the known
+  `api-ai-runs` 5-second timeout, and no `testTimeout` is configured anywhere.
+- **F-F04** — a genuine DST bug, found by running the suite under
+  `TZ=America/Los_Angeles`. The suite pins no `TZ` at all.
+- **F-F06** — one test named "fails closed" that only forbids two shapes, so
+  deleting the error check makes it greener.
+- **F-F07** — 37 of 51 money, kids, economy and missions server actions have no
+  test.
+- **F4, F-004, F-015, F-019** — tests and probes that could not observe what
+  they were named for. All fixed.
+- **Worth recording as a positive**: the sweep for tests-that-cannot-fail came
+  back *mostly clean*. This suite's grep-style guards mostly carry explicit
+  non-vacuity blocks, which is unusual. The four above were the exception, not
+  the pattern.
+
+---
+
+# Broken/Incomplete Features
+
+- **F-F10** — two buttons in the message header exist only to say the feature is
+  unavailable.
+- **F6** — family email: built, not routed.
+- **F-D12** — two admin links point at routes that exist only at runtime.
+- **F-E03 / F-E05** — two storage buckets public by a decision that was recorded
+  as a follow-up and never followed up.
+
+---
+
+# Technical Debt
+
+- **F-D10** — the lint config that permits the whole accessibility class.
+- **F-F12** — the vitest config's JSX block is dead under vitest 4.
+- **F-F13** — sixty-nine test blocks assert only the absence of a pattern.
+- **F-D13** — 172 index-derived React keys.
+- **F-C09** — no central environment validation.
+- **The release process itself** — two mechanisms, both non-functional, one
+  pinned to a release 38 migrations old. This is debt that has become a blocker.
+
+---
+
+# Recommended Fix Order
+
+Ordered by what unblocks the most, not by severity alone.
+
+1. **Restore a path to production for migrations** (F5 / F-001 / F-C08). Until
+   this is done, `0296` and every other schema fix is inert. Needs a Supabase
+   access token with project privileges, and a decision on whether to re-pin the
+   forward-release manifest or retire it.
+2. **Apply `0296`** the moment step 1 lands, and confirm the boundary probe
+   passes against production. This closes the only CRITICAL.
+3. **F-F01** — the capped read that reports success. It makes reconciliation
+   confidently wrong about money, which is worse than an error.
+4. **F-E02** — step-up MFA. Either enforce `aal` in policy or stop presenting it
+   as a control.
+5. **F-E03 / F-E05** — decide on the public buckets. They are known and
+   deliberate; what is missing is the decision, not the discovery.
+6. **F-F02** — the eleven server-rendered surfaces still on server midnight, and
+   widen F-017's guard so it can see `setHours` against `timestamptz`.
+7. **F-D10** — turn on the `jsx-a11y` rules, then fix what they surface
+   (F-D02, F-D03, F-D06). Config first: it stops the class from growing.
+8. **F-D01** — the lightbox. Small, self-contained, and the file already imports
+   the right component.
+9. **F-C07** — document the environment contract. Cheap, and it un-breaks two
+   integrations nobody knows are off.
+10. **F-F03, F-F09** — the N+1 and the unbounded fan-out.
+11. **F-C10** — give the mobile app a gate worth the name.
+12. Everything remaining in Low.
+
+---
+
+# Verification Checklist
+
+Each item is a thing to *run or observe*, not a box to tick from reading.
+
+**Blockers**
+- [ ] `supabase link` succeeds against the production project ref.
+- [ ] The migration ledger lists every version through `0296`, not `0001–0003`.
+- [ ] `supabase-forward-release` completes, or is retired and the workflow removed.
+
+**The critical finding**
+- [ ] `docs/audit/family-credentials-boundary-check.sql` passes against
+      production, not only against a local replay.
+- [ ] A real child account, signed in, sees zero rows on the vault page.
+- [ ] A parent *and* a non-parent adult can both still read and edit it.
+
+**Regression guards already in place** (these should fail if the fix is reverted)
+- [ ] `tests/sitemap-lastmod-is-content-dated.test.ts`
+- [ ] `tests/sitemap-urls.test.ts`
+- [ ] `tests/i18n-client-scope.test.ts`
+- [ ] `tests/route-access-is-total.test.ts`
+- [ ] `tests/catalogue-holds-language-only.test.ts`
+- [ ] `tests/blog-search-index-is-fetched-not-shipped.test.ts`
+- [ ] Every `docs/audit/*-check.sql` probe, via the Database CI job.
+
+**Production observations**
+- [ ] `/sitemap.xml` — no URL dated with the build time; no 404s; ~1,063 URLs.
+- [ ] `/cookies` under 25 KB gzipped.
+- [ ] `/nope` returns 404 with `noindex`; `/dashboard` still 307s to `/login`.
+- [ ] Blog `lastmod` values spread across real dates rather than all
+      `2026-07-18` — this is the observable proof that `0286` applied.
+
+**Gaps to close before this audit can be called complete**
+- [ ] Run a browser: contrast, tab order, screen-reader output (Pass D).
+- [ ] Replay `0237`, `0239`, `0292` with the `vector` extension and audit the
+      marketing platform spine tables (Pass E).
+- [ ] Re-verify Pass E's findings against production once the ledger is current.
+
+---
+
+
 Two audits of bubaly.com, kept in one file because one file is the record.
 
 They ran over **different surfaces** and neither supersedes the other:
@@ -8,6 +354,27 @@ They ran over **different surfaces** and neither supersedes the other:
 |---|---|---|---|
 | **A — Public surface** | marketing pages, SEO and crawler contract, robots/sitemap, headers, titles, i18n payload, plan entitlement, role entitlement, child sign-in | 22 | `F1`–`F22` |
 | **B — Data layer** | Supabase reads and writes, RLS and grant boundaries, nightly jobs, the build/data-cache boundary, calendar-day correctness, query plans, money concurrency, and the audit's own probes | 19 | `F-001`–`F-019` |
+| **C — Delivery and integration** (2026-09-13) | what the sitemap says, what every public page weighs, what an unrouted path answers, the environment contract, workflow health, the mobile app's gate | 10 | `F-C01`–`F-C10` |
+| **D — Frontend and accessibility** (2026-09-13) | the *authenticated* app, which A and B barely touched on the frontend: dialogs, labels, keyboard reachability, headings, loading and error states, React effect correctness | 14 | `F-D01`–`F-D14` |
+| **E — Backend, auth and security** (2026-09-13) | RLS and grants audited against a real catalogue after replaying 308 migrations, all 141 API routes mapped to their guard, all 61 public-list carve-outs read, storage buckets, secrets | 9 | `F-E01`–`F-E09` |
+| **F — QA, flows, performance, edge cases** (2026-09-13) | tests that cannot fail, coverage holes on money and children, timezone and DST correctness, N+1 round trips, incomplete features | 13 | `F-F01`–`F-F13` |
+
+> **Pass E opens with the most serious finding in this document.** See
+> **F-E01**: every child in a family can read, edit and delete the family
+> password vault, and the secrets are stored in plaintext. **It is fixed** by
+> migration `0296`, proved by a probe CI runs — but see F-C08: no migration can
+> currently reach production.
+
+**Pass C changes the disposition of two Pass A findings.** Both are recorded
+below rather than edited in place, so the history stays readable:
+
+- **F9** (the whole i18n catalogue on every page) was closed as *a decision*.
+  It is now fixed and verified in production — `/cookies` went from 266 KB to
+  20 KB gzipped. See **F-C03**.
+- **F13** (unknown top-level paths redirecting to login) was recorded as *by
+  design — no change*. The owner directed the change on 2026-09-13 and it is
+  shipped and verified. Superseded by decision, not overturned on the merits.
+  See **F-C05**.
 
 **Where they touch, stated plainly.** Only two places:
 
@@ -30,6 +397,295 @@ They ran over **different surfaces** and neither supersedes the other:
   file, and neither pass would have found the other's defect.
 
 Everything else is disjoint.
+
+---
+
+# Part 0 — Consolidated view
+
+Maintained by **Claude-1** (coordinator). This part is a roll-up **over** the
+detailed passes below, not a replacement for them: every entry points at the
+finding that carries the evidence. Nothing below Part 0 is rewritten or removed
+when this view is rebuilt.
+
+Worker findings live in `audit/claude-1.md` … `audit/claude-4.md`; `audit/status.md`
+is the board. Only Claude-1 edits this file.
+
+**Honesty rule for this part:** a heading with no findings says so. An area no
+worker has audited yet is recorded as *not yet audited*, never as "clean" —
+*"we checked"* and *"we could not see"* must not read the same on the page.
+
+## Coverage as of this rebuild
+
+| Area | Audited by | Depth |
+|---|---|---|
+| Public surface, SEO, entitlement, child sign-in | Pass A (F1–F22) | deep |
+| Data layer, RLS, grants, cron, query plans, money concurrency | Pass B (F-001–F-020) | deep |
+| Architecture / integration seams | Claude-1 | in progress — config contract, cron auth, service-role boundary done |
+| Frontend / UI / responsive / accessibility | Claude-2 | **running** |
+| Backend / API / auth / security | Claude-3 | **running** |
+| QA / flows / performance / edge cases | Claude-4 | **running** |
+
+# Executive Summary
+
+Two deep passes are complete (41 findings, `F1`–`F22` and `F-001`–`F-020`), and
+a coordinator pass on architecture and integration is in progress. **Three
+findings remain open, and exactly one is a release blocker.**
+
+The blocker is the production migration ledger (A's **F5** / B's **F-001**):
+production carries the full schema but a three-row ledger, so every release
+touching `supabase/` halts at the baseline guard. It needs a credentialed
+operator; agents must not apply it.
+
+The most consequential finding of this pass is **F-020**, because of what it
+says about the others: the documented procedure for clearing that blocker
+**did not work**, and had never been tested. It cited two guards as proof and
+neither could observe the property it claimed. Replayed against production's
+actual condition it stopped on the first file. That is now fixed, rehearsed,
+and enforced by CI on every pull request.
+
+The pattern worth carrying into the remaining passes: **the failures here are
+mostly guards that could not see what they were named for** — a sweep that read
+one line at a time (Pass C), a probe that granted itself privileges (F-015), a
+concurrency check that never ran two things at once (F-019), an index test that
+could not see `UNIQUE` declarations, a replay that ran only against an empty
+database (F-020). Verifying that a guard fails when it should is the single
+highest-yield check in this repository.
+
+# Critical Issues
+
+| # | Finding | Status |
+|---|---|---|
+| **F-020** | The documented production-recovery procedure did not work — `db push` stopped on `0004` and left the guard unclearable | **FIXED** + CI gate |
+
+# High Priority
+
+| # | Finding | Status |
+|---|---|---|
+| **F5 / F-001** | Production migration ledger records only `0001`–`0003`; every schema release is blocked | **BLOCKED — operator** |
+| F15 | Family Autopilot ran for every family on the platform | fixed |
+| F16 | Paid features enforced only by the sidebar padlock | fixed |
+| F18 | Endpoints behind gated pages had no gate | fixed |
+| F20 | A child could clear the chore board | fixed |
+| F21 | A child could grant themselves a reward | fixed (app) · `0295` awaiting operator |
+| F22 | A child's username was matched as a pattern | fixed |
+| F1 | The sitemap advertised 435 dead URLs | fixed |
+| F9 | The entire i18n catalogue ships on every page | closed as a decision |
+| F10 | Seeded records presented as real customer stories | fixed |
+| F-003 | `anon` held INSERT/UPDATE/DELETE on all five money tables | fixed · `0290` awaiting operator |
+| F-005 | Every blog post not baked in at build time returned 500 | fixed |
+| F-006 | Any signed-in user could claim another household's AI jobs | fixed · `0292` awaiting operator |
+| F-008 | Six nightly jobs silently stopped at 1,000 rows | fixed |
+| F-010 | Notification generation failed outright for affected households | fixed · `0293` awaiting operator |
+| F-011 | The fix for F-008 had the same defect it was written to fix | fixed |
+| F-012 | The sitemap was six days stale and would have stayed stale for a year | fixed |
+| F-013 | 59 reads asked for more rows than the server would ever return | fixed |
+| F-014 | Notification dedupe failed on every run | fixed |
+| F-017 | A family's "today" was Greenwich's today | fixed |
+| F-018 | Nine family-scoped reads were sequential scans | fixed |
+| F-019 | The money-safety probe asserted concurrency it never tested | fixed |
+| CLAUDE-1 | Nothing enforced migration idempotency, so it could regress silently | fixed (CI gate) |
+| CLAUDE-1 | Two branches independently claimed migration version `0295` | fixed (renumbered `0296`) |
+| CLAUDE-1 | A merge would have reopened the child-self-approval hole | fixed |
+| CLAUDE-1 | `/api/health` reported `ok` while a missing `CRON_SECRET` silently 401'd all 24 scheduled jobs, and a missing `CHILD_LOGIN_SECRET` disabled child sign-in | fixed |
+| CLAUDE-1 | Five nightly jobs answered HTTP 200 while counting their own failures; no cron route writes a durable run record | fixed |
+
+# Medium Priority
+
+| # | Finding | Status |
+|---|---|---|
+| **F6** | Family email is built but not routed | **OPEN — operator config** |
+| **F19** | Most AI endpoints run unmetered | **OPEN — pricing decision for the owner** |
+| F2 | `robots.txt` omitted 20 authenticated surfaces | fixed |
+| F4 | The test named for F1's property could not observe it | fixed |
+| F7 | The family email gate existed only on the screen | fixed |
+| F11 | Five public pages had no `<h1>` | fixed |
+| F17 | The documented tier map disagreed with the enforced one | fixed |
+| F-004 | The money-boundary probe could not catch F-003 in CI | fixed |
+| F-007 | The additive-migrations guard flagged a revoke as destructive | fixed |
+| F-009 | A provider error in the mailer took down the whole cron run | fixed |
+| F-015 | A probe granted itself privileges and left them, poisoning the suite | fixed |
+| F-016 | The documented crawl workflow drops a live session cookie into the tree | fixed |
+| CLAUDE-1 | `/api/contact-center` was public as a prefix, not as exact paths | fixed |
+| CLAUDE-1 | A runtime gate fails on this Node and passes on CI's | **OPEN — worker collision** |
+
+# Low Priority
+
+| # | Finding | Status |
+|---|---|---|
+| F3 | The homepage was published twice | fixed |
+| F8 | Page titles doubled the brand | fixed |
+| F12 | The 404 page ships no server-rendered markup | closed — recorded |
+| F14 | Nine sitemap URLs declare themselves non-canonical | fixed by #526 |
+| **F13** | Unknown top-level paths redirect to login | **SUPERSEDED — see below** |
+| CLAUDE-1 | The service-role boundary was real but inherited from an incidental `next/headers` import rather than declared | fixed (hardening) |
+| CLAUDE-1 | Mobile imported from a folder Metro does not watch; safe only because the import is type-only, and no CI job bundles the app | fixed (guard added) |
+
+# Architecture
+
+Claude-1's scope. Detail in `audit/claude-1.md`.
+
+- **F-020** and its CI gate are the substantive architectural findings of this
+  pass: the repository's recovery story depended on a property (migration
+  idempotency) that nothing enforced and one guard actively misrepresented.
+- **Migration numbering is a cross-branch race.** `schema_migrations` has a
+  PRIMARY KEY on `version`, but the guard that protects it
+  (`tests/migration-version-safety.test.ts`) can only see one branch at a time.
+  Two branches took `0295` simultaneously. The guard did its job *after* the
+  merge, which is the only moment it can — worth knowing when several sessions
+  author migrations in parallel, as they are now.
+- **Merge direction carries security weight.** Resolving a conflict toward the
+  branch rather than toward `main` silently reverted a fix in one case
+  (rewards) and would have widened an auth boundary in another (contact-center).
+  On this repository a merge conflict in an auth or money path deserves the same
+  scrutiny as the original change.
+
+# Frontend
+
+**Not yet audited this pass.** Claude-2's scope; `audit/claude-2.md` is empty.
+Pass A covered public marketing pages for SEO, headings and titles (F1–F14) but
+did not audit component behaviour, state handling, loading/error states, or
+responsive layout.
+
+# Backend
+
+Covered in depth by Pass B for the data layer (reads, writes, cron, caching) and
+by Pass A for entitlement and authorization on gated endpoints (F16, F18, F19).
+**Route-by-route API auditing is Claude-3's scope and has not started.**
+
+# Database
+
+Pass B's core surface, plus Claude-1's F-020 work.
+
+- 308 migrations, replay 0 → 308 clean, and now **re-appliable** onto a populated
+  schema (the F-020 gate).
+- 19 boundary probes under `docs/audit/`, globbed by `run-probes.sh`, all passing.
+- Open: the production ledger (F-001). Five migrations (`0290`, `0292`, `0293`,
+  `0295`, and #541's `0296`) are authored, tested, and **not in production**.
+
+# Security/Auth
+
+- Pass A found and closed four privilege-escalation classes (F15, F16, F18, F20,
+  F21, F22) — all but F21's migration half are live.
+- Pass B closed the money-table grant hole (F-003) and cross-household AI job
+  claiming (F-006).
+- Claude-1 this pass: prevented a merge from reopening F21's app half, and
+  narrowed `/api/contact-center` from a public prefix to five exact paths.
+- Claude-1 verified the **service-role boundary** by planting a `'use client'`
+  page that imports `createServiceClient`: the build fails, and the key's value
+  is absent from every emitted client chunk. It failed *before* the change too
+  (via `next/headers`), so the boundary was sound and the fix is hardening — the
+  protection is now declared rather than inherited. Recorded that way rather than
+  as a closed vulnerability.
+- All 24 cron routes enforce `hasCronAuthorization`, which is correctly
+  fail-closed (`!!secret &&`, so an unset secret cannot become a matchable
+  `Bearer undefined`). Now asserted per-route by a test rather than by grep.
+- **A full authorization sweep over all 146 API routes is Claude-3's scope and
+  has not started.**
+
+# UX/Accessibility
+
+**Not yet audited this pass.** Claude-2's scope. Pass A touched `<h1>` presence
+on five public pages (F11); nothing else here is accessibility coverage.
+
+# Performance
+
+Partial. F9 (i18n payload, closed as a decision), F-018 (nine sequential scans
+turned into index scans, measured at 700k rows), F-008/F-011/F-013 (row-ceiling
+correctness, which is also a throughput property). **Systematic performance work
+— bundle size, render cost, query N+1, cold start — is Claude-4's scope and has
+not started.**
+
+# Mobile/Responsive
+
+**Not yet audited this pass.** Claude-2's scope. CI runs a mobile device matrix
+(iphone-se / iphone / pixel / ipad) asserting no horizontal overflow and no
+sub-16px inputs, so there is a standing gate; no one has audited beyond it.
+
+# Integrations
+
+Claude-1's scope, in progress.
+
+- CI (`ci.yml`): five jobs; the Database job now carries the idempotency gate.
+- Supabase: service-role vs anon client split; production ledger blocked (F-001).
+- Vercel: deploys on merge to `main`; code fixes reach production, schema does not.
+- Provider webhooks: Twilio (contact centre, Guardian), email inbound — each
+  authenticates in its own handler; middleware must let them through, which is
+  the exact-path narrowing above.
+- **Cron observability:** 0 of 24 routes write a durable run record, so the HTTP
+  status is the only signal a run failed. Five routes answered 200 while counting
+  failures; all five now answer 502, matching the other 19.
+- **Config contract:** 79 distinct env vars, no central schema. `/api/health` now
+  reports a `FEATURE_ENV` tier as `degraded`/200 — the six secrets whose absence
+  silently disables a whole subsystem. Previously invisible; see High Priority.
+- **Not yet audited:** push/APNs, calendar feed subscribers, AI provider fallbacks.
+
+# Testing/QA
+
+- 13,641 unit tests across 1,187 files on #541's merged tree; 15,806 on #510's.
+- 19 SQL boundary probes; E2E with a mobile device matrix.
+- **The recurring defect class is vacuous guards** — see the Executive Summary.
+  Claude-4 should treat "revert the fix and confirm the test fails" as the
+  standard for any guard it reviews, not an optional extra.
+- Open: `tests/stream-cancellation-runtime.test.ts` is Node-patch-sensitive.
+
+# Broken/Incomplete Features
+
+- **Family email** (F6) — built, not routed. Operator config.
+- **AI metering** (F19) — most AI endpoints run unmetered. Owner decision.
+- **`endEmergencyAction` writes no audit row at all** — recorded in Pass C as a
+  missing feature rather than a discarded result.
+- Five migrations authored but not applied to production (see Database).
+
+# Technical Debt
+
+- `docs/PENDING_PROD_MIGRATIONS.md` describes a baseline that is 70+ migrations
+  behind; the range sentence has been corrected twice by the range simply growing.
+- 17 historical duplicate migration versions were renamed; `ci-dedupe-migration-versions.mjs`
+  remains as a no-op safety net.
+- Four baseline `react-hooks/exhaustive-deps` lint warnings.
+- `finalaudit.md` is now large enough that three concurrent sessions conflict in
+  it on nearly every merge. Part 0 exists partly to give a stable place to read
+  the state without diffing the whole file.
+
+# Recommended Fix Order
+
+1. **Operator: repair the production ledger** (F-001 / F5), following
+   `docs/runbooks/LB-016-…md` §4 — now rehearsed end to end. This unblocks
+   everything below it.
+2. **Operator: apply the five held migrations** — `0290` (money grants),
+   `0292` (privileged RPC), `0293` (`related_id` type), `0295` (reward
+   redemption), `0296` (social-access delete). Until then F-003, F-006, F-010,
+   F21 and I-01 are only half-live.
+3. **Operator: route family email** (F6).
+4. **Owner: decide AI metering** (F19).
+5. Pin or guard the Node-sensitive runtime test.
+6. Run the three unstarted worker passes (Claude-2, -3, -4).
+
+# Verification Checklist
+
+Commands, with what a good answer looks like. Everything here was run this pass
+unless marked.
+
+- [x] `npx tsc --noEmit` → clean
+- [x] `npm run lint` → 0 errors (4 baseline warnings)
+- [x] `npx vitest run` → all pass (13,641 on #541's tree)
+- [x] `npm run build` → exits 0
+- [x] `npm run db:audit:migrations` → no collisions
+- [x] `npm run db:audit:queries` → every table, column, function, route resolves
+- [x] `bash docs/audit/verify-pg.sh up` → all migrations applied, 0 failed
+- [x] `bash docs/audit/rehearse-ledger-repair.sh` → **FAILED: 0**, `0004` recorded
+- [x] `bash docs/audit/run-probes.sh` → 19/19
+- [x] `node scripts/check-conflict-targets.mjs` → every target inferable
+- [x] Gate proven load-bearing: plant an unguarded `create policy`, confirm the
+      rehearsal fails **and** the from-scratch replay does not
+- [x] Service-role boundary: plant a `'use client'` importer, confirm the build
+      fails **and** confirm the control (guard removed) fails too — otherwise you
+      are reporting a hole that was never open
+- [x] `/api/health` degraded tier proved load-bearing by reverting the branch
+- [ ] Frontend / accessibility pass (Claude-2)
+- [ ] API authorization sweep over all 146 routes (Claude-3)
+- [ ] End-to-end flow + edge-case pass (Claude-4)
+- [ ] Production: ledger repaired and five migrations applied (operator)
 
 ---
 
@@ -528,7 +1184,7 @@ nothing at all without JS. Recorded with evidence rather than fixed, because the
 fix touches how `not-found.tsx` resolves translations and the payoff is small;
 worth doing deliberately rather than as a drive-by.
 
-## F13 — Unknown top-level paths redirect to login *(By design — no change)*
+## F13 — Unknown top-level paths redirect to login *(Superseded — main #544 fixed it a third way)*
 
 `/nope` answers **307 → `/login?redirect=%2Fnope`** rather than 404. Paths under
 a known public prefix behave correctly: `/blog/nope`, `/features/nope` and
@@ -541,9 +1197,29 @@ assistant-bridge history on this codebase is about routes that were *missing*
 from an allowlist. The cost is that a typo'd marketing URL lands on a login page
 and search engines see a soft 404 instead of a hard one.
 
-Deliberately **not changed**: trading fail-closed routing for a nicer typo
-experience is a bad exchange, and weakening auth routing is off-limits. Recorded
-so the trade-off is known rather than rediscovered.
+Deliberately **not changed** at the time: trading fail-closed routing for a nicer
+typo experience is a bad exchange, and weakening auth routing is off-limits.
+Recorded so the trade-off is known rather than rediscovered.
+
+> **Superseded on 2026-09-13 by main #544** — and the reasoning above is why this
+> note matters rather than a quiet edit. This entry told a future reader the
+> change was off-limits. It is not, because #544 did not take either side of the
+> trade-off as stated. It added an explicit **`PROTECTED`** list alongside
+> `PUBLIC` in `lib/auth/route-access.ts`, so a path is now one of three things
+> rather than two:
+>
+>     isPublic    -> serve it
+>     isProtected -> require a session      (fail-closed, unchanged)
+>     neither     -> fall through to the router, which 404s
+>
+> An unlisted app route is still protected, because app routes live under
+> prefixes that are in `PROTECTED`. `/nope` is under neither list, so it is a
+> path with no route and answers 404. Fail-closed routing is preserved exactly;
+> the soft 404 is gone.
+>
+> The general lesson is worth more than the fix: a finding closed as "an
+> unavoidable trade-off" is a finding that stopped looking for a third option.
+> **Do not revert #544 on the strength of the paragraph above it.**
 
 ---
 
@@ -2296,3 +2972,500 @@ reproduction of production's condition, instead of being asserted.
 | 2 overlapping $8 auths vs a $10 wallet | 1 approved, $8 held — the lock serializes them |
 | the same race with `FOR UPDATE` removed | 2 of 2 approved ($16 of $10) — the probe catches it |
 | `run-probes.sh`, pristine replay and used DB | 15/15, and 15/15 twice in a row |
+
+
+---
+
+# Pass C — Delivery and integration (F-C01–F-C10)
+
+Ran 2026-09-13 against the live site and the real code paths. Every finding
+here was reproduced before it was written, and every fix was verified in
+production after deploy rather than assumed from a green build.
+
+Full working notes, with the commands and outputs, are in `audit/claude-1.md`.
+
+## F-C01 — The sitemap dated 24 URLs with the time the file ran *(High, fixed)*
+
+`app/sitemap.ts` opened with `const now = new Date()` and applied it to all 15
+static routes and 9 category tabs. Every regeneration told crawlers those URLs
+had just changed.
+
+Evidence: the live sitemap carried `2026-09-13T11:51:45.957Z` on 24 entries,
+identical to the millisecond — the build's own transaction time.
+
+Fixed by #526. Each source now answers from its own real date; anything with no
+real date omits `lastmod` rather than inventing one.
+`tests/sitemap-lastmod-is-content-dated.test.ts` generates the sitemap twice
+with the clock moved a year between and requires every date to be identical, so
+a `new Date()` reintroduced anywhere in the pipeline fails immediately.
+
+## F-C02 — 445 of 1,508 sitemap URLs were not indexable *(High, fixed)*
+
+435 answered `404` with `noindex`, 9 canonicalised to `/blog`, and the homepage
+was listed twice.
+
+The 435 were `marketing_pages` registry rows for `/blog/Seed <uuid>` slugs.
+That table is a path *overlay* — a row supplies a page's title and description,
+not proof the path resolves — and `/blog/<slug>` is served from `blog_posts`,
+which hides synthetic seed rows. They were also unparseable as URLs: the slug
+was interpolated raw, putting a literal space inside `<loc>`.
+
+Fixed by #526. `canonicalUrl()` in `lib/marketing/sitemap-urls.ts` is now the
+only thing that may mint a `<loc>`. Production verified: 1,063 URLs, none
+returning 404, none `noindex`, none canonicalising elsewhere.
+
+*Overlaps Pass A's F1/F3/F14, which found the same URL set from the crawler
+side. Same defect, independently reproduced.*
+
+## F-C03 — The whole message catalogue shipped on every public page *(High, fixed — supersedes F9)*
+
+`LocaleProvider` is a client component, so the catalogue handed to it in the
+root layout was serialised into the RSC payload of every route beneath — which
+is every route.
+
+Measured on production: `/cookies`, a legal page of a few hundred words, was
+949,769 bytes raw and 265,651 gzipped, of which **246,126 gzipped was the
+catalogue** — 93% — carrying wallet errors, marketplace copy and the admin
+studio's capability matrix onto a cookie policy.
+
+Fixed by #540. Each surface declares the namespaces its own client components
+use; marketing needs 26 of 13,449 keys. The authenticated app keeps the whole
+catalogue deliberately: 3,791 keys across 368 namespaces with 96 non-literal
+`t()` calls, where no static subset is provable and there is no crawler or
+first-visit cost to pay for it.
+
+Production, gzipped: `/cookies` 266→20 KB, `/faq` 276→31 KB, `/terms` 269→24 KB,
+`/` 291→45 KB.
+
+`tests/i18n-client-scope.test.ts` walks the import graph from every page and
+fails, naming the key and file, if a scope does not cover what its client
+components ask for.
+
+## F-C04 — /blog shipped its entire search corpus to the browser *(Medium, fixed)*
+
+All 1,048 published posts were passed to the client search component as a prop,
+so React serialised the corpus into the HTML of a page that renders 25 cards:
+446 KB of a 597 KB response, paid by every visitor so the minority who type in
+the box could filter locally.
+
+Fixed by #543. The index loads on first interaction from
+`/api/blog/search-index`, edge-cached, so the corpus is fetched per publish
+rather than per visitor. Production: 88,907 → 40,098 gzipped (−54.9%),
+occurrences of the corpus in the HTML 1,048 → 0, 25 cards still rendered.
+
+## F-C05 — Every unrouted path answered a login form *(Medium, fixed — supersedes F13)*
+
+`/nope`, `/some-random-thing` and `/.env` all answered `307` to
+`/login?redirect=…`. Middleware had one list, `PUBLIC`, and redirected
+everything else — right for a real app route, wrong for a path with no route.
+
+A person following a stale link met a sign-in form instead of "page not found",
+and after signing in would have landed on a 404 anyway. A crawler saw a
+redirect to an irrelevant page, which Google counts as a **soft 404**.
+
+Fixed by #544. `PROTECTED` now names the paths that require a session; a path
+on neither list falls through to `app/not-found.tsx`.
+
+**This inverted a safety property** — forgetting to classify a route used to
+leave it protected and now leaves it reachable — so
+`tests/route-access-is-total.test.ts` walks `app/` and fails if any routable
+top-level path is on neither list. It earned itself immediately, catching
+`/display` (the signed-in kiosk), `/account`, `/money` and `/settings` missing
+from the first `PROTECTED` list.
+
+Verified in production: unrouted paths answer 404 with `noindex`; all twenty
+protected segments still 307 to `/login`; public pages still 200;
+`/dashboard/not-a-page` still redirects rather than revealing which pages exist.
+
+## F-C06 — A CSS margin lived in the message catalogue *(Low, fixed)*
+
+`tableOfContents.80px0px600px` held `-80px 0px -60% 0px`, the `rootMargin` of
+the blog table of contents' `IntersectionObserver`, duplicated across all seven
+full catalogues. A translator or tool altering it produces a value
+`IntersectionObserver` rejects; it throws at construction and the table of
+contents disappears for that locale on every article while the English build
+stays green.
+
+Fixed by #546. `tests/catalogue-holds-language-only.test.ts` sweeps for CSS
+lengths, hex colours, URLs and CSS keywords. It deliberately does not catch
+`profileQuestions.householdThree` (`'3'` — numerals differ by script) or
+`network.bandNone` (`'none'` — a word a reader sees); both are pinned so the
+rule cannot widen onto them.
+
+## F-C07 — Nineteen environment variables are undocumented *(Medium, open)*
+
+`.env.example` documents 75; app code reads 89. Nineteen are absent.
+
+The sharpest is `CONTACT_CENTER_INBOUND_SECRET`. The inbound email endpoint is
+correctly fail-closed in production, so with the secret unset it rejects
+**every** inbound message, silently, and nothing says why. Apple calendar sync
+is configured by two undocumented variables (`APPLE_SYNC_ENABLED`,
+`APPLE_CALDAV_BASE_URL`) and is simply off until someone reads the source.
+
+Fix: add the operator-facing variables with a line each saying what breaks when
+unset; group the test-only ones (`PW_*`, `PLAYWRIGHT_*`, `AI_PROVIDER_STUB_DIR`)
+under their own heading.
+
+## F-C08 — The forward-release mechanism is pinned 38 migrations in the past *(High, open)*
+
+`.github/workflows/supabase-forward-release.yml` failed on its most recent run
+(34781290560, 2026-09-13T20:36Z) and the one before it. The cause is now
+established, not guessed.
+
+The failing step is #4, "Release preview, read-only proof, or atomic apply",
+which runs `scripts/apply-production-forward-release.mjs` in preview mode. That
+script opens with:
+
+```js
+export function assertNoNewerMigrations(migrationNames) {
+  const latestReviewedVersion = Number(RELEASE_VERSIONS.at(-1));   // 0254
+  const newer = migrationNames.filter(…);
+  if (newer.length) {
+    throw new Error('Production forward release is held: repository migrations '
+      + 'outside the pinned 0240-0254 release: ' + newer.join(', '));
+  }
+}
+```
+
+The repository now carries **38 migrations past 0254** — `0255_ai_runtime_lockdown`
+through `0295_reward_redemption_decision_guard`. The guard fires every time.
+
+Two things follow, and the second is the one that matters:
+
+1. **The workflow is not broken; it is correctly refusing.** It is a
+   deliberately pinned, checksum-reviewed release of exactly `0240`–`0254`, and
+   it holds the moment the repository moves past that. Step 6 ("Capture
+   metadata after release attempt") succeeded in the same run and uploaded its
+   artifact, which proves the credentials reach production — so this is a
+   verdict, not a connectivity failure, and it is a *different* wall from F5.
+
+2. **There is now no working path to apply a migration to production.** The
+   migrations workflow cannot authenticate (F5), and the forward-release
+   mechanism is pinned 38 migrations behind (this finding). Every migration
+   from `0255` onward — including `0286`, the `blog_posts.updated_at` backfill
+   merged today — is written, reviewed, merged, and unapplied.
+
+Fix: re-pin the release to the current head with fresh checksums, or retire the
+pinned-release mechanism in favour of the ledger-based one. Either is an owner
+decision about release process, not a code defect.
+
+## F-C09 — Supabase credentials fail at first use, not at boot *(Low, open)*
+
+`NEXT_PUBLIC_SUPABASE_URL` (7 sites) and `NEXT_PUBLIC_SUPABASE_ANON_KEY` (6) are
+read with a non-null assertion, and there is no central env validation module.
+
+Reproduced: starting the built app with those unset made `/pricing` answer 500
+with `Error: supabaseUrl is required` while `/terms` and `/cookies` rendered
+fine. A misconfigured deploy degrades into scattered 500s on whichever pages
+happen to read the database, instead of refusing to start.
+
+## F-C10 — The mobile app has no tests, and CI barely checks it *(Medium, open)*
+
+`mobile/` is a real Expo app of 42 TypeScript files with **zero** test files.
+Its CI job has three steps: install, `npm run typecheck`, and
+`npx expo config --type public`. No lint, no unit tests, no build.
+
+The web app is gated on 13,500 tests and a mobile device matrix; the mobile app
+is gated on "it compiles and its config parses". Separately, nothing audits the
+mobile dependency tree — `npm audit --package-lock-only` there reports 14
+moderate advisories, while the root tree reports zero of any severity.
+
+## Verified clean in Pass C
+
+Recorded so no later pass re-derives them:
+
+- **Security headers** — full CSP with `frame-ancestors 'none'`, HSTS
+  `max-age=63072000; includeSubDomains`, `X-Frame-Options: DENY`, `nosniff`,
+  `strict-origin-when-cross-origin`, a scoped permissions policy.
+- **The CSP matches reality** — every `fetch()` inside a `"use client"` module
+  targets a host in `connect-src`. Google, OpenAI, Resend and the grocery and
+  recipe integrations are all server-side.
+- **The server/client boundary holds** — no client module imports
+  `lib/supabase/server`, `createServiceClient` or `SUPABASE_SERVICE_ROLE_KEY`.
+- **Redirects** — `http→https` and apex→www are clean 308s.
+- **Images** — 69 `<img>` on the public pages, every one with non-empty alt;
+  35 lazy-loaded, the above-fold ones correctly not.
+- **Structured data** — 33 JSON-LD blocks, all parse, one schema type per page,
+  no duplicates.
+- **Page metadata** — no duplicate titles or descriptions across the 15 static
+  routes; each has exactly one `<h1>`, a description and an `og:image`.
+- **Web dependencies** — `npm audit --production` reports zero advisories at
+  every severity.
+
+
+---
+
+# Pass D — Frontend and accessibility (F-D01–F-D14)
+
+Ran 2026-09-13 over `app/(app)/` (354 pages) and `components/` (456 files) —
+the authenticated surface, which Passes A and B examined from the data side and
+barely touched on the frontend. Working notes, with every file:line and the
+quoted code, are in `audit/claude-2.md`.
+
+**No browser was run.** Colour contrast, real tab order and screen-reader output
+are therefore *unverified* and are marked as such rather than asserted. Every
+finding below is from reading the source.
+
+**A note on method that changes how to read the counts.** The first scan used a
+regex of the shape `<input[^>]*>`, which terminates on the `>` of an inline
+arrow function (`onChange={(e) => …}`) and silently mis-reports attributes. That
+produced wrong numbers, was caught, and every count below comes from a
+brace-aware parser tracking label open/close depth. The `<h1>` scan likewise
+over-matched by following imports into a conditional heading in
+`trial-paywall-gate.tsx`; all 19 pages were confirmed by hand and 11 false
+positives dropped.
+
+## The three that matter most
+
+### F-D01 — The photo lightbox strands keyboard users *(High)*
+
+`components/modules/photos-module.tsx:407`. A hand-rolled full-screen overlay
+with no `role="dialog"`, no Escape handler (`grep -c Escape` → 0), no focus
+trap and no scroll lock. Its only dismissal is an `onClick` on a `<div>`.
+
+A keyboard user who opens a photo is stranded behind an opaque `bg-black/95`
+layer, operating UI they cannot see.
+
+The same file already imports the project's `<Modal>` component and uses it
+correctly elsewhere, so the fix is to use it here too.
+
+### F-D02 / F-D03 — Controls with no programmatic name *(High)*
+
+- **55 visible labels are detached from their control** across 22 files: a
+  sibling `<label>` with no `htmlFor`, a control with no `id`. Includes the
+  *public* survey form at `app/s/[slug]/survey-form.tsx:79`.
+- **65 of 145 `<select>` elements have no accessible name at all** — among them
+  the select that chooses *which child* a reward is redeemed for
+  (`rewards-module.tsx:324`, `economy-view.tsx:190`) and the one that sets a
+  member's role during onboarding.
+
+A screen-reader user hears "combo box" and must infer the rest from position.
+
+### F-D10 — The lint config enables none of the rules that would have caught them *(Medium — and the root cause)*
+
+`.eslintrc.json` is `next/core-web-vitals` alone, which enables none of
+`label-has-associated-control`, `click-events-have-key-events`,
+`no-static-element-interactions` or `control-has-associated-label` — precisely
+the rules describing F-D02, F-D03 and F-D06.
+
+`npx next lint` runs clean over ~1,000 files with 3 warnings, so the gap reads
+as a green light. **This is why the other findings accumulated**, and fixing it
+is worth more than fixing any single one of them.
+
+## The rest
+
+| | Finding | Severity |
+|---|---|---|
+| F-D04 | Four hand-rolled dialogs claim `aria-modal="true"` but never trap focus or handle Escape | Medium |
+| F-D05 | 19 authenticated pages render no `<h1>`; 11 render no heading at all | Medium |
+| F-D06 | Primary content rows across seven modules are clickable but not keyboard reachable | Medium |
+| F-D07 | 92 destructive actions are guarded only by native `window.confirm()` | Medium |
+| F-D08 | All 354 authenticated pages share one route-group loading skeleton | Medium |
+| F-D09 | Ten client components set state from an un-cancelled async effect | Medium |
+| F-D11 | Two icon-only buttons in the guardian contact list have no accessible name | Low |
+| F-D12 | Two admin links point at routes that exist only at runtime | Low |
+| F-D13 | 172 index-derived React keys; the reorderable cases are worth a second look | Low |
+| F-D14 | Three `exhaustive-deps` warnings, one a genuine ref-in-cleanup bug | Low |
+
+## Verified clean in Pass D
+
+Eight areas were checked and found sound; they are listed in `audit/claude-2.md`
+so a later pass does not re-derive them.
+
+
+---
+
+# Pass E — Backend, auth and security (F-E01–F-E09)
+
+Ran 2026-09-13. Working notes in `audit/claude-3.md`.
+
+**Method, and why it found things greps do not.** All 308 migrations were
+replayed into a local Postgres 16 and then RLS, grants, policies and
+`SECURITY DEFINER` functions were audited **against the live catalogue**, not
+by text search. That distinction is load-bearing: this repo enables RLS through
+`DO $$ … EXECUTE format('alter table public.%I enable row level security')`
+loops, so a text scan reports 216 tables "missing RLS" while the catalogue
+reports zero missing. All 141 `app/api` routes were mapped to their guard and
+all 61 entries of the public carve-out list were read individually.
+
+**Two caveats that bound every finding below.**
+
+1. These describe the **committed migrations as replayed locally**. If F-001
+   still holds and production's ledger is stuck at `0001–0003`, production may
+   not carry even the policies verified here as correct. That cuts both ways,
+   and F-C08 makes it likely: there is currently no working path to apply a
+   migration to production.
+2. Migrations `0237`, `0239` and `0292` did not replay locally — the `vector`
+   extension was absent — so the **marketing platform spine tables were not
+   checked**. That is a known gap, not a clean bill.
+
+## F-E01 — Every child can read, edit and delete the family password vault *(CRITICAL — fixed by 0296, unapplied)*
+
+`public.family_credentials` holds Wi-Fi passwords, account logins, PINs and card
+details, with `secret` stored as **plaintext `text`**.
+
+All four of its policies are written as `is_family_member(family_id)`, which
+answers "is this user in the family" and **ignores role entirely** — unlike
+`can_manage_family()`, and unlike the `documents` table, which correctly ANDs in
+`can_manage_family` for its sensitive rows.
+
+Children are real auth users with `family_members.user_id` set
+(`app/(app)/family/child-login-actions.ts:49-60`). The page carries no role
+check; `requireAal2` is a no-op for children (`lib/auth/mfa.ts:103`); and the
+module reads through the browser client anyway, so **RLS is the only boundary
+and it does not hold**.
+
+A child signed into the family app can read every stored password, change them,
+or delete them.
+
+### Independently reproduced, then fixed
+
+Every link was verified by hand before anything was changed: `secret` is
+plaintext `text`; all four policies call `is_family_member`; that function
+checks only `user_id = auth.uid() and is_active`; `child-login-actions.ts`
+creates a real auth user and sets `family_members.user_id` to it, its own
+comment reading *"Link the member to the new auth user so they ARE this member
+on sign-in"*; and no migration after `0119` ever touched the table.
+
+**Migration `0296_family_credentials_manager_only.sql`** swaps all four policies
+to `can_manage_family`, which is `role in ('parent','adult') and is_active` —
+so no adult loses access and only children do, which is the point. `0266` did
+exactly this for the document vault; this is the same fix for the table that
+holds the passwords.
+
+**`docs/audit/family-credentials-boundary-check.sql`** proves it behaviourally,
+and CI globs `docs/audit/*-check.sql`, so it runs on every PR. Against a real
+Postgres 16:
+
+- against the **original** policies it fails with
+  `0296: a child can READ 1 credential row(s); the vault is open`
+- against the **fixed** policies it passes, asserting the child is refused
+  read, insert, update *and* delete, while both a parent and an adult keep the
+  vault and can still write to it
+
+The probe was itself defective on first write — it inserted a row per run, so a
+second run tripped its own count assertion and looked like the fix had locked
+out a parent. It now clears its family's rows first and asserts on the row it
+created; verified re-runnable three times.
+
+**This cannot reach production yet.** See F5 and F-C08: authentication blocks
+one release path and a stale pin blocks the other. The fix is merged-ready and
+inert until an operator unblocks them.
+
+*If the owner wants the vault narrowed further — parents only, not adults —
+that is a second and additive decision, deliberately not made here.*
+
+## F-E02 — Step-up MFA is presentational *(High)*
+
+`requireAal2` guards 19 pages by redirect, but the data on those pages is
+fetched by client components straight from PostgREST
+(`components/finance/bills-view.tsx:54,63`), and
+
+```sql
+select count(*) from pg_policies where qual/with_check ilike '%aal%'  -->  0
+```
+
+No policy knows what `aal` is. `aal2Verdict` — which exists precisely so route
+handlers can answer `403 step_up_required` — is wired into 3 routes, none of
+them money.
+
+A stolen `aal1` session reads and writes bills, expenses, autopay and both
+vaults without ever being asked for a code.
+
+## F-E03 — The `family-media` bucket is public *(High)*
+
+`supabase/migrations/0216_family_media_bucket.sql:22-24` creates the bucket with
+`public = true`, so family photos, videos, message attachments and reminder
+attachments are served from `/storage/v1/object/public/…` **with no session**.
+The four family-scoped SELECT policies the same migration creates never run on
+that path.
+
+The migration documents this as a tracked follow-up (LB-009), so it is a known
+decision rather than an oversight — but it is a live exposure, and one that
+survives both row deletion and membership revocation, because the object URL
+keeps working.
+
+## The rest
+
+| | Finding | Severity |
+|---|---|---|
+| F-E04 | OAuth tokens in `social_account_tokens` are family-member readable, while the equivalent `sync_tokens` is service-only | Medium |
+| F-E05 | `feedback-attachments` is a public bucket holding user-uploaded screenshots | Medium |
+| F-E06 | The Contact Center inbound-email secret is accepted in the query string, where it lands in logs and referrers | Medium |
+| F-E07 | Twilio signature verification is off outside production and depends on `NEXT_PUBLIC_APP_URL` being exactly right | Medium |
+| F-E08 | Shared-secret comparisons are not constant time | Low |
+| F-E09 | An authorization failure in the marketing AI route answers 500, not 403 | Low |
+
+F-E06 is the same variable as **F-C07**, reached from the other side: Pass C
+found it undocumented, Pass E found it accepted in a query string.
+
+## Verified healthy in Pass E
+
+Twelve items, listed in `audit/claude-3.md`, including that no table is
+actually missing RLS once the catalogue is read rather than grepped.
+
+
+---
+
+# Pass F — QA, flows, performance and edge cases (F-F01–F-F13)
+
+Ran 2026-09-13. Working notes in `audit/claude-4.md`.
+
+## The three that matter most
+
+### F-F01 — A capped read reports success while dropping rows *(High, money)*
+
+`lib/supabase/read-all.ts:93` returns `error: null` when a read stops at a
+**caller-supplied** `max`; only the default ceiling raises.
+
+So `app/(app)/admin/wallet/reconciliation/page.tsx` reads the platform-wide
+ledger with `{ max: 20000 }` ordered `created_at DESC`, silently drops every
+row past that, and renders **"Everything reconciles"** from a prefix — the
+exact failure its own comment says the helper was fixed to prevent. Same shape
+at `economy/page.tsx` with `{ max: 5000 }`, where the comment reads *"a capped
+read is a wrong balance."*
+
+*Related to F-008/F-011/F-013, which fixed the default ceiling. This is the
+caller-supplied path the fix did not cover.*
+
+### F-F02 — F-017's timezone bug is still live on eleven server-rendered surfaces *(High)*
+
+`setHours(0,0,0,0)` — server midnight — remains on eleven surfaces including
+`app/(app)/kids/page.tsx:22` and the "today"/"tomorrow" text of every
+notification.
+
+F-017's guard cannot see them: it flags `toISOString().slice(0,10)` next to a
+**DATE** column, and these are `setHours` against **timestamptz**. On a UTC host
+a Californian child's "today" runs 17:00 → 17:00.
+
+*This is F-017 incompletely closed, found by a different detector.*
+
+### F-F03 — /missions issues up to 240 sequential storage round trips *(High, perf)*
+
+`app/(app)/missions/page.tsx:70-77` nests two loops around
+`await createSignedUrl`. The batch call `createSignedUrls` is already used
+correctly at `app/(app)/admin/marketing/assets/page.tsx:53`. This is the parent
+approval queue — the page a parent opens most.
+
+## The rest
+
+| | Finding | Severity |
+|---|---|---|
+| F-F04 | A requested local time that does not exist (DST spring-forward) is mishandled — **a genuine production bug**, found by running the suite under `TZ=America/Los_Angeles`, reproduced in two lines of node, and the suite pins no `TZ` at all | Medium |
+| F-F05 | 96 tests across 12 files share the exact shape of the known `api-ai-runs` 5-second timeout — a cold `await import('@/app/…')` inside a default-timeout test — and no `testTimeout` is configured anywhere | Medium |
+| F-F06 | `tests/seed-failure-safety.test.ts`, named "fails closed", asserts only the *absence* of two bad shapes, so deleting the error check makes it greener | Medium |
+| F-F07 | 37 of 51 money, kids, economy and missions server actions have no test | Medium |
+| F-F08 | `addFundsAction` is the one money mutator that writes the balance directly | Medium |
+| F-F09 | Unbounded concurrent fan-out to an external drive-time API | Medium |
+| F-F10 | Two buttons in the message header exist only to say the feature is unavailable | Low |
+| F-F11 | The proof-photo signing error is discarded, so a parent sees a blank frame rather than a reason | Low |
+| F-F12 | The vitest config's JSX block is dead under vitest 4 | Low |
+| F-F13 | Sixty-nine test blocks assert only the absence of a pattern | Low |
+
+## On the hunt for tests that cannot fail
+
+This was the highest-priority sweep and it came back **mostly clean** — one
+genuine instance (F-F06). That is worth recording as a positive: this suite's
+grep-style guards mostly carry explicit non-vacuity blocks, which is unusual
+and means the earlier findings (F4, F-004, F-015, F-019) were the exception
+rather than the pattern.
