@@ -40,7 +40,18 @@ begin
 
   -- ---- the child sees nothing ----
   set local role authenticated;
-  perform set_config('request.jwt.claims', json_build_object('sub', child_uid)::text, true);
+  perform set_config('request.jwt.claim.sub', child_uid::text, true);
+
+  -- Prove the impersonation TOOK before trusting a single refusal below.
+  -- This probe first set `request.jwt.claims` (the JSON object); the shim's
+  -- auth.uid() reads `request.jwt.claim.sub` (the dotted GUC), so auth.uid()
+  -- was null and every refusal held because NOBODY WAS ANYBODY — the probe
+  -- passed its child assertions against the ORIGINAL, broken policies too.
+  -- A boundary probe that cannot tell "denied because child" from "denied
+  -- because unauthenticated" proves nothing, so make that distinction fatal.
+  if auth.uid() is distinct from child_uid then
+    raise exception '0296: impersonation failed — auth.uid() is %, expected the child; the probe is not testing what it claims', auth.uid();
+  end if;
 
   select count(*) into n from public.family_credentials where family_id = fam;
   if n <> 0 then
@@ -82,13 +93,19 @@ begin
   end if;
 
   -- ---- both adults still have their vault (the fix must not lock them out) ----
-  perform set_config('request.jwt.claims', json_build_object('sub', parent_uid)::text, true);
+  perform set_config('request.jwt.claim.sub', parent_uid::text, true);
+  if auth.uid() is distinct from parent_uid then
+    raise exception '0296: impersonation failed — auth.uid() is %, expected the parent', auth.uid();
+  end if;
   select count(*) into n from public.family_credentials where id = wifi_id;
   if n <> 1 then
     raise exception '0296: a PARENT sees % rows for the vault entry, expected 1 — the fix locked out an owner', n;
   end if;
 
-  perform set_config('request.jwt.claims', json_build_object('sub', adult_uid)::text, true);
+  perform set_config('request.jwt.claim.sub', adult_uid::text, true);
+  if auth.uid() is distinct from adult_uid then
+    raise exception '0296: impersonation failed — auth.uid() is %, expected the adult', auth.uid();
+  end if;
   select count(*) into n from public.family_credentials where id = wifi_id;
   if n <> 1 then
     raise exception '0296: an ADULT sees % rows for the vault entry, expected 1 — can_manage_family admits parent AND adult', n;
