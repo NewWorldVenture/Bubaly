@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { readAll } from '@/lib/supabase/read-all';
+import { readAllAuthUsers } from '@/lib/supabase/read-all-auth-users';
 import { settleAll } from '@/lib/supabase/settle';
 import { sendReactEmail } from '@/lib/email';
 import { WeeklyDigestEmail } from '@/lib/emails/weekly-digest';
@@ -9,6 +10,13 @@ import * as React from 'react';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
 import { loadCompareLine } from '@/lib/network/compare-line-server';
 import { renderCompareLine } from '@/lib/network/compare-line';
+
+export const runtime = 'nodejs';
+// A chosen budget rather than the platform default. The loop is one family (or
+// one member) at a time with a network send in it, and a run killed mid-loop
+// always walks the same ordered prefix, so the tail of the customer base would
+// never be reached — silently, since nothing records where a run stopped.
+export const maxDuration = 300;
 
 // Runs every Monday at 08:00 UTC via Vercel Cron.
 // Sends each family a summary of the week ahead: events, due chores, meal count.
@@ -33,19 +41,26 @@ export async function GET(req: NextRequest) {
     console.error('Weekly digest family read error:', familiesError);
     return NextResponse.json({ error: t('weeklyDigest.weeklyDigestProcessingFailed') }, { status: 500 });
   }
-  if (!families?.length) return NextResponse.json({ sent: 0 });
+  if (!families?.length) return NextResponse.json({ sent: 0, failed: 0, skipped: 0 });
 
-  const { data: authUsers, error: authUsersError } = await supabase.auth.admin.listUsers();
+  // Every auth user, not the first fifty. `listUsers()` with no arguments is one
+  // page, and a family whose admin fell outside it had no email on file and was
+  // skipped below without counting a failure.
+  const { users: authUsers, error: authUsersError } = await readAllAuthUsers((params) =>
+    supabase.auth.admin.listUsers(params),
+  );
   if (authUsersError) {
     console.error('Weekly digest user read error:', authUsersError);
     return NextResponse.json({ error: t('weeklyDigest.weeklyDigestProcessingFailed') }, { status: 500 });
   }
-  const emailByUserId = new Map(
-    (authUsers?.users ?? []).map((u) => [u.id, u.email ?? null]),
-  );
+  const emailByUserId = new Map(authUsers.map((u) => [u.id, u.email ?? null]));
 
   let sent = 0;
   let failed = 0;
+  // A family nobody could be emailed for is neither a send nor a send failure,
+  // and reporting it as neither is how this route answered 200 while most of
+  // the customer base got nothing.
+  let skipped = 0;
   for (const family of families) {
     // An open chore is an ASSIGNMENT that is still todo/in_progress. `chores` is
     // the definition table — it carries neither `status` nor `assignee_id`, so
@@ -69,7 +84,7 @@ export async function GET(req: NextRequest) {
       continue;
     }
 
-    if (!members?.length) continue;
+    if (!members?.length) { skipped++; continue; }
 
     const { data: adminMember, error: adminMemberError } = await supabase
       .from('family_members')
@@ -86,9 +101,9 @@ export async function GET(req: NextRequest) {
       continue;
     }
 
-    if (!adminMember?.user_id) continue;
+    if (!adminMember?.user_id) { skipped++; continue; }
     const adminEmail = emailByUserId.get(adminMember.user_id);
-    if (!adminEmail) continue;
+    if (!adminEmail) { skipped++; continue; }
 
     const { ok } = await sendReactEmail({
       to: adminEmail,
@@ -109,5 +124,5 @@ export async function GET(req: NextRequest) {
     else failed++;
   }
 
-  return NextResponse.json({ sent, failed }, { status: failed === 0 ? 200 : 502 });
+  return NextResponse.json({ sent, failed, skipped }, { status: failed === 0 ? 200 : 502 });
 }

@@ -9,6 +9,7 @@ import { NotificationDigestEmail } from '@/lib/emails/notification-digest';
 import { iconForType, groupByUser } from '@/lib/notifications/digest';
 import * as React from 'react';
 import { childrenBlockedOn } from '@/lib/notifications/child-channels';
+import { readAllAuthUsers } from '@/lib/supabase/read-all-auth-users';
 
 type DB = SupabaseClient<Database>;
 export type NotificationEmailResult = { sent: number; failed: number; skipped: number };
@@ -62,14 +63,19 @@ export async function deliverNotificationEmails(supabase: DB): Promise<Notificat
   const childEmailOff = await childrenBlockedOn(supabase, 'email', userIds);
   for (const id of childEmailOff) emailOff.add(id);
 
-  // Resolve recipient emails + names. Mirrors the weekly-digest cron's approach.
-  const { data: authUsers, error: authUsersError } = await supabase.auth.admin.listUsers();
+  // Resolve recipient emails + names. Mirrors the weekly-digest cron's approach,
+  // including its pagination: listUsers() with no arguments is fifty users, and
+  // every recipient past that resolved to `skipped` here — settled with a
+  // `sent_at` stamp, so their notification was never retried either.
+  const { users: authUsers, error: authUsersError } = await readAllAuthUsers((params) =>
+    supabase.auth.admin.listUsers(params),
+  );
   if (authUsersError) {
     console.error('[notification-email] recipient lookup failed', authUsersError);
     return { sent: 0, failed: 1, skipped: 0 };
   }
   const userMeta = new Map(
-    (authUsers?.users ?? []).map((u) => [
+    authUsers.map((u) => [
       u.id,
       {
         email: u.email ?? null,

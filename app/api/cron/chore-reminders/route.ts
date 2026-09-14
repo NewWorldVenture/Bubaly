@@ -6,6 +6,14 @@ import { sendReactEmail } from '@/lib/email';
 import { ChoreReminderEmail } from '@/lib/emails/chore-reminder';
 import * as React from 'react';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
+import { readAllAuthUsers } from '@/lib/supabase/read-all-auth-users';
+
+export const runtime = 'nodejs';
+// A chosen budget rather than the platform default. The loop is one family (or
+// one member) at a time with a network send in it, and a run killed mid-loop
+// always walks the same ordered prefix, so the tail of the customer base would
+// never be reached — silently, since nothing records where a run stopped.
+export const maxDuration = 300;
 
 // Runs every Sunday at 18:00 UTC via Vercel Cron.
 // Finds every family member who has open chore assignments due this week and emails them.
@@ -100,22 +108,28 @@ export async function GET(req: NextRequest) {
 
   // Fetch emails
   const userIds = [...byMember.values()].map((v) => v.userId);
-  const { data: authUsers, error: authUsersError } = await supabase.auth.admin.listUsers();
+  // Every auth user, not the first fifty — see lib/supabase/read-all-auth-users.
+  const { users: authUsers, error: authUsersError } = await readAllAuthUsers((params) =>
+    supabase.auth.admin.listUsers(params),
+  );
   if (authUsersError) {
     console.error('Cron chore user read error:', authUsersError);
     return NextResponse.json({ error: t('choreReminders.choreReminderProcessingFailed') }, { status: 500 });
   }
   const emailByUserId = new Map(
-    (authUsers?.users ?? [])
+    authUsers
       .filter((u) => userIds.includes(u.id))
       .map((u) => [u.id, u.email ?? null]),
   );
 
   let sent = 0;
   let failed = 0;
+  // A member with no email on file is neither sent nor failed. Counting it is
+  // the difference between "nobody was due" and "nobody could be reached".
+  let skipped = 0;
   for (const [, { userId, memberName, familyName, chores }] of byMember) {
     const email = emailByUserId.get(userId);
-    if (!email) continue;
+    if (!email) { skipped++; continue; }
     const { ok } = await sendReactEmail({
       to: email,
       subject: `${chores.length} chore${chores.length !== 1 ? 's' : ''} coming up this week`,
@@ -125,5 +139,5 @@ export async function GET(req: NextRequest) {
     else failed++;
   }
 
-  return NextResponse.json({ sent, failed }, { status: failed === 0 ? 200 : 502 });
+  return NextResponse.json({ sent, failed, skipped }, { status: failed === 0 ? 200 : 502 });
 }

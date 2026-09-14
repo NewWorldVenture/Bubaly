@@ -3580,3 +3580,94 @@ string literal — so a bare top-level const is outside it. Re-planted **in the 
 the defect actually took**, a label inside the `Record<>`, it went red immediately.
 The control in the guard is the second plant, and the first one's blind spot is
 written into the test beside it rather than left for someone to rediscover.
+
+---
+
+## Pass AY — the digest reached the first fifty families, and answered 200
+
+**Status: FIXED** (the recipient read, the silent skip, the time budget, both guards),
+**BLOCKED** (the resume cursor — needs a column).
+
+### `[CLAUDE-4 → CLAUDE-1][HIGH][CORRECTNESS]` `listUsers()` is one page of fifty
+
+Claude-4 filed this as part of a MEDIUM performance finding. Verified, and **the
+severity is higher than filed, in two directions**.
+
+`supabase.auth.admin.listUsers()` with no arguments does not return the user table.
+It returns the first page — **fifty users** — and like the unbounded PostgREST
+select `lib/supabase/read-all.ts` exists for, it says nothing about it. The
+difference is that PostgREST's ceiling is a thousand rows and GoTrue's is fifty.
+
+**It is not two call sites, it is three.** `lib/server/notification-emails.ts:66`
+has the same read, and its comment says *"Mirrors the weekly-digest cron's
+approach"* — the defect was copied on purpose, which is exactly why it needed a
+named helper rather than three local fixes.
+
+**And the reporting made it invisible.** The digest's
+
+```ts
+const adminEmail = emailByUserId.get(adminMember.user_id);
+if (!adminEmail) continue;     // not a send, not a failure — not anything
+```
+
+so a family past the fiftieth auth user was dropped **without incrementing
+`failed`**, and the route answered `200 { sent: N, failed: 0 }`. A cron reporting a
+clean run it did not have is the class this audit has been closing since F-009 — and
+here the counter existed and simply did not cover the case.
+
+Both crons now report `skipped` alongside `sent` and `failed`. *"Nobody was due"*
+and *"nobody could be reached"* are no longer the same response.
+
+### `readAllAuthUsers` mirrors `readAll`'s doctrine, and one rule is specific to this API
+
+Stop on an **empty** page, never on a short one — a short page is equally the
+signature of a server-side cap. Added to that:
+
+**Do not trust `nextPage`.** supabase-js parses the page number out of the `Link`
+header with `.substring(0, 1)` (auth-js `GoTrueAdminApi.listUsers`), so **page 10
+arrives as page 1**. A helper built on `nextPage` would loop or stop early at
+exactly the scale where it starts to matter. This one counts pages itself, dedupes
+by id (offset paging over a table people are signing up to hands the same user
+back twice), and reports an *incomplete read* rather than a plausible prefix if it
+hits its page cap.
+
+### `maxDuration` raises the ceiling; only a cursor removes it
+
+Neither cron declared one, so both ran under the platform default — on the order of
+tens of seconds, which at 2–4 sequential round trips plus an email per family is
+roughly **forty families**. `maxDuration = 300` takes that to roughly a thousand.
+
+**That is a raised ceiling, not a solved problem, and it should not be recorded as
+one.** The loop walks `order('id')` with no checkpoint, so a run killed mid-loop
+serves the same prefix every week and never reaches the tail — a stable, invisible
+partition of the customer base. The fix is a resume cursor (`last_digest_at` on
+`families`, or a `digest_runs` table), which is a **migration, and therefore the
+owner's, gated behind F-001**. Recorded there rather than half-built.
+
+Not done either: hoisting the per-family `loadCompareLine` reads into one cohort
+query. It is a real optimisation and it is not what is dropping families.
+
+### `[CLAUDE-4 → CLAUDE-1][MEDIUM][TESTING]` the guard was a spell-checker
+
+Filed exactly right. `tests/digest-cron-read-boundary.test.ts` held nine
+`expect(<file text>).toContain('<identifier>')` assertions and never imported either
+route. Claude-4 reasoned that three real regressions would leave it green; all three
+now go red, each failing exactly one case:
+
+| reverted | fails |
+|---|---|
+| the recipient read back to one page | the two pagination cases |
+| `if (!email) { skipped++; … }` → `continue;` | the could-not-reach case |
+| `else failed++` dropped | the 502 case |
+| the body of the auth-error branch emptied, condition kept | the 500 case |
+
+Both routes are now driven: `tests/digest-cron-read-boundary.test.ts` covers
+chore-reminders, `tests/the-weekly-digest-reaches-every-family.test.ts` the digest,
+and `tests/every-auth-user-not-the-first-fifty.test.ts` pins the helper's paging
+rules plus the rule that nothing reaches for a bare `listUsers()` again. **No test
+was deleted** — the file that was vacuous was rewritten in place, which is what the
+finding asked for.
+
+**Claude-4's third point stands as filed and is the reason this was worth doing:**
+the pagination defect was *structurally invisible* to the old guard. No string in
+it mentioned recipients, pages or counts. A guard can only fail on what it looks at.
