@@ -1,4 +1,4 @@
--- Bubaly :: 0298 - the rest of 0088's loop, given 0217's boundary
+-- Bubaly :: 0299 - the rest of 0088's loop, given 0217's boundary
 -- ----------------------------------------------------------------------------
 -- 0217 narrowed writes to can_manage_family on FIVE wallet tables —
 -- family_wallets, child_wallets, wallet_buckets, wallet_transactions,
@@ -94,7 +94,7 @@ begin
     loop
       execute format('drop policy if exists %I on public.%I', pol.polname, t);
       swept := swept + 1;
-      raise notice '0298: dropped stray permissive write policy %.%', t, pol.polname;
+      raise notice '0299: dropped stray permissive write policy %.%', t, pol.polname;
     end loop;
   end loop;
 
@@ -109,8 +109,8 @@ begin
     and p.polname not in (c.relname || '_mng_insert', c.relname || '_mng_update', c.relname || '_mng_delete');
 
   if remaining <> 0 then
-    raise exception '0298 FAILED: % permissive write policy(ies) still on the allowance/gift tables after the sweep', remaining;
+    raise exception '0299 FAILED: % permissive write policy(ies) still on the allowance/gift tables after the sweep', remaining;
   end if;
 
-  raise notice '0298 OK: % stray write policy(ies) swept; writes on % table(s) are managers-only', swept, array_length(money_adjacent, 1);
+  raise notice '0299 OK: % stray write policy(ies) swept; writes on % table(s) are managers-only', swept, array_length(money_adjacent, 1);
 end $$;

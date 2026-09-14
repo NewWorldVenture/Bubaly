@@ -1,4 +1,4 @@
--- Bubaly :: 0297 - an invite's terms are set by the family, not by its recipient
+-- Bubaly :: 0298 - an invite's terms are set by the family, not by its recipient
 -- ----------------------------------------------------------------------------
 -- `invites_update` (0004, re-asserted verbatim by 0118) is:
 --

@@ -1,4 +1,4 @@
--- Bubaly :: 0299 - a prescription is a parent's to write
+-- Bubaly :: 0300 - a prescription is a parent's to write
 -- ----------------------------------------------------------------------------
 -- `medications` and `medication_schedules` resolve to membership-only policies:
 -- SELECT/UPDATE/DELETE `using (is_family_member(family_id))`, INSERT
@@ -88,7 +88,7 @@ begin
     loop
       execute format('drop policy if exists %I on public.%I', pol.polname, t);
       swept := swept + 1;
-      raise notice '0299: dropped stray permissive write policy %.%', t, pol.polname;
+      raise notice '0300: dropped stray permissive write policy %.%', t, pol.polname;
     end loop;
   end loop;
 
@@ -103,8 +103,8 @@ begin
     and p.polname not in (c.relname || '_mng_insert', c.relname || '_mng_update', c.relname || '_mng_delete');
 
   if remaining <> 0 then
-    raise exception '0299 FAILED: % permissive write policy(ies) still on the prescription tables after the sweep', remaining;
+    raise exception '0300 FAILED: % permissive write policy(ies) still on the prescription tables after the sweep', remaining;
   end if;
 
-  raise notice '0299 OK: % stray write policy(ies) swept; prescriptions and their schedules are managers-only to write', swept;
+  raise notice '0300 OK: % stray write policy(ies) swept; prescriptions and their schedules are managers-only to write', swept;
 end $$;

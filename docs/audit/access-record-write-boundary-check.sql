@@ -1,4 +1,9 @@
--- Behavioural proof for 0301, run as real `authenticated` sessions under RLS.
+-- Behavioural proof for 0302 AND for 0297, run as real `authenticated` sessions
+-- under RLS. Two sessions found the child_logins half independently and 0297
+-- landed first, keeping the policy's name and re-predicating it; 0302 covers
+-- behavior_logs. This probe asserts both halves whichever migration supplied
+-- them, which is the right shape for a boundary check: it tests the boundary,
+-- not the file that drew it.
 --
 -- child_logins carried a policy literally called "Managers manage child_logins"
 -- whose predicate was `is_family_member(family_id)` for ALL commands. A child

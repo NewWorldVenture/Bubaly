@@ -82,7 +82,7 @@ not carry even the policies verified correct.
 | | Finding | Status |
 |---|---|---|
 | F5 / F-001 | Production migrations cannot be applied — the ledger records only `0001–0003` | **BLOCKED — operator** |
-| F-C08 | The forward-release mechanism is pinned to `0240–0254`; the repo is 38 migrations past it | **OPEN — owner** |
+| F-C08 | The forward-release mechanism is pinned to `0240–0254`; the repo is 38 migrations past it | **Code half fixed — re-pinning is now a manifest change; the release itself is still owner/operator** |
 | F-E02 | Step-up MFA is presentational; no policy references `aal`, and guarded pages fetch straight from PostgREST | OPEN |
 | F-E03 | The `family-media` bucket is public; photos and attachments are served with no session | OPEN (known, tracked as LB-009) |
 | F-F01 / F-G13 | A caller-supplied `max` truncates a money read and reports success; reconciliation renders "Everything reconciles" from a prefix | **Fixed** — `readAll` now answers `truncated`, and `failOnMax` turns it into the error the five summing call sites already handle |
@@ -3155,6 +3155,38 @@ Fix: re-pin the release to the current head with fresh checksums, or retire the
 pinned-release mechanism in favour of the ledger-based one. Either is an owner
 decision about release process, not a code defect.
 
+**Update — the code half is now done; the release itself remains the owner's.**
+
+There *was* a code defect underneath, and it is what made re-pinning expensive:
+the pinned range was stated **twice**. Authoritatively in
+`supabase/production-forward-release.json`, and again as three hardcoded
+literals in `scripts/apply-production-forward-release.mjs` — `RELEASE_VERSIONS`,
+the filename regex `^0(?:24\d|25[0-4])_…`, and two error strings. Re-pinning
+therefore meant editing code *and* regenerating the manifest, and if the two
+disagreed `readReleaseFiles` refused with "Only the pinned 0240-0254 production
+release is supported."
+
+The manifest is now the only statement of the range. Re-pinning is a reviewed
+data change. Nothing was relaxed: every sha256 is still verified, the project
+ref is still checked, the filename still cannot escape `supabase/migrations/`,
+and the range must now additionally be **contiguous and duplicate-free** — a
+property the hand-written list could only assert by being written out correctly.
+The held-release error now names the range it is actually pinned to and points
+at the manifest. Proved by a test that feeds the script a manifest re-pinned to
+`0240-0255`, with the real checksum of `0255`, and asserts it is accepted with
+no code change and still rejects a corrupted read.
+
+**What remains is not code.** A re-pinned manifest also carries `boundary` —
+a snapshot of production's live catalogue — and `newTables`, which
+`assertPreflight` requires to be *absent* from production. Both need a
+credentialed read of production, which this session does not have and must not
+have. And the runbook is explicit that an apply needs "a new successful preview,
+review evidence … and explicit parent authorization", and that the baseline
+block "must not be bypassed or treated as a missing-credentials failure".
+
+So F-C08's code half is closed and F-C08's release half, like F5, is the
+operator's.
+
 ## F-C09 — Supabase credentials fail at first use, not at boot *(Low, open)*
 
 `NEXT_PUBLIC_SUPABASE_URL` (7 sites) and `NEXT_PUBLIC_SUPABASE_ANON_KEY` (6) are
@@ -3505,7 +3537,7 @@ edited or removed.
 | **F-G02** | HIGH | **Every child row on `/wallet/treasury` was a 404.** `ChildRow` linked to `/wallet/wallets/${id}`; no such route, no redirect, and exactly one reference in the repo. The identifier was correct and the wallet dashboard already linked to `/wallet/children/${id}` from the other surface. Independently found by Pass G's Claude-4 link cross-check. | `tests/internal-links-resolve.test.ts` — 237 hrefs resolved against the real route tree |
 | **F-G08** | CRITICAL | **A child could write an allowance rule, and the service-role cron minted the money.** 0217 narrowed writes to `can_manage_family` on five wallet tables; six more from the same 0088 loop were never on the list and kept its permissive `FOR ALL … is_family_member`. The direct mint 0217 closed was reopened one level up: a child could not insert a `wallet_transaction` but could insert a **rule**, and the nightly cron — service role, RLS bypassed — credited `rule.amount_cents` with no check on its author. Found by Pass G's Claude-3 and proven on a live replay: the child's `wallet_transactions` insert is refused while `insert into allowance_rules (… 999999 …)` returns `INSERT 0 1`. Every one of the eleven app write paths to the six tables is already `isManager`-gated, so the database was simply behind the code. | `0298` + `docs/audit/allowance-rule-write-boundary-check.sql`, and an author check in the cron itself |
 | **F-G10** | MEDIUM | **The two records a child has the most motive to edit were the child's to edit.** `grades` and `screen_time_limits` each carried one `FOR ALL … is_family_member` policy, written directly from the browser, and neither module has a role gate of any kind — so unlike the medications module, no layer was claiming a boundary. Closed with two **different** rules: a limit is set on a child by a parent, so writes are managers-only; a grade is not, so any member may record one and only its author or a manager may rewrite it. Fixing what is defective without quietly removing a feature. | `0300` + `docs/audit/child-record-write-boundary-check.sql`, plus the screen-time module's own gate |
-| **F-G11** | MEDIUM | **A policy named "Managers manage child_logins" was predicated on membership** — and `behavior_logs`, the repo's own "behaviour notes about children", let the child a note is about rewrite it. Not an escalation on child_logins (sign-in derives both email and password from `row.username`), but a child could delete a sibling's login row: a denial of service against an access-control record. Closed with the two rules this sweep has settled on — child_logins writes are managers-only (every real write already goes through the service role), and a behaviour note is its author's to correct. | `0301` + `docs/audit/access-record-write-boundary-check.sql` |
+| **F-G11** | MEDIUM | **A policy named "Managers manage child_logins" was predicated on membership** — and `behavior_logs`, the repo's own "behaviour notes about children", let the child a note is about rewrite it. Not an escalation on child_logins (sign-in derives both email and password from `row.username`), but a child could delete a sibling's login row: a denial of service against an access-control record. Closed with the two rules this sweep settled on. `child_logins` turned out to be fixed first by the parallel session's `0297`, which keeps the policy's name and re-predicates it — and found the sharper impact: the username is an INPUT to the child's credential derivation, so renaming a sibling's row locks that sibling out. This session's migration for it was withdrawn rather than duplicated; `0302` now covers `behavior_logs` alone, and the probe asserts both halves. | `0297` (theirs) + `0302` + `docs/audit/access-record-write-boundary-check.sql` |
 | **F-G15** | MEDIUM | **One inbound message could send the family two urgent 🚨 texts.** Three sibling contact-centre routes escalate a genuine urgency to the family's human fallback number, and all three call `recordInboundMessage`, which answers `inserted: false` on a provider redelivery. The **email** route gates its escalation on that flag; the SMS and voicemail routes gated only the planner routing — and wrote the reasoning down while doing it (*"Twilio retries a transcription callback, so only a delivery that was actually new reaches the planner"*) — while the two side effects that reach a person ran on every redelivery. The correct form already existed in the same directory, which is how "this is deliberate" was ruled out: one of three is not a policy. | `tests/inbound-escalation-fires-once.test.ts` — scoped to the condition, because a bare `toContain('filed.inserted')` would have passed on the planner check alone |
 | **F-G01** | MEDIUM | **Two integrations had no documented switch, one of them on a daily cron.** Six operator-facing variables (`GITHUB_*` ×4, `APPLE_*` ×2) existed only in `lib/`. `grep -i github .env.example` returned nothing, while `/api/cron/feedback-github-sync` has run daily throughout — and, because it reports only when `result.configured`, silently. Supersedes the OPEN "19 environment variables are undocumented" in `audit/claude-1.md`. | `tests/env-example-covers-runtime-config.test.ts`, both directions |
 | **F-G04** | MEDIUM | **A whole feature queried the database outside the typed layer, behind types that enforced nothing.** Eight `guardian_*` tables were absent from `database.types.ts`, so 27 queries went through casts and the audit insert through `as never`. `lib/supabase/guardian-tables.ts` declared all eight row shapes correctly and wired them so none of them applied — the row types were a key constraint and nothing more. Declaring the tables raised nine previously invisible type errors, two of which were real defects (F-G05, F-G06). | the type declarations themselves; `tsc` |
@@ -3545,4 +3577,163 @@ not by inspection:
 - Deleting the `GITHUB_TOKEN` and `APPLE_SYNC_ENABLED` lines and restoring
   `TWILIO_CALLER_NUMBER` fails all three env assertions.
 
-309 migrations replayed with 0 failures; 18/18 boundary probes pass.
+All migrations replayed with 0 failures; every boundary probe passes, the five
+new ones included. The counts moved with each commit in the sweep, so they are
+recorded per-commit rather than frozen here.
+
+---
+
+> **Two sessions each appended a section called "Pass G".** They ran at the same
+> time against the same repository and neither could see the other's heading.
+> Both are kept, in the order git merged them: this session's above, the
+> parallel session's below. Their finding ids do not collide (`F-G01`–`F-G15`
+> here, `G1`–`G2` there), and one of their findings — three boundary probes that
+> passed while testing nothing — is a result about the instruments this whole
+> document depends on, which is worth more than most defects in it.
+>
+> They also found and fixed `child_logins` independently, as `0297`. This
+> session's migration for it was withdrawn rather than duplicated: see
+> `0302`'s header.
+
+---
+
+# Pass G — the audit's own instruments, and the list the database ignores
+
+Two findings, one shape: a boundary that is stated somewhere and enforced
+nowhere.
+
+## G1 — Three boundary probes passed while testing nothing
+
+`document-vault-boundary-check.sql`, `money-write-boundary-check.sql` and
+`wallet-write-rls-check.sql` each guarded a security boundary with
+`when others`, so ANY error counted as "the boundary held". Renaming one column
+in each guarded statement left all three printing a pass; the wallet probe
+printed `sqlstate 42703` (undefined_column) inside a message claiming RLS had
+rejected a valid $9,999.99 credit.
+
+**Status: fixed.** Narrowed to `insufficient_privilege`; the wallet probe now
+asserts the sqlstate it was already capturing; a renamed money table now fails
+loudly instead of reading as locked.
+
+This is the same defect that made the `0296` vault probe vacuous in CI, which
+is why the whole `docs/audit` suite was swept for it. `approval-dedupe`,
+`family-scoped-index` and `rls-isolation` were checked and are correct.
+
+## G2 — 58 of the 66 tables the code calls sensitive are readable by children
+
+`lib/ai/context/policy.ts` carries `SENSITIVE_TABLES`: 66 tables, curated and
+reasoned, under a header stating *"§4 says a child must not inspect household
+finances or confidential documents"*. It governs what an AI context slice may
+read. **It does not govern the database.**
+
+Measured against the RLS catalogue of a replayed database: **58 of the 66** are
+readable by any family member, children included, because their read policies
+gate on `is_family_member`, which ignores role. `0297` fixes three
+(`child_logins`, `social_account_tokens`, `driver_licenses`); **55 remain**.
+
+These are NOT all defects. A child should see their own wallet, their own
+medications, their own sleep log. That is exactly why they are recorded here
+rather than swept: each needs a decision of the form *"none", "own row only"
+(`is_self_member`), or "managers only"* (`can_manage_family`) — the three
+shapes this repository already uses (`0272`, `0266`, `0296`).
+
+The count is the finding. A 66-table list that the database honours on 8 of
+them is a policy that exists in one layer only.
+
+**Two checks were run before publishing this list, because a catalogue reading
+is not a measurement.**
+
+*Is the permissive union really the whole gate?* A RESTRICTIVE policy ANDs with
+the permissive ones, so a manager-gated restrictive read policy would make the
+entry wrong. **Zero** of the 55 carry one: the permissive union is the gate.
+
+*Does a child actually get the rows?* Spot-checked behaviourally against a
+replayed database, as a real child auth user with the impersonation asserted:
+
+```
+child sees 1 financial_accounts row(s)   [policy.ts: "account numbers"]
+child sees 1 member_locations row(s) for a PARENT   [policy.ts: "live location"]
+```
+
+That is the household's bank account with its balance, and a parent's
+location-sharing row, read by a child.
+
+| Table | policy.ts reason |
+|---|---|
+| `ai_messages` | other conversations |
+| `auto_insurance_policies` | policy numbers |
+| `babysitter_payments` | payment detail |
+| `behavior_logs` | behaviour notes about children |
+| `billing_customers` | billing identity |
+| `care_log` | care notes |
+| `checkout_sessions` | payment sessions |
+| `child_wallets` | child balances |
+| `driving_trips` | driving telemetry |
+| `family_emergency_contacts` | emergency contacts |
+| `family_emergency_plans` | emergency plans |
+| `family_inbox_messages` | inbound mail bodies |
+| `family_insurance_policies` | policy numbers |
+| `family_wallets` | wallet balances |
+| `financial_accounts` | account numbers |
+| `gift_payments` | payment detail |
+| `health_goals` | health targets |
+| `health_metrics` | measurements |
+| `health_providers` | clinicians |
+| `health_visits` | visit notes |
+| `home_warranties` | warranty account numbers |
+| `household_info` | rows flagged is_sensitive (alarm codes, wifi keys) |
+| `immunizations` | vaccination records |
+| `insurance_policies` | policy numbers |
+| `invest_holdings` | investment positions |
+| `invest_orders` | investment orders |
+| `journal_entries` | private journals |
+| `location_events` | location history |
+| `medical_profiles` | conditions, physicians, emergency contacts |
+| `medication_doses` | prescriptions |
+| `medication_schedules` | prescriptions |
+| `medications` | prescriptions |
+| `member_locations` | live location |
+| `nutrition_logs` | per-person intake |
+| `paperwork_items` | scanned paperwork bodies |
+| `pay_handles` | payment handles |
+| `rides` | ride locations |
+| `safety_check_ins` | check-in locations |
+| `sleep_checkins` | sleep tracking |
+| `sleep_logs` | sleep tracking |
+| `stripe_authorizations` | card authorisations |
+| `stripe_cardholders` | cardholder identity |
+| `stripe_connected_accounts` | payout accounts |
+| `stripe_financial_accounts` | account numbers |
+| `stripe_issuing_cards` | card numbers |
+| `symptom_logs` | symptoms |
+| `tax_documents` | tax filings |
+| `vacation_documents` | passport and ticket scans |
+| `vacation_emergency_contacts` | emergency contacts |
+| `vacation_medical_information` | travel medical detail |
+| `vehicle_registrations` | registration numbers |
+| `wallet_cards` | card details |
+| `wallet_passes` | stored passes |
+| `wallet_transactions` | per-child card activity |
+| `weather_locations` | stored coordinates |
+
+**Suggested triage**, for an owner to confirm rather than for an agent to
+assume:
+
+* **Managers only** — the money instruments and account numbers
+  (`financial_accounts`, the `stripe_*` group, `pay_handles`, `invest_*`,
+  `wallet_cards`, `home_warranties`, the `*insurance_policies` group,
+  `tax_documents`, `paperwork_items`, `vacation_documents`).
+* **Own row only** — the per-person health and telemetry tables, which have a
+  member column and a real first-person use (`medications`,
+  `medication_schedules`, `medication_doses`, `health_*`, `immunizations`,
+  `symptom_logs`, `sleep_*`, `nutrition_logs`, `journal_entries`,
+  `member_locations`, `location_events`, `safety_check_ins`, `driving_trips`,
+  `rides`, `child_wallets`, `wallet_transactions`).
+* **Needs a column-aware rule**, as `0266` did for documents —
+  `household_info`, whose own reason names only the rows "flagged
+  is_sensitive (alarm codes, wifi keys)".
+
+**Status: 3 fixed by `0297` and proved by
+`docs/audit/sensitive-role-boundary-check.sql`; 55 OPEN, owner decision.**
+Like every migration since `0255`, `0297` is inert in production until F5 and
+F-C08 are cleared.

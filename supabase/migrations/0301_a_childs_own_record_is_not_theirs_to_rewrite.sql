@@ -1,4 +1,4 @@
--- Bubaly :: 0300 - the two records a child has the most motive to edit
+-- Bubaly :: 0301 - the two records a child has the most motive to edit
 -- ----------------------------------------------------------------------------
 -- `screen_time_limits` and `grades` each carry ONE `FOR ALL … is_family_member`
 -- policy, and both are written directly from the browser through the anon
@@ -80,7 +80,7 @@ begin
     loop
       execute format('drop policy if exists %I on public.screen_time_limits', pol.polname);
       swept := swept + 1;
-      raise notice '0300: dropped stray permissive write policy screen_time_limits.%', pol.polname;
+      raise notice '0301: dropped stray permissive write policy screen_time_limits.%', pol.polname;
     end loop;
   end if;
 
@@ -131,7 +131,7 @@ begin
     loop
       execute format('drop policy if exists %I on public.grades', pol.polname);
       swept := swept + 1;
-      raise notice '0300: dropped stray permissive write policy grades.%', pol.polname;
+      raise notice '0301: dropped stray permissive write policy grades.%', pol.polname;
     end loop;
   end if;
 
@@ -147,8 +147,8 @@ begin
       'grades_insert','grades_author_or_manager_update','grades_author_or_manager_delete'
     );
   if remaining <> 0 then
-    raise exception '0300 FAILED: % permissive write policy(ies) still on grades/screen_time_limits after the sweep', remaining;
+    raise exception '0301 FAILED: % permissive write policy(ies) still on grades/screen_time_limits after the sweep', remaining;
   end if;
 
-  raise notice '0300 OK: % stray write policy(ies) swept; a limit is a manager''s to set and a grade is its author''s to correct', swept;
+  raise notice '0301 OK: % stray write policy(ies) swept; a limit is a manager''s to set and a grade is its author''s to correct', swept;
 end $$;
