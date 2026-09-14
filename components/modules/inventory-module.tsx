@@ -22,6 +22,7 @@ import {
   searchItems, lentOut, warrantyAlerts, valueSummary, inventorySummary, lastConfirmed,
 } from '@/lib/inventory/finder';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { familyMediaPath } from '@/lib/storage/family-media';
 
 type Item = Tables<'inventory_items'>;
 type Location = Tables<'home_locations'>;
@@ -350,8 +351,7 @@ function ItemForm({ familyId, userId, members, locations, item, defaultLocationI
     if (file.size > 25 * 1024 * 1024) { toastError('Photo is too large (max 25 MB)'); return; }
     setUploading(true);
     try {
-      const ext = file.name.split('.').pop() || 'jpg';
-      const path = `${familyId}/inventory/${Date.now()}.${ext}`;
+      const path = familyMediaPath(familyId, 'inventory', file.name);
       const { data: stored, error: upErr } = await createClient().storage.from('family-media').upload(path, file, { upsert: false });
       if (upErr || !stored) { toastError(describeDbError(upErr)); return; }
       setPhotoPath(stored.path);

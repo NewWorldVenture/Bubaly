@@ -7,13 +7,20 @@ const read = (relativePath: string) => readFileSync(resolve(process.cwd(), relat
 
 describe('family media persistence boundaries', () => {
   it('uses collision-resistant client-side upload paths', () => {
+    // The randomUUID call these three used to make inline now lives in
+    // lib/storage/object-name.ts, because four OTHER modules were naming objects
+    // `${Date.now()}.${ext}` in the same public bucket. The assertion follows the
+    // subject rather than the old spelling: each uploader must route through a
+    // collision-resistant namer. tests/public-bucket-objects-are-unguessable.ts
+    // enforces this across every uploader and checks the namer behaviourally.
     const createMemory = read('components/memories/create-memory.tsx');
     const photosModule = read('components/modules/photos-module.tsx');
     const marketplaceUpload = read('components/marketplace/photo-upload.tsx');
 
-    expect(createMemory).toContain('crypto.randomUUID');
-    expect(photosModule).toContain('crypto.randomUUID');
+    expect(createMemory).toContain('familyMediaPath');
+    expect(photosModule).toContain('familyMediaPath');
     expect(marketplaceUpload).toContain('crypto.randomUUID');
+    expect(read('lib/storage/object-name.ts')).toContain('crypto.randomUUID');
   });
 
   it('cleans up family-media objects when Create Memory metadata fails', () => {

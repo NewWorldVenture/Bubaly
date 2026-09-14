@@ -3644,3 +3644,104 @@ assume:
 `docs/audit/sensitive-role-boundary-check.sql`; 55 OPEN, owner decision.**
 Like every migration since `0255`, `0297` is inert in production until F5 and
 F-C08 are cleared.
+
+---
+
+# Pass H — the auth-user ceiling, closed
+
+`[CLAUDE-4][HIGH][EDGE CASE]` recorded that three production paths read only the
+first 50 auth users and that one of them marked the rest delivered. It was
+recorded and never fixed. It is fixed now.
+
+`supabase.auth.admin.listUsers()` with no arguments sends an empty `per_page`,
+so GoTrue applies its own default of 50 and answers with the first page — no
+error, no short-read signal. Three callers did exactly that:
+
+| Caller | What truncation did |
+|---|---|
+| `lib/server/notification-emails.ts` | **Permanent loss.** A recipient past the 50th had no metadata, so `!meta?.email` matched the "no email on file" branch, their notification ids went into `resolvedIds`, and `sent_at` was stamped. Marked delivered, never sent, never retried. |
+| `app/api/cron/weekly-digest/route.ts` | Families are read with `readAll`, so the family list is complete — and then the digest is dropped for every family whose members sit past the first page. |
+| `app/api/cron/chore-reminders/route.ts` | The reminder is skipped for any member past the first page. The `userIds` filter can only narrow what was read. |
+
+The notification one is the severe case: a truncated lookup was
+indistinguishable from a user who genuinely has no address, and the code's
+response to "no address" is to settle the notification rather than retry it.
+
+**Fixed** by `lib/server/list-all-auth-users.ts`, which pages explicitly and
+returns `{ users, error }` where any error means the list is NOT complete, so a
+caller can never read a partial list as an absent user.
+
+Two details that are the whole difficulty:
+
+* It terminates on an **empty** page, not a short one — mirroring
+  `lib/supabase/read-all.ts`. Stopping on a page shorter than the one requested
+  rebuilds the bug: GoTrue may clamp `per_page` below what the client asks for,
+  and then the first page is "short" and the read ends at the server's cap.
+  **I wrote the short-page version first**; the test that models a clamping
+  server caught it before it was committed.
+* It does not use the client's `nextPage`. That value is parsed out of the Link
+  header with `.substring(0, 1)` — one character — so page 10 reads as page 1.
+  Measured against `@supabase/auth-js` 2.108.2.
+
+`tests/auth-user-list-is-complete.test.ts` is behavioural, not source-reading: a
+fake GoTrue that clamps `per_page` to 50 exactly as the real one does. Verified
+non-vacuous — reintroducing the short-page termination fails 4 of its 10 tests.
+
+**Status: FIXED**, and unlike `0296`/`0297` this one needs no migration, so it
+reaches production with the deploy.
+
+## Also fixed in Pass H — nothing pinned "manager" to the database
+
+"Manager" was stated three times and nothing tied them together:
+
+```
+lib/constants/roles.ts   MANAGER_ROLES = ['parent', 'adult']
+lib/constants/roles.ts   isManager = role === 'parent' || role === 'adult'
+0003_functions_triggers  can_manage_family: role in ('parent','adult')
+```
+
+All three agree today, and `MANAGER_ROLES` appeared in **zero** tests. This is
+the source of the class that dominates this audit — F16, F18, F20, F21, F-003,
+F-006, F-E01, F-E02, *one mistake in eight places*: authorization drawn on the
+screen rather than in the database. `roles.ts` says so itself: *"Used for UI
+gating; the database RLS is the real enforcement boundary."*
+
+`tests/manager-role-agrees-with-the-database.test.ts` reads the roles out of the
+migration that defines each function and asserts the sets match, and that
+`can_manage_family` stays strictly narrower than membership — never `child` or
+`teen`, the equivalence `0296`/`0297` had to undo. Non-vacuous against all three
+drift directions (array 3/6, predicate 2/6, SQL 2/6).
+
+## Swept and found clean in Pass H
+
+Recorded so a later pass does not re-derive them.
+
+**The service-role surface** (it bypasses RLS entirely, so it is the one place
+where every database boundary in this audit is irrelevant):
+
+* 71 service-role API routes and 30 service-role server-action files — all gated.
+* 24/24 cron routes call `hasCronAuthorization`, which fails closed on a missing
+  secret.
+* 9 Twilio webhooks validate `x-twilio-signature` through a validator that fails
+  closed on a missing token and uses `timingSafeEqual`.
+* The three ungated public actions (`gift`, `reviews/new`, `s/[slug]`) are IP
+  rate-limited and scoped by an unguessable token or a public slug.
+* 0/24 cron routes contain an unbounded `select()` — the PostgREST 1,000-row cap
+  class is closed there.
+
+**The child sign-in path**, which is the most attackable surface in the product
+(guessable username, 4-digit PIN, real auth users):
+
+* A wrong PIN records a failure and a success clears the counter — the throttle
+  is not decorative.
+* The `ilike` wildcard hole is fixed and documented in place.
+* `child_login_throttle` is RLS-on-with-no-policies, so it is deny-all to every
+  client role and cannot be reset by the account being throttled.
+* `resetChildPinAction` checks `isManager` **and** that the member belongs to the
+  caller's own family, so it is not a cross-family takeover.
+
+**The rate limiter**: `rate_limit_hit` is a single atomic
+`insert … on conflict do update … returning count`, so there is no read-then-write
+race; execute is revoked from `public`/`anon`; and an authenticated caller may
+only use a key containing their own `auth.uid()`, so one user cannot exhaust
+another's bucket. `rateLimitDb` fails closed by default.

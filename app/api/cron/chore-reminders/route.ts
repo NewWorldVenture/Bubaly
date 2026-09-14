@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { listAllAuthUsers } from '@/lib/server/list-all-auth-users';
 import { readAll } from '@/lib/supabase/read-all';
 import { sendReactEmail } from '@/lib/email';
 import { ChoreReminderEmail } from '@/lib/emails/chore-reminder';
@@ -100,13 +101,16 @@ export async function GET(req: NextRequest) {
 
   // Fetch emails
   const userIds = [...byMember.values()].map((v) => v.userId);
-  const { data: authUsers, error: authUsersError } = await supabase.auth.admin.listUsers();
+  // Every auth user, not GoTrue's default first 50. The filter below narrows to
+  // the members who have a reminder due, but it can only narrow what was read:
+  // a member past the first page has no email here and is skipped silently.
+  const { users: allAuthUsers, error: authUsersError } = await listAllAuthUsers(supabase);
   if (authUsersError) {
     console.error('Cron chore user read error:', authUsersError);
     return NextResponse.json({ error: t('choreReminders.choreReminderProcessingFailed') }, { status: 500 });
   }
   const emailByUserId = new Map(
-    (authUsers?.users ?? [])
+    allAuthUsers
       .filter((u) => userIds.includes(u.id))
       .map((u) => [u.id, u.email ?? null]),
   );
