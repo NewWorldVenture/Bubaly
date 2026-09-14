@@ -3237,3 +3237,66 @@ their weight beyond that:
   fails loudly instead of quietly becoming false.
 
 Reverting the members page and the recipe flow fails 3 of 8, naming both.
+
+---
+
+## Pass AU — two primitives that documented a guarantee they did not hold
+
+**Status: FIXED** (two), **BLOCKED with the reason corrected** (one).
+
+### `[CLAUDE-2 → CLAUDE-1][LOW][A11Y]` `Field` called itself "fully accessible"
+
+Its own docstring said so. The error is rendered with `role="alert"`, so it is
+**announced once** when it appears — and then the control reported nothing. A user who
+tabs back to the field, or reaches it any way other than at the instant the error
+appeared, is told the field is fine. WCAG 3.3.1 asks the **field** to identify itself as
+in error; a message sitting near it is not the same thing.
+
+**Fixed centrally, not at 124 call sites.** `Field` now clones the render prop's element
+to apply `aria-invalid` and an `aria-describedby` pointing at the message (or the hint when
+there is no error), so every consumer is correct without one of them being touched. Three
+properties make that safe, and each has a case:
+
+- **A call site that sets either attribute itself wins** — the explicit value is never
+  clobbered.
+- **A render prop returning something other than a single element** (a fragment, a
+  conditional pair) is **left exactly as it was** rather than guessed at. The second
+  argument exists for those, and the test proves the render prop receives it.
+- **A healthy field must not report itself invalid** — `aria-invalid` is absent, not
+  `"false"`.
+
+### `[CLAUDE-3 → CLAUDE-1][LOW][INPUT]` `*` is a wildcard to PostgREST and neither sanitizer knew
+
+Both `lib/services/search/index.ts sanitizeQuery` and `lib/ai/activity.ts safeSearchTerm`
+state their purpose as stopping a query that would *"quietly match far more than the person
+typed"* — and both missed `*`.
+
+**The reason they made the same omission is worth keeping**: `*` is **not a SQL wildcard**.
+It is PostgREST's own spelling of `%` in a `like`/`ilike` value, so a character class
+written against the LIKE grammar — which is what both of these are — does not contain it.
+Two sanitizers written independently made the identical mistake because they were both
+written correctly against the wrong grammar. A search for `*` became `%%%%` and returned
+every row the caller could see.
+
+### `[CLAUDE-4 → CLAUDE-1][LOW][EDGE-CASE]` the 31st allowance — blocked, and Claude-4's alternative does not work
+
+Verified exactly as filed: `nextRunDate` reads the day-of-month off `fromIso`, which after
+the first run is the **already-clamped** date, so 2026-01-31 → 02-28 → 03-28 → 04-28 …
+A parent who sets "the last day of the month" gets it three days early for the rest of the
+child's life.
+
+Claude-4 offered *"store the intended day-of-month on the rule **or derive it from the
+rule's `created_at`**"*. **The second does not work**, and that is worth recording so
+nobody tries it:
+
+- `created_at` does not move when a parent **edits** the rule to a different day, so an
+  edited rule would clamp to the wrong anchor forever.
+- `updated_at` moves on **every** unrelated edit (an amount change) **and on every run**,
+  since the runner writes `next_run_on` — so it is not an anchor at all.
+
+`allowance_rules` has no other candidate column (`id, family_id, child_wallet_id,
+amount_cents, cadence, split, is_active, next_run_on, last_run_on, created_by` + stamps).
+The parent's intended day is **not recoverable from anything currently stored**, so this
+needs a column, which is a migration, which is the owner's and gated behind **F-001**.
+Recorded there rather than half-built — an `anchorDay` parameter nobody can supply is the
+same lie as an optional locale nobody passes.
