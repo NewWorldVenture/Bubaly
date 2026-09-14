@@ -13,7 +13,8 @@ import { getOnboardingProgress, resolveCompleteness } from '@/lib/server/onboard
 import { isManager } from '@/lib/constants/roles';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
-import { fmtTime, firstName, fmtMoney } from '@/lib/utils/format';
+import { firstName } from '@/lib/utils/format';
+import { getFormat } from '@/lib/utils/format-server';
 import { familyScore } from '@/lib/home/family-score';
 import { HomeMomentCard } from '@/components/moments/home-moment-card';
 import { OnThisDayCard } from '@/components/memories/on-this-day-card';
@@ -145,6 +146,7 @@ type Member = { id: string; display_name: string; color: string | null; role: st
 
 export default async function HomePage() {
   const i18nT = await getTranslations();
+  const { fmtTime, fmtMoney } = await getFormat();
   const tr = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;

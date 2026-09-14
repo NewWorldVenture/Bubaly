@@ -1731,3 +1731,103 @@ what turns it red.
 
 `fs` has been an unused import in that file since before this pass; eslint does not
 flag it and it is left alone rather than widening the diff.
+
+---
+
+## Pass Z — the shared formatter follows the locale, and the honest size of what is left
+
+### [CLAUDE-1][HIGH][I18N] Every date, time and money value in the shared formatter rendered in US English — and there are 24 money formatters, not one
+
+- **Status:** MECHANISM FIXED + PROVEN; conversion RATCHETED (249 sites remain, ceiling enforced)
+- **File:** `lib/utils/format.ts`, plus `components/i18n/use-format.ts` (new),
+  `lib/utils/format-server.ts` (new)
+
+Claude-2 recorded *"245 hardcoded `'en-US'` formatters and a USD-only
+`lib/utils/format.ts`"*. Verified, and it is worse in two directions and narrower in a
+third:
+
+| measure | finding | measured |
+|---|---|---|
+| `'en-US'` literals in app/components/lib | 245 | **261** |
+| hardcoded-locale **formatter** sites | — | **252** in 144 files |
+| independent money formatters | "a USD-only format.ts" | **24** |
+| family-facing `fmtMoney` files | — | **5 of 20** — the other 16 are Super Admin |
+
+`lib/utils/format.ts` was locale-blind in four ways, not one: `format(d, 'EEE, MMM d')`
+gives "Tue, Jul 14" to a German family who expect "Di., 14. Juli"; `'h:mm a'` gives
+12-hour AM/PM to locales using a 24-hour clock; `fmtRelative` said **"Today,"** in
+hardcoded English; and `fmtMoney` pinned `new Intl.NumberFormat('en-US')` at module
+scope. 323 call sites across 144 files go through it — 70 client, 74 server.
+
+**`lib/i18n/locales.ts` states the intent in its own header** — the unit is a full
+locale because *"a family in Mexico and a family in Spain both read Spanish but expect
+different dates, currency and vocabulary"* — and the `Locale` type carries no date or
+currency information and nothing consumed it for either.
+
+### Why Intl and not date-fns with a locale
+
+This is the part that looks equivalent and is not. A pattern like `'EEE, MMM d'`
+hardcodes the **order** as well as the names, so `format(d, 'EEE, MMM d', { locale: de })`
+yields *German names in American order*. `Intl.DateTimeFormat` gets both right, and
+costs no bundle. The test asserts the ORDER (`de.indexOf('14') < de.indexOf('Juli')`),
+which is exactly the half a locale-aware date-fns call would still get wrong.
+
+`PATTERNS` maps the nine date-fns patterns the app actually passes to Intl option bags,
+and anything unmapped falls through to date-fns so it renders as today rather than
+wrong. The guard reads every pattern the app passes **out of the source** and requires
+each to be mapped — removing one mapping fails naming `'MMM d, yyyy'`.
+
+### Money: the currency is not a locale question
+
+The currency belongs to the money, not the reader's language: a US family's wallet is
+in dollars whichever language they read, and showing a USD balance as euros because the
+UI is French would **misstate an amount** — worse than the defect. So `fmtMoney(cents,
+currency)` keeps the currency a caller's argument (eight tables carry a `currency`
+column; `lib/wallet/ledger.ts:127` already threads it and pinned only the locale) while
+the grouping and separators follow the locale. `"12,50 $"` is how German writes twelve
+and a half US dollars; `"$12.50"` is not.
+
+`lib/insurance/policies.ts:160` is deliberately NOT merged into the shared one: it takes
+**whole dollars**, not cents, so routing those amounts through the cents formatter would
+divide them by a hundred.
+
+### What is fixed, and what is ratcheted
+
+Fixed: the mechanism (`createFormat(code, t?)`, `useFormat()`, `await getFormat()` —
+matching the existing `useTranslations()`/`getTranslations()` idiom exactly), and the
+five family-facing money/date surfaces (insurance, settings, the referral panel and
+page, Home). 252 → 249.
+
+**Not fixed: 249 sites in 141 files, and this is recorded as a ratchet rather than
+claimed.** Converting 24 money formatters and 144 files is a project, and a
+half-conversion is worse than either finishing it or recording it precisely — it leaves
+two conventions and no way to tell which a surface follows.
+`tests/hardcoded-locales-only-go-down.test.ts` pins the ceiling so the total can only
+fall, names the offenders on failure, and states which categories are legitimately
+`'en-US'` (the locale code as data in `lib/i18n`; crons, exports and model prompts,
+which have no reader whose language is known; Super Admin pages in the platform's own
+currency).
+
+### A sixth instrument bug, and the one that would have made the ratchet worthless
+
+The ceiling took three tries and the derivation is now written into the test rather than
+just the result:
+
+- `git grep -c` says **247** — it counts matching LINES and several hold two formatters.
+- Counting matches says **252** — but that **reads comments**, and one of them is this
+  pass's own header quoting `new Intl.NumberFormat('en-US')` to explain the defect. So
+  the module that CLOSED a site still showed one, and **deleting the explanation would
+  have "converted" it**. A ratchet satisfiable by removing a comment measures nothing.
+- Comments stripped: **252** on HEAD, **249** now.
+
+The bare `fmtDate`/`fmtMoney` exports are kept and are **not** a leftover: a cron, a CSV
+export and the text of a prompt sent to a model have no reader with a language
+preference, and the source language is right there. They are documented as that, and the
+ratchet's failure message names them as the correct answer for that case.
+
+### Next tranche, with its number
+
+Convert the 249. The order that follows from the measurements: the 24 money formatters
+first (money is where a wrong locale misstates a value rather than reading oddly), then
+the 70 client files via `useFormat()`, then the 74 server files via `getFormat()`,
+leaving `lib/i18n`, the crons/exports and the Super Admin pages as recorded exceptions.

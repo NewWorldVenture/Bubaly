@@ -4,7 +4,7 @@ import { requireFeature } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { getOrCreateReferralCode, listReferralsForFamily, getReferralConfig } from '@/lib/referrals/server';
 import { summarizeReferrals, referralLink } from '@/lib/referrals/core';
-import { fmtMoney } from '@/lib/utils/format';
+import { getFormat } from '@/lib/utils/format-server';
 import { ReferralPanel } from '@/components/referrals/referral-panel';
 import { getTranslations } from '@/lib/i18n/server';
 
@@ -13,6 +13,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function ReferralsPage() {
   const t = await getTranslations();
+  const { fmtMoney } = await getFormat();
   const ctx = await requireFeature('/referrals');
   const familyId = ctx.active.familyId;
 

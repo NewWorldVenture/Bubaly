@@ -386,9 +386,25 @@ reads the **JWT** email and not `profiles.email`, so it is not an escalation.
 - **The shared `Field`** announces an error but never sets `aria-invalid`.
 - **Destructive actions in the medical and money modules delete on one click**
   with no confirmation.
-- **Every date, time and money value renders in US English** regardless of
-  locale: 245 hardcoded `'en-US'` formatters and a USD-only
-  `lib/utils/format.ts`, in a product shipping eleven locales.
+- **Every date, time and money value renders in US English** regardless of locale.
+  **Mechanism FIXED; the conversion is ratcheted.** Measured: **252** hardcoded-locale
+  formatter sites in 144 files, not 245 — and **24 independent money formatters**, not
+  one. `lib/utils/format.ts` was locale-blind in four ways: English month and day
+  names, 12-hour AM/PM in locales that use a 24-hour clock, `fmtRelative` saying
+  **"Today,"** in hardcoded English, and `new Intl.NumberFormat('en-US')` pinned at
+  module scope. `lib/i18n/locales.ts` says in its own header that the unit is a full
+  locale because *"a family in Mexico and a family in Spain both read Spanish but
+  expect different dates, currency and vocabulary"* — and nothing consumed it for
+  either. `createFormat(code, t?)`, `useFormat()` and `await getFormat()` now exist,
+  matching the `useTranslations()`/`getTranslations()` idiom, built on `Intl` rather
+  than date-fns-with-a-locale because a pattern like `'EEE, MMM d'` hardcodes the
+  **order** as well as the names — date-fns with a German locale gives German names in
+  American order. Five family-facing money and date surfaces converted (252 → 249);
+  `tests/hardcoded-locales-only-go-down.test.ts` holds the remainder as a ceiling that
+  can only fall. **The currency is deliberately NOT localised**: a US family's wallet
+  is in dollars whichever language they read, so the currency stays a caller's argument
+  (eight tables carry a `currency` column) while only the separators follow the
+  locale — `"12,50 $"` is how German writes twelve and a half US dollars.
 - **Guardian's safety vocabulary** — scam types, trust levels, routing labels —
   is 45 hardcoded English strings in `lib/`, on a surface `GATED_SURFACES`
   cannot see. The same blind spot as Claude-1's finding on `lib/server/ai-access.ts`:
