@@ -3958,3 +3958,50 @@ still unsaves. Closing that needs a **three-state heart** — saved, not saved,
 unknown — which is a client change on a marketing surface, and the failure needs an
 outage at exactly first paint. Named here rather than built, and the server no longer
 *asserts* the wrong state, which is the half that was a lie.
+
+---
+
+## Pass BC — a dead export whose docstring was the defect
+
+**Status: FIXED** (deleted), with **half the finding corrected as stale**.
+
+### `[CLAUDE-4 → CLAUDE-1][LOW][DEAD-CODE]` verified dead, and the reason it mattered is right
+
+`rg childSpendableCents` across `app/`, `lib/`, `components/`, `tests/` and
+`mobile/src` returns the definition and nothing else. Claude-4 called the impact
+*"none today"* and then named the part that is not nothing:
+
+> *"it carries … a comment that would invite a future caller to trust it for a money
+> decision."*
+
+The docstring said **"This is what a card authorization is checked against in real
+time."** Verified false: an authorization goes through `reserveCardAuth` →
+`wallet_reserve_card_auth`, called from `lib/stripe/webhook.ts:182`, and that RPC
+re-checks the balance **in SQL under a per-child lock** — the whole point being that
+two concurrent authorizations cannot each approve against the same money. A
+TypeScript sum taken outside that lock cannot give the same answer. A future caller
+trusting the sentence would have had a race, not a balance.
+
+Deleted rather than re-commented: a correct comment on code nobody calls is still an
+invitation. The reason is left in its place so the next person does not re-add it.
+
+### Half the finding is stale, and saying so is the point of re-verifying
+
+Claude-4 wrote that it *"carries the same unbounded read as `bucketBalanceCents`"*.
+**Both are paged now** — `childSpendableCents` used `readAll` at the time I read it,
+and `bucketBalanceCents` carries a comment explaining the `db-max-rows` cap in
+detail. Somebody fixed that half between the filing and now. The guard keeps a case
+on it so the fix stays.
+
+### The guard asserts code, because prose could not tell a claim from a warning
+
+My first version matched the false docstring's wording — and went red on **the
+comment I had just written to explain why that docstring was wrong.** A regex cannot
+distinguish a claim from a warning about the claim, and the property was never about
+wording: it is that the approve/decline decision comes from the reservation. So the
+case now reads the webhook's authorization branch and asserts the decision is
+derived from `reserved`, with no summed balance in it.
+
+That is the same shape as the `listUsers` guard two passes ago — a text scan
+tripping over prose — and the third time in this audit that a guard of mine had to
+be moved off words and onto code.

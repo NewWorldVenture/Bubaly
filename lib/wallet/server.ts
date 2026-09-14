@@ -111,35 +111,17 @@ export async function fundGoal(supabase: DB, params: {
 
 export type CreditResult = { ok: boolean; error?: string; credited: number };
 
-/**
- * Spendable balance for a child = the live balance of their SPEND bucket, derived
- * from the immutable ledger (credits − debits). This is what a card authorization
- * is checked against in real time. Returns 0 when the bucket/wallet is unknown.
- */
-export async function childSpendableCents(supabase: DB, familyId: string, childWalletId: string): Promise<number> {
-  const { data: bucket, error: bucketError } = await supabase
-    .from('wallet_buckets').select('id')
-    .eq('family_id', familyId).eq('child_wallet_id', childWalletId).eq('kind', 'spend').maybeSingle();
-  if (bucketError) throw new Error(walletFailure(bucketError, 'Could not load the wallet Spend bucket.'));
-  if (!bucket) return 0;
-
-  // Paged: PostgREST caps at db-max-rows whatever the client asks, so an
-  // unbounded read of a busy ledger totals only its first page.
-  const { rows: txns, error: transactionError } = await readAll<{ direction: string; amount_cents: number; status: string }>(
-    (from, to) => supabase
-      .from('wallet_transactions')
-      .select('direction, amount_cents, status')
-      .eq('family_id', familyId).eq('bucket_id', bucket.id)
-      .in('status', ['completed', 'processing'])
-      .order('id').range(from, to),
-  );
-  if (transactionError) throw new Error(walletFailure(transactionError, 'Could not load the wallet balance.'));
-
-  return (txns ?? []).reduce((sum, t) => {
-    if (t.status !== 'completed' && t.status !== 'processing') return sum;
-    return sum + (t.direction === 'credit' ? t.amount_cents : -t.amount_cents);
-  }, 0);
-}
+// A `childSpendableCents` helper used to sit here, exported, and its docstring
+// said "This is what a card authorization is checked against in real time."
+// Nothing called it, and the sentence was false: a card authorization goes
+// through `reserveCardAuth` below, which re-checks the balance in SQL under a
+// per-child lock — the whole point being that two concurrent authorizations
+// cannot each approve against the same balance. A TypeScript sum read outside
+// that lock cannot give the same answer, so a future caller trusting the comment
+// for a money decision would have had a race, not a balance.
+//
+// Use `bucketBalanceCents` (below) for DISPLAY, and `reserveCardAuth` for a
+// decision that spends.
 
 /**
  * Atomically reserve a hold for a card authorization. Under a per-child lock the
