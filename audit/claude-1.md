@@ -4153,3 +4153,106 @@ Changing what every rendering test runs against, on a branch carrying nine other
 passes, is not something to bundle. It needs its own pass: move the resolution
 wholesale, then read the failures that survive — **those** would be the real finding,
 and only then is there a number worth writing down.
+
+---
+
+## Pass BF — native push had no transport, and three places said it did
+
+**Status: FIXED** (the claim), **BLOCKED on credentials** (the capability).
+
+This closes a gap I named in my own status board long ago — *"push/APNs + calendar-feed
+integration seams"* — and never came back to. No other worker had reached it.
+
+### `[CLAUDE-1][HIGH][INTEGRATIONS]` the send targeted an API Google decommissioned in 2024
+
+`lib/server/push.ts` POSTed `https://fcm.googleapis.com/fcm/send` with an
+`Authorization: key=<FCM_SERVER_KEY>` header — the FCM **legacy** HTTP API. Google
+shut it down on **2024-06-20**, together with the server keys that authenticated it.
+
+**Probed rather than recalled**, because a date from memory is not evidence:
+
+```
+$ curl -sS -o /dev/null -w '%{http_code}' -X POST https://fcm.googleapis.com/fcm/send \
+    -H 'authorization: key=AAAA-not-a-real-key' -d '{"to":"probe"}'
+404
+```
+
+404 from Google's own frontend, not 401. A 401 would have meant *"alive, bad
+credential"* and my claim would have been wrong; 404 means the path is gone.
+
+### The dead send was the harmless half
+
+It could only fail, and a failure was counted as a failure. Three other things were
+not harmless:
+
+1. **`pushConfigured()` returned `native: true` whenever that dead key was set**, so
+   `/admin/marketing/push` and `/api/push/test` told an operator native delivery was
+   configured and working.
+2. **`docs/mobile.md` step 4 instructed them to set it** — *"Set `FCM_SERVER_KEY` so
+   `lib/server/push.ts` delivers to native tokens"* — an instruction that cannot
+   succeed, and following it turned every native send from a counted `skipped` into a
+   counted `failed`.
+3. **The environment registry documented it as a live conditional credential**, with a
+   source line pointing at the dead branch.
+
+All three now say the same true thing. Native devices still register and their tokens
+are still stored; every native send is counted as **skipped**, which is what it is —
+the device is reachable, we have no way to reach it.
+
+### Not built, and why that is the right call
+
+Reinstating native delivery means FCM **HTTP v1**: a service-account JSON, an OAuth2
+token minted against `https://oauth2.googleapis.com/token`, and POSTs to
+`…/v1/projects/<id>/messages:send`. This repo has none of those credentials, so the
+path could not be exercised even once. **Building it blind would recreate exactly what
+was here before** — an untestable integration that reports itself working. The shape
+is written into the module so the next person starts from the right API rather than
+rediscovering the 404.
+
+### Removing the call moved a file off an audited list, and the list noticed
+
+`tests/external-fetch-boundaries.test.ts` keeps a roster of files that reach a fixed
+external provider and must do so behind an explicit timeout wrapper. `lib/server/push.ts`
+was on it, and deleting the FCM call made it fail — correctly: the file no longer
+contains `fetchExternal` because it no longer contains a fetch.
+
+Struck off **with the reason**, and the half of the rule that still bites is kept
+rather than dropped alongside the entry: *no bare `fetch(`* is true of every server
+file whether or not it currently calls one. An entry removed from a roster silently is
+how a roster stops meaning anything.
+
+### `[CLAUDE-1][LOW][TESTING]` a flaky test, and the discipline of not calling it one
+
+Validating this pass, `tests/library-assistants-pre-migration-render.test.ts` failed
+in the full run and again in the isolated run straight after it — then passed **6/6**
+in isolation once the machine was quiet. That is the definition of flaky, and the
+audit's own rule is that *"flake is not a root cause"*, so I measured rather than
+re-ran until green.
+
+- Failing isolated run: **9.8s** for the file. Passing runs: **5.1–5.2s**.
+- Six cases, each doing a real SSR render, against vitest's **5s default per-test
+  timeout**. The margin is thin enough that CPU pressure breaches it.
+
+Two hypotheses checked and **discarded before writing them down**: the two tests
+sharing a name across the file's two `describe` blocks do not share leaked state
+(there is a `beforeEach` reset), and the file declares no `concurrent`.
+
+Each case now carries an explicit 30s budget. **Stated as a mitigation, not a
+confirmed diagnosis** — the original failure's error text was overwritten before I
+could re-read it, so "slow render hit the default timeout" is the best-supported
+cause and not a proven one. The comment says so, and says to capture the message
+first if it ever fails again.
+
+**This also names a false-negative mode in my own gate.** I push on a clean full-suite
+run; a test that can fail under load means that gate can go red for a reason that is
+not the change — and, worse, could have gone green on a run where a genuinely broken
+test happened to pass. Worth knowing about every "1,228 files green" in this audit.
+
+### And my own guard anchored on the wrong occurrence
+
+The case asserting the native branch counts a skip sliced
+`push.indexOf('// Native FCM/APNs')` to `push.indexOf('} catch {')` — and `} catch {`
+first appears inside `ensureVapid`, eighty lines **above**. The slice was empty and
+the case passed on nothing until I asserted its length. Searching forward from the
+marker fixes it. Same family as the binding-in-the-wrong-function mistakes earlier in
+this audit: an anchor that matches an earlier occurrence than the one meant.

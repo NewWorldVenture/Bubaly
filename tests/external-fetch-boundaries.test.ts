@@ -11,7 +11,6 @@ const serverFiles = [
   'lib/guardian/twilio.ts',
   'lib/marketing/send.ts',
   'lib/server/email.ts',
-  'lib/server/push.ts',
   'lib/sync/providers/google.ts',
   'lib/sync/providers/microsoft.ts',
   'lib/vacations/weather-fetch.ts',
@@ -49,6 +48,20 @@ describe('external fetch deadlines', () => {
       const source = readFileSync(file, 'utf8');
       expect(source, file).toContain('fetchExternal');
       expect(source, file).not.toMatch(/await fetch\(/);
+    }
+  });
+
+  // `lib/server/push.ts` was on the list above and came off it, because it no
+  // longer reaches a provider: its native send targeted the FCM legacy endpoint
+  // Google decommissioned on 2024-06-20, and the web half goes out through the
+  // `web-push` library rather than fetch. The half of the rule that still bites
+  // is kept here rather than dropped with the entry — "no bare fetch" is true of
+  // every server file whether or not it currently calls one.
+  it('files that left the audited list still may not reach for a bare fetch', () => {
+    for (const file of ['lib/server/push.ts']) {
+      const source = readFileSync(file, 'utf8');
+      expect(source, file).not.toMatch(/await fetch\(/);
+      expect(source, file).not.toMatch(/fetch\(['"`]https?:/);
     }
   });
 

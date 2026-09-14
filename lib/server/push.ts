@@ -2,16 +2,15 @@
 // Server-side push dispatch. Delivers a notification payload to all of a user's
 // registered devices:
 //   - Web Push (installed PWA): real delivery via the `web-push` library + VAPID.
-//   - Native (iOS/Android via Capacitor): delivered through FCM/APNs. A real FCM
-//     HTTP send is wired when FCM credentials are present; otherwise native sends
-//     are honestly skipped (reported, never silently "succeeded").
+//   - Native (iOS/Android via Capacitor): NOT DELIVERABLE TODAY, and said so
+//     here rather than attempted. Devices still register and their tokens are
+//     stored; every native send is counted as `skipped`, never as sent.
 //
 // Stale Web Push subscriptions (404/410) are pruned automatically.
 import 'server-only';
 import webpush from 'web-push';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { fetchExternal } from '@/lib/server/external-fetch';
 import { childrenBlockedOn } from '@/lib/notifications/child-channels';
 
 type DB = SupabaseClient<Database>;
@@ -38,26 +37,31 @@ function ensureVapid(): boolean {
   return vapidReady;
 }
 
-/** True when native push (FCM) is configured; APNs is delivered via FCM too. */
-function fcmConfigured(): boolean {
-  return Boolean(process.env.FCM_SERVER_KEY);
-}
-
-async function sendFcm(token: string, payload: PushPayload): Promise<boolean> {
-  const key = process.env.FCM_SERVER_KEY;
-  if (!key) return false;
-  // FCM legacy HTTP send. Swap for HTTP v1 (service-account OAuth) in production.
-  const res = await fetchExternal('https://fcm.googleapis.com/fcm/send', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `key=${key}` },
-    body: JSON.stringify({
-      to: token,
-      notification: { title: payload.title, body: payload.body ?? '' },
-      data: { url: payload.url ?? '/dashboard' },
-    }),
-  }, 15_000);
-  return res.ok;
-}
+/**
+ * Native push (FCM/APNs) has no transport, and this says so instead of trying.
+ *
+ * The send used to POST `https://fcm.googleapis.com/fcm/send` with an
+ * `Authorization: key=<FCM_SERVER_KEY>` header — the FCM **legacy** HTTP API,
+ * which Google shut down on 2024-06-20 along with the server keys that
+ * authenticated it. Probed from this repo: that URL answers **404 Not Found**
+ * from Google's frontend. Not 401, which would mean "alive, bad credential" —
+ * 404, the path is gone.
+ *
+ * So the old code could only ever fail, and worse, `pushConfigured()` reported
+ * `native: true` whenever the dead key happened to be set — telling the admin
+ * console that native delivery was working. `docs/mobile.md` told an operator to
+ * set that key "so lib/server/push.ts delivers to native tokens", which is an
+ * instruction that cannot succeed.
+ *
+ * Reinstating native delivery means FCM **HTTP v1**: a service-account JSON, an
+ * OAuth2 token minted per send-window against
+ * `https://oauth2.googleapis.com/token`, and POSTs to
+ * `https://fcm.googleapis.com/v1/projects/<id>/messages:send`. That is a real
+ * integration with credentials this repo does not have, so it is the owner's to
+ * wire — and building it blind would be an untestable path pretending to work,
+ * which is exactly what was here before.
+ */
+const NATIVE_PUSH_TRANSPORT: null = null;
 
 /**
  * Send a push to every enabled device for a user. Returns delivery counts.
@@ -107,10 +111,11 @@ export async function sendPushToUser(supabase: DB, userId: string, payload: Push
           }
         }
       } else {
-        // Native FCM/APNs.
-        if (!fcmConfigured() || !d.token) { result.skipped++; continue; }
-        const ok = await sendFcm(d.token, payload);
-        ok ? result.sent++ : result.failed++;
+        // Native FCM/APNs: no transport (see NATIVE_PUSH_TRANSPORT above).
+        // Counted as skipped, which is what it is — the device is registered and
+        // reachable, we have no way to reach it.
+        void NATIVE_PUSH_TRANSPORT;
+        result.skipped++;
       }
     } catch {
       result.failed++;
@@ -129,8 +134,11 @@ export async function sendPushToUsers(supabase: DB, userIds: string[], payload: 
   return totals;
 }
 
+/** What this deployment can actually deliver. `native` is false until FCM HTTP
+ *  v1 is wired; it used to report the presence of a credential for an API that
+ *  no longer exists. */
 export function pushConfigured(): { web: boolean; native: boolean } {
-  return { web: ensureVapid(), native: fcmConfigured() };
+  return { web: ensureVapid(), native: NATIVE_PUSH_TRANSPORT !== null };
 }
 
 /**
