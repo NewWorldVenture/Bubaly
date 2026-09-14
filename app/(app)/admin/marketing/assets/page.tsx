@@ -11,6 +11,7 @@ import {
 } from '@/lib/marketing/assets';
 import { uploadAssetAction, updateAssetAction, deleteAssetAction } from './actions';
 import { getTranslations } from '@/lib/i18n/server';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -83,7 +84,7 @@ export default async function AssetsPage() {
           </select>
           <input name="source_url" placeholder={tr('adminMarketingAssets.sourceUrlIfApplicable')} className={inputCls} />
           <input name="attribution" placeholder={tr('adminMarketingAssets.attributionIfRequired')} className={inputCls} />
-          <button type="submit" className={btnCls}>{tr('adminMarketingAssets.upload')}</button>
+          <SubmitButton className={btnCls}>{tr('adminMarketingAssets.upload')}</SubmitButton>
         </form>
         <p className="mt-3 text-xs text-muted">
           {assets.length} asset{assets.length === 1 ? '' : 's'} · {formatBytes(totalBytes)} {tr('adminMarketingAssets.total50MbPerFile')}
@@ -131,11 +132,11 @@ export default async function AssetsPage() {
                           <select name="license" defaultValue={a.license ?? 'original'} className={inputCls}><option value="original">{tr('assets.originalOwned')}</option><option value="cc0">{tr('assets.cc0PublicDomain')}</option><option value="cc_by">{tr('assets.creativeCommonsBy')}</option><option value="licensed">{tr('assets.licensedWithProof')}</option></select>
                           <input name="source_url" defaultValue={a.source_url ?? ''} placeholder={tr('assets.sourceUrl')} className={inputCls} />
                           <input name="attribution" defaultValue={a.attribution ?? ''} placeholder={tr('assets.attribution')} className={inputCls} />
-                          <button type="submit" className={`${btnCls} w-full`}>{tr('assets.save')}</button>
+                          <SubmitButton className={`${btnCls} w-full`}>{tr('assets.save')}</SubmitButton>
                         </form>
                       </details>
                       <form action={deleteAssetAction.bind(null, a.id, a.storage_path)} className="mt-2">
-                        <button type="submit" className="text-xs text-muted hover:text-rose-400">{tr('assets.delete')}</button>
+                        <SubmitButton className="text-xs text-muted hover:text-rose-400">{tr('assets.delete')}</SubmitButton>
                       </form>
                     </div>
                   );

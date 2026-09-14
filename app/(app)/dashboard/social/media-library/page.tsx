@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 export const metadata: Metadata = { title: 'Media Library · Social' };
 export const dynamic = 'force-dynamic';
@@ -65,7 +66,7 @@ export default async function MediaLibraryPage() {
           <input name="url" placeholder={t('dashboardSocialMediaLibrary.urlLeaveBlankForAPrompt')} className="w-full rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm" />
           <input name="alt_text" placeholder={t('dashboardSocialMediaLibrary.altTextAccessibility')} className="w-full rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm" />
           <input name="tags" placeholder={t('dashboardSocialMediaLibrary.tagsCommaSeparated')} className="w-full rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm" />
-          <button className="h-9 w-full rounded-lg bg-brand text-sm font-medium text-brand-fg">{t('dashboardSocialMediaLibrary.addToLibrary')}</button>
+          <SubmitButton className="h-9 w-full rounded-lg bg-brand text-sm font-medium text-brand-fg">{t('dashboardSocialMediaLibrary.addToLibrary')}</SubmitButton>
         </form>
         <p className="mt-2 text-[11px] text-muted">{t('dashboardSocialMediaLibrary.aspectRatioGuidancePerPlatformIs')}</p>
       </Card>

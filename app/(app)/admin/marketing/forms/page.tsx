@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { createForm, setFormStatus } from '../actions';
 import { getTranslations } from '@/lib/i18n/server';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 export const metadata: Metadata = { title: 'Marketing · Forms', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -57,7 +58,7 @@ export default async function FormsPage() {
                     <form action={setFormStatus}>
                       <input type="hidden" name="id" value={f.id} />
                       <input type="hidden" name="activate" value={active ? '0' : '1'} />
-                      <button className="text-muted hover:text-fg hover:underline">{active ? 'Archive' : 'Activate'}</button>
+                      <SubmitButton className="text-muted hover:text-fg hover:underline">{active ? 'Archive' : 'Activate'}</SubmitButton>
                     </form>
                   </div>
                 </div>
@@ -79,7 +80,7 @@ export default async function FormsPage() {
         <form action={createForm} className="space-y-3 text-sm">
           <input name="name" required placeholder={t('adminMarketingForms.formName')} className={inputCls} />
           <input name="fields" placeholder={t('adminMarketingForms.fieldsCommaSeparatedEGName')} className={inputCls} />
-          <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingForms.createForm')}</button>
+          <SubmitButton className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingForms.createForm')}</SubmitButton>
         </form>
       </Card>
     </div>

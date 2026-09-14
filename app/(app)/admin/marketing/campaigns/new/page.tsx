@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card';
 import { ErrorState } from '@/components/ui/states';
 import { createCampaign } from '../../actions';
 import { getTranslations } from '@/lib/i18n/server';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 export const metadata: Metadata = { title: 'Marketing · New Campaign', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -73,7 +74,7 @@ export default async function NewCampaignPage() {
           <label className="block">{tr('adminMarketingCampaignsNew.notes')}
             <textarea name="notes" rows={3} className="mt-1 w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
           </label>
-          <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{tr('adminMarketingCampaignsNew.createCampaign')}</button>
+          <SubmitButton className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{tr('adminMarketingCampaignsNew.createCampaign')}</SubmitButton>
         </form>
       </Card>
     </div>

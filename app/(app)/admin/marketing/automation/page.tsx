@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { createAutomation, setAutomationStatus } from '../actions';
 import { getTranslations } from '@/lib/i18n/server';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 export const metadata: Metadata = { title: 'Marketing · Automation', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -72,7 +73,7 @@ export default async function AutomationPage() {
               ))}
             </div>
           </div>
-          <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{tr('adminMarketingAutomation.createWorkflow')}</button>
+          <SubmitButton className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{tr('adminMarketingAutomation.createWorkflow')}</SubmitButton>
         </form>
       </Card>
     </div>

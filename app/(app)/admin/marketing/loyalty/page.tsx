@@ -11,6 +11,7 @@ import { RewardRow, AddReward, type Reward } from './reward-editor';
 import { RedemptionRow, type Redemption } from './redemption-row';
 import { saveLoyaltySettingsAction, awardPointsAction } from './actions';
 import { getTranslations } from '@/lib/i18n/server';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 export const metadata: Metadata = { title: 'Marketing · Loyalty', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -145,7 +146,7 @@ export default async function LoyaltyPage() {
           <label className="space-y-1"><span className="block text-xs font-medium text-muted">{t('adminMarketingLoyalty.earnPer1Spent')}</span><input type="number" min="0" step="0.01" name="earn_per_dollar" defaultValue={set?.earn_per_dollar ?? DEFAULT_LOYALTY.earn_per_dollar} className={inputCls} /></label>
           <label className="space-y-1"><span className="block text-xs font-medium text-muted">{t('adminMarketingLoyalty.silverTierAtLifetimePts')}</span><input type="number" min="0" name="tier_silver_at" defaultValue={set?.tier_silver_at ?? DEFAULT_LOYALTY.tier_silver_at} className={inputCls} /></label>
           <label className="space-y-1"><span className="block text-xs font-medium text-muted">{t('adminMarketingLoyalty.goldTierAtLifetimePts')}</span><input type="number" min="0" name="tier_gold_at" defaultValue={set?.tier_gold_at ?? DEFAULT_LOYALTY.tier_gold_at} className={inputCls} /></label>
-          <div className="sm:col-span-2"><button className="inline-flex h-10 items-center rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg">{t('adminMarketingLoyalty.saveSettings')}</button></div>
+          <div className="sm:col-span-2"><SubmitButton className="inline-flex h-10 items-center rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg">{t('adminMarketingLoyalty.saveSettings')}</SubmitButton></div>
         </form>
       </Card>
     </div>

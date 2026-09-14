@@ -6,6 +6,7 @@ import { moderateReviewAction, replyToReviewAction, deleteReviewAction } from '.
 import { SOURCE_LABELS, STATUS_TONE, STATUS_LABELS, type ReviewSource, type ReviewStatus } from '@/lib/marketing/reviews';
 import { Badge } from '@/components/ui/badge';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 type Review = {
   id: string; rating: number; title: string | null; body: string | null;
@@ -56,7 +57,7 @@ export function ReviewRow({ review }: { review: Review }) {
         <form action={(fd) => start(async () => { await replyToReviewAction(fd); setReplyOpen(false); })} className="mt-2 space-y-2">
           <input type="hidden" name="id" value={review.id} />
           <textarea name="reply" defaultValue={review.reply ?? ''} rows={2} placeholder={t('adminMarketingReviewsReviewRow.writeAPublicReply')} className="w-full rounded-lg border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
-          <button className="inline-flex h-8 items-center rounded-lg bg-brand px-3 text-xs font-medium text-brand-fg">{t('adminMarketingReviewsReviewRow.saveReply')}</button>
+          <SubmitButton className="inline-flex h-8 items-center rounded-lg bg-brand px-3 text-xs font-medium text-brand-fg">{t('adminMarketingReviewsReviewRow.saveReply')}</SubmitButton>
         </form>
       )}
     </div>

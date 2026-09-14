@@ -10,6 +10,7 @@ import { PLANS } from '@/lib/constants/plans';
 import { getMarketingCustomersWithError, evaluateSegment, type SegmentRules } from '@/lib/marketing/customers';
 import { createSegment, archiveSegment } from '../actions';
 import { getTranslations } from '@/lib/i18n/server';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 export const metadata: Metadata = { title: 'Marketing · Segments', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -60,7 +61,7 @@ export default async function SegmentsPage() {
                   </div>
                   <form action={archiveSegment}>
                     <input type="hidden" name="id" value={s.id} />
-                    <button className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted hover:bg-elevated hover:text-danger">{t('segments.archive')}</button>
+                    <SubmitButton className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted hover:bg-elevated hover:text-danger">{t('segments.archive')}</SubmitButton>
                   </form>
                 </Card>
               );
@@ -102,7 +103,7 @@ export default async function SegmentsPage() {
               <input name="inactiveForDays" type="number" min="0" className={inputCls} />
             </label>
           </div>
-          <button className="w-full rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand/90">{t('adminMarketingSegments.createSegment')}</button>
+          <SubmitButton className="w-full rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand/90">{t('adminMarketingSegments.createSegment')}</SubmitButton>
         </form>
       </Card>
     </div>

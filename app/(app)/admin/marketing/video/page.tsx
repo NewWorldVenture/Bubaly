@@ -10,6 +10,7 @@ import type { Tables } from '@/lib/database.types';
 import { thumbnailUrl, formatDuration, isVideoProvider, type VideoProvider } from '@/lib/marketing/video';
 import { saveVideoAction, toggleVideoPublishAction, deleteVideoAction } from './actions';
 import { getTranslations } from '@/lib/i18n/server';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations();
@@ -70,7 +71,7 @@ export default async function VideoPage() {
           </select>
           <input name="tags" placeholder={tr('adminMarketingVideo.tagsCommaSeparated')} className={`${inputCls} lg:col-span-2`} />
           <textarea name="transcript" placeholder={tr('adminMarketingVideo.transcriptOptionalFeedsAeoSeo')} rows={2} className={`${inputCls} h-auto py-2 lg:col-span-2`} />
-          <button type="submit" className={btnCls}>{tr('adminMarketingVideo.addVideo')}</button>
+          <SubmitButton className={btnCls}>{tr('adminMarketingVideo.addVideo')}</SubmitButton>
         </form>
         <p className="mt-3 text-xs text-muted">
           {videos.length} video{videos.length === 1 ? '' : 's'} · {published} {tr('adminMarketingVideo.publishedPasteAUrlOrPick')}
@@ -114,12 +115,12 @@ export default async function VideoPage() {
                 )}
                 <div className="mt-2 flex items-center gap-3 text-xs">
                   <form action={toggleVideoPublishAction.bind(null, v.id, v.status !== 'published')}>
-                    <button type="submit" className="inline-flex items-center gap-1 text-muted hover:text-fg">
+                    <SubmitButton className="inline-flex items-center gap-1 text-muted hover:text-fg">
                       {v.status === 'published' ? <><EyeOff className="h-3 w-3" />{' '}{tr('video.unpublish')}</> : <><Eye className="h-3 w-3" />{' '}{tr('video.publish')}</>}
-                    </button>
+                    </SubmitButton>
                   </form>
                   <form action={deleteVideoAction.bind(null, v.id)}>
-                    <button type="submit" className="text-muted hover:text-rose-400">{tr('video.delete')}</button>
+                    <SubmitButton className="text-muted hover:text-rose-400">{tr('video.delete')}</SubmitButton>
                   </form>
                 </div>
               </div>

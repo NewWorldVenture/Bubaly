@@ -12,6 +12,7 @@ import { bandFamilyLabel } from '@/lib/network/contribution';
 import { K_ANONYMITY_FLOOR } from '@/lib/network/insights';
 import { fmtDate } from '@/lib/utils/format';
 import { setBenchmarksPublicationAction } from './actions';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 export const metadata: Metadata = { title: 'Household Benchmarks', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -80,9 +81,9 @@ export default async function AdminBenchmarksPage() {
             </span>
             <form action={setBenchmarksPublicationAction}>
               <input type="hidden" name="published" value={publication.published ? 'false' : 'true'} />
-              <button type="submit" className="h-9 rounded-xl border border-border px-4 text-sm font-medium hover:bg-elevated">
+              <SubmitButton className="h-9 rounded-xl border border-border px-4 text-sm font-medium hover:bg-elevated">
                 {publication.published ? t('adminBenchmarks.unpublish') : t('adminBenchmarks.publish')}
-              </button>
+              </SubmitButton>
             </form>
             {publication.published && (
               <Link href="/resources/benchmarks" className="inline-flex items-center gap-1 text-sm font-medium text-brand-text underline">

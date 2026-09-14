@@ -10,6 +10,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 export const metadata: Metadata = { title: 'Inbox · Social' };
 export const dynamic = 'force-dynamic';
@@ -51,7 +52,7 @@ export default async function InboxPage() {
                   {c.permalink_url && <a href={c.permalink_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-brand-text underline">{t('inbox.openOriginal')}{' '}<ExternalLink className="h-3 w-3" /></a>}
                   {c.status === 'open' && (
                     <form action={resolveCommentAction.bind(null, c.id)}>
-                      <button className="text-xs font-medium text-muted hover:text-fg underline">{t('inbox.markResolved')}</button>
+                      <SubmitButton className="text-xs font-medium text-muted hover:text-fg underline">{t('inbox.markResolved')}</SubmitButton>
                     </form>
                   )}
                 </div>

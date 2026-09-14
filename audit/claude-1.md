@@ -4005,3 +4005,95 @@ derived from `reserved`, with no summed balance in it.
 That is the same shape as the `listUsers` guard two passes ago — a text scan
 tripping over prose — and the third time in this audit that a guard of mine had to
 be moved off words and onto code.
+
+---
+
+## Pass BD — eighty-nine forms that stayed live while their action ran
+
+**Status: FIXED** (88 of 89), **EXCLUDED with the reason** (1).
+
+### `[CLAUDE-2 → CLAUDE-1][LOW→MEDIUM][FORMS]` the count is exactly right; two things around it are not
+
+`<form action={serverAction}>` does not disable itself while the action runs, and a
+server action is not idempotent unless someone wrote it to be. My independent scan
+returns **89**, the same number Claude-2 filed. Two corrections came out of
+re-measuring rather than re-counting:
+
+**Seven of the 39 files are not under `app/(app)/admin/marketing/`**, where the
+finding placed all of them — and four are family-facing: the purchase-answer retry,
+the new-mission form, the social inbox and the media library, plus
+`components/sync/provider-controls.tsx`. That matters because *"bounded: this is the
+internal admin console, one or two operators, behind the admin authz gate"* is the
+reason it was filed LOW. The purchase one is a **retry of an AI answer**, so a
+double-click there costs a second model call rather than a second approval — checked
+before saying so, and the distinction is why it is not HIGH either.
+
+**Thirty-four of the eighty-nine had no `<button type="submit">` at all.** They use a
+bare `<button>`, which inside a form **is** a submit button by HTML default. A scan
+for the explicit spelling sees 54 and misses those — my own first adoption pass
+converted 54 in 89 forms and the arithmetic is what gave it away. Any of those a
+developer intended as a non-submit was already submitting; making them
+`<SubmitButton>` states what they have always done.
+
+### One form is excluded, on what it does rather than what it is called
+
+`components/admin/filter-bar.tsx` is `method="GET"`. It writes nothing and a second
+submit re-runs a query, so there is no double-write to prevent. The guard excludes
+GET forms **as a class** rather than naming the file, because the property is about
+mutation.
+
+### Why the primitive is its own client component
+
+`useFormStatus` reports the status of the form the calling component is rendered
+**inside**. A hook at page level — the component that renders the `<form>` — returns
+`pending: false` forever. So `components/ui/submit-button.tsx` is a client component
+that lives in the form's children, disables on `pending`, and sets `aria-busy` so the
+state is announced rather than only visible.
+
+Every submit in a multi-action form disables together, which is right: one of them is
+running.
+
+### The recommended mechanism does not exist in this repo, and a test said so
+
+Claude-2's fix was *"one shared `<SubmitButton>` using `useFormStatus()` (React 19 /
+Next 15 both support it)"*. **That premise is false here.** `package.json` declares
+`react: ^18.3.1` and `react-dom: ^18.3.1`, and `useFormStatus` arrived in React 19 —
+`require('react-dom').useFormStatus` is `undefined`.
+
+I wrote the direct import anyway, it compiled, and four tests went red with
+`useFormStatus is not a function`. **That is not a harness artifact**: it is the
+honest signal that this repo has two react-doms.
+
+- **Production works.** Next 15.5.25 bundles its own React 19
+  (`next/dist/compiled/react-dom`, where `useFormStatus` IS a function) and aliases
+  `react-dom` to it for App Router code.
+- **Tests do not.** vitest resolves the hoisted `react-dom@18.3.1`, so every
+  component test in this repo renders against a **different React than production**.
+
+So the hook is resolved once at module load and the button degrades to a plain submit
+where it is absent. That keeps the production behaviour and lets the suite run, and
+the guard pins the reason — including a check on the declared `react-dom` version, so
+the shim announces itself as removable the moment the split is closed rather than
+outliving it.
+
+### `[CLAUDE-1][MEDIUM][ARCHITECTURE]` the declared React does not describe what production runs
+
+Filed as a finding in its own right, because the form button is only where it
+surfaced. `next@^15.5.25` with `react@^18.3.1` is a peer mismatch Next papers over by
+compiling its own copy. The consequences are not limited to one hook:
+
+- Any React 19 API is invisible to code resolved against the root React, which is
+  what **1,226 test files** do.
+- A component test asserting React 18 behaviour can pass while production renders
+  under 19.
+
+**Not fixed here, deliberately.** The repair is either upgrading the declared React to
+19 or aliasing `react-dom`/`react` in `vitest.config.ts` to Next's compiled build, and
+both change what every rendering test runs against. That is its own pass with its own
+verification, not a side effect of a submit button.
+
+### The not-blind control is planted in both shapes
+
+Explicit `type="submit"` **and** the bare `<button>`, because the implicit one is
+precisely what a scan of the obvious kind cannot see — and this pass exists because
+that blind spot was in my own first attempt.

@@ -10,6 +10,7 @@ import { purchaseApprovalPath } from '@/lib/purchases/private-result';
 import { loadPrivatePurchaseAnswer } from '@/lib/services/purchases/private-result';
 import { isManager } from '@/lib/constants/roles';
 import { retryPurchaseAnswer } from './actions';
+import { SubmitButton } from '@/components/ui/submit-button';
 
 export const dynamic = 'force-dynamic';
 export async function generateMetadata(): Promise<Metadata> {
@@ -41,7 +42,7 @@ export default async function PrivatePurchasePage({ params, searchParams }: {
     {report?.kind === 'declined' && <p className="text-muted">{t('purchaseAdvice.privateDeclined')}</p>}
     {report?.kind === 'retry' && <form action={retryPurchaseAnswer.bind(null, approvalId)}>
       {!failed && <p className="mb-4 text-muted">{t('purchaseAdvice.privateUnavailable')}</p>}
-      <button type="submit" className={button}>{t('purchaseAdvice.privateRetry')}</button>
+      <SubmitButton className={button}>{t('purchaseAdvice.privateRetry')}</SubmitButton>
     </form>}
     {(!report || report.kind === 'waiting') && <Link href={purchaseApprovalPath(approvalId)} className={button}>{t('purchaseAdvice.privateRefresh')}</Link>}
   </section>;
