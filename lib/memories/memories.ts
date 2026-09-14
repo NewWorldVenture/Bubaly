@@ -9,6 +9,8 @@ import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
 import type { ComponentType } from 'react';
 import { Image as ImageIcon, Video, LayoutGrid, BookOpen } from 'lucide-react';
 
+type Translate = (key: string, params?: Record<string, string | number>) => string;
+
 /** Album row as selected by the Memories page (subset of family_albums). */
 export type AlbumRow = {
   id: string;
@@ -43,7 +45,6 @@ export type MemberLite = {
 };
 
 const DAY_MS = 86_400_000;
-const WEEKDAY = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 /** Whole-day difference between two instants, using local midnight boundaries. */
 function calendarDaysAgo(iso: string, now: Date): number {
@@ -58,12 +59,24 @@ function calendarDaysAgo(iso: string, now: Date): number {
  * "Last Thursday" (2–6 days ago), else the full date. Future dates fall back
  * to the absolute date too. Kept simple and locale-stable for tests.
  */
-export function relativeDay(iso: string, now: Date): string {
+export function relativeDay(
+  iso: string,
+  now: Date,
+  locale: LocaleCode = DEFAULT_LOCALE,
+  t?: Translate,
+): string {
   const days = calendarDaysAgo(iso, now);
-  if (days === 0) return 'Today';
-  if (days === 1) return 'Yesterday';
-  if (days >= 2 && days <= 6) return `Last ${WEEKDAY[new Date(iso).getDay()]}`;
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const fmt = createFormat(locale);
+  if (days === 0) return t ? t('calendar.today') : 'Today';
+  if (days === 1) return t ? t('completedByBubaly.yesterday') : 'Yesterday';
+  if (days >= 2 && days <= 6) {
+    // This used to index a seven-entry English array. Intl knows the long weekday in
+    // all eleven locales, and "Last {weekday}" is the only word left to translate —
+    // which matters, because several languages put that word AFTER the day name.
+    const weekday = fmt.fmtDate(new Date(iso), 'EEEE');
+    return t ? t('memories.lastWeekday', { weekday }) : `Last ${weekday}`;
+  }
+  return fmt.fmtDate(new Date(iso), 'MMM d, yyyy');
 }
 
 /**
@@ -81,11 +94,17 @@ export type TimelineRow = { album: AlbumRow; relative: string };
  * relative-day label. Capped so the page renders a digestible strip rather
  * than an unbounded wall.
  */
-export function buildTimeline(highlights: AlbumRow[], now: Date = new Date(), limit = 12): TimelineRow[] {
+export function buildTimeline(
+  highlights: AlbumRow[],
+  now: Date = new Date(),
+  limit = 12,
+  locale: LocaleCode = DEFAULT_LOCALE,
+  t?: Translate,
+): TimelineRow[] {
   return [...highlights]
     .sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0))
     .slice(0, limit)
-    .map((album) => ({ album, relative: relativeDay(album.created_at, now) }));
+    .map((album) => ({ album, relative: relativeDay(album.created_at, now, locale, t) }));
 }
 
 export type StatRow = {

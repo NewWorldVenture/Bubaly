@@ -15,7 +15,7 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { useToast } from '@/components/ui/toast';
 import type { Tables } from '@/lib/database.types';
-import { buildMomentPrep, momentWhen, type PrepDomain, type MomentEvent } from '@/lib/moments/prep';
+import { buildMomentPrep, momentWhen as momentWhenIn, type PrepDomain, type MomentEvent } from '@/lib/moments/prep';
 import { upcomingBirthdayEvents } from '@/lib/moments/birthdays';
 import { weatherAdvisory, dayKey } from '@/lib/moments/weather';
 import { reminderTimeFor } from '@/lib/moments/reminders';
@@ -37,6 +37,8 @@ const HORIZON_MS = 36 * 3600 * 1000;
 
 export function HomeMomentCard() {
   const locale = useLocale();
+  // The date follows the reader and the words come from the catalogue.
+  const momentWhen = (startsAt: string, allDay: boolean) => momentWhenIn(startsAt, allDay, new Date(), locale.code, t);
   const t = useTranslations();
   const { familyId, members } = useApp();
   const { success, error: toastError } = useToast();

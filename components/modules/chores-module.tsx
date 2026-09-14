@@ -28,7 +28,7 @@ import { requestRedemptionAction } from '@/app/(app)/dashboard/rewards/actions';
 import { formatCents } from '@/lib/wallet/ledger';
 import {
   topEarners, streaksByMember, groupByRecurrence, rewardsProgress, totalFamilyPoints,
-  pointsByMember, dueLabel, choreEmoji, isCompleted, RANK_MEDALS,
+  pointsByMember, dueLabel as dueLabelIn, choreEmoji, isCompleted, RANK_MEDALS,
   type AssignmentLike,
 } from '@/lib/chores/dashboard';
 import type { Tables, Updatable } from '@/lib/database.types';
@@ -560,6 +560,9 @@ function ChoreTable({ title, rows, ...p }: { title: string; rows: AssignmentLike
 
 function ChoreRow({ a, memberById, manager, busy, paying, menuFor, setMenuFor, onStatus, onApprove, onPay, onDelete }: { a: Assignment } & RowProps) {
   const tr = useTranslations();
+  // The date follows the reader and the words come from the catalogue.
+  const locale = useLocale();
+  const dueLabel = (due: string | null) => dueLabelIn(due, new Date(), locale.code, tr);
   const member = memberById.get(a.member_id);
   const due = dueLabel(a.due_at);
   const status = STATUS_META[a.status] ?? STATUS_META.todo;

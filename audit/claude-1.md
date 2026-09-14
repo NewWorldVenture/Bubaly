@@ -3052,3 +3052,71 @@ That is six exempt sites found by reading callers rather than the call, across t
 segment. And one **near-miss in the other direction**: I had `lib/marketing/format.ts
 formatFamilies` written down as dead before checking — it is used twice inside its own
 module, by `familiesNote` and `formatHandled`. I checked before acting.
+
+---
+
+## Pass AR — "Overdue" beside "Di., 14. Juli" is worse than "Overdue" beside "Tue, Jul 14"
+
+**Status: FIXED.** 6 sites, 4 helpers, 5 surfaces. Ceiling 80 → **74**.
+
+### The shape, and why it is the harder half
+
+Four helpers mix a formatter **this ratchet counts** with English literals **it cannot
+see**:
+
+```ts
+if (diff < 0) return 'Overdue';                                     // invisible
+return d.toLocaleDateString('en-US', { weekday: 'short', ... });    // counted
+```
+
+Converting only the counted half would have left a German family reading **"Overdue"
+beside "Di., 14. Juli"** — a half-translated chip, which is *worse* than a wholly English
+one, because it looks like someone tried and stopped. So each takes the locale **and** a
+translator, on the contract `fmtRelative` already used: words from the catalogue when a
+caller has one, English when it has none.
+
+| helper | the words it was hiding |
+|---|---|
+| `lib/chores/dashboard.ts dueLabel` | `'No due date'`, `'Overdue'`, `'Today'`, `'Tomorrow'` |
+| `lib/messages/overview.ts shortTime` | `'Yesterday'` + a seven-entry weekday array |
+| `lib/moments/prep.ts momentWhen` | `'starting now'`, `'in N min'`, `'in N hours'`, `'Today'`, `'Tomorrow'` |
+| `lib/memories/memories.ts relativeDay` | `'Today'`, `'Yesterday'`, `` `Last ${weekday}` `` |
+
+Only **three** new catalogue keys were needed — `moments.startingNow`,
+`moments.inNHours`, `memories.lastWeekday`. The rest already existed (`todos.overdue`,
+`todos.noDueDate`, `calendar.today`, `quickCapture.tomorrow`,
+`completedByBubaly.yesterday`, `ambient.inNMin`), which says the words had been lifted
+elsewhere and only these four helpers were missed — `lib/` sits outside the i18n gate's
+surfaces, which scan `app/` and `components/`. That is the same reason
+`lib/marketing/format.ts` records for its own case.
+
+### `Last ${weekday}` could not have been fixed by localising the weekday
+
+French writes **"samedi dernier"** — the word *after* the day. A template with the word
+baked in front cannot express that however well the weekday itself is translated. The
+test pins exactly this: `relativeDay(…, 'fr-FR', …)` must be `'samedi dernier'`, not
+`'Last samedi'`.
+
+### Two English weekday arrays deleted, not left unread
+
+`['Sun','Mon',…]` and `['Sunday','Monday',…]`. `Intl.DateTimeFormat` knows the weekday in
+all eleven locales, so the arrays are **gone** rather than sitting unused beside a comment
+saying nothing reads them. Four patterns joined the shared map to make that possible:
+`'EEE'`, `'EEEE'`, `'M/d/yy'` (the messages list's compact date — and note `fr-FR` renders
+it `14/06/26`, day first, which the old `M/D/YY` could never express).
+
+### What the guard holds that a green diff would not
+
+- **The TONE never moves.** `dueLabel` returns `{ label, tone }` and the tone drives colour
+  and urgency. The test asserts `dueLabel(d, now, 'de-DE', de).tone === dueLabel(d, now).tone`
+  across every rung, so a locale can never reach the thing that decides whether a chore
+  looks urgent.
+- **The English fallback is a contract, not an accident.** Every helper is asserted twice:
+  once with no translator (English, unchanged, byte for byte) and once with one.
+  `lib/moments/notify.ts` is a cron with no reader — I18N-001 — and the English path is
+  what it gets, deliberately.
+- **The arrays are asserted gone**, by pattern, in the source.
+
+One expectation of mine was wrong and the test caught it: I wrote `'Morgen 09:00'` where
+`hour: 'numeric'` renders `'Morgen 9:00'`. The 24-hour clock is the locale's; the
+zero-padding is the pattern's. Two separate choices.

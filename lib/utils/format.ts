@@ -93,6 +93,9 @@ const PATTERNS: Record<string, Intl.DateTimeFormatOptions> = {
   // locale's own numeric date is, and eighteen sites were calling it that way to
   // follow the BROWSER. Mapping the shape lets those sites keep the rendering they
   // had while taking the family's locale instead of the machine's.
+  'EEE':                 { weekday: 'short' },
+  'EEEE':                { weekday: 'long' },
+  'M/d/yy':              { month: 'numeric', day: 'numeric', year: '2-digit' },
   'P':                   { year: 'numeric', month: 'numeric', day: 'numeric' },
   'pp':                  { hour: 'numeric', minute: '2-digit', second: '2-digit' },
 };

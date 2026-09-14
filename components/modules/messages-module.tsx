@@ -23,10 +23,10 @@ import { ROLE_LABELS } from '@/lib/constants/roles';
 import { fmtDate, firstName } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import {
-  convMatchesTab, previewText, shortTime, summarizeConversations, type ConvTab,
+  convMatchesTab, previewText, shortTime as shortTimeIn, summarizeConversations, type ConvTab,
 } from '@/lib/messages/overview';
 import type { Tables, MemberRole } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type Conversation = Tables<'family_conversations'>;
 type Message = Tables<'family_messages'>;
@@ -80,6 +80,9 @@ async function createConversation(payload: ConvInsert) {
 
 export function MessagesModule() {
   const tr = useTranslations();
+  // The date follows the reader and the words come from the catalogue.
+  const locale = useLocale();
+  const shortTime = (iso: string) => shortTimeIn(iso, new Date(), locale.code, tr);
   const { familyId, userId, members, selfMember } = useApp();
   const { error: toastError } = useToast();
 

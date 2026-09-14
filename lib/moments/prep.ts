@@ -11,6 +11,11 @@
 // Weather, then Grocery, then Reminders before a Saturday tournament, the moment
 // card assembles the whole checklist and each item is a single tap.
 
+import { createFormat } from '@/lib/utils/format';
+import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
+
+type Translate = (key: string, params?: Record<string, string | number>) => string;
+
 export type MomentCategory =
   | 'sports' | 'trip' | 'appointment' | 'school' | 'outdoors' | 'celebration' | 'general';
 
@@ -191,24 +196,40 @@ function shopHint(category: MomentCategory): { label: string; hint: string; item
   }
 }
 
-function fmtClock(iso: string): string {
+function fmtClock(iso: string, locale: LocaleCode = DEFAULT_LOCALE): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  return createFormat(locale).fmtTime(d);
 }
 
 /** Human "when" label for a moment, e.g. "in 2 hours", "Tomorrow", "Sat 9:00 AM". */
-export function momentWhen(startsAt: string, allDay: boolean, now: Date = new Date()): string {
+export function momentWhen(
+  startsAt: string,
+  allDay: boolean,
+  now: Date = new Date(),
+  locale: LocaleCode = DEFAULT_LOCALE,
+  t?: Translate,
+): string {
+  // FORWARD-facing, so not fmtTimeAgo. The clock and the date take the locale; the
+  // five words take a translator, with an English fallback for the caller that has
+  // no reader — lib/moments/notify.ts is a cron, and that is I18N-001, not an
+  // oversight here.
   const d = new Date(startsAt);
   if (Number.isNaN(d.getTime())) return '';
   const mins = Math.round((d.getTime() - now.getTime()) / 60000);
-  if (!allDay && mins >= 0 && mins < 60) return mins <= 1 ? 'starting now' : `in ${mins} min`;
-  if (!allDay && mins >= 60 && mins < 300) return `in ${Math.round(mins / 60)} hours`;
+  if (!allDay && mins >= 0 && mins < 60) {
+    if (mins <= 1) return t ? t('moments.startingNow') : 'starting now';
+    return t ? t('ambient.inNMin', { minutes: mins }) : `in ${mins} min`;
+  }
+  if (!allDay && mins >= 60 && mins < 300) {
+    const hours = Math.round(mins / 60);
+    return t ? t('moments.inNHours', { hours }) : `in ${hours} hours`;
+  }
   const startDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const dayDiff = Math.round((startDay.getTime() - today.getTime()) / 86400000);
-  const time = allDay ? '' : ` ${fmtClock(startsAt)}`;
-  if (dayDiff === 0) return `Today${time}`;
-  if (dayDiff === 1) return `Tomorrow${time}`;
-  return `${d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}${time}`;
+  const time = allDay ? '' : ` ${fmtClock(startsAt, locale)}`;
+  if (dayDiff === 0) return `${t ? t('calendar.today') : 'Today'}${time}`;
+  if (dayDiff === 1) return `${t ? t('quickCapture.tomorrow') : 'Tomorrow'}${time}`;
+  return `${createFormat(locale).fmtDate(d, 'EEE, MMM d')}${time}`;
 }

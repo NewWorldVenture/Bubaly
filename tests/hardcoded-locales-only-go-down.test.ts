@@ -78,6 +78,16 @@ const FORMATTER_WITH_LOCALE =
 /**
  * The ceiling, measured when the shared formatter was made locale-aware.
  *
+ * Now 74. The four relative-day labels — lib/chores/dashboard.ts dueLabel,
+ * lib/messages/overview.ts shortTime, lib/moments/prep.ts momentWhen and
+ * lib/memories/memories.ts relativeDay — each mixed a formatter THIS FILE COUNTS
+ * with English literals it CANNOT see ("Overdue", "Yesterday", "starting now").
+ * Converting only the half this ceiling measures would have left a German family
+ * reading "Overdue" beside "Di., 14. Juli": a half-translated chip, which is worse
+ * than a wholly English one because it looks like someone tried. Each now takes the
+ * locale AND a translator. Two seven-entry English weekday arrays were deleted with
+ * them. Proved in tests/the-day-labels-follow-the-reader.test.ts.
+ *
  * A SECOND CLASS THIS CEILING CANNOT SEE, measured while working the eighth tranche:
  * FIFTY-ONE money values write the currency symbol as a LITERAL — `$${x.toFixed(2)}`
  * — which holds no locale for this scan to find and has no locale at all: `toFixed`
@@ -130,7 +140,7 @@ const FORMATTER_WITH_LOCALE =
  * Getting those three numbers to disagree is how a ratchet starts life already
  * broken, which is why the derivation is written down rather than the result.
  */
-const CEILING = 80;
+const CEILING = 74;
 
 /**
  * Comments stripped first, and this is not a detail.
