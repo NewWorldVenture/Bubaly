@@ -1398,3 +1398,60 @@ Why not all 19: each remaining site needs its own decision about WHICH family's
           list growing while it is worked down; shrinking it is the only edit it
           should ever receive.
 ```
+
+## A3-016 — the sibling route that got it right, and the two that wrote the reasoning down and did not apply it
+
+```
+[CLAUDE-1][MEDIUM][INTEGRATION] One inbound message could send the family two urgent 🚨 texts
+Path:     app/api/contact-center/sms/route.ts:84 · app/api/contact-center/voice/transcription/route.ts:67
+          (correct sibling: app/api/contact-center/email/route.ts:132)
+Problem:  Three sibling routes file an inbound message and then escalate a
+          genuine urgency to the family's human fallback number — a 🚨 SMS and a
+          notification row. All three call `recordInboundMessage`, which answers
+          `inserted: false` when the provider has re-fired a delivery it already
+          sent (lib/contact-center/server.ts:178-187 looks the provider_ref up
+          before writing, precisely so the caller can ask that question).
+          The EMAIL route gates its escalation on that flag. The SMS and
+          voicemail routes gated only the PLANNER routing — and wrote the
+          reasoning down while doing it:
+            "Twilio retries a transcription callback, so only a delivery that
+             was actually new reaches the planner"
+          — while the two side effects that reach a PERSON ran on every
+          redelivery.
+Evidence: sms/route.ts read in full: `if (filed.inserted) { routeInboundToPlanner… }`
+          followed by an UNGATED `if (shouldNotifyFamily(result.intent) &&
+          channel?.forward_to_phone) { sendSms(…); notifications.insert(…) }`.
+          transcription/route.ts:60-78 has the identical shape.
+          email/route.ts:132 reads
+          `if (filed.inserted && shouldNotifyFamily(result.intent) && …)`.
+          So the correct form already existed in the same directory, which is how
+          I ruled out "this is deliberate": one of three is not a policy.
+Impact:   A family whose Bubaly line takes an urgent message gets a second 🚨
+          text and a second urgent notification for the same message whenever
+          Twilio redelivers. The alarm that means "something needs you now" is
+          the one that must not cry twice.
+Fix:      Fold `filed.inserted` into the escalation condition on both routes, as
+          the email route already does. One line each.
+Status:   FIXED
+Guard:    tests/inbound-escalation-fires-once.test.ts asserts, for all three
+          routes, that the condition CONTAINING `shouldNotifyFamily(result.intent)`
+          also contains `filed.inserted` — scoped to that condition, because a
+          bare `toContain('filed.inserted')` would have passed on the planner
+          check alone, which is exactly the state the two routes were already in.
+          It also asserts the SMS and the notification write sit INSIDE that
+          block rather than beside it. Non-vacuity proven: removing the gate from
+          the SMS route fails it by name.
+NOT fixed, recorded instead:
+  · `runConcierge` — a paid AI call — runs BEFORE the dedup on all three routes,
+    so a redelivery still costs a model call. Moving it after would need the
+    dedup split out of `recordInboundMessage` (which takes `aiSummary`/`aiIntent`
+    as inputs). A cost issue, not a correctness one.
+  · The SMS route's TwiML auto-reply is deliberately left ungated. The TwiML IS
+    the response to this request, and a redelivery usually means the first
+    response never reached Twilio — suppressing it would risk the caller never
+    getting a reply at all. Duplicate contact with the FAMILY is the defect;
+    replying to the sender is the route answering the request it was given.
+Collision check: no other worker is assigned contact-center. Claude-3 is on input
+  validation, error leakage, money idempotency, storage and the remaining
+  membership-only tables; Claude-2 on frontend; Claude-4 on flows and QA.
+```

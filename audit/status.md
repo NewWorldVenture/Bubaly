@@ -224,8 +224,11 @@ COMPLETED:
     filed as owner decisions rather than taken (see A3-009).
   - Claude-3's grades/screen-time MEDIUM closed (0300), with two different rules
     rather than one blunt one — see A3-010.
-  - child_logins and behavior_logs closed (0301). Claude-3's OPEN list from this
-    session is now empty: every finding it raised is fixed or filed with a reason.
+  - child_logins and behavior_logs closed (0301). Claude-3's OPEN list from its
+    first run is now empty: every finding it raised is fixed or filed with a reason.
+  - Claude-4's two HIGHs closed: readAll's silent ceiling (truncated + failOnMax,
+    five summing call sites) and the server-midnight defect on the kids page and
+    in every notification's text, with a ratchet holding the other 17 sites.
 NEXT: Claude-2's 17 frontend findings and Claude-4's four flow findings, both
   from partial runs. Two owner decisions are filed and not mine to take:
   narrowing medical READS, and whether logging a vaccination is any member's
@@ -263,9 +266,24 @@ VERIFICATION: tsc clean · eslint clean on every changed file · full vitest sui
 LAST-UPDATE: 2026-09-14T12:05Z
 
 ## Claude-2 / Claude-3 / Claude-4 (third session)
-STATUS: stopped early — all three hit the account session limit mid-run. Their
-  findings so far are in their own files and are NOT complete sweeps. Claude-3's
-  partial run is the most valuable: it bootstrapped a throwaway PG16, replayed
-  all 308 migrations, and probed RLS as a real child session, producing two
-  CRITICALs (one now fixed here as A3-003, one still OPEN) and two HIGHs.
-LAST-UPDATE: 2026-09-14T12:05Z
+STATUS: RE-LAUNCHED and running in parallel. The first launch stopped early —
+  all three hit the account session limit mid-run, which has since reset. Their
+  partial findings from that run are already in their own files and were acted
+  on: every one of Claude-3's, and Claude-4's two HIGHs, are now fixed in PR #548.
+  This second launch carries an explicit "already fixed, do not re-derive" list
+  so none of them re-covers closed ground, and each is scoped to NEW areas:
+    Claude-2  responsive/mobile layout · loading+empty+error states · forms and
+              validation feedback · focus and reduced-motion · theming and
+              contrast from the real tokens · client/server boundary cost · RTL
+    Claude-3  input validation and mass assignment across 141 routes · error
+              leakage · money idempotency beyond the wallet · secrets in the
+              client bundle · storage and signed URLs · the remaining
+              membership-only tables · auth edges. The live PG16 harness is
+              handed to it at PGPORT=54401 with 313 migrations replayed and
+              22/22 probes green, so findings are proven rather than read.
+    Claude-4  broken/incomplete features · the UNHAPPY branches of each flow ·
+              edge cases · N+1 and index coverage · test quality proven by
+              mutation
+  All three are audit-only: one working tree, so source edits would collide.
+  Claude-1 applies fixes serially after a collision check.
+LAST-UPDATE: 2026-09-14T12:56Z

@@ -64,7 +64,11 @@ export async function POST(req: NextRequest) {
     }).catch((error) => { console.error('[contact-center] voicemail planner routing threw', error); });
   }
 
-  if (shouldNotifyFamily(result.intent) && channel?.forward_to_phone) {
+  // Only on a NEW delivery — the same `filed.inserted` the planner routing above
+  // turns on. Twilio retries a transcription callback, and without this a retry
+  // sends a second 🚨 text and files a second urgent notification about one
+  // voicemail. The sibling email route already gates on it.
+  if (filed.inserted && shouldNotifyFamily(result.intent) && channel?.forward_to_phone) {
     try { await sendSms(channel.forward_to_phone, `🚨 Urgent voicemail at your Bubaly line: ${result.summary}`); } catch (error) { console.error('[contact-center] urgent voicemail SMS failed', error); }
     try {
       const { error: notifyError } = await admin.from('notifications').insert({
