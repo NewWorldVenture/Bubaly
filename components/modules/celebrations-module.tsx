@@ -119,7 +119,7 @@ export function CelebrationsModule() {
                 {who && <Avatar name={who.display_name} color={who.color} size={32} />}
                 <span className={`shrink-0 text-sm font-semibold ${soon ? 'text-brand-text' : 'text-muted'}`}>{countdownLabel(c.daysUntil)}</span>
                 {admin && c.id.startsWith('d-') && (
-                  <button onClick={() => remove(c.id)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Trash2 className="h-4 w-4" /></button>
+                  <button aria-label={t('a11y.delete')} onClick={() => remove(c.id)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Trash2 className="h-4 w-4" /></button>
                 )}
               </li>
             );

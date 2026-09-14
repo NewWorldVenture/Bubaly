@@ -112,6 +112,7 @@ function eventHeight(e: Event): number {
 
 // Mini calendar for the right sidebar
 function MiniCalendar({ current, onSelect }: { current: Date; onSelect: (d: Date) => void }) {
+  const tr = useTranslations();
   const [month, setMonth] = useState(() => new Date(current.getFullYear(), current.getMonth(), 1));
   const today = new Date(); today.setHours(0, 0, 0, 0);
 
@@ -129,8 +130,8 @@ function MiniCalendar({ current, onSelect }: { current: Date; onSelect: (d: Date
       <div className="mb-3 flex items-center justify-between">
         <span className="text-sm font-semibold">{month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
         <div className="flex gap-1">
-          <button onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))} className="rounded p-1 hover:bg-elevated"><ChevronLeft className="h-3.5 w-3.5" /></button>
-          <button onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))} className="rounded p-1 hover:bg-elevated"><ChevronRight className="h-3.5 w-3.5" /></button>
+          <button aria-label={tr('a11y.previous')} onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))} className="rounded p-1 hover:bg-elevated"><ChevronLeft className="h-3.5 w-3.5" /></button>
+          <button aria-label={tr('a11y.next')} onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))} className="rounded p-1 hover:bg-elevated"><ChevronRight className="h-3.5 w-3.5" /></button>
         </div>
       </div>
       <div className="grid grid-cols-7 gap-0.5 text-center">
@@ -596,7 +597,7 @@ export function CalendarModule() {
         <div className="flex flex-1 flex-col overflow-y-auto md:hidden">
           {/* Mobile day selector */}
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
-            <button onClick={() => setMobileDayIndex(i => (i - 1 + 7) % 7)} className="rounded-lg p-1.5 hover:bg-elevated transition">
+            <button aria-label={tr('a11y.previous')} onClick={() => setMobileDayIndex(i => (i - 1 + 7) % 7)} className="rounded-lg p-1.5 hover:bg-elevated transition">
               <ChevronLeft className="h-5 w-5" />
             </button>
             <div className="text-center">
@@ -607,7 +608,7 @@ export function CalendarModule() {
                 {mobileDay.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
               </div>
             </div>
-            <button onClick={() => setMobileDayIndex(i => (i + 1) % 7)} className="rounded-lg p-1.5 hover:bg-elevated transition">
+            <button aria-label={tr('a11y.next')} onClick={() => setMobileDayIndex(i => (i + 1) % 7)} className="rounded-lg p-1.5 hover:bg-elevated transition">
               <ChevronRight className="h-5 w-5" />
             </button>
           </div>

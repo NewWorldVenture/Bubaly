@@ -145,13 +145,14 @@ export function RulesEditor({ rules: initial }: { rules: Rule[] }) {
                   )}
                 </p>
               </div>
-              <button
+              <button aria-label={tr(expanded === rule.id ? 'a11y.collapse' : 'a11y.expand')}
                 onClick={() => setExpanded(expanded === rule.id ? null : rule.id)}
                 className="rounded-lg p-1.5 text-muted hover:bg-surface transition"
               >
                 {expanded === rule.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
               </button>
               <button
+                aria-label={tr('a11y.toggle')}
                 onClick={() => handleToggle(rule.id, rule.is_active)}
                 className="text-muted hover:text-fg transition"
               >
@@ -160,7 +161,7 @@ export function RulesEditor({ rules: initial }: { rules: Rule[] }) {
                   : <ToggleLeft className="h-5 w-5" />
                 }
               </button>
-              <button
+              <button aria-label={t('a11y.delete')}
                 onClick={() => handleDelete(rule.id)}
                 className="rounded-lg p-1.5 text-muted hover:bg-red-500/10 hover:text-red-400 transition"
               >

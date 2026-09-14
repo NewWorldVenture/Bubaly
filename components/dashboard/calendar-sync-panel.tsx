@@ -121,7 +121,7 @@ export function CalendarSyncPanel() {
                     <RefreshCw className={cn('h-3.5 w-3.5', isSyncing && 'animate-spin')} />
                     {isSyncing ? 'Syncing…' : 'Sync'}
                   </Button>
-                  <button onClick={() => remove(feed)} className="rounded p-1.5 text-muted hover:text-danger transition">
+                  <button aria-label={t('a11y.delete')} onClick={() => remove(feed)} className="rounded p-1.5 text-muted hover:text-danger transition">
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>

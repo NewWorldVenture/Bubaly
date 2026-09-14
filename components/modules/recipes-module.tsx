@@ -246,7 +246,7 @@ export function RecipesModule() {
               <input value={search} inputMode="search" enterKeyHint="search" onChange={(e) => setSearch(e.target.value)}
                 placeholder={tr('recipes.searchRecipes')}
                 className="w-28 bg-transparent text-sm placeholder:text-muted outline-none sm:w-40" />
-              {search && <button onClick={() => setSearch('')}><X className="h-3.5 w-3.5 text-muted" /></button>}
+              {search && <button aria-label={tr('a11y.clearSearch')} onClick={() => setSearch('')}><X className="h-3.5 w-3.5 text-muted" /></button>}
             </div>
             <button onClick={() => { setTonightOpen(true); setTonightPicks(null); }} className="inline-flex items-center gap-1.5 rounded-xl border border-brand/30 bg-brand/10 px-3 py-2 text-sm font-semibold text-brand-text hover:bg-brand/15"><Sparkles className="h-4 w-4" /> Tonight?</button>
             <a href="/dashboard/recipes/vote" className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm font-semibold hover:bg-elevated"><Vote className="h-4 w-4" /> {tr('recipes.vote')}</a>
@@ -376,11 +376,11 @@ export function RecipesModule() {
                     className="rounded-xl p-2 hover:bg-elevated transition">
                     <Heart className={cn('h-5 w-5', viewing.is_favorite ? 'fill-red-400 text-red-400' : 'text-muted')} />
                   </button>
-                  <button onClick={() => { setEditing(viewing); setViewing(null); }}
+                  <button aria-label={tr('a11y.edit')} onClick={() => { setEditing(viewing); setViewing(null); }}
                     className="rounded-xl p-2 text-muted hover:bg-elevated hover:text-fg transition">
                     <Edit2 className="h-5 w-5" />
                   </button>
-                  <button onClick={() => { if (confirm(tr('recipesModule.deleteThisRecipe'))) deleteRecipe(viewing.id); }}
+                  <button aria-label={tr('a11y.delete')} onClick={() => { if (confirm(tr('recipesModule.deleteThisRecipe'))) deleteRecipe(viewing.id); }}
                     className="rounded-xl p-2 text-muted hover:bg-elevated hover:text-danger transition">
                     <Trash2 className="h-5 w-5" />
                   </button>
@@ -686,7 +686,7 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
                 <Input value={ing.quantity} onChange={(e) => updateIngredient(i, 'quantity', e.target.value)} placeholder="2" className="w-16 flex-shrink-0" />
                 <Input value={ing.unit} onChange={(e) => updateIngredient(i, 'unit', e.target.value)} placeholder="cups" className="w-20 flex-shrink-0" />
                 <Input value={ing.name} onChange={(e) => updateIngredient(i, 'name', e.target.value)} placeholder={tr('recipes.ingredientName')} className="flex-1" />
-                <button type="button" onClick={() => removeIngredient(i)} className="rounded-lg p-2 text-muted hover:text-danger"><X className="h-4 w-4" /></button>
+                <button type="button" aria-label={tr('a11y.remove')} onClick={() => removeIngredient(i)} className="rounded-lg p-2 text-muted hover:text-danger"><X className="h-4 w-4" /></button>
               </div>
             ))}
           </div>
@@ -706,7 +706,7 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
                 </div>
                 <Textarea value={step.text} onChange={(e) => updateStep(i, e.target.value)}
                   placeholder={`Step ${step.step}…`} className="flex-1 min-h-[60px]" />
-                <button type="button" onClick={() => removeStep(i)} className="rounded-lg p-2 text-muted hover:text-danger self-start"><X className="h-4 w-4" /></button>
+                <button type="button" aria-label={tr('a11y.remove')} onClick={() => removeStep(i)} className="rounded-lg p-2 text-muted hover:text-danger self-start"><X className="h-4 w-4" /></button>
               </div>
             ))}
           </div>

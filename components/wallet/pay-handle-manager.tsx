@@ -71,12 +71,12 @@ export function PayHandleManager({ handles, childOptions, canManage, baseUrl }: 
                 <p className="text-xs text-muted">→ {h.childName ?? 'Whole family'}</p>
               </div>
               <div className="flex flex-shrink-0 items-center gap-1">
-                <button type="button" onClick={() => copy(h.handle)}
+                <button type="button" aria-label={t('a11y.copy')} onClick={() => copy(h.handle)}
                   className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1.5 text-xs hover:bg-elevated">
                   {copied === h.handle ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
                 </button>
                 {canManage && (
-                  <button type="button" onClick={() => release(h.id)}
+                  <button aria-label={t('a11y.delete')} type="button" onClick={() => release(h.id)}
                     className="inline-flex items-center rounded-lg border border-border px-2 py-1.5 text-xs text-muted hover:bg-elevated hover:text-danger">
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>

@@ -171,7 +171,7 @@ export function WeekendModule() {
                     <span className="rounded bg-elevated px-1.5 py-0.5 text-[10px] uppercase text-muted">{f.kind}</span>
                     {f.last_status && <span className={`text-[11px] ${f.last_status === 'ok' ? 'text-emerald-400' : 'text-rose-400'}`}>{f.last_status === 'ok' ? `✓ ${f.last_count} found` : `⚠ ${f.last_status}`}</span>}
                     <a href={f.url} target="_blank" rel="noopener noreferrer" className="truncate text-xs text-muted hover:text-brand-text">{f.url}</a>
-                    <button onClick={() => removeFeed(f.id)} className="ml-auto text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
+                    <button aria-label={t('a11y.delete')} onClick={() => removeFeed(f.id)} className="ml-auto text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
                   </li>
                 ))}
               </ul>

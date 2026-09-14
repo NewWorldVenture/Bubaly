@@ -93,8 +93,8 @@ export function JournalModule() {
                     </div>
                   </div>
                   <div className="flex gap-0.5 opacity-0 transition group-hover:opacity-100">
-                    <button onClick={() => setComposer({ entry: e, prompt: e.prompt })} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
-                    <button onClick={() => { if (confirm(t('journalModule.deleteThisEntry'))) remove(e.id); }} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
+                    <button aria-label={t('a11y.edit')} onClick={() => setComposer({ entry: e, prompt: e.prompt })} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
+                    <button aria-label={t('a11y.delete')} onClick={() => { if (confirm(t('journalModule.deleteThisEntry'))) remove(e.id); }} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
                   </div>
                 </div>
                 {e.prompt && (

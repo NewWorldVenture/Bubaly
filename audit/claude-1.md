@@ -1494,3 +1494,81 @@ re-pinning a formatting choice.
 - **Status:** the `families` half is FIXED in the repository and **NOT applied to
   production** (F-001). Fresh replay 314 migrations / 0 failed, probes **23/23**,
   both new assertions verified to be able to fail.
+
+---
+
+## Pass X — every icon button has a name (merged from Claude-2's U-05)
+
+### [CLAUDE-2][MEDIUM → the destructive half is worse][A11Y] Icon-only buttons with no accessible name
+
+- **Verified with my own scanner, and the count moved:** Claude-2 reported 74; the
+  current tree has **82**. `scripts/audit-icon-button-labels.mjs` walks the
+  TypeScript AST for every `<button>` and reports one only when it can see no way
+  for it to have a name — deliberately conservative, because over-reporting is the
+  trap here. Claude-2's own first two formulations produced **903** and then
+  **256** by treating `{t('notes.edit')}` as "not text"; mine treats ANY non-JSX
+  `{expression}` child as a name for exactly that reason.
+- **Impact:** WCAG 4.1.2. A screen-reader or voice-control user hears "button" and
+  cannot tell Edit from Delete, and on these lists the pair sits side by side: an
+  insurance policy, a financial transaction, an immunisation record, a Guardian
+  routing rule. And two I found that Claude-2's list did not reach:
+  `components/wallet/invest-view.tsx:71,73` are **approve and reject on a child's
+  investment order** — a Check and an X, no names, moving money.
+- **Icon vocabulary, counted:** 46 `Trash2`, 16 `X`, 9 `Pencil` + 2 `Edit2`, 5
+  `Copy`, 4 `MoreHorizontal`, 4 `ChevronRight`, 4 `Plus`, 3 `Pin`, 3 `PinOff`, 3
+  `Check`, and a tail of navigation and one-offs. So **28 reusable labels** cover
+  all 82 — which is why the fix is an `a11y.*` key group translated once with care
+  rather than 82 bespoke strings in seven languages.
+- **Fix (applied): all 82, in two deliberate halves.**
+  - **62 automatically**, for icons whose meaning is unambiguous (`Trash2` →
+    delete, `Pencil` → edit, `MoreHorizontal` → more actions, and so on).
+  - **20 by hand, each read first**, because the icon alone was not enough. An `X`
+    beside a `Check` means **Reject**, not Close — mislabelling that is worse than
+    leaving it unnamed. An `X` inside a search field means **Clear search**; an `X`
+    on a panel header means **Close**; an `X` beside a `Textarea` in a recipe step
+    means **Remove**.
+  - **`components/wallet/wallet-activation.tsx:78` was the interesting one.** A
+    checkbox drawn as a `<button>`, inside a `<label>` whose sibling `<span>`
+    carries the sentence — so it looks perfectly labelled on screen and had **no
+    accessible name at all**, because a `<label>` names a form CONTROL and not a
+    `<button>`. It now carries `role="checkbox"`, `aria-checked` and the agreement
+    sentence as its name.
+- **Five of the automated labels were then corrected**, and this is worth recording
+  because the automation looked right: where a button switches between two icons
+  (`Pin`/`PinOff`, `ChevronUp`/`ChevronDown`, `List`/`LayoutGrid`) a FIXED label is
+  wrong half the time. Those five now read the state:
+  `aria-label={t(view === 'grid' ? 'a11y.listView' : 'a11y.gridView')}`.
+- **And fifteen type errors, all of one kind.** My detector took each file's FIRST
+  `useTranslations()` — but these files hold several components and each has its own
+  translator in its own scope, so five labels named `t` where the enclosing
+  component has `tr`, or the reverse. Three child components
+  (`ContactRow`, `MiniCalendar`, `NoteGroup`) had **no** translator at all and now
+  declare one. One was a real logic error I introduced: `viewing.pinned` where the
+  column is `is_pinned`. `tsc` found every one — which is the argument for running
+  it before believing a mass edit, not after.
+- **Status:** FIXED, and guarded by
+  `tests/every-icon-button-has-a-name.test.ts` — the offender list must be empty,
+  with **three positive controls** (a bare icon button, a conditional between two
+  icons, and the button-inside-a-label case) and **eight negative controls** that
+  pin the over-reporting the scanner must not do. Reverting one label fails the
+  sweep naming that exact file and line.
+- **Replaces two file-by-file guards' coverage gap:** `tests/mobile-touch-a11y.test.ts`
+  and `tests/photos-a11y-labels.test.ts` cover five files between them and **none
+  of the 82 was in those five**. This one names no file.
+
+### And an existing guard caught a defect this change introduced
+
+`tests/i18n-client-scope.test.ts` failed on *"the marketing site has no key outside
+its scope"*. `app/(marketing)/blog/blog-search.tsx` is a marketing client component,
+and each surface ships only the part of the catalogue its client components use — so
+`a11y.clearSearch` would have rendered as the **raw key** to every visitor of the
+blog. Exactly what that guard exists to prevent, and it earned its keep.
+
+Fixed by putting `a11y` in `ROOT_CHROME_SCOPE` rather than in each surface's own
+list — a deliberate widening. These keys are the accessible NAMES of controls, and a
+control appears on every surface: the blog's search field, a public gift page, the
+sign-in screen. Scoping them per surface means adding an `aria-label` to an auth
+component fails a test about authentication copy, for a reason unrelated to the
+author's intent. 28 short strings in the active locale is a few hundred bytes
+against the marketing scope's 2 KB, and the alternative is a guard that punishes the
+right change.

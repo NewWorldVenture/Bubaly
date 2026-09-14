@@ -223,7 +223,7 @@ export function ConciergeModule() {
                   rows={2}
                   className="flex-1 resize-none rounded-2xl border border-border bg-surface/60 px-4 py-3 text-sm placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand/30"
                 />
-                <button onClick={() => void sendMessage()} disabled={!input.trim() || sending}
+                <button aria-label={tr('a11y.send')} onClick={() => void sendMessage()} disabled={!input.trim() || sending}
                   className={cn('flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl transition',
                     input.trim() && !sending ? 'bg-brand text-white hover:bg-brand/90' : 'bg-surface text-muted')}>
                   <Send className="h-4 w-4" />
@@ -441,7 +441,7 @@ function PlanDetail({ plan, onClose, onDelete, onRefresh }: {
           <cfg.icon className="h-3.5 w-3.5" />
         </div>
         <p className="flex-1 truncate text-sm font-bold">{plan.title}</p>
-        <button onClick={() => onDelete(plan)} className="text-muted hover:text-red-400"><Trash2 className="h-3.5 w-3.5" /></button>
+        <button aria-label={t('a11y.delete')} onClick={() => onDelete(plan)} className="text-muted hover:text-red-400"><Trash2 className="h-3.5 w-3.5" /></button>
       </div>
 
       <div className="space-y-3">

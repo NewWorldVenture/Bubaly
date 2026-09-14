@@ -80,7 +80,7 @@ export function BlogSearch() {
           onFocus={() => { loadIndex(); setFocused(true); }}
         />
         {query && (
-          <button onClick={() => setQuery('')} className="shrink-0 text-white/40 hover:text-white/70">
+          <button aria-label={t('a11y.clearSearch')} onClick={() => setQuery('')} className="shrink-0 text-white/40 hover:text-white/70">
             <X className="h-4 w-4" />
           </button>
         )}

@@ -216,7 +216,7 @@ export function WeatherModule() {
               <input autoFocus value={query} inputMode="search" enterKeyHint="search" onChange={(e) => setQuery(e.target.value)} placeholder={t('weather.searchForACity')} className="min-w-0 flex-1 bg-transparent text-sm outline-none" />
             </div>
             <Button type="submit" loading={searching}>{t('weather.search')}</Button>
-            <button type="button" onClick={() => { setAdding(false); setQuery(''); setResults([]); }} className="grid h-10 w-10 place-items-center rounded-xl border border-border text-muted hover:bg-elevated"><X className="h-4 w-4" /></button>
+            <button type="button" aria-label={t('a11y.close')} onClick={() => { setAdding(false); setQuery(''); setResults([]); }} className="grid h-10 w-10 place-items-center rounded-xl border border-border text-muted hover:bg-elevated"><X className="h-4 w-4" /></button>
           </form>
           {results.length > 0 && (
             <ul className="mt-3 divide-y divide-border/60">

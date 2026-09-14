@@ -127,7 +127,7 @@ export function KitchenTimers() {
             inputMode="numeric" placeholder="Minutes…" aria-label={tr('kitchenTimers.customTimerMinutes')}
             className="h-9 w-full min-w-0 flex-1 rounded-lg border border-white/15 bg-black/25 px-2.5 text-sm text-white outline-none placeholder:text-white/40 focus:border-brand" />
           <button type="submit" className="h-9 shrink-0 rounded-lg bg-brand px-3 text-sm font-semibold text-white disabled:opacity-50" disabled={!customMin}>{tr('kitchenTimers.start')}</button>
-          <button type="button" onClick={() => setPicking(false)} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white/10 text-white/70 hover:bg-white/20"><X className="h-4 w-4" /></button>
+          <button type="button" aria-label={tr('a11y.close')} onClick={() => setPicking(false)} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white/10 text-white/70 hover:bg-white/20"><X className="h-4 w-4" /></button>
         </form>
       </div>
     );
