@@ -5,9 +5,9 @@ import { TrendingUp, PiggyBank, Target, ArrowDownLeft, ArrowUpRight, ChevronRigh
 import { PageHeader } from '@/components/app/page-header';
 import { WalletSubnav } from '@/components/wallet/wallet-subnav';
 import { Avatar } from '@/components/ui/avatar';
-import { formatCents, type BucketKind } from '@/lib/wallet/ledger';
+import { formatCents as formatCentsIn, type BucketKind } from '@/lib/wallet/ledger';
 import { progressBarA11y } from '@/lib/ui/a11y';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 export type TreasuryChild = {
   id: string;
@@ -44,6 +44,10 @@ export function TreasuryView({
   trend: { label: string; credits: number; debits: number }[];
   canManage: boolean;
 }) {
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const formatCents = (cents: number, currency?: string) =>
+    formatCentsIn(cents, currency, locale.code);
   const tr = useTranslations();
   const netMonth = thisMonthIn - thisMonthOut;
   const goalPct = totalGoalTargets > 0 ? Math.min(100, Math.round((totalGoalSaved / totalGoalTargets) * 100)) : 0;
@@ -254,6 +258,10 @@ function MiniSplitBar({ wallets, familyTotal }: { wallets: TreasuryChild[]; fami
 }
 
 function ChildRow({ child, familyTotal }: { child: TreasuryChild; familyTotal: number }) {
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const formatCents = (cents: number, currency?: string) =>
+    formatCentsIn(cents, currency, locale.code);
   const tr = useTranslations();
   const share = familyTotal > 0 ? Math.round((child.total / familyTotal) * 100) : 0;
   const goalPct = child.goalTargetCents > 0 ? Math.min(100, Math.round((child.goalSavedCents / child.goalTargetCents) * 100)) : null;
@@ -298,6 +306,10 @@ function ChildRow({ child, familyTotal }: { child: TreasuryChild; familyTotal: n
 }
 
 function TrendChart({ trend }: { trend: { label: string; credits: number; debits: number }[] }) {
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const formatCents = (cents: number, currency?: string) =>
+    formatCentsIn(cents, currency, locale.code);
   const maxVal = Math.max(...trend.flatMap((t) => [t.credits, t.debits]), 1);
   return (
     <div className="flex h-32 items-end gap-1.5">

@@ -3,10 +3,10 @@
 import { useMemo, useState } from 'react';
 import { Receipt, ArrowDownLeft, ArrowUpRight, Download } from 'lucide-react';
 import { EmptyState } from '@/components/ui/states';
-import { formatCents } from '@/lib/wallet/ledger';
+import { formatCents as formatCentsIn } from '@/lib/wallet/ledger';
 import { txnTypeLabel, signedAmountCents, filterTxns, groupByDay, netCents, toStatementCsv, statementFilename, type ActivityTxn } from '@/lib/wallet/activity';
 import { WalletSubnav } from '@/components/wallet/wallet-subnav';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type Row = ActivityTxn & { childName: string | null };
 
@@ -20,6 +20,10 @@ function dayLabel(date: string): string {
 }
 
 export function WalletActivityView({ rows, childOptions }: { rows: Row[]; childOptions: { id: string; name: string }[] }) {
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const formatCents = (cents: number, currency?: string) =>
+    formatCentsIn(cents, currency, locale.code);
   const tr = useTranslations();
   const [child, setChild] = useState('');
   const [type, setType] = useState('');

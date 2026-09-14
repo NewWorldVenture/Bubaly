@@ -1993,3 +1993,90 @@ the context sent to the model, and the reader is the model.
 `formatCents` (137 calls / 22 files) and the six other `lib/` money functions, each
 converted **together with its callers** so the ratchet falls only for sites whose
 output actually changed. Then the 70 client and 74 server date surfaces.
+
+---
+
+## Pass AC — the Family Wallet's money follows the reader (79 sites), and a mechanical edit I had to throw away
+
+### [CLAUDE-1][HIGH][I18N] `formatCents` pinned the locale on every amount in the wallet
+
+- **Status:** FIXED — 79 call sites across 12 views and 30 components; ratchet 241 → **240**
+- **Files:** `lib/wallet/ledger.ts` + `components/wallet/{wallet-dashboard, child-detail-view,
+  treasury-view, invest-view, send-money-view, babysitters-view, goals-view,
+  public-gift-form, allowance-view, gift-view, activity-view, money-cards-view}.tsx`
+
+`formatCents(cents, currency = 'USD')` already took the currency as an argument — eight
+tables carry a `currency` column — and pinned only the **locale**. So a German family
+read their child's balance as `$8,245.50` where they expect `8.245,50 $`, on every
+amount in the Family Wallet: a balance, a savings goal, a sibling transfer, a
+babysitter payment.
+
+`currency` stays the caller's and only the separators follow the reader. Converting the
+currency would misstate a balance, which is worse than the defect.
+
+### The ratchet moved by one and the fix covers seventy-nine
+
+Worth stating plainly, because the numbers look wrong together: the ratchet counts
+hardcoded **literals**, and `formatCents` is one literal serving 79 call sites. A
+ratchet is a floor on regression, not a measure of work.
+
+### Two things correctly left alone
+
+`lib/wallet/coach.ts` (9 calls) and `lib/wallet/gift-ai.ts` (1) build **AI prompts** —
+the reader is the model, so the source language is right. Together with the five Super
+Admin ledger pages (18 calls), that is 28 calls deliberately on the en-US default,
+which is why the default was kept rather than removed.
+
+### The mechanical edit I threw away, and why
+
+The first attempt inserted the 28 bindings by finding, for each `formatCents` use, the
+nearest preceding function declaration in the file's **lines**. eslint then reported
+
+    React Hook "useLocale" is called in function "downloadStatement" that is
+    neither a React function component nor a custom React Hook function
+
+fourteen times, across seven files: the nearest preceding declaration was a nested
+handler — `submit`, `archive`, `onSubmit`, `downloadStatement` — and a hook there is
+illegal. Two more were *at the top level of the module*.
+
+I reverted all twelve files rather than patch them. A half-applied mechanical edit
+across twelve files is the case for resetting, not for chasing errors: every patch
+would have been guesswork about which of my own insertions were sound.
+
+The second attempt parses each file with the TypeScript AST and takes only
+**top-level function declarations whose name begins with a capital** — the same rule
+`react-hooks/rules-of-hooks` applies. Nested handlers then see the binding through the
+closure, which is what should have happened the first time. 30 bindings, tsc clean,
+eslint clean.
+
+### And a second extraction bug in the same pass
+
+The first binding script read tsc's output for `error TS2304: Cannot find name
+'formatCents'` — and three files came out with **no binding at all**. TypeScript emits
+**TS2552** ("Did you mean 'formatCentsIn'?") instead of TS2304 once a similarly-named
+symbol is in scope, which is exactly what the aliased import created. So which files
+got a binding depended on which error code the compiler chose. Matching both codes
+fixed it.
+
+Both bugs are the same shape as the five in Pass Y: an instrument reading a proxy for
+the thing it cares about.
+
+### Proof
+
+`tests/wallet-ledger.test.ts` gains three cases on `formatCents` — the locale, the
+currency, and the unchanged default — asserting **exact strings**, because the space
+between amount and symbol is U+00A0 and French groups thousands with U+202F. Both are
+non-breaking and load-bearing, and `toContain` cannot see either. Reverting the locale
+to a literal fails 2 of the 3.
+
+Arithmetic correction along the way: `formatCents(5000)` is **$50**, not $5,000 — the
+argument is cents. My first expectations read `'5.000 $'` and `'€5,000'` and were
+simply wrong; the French separator case needed 500,000 cents to have a thousands
+separator to show at all.
+
+### Remaining, with numbers
+
+`lib/marketplace/fees.ts` (6) and `listings.ts` (2) each define their **own**
+`formatCents`, shadowing the ledger's, used inside narrative strings — a separate
+piece. Then `app/(app)/marketplace/{orders,insights,item}` (8, server pages),
+`components/modules/chores-module.tsx` (1), and the six other `lib/` money functions.

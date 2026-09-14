@@ -115,4 +115,39 @@ describe('formatCents', () => {
     expect(formatCents(4250)).toBe('$42.50');
     expect(formatCents(0)).toBe('$0');
   });
+
+  // Every amount in the Family Wallet goes through here — a child's balance, a
+  // savings goal, a sibling transfer, a babysitter payment: 79 call sites across
+  // twelve views. `currency` was already a caller's argument and only the LOCALE was
+  // pinned, so a German family read their child's balance as "$8,245.50" where they
+  // expect "8.245,50 $".
+  //
+  // Exact strings, not toContain. The space between amount and symbol is U+00A0, a
+  // NON-BREAKING space, and it is load-bearing: it stops the figure being split
+  // across a line. An earlier version of the shared formatter flattened it and three
+  // green checks missed that, because they asserted toContain('8.245,50').
+  it('follows the reader’s locale', () => {
+    expect(formatCents(824550, 'USD', 'de-DE')).toBe('8.245,50\u00a0$');
+    expect(formatCents(824550, 'USD', 'en-US')).toBe('$8,245.50');
+    expect(formatCents(5000, 'USD', 'de-DE')).toBe('50\u00a0$');
+  });
+
+  // The currency belongs to the MONEY, not to the reader's language. A US family's
+  // wallet is in dollars whichever language they read, and converting it would
+  // misstate a balance — which is worse than the defect being fixed.
+  it('keeps the money’s currency whatever the reader’s language', () => {
+    expect(formatCents(5000, 'EUR', 'de-DE')).toBe('50\u00a0€');
+    expect(formatCents(5000, 'EUR', 'en-US')).toBe('€50');
+    // French groups thousands with U+202F, so a five-thousand-dollar treasury
+    // balance reads "5 000 $US" — a different separator again, and also non-breaking.
+    expect(formatCents(500000, 'USD', 'fr-FR')).toBe('5\u202f000\u00a0$US');
+    expect(formatCents(500000, 'USD', 'en-US')).toBe('$5,000');
+  });
+
+  // And the default is unchanged, which is what the Super Admin ledger pages and
+  // lib/wallet/coach.ts's prompt text rely on — the latter correctly, since the
+  // reader of a prompt is the model.
+  it('still defaults to en-US', () => {
+    expect(formatCents(4250)).toBe(formatCents(4250, 'USD', 'en-US'));
+  });
 });

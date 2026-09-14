@@ -13,12 +13,12 @@ import { Field, Input, Textarea } from '@/components/ui/input';
 import { useToast } from '@/components/ui/toast';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
-import { formatCents } from '@/lib/wallet/ledger';
+import { formatCents as formatCentsIn } from '@/lib/wallet/ledger';
 import { WalletSubnav } from '@/components/wallet/wallet-subnav';
 import {
   saveBabysitterAction, archiveBabysitterAction, recordBabysitterPaymentAction,
 } from '@/app/(app)/wallet/actions';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 export type BabysitterRow = {
   id: string; name: string; phone: string | null; email: string | null;
@@ -32,6 +32,10 @@ export type PaymentRow = {
 export function BabysittersView({ sitters, payments, canManage }: {
   sitters: BabysitterRow[]; payments: PaymentRow[]; canManage: boolean;
 }) {
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const formatCents = (cents: number, currency?: string) =>
+    formatCentsIn(cents, currency, locale.code);
   const t = useTranslations();
   const tr = useTranslations();
   const router = useRouter();
@@ -211,6 +215,10 @@ function SitterModal({ sitter, onClose, onSaved }: {
 function PaymentModal({ sitter, onClose, onSaved }: {
   sitter: BabysitterRow; onClose: () => void; onSaved: () => void;
 }) {
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const formatCents = (cents: number, currency?: string) =>
+    formatCentsIn(cents, currency, locale.code);
   const t = useTranslations();
   const tr = useTranslations();
   const { error: toastError } = useToast();

@@ -20,7 +20,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import { progressBarA11y } from '@/lib/ui/a11y';
 import { fmtRelative } from '@/lib/utils/format';
-import { formatCents, type BucketKind } from '@/lib/wallet/ledger';
+import { formatCents as formatCentsIn, type BucketKind } from '@/lib/wallet/ledger';
 import { computeFunding, serviceFeeLabel, type WalletTier } from '@/lib/wallet/fees';
 import { WALLET_TIERS, aiCoachLevel } from '@/lib/wallet/tiers';
 import { WalletSubnav } from '@/components/wallet/wallet-subnav';
@@ -28,7 +28,7 @@ import {
   addFundsAction, requestSpendAction, decideSpendRequestAction, sendMoneyAction, decideAllowanceRequestAction,
 } from '@/app/(app)/wallet/actions';
 import { describeDbError } from '@/lib/supabase/errors';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 type Coaching = { headline: string; insights: string[]; suggestion: string };
 
@@ -87,6 +87,10 @@ export function WalletDashboard({ familyTotal, mode, tier, canManage, childWalle
   pendingApprovals: PendingApproval[];
   analytics?: WalletAnalytics;
 }) {
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const formatCents = (cents: number, currency?: string) =>
+    formatCentsIn(cents, currency, locale.code);
   const tr = useTranslations();
   const [addFor, setAddFor] = useState<ChildWalletView | null>(null);
   const [sendOpen, setSendOpen] = useState(false);
@@ -290,6 +294,10 @@ const CREDIT_TYPE_META: Record<string, { label: string; color: string }> = {
 };
 
 function SpendingAnalytics({ analytics }: { analytics: WalletAnalytics }) {
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const formatCents = (cents: number, currency?: string) =>
+    formatCentsIn(cents, currency, locale.code);
   const tr = useTranslations();
   const { thisMonthIn, thisMonthOut, creditsByType, monthlyTrend } = analytics;
   const net = thisMonthIn - thisMonthOut;
@@ -380,6 +388,10 @@ function SpendingAnalytics({ analytics }: { analytics: WalletAnalytics }) {
 
 /** One pending approval row with inline Approve / Reject (managers only). */
 function ApprovalRow({ approval, canDecide }: { approval: PendingApproval; canDecide: boolean }) {
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const formatCents = (cents: number, currency?: string) =>
+    formatCentsIn(cents, currency, locale.code);
   const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
@@ -431,6 +443,10 @@ function ApprovalRow({ approval, canDecide }: { approval: PendingApproval; canDe
 
 /** Request to spend from a child's Spend bucket → completes or queues for approval. */
 function RequestSpendModal({ child, onClose }: { child: ChildWalletView; onClose: () => void }) {
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const formatCents = (cents: number, currency?: string) =>
+    formatCentsIn(cents, currency, locale.code);
   const t = useTranslations();
   const tr = useTranslations();
   const router = useRouter();
@@ -475,6 +491,10 @@ function RequestSpendModal({ child, onClose }: { child: ChildWalletView; onClose
 
 /** Move money between two child wallets (parent-initiated, money-conserving). */
 function SendMoneyModal({ wallets, onClose }: { wallets: ChildWalletView[]; onClose: () => void }) {
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const formatCents = (cents: number, currency?: string) =>
+    formatCentsIn(cents, currency, locale.code);
   const t = useTranslations();
   const tr = useTranslations();
   const router = useRouter();
@@ -536,6 +556,10 @@ function SendMoneyModal({ wallets, onClose }: { wallets: ChildWalletView[]; onCl
 }
 
 function AddFundsModal({ child, onClose }: { child: ChildWalletView; onClose: () => void }) {
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const formatCents = (cents: number, currency?: string) =>
+    formatCentsIn(cents, currency, locale.code);
   const tr = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();

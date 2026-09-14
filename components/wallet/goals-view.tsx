@@ -14,10 +14,10 @@ import { EmptyState } from '@/components/ui/states';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import { progressBarA11y } from '@/lib/ui/a11y';
-import { formatCents, goalProgress } from '@/lib/wallet/ledger';
+import { formatCents as formatCentsIn, goalProgress } from '@/lib/wallet/ledger';
 import { WalletSubnav } from '@/components/wallet/wallet-subnav';
 import { createGoalAction, fundGoalAction } from '@/app/(app)/wallet/actions';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 const GOAL_KIND_META: Record<string, { emoji: string; label: string }> = {
   bike:       { emoji: '🚲', label: 'Bike' },
@@ -101,6 +101,10 @@ export function GoalsView({ goals, childOptions, canManage }: {
 }
 
 function GoalCard({ goal, canManage, onFund }: { goal: GoalView; canManage: boolean; onFund: () => void }) {
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const formatCents = (cents: number, currency?: string) =>
+    formatCentsIn(cents, currency, locale.code);
   const t = useTranslations();
   const pct = Math.round(goalProgress(goal.savedCents, goal.targetCents) * 100);
   const reached = goal.status === 'reached' || goal.savedCents >= goal.targetCents;
@@ -252,6 +256,10 @@ function CreateGoalModal({ childOptions, onClose }: { childOptions: ChildOption[
 }
 
 function FundGoalModal({ goal, onClose }: { goal: GoalView; onClose: () => void }) {
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const formatCents = (cents: number, currency?: string) =>
+    formatCentsIn(cents, currency, locale.code);
   const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();

@@ -13,13 +13,13 @@ import { EmptyState } from '@/components/ui/states';
 import { useToast } from '@/components/ui/toast';
 import { Avatar } from '@/components/ui/avatar';
 import { WalletSubnav } from '@/components/wallet/wallet-subnav';
-import { formatCents } from '@/lib/wallet/ledger';
+import { formatCents as formatCentsIn } from '@/lib/wallet/ledger';
 import {
   portfolioValue, portfolioCost, gainLossCents, gainLossPct, projectGrowth,
   orderAmountCents, type Holding as PortHolding, type PriceMap,
 } from '@/lib/invest/portfolio';
 import { placeInvestOrderAction, decideInvestOrderAction } from '@/app/(app)/wallet/invest/actions';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 export type InvestAsset = { id: string; symbol: string; name: string; kind: string; emoji: string; description: string | null; priceCents: number; riskLevel: string };
 export type InvestChild = { id: string; name: string; color: string | null; investCashCents: number };
@@ -29,6 +29,10 @@ export type PendingOrder = { id: string; childName: string; assetEmoji: string; 
 export function InvestView(props: {
   assets: InvestAsset[]; childWallets: InvestChild[]; holdings: Holding[]; pendingOrders: PendingOrder[]; canManage: boolean;
 }) {
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const formatCents = (cents: number, currency?: string) =>
+    formatCentsIn(cents, currency, locale.code);
   const tr = useTranslations();
   const { assets, childWallets, holdings, pendingOrders, canManage } = props;
   const router = useRouter();
@@ -100,6 +104,10 @@ function ChildInvest({ child, assets, assetById, prices, holdings, busy, onTrade
   child: InvestChild; assets: InvestAsset[]; assetById: Map<string, InvestAsset>; prices: PriceMap;
   holdings: Holding[]; busy: string | null; onTrade: (assetId: string, side: 'buy' | 'sell', shares: number) => void;
 }) {
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const formatCents = (cents: number, currency?: string) =>
+    formatCentsIn(cents, currency, locale.code);
   const tr = useTranslations();
   const { error: toastError } = useToast();
   const portHoldings: PortHolding[] = holdings.map((h) => ({ assetId: h.assetId, shares: h.shares, avgCostCents: h.avgCostCents }));
@@ -211,6 +219,10 @@ function ChildInvest({ child, assets, assetById, prices, holdings, busy, onTrade
 
 // A fun compound-growth teaching tool (not a prediction).
 function GrowthProjector() {
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const formatCents = (cents: number, currency?: string) =>
+    formatCentsIn(cents, currency, locale.code);
   const tr = useTranslations();
   const [start, setStart] = useState(50);
   const [monthly, setMonthly] = useState(10);

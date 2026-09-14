@@ -24,11 +24,11 @@ import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import { progressBarA11y } from '@/lib/ui/a11y';
 import { fmtRelative } from '@/lib/utils/format';
-import { formatCents, goalProgress, type BucketKind, type Split } from '@/lib/wallet/ledger';
+import { formatCents as formatCentsIn, goalProgress, type BucketKind, type Split } from '@/lib/wallet/ledger';
 import { txnTypeLabel, signedAmountCents, groupByDay, toStatementCsv, statementFilename, type ActivityTxn } from '@/lib/wallet/activity';
 import { addFundsAction, requestSpendAction, sendMoneyAction, requestAllowanceAction } from '@/app/(app)/wallet/actions';
 import { describeDbError } from '@/lib/supabase/errors';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -62,6 +62,10 @@ const BUCKET_KINDS: BucketKind[] = ['spend', 'save', 'give', 'invest'];
 // ─── Smart Split Donut ────────────────────────────────────────────────────────
 
 function SmartSplitDonut({ buckets, total }: { buckets: Record<BucketKind, number>; total: number }) {
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const formatCents = (cents: number, currency?: string) =>
+    formatCentsIn(cents, currency, locale.code);
   const t = useTranslations();
   if (total <= 0) {
     return (
@@ -128,6 +132,10 @@ function SmartSplitDonut({ buckets, total }: { buckets: Record<BucketKind, numbe
 // ─── Card status ──────────────────────────────────────────────────────────────
 
 function SpendingCardPreview({ child }: { child: Child }) {
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const formatCents = (cents: number, currency?: string) =>
+    formatCentsIn(cents, currency, locale.code);
   const t = useTranslations();
   const spendable = child.buckets.spend ?? 0;
   return (
@@ -260,6 +268,10 @@ function AICoachCard({ childId }: { childId: string }) {
 // ─── Goal progress card ───────────────────────────────────────────────────────
 
 function GoalCard({ goal }: { goal: Goal }) {
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const formatCents = (cents: number, currency?: string) =>
+    formatCentsIn(cents, currency, locale.code);
   const pct = Math.round(goalProgress(goal.saved_cents, goal.target_cents) * 100);
   const reached = goal.status === 'reached';
   const daysLeft = goal.target_date
@@ -321,6 +333,10 @@ const TRUST_BASIS_LABEL: Record<string, string> = {
 };
 
 function TxnRow({ tx }: { tx: HistoryTxn }) {
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const formatCents = (cents: number, currency?: string) =>
+    formatCentsIn(cents, currency, locale.code);
   const t = useTranslations();
   const signed = signedAmountCents(tx);
   const credit = signed >= 0;
@@ -366,6 +382,10 @@ function TxnRow({ tx }: { tx: HistoryTxn }) {
 // ─── Request to Spend modal ───────────────────────────────────────────────────
 
 function RequestSpendModal({ child, onClose }: { child: Child; onClose: () => void }) {
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const formatCents = (cents: number, currency?: string) =>
+    formatCentsIn(cents, currency, locale.code);
   const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
@@ -423,6 +443,10 @@ function RequestSpendModal({ child, onClose }: { child: Child; onClose: () => vo
 // ─── Send to Sibling modal ────────────────────────────────────────────────────
 
 function SendToSiblingModal({ child, siblings, onClose }: { child: Child; siblings: Sibling[]; onClose: () => void }) {
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const formatCents = (cents: number, currency?: string) =>
+    formatCentsIn(cents, currency, locale.code);
   const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
@@ -479,6 +503,10 @@ function SendToSiblingModal({ child, siblings, onClose }: { child: Child; siblin
 // ─── Add Funds modal ──────────────────────────────────────────────────────────
 
 function AddFundsModal({ child, onClose }: { child: Child; onClose: () => void }) {
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const formatCents = (cents: number, currency?: string) =>
+    formatCentsIn(cents, currency, locale.code);
   const t = useTranslations();
   const router = useRouter();
   const { success, error: toastError } = useToast();
@@ -594,6 +622,10 @@ export function ChildDetailView({
   canManage: boolean;
   siblings: Sibling[];
 }) {
+  const locale = useLocale();
+  // Money follows the reader; the currency stays the money's own.
+  const formatCents = (cents: number, currency?: string) =>
+    formatCentsIn(cents, currency, locale.code);
   const tr = useTranslations();
   const t = useTranslations();
   const [adding, setAdding] = useState(false);
