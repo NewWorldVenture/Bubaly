@@ -7,6 +7,7 @@ import {
 } from '@/lib/marketing/consent';
 import { rateLimit, clientIp } from '@/lib/server/rate-limit';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
+import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 
 export const runtime = 'nodejs';
 
@@ -24,7 +25,7 @@ type ConsentBody = {
 
 export async function POST(req: NextRequest) {
   const t = await getTranslations();
-  const limited = rateLimit(`consent:post:${clientIp(req.headers)}`, { limit: 30, windowMs: 60_000 });
+  const limited = await enforceRequestRateLimit(createServiceClient(), `consent:post:${clientIp(req.headers)}`, { limit: 30, windowMs: 60_000 });
   if (!limited.ok) return NextResponse.json(
     { error: t('consent.tooManyConsentUpdatesPlease') },
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
@@ -68,7 +69,7 @@ export async function POST(req: NextRequest) {
 // Read the current consent state (for hydrating the banner/preference center).
 export async function GET(req: NextRequest) {
   const t = await getTranslations();
-  const limited = rateLimit(`consent:get:${clientIp(req.headers)}`, { limit: 60, windowMs: 60_000 });
+  const limited = await enforceRequestRateLimit(createServiceClient(), `consent:get:${clientIp(req.headers)}`, { limit: 60, windowMs: 60_000 });
   if (!limited.ok) return NextResponse.json(
     { error: t('consent.tooManyConsentRequestsPlease') },
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },

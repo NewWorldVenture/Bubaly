@@ -4,6 +4,8 @@ import { rateLimit, clientIp } from '@/lib/server/rate-limit';
 import { resolveActiveExitIntent } from '@/lib/marketing/exit-intent-server';
 import type { VisitorContext } from '@/lib/marketing/personalization';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
+import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
+import { createServiceClient } from '@/lib/supabase/server';
 
 export const runtime = 'nodejs';
 
@@ -12,7 +14,7 @@ const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim().slice(
 /** Public: resolve the best exit-intent offer for this visitor's context. */
 export async function POST(req: NextRequest) {
   const t = await getTranslations();
-  const limit = rateLimit(`ei-resolve:${clientIp(req.headers)}`, { limit: 60, windowMs: 60_000 });
+  const limit = await enforceRequestRateLimit(createServiceClient(), `ei-resolve:${clientIp(req.headers)}`, { limit: 60, windowMs: 60_000 });
   if (!limit.ok) return NextResponse.json({ offer: null }, { status: 429 });
 
   const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_SMALL_JSON_BYTES);

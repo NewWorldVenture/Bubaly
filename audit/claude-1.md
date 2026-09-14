@@ -3758,3 +3758,146 @@ It passed every time I ran it while writing, and failed on the next run — beca
 `git ls-files` cannot see an untracked file, and the helper only entered the scan once
 it was committed. **A guard that reads source as text has to read code as text**; it
 strips comments now, and the reason is written beside it.
+
+---
+
+## Two CI failures I caused, and the rule that would have caught both
+
+`038eb514` (Pass AW) and `ca72c250` (Pass AY) each went red on
+`Typecheck · Lint · Test · Build`. Both are mine, both were already fixed on the next
+head by the time the wake arrived, and neither is a flake. They are recorded here
+because they share a cause worth naming.
+
+### `038eb514` — `TS2769`, from an edit made after the typecheck
+
+Pass AW's validation ran `tsc` and then `lint`. Lint named two errors in a test file
+I had written the pass before, I fixed them, re-ran **that file's tests and lint**,
+and committed. The `children`-prop fix does not compile — `Field`'s children is a
+render prop and `createElement`'s third parameter is typed `ReactNode` — and `tsc`
+had already run, so nothing said so.
+
+I found it myself in the next pass and reverted to the render-prop form with the
+reason written beside it, so `0fd6bf95` is clean. But the push went out with a claim
+of "tsc clean" that was true of the code I typechecked and not of the code I pushed.
+
+### `ca72c250` — a guard whose input the commit itself changed
+
+Pass AY's guard scans `git ls-files` for a bare `listUsers()`. It passed every time I
+ran it while writing, and failed on CI, because **`git ls-files` cannot see an
+untracked file**: the helper it was going to match — whose header comment names the
+API it exists to replace — only entered the scan when `git add` tracked it.
+
+That is the sharper of the two. The test did not change and the file did not change;
+**committing changed the test's input.** Any guard that enumerates the repository
+through git has a different input before and after staging, and validating before
+staging therefore validates a different repository than CI sees.
+
+### The rule
+
+**Stage first, then validate, then commit.** `git add -A` before the last full run, so
+the gate sees exactly the file set CI will, and so no edit can slip in between the
+gate and the push. Both failures fall out of that ordering, from opposite directions:
+one was an edit after the gate, one was a file the gate could not see.
+
+Neither needed a comment on the PR under the drive-to-green rules — each already had
+a pushed fix on a later head before its wake was read — but "superseded" is not the
+same as "not my defect", and the count is two.
+
+---
+
+## Pass BA — a rate limit each lambda kept to itself, and a comment that said otherwise
+
+**Status: FIXED** (seven call sites across six routes, plus the false claim).
+
+### `[CLAUDE-3 → CLAUDE-1][MEDIUM][SECURITY]` verified, and it is six routes, not four
+
+`lib/server/rate-limit.ts` is a module-scope `Map` and says so in its own header:
+*"Good for a single instance / dev; swap for Upstash Redis in multi-instance prod."*
+On a serverless deployment every cold instance starts empty and concurrent instances
+share nothing, so "30 per minute" is 30 per minute **per instance** — and the number
+of instances is the caller's to raise, by sending in parallel.
+
+Claude-3 named four routes. The scan finds **six** (seven call sites): `recipes/search`
+and `blog/search-index` are the two it missed. All seven now go through
+`enforceRequestRateLimit`, which is what 26 other routes already use.
+
+**Claude-3's severity analysis is right and worth preserving rather than restating
+louder.** The *token-guessing* half of the claim is not exploitable — a link token is
+32 CSPRNG bytes stored as a SHA-256 and compared with `timingSafeEqual`, so the
+keyspace is the defence. What is real is unbounded **cost**: every accepted
+`/api/assistant` POST reads the family and calls a model.
+
+### The comment was wrong twice, so correcting it once would not have been enough
+
+```
+// Rate limited by IP BEFORE the token lookup, so an attacker cannot use this
+// endpoint to test guessed tokens at speed.
+```
+
+The mechanism could not provide that property **and** it is not the property that
+matters. A correction that only swapped the limiter would have left a sentence
+pointing the next reader at the wrong threat; one that only fixed the prose would
+have left the gate per-lambda. The replacement names both: what it now does, and
+what it is actually for.
+
+### Four more raw `rateLimit(` calls that are NOT defects
+
+`app/api/ai/route.ts`, `ai/chat`, `ai/gift` and `sync/feeds/[token]` each call the
+in-memory limiter and then `rateLimitDb` on the same path — the helper's body,
+hand-inlined. Checked before touching them, and left alone.
+
+### The guard is per-handler, because per-file would not have caught this
+
+`app/api/mkt/consent/route.ts` has two exported handlers. A file-level scan sees a
+durable limiter in the file and passes both; the AST walk asks whether the durable
+check is in **the same function** as the in-memory one. Proved by reverting only the
+`GET` handler: it goes red naming `route.ts:72` while `POST` stays green.
+
+### An existing guard caught a real regression in my fix, and it was the right guard
+
+`tests/alexa-request-verification.test.ts` asserts that `verifyAlexaRequest` comes
+**before** `createServiceClient()` — the route proves the request is Alexa's before it
+touches the database. Dropping `enforceRequestRateLimit(createServiceClient(), …)` at
+the top of the handler broke that: an **unverified** request would have caused a
+database write.
+
+That is not a guard asserting a spelling; it is the ordering property the route was
+built around, and my change violated it. The fix is better than what I first wrote:
+the gate is now **split around the signature check** — the cheap per-instance bucket
+first, because it touches nothing, and the durable `rateLimitDb` call after
+verification. Both properties hold, and the reason is written at the split.
+
+### One route is exempt, and the exemption is argued rather than assumed
+
+`app/api/blog/search-index/route.ts` keeps the per-instance limiter. It answers with
+`s-maxage=300` and takes **no query string**, so a scripted hammer is served by the
+CDN and the origin sees roughly one request per five minutes per edge location: the
+cache is the bound and the map is belt-and-braces behind it. Converting it would put
+a **service-role client and a database write on an unauthenticated marketing path**,
+to protect a read that is already cached — a worse trade than the one it fixes.
+
+I had converted it, and reverted it on that reasoning rather than on the shape. The
+guard carries the exemption by name **with a case that re-checks the argument**: if
+the cache header or the no-query-string property goes, the exemption fails and the
+route needs the durable limiter like every other.
+
+### Three existing guards pinned the spelling, and one of my replacements did too
+
+`assistant-bridge` matched `'rateLimit(\`assistant'` and `blog-search-index` matched
+`'rateLimit('`; both went red on a change that made the routes stronger. Rewritten to
+the properties they meant — the limit runs before the token lookup; the route is
+bounded, and by what.
+
+**And my own replacement regex was wrong for a reason worth keeping**: I wrote
+`/[Rr]ate[Ll]imit\([^)]*\`assistant:/`, and `[^)]*` stops at the `)` of
+`createServiceClient()` — which is *inside* the argument list it was meant to cross.
+Bounded on the backtick instead.
+
+### And I repeated the not-blind-control mistake, in the same pass that fixed it
+
+The first version of the control asserted that at least **ten** routes still hold a
+bare `rateLimit(` — a number that FALLS as the work succeeds. Converting seven took
+it to four and the control went red, so finishing the job looked identical to the
+scanner breaking. That is the sixth instance of this exact error in the audit, and
+the second time I have written it *after* recording the lesson. It asserts by name
+now: the four routes that hand-inline the correct pattern and are not going away.

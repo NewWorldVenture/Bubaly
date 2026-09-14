@@ -11,6 +11,7 @@ import {
   ALEXA_NOT_LINKED_SPEECH, type AlexaRequestBody,
 } from '@/lib/assistant/alexa';
 import { verifyAlexaRequest } from '@/lib/assistant/alexa-verify';
+import { rateLimitDb } from '@/lib/server/rate-limit-db';
 
 export const runtime = 'nodejs';
 
@@ -32,8 +33,21 @@ const MAX_BODY_BYTES = 24 * 1024; // Alexa envelopes are chatty.
 //     which tells the person nothing; a spoken sentence tells them whether they
 //     need to link an account or try again later.
 export async function POST(req: NextRequest) {
-  const limited = rateLimit(`assistant-alexa:${clientIp(req.headers)}`, { limit: 60, windowMs: 60_000 });
-  if (!limited.ok) return NextResponse.json(alexaSpeechResponse('Too many requests right now. Try again shortly.'));
+  // The gate is SPLIT around the signature check, deliberately.
+  //
+  // The cheap per-instance bucket runs first, because it touches nothing: an
+  // unverified request must not reach the database, which is the property
+  // tests/alexa-request-verification.test.ts pins and which a single durable
+  // call placed here would have broken — it would have written a rate-limit row
+  // for a request whose signature had not been checked.
+  //
+  // The durable, cross-instance half runs after verification, below. A limiter
+  // that lives in a module-scope Map is per-lambda, and the caller sets the
+  // number of lambdas by sending in parallel, so the local check alone bounds
+  // nothing across a real deployment.
+  const tooMany = () => NextResponse.json(alexaSpeechResponse('Too many requests right now. Try again shortly.'));
+  const rateKey = `assistant-alexa:${clientIp(req.headers)}`;
+  if (!rateLimit(rateKey, { limit: 60, windowMs: 60_000 }).ok) return tooMany();
 
   // Bytes, not parsed JSON: the signature is over exactly what arrived. Parsing
   // and re-serialising would change whitespace and key order, and the signature
@@ -55,6 +69,10 @@ export async function POST(req: NextRequest) {
     console.warn('[assistant/alexa] rejected unverified request', verified.reason);
     return new NextResponse(null, { status: 403 });
   }
+
+  // Now that the request is proved to be Alexa's, the durable half of the limit.
+  const durable = await rateLimitDb(createServiceClient(), rateKey, { limit: 60, windowMs: 60_000 });
+  if (!durable.ok) return tooMany();
 
   const translated = alexaUtterance(envelope);
   if (translated.kind === 'silent') return NextResponse.json(alexaSilentResponse());
