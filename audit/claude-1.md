@@ -1180,3 +1180,57 @@ Guard:    docs/audit/child-record-write-boundary-check.sql asserts BOTH rules an
           `Members manage …` on both — the probe then fails at "a child rewrote
           a grade their parent recorded". 21/21 probes with it in place.
 ```
+
+## A3-011 — the policy whose name and predicate disagreed, and its sibling
+
+```
+[CLAUDE-1][MEDIUM][RLS] "Managers manage child_logins" was predicated on membership
+Path:     pg_policies: public.child_logins · public.behavior_logs
+Source:   child_logins from Claude-3, [CLAUDE-3][MEDIUM][RLS]. behavior_logs found
+          here, same shape, while checking the rest of the membership-only set.
+Problem:  `child_logins` carried one policy, literally named "Managers manage
+          child_logins", whose predicate was `is_family_member(family_id)` for
+          ALL commands. A policy whose name and predicate disagree is how the
+          next reviewer is misled as much as it is a hole.
+          `behavior_logs` — "behaviour notes about children" in the repo's own
+          SENSITIVE_TABLES (lib/ai/context/policy.ts:68) — let the child a note
+          is ABOUT edit or delete it. Its module has no role gate.
+Evidence: pg_policies before the fix:
+            child_logins  | Managers manage child_logins | ALL | q=is_family_member | c=is_family_member
+            behavior_logs | Members manage behavior_logs | ALL | q=is_family_member | c=is_family_member
+          Reviewed for escalation on child_logins and it is NOT one:
+          app/(auth)/actions.ts:125-141 derives both the email and the password
+          from `row.username` (syntheticChildEmail / deriveChildPassword), so
+          forging a row cannot produce a session for an account that does not
+          already exist under that username. What it is: a child deleting a
+          SIBLING's row removes that sibling's ability to sign in — the lookup is
+          `select … from child_logins where username = …` — and blanks the
+          parent's /dashboard/family-access view.
+Fix:      0301.
+          child_logins: writes can_manage_family, and the name is finally true.
+          Nothing legitimate is lost — EVERY write path goes through
+          `createServiceClient()` after an isManager check, and the service role
+          bypasses RLS. The only authenticated-session use is the family-access
+          SELECT, unchanged and asserted by the probe.
+          behavior_logs: the rule 0300 gave `grades`, for the same reason.
+          RECORDING a note is plausibly any member's to do and the module offers
+          it; REWRITING someone else's is not. `logged_by` makes that
+          expressible. `points` here feeds AI insight summaries only — not an
+          economy — so this is record integrity, not money.
+Status:   FIXED — migration 0301
+Guard:    docs/audit/access-record-write-boundary-check.sql — the sibling-login
+          delete, rewrite and mint refused; the child's rewrite and delete of a
+          parent's note refused AND the stored note re-read, so the assertion
+          cannot pass on an unmatched row; the parent's family-access read and a
+          member recording and correcting their OWN note both asserted intact.
+          Non-vacuity proven by restoring `Members manage …` on both — the probe
+          then fails at "a child deleted a sibling's login". 22/22 probes.
+
+NOT INCLUDED, deliberately:
+  kid_progress   XP and streaks are written by lib/chores/server.ts as part of a
+                 child completing a chore. A child's own progress row being
+                 written on the child's action is the feature. Narrowing it needs
+                 the chore-reward path traced first, and a guess here would break
+                 what chores exist for.
+  habit_logs     A habit log is the logger's own record by construction.
+```
