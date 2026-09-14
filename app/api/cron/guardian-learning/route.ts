@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
-import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { runLearningForFamily } from '@/lib/guardian/learning-run';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
 import { readAll } from '@/lib/supabase/read-all';
@@ -21,11 +20,9 @@ export async function GET(req: NextRequest) {
   }
   try {
     const supabase = createServiceClient();
-    const db = withGuardianTables(supabase);
-    const gFrom = (t: Parameters<typeof db.from>[0]) => (db.from(t) as ReturnType<typeof supabase.from>);
 
     // Auto-dismiss expired pending suggestions first (housekeeping).
-    const { error: dismissError } = await gFrom('guardian_suggestions')
+    const { error: dismissError } = await supabase.from('guardian_suggestions')
       .update({ status: 'auto_dismissed' })
       .eq('status', 'pending')
       .lt('expires_at', new Date().toISOString());
@@ -36,7 +33,7 @@ export async function GET(req: NextRequest) {
     // `.limit(N)` is not a bound — PostgREST caps a response at db-max-rows
     // whatever the client asked for, so this quietly read 1,000. `max` is the
     // same ceiling, honoured by paging to it. See lib/supabase/read-all.ts.
-    const { rows: recent, error: recentError } = await readAll((from, to) => gFrom('guardian_communications')
+    const { rows: recent, error: recentError } = await readAll((from, to) => supabase.from('guardian_communications')
       .select('family_id')
       .gte('started_at', since)
       .order('id')

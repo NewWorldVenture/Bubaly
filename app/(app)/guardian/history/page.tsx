@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { CallHistory } from '@/components/guardian/call-history';
 import { Clock, ArrowLeft } from 'lucide-react';
 import { getTranslations } from '@/lib/i18n/server';
@@ -23,9 +22,8 @@ export default async function HistoryPage({
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
-  const db = withGuardianTables(supabase);
 
-  const { data: communications, count } = await (db.from('guardian_communications') as ReturnType<typeof supabase.from>)
+  const { data: communications, count } = await supabase.from('guardian_communications')
     .select(
       'id, comm_type, direction, from_number, to_number, from_name, body, summary, sentiment, trust_level_at_time, routing_mode_used, ai_decision_reason, scam_detected, scam_type, scam_confidence, call_duration_secs, call_recording_url, status, started_at, ended_at',
       { count: 'exact' },

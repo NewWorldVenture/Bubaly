@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import type { GuardianContext } from '@/lib/database.types';
 import { useRouter } from 'next/navigation';
 import { Shield, Phone, MessageSquare, AlertTriangle, CheckCircle, Clock, TrendingUp, Users, Zap, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
@@ -77,7 +78,7 @@ const COMM_ICONS: Record<string, string> = {
   email_inbound: '📧',
 };
 
-const CONTEXT_OPTIONS = [
+const CONTEXT_OPTIONS: { value: GuardianContext; label: string; icon: string }[] = [
   { value: 'normal', label: 'Normal', icon: '🟢' },
   { value: 'driving', label: 'Driving', icon: '🚗' },
   { value: 'meeting', label: 'In a Meeting', icon: '💼' },
@@ -107,7 +108,7 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
     }
   }
 
-  async function handleContextChange(memberId: string, context: string) {
+  async function handleContextChange(memberId: string, context: GuardianContext) {
     setContextLoading(memberId);
     const res = await updateContextAction(memberId, context);
     setContextLoading(null);

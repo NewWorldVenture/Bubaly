@@ -43,10 +43,18 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
+// Comments discuss variables without reading them — lib/health/status.ts
+// documents the shape `process.env.X` as a placeholder, which is prose, not a
+// dependency. Strip comments before scanning so the test measures what the code
+// does rather than what it says.
+function withoutComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+}
+
 function envNamesReadBy(paths: string[]): Map<string, string> {
   const found = new Map<string, string>();
   for (const path of paths) {
-    const source = readFileSync(path, 'utf8');
+    const source = withoutComments(readFileSync(path, 'utf8'));
     for (const match of source.matchAll(/process\.env\.([A-Z0-9_]+)/g)) {
       if (!found.has(match[1])) found.set(match[1], path);
     }

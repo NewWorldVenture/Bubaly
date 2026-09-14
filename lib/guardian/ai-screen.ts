@@ -54,21 +54,56 @@ Your role is that of a friendly, professional executive assistant — like a fro
 {"action":"transfer"|"voicemail"|"hang_up","urgency":"low"|"medium"|"high"|"emergency","risk":"safe"|"suspicious"|"likely_scam"|"definite_scam","intent":"appointment"|"personal"|"sales"|"scam"|"emergency"|"other","summary":"1-2 sentence summary","callerName":"name or null","shouldNotifyParents":true|false}`;
 }
 
-/** Parse a decision JSON block from the AI response. */
-function parseDecision(text: string): ScreeningDecision | null {
+// The three sets the decision is allowed to name. They are the same values the
+// `guardian_screening_sessions` CHECK constraints accept, and the same ones the
+// screening route branches on.
+const ACTIONS = ['transfer', 'voicemail', 'hang_up', 'notify'] as const;
+const URGENCIES = ['low', 'medium', 'high', 'emergency'] as const;
+const RISKS = ['safe', 'suspicious', 'likely_scam', 'definite_scam'] as const;
+
+function oneOf<T extends string>(allowed: readonly T[], value: unknown): T | null {
+  return typeof value === 'string' && (allowed as readonly string[]).includes(value) ? (value as T) : null;
+}
+
+/**
+ * Parse a decision JSON block from the AI response.
+ *
+ * MEMBERSHIP, not presence. This used to check `!d.action || !d.urgency ||
+ * !d.risk` and then assign straight through — `d` is `JSON.parse` output, so
+ * any string at all satisfied a type that promises four specific words. Two
+ * things depended on that promise and neither could see it broken:
+ *
+ *   • The route decides routing by string equality — `action === 'hang_up'`,
+ *     `risk === 'definite_scam'`. A model that answered "Hang_up" missed the
+ *     branch and the call was TRANSFERRED instead, to the member being
+ *     screened for. The caller's speech is untrusted input to that model.
+ *   • `endScreening` writes all three into columns with CHECK constraints. An
+ *     unlisted value raises 23514, the update is discarded, and the session
+ *     stays 'active' with nobody told.
+ *
+ * A decision that does not name one of the allowed values is no decision. The
+ * caller already handles `null` by falling through to voicemail — the
+ * conservative outcome — so rejecting here fails safe rather than open.
+ */
+export function parseDecision(text: string): ScreeningDecision | null {
   const match = text.match(/\{[^{}]*"action"[^{}]*\}/);
   if (!match) return null;
   try {
-    const d = JSON.parse(match[0]);
-    if (!d.action || !d.urgency || !d.risk) return null;
+    const d: unknown = JSON.parse(match[0]);
+    if (typeof d !== 'object' || d === null) return null;
+    const raw = d as Record<string, unknown>;
+    const action = oneOf(ACTIONS, raw.action);
+    const urgency = oneOf(URGENCIES, raw.urgency);
+    const risk = oneOf(RISKS, raw.risk);
+    if (!action || !urgency || !risk) return null;
     return {
-      action: d.action,
-      urgency: d.urgency,
-      risk: d.risk,
-      intent: d.intent ?? 'other',
-      summary: d.summary ?? '',
-      callerName: d.callerName ?? null,
-      shouldNotifyParents: !!d.shouldNotifyParents,
+      action,
+      urgency,
+      risk,
+      intent: typeof raw.intent === 'string' && raw.intent ? raw.intent : 'other',
+      summary: typeof raw.summary === 'string' ? raw.summary : '',
+      callerName: typeof raw.callerName === 'string' && raw.callerName ? raw.callerName : null,
+      shouldNotifyParents: !!raw.shouldNotifyParents,
     };
   } catch {
     return null;

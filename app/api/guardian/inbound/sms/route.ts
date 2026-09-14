@@ -6,7 +6,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { notify } from '@/lib/services/notifications';
 import { systemScopeForFamily } from '@/lib/services/scope';
-import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { runDecisionPipeline } from '@/lib/guardian/pipeline';
 import { detectScamWithAI } from '@/lib/guardian/scam-ai';
 import { sendSms, validateTwilioSignature } from '@/lib/guardian/twilio';
@@ -37,7 +36,11 @@ export async function POST(req: NextRequest) {
   const body = params.Body ?? '';
   const smsSid = params.SmsSid ?? params.MessageSid ?? null;
 
-  if (!isValidGuardianEventId(smsSid) || body.length > 4096) {
+  // `To` is the Guardian number the message reached, and it is the ONLY thing
+  // that resolves which family this belongs to. Without it the profile lookup
+  // matches nothing and the callback is consumed anyway — so refuse it here,
+  // before the claim, rather than after.
+  if (!isValidGuardianEventId(smsSid) || !to || body.length > 4096) {
     return new NextResponse('Invalid callback', { status: 400 });
   }
 
@@ -48,11 +51,9 @@ export async function POST(req: NextRequest) {
   // asks it to come back. Silence is the one answer that loses the event.
   if (claim === 'unavailable') return new NextResponse('', { status: 503 });
   if (claim !== 'claimed') return new NextResponse('', { status: 200 });
-  const db = withGuardianTables(supabase);
-  const gFrom = (t: Parameters<typeof db.from>[0]) => (db.from(t) as ReturnType<typeof supabase.from>);
 
   // Find which family member this number belongs to
-  const { data: memberProfile } = await gFrom('guardian_member_profiles')
+  const { data: memberProfile } = await supabase.from('guardian_member_profiles')
     .select('id, family_id, member_id, default_mode_suspected_spam, default_mode_blocked, default_mode_unknown')
     .eq('guardian_phone', to)
     .eq('is_active', true)
@@ -79,7 +80,7 @@ export async function POST(req: NextRequest) {
   const scamResult = await detectScamWithAI(body, from, `Family ID: ${familyId}`);
 
   // Create communication record
-  const { data: comm } = await gFrom('guardian_communications').insert({
+  const { data: comm } = await supabase.from('guardian_communications').insert({
     family_id: familyId,
     member_id: memberId,
     contact_id: decision.contactId,
@@ -102,7 +103,7 @@ export async function POST(req: NextRequest) {
 
   // Update contact last contact timestamp
   if (decision.contactId) {
-    await gFrom('guardian_contacts')
+    await supabase.from('guardian_contacts')
       .update({ last_contact_at: new Date().toISOString() })
       .eq('id', decision.contactId);
   }
@@ -140,20 +141,20 @@ export async function POST(req: NextRequest) {
 
   // Suggest trust upgrade if this is a repeated unknown contact
   if (decision.trustLevel === 'unknown' && from) {
-    const { count } = await gFrom('guardian_communications')
+    const { count } = await supabase.from('guardian_communications')
       .select('*', { count: 'exact', head: true })
       .eq('family_id', familyId)
       .eq('from_number', from);
 
     if ((count ?? 0) >= 3) {
-      const existing = await gFrom('guardian_suggestions')
+      const existing = await supabase.from('guardian_suggestions')
         .select('id')
         .eq('family_id', familyId)
         .eq('suggestion_type', 'update_trust')
         .maybeSingle();
 
       if (!existing.data) {
-        await gFrom('guardian_suggestions').insert({
+        await supabase.from('guardian_suggestions').insert({
           family_id: familyId,
           suggestion_type: 'update_trust',
           title: `Add ${formatPhone(from)} to your contacts?`,

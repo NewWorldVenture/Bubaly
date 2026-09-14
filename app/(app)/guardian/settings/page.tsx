@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
-import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { RoutingSettings } from '@/components/guardian/routing-settings';
 import { GuardianNumberForm } from '@/components/guardian/guardian-number-form';
 import { Settings, ArrowLeft } from 'lucide-react';
@@ -18,10 +17,9 @@ export default async function GuardianSettingsPage() {
   const familyId = ctx.active.familyId;
   const memberId = ctx.active.member.id;
   const supabase = await createServer();
-  const db = withGuardianTables(supabase);
 
   const [{ data: profile }, { data: member }] = await Promise.all([
-    (db.from('guardian_member_profiles') as ReturnType<typeof supabase.from>)
+    supabase.from('guardian_member_profiles')
       .select('*')
       .eq('family_id', familyId)
       .eq('member_id', memberId)
