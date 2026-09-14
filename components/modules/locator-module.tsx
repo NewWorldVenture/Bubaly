@@ -368,7 +368,7 @@ export function LocatorModule() {
                     <div className="flex items-center gap-1 text-xs font-medium text-brand-text"><MapPin className="h-3 w-3" />{place?.name ?? placeLabel(l)}</div>
                   </div>
                   <div className="hidden min-w-0 flex-1 truncate text-sm text-muted sm:block">{l.address ?? place?.address ?? '—'}</div>
-                  <div className="w-24 shrink-0 text-right text-xs text-muted">{sinceLabel(l.updated_at, now)}</div>
+                  <div className="w-24 shrink-0 text-right text-xs text-muted">{sinceLabel(l.updated_at, now, locale.code, tr)}</div>
                   <div className="flex w-16 shrink-0 items-center justify-end gap-1.5">
                     <div className="relative h-3.5 w-7 rounded-[3px] border border-current text-muted">
                       <span className="absolute -right-[3px] top-1/2 h-1.5 w-[2px] -translate-y-1/2 rounded-r bg-current" />

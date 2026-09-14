@@ -101,6 +101,44 @@ const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
   ['minute', 60_000],
 ];
 
+/**
+ * How a surface wants its compact "time ago" to behave past a point.
+ *
+ * Ten surfaces grew their own ladder and they differ in exactly two ways, so
+ * those two are the options and nothing else is:
+ *
+ *   absoluteAfterDays  — the Memories share attribution switches to a date after a
+ *                        week; the activity feed carries on in weeks until five;
+ *                        the Guardian check-in list never switches.
+ *   absolutePattern    — and they disagree about whether that date carries a year.
+ */
+export type TimeAgoOptions = {
+  now?: Date;
+  absoluteAfterDays?: number;
+  absolutePattern?: string;
+};
+
+/**
+ * The ladder for a COMPACT, past-facing label, coarsest first.
+ *
+ * Separate from UNITS because `fmtRelative` describes a gap in either direction
+ * and may reach for years; a "time ago" chip on a feed row stops at weeks and
+ * hands anything older to an absolute date, which is more use than "2 mo. ago".
+ */
+/**
+ * 'narrow' keeps en-US byte-identical to the ladders this replaced. See the note on
+ * `fmtTimeAgo` before changing it — 'short' reads better in fr/pt and changes the
+ * English copy on ten surfaces.
+ */
+const AGO_STYLE: Intl.RelativeTimeFormatStyle = 'narrow';
+
+const AGO_UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
+  ['week', 7 * 24 * 3600_000],
+  ['day', 24 * 3600_000],
+  ['hour', 3600_000],
+  ['minute', 60_000],
+];
+
 /** A translator, in the shape `useTranslations()` and `getTranslations()` return. */
 type Translator = (key: string, params?: Record<string, string | number>) => string;
 
@@ -109,6 +147,7 @@ export type Format = {
   fmtTime: (value: string | Date | null | undefined) => string;
   fmtDateTime: (value: string | Date | null | undefined) => string;
   fmtRelative: (value: string | Date | null | undefined) => string;
+  fmtTimeAgo: (value: string | Date | null | undefined, opts?: TimeAgoOptions) => string;
   fmtMoney: (cents: number, currency?: string) => string;
   fmtNumber: (value: number) => string;
 };
@@ -162,11 +201,62 @@ export function createFormat(code: LocaleCode = DEFAULT_LOCALE, t?: Translator):
     return new Intl.RelativeTimeFormat(code, { numeric: 'auto' }).format(0, 'minute');
   };
 
+  /**
+   * The compact "time ago" chip — one implementation for all of them.
+   *
+   * Ten surfaces had grown their own ladder under five different names
+   * (`relativeTime` three times, `relTime`, `timeAgo`, `ago`, `sinceLabel`) and
+   * three different wordings, every one of them ENGLISH-ONLY. None of those was
+   * visible to tests/hardcoded-locales-only-go-down.test.ts, because a ladder built
+   * from `'just now'` and `` `${m}m ago` `` holds no locale for a scan to find. That
+   * is the defect class this replaces.
+   *
+   * Two deliberate choices, both of which change what a reader sees:
+   *
+   *   `style: 'narrow'`, `numeric: 'always'` renders en-US EXACTLY as the ladders
+   *   did — "30m ago", "3h ago", "2d ago", "1w ago" — so the shipped English copy is
+   *   unchanged and the five existing tests keep asserting a real contract. The cost
+   *   is that narrow is terse in French and Portuguese ("-30 min" rather than
+   *   "il y a 30 min"). Flipping AGO_STYLE to 'short' fixes those and changes en-US
+   *   to "30 min. ago"; that is visible product copy in the majority locale, so it
+   *   is the owner's call and not a formatter's.
+   *
+   *   Under a minute takes `numeric: 'auto'` on seconds, which gives "now", "jetzt",
+   *   "maintenant", "ahora", "adesso" — a real word in all eleven locales. The
+   *   ladders said "just now"; narrow/always would say "in 0s", which is worse than
+   *   either. So en-US loses the "just" and gains ten correct locales.
+   *
+   * A FUTURE timestamp clamps to now rather than reading "in 3 minutes". A clock
+   * skew of a few seconds between a phone and Postgres is ordinary, and
+   * tests/marketplace-discover.test.ts already pinned that clamp.
+   */
+  const fmtTimeAgo = (value: string | Date | null | undefined, opts: TimeAgoOptions = {}): string => {
+    if (!value) return '';
+    const d = toDate(value);
+    if (!d) return '';
+    const now = opts.now ?? new Date();
+    const gap = Math.max(0, now.getTime() - d.getTime());
+
+    const days = gap / (24 * 3600_000);
+    if (opts.absoluteAfterDays != null && days >= opts.absoluteAfterDays) {
+      return fmtDate(d, opts.absolutePattern ?? 'MMM d');
+    }
+    if (gap < 60_000) {
+      return new Intl.RelativeTimeFormat(code, { numeric: 'auto', style: AGO_STYLE }).format(0, 'second');
+    }
+    const rtf = new Intl.RelativeTimeFormat(code, { numeric: 'always', style: AGO_STYLE });
+    for (const [unit, ms] of AGO_UNITS) {
+      if (gap >= ms) return rtf.format(-Math.floor(gap / ms), unit);
+    }
+    return rtf.format(-Math.floor(gap / 60_000), 'minute');
+  };
+
   return {
     fmtDate,
     fmtTime,
     fmtDateTime,
     fmtRelative,
+    fmtTimeAgo,
     // The currency is a property of the MONEY, not of the reader's language: a US
     // family's wallet is in dollars whichever language they read. So the currency
     // stays a caller's argument (eight tables carry a `currency` column) while the
@@ -191,6 +281,7 @@ export const fmtDate = EN_US.fmtDate;
 export const fmtTime = EN_US.fmtTime;
 export const fmtDateTime = EN_US.fmtDateTime;
 export const fmtRelative = EN_US.fmtRelative;
+export const fmtTimeAgo = EN_US.fmtTimeAgo;
 export const fmtMoney = EN_US.fmtMoney;
 export const fmtNumber = EN_US.fmtNumber;
 

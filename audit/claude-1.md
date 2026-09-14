@@ -2524,3 +2524,142 @@ nobody has been told about. Recorded, not touched.
 **99 total = 56 correct** (40 exempt + 16 mechanism) + **8 blocked** on I18N-001 +
 **35 convertible defects**, all display formatters in `lib/`. `components/` is at zero;
 `app/` is at its floor of 25.
+
+---
+
+## Pass AK — one time-ago, and the defect class a locale ratchet cannot see
+
+**Status: FIXED (english-only ladders now zero).** Ceiling 99 → **93**, plus a new
+measured class the ceiling was structurally blind to.
+
+### `[CLAUDE-1][HIGH][I18N]` eleven private "time ago" ladders, all English-only
+
+**This is the finding, not the conversion.** `tests/hardcoded-locales-only-go-down.test.ts`
+counts `'en-US'` in a formatter position. It cannot see this:
+
+```ts
+if (mins < 60) return `${mins}m ago`;
+```
+
+There is no locale in that line to find — **the English is the literal.** Eleven surfaces
+had grown their own ladder, under **five different names** and with **three different
+wordings**, every one of them English for all eleven locales, and the locale scan was green
+over all of it:
+
+| where | name | wording |
+|---|---|---|
+| `lib/activity/feed.ts` | `relativeTime` | `just now` / `30m ago` / `1w ago` → `MMM d` |
+| `lib/memories/memories.ts` | `relativeTime` | same, → `MMM d, yyyy` after 7 days |
+| `lib/marketplace/discover.ts` | `relativeTime` | `5 min ago` / `3 hr ago` / `2 days ago` |
+| `lib/family/safety.ts` | `relTime` | `30m ago`, **`Math.round`** not floor |
+| `lib/location/geo.ts` | `timeAgo` | `30m ago` — **and nothing calls it** |
+| `components/modules/school-module.tsx` | `timeAgo` | `30m ago` |
+| `components/modules/social-feed-module.tsx` | `timeAgo` | bare `2h`, no "ago" |
+| `components/modules/contact-center-module.tsx` | `timeAgo` | `just now` → `toLocaleDateString()` |
+| `components/modules/voice-module.tsx` | `ago` | 45s threshold → `toLocaleDateString(undefined, …)` |
+| `components/modules/care-module.tsx` | inline in JSX | `Just now` / `${h}h ago` |
+| `components/modules/inbox-queue.tsx` | `fmtTime` | `5m` / `3h` → `toLocaleDateString(undefined, …)` |
+
+Two further things fell out of reading them side by side:
+
+- **`social-feed-module.tsx` disagreed with itself.** Its ladder returned a bare `"2h"`, and
+  only **one** of its two call sites appended `" ago"` — so the same value read `· 2h ago`
+  on the list and `· 2h` on the card.
+- **`lib/location/geo.ts timeAgo` has no caller anywhere.** Exported, unit-tested, rendered
+  by nothing. A tested export with no caller is a guard measuring nothing.
+
+### `[CLAUDE-1][HIGH][I18N]` I18N-002 — fourteen dates follow the BROWSER, not the family
+
+**Status: VERIFIED, measured, pinned. Not fixed in this pass.**
+
+`toLocaleDateString()` and `toLocaleTimeString()` **with no argument** follow the browser's
+locale. A family who sets Bubaly to Deutsch on an en-US laptop gets American dates at
+fourteen sites — `quick-capture.tsx`, `guardian-dashboard.tsx` (×2), `migrate-wizard.tsx`
+(×2), `life-events-module.tsx` (×2), `relationship-module.tsx`,
+`independence-module.tsx`, `calendar-sync-panel.tsx`, `marketplace/item/[id]/page.tsx`,
+`admin-notifications-list.tsx`, `lib/emails/chore-reminder.tsx`.
+
+This is the **hardest of the four flavours to diagnose**, because the source looks
+locale-aware: it calls a `toLocale…` method. Only the missing argument gives it away, and no
+scan for `'en-US'` can ever say so.
+
+### The shared helper
+
+`fmtTimeAgo` on `createFormat`, so `useFormat()` and `await getFormat()` both carry it.
+Two deliberate choices, both of which change what a reader sees, and both written into the
+code rather than left for someone to discover:
+
+- **`style: 'narrow'`, `numeric: 'always'` renders en-US byte-identically** to the ladders
+  — `"30m ago"`, `"3h ago"`, `"2d ago"`, `"1w ago"`. The shipped English copy is unchanged
+  and the five existing tests keep asserting a real contract. The cost is that narrow is
+  terse in French and Portuguese (`"-30 min"` rather than `"il y a 30 min"`). Flipping the
+  single `AGO_STYLE` constant to `'short'` fixes those **and** changes en-US to
+  `"30 min. ago"` on ten surfaces — visible product copy in the majority locale, so it is
+  the owner's call, and it is one constant with a comment saying exactly that.
+- **Sub-minute takes `numeric: 'auto'` on seconds**, giving `"now"`, `"jetzt"`,
+  `"maintenant"`, `"ahora"`, `"adesso"`, `"nu"`, `"agora"` — a real word in all eleven.
+  The ladders said `"just now"`; narrow/always would say `"in 0s"`, which is worse than
+  either. **en-US loses the "just" and gains ten correct locales**, and the three tests
+  that pinned `'just now'` now say why.
+
+Marketplace was the other visible English change: `"5 min ago"` → `"5m ago"`. Unifying on
+one implementation means unifying on one wording, and the compact form is what nine
+surfaces already showed.
+
+### Two things that are NOT this helper's job, and are counted separately
+
+- **`lib/display/ambient.ts countdownLabel` is FORWARD-facing** — `"in 15 min"`,
+  `"Sat 3:00 PM"` on the Kitchen Display. A past-tense helper cannot express it. Converted
+  in place instead: clock and weekday from the locale, `"Now"` and `"in {minutes} min"` from
+  two new catalogue keys, translator optional with an English fallback — the contract
+  `fmtRelative` already uses for "Today"/"Tomorrow". Its three call sites in
+  `display-grid.tsx` bind it.
+- **`lib/marketplace/auction.ts timeLeft` ("2d 4h") and `lib/sleep/coach.ts fmtHours`
+  ("7h 30m") are COMPOSITE DURATIONS.** `Intl.RelativeTimeFormat` describes one unit in one
+  direction, so it cannot express either. A real gap needing `Intl.DurationFormat` or a
+  catalogue key, and not the same defect as showing a German family American words.
+  Classified apart so the two are not conflated.
+
+### The instrument, and the exemption that was too generous
+
+`scripts/audit-time-ago-ladders.mjs` finds a millisecond→label conversion and classifies it
+four ways: `ladder` (English-only), `ladder-localised` (private but locale-aware),
+`composite-duration`, `browser-locale`. The discriminator between a ladder and a duration is
+**the word, not the shape** — a "time ago" label says so (`ago`, `just now`); a duration
+says `"2d 4h"` or `"Ended"`.
+
+**Its first version had an exemption that made it useless, and only planting a defect back
+found that.** It skipped any window mentioning `fmtTimeAgo` — but a component that
+destructures `const { fmtTimeAgo } = useFormat()` at the top has that name in scope for the
+whole file, so a ladder written twenty lines below it was silently exempt. I re-planted the
+`inbox-queue.tsx` ladder and the guard **stayed green over it**. The exemption is gone: a
+site that delegates has no ago-template, so `isLadder` is already false for it and no
+exemption was needed at all. Re-planted again: fails, naming
+`components/modules/inbox-queue.tsx:77`.
+
+That is the **third** instrument in this audit whose exemption was too generous (after the
+zero-argument call read as a dismissal, and the nested-button exemption covering a
+dismissal) — and the third caught only by reverting a fix rather than by reading the code.
+
+### The guard
+
+`tests/one-time-ago-and-it-follows-the-reader.test.ts`, 12 cases. It pins the four counts
+with a different meaning for each: **english-only must stay 0**; localised-private held at 5
+(four worth folding in, the fifth correctly separate); composite durations named by file;
+browser-locale held at **14**. Plus a positive control requiring the instrument to still see
+three of the four shapes, since all four counts come from one scanner and a blind one would
+report zeros that three of the four tests would happily accept.
+
+### Catalogue
+
+Three keys × 7 base catalogues (the four regional overlays inherit through
+`FALLBACK_CHAIN`): `locatorModule.now`, `locatorModule.sinceTime`, `care.noContactLogged`,
+`ambient.now`, `ambient.inNMin`. Checked while there: **en-GB, es-MX, es-US and fr-CA hold
+zero keys**, which looks alarming and is correct — they are deliberate overlays and
+`lib/i18n/messages.ts` documents the chain.
+
+### Where the count stands
+
+**93 = 56 correct + 8 blocked** on I18N-001 + **29 convertible** hardcoded-locale defects,
+all display formatters in `lib/`. Separately: **0** English-only time-ago ladders, **5**
+private-but-localised, **2** composite durations, **14** browser-locale dates (I18N-002).

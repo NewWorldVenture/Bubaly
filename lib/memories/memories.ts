@@ -63,20 +63,15 @@ export function relativeDay(iso: string, now: Date): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+import { createFormat } from '@/lib/utils/format';
+import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
+
 /**
  * Compact "time ago" for share attributions: "just now", "5m ago", "2h ago",
  * "3d ago", else an absolute date once it's over a week old.
  */
-export function relativeTime(iso: string, now: Date): string {
-  const diff = now.getTime() - new Date(iso).getTime();
-  if (diff < 60_000) return 'just now';
-  const mins = Math.floor(diff / 60_000);
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days < 7) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+export function relativeTime(iso: string, now: Date, locale: LocaleCode = DEFAULT_LOCALE): string {
+  return createFormat(locale).fmtTimeAgo(iso, { now, absoluteAfterDays: 7, absolutePattern: 'MMM d, yyyy' });
 }
 
 export type TimelineRow = { album: AlbumRow; relative: string };

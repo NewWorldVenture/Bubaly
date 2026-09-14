@@ -416,7 +416,7 @@ export default async function MemoriesPage({ searchParams }: { searchParams: Pro
                       <Avatar name={s.name} color={m?.color ?? undefined} size={32} />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm"><span className="font-medium">{s.name}</span> shared {s.label}</span>
-                        <span className="block text-xs text-muted">{relativeTime(s.at, now)}</span>
+                        <span className="block text-xs text-muted">{relativeTime(s.at, now, locale.code)}</span>
                       </span>
                       <ChevronRight className="h-4 w-4 shrink-0 text-muted" />
                     </Link>

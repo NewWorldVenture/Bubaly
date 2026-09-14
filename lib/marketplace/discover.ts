@@ -119,22 +119,29 @@ const ORDER_VERB: Record<string, string> = {
   rent: 'rented', buy: 'bought', borrow: 'borrowed', swap: 'swapped for', donate: 'received', free: 'picked up',
 };
 
-/** "2 min ago" / "3 hr ago" / "2 days ago" — coarse on purpose. */
-export function relativeTime(iso: string, now: Date): string {
-  const ms = Math.max(0, now.getTime() - new Date(iso).getTime());
-  const min = Math.floor(ms / 60_000);
-  if (min < 1) return 'just now';
-  if (min < 60) return `${min} min ago`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr} hr ago`;
-  const d = Math.floor(hr / 24);
-  return `${d} day${d === 1 ? '' : 's'} ago`;
+import { createFormat } from '@/lib/utils/format';
+import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
+
+/**
+ * Coarse "time ago" for the marketplace feed, in the reader's language.
+ *
+ * This one's English wording DID change: it said "2 min ago" / "3 hr ago" /
+ * "2 days ago" where the app's other nine ladders said "2m ago" / "3h ago" /
+ * "2d ago". Unifying on one implementation means unifying on one wording, and the
+ * compact form is the one nine surfaces already used.
+ */
+export function relativeTime(iso: string, now: Date, locale: LocaleCode = DEFAULT_LOCALE): string {
+  return createFormat(locale).fmtTimeAgo(iso, { now });
 }
 
 /**
  * Fold recent orders, reviews, and fresh listings into one human feed, newest
  * first, capped. Unknown members read as "Someone" so a partial join never hides
  * real activity.
+ *
+ * `locale` reaches the `when` chip only. Each item's `text` is still built from
+ * English literals ("received a review", "listed …", "Someone"), which is a
+ * catalogue change rather than a formatter one — see I18N-002 in finalaudit.md.
  */
 export function activityFeed(
   orders: ActivityOrder[],
@@ -143,6 +150,7 @@ export function activityFeed(
   nameOf: (memberId: string | null) => string | null,
   now: Date = new Date(),
   limit = 6,
+  locale: LocaleCode = DEFAULT_LOCALE,
 ): ActivityItem[] {
   const titleOf = new Map(listings.map((l) => [l.id, l.title]));
   const who = (id: string | null) => nameOf(id) ?? 'Someone';
@@ -151,14 +159,14 @@ export function activityFeed(
   for (const o of orders) {
     const verb = ORDER_VERB[o.kind] ?? 'claimed';
     const title = titleOf.get(o.listing_id) ?? 'an item';
-    items.push({ id: `o-${o.id}`, text: `${who(o.buyer_member)} ${verb} ${title}`, when: relativeTime(o.created_at, now), at: o.created_at });
+    items.push({ id: `o-${o.id}`, text: `${who(o.buyer_member)} ${verb} ${title}`, when: relativeTime(o.created_at, now, locale), at: o.created_at });
   }
   for (const r of reviews) {
-    items.push({ id: `r-${r.id}`, text: `${who(r.reviewee_member)} received a review`, when: relativeTime(r.created_at, now), at: r.created_at });
+    items.push({ id: `r-${r.id}`, text: `${who(r.reviewee_member)} received a review`, when: relativeTime(r.created_at, now, locale), at: r.created_at });
   }
   for (const l of listings) {
     if (now.getTime() - new Date(l.created_at).getTime() < 3 * DAY_MS) {
-      items.push({ id: `l-${l.id}`, text: `${who(l.member_id)} listed ${l.title}`, when: relativeTime(l.created_at, now), at: l.created_at });
+      items.push({ id: `l-${l.id}`, text: `${who(l.member_id)} listed ${l.title}`, when: relativeTime(l.created_at, now, locale), at: l.created_at });
     }
   }
   return items.sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit);

@@ -21,6 +21,7 @@ import { AiInsight } from '@/components/ai/ai-insight';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, GradeType } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 import type { LocaleCode } from '@/lib/i18n/locales';
 
 type SchoolEvent = Tables<'school_events'>;
@@ -86,16 +87,6 @@ const fmtDueIn = (locale: LocaleCode) => (iso: string) => {
   return { label: d.toLocaleDateString(locale, { month: 'short', day: 'numeric' }), sub: `${diff} days left`, urgent: false };
 };
 
-function timeAgo(iso: string) {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
-}
-
 function letterGrade(pct: number): string {
   if (pct >= 93) return 'A';
   if (pct >= 90) return 'A-';
@@ -128,6 +119,8 @@ export function SchoolModule() {
   const locale = useLocale();
   const fmtDue = fmtDueIn(locale.code);
   const tr = useTranslations();
+  // One time-ago, and it follows the reader (lib/utils/format.ts fmtTimeAgo).
+  const { fmtTimeAgo } = useFormat();
   const { familyId, userId, members } = useApp();
   const { toast, success, error: toastError } = useToast();
   const [tab, setTab] = useState<Tab>('Overview');
@@ -496,7 +489,7 @@ export function SchoolModule() {
                                 {new Intl.NumberFormat(undefined, { style: 'currency', currency: verdict.currency }).format(verdict.amount_cents / 100)}
                               </span>
                             )}
-                            <span className="text-muted/60">{timeAgo(row.occurred_at)}</span>
+                            <span className="text-muted/60">{fmtTimeAgo(row.occurred_at)}</span>
                           </div>
                         </div>
                         {row.ai_handled ? (
@@ -702,7 +695,7 @@ export function SchoolModule() {
                       <div>
                         <p className="text-sm font-semibold">{a.title}</p>
                         {a.notes && <p className="mt-0.5 text-xs leading-5 text-muted">{a.notes}</p>}
-                        <p className="mt-1 text-xs text-muted/60">{timeAgo(a.starts_at)}</p>
+                        <p className="mt-1 text-xs text-muted/60">{fmtTimeAgo(a.starts_at)}</p>
                       </div>
                     </div>
                   ))}

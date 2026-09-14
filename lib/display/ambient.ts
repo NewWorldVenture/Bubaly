@@ -170,18 +170,37 @@ export function nowAndNext<T extends TimedEvent>(
   return { current, next };
 }
 
-/** Human countdown/time label for an event relative to `now`. */
-export function countdownLabel(startsAt: string, now: Date): string {
-  const t = new Date(startsAt).getTime();
-  if (!Number.isFinite(t)) return '';
-  const diffMs = t - now.getTime();
-  const diffMin = Math.round(diffMs / 60_000);
-  if (diffMin <= 0 && diffMin > -90) return 'Now';
-  if (diffMin > 0 && diffMin < 60) return `in ${diffMin} min`;
+import { createFormat } from '@/lib/utils/format';
+import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
+
+/**
+ * Human countdown/time label for an event relative to `now` — the Kitchen
+ * Display's Now/Next strip.
+ *
+ * FORWARD-facing, which is why it does not use the shared `fmtTimeAgo`: this says
+ * "in 15 min" and "Sat 3:00 PM", not "15m ago". The clock and the weekday take
+ * the locale; "Now" and "in {minutes} min" are copy, so they take a translator the
+ * caller supplies and fall back to English without one — the same contract
+ * `fmtRelative` uses for "Today" and "Tomorrow".
+ */
+export function countdownLabel(
+  startsAt: string,
+  now: Date,
+  locale: LocaleCode = DEFAULT_LOCALE,
+  t?: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  const at = new Date(startsAt).getTime();
+  if (!Number.isFinite(at)) return '';
+  const diffMin = Math.round((at - now.getTime()) / 60_000);
+  if (diffMin <= 0 && diffMin > -90) return t ? t('ambient.now') : 'Now';
+  if (diffMin > 0 && diffMin < 60) {
+    return t ? t('ambient.inNMin', { minutes: diffMin }) : `in ${diffMin} min`;
+  }
   const d = new Date(startsAt);
   const sameDay = d.toDateString() === now.toDateString();
-  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-  return sameDay ? time : `${d.toLocaleDateString('en-US', { weekday: 'short' })} ${time}`;
+  const fmt = createFormat(locale);
+  const time = fmt.fmtTime(d);
+  return sameDay ? time : `${new Intl.DateTimeFormat(locale, { weekday: 'short' }).format(d)} ${time}`;
 }
 
 // ── Kitchen timers ───────────────────────────────────────────────────────────

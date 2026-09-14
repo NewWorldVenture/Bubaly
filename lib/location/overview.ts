@@ -90,13 +90,30 @@ export function batteryTone(pct: number | null): 'ok' | 'low' | 'critical' | 'un
  * "Since" label for a member's current stay: "Now" when very recent, else the
  * clock time they were last placed ("Since 8:15 AM").
  */
-export function sinceLabel(iso: string | null, now: Date = new Date()): string {
+import { createFormat } from '@/lib/utils/format';
+import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
+
+/**
+ * "Since 3:04 PM" for the locator list — the CLOCK follows the reader.
+ *
+ * The two English words do not, and cannot from here: "Now" and "Since {time}" are
+ * copy, so they take a translator the caller supplies (locator-module.tsx has one)
+ * and fall back to English when there is none, the same contract `fmtRelative`
+ * uses for "Today" and "Tomorrow".
+ */
+export function sinceLabel(
+  iso: string | null,
+  now: Date = new Date(),
+  locale: LocaleCode = DEFAULT_LOCALE,
+  t?: (key: string, params?: Record<string, string | number>) => string,
+): string {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
   const mins = (now.getTime() - d.getTime()) / 60000;
-  if (mins < 3) return 'Now';
-  return `Since ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+  if (mins < 3) return t ? t('locatorModule.now') : 'Now';
+  const time = createFormat(locale).fmtTime(d);
+  return t ? t('locatorModule.sinceTime', { time }) : `Since ${time}`;
 }
 
 /** Distance of a point from a place center via the shared haversine — re-exported for the map. */

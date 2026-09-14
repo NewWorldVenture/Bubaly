@@ -21,24 +21,21 @@ import {
 } from '@/app/(app)/dashboard/contact-center/actions';
 import { cn } from '@/lib/utils/cn';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useFormat } from '@/components/i18n/use-format';
 
 type Channel = Tables<'family_contact_channels'> | null;
 
 const CHANNEL_ICON: Record<string, typeof MailIcon> = { email: MailIcon, sms: MessageSquare, voice: Voicemail };
 
-function timeAgo(iso: string): string {
-  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
-  if (s < 60) return 'just now';
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  if (s < 604800) return `${Math.floor(s / 86400)}d ago`;
-  return new Date(iso).toLocaleDateString();
-}
-
 export function ContactCenterModule({ channel, messages, suggestedLocal, twilioReady, canManage }: {
   channel: Channel; messages: InboxRow[]; suggestedLocal: string; twilioReady: boolean; canManage: boolean;
 }) {
   const tr = useTranslations();
+  // One time-ago, and it follows the reader. The ladder this replaced ended in a
+  // bare toLocaleDateString(), which follows the BROWSER's locale rather than the
+  // family's Bubaly choice — a defect the 'en-US' scan could not see.
+  const { fmtTimeAgo } = useFormat();
+  const fmtTimeAgo7 = (iso: string) => fmtTimeAgo(iso, { absoluteAfterDays: 7, absolutePattern: 'MMM d, yyyy' });
   const t = useTranslations();
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -202,7 +199,7 @@ export function ContactCenterModule({ channel, messages, suggestedLocal, twilioR
                           ? <span className="text-[10px] font-bold uppercase tracking-wide text-muted">{t('contactCenter.conciergeReply')}</span>
                           : <span className={cn('text-[10px] font-bold uppercase tracking-wide', meta.tone)}>{meta.emoji} {meta.label}</span>}
                         <span className="text-xs text-muted">{outbound ? `to ${formatPhone(m.to_addr) }` : `from ${m.from_addr ? formatPhone(m.from_addr) : 'unknown'}`}</span>
-                        <span className="ml-auto text-[11px] text-muted/70">{timeAgo(m.occurred_at)}</span>
+                        <span className="ml-auto text-[11px] text-muted/70">{fmtTimeAgo7(m.occurred_at)}</span>
                       </div>
                       <p className="mt-1 text-sm text-fg">{m.ai_summary || m.body}</p>
                       {!outbound && (

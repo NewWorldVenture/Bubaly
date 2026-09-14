@@ -73,19 +73,24 @@ export function splitPlayDates<T extends PlayDateLike>(rows: T[], now: Date = ne
   return { upcoming, past };
 }
 
-export function fmtDateTime(iso: string): string {
+import { createFormat } from '@/lib/utils/format';
+import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
+
+export function fmtDateTime(iso: string, locale: LocaleCode = DEFAULT_LOCALE): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  return createFormat(locale).fmtDate(d, "EEE, MMM d 'at' h:mm a");
 }
 
-export function relTime(iso: string, now: Date = new Date()): string {
-  const diff = now.getTime() - new Date(iso).getTime();
-  const min = Math.round(diff / 60000);
-  if (min < 1) return 'just now';
-  if (min < 60) return `${min}m ago`;
-  const hr = Math.round(min / 60);
-  if (hr < 24) return `${hr}h ago`;
-  const d = Math.round(hr / 24);
-  return `${d}d ago`;
+/**
+ * The Guardian check-in and Find-my-phone "last seen" chip, in the reader's
+ * language, and it never switches to an absolute date — a check-in three months
+ * old still reads as elapsed time, which is what those two surfaces show.
+ *
+ * The rounding changed with the shared ladder: this used `Math.round`, so 90
+ * minutes read "2h ago". It now floors, so 90 minutes reads "1h ago" — which is
+ * the truthful direction for "ago" and what the other nine ladders already did.
+ */
+export function relTime(iso: string, now: Date = new Date(), locale: LocaleCode = DEFAULT_LOCALE): string {
+  return createFormat(locale).fmtTimeAgo(iso, { now });
 }

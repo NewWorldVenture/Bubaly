@@ -71,7 +71,21 @@ const FORMATTER_WITH_LOCALE =
 /**
  * The ceiling, measured when the shared formatter was made locale-aware.
  *
- * Now 99: the Finances tranche converted five — lib/finance/hub.ts (usd,
+ * Now 93. The time-ago tranche converted six more — lib/activity/feed.ts,
+ * lib/memories/memories.ts, lib/family/safety.ts (relTime + fmtDateTime),
+ * lib/location/geo.ts, lib/location/overview.ts, lib/marketplace/discover.ts and
+ * lib/display/ambient.ts all delegate to one shared `fmtTimeAgo`.
+ *
+ * AND IT FOUND A DEFECT CLASS THIS FILE CANNOT SEE AT ALL. Eleven surfaces had
+ * their own "time ago" ladder built from ENGLISH LITERALS — `'just now'`,
+ * `` `${m}m ago` `` — which hold no locale for this scan to find, and two ended in
+ * `toLocaleDateString()` with NO argument, following the BROWSER's locale rather
+ * than the family's Bubaly choice. Both were green here throughout. Measured and
+ * held by tests/one-time-ago-and-it-follows-the-reader.test.ts, with
+ * scripts/audit-time-ago-ladders.mjs as the instrument. A ceiling on hardcoded
+ * locales is necessary and not sufficient; see I18N-002.
+ *
+ * Before that, 99: the Finances tranche converted five — lib/finance/hub.ts (usd,
  * fmtDueDate), lib/finance/splits.ts (usd) and lib/finance/timeline.ts (money,
  * pretty) — across twelve surfaces, proved in
  * tests/the-finance-surfaces-follow-the-reader.test.ts.
@@ -85,7 +99,7 @@ const FORMATTER_WITH_LOCALE =
  * Getting those three numbers to disagree is how a ratchet starts life already
  * broken, which is why the derivation is written down rather than the result.
  */
-const CEILING = 99;
+const CEILING = 93;
 
 /**
  * Comments stripped first, and this is not a detail.

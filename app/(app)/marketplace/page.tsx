@@ -20,7 +20,7 @@ import {
 import { ratingSummary } from '@/lib/marketplace/trust';
 import { KIND_LABELS, CATEGORY_LABELS, priceLabel, type ListingKind, type ListingCategory, type RentPeriod } from '@/lib/marketplace/listings';
 import { cn } from '@/lib/utils/cn';
-import { getTranslations } from '@/lib/i18n/server';
+import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 
 export const metadata: Metadata = { title: 'Marketplace | Bubaly' };
@@ -59,6 +59,9 @@ const BADGE_STYLE: Record<string, string> = {
 
 export default async function MarketplaceHomePage() {
   const t = await getTranslations();
+  // The feed's "when" chip follows the reader; each item's text is still English
+  // (I18N-002).
+  const { locale } = await getLocaleContext();
   const ctx = await requireUserContext();
   const sb = await createServer();
   const familyId = ctx.active.familyId;
@@ -154,7 +157,7 @@ export default async function MarketplaceHomePage() {
     orders as ActivityOrder[],
     reviews as ActivityReview[],
     listings.map((l) => ({ id: l.id, title: l.title, member_id: l.member_id, created_at: l.created_at })),
-    nameOf, now, 5,
+    nameOf, now, 5, locale.code,
   );
 
   const itemsByCollection = new Map<string, number>();

@@ -13,7 +13,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { fmtTime } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import {
-  ambientTheme, greeting, dayPart, nowAndNext, countdownLabel, normalizeSettings, buildHints,
+  ambientTheme, greeting, dayPart, nowAndNext, countdownLabel as countdownLabelIn, normalizeSettings, buildHints,
   DEFAULT_DISPLAY_SETTINGS, THEME_OPTIONS, IDLE_OPTIONS,
   type DisplaySettings, type ThemeChoice,
 } from '@/lib/display/ambient';
@@ -186,6 +186,9 @@ function WidgetBody({ widget, size, data, memberById, now }: {
 }) {
   const locale = useLocale();
   const tr = useTranslations();
+  // The Now/Next countdown follows the reader: the clock and weekday from the
+  // locale, "Now" and "in N min" from the catalogue.
+  const countdownLabel = (iso: string, at: Date) => countdownLabelIn(iso, at, locale.code, tr);
   switch (widget) {
     case 'clock': return <AmbientClock clock24={false} seconds={false} />;
     case 'weather': return <WeatherTile size={size} />;
@@ -380,6 +383,10 @@ function NowNextStrip({ events, memberById, now }: {
   events: Ev[]; memberById: Map<string, DisplayData['members'][number]>; now: Date;
 }) {
   const tr = useTranslations();
+  const locale = useLocale();
+  // The Now/Next countdown follows the reader: the clock and weekday from the
+  // locale, "Now" and "in N min" from the catalogue.
+  const countdownLabel = (iso: string, at: Date) => countdownLabelIn(iso, at, locale.code, tr);
   const { current, next } = nowAndNext(events, now);
   if (!current && !next) return null;
   const Cell = ({ label, ev, tone }: { label: string; ev: Ev; tone: string }) => {
@@ -505,6 +512,10 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
 }) {
   const t = useTranslations();
   const tr = useTranslations();
+  const locale = useLocale();
+  // The Now/Next countdown follows the reader: the clock and weekday from the
+  // locale, "Now" and "in N min" from the catalogue.
+  const countdownLabel = (iso: string, at: Date) => countdownLabelIn(iso, at, locale.code, tr);
   const { success, error: toastError } = useToast();
   // Defense in depth: even the props are re-normalized (SSR throws here are
   // uncatchable by widget boundaries, so the shell must be garbage-proof).
