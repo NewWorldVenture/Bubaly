@@ -725,3 +725,65 @@ No finding. Status: VERIFIED.
 fix produced the finding. A fix is a new thing in the codebase and deserves the
 same question as everything else: what is the most plausible wrong change
 someone makes next, and does anything stop it?
+
+---
+
+# Session 3 — 2026-09-14
+
+## C1-S3-01 — a push that failed was recorded as delivered, and nothing could retry it
+
+`[CLAUDE-1][HIGH][INTEGRATION]`
+
+- **File:** `lib/server/push.ts` (`dispatchPendingPushes`), `app/api/cron/push-scan/route.ts`
+- **Problem:** `pushed_at` was stamped on every notification the dispatcher
+  touched, whether or not the send succeeded. `pushed_at` is the *only* thing
+  the pending query filters on (`.is('pushed_at', null)`), nothing in the
+  codebase ever clears it, and no retry path exists. A provider outage therefore
+  dropped every notification in that run **permanently**.
+- **Evidence:** `tests/push-failure-is-not-delivery.test.ts`, with `web-push`
+  stubbed to reject with `statusCode: 500` (404/410 prune the device; anything
+  else counts as `failed`). Before the fix:
+
+  ```
+  ✓ counts the send as failed                    result.failed === 1, sent === 0
+  ✗ does NOT stamp pushed_at when every send failed
+      expected [] to deeply equal
+      [ { "pushed_at": "2026-09-14T21:13:14.747Z", "table": "notifications" } ]
+  ```
+
+  So: the send failed, and the row said delivered.
+
+  Grep confirms there is nowhere to recover from: `pushed_at` appears only as a
+  filter (`push.ts:163`), the stamp (`:219`) and comments. No `UPDATE` anywhere
+  sets it back to `null`.
+- **Why it survived the last pass.** This is a *second-order* instance of the
+  pattern in Part 0. The cron route already answers **502** when
+  `pushed.result.failed > 0` — that was this session's earlier fix, and it works.
+  It made the failure **visible** while leaving it **unrecoverable**: the run
+  goes red, the row says delivered, and the row is what the next run reads. A
+  fix that surfaces a failure is not the same as a fix that survives one, and
+  the red cron run made it *look* handled.
+- **Impact:** Silent, permanent loss of any notification whose push fails —
+  chore reminders, medication reminders, calendar and school events, expiring
+  documents. Exactly the class of message a family would notice missing and have
+  no way to explain. Pass H fixed the neighbouring shape (recipients past the
+  50th *marked delivered and never sent*); this is the same mistake one layer up.
+- **Recommended fix:** applied. Retry **only when nothing got through at all**
+  (`failed > 0 && sent === 0 && pruned === 0`). A partial success still stamps —
+  those devices already have the notification and re-sending would buzz them
+  twice. Telling partial from total is the most that can be done without
+  per-device delivery state, which is a schema change and therefore inert in
+  production while `F-001` holds; that constraint is recorded in the code
+  comment rather than left for the next reader to rediscover. Bounded by
+  `PUSH_RETRY_WINDOW_MS` (24h, ≈12 attempts at the two-hourly scan) so a
+  permanently broken endpoint cannot retry forever, and a row whose `created_at`
+  will not parse is treated as **new** rather than expired — the failure mode of
+  the first is one extra attempt, of the second a silently dropped notification.
+- **Status:** FIXED.
+- **Proved load-bearing:** neutering the guard (`if (false && retryable)`) turns
+  the suite red — `1 failed | 2 passed` — and restoring it green, `3 passed`.
+
+**Method note.** The finding came from asking the Part 0 question of a fix this
+same session had already shipped: *the cron now reports the failure — but does
+anything act on it?* Reporting and recovering are different properties, and a
+visible failure is the more comfortable of the two to stop at.
