@@ -2042,7 +2042,9 @@ object with an indistinguishable copy and cost the repo the account that goes
 with it, for no change in behaviour.
 
 `lib/supabase/read-all.ts` was fixed by both sessions at once, and the merge is a
-genuine **union rather than a choice**. Main's loop runs to `max + 1` so the
+genuine **union rather than a choice** — including on the one point where the
+two sessions actually disagreed, which is recorded below rather than settled
+silently. Main's loop runs to `max + 1` so the
 probe row rides along on the last page's range — one fewer round trip than my
 separate follow-up request, and I took it. My `truncated` flag and `failOnMax`
 are kept on top, because main's version makes **every** truncated read an error,
@@ -2162,3 +2164,203 @@ corrected to the merged call sequence (`[[0,999],[1000,1999],[2000,2500]]`).
   Positive controls assert the child still sees the family map, still posts and
   stops sharing their own location, still checks in and withdraws their own
   check-in; and a parent still clears a trail and a stale dot.
+
+### [CLAUDE-1][HIGH][PERF/BUNDLE] The English catalogue reached the browser by one import hop
+
+- **File/path:** `lib/i18n/messages.ts` (imports all eleven catalogue JSONs);
+  `components/i18n/locale-provider.tsx:13` (the `'use client'` module in the
+  ROOT layout that imported `translate` from it).
+- **Raised by:** Claude-2 as C2-18, with a measured build behind it. Verified
+  and fixed as reported.
+- **Problem:** `lib/i18n/scopes.ts` is careful, documented work that cut the
+  catalogue out of the **RSC payload** — "from 246 KB of compressed strings to
+  about 2 KB", its own header. It could not touch the JS side, because there
+  the catalogue arrives through an **import**. Webpack shook ten catalogues out
+  of the provider's chunk; en-US could not go, because `translate` ended
+  `messages[key] ?? SOURCE_MESSAGES[key] ?? key` and `SOURCE_MESSAGES = enUS`.
+- **Evidence (Claude-2's, on a real build):** the chunk carrying
+  `LocaleProvider` inlines one `JSON.parse('…')` blob — **818,132 bytes raw,
+  244,556 gzip** — and is listed for `/layout`, `/(marketing)/layout`,
+  `/(auth)/layout` and `/(app)/layout`, i.e. **397 of 591 entries**. Share of
+  first-load JS: **62.4%** of the marketing home page, 52.9% of `/login`,
+  48.6% of `/dashboard`.
+- **Impact:** every visitor to the public marketing site downloads, parses and
+  `JSON.parse`s the entire English product — wallet errors, the admin studio,
+  marketplace copy — before the landing page is interactive, on mobile data,
+  on the one page whose job is conversion. A French visitor downloads it and
+  reads none of it.
+- **Recommended fix / taken:** exactly the fix C2-18 proposed. New
+  `lib/i18n/translate.ts` holds the interpolation primitive and **imports no
+  catalogue**; the provider imports that. `lib/i18n/messages.ts` keeps its
+  enUS-falling-back `translate` for the server callers, now delegating its
+  regex to the new module so there is one implementation.
+  The caveat C2-18 flagged is handled rather than skipped: `app/global-error.tsx`
+  renders its own `<html>` and so runs above every provider, and its four keys
+  were covered by that English fallback **by accident**. They are inlined in the
+  provider's out-of-context branch.
+- **Status:** FIXED. `tests/the-catalogue-stays-out-of-the-browser.test.ts`
+  guards the **invariant** rather than a byte count, so it needs no build:
+  *no `'use client'` module may reach `@/lib/i18n/messages`, by any path*. The
+  walk is transitive — one hop is all it took last time.
+  Two corrections were needed before it was honest, and both are the kind that
+  would have made it a nuisance test rather than a guard:
+  1. It first reported **~30 paths**, every one a client component importing its
+     own `'use server'` action file. Next replaces that import with an RPC
+     reference and never bundles the action's graph. The walk now **stops at
+     server boundaries** — `'use server'` (matched under a leading comment
+     block, which is how every action file in this repo is written), `import
+     'server-only'`, and `next/headers`, which throws if a client component
+     reaches it and is what makes `lib/i18n/server.ts` server-only "by
+     construction", as its own header says.
+  2. `import type { … }` is erased by the compiler and is not an edge in any
+     bundler's graph; it was being counted.
+  Non-vacuity: pointing the provider back at `@/lib/i18n/messages` fails the
+  test. A companion assertion checks a **server** module still imports the
+  catalogue, so the guard cannot pass by the catalogue ceasing to exist; another
+  reads `app/global-error.tsx`'s keys and fails if it grows a fifth, rather than
+  shipping a raw key at a visitor on the error screen.
+
+### [CLAUDE-1][HIGH][FLOWS] Approve and Reject failed in complete silence — twenty ways across four actions
+
+- **File/path:** `app/(app)/missions/actions.ts` (approve, reject, dispute,
+  create); `app/(app)/missions/review-card.tsx`;
+  `app/(app)/missions/new/{page.tsx,plan-generator.tsx}`.
+- **Raised by:** Claude-4 as C-4-14. Verified and fixed as reported.
+- **Problem:** all four were typed `Promise<void>` with seven, five, five and
+  three bare `return;` exits, and `revalidatePath` on the success path only. So
+  every failure did nothing observable at all — no toast, no error, not even a
+  re-render. The spinner stopped and the card sat exactly where it was, so the
+  parent clicked again and re-ran the same failing path.
+  The shape was never in doubt: **`submitProofAction`, in the same file**,
+  already returned `{ ok, error }` with eight distinct messages, and the kid's
+  submit form renders them. The CHILD was told why their submission failed; the
+  PARENT was told nothing when the approval did.
+- **Impact:** the headline flow of the product. The sharpest case is
+  `finalizeApproval` throwing — the wallet credit — because by then the
+  assignment had already flipped to approved: the rollback runs, the queue keeps
+  the item, and a reward that is owed is recorded nowhere with no error anywhere
+  a human will look. `disputeSubmissionAction` is the CHILD's "that's not fair"
+  button, and had five of its own.
+- **Recommended fix / taken:** all four return `{ ok, error }`, each exit
+  carrying its own message (nine new catalogue keys, en-US only — a translation
+  may lag, as `messages.ts` documents), and every swallowed error is now also
+  `console.error`'d. The UI renders them:
+  - `review-card.tsx` holds the result and shows it under the buttons, with
+    `role="alert"`.
+  - `app/(app)/missions/new/page.tsx` used `<form action={createChoreAction}>`
+    in a **server** component, which a non-void return cannot type. Only the
+    `<form>` element moves, into a small `mission-form.tsx` client wrapper; all
+    47 lines of fields stay server-rendered and arrive as `children`.
+  - `plan-generator.tsx` awaited the void action and marked the suggestion
+    **"Added" unconditionally** — including when the chore was refused for want
+    of a manager role, or rolled back because the assignment insert failed. It
+    now adds only on `ok`.
+- **Status:** FIXED. `tests/a-failed-approval-is-not-a-silent-one.test.ts`, 16
+  assertions. It checks three things per action — that it *can* report a
+  failure, that **no bare `return;` survives** (comments stripped, so a
+  `return;` described in a header is not miscounted), and that it still answers
+  `ok` on the path that succeeds, which stops a function that only ever returns
+  failures from passing. One further assertion requires **at least eight
+  distinct messages**: seven silent exits replaced by a single "something went
+  wrong" would be a smaller defect, not a fixed one.
+
+### [CLAUDE-1][LOW][FLOWS] `disputeSubmissionAction` has no caller
+
+Found while fixing C-4-14 and recorded rather than acted on. `grep -rn
+disputeSubmissionAction app components lib` returns **only its own definition**.
+The child's "that's not fair" appeal is implemented end to end in the server —
+it opens a dispute, moves the submission to `disputed`, flips the assignment,
+logs the event, and rolls all of it back on failure — and nothing in the product
+calls it. `review-card.tsx` renders `item.isDisputed` and `item.disputeReason`,
+so the parent's side of the feature exists and can only ever show rows no
+current UI can create.
+
+Whether the button is missing or the feature was withdrawn is a product
+question, so it is filed rather than guessed at. It is fixed to the same
+`{ ok, error }` contract as its three siblings either way, so wiring a button to
+it is now a one-line call site rather than a call site plus a redesign.
+
+### [CLAUDE-1][MEDIUM][I18N/UI] The i18n gate scanned one file and called it "the app chrome"
+
+- **File/path:** `scripts/i18n-scan.mjs:32` (the surface);
+  `components/app/quick-capture.tsx`, `components/app/command-bar.tsx`.
+- **Raised by:** Claude-2 as C2-22, with the repo's own scanner as evidence.
+  Verified and fixed as reported, and **widening the gate found three more**.
+- **Problem:** the surface was declared
+  `'app-shell': ['components/app/app-shell.tsx']` under a comment reading *"The
+  authenticated app chrome — top bar, account menu, sidebar, mobile nav. Every
+  signed-in page renders this, so a regression here is visible on all of them at
+  once."* `scanPaths` walks the **filesystem, not the import graph**, so naming
+  one file gated one file. app-shell.tsx was clean; the two components it
+  renders on lines 398-399 were not, and nothing scanned them.
+- **Evidence:** `node scripts/i18n-scan.mjs --list components/app/quick-capture.tsx
+  components/app/command-bar.tsx` → **10 hardcoded strings**, all rendered:
+  the four capture tabs and their placeholders, and two "Undo" labels.
+- **Impact:** every non-English family met the quick-capture sheet — the app's
+  primary "add anything" affordance, on all 354 signed-in pages — offering
+  "Task / Note / Event / Shopping" with "e.g. Pack lunches", and an "Undo" they
+  had to guess at, in a sheet whose other half was correctly translated.
+  **The gate's whole job is to make that impossible, and it reported the surface
+  clean.**
+- **Recommended fix / taken:** both halves C2-22 proposed.
+  1. The ten strings are in the catalogue, and `TYPES` holds **keys rather than
+     words** — the shape `lib/marketing/*.ts` already uses for exactly this
+     reason, because the array is built at module scope where there is no
+     locale yet. The two template literals that built visible text
+     (`` `${res.count} items added` ``, `` `${label} saved` ``) become
+     parameterised keys. The "looks like a…" hint now lower-cases with
+     `toLocaleLowerCase(locale)`, since lower-casing a word that now comes from
+     a catalogue is locale-dependent.
+  2. `'app-shell': ['components/app']`. A comment promising "the app chrome"
+     has to be gated as the app chrome; a file list is only ever as current as
+     the last person who remembered to extend it.
+- **What widening it found — three more, none of them in C2-22:**
+  - `lib/ui/role-surface.ts` held `DENSITY_LABELS` and `DENSITY_DESCRIPTIONS`
+    as English words — "Standard / Cozy / Relaxed" and their three descriptions,
+    rendered in Settings. Module-scope copy under `lib/`, which is the blind
+    spot the gate's own comments say it exists for. Now `*_KEYS`.
+  - `display-comfort.tsx:42` built `` `Follow your role — ${…} for you.` `` as a
+    template literal, so the scanner only ever saw the word "Auto" — the English
+    sentence around it was invisible to the gate **and to every translator**.
+  - `trial-paywall-gate.tsx` shipped both plan taglines in English on the
+    paywall itself. The plan NAMES go into the catalogue too, which is this
+    repo's existing convention: 23 catalogue entries already contain "Family
+    Basic" or "Family+".
+- **One scanner change, measured rather than asserted.** Widening the surface
+  also surfaced `free-tier-sidebar.tsx:187 "void; pinned: Set"` — a destructured
+  parameter's TYPE ANNOTATION, a true positive for the widening and a false
+  positive for the scanner. The new exclusion targets the signal (an identifier,
+  a colon, a type) rather than the file, and was replayed against **all 13,480
+  English strings already in the catalogue, which are copy by construction: it
+  excludes zero of them.** That is the discipline the surrounding rules document
+  for themselves, so the cost is written down rather than implied.
+- **Status:** FIXED. All eight gated surfaces report **clean**, with `app-shell`
+  now covering `components/app` rather than one file in it.
+
+
+### [CLAUDE-1][NOTE][COORDINATION] Where the two `readAll` fixes actually disagreed
+
+Worth writing down, because the merge is not only a union: on one point the two
+sessions took opposite positions and the tests said so.
+
+Main's version makes **every** truncated read an error, and its test states the
+case plainly: *"A caller's max is a bound they expect the data to fit under, so
+reaching it is not success; it means rows exist that were never read."* Mine
+made truncation silent unless the caller passed `failOnMax: true`, on the
+grounds that `wallet/activity` LISTS recent rows rather than summing them and a
+prefix of the newest is the right answer there.
+
+**Main's default is the better one**, and I took it. Silence-by-default puts the
+error out of reach of exactly the call site nobody thought about — which is the
+defect this module exists to end, one level up. So `failOnMax` survives, but
+**inverted**: the default errors, and `failOnMax: false` is the explicit opt-out.
+It is passed at exactly one site, `app/(app)/wallet/activity/page.tsx`, with the
+reason written at the call: that page lists newest-first, so for a family with
+more than 2,000 transactions the 2,000 most recent ARE the answer, and erroring
+would replace a correct recent-activity view with a failure page. Every summing
+call site keeps the default and needs no flag at all.
+
+Four of main's test cases were failing against my version when the two were
+merged. They were not adjusted to fit — the IMPLEMENTATION changed to match
+them, and my cases were rewritten to the settled semantics. That is the right
+way round: their tests were encoding the better rule.

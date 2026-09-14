@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import React from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderTranslated } from './helpers/render-translated';
 
 // AskBubaly (mounted by the ask tile) uses the app router. On the real display
 // that router is there — the shell is client-only (`ssr: false`) and runs in the
@@ -35,7 +35,7 @@ function base(over: Partial<DisplayData> = {}): DisplayData {
 }
 
 function render(data: DisplayData, tiles: Tile[]) {
-  return renderToStaticMarkup(
+  return renderTranslated(
     React.createElement(ToastProvider, null,
       React.createElement(DisplayShell, {
         initialTiles: tiles,

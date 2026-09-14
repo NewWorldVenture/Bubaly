@@ -140,9 +140,12 @@ describe('readAll with a ceiling the caller chose', () => {
   });
 
   it('says truncated when the table holds more than the ceiling, and complete when it does not', async () => {
+    // Truncation is an error BY DEFAULT — a caller's max is a bound they expect
+    // the data to fit under — and `truncated` carries the same fact for a caller
+    // that wants to render it rather than fail on it.
     const more = await readAll<{ id: number }>(table(6500), { max: 2500 });
     expect(more.truncated).toBe(true);
-    expect(more.error).toBeNull();
+    expect(more.error).not.toBeNull();
 
     // A table of EXACTLY `max` rows is complete, not truncated. This is the
     // case the probe exists to get right: the loop exits identically either way.
@@ -152,17 +155,20 @@ describe('readAll with a ceiling the caller chose', () => {
     expect(exact.rows).toHaveLength(2500);
   });
 
-  it('turns a truncated read into an error when the caller asks it to', async () => {
-    const { rows, error, truncated } = await readAll<{ id: number }>(table(6500), { max: 2500, failOnMax: true });
+  it('hands back a prefix without an error ONLY when the caller opts out', async () => {
+    // `failOnMax: false` is the opt-out, not `failOnMax: true` the opt-in. That
+    // direction is the point: silence-by-default would put the error out of
+    // reach of exactly the call site nobody thought about.
+    const { rows, error, truncated } = await readAll<{ id: number }>(table(6500), { max: 2500, failOnMax: false });
     expect(truncated).toBe(true);
-    expect(error?.message).toContain('2500-row ceiling');
+    expect(error).toBeNull();
     // The rows read are still returned; the caller decides what to do with a
     // prefix it has been told is a prefix.
     expect(rows).toHaveLength(2500);
   });
 
-  it('does not error a complete read even under failOnMax', async () => {
-    const { error, truncated } = await readAll<{ id: number }>(table(2500), { max: 2500, failOnMax: true });
+  it('does not error a complete read, opted out or not', async () => {
+    const { error, truncated } = await readAll<{ id: number }>(table(2500), { max: 2500 });
     expect(truncated).toBe(false);
     expect(error).toBeNull();
   });
@@ -243,7 +249,7 @@ describe('readAllAsQuery', () => {
   });
 
   it('honours a ceiling, and carries the truncation flag through', async () => {
-    const { data, truncated } = await readAllAsQuery<{ id: number }>(table(6500), { max: 5000 });
+    const { data, truncated } = await readAllAsQuery<{ id: number }>(table(6500), { max: 5000, failOnMax: false });
     expect(data).toHaveLength(5000);
     expect(truncated).toBe(true);
   });
@@ -257,13 +263,14 @@ describe('readAllAsQuery', () => {
     expect(complete.data).toHaveLength(4000);
   });
 
-  it('reports a truncated read as a failed read when the caller asks', async () => {
-    // This is what the wallet reconciler passes. Its correct behaviour at the
-    // cap is the ErrorState it already renders for a read failure, not a green
-    // "everything reconciles" computed from the newest 20,000 rows.
-    const { data, error } = await readAllAsQuery<{ id: number }>(table(6500), { max: 5000, failOnMax: true });
+  it('reports a truncated read as a failed read, without being asked', async () => {
+    // This is what the wallet reconciler gets. Its correct behaviour at the cap
+    // is the ErrorState it already renders for a read failure, not a green
+    // "everything reconciles" computed from the newest 20,000 rows — and it gets
+    // that without having to remember a flag.
+    const { data, error } = await readAllAsQuery<{ id: number }>(table(6500), { max: 5000 });
     expect(data).toBeNull();
-    expect(error?.message).toContain('ceiling');
+    expect(error?.message).toMatch(/PREFIX/);
   });
 
   it('reports a failure as null data, never as an empty table', async () => {

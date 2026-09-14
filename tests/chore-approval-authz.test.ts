@@ -16,10 +16,20 @@ describe('A-07 chore approval requires a family manager', () => {
     expect(src).toMatch(/import\s*\{[^}]*\bisManager\b[^}]*\}\s*from\s*'@\/lib\/constants\/roles'/);
   });
 
+  // The gate is asserted as a GUARD CLAUSE that leaves the function, not as one
+  // exact line. It used to read `if (!isManager(...)) return;` and now returns
+  // `{ ok: false, error }` — because a bare `return;` was one of seven silent
+  // exits that told the parent nothing when an approval failed. Matching the
+  // literal would have made that fix look like the gate being dropped, which is
+  // the opposite of what happened; matching the SHAPE keeps the invariant this
+  // test exists for — a non-manager never reaches the body — while letting the
+  // refusal say why.
+  const gate = /if\s*\(!isManager\(ctx\.active\.role\)\)\s*return\b/;
+
   it('gates approveSubmissionAction on isManager before doing anything', () => {
     const body = src.slice(src.indexOf('export async function approveSubmissionAction'));
     const fn = body.slice(0, body.indexOf('\nexport async function', 1));
-    expect(fn).toContain('if (!isManager(ctx.active.role)) return;');
+    expect(fn).toMatch(gate);
     // the gate must precede the reward-affecting call
     expect(fn.indexOf('isManager')).toBeLessThan(fn.indexOf('finalizeApproval'));
   });
@@ -27,7 +37,18 @@ describe('A-07 chore approval requires a family manager', () => {
   it('gates rejectSubmissionAction on isManager', () => {
     const body = src.slice(src.indexOf('export async function rejectSubmissionAction'));
     const fn = body.slice(0, body.indexOf('\nexport async function', 1));
-    expect(fn).toContain('if (!isManager(ctx.active.role)) return;');
+    expect(fn).toMatch(gate);
+  });
+
+  it('the refusal tells the caller why, rather than returning silently', () => {
+    // The other half of the same change: a gate that refuses in silence leaves
+    // the parent clicking Approve on a card that never moves.
+    for (const name of ['approveSubmissionAction', 'rejectSubmissionAction']) {
+      const body = src.slice(src.indexOf(`export async function ${name}`));
+      const fn = body.slice(0, body.indexOf('\nexport async function', 1));
+      expect(fn, `${name} refuses without saying why`)
+        .toMatch(/if\s*\(!isManager\(ctx\.active\.role\)\)\s*return\s*\{\s*ok:\s*false/);
+    }
   });
 
   it('the manager check means parent or adult only (not child/teen)', () => {

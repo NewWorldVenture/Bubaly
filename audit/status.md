@@ -436,3 +436,76 @@ FILES-TOUCHED: audit/claude-4.md only. Audit-only — no source file was modifie
 BLOCKERS: none.
 LAST-UPDATE: 2026-09-14
 
+
+## Claude-1 (third session, continued)
+CURRENT: Working the OPEN findings from Claude-2/3/4 in severity order, after
+  merging main a second time. Everything below is on
+  `claude/bubaly-repo-connect-etzqg7` (PR #548).
+COMPLETED since the block above:
+  - **Merged main again.** Third migration-version collision of the sweep, and
+    the SECOND on the same finding: main landed `0298_invites_update_manager_only`
+    while this branch held its own 0298 for the invite hole. Disposition as with
+    `child_logins`: 0298 keeps the policy; mine renumbered to **0305** and
+    rewritten to carry only the half 0298 does not — the trigger fixing an
+    invite's family, token and email at issue.
+  - **`lib/supabase/read-all.ts` was fixed by both sessions at once, and the
+    merge is a UNION rather than a choice.** Main's loop runs to `max + 1` so
+    the probe row rides along on the last page's range (one fewer round trip —
+    took it); this branch's `truncated` and `failOnMax` stay on top, because
+    main's version errors on EVERY truncated read and `wallet/activity` wants
+    the opposite: it lists rather than sums, so a prefix of the newest is right
+    there. Tests from both sides kept.
+  - **CRITICAL — the paywall (0306).** Claude-3's `subscriptions` HIGH, verified
+    and raised: a parent could set their own plan to family_plus, extend or NULL
+    `trial_ends_at` (NULL reads as "grandfathered, never locked"), and — the
+    cross-tenant one — write ANOTHER family's Stripe `customer_ref` into their
+    own billing row, which `/api/billing/portal` hands straight to Stripe. Fixed
+    by REVOKE rather than a narrower predicate: no legitimate session-client
+    write existed. Probe + a code-side ratchet resolving which CLIENT each write
+    was built on.
+  - **HIGH — nine health tables (0307).** Two rules, not one: a log you keep
+    about yourself may be corrected by its subject; a record of medical fact
+    about someone may not be erased by that someone. INSERT and reads untouched,
+    because 0300 filed those as owner decisions and this answers neither.
+  - **HIGH — the locator (0308).** "Strictly self-only" was true of the action
+    and false of the database. Three shapes: your own dot, an append-only trail,
+    and a check-in whose self is established by `created_by` as well as
+    `member_id`.
+  - **HIGH — C2-18, the English catalogue in every page's JavaScript.** Fixed as
+    Claude-2 proposed. **Measured on a real build afterwards: no inlined JSON
+    blob over 2 KB survives in any chunk** — the catalogue blob was 818,132
+    bytes — and the largest remaining chunk is 54 KB gzip against the old
+    244 KB catalogue alone.
+  - **HIGH — C-4-14, Approve/Reject failing in silence.** All four missions
+    actions carry `{ ok, error }`; the review card, the create form and the AI
+    plan generator render it. `disputeSubmissionAction` turns out to have **no
+    caller at all** — filed as a separate LOW rather than guessed at.
+  - **MEDIUM — C2-22, the i18n gate scanning one file.** Both halves taken, and
+    widening `app-shell` to the directory found **three more** nobody had:
+    density labels parked in `lib/ui/role-surface.ts`, a template literal that
+    hid an English sentence from the gate, and both paywall taglines. One
+    scanner exclusion added for TypeScript type text, measured against all
+    13,480 catalogue strings (excludes zero).
+NEXT: the test fallout from the catalogue fix, which is a real signal and is
+  being worked file by file: ~12 test files rendered client components OUTSIDE
+  every provider and relied on the English fallback that just went away. They
+  now render through a real `LocaleProvider` (`tests/helpers/render-translated.ts`),
+  which is what the app does. After that: C-4-16 (two families, one Guardian
+  number), C2-19 (15 double-submitting forms), C2-23 (the un-pausable Undo
+  toast), and Claude-3's MEDIUMs.
+BLOCKERS: unchanged — F5/F-001 (no path to apply migrations to prod) is
+  owner-blocked, and the two medical owner-decisions are filed, not mine.
+FILES-TOUCHED (this continuation):
+  - supabase/migrations/0305_invite_terms_are_fixed_at_issue.sql (renamed)
+  - supabase/migrations/0306_a_family_cannot_write_its_own_entitlement.sql
+  - supabase/migrations/0307_a_health_record_is_not_a_siblings_to_rewrite.sql
+  - supabase/migrations/0308_a_location_is_only_your_own_to_post.sql
+  - docs/audit/{paywall,health-record,locator}-write-boundary-check.sql
+  - lib/i18n/translate.ts (new), lib/i18n/messages.ts, components/i18n/locale-provider.tsx
+  - lib/supabase/read-all.ts, lib/ui/role-surface.ts, lib/database.types.ts
+  - app/api/billing/{checkout,change-plan}/route.ts
+  - app/(app)/missions/{actions.ts,review-card.tsx,new/*}
+  - components/app/{quick-capture,command-bar,display-comfort,trial-paywall-gate}.tsx
+  - components/modules/health-module.tsx, scripts/i18n-scan.mjs
+  - tests/helpers/render-translated.ts (new) + the render tests it repairs
+LAST-UPDATE: 2026-09-14, after 0308 and the catalogue fix.

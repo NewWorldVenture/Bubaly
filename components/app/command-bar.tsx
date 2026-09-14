@@ -163,8 +163,8 @@ export function CommandBar() {
       const res = await saveCapture(createClient(), { kind: r.captureKind, text: r.text, familyId, userId, memberId: selfMember?.id ?? null });
       setOpen(false);
       success(
-        res.count > 1 ? `${res.count} items added` : r.label,
-        { label: 'Undo', onClick: () => { void undoCapture(createClient(), res.undo).then(() => success(t('commandBar.undone'))).catch(() => toastError(t('commandBar.couldNotUndo'))); } },
+        res.count > 1 ? t('commandBar.itemsAdded', { count: res.count }) : r.label,
+        { label: t('commandBar.undo'), onClick: () => { void undoCapture(createClient(), res.undo).then(() => success(t('commandBar.undone'))).catch(() => toastError(t('commandBar.couldNotUndo'))); } },
       );
     } catch (err) {
       toastError(describeDbError(err, t('commandBar.couldNotSaveThat')));

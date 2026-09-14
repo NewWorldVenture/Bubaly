@@ -7,7 +7,7 @@
 // chain ever reaches the markup.
 import { describe, it, expect, vi } from 'vitest';
 import React from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderTranslated } from './helpers/render-translated';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: () => undefined, push: () => undefined }) }));
 vi.mock('@/app/(app)/dashboard/approvals-actions', () => ({
@@ -38,7 +38,7 @@ const row = {
 };
 
 function render(node: React.ReactElement) {
-  return renderToStaticMarkup(React.createElement(ToastProvider, null, node));
+  return renderTranslated(React.createElement(ToastProvider, null, node));
 }
 
 describe('ApprovalCard', () => {

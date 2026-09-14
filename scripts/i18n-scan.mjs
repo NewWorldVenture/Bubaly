@@ -26,10 +26,20 @@ const ROOT = process.cwd();
 export const GATED_SURFACES = {
   // The language control itself.
   'i18n-ui': ['components/i18n'],
-  // The authenticated app chrome — top bar, account menu, sidebar, mobile nav.
-  // Every signed-in page renders this, so a regression here is visible on all
-  // of them at once.
-  'app-shell': ['components/app/app-shell.tsx'],
+  // The authenticated app chrome — top bar, account menu, sidebar, mobile nav,
+  // the quick-capture sheet and the ⌘K bar. Every signed-in page renders this,
+  // so a regression here is visible on all of them at once.
+  //
+  // This is the DIRECTORY and not app-shell.tsx alone, and the difference was a
+  // real escape. `scanPaths` walks the filesystem, not the import graph, so
+  // naming the one file gated the one file: app-shell.tsx was clean while the
+  // two components it renders on line 398-399 shipped ten English strings —
+  // "Task / Note / Event / Shopping", "e.g. Pack lunches", "Undo" — to every
+  // non-English family on all 354 signed-in pages, and the gate reported the
+  // surface clean. A comment promising "the app chrome" has to be gated as the
+  // app chrome; a file list can only ever be as current as the last person who
+  // remembered to extend it.
+  'app-shell': ['components/app'],
   // The public marketing header, on every unauthenticated page.
   'marketing-header': ['components/marketing/site-header.tsx'],
   // The public marketing site: every page under (marketing) and every component
@@ -142,6 +152,15 @@ const NOT_COPY = [
   // operator, a strict comparison, a snake_case identifier, a line comment or a
   // method call, and never OPENS on `:`, `=` or `,` — those are all fragments of
   // an expression that happened to sit between a `>` and a `<`.
+  // A TYPE ANNOTATION. `void; pinned: Set` is the destructured-parameter
+  // annotation in free-tier-sidebar.tsx, and it surfaced the moment the
+  // app-shell surface was widened from one file to the directory — a true
+  // positive for the widening and a false positive for the scanner. The signal
+  // is an identifier followed by `:` and a TYPE, which prose does not do.
+  // Measured the way every rule in this block was: replayed against all 13,480
+  // English strings already in the catalogue, which are copy by construction.
+  // It excludes ZERO of them, so it costs nothing and the price is not implied.
+  /\b\w+:\s*(?:Set|Map|Record|Promise|Array|ReadonlyArray|string|number|boolean|void|unknown|never)\b/,
   /&&|\|\|/,                    // `todayStr && i.due_date`
   /===|!==/,                    // `( items.length === 0 ?`
   // snake_case. Every rule in this block was measured the only way that proves

@@ -4156,3 +4156,210 @@ unidentified single failure reported in Pass J).
 **Status: FIXED IN CODE, NOT YET IN PRODUCTION.** This is a migration, so like
 0296 and 0297 it is inert until the F5 ledger blocker is cleared. **The
 escalation is live in production until then.**
+
+---
+
+# Pass M — the paywall, the health records, the locator and the catalogue
+
+Four findings raised by the specialist workers, verified independently and
+closed, plus two the fixes themselves uncovered. All on
+`claude/bubaly-repo-connect-etzqg7` (PR #548), all proven by reverting the fix
+and watching a guard name the exact defect.
+
+## M1 — CRITICAL: a family could write the row that decides what it paid for
+
+`subscriptions` IS the paywall. `lib/server/plan.ts` reads it with the
+**service-role** client, deliberately, and its own header says why: *"Reading
+the family's own plan is a trusted, server-side gating concern, so we use the
+SERVICE-ROLE client to bypass RLS entirely and read the real plan."*
+
+The real plan was the customer's to write. 0004's `subs_manage`, re-asserted
+verbatim by 0118, grants ALL to `is_family_admin(family_id)` — the parent being
+charged. `billing_manage` does the same for `billing_customers`. And
+`families_update` is `can_manage_family(id)` with no column restriction, while
+that same trusted read takes `trial_ends_at` and `closed_at` from it.
+
+Measured on a replayed database as a real `authenticated` parent under RLS:
+
+```
+update subscriptions set plan='family_plus', status='active' ..... UPDATE 1
+update families set trial_ends_at = now() + '3650 days' .......... UPDATE 1
+insert billing_customers (customer_ref='cus_<another family>') ... INSERT 1
+```
+
+Three consequences, ascending:
+
+1. **The paid product, for free.** `planLevel(s.plan)` over active/trialing rows
+   is the entitlement.
+2. **The trial never ends** — and the sharpest form is not extending it but
+   `trial_ends_at = null`, which `computeEntitlement` reads as GRANDFATHERED,
+   turning "locked, must buy" into permanently unlocked in one word.
+3. **Another family's Stripe account.** `/api/billing/portal` hands
+   `customer_ref` to `stripe.billingPortal.sessions.create({ customer })` with
+   no ownership check. A parent who writes another family's `cus_…` into their
+   own row opens the billing portal **on that customer** — their invoices, their
+   card, their cancellation. Cross-tenant, and not about money the attacker
+   saves.
+
+**0306** is a REVOKE rather than a narrower predicate, because there is no
+narrower predicate to write: no legitimate session-client write to either table
+exists anywhere in the repo. Every writer was already the service role, and the
+two that were not — the `billing_customers` upserts in `billing/checkout` and
+`billing/change-plan` — moved there in the same commit. **The database was
+simply behind the code.** `families` keeps its UPDATE and gains a trigger
+pinning the two columns that are entitlement wearing a profile table's clothes.
+
+Guard: `docs/audit/paywall-write-boundary-check.sql`, plus
+`tests/entitlement-is-never-written-by-its-own-customer.test.ts`, which resolves
+which CLIENT each write was built on — because F5 means code reaches production
+before migrations do.
+
+## M2 — HIGH: nine health tables let any member rewrite any other member's record
+
+The shape 0300 closed on `medications`, on nine tables it did not reach. All are
+written directly from the browser and `grep -n 'isManager\|role ==='` over the
+six modules that write them returns **nothing** — RLS was the only boundary.
+
+**0307** applies **two rules, because these are not one kind of record**:
+
+- a log you keep about yourself (`symptom_logs`, `health_metrics`,
+  `health_goals`, `sleep_logs`, `sleep_checkins`, `nutrition_logs`) — a manager,
+  the author, **or the member the row is about**. The subject matters because
+  three of these upsert on `(member_id, date)`, so the day's second entry is an
+  UPDATE, and an author-only rule would refuse a child correcting their own log
+  the moment a parent recorded one for them.
+- a record of medical fact about someone (`health_visits`, `immunizations`,
+  `care_log`) — a manager or the author, and **not** the subject. A child
+  deleting the record of their own vaccination is the defect, not the feature.
+
+INSERT and reads are untouched: 0300 filed those as owner decisions and this
+answers neither.
+
+## M3 — HIGH: "Strictly self-only" was true of the action and false of the database
+
+`app/(app)/dashboard/locator/actions.ts:30` states the rule in as many words,
+and both writers keep it. The tables did not: a child could move a parent's dot,
+take a parent off the map, fabricate an arrival that notifies the family as
+**urgent**, erase their own departure event, and delete another member's "I am
+safe" — the check-in view's `remove(id)` deletes by id with no author check.
+
+**0308**, three shapes: your own current position (a manager may clear a stale
+row); an **append-only** trail, in `wallet_audit_logs`' idiom, with no UPDATE
+policy at all and only a manager deleting; and a check-in whose "self" is
+established by `created_by` as well as `member_id`, because `member_id` is
+nullable there.
+
+## M4 — HIGH: the English catalogue shipped as JavaScript on every page
+
+`lib/i18n/scopes.ts` had cut the catalogue out of the **RSC payload** — "from
+246 KB of compressed strings to about 2 KB". It could not touch the JS side,
+because there the catalogue arrived through an **import**: the root layout's
+`LocaleProvider` imported `translate` from `lib/i18n/messages`, whose English
+fallback kept en-US.json alive through tree-shaking. 818,132 bytes raw,
+**244,556 gzip**, in a chunk listed for every layout — 62.4% of the marketing
+home page's first-load JavaScript.
+
+The primitive moves to `lib/i18n/translate.ts`, which imports no catalogue;
+`messages.ts` keeps the falling-back wrapper for server callers. The four
+`app/global-error.tsx` keys — which render above every provider and were covered
+by that fallback **by accident** — are inlined.
+
+**Measured on a real production build afterwards: no inlined JSON blob over
+2 KB survives in any chunk**, and the largest remaining chunk is 54 KB gzip
+against the old catalogue's 244 KB alone.
+
+## M5 — HIGH: Approve and Reject failed in complete silence
+
+Four missions actions typed `Promise<void>` with seven, five, five and three
+bare `return;` exits and `revalidatePath` on the success path only. The sharpest
+was `finalizeApproval` throwing — the wallet credit — because by then the
+assignment had already flipped to approved: the rollback runs, the queue keeps
+the item, and a reward that is owed is recorded nowhere.
+
+The shape was never in doubt: `submitProofAction`, in the same file, already
+returned `{ ok, error }` with eight messages that the kid's submit form renders.
+**The child was told why their submission failed; the parent was told nothing
+when the approval did.**
+
+All four now return `{ ok, error }`; the review card, a new client wrapper on
+the create form, and the AI plan generator render it. The plan generator had
+also been marking suggestions "Added" unconditionally, including when the chore
+was refused or rolled back.
+
+## M6 — MEDIUM: the i18n gate scanned one file and called it "the app chrome"
+
+`scanPaths` walks the filesystem, not the import graph, so
+`'app-shell': ['components/app/app-shell.tsx']` gated one file while the two
+chrome components it renders shipped ten English strings to every non-English
+family on all 354 signed-in pages.
+
+Both halves taken — the strings lifted with `TYPES` holding **keys**, and the
+surface widened to `components/app` — and the widening found **three more**
+nobody had: density labels parked in `lib/ui/role-surface.ts`, a template
+literal that hid an English sentence from the gate entirely, and both paywall
+taglines. All eight gated surfaces now report clean.
+
+## Two things this pass got wrong first, and fixed
+
+Recorded because both are the failure modes this kind of work is most prone to.
+
+1. **A probe that asserted a refusal against a write that had nothing to do.**
+   The first draft of the paywall probe checked that a parent cannot clear
+   `closed_at` — on a family whose `closed_at` was already NULL. `is distinct
+   from` is not violated by writing the value a column already holds, so the
+   refusal never fired and the probe read the no-op as a guard.
+2. **A guard that reported ~30 false positives on its first run.** The
+   catalogue-bundle test walked the import graph without stopping at server
+   boundaries, so every client component importing its own `'use server'` action
+   looked like a leak. Next replaces that import with an RPC reference and never
+   bundles the action's graph. The walk now stops at `'use server'` (matched
+   under a leading comment block, which is how every action file here is
+   written), `import 'server-only'`, and `next/headers`; and type-only imports,
+   which the compiler erases, are no longer counted as edges.
+
+## What the catalogue fix cost, and why it was paid
+
+Removing the English fallback broke ~12 test files that rendered client
+components **outside every provider** and relied on it. That is a real signal
+and was worked file by file rather than papered over: they now render through a
+real `LocaleProvider` (`tests/helpers/render-translated.ts`), which is what the
+app does. `app/layout.tsx` wraps the entire tree, so a component rendered
+outside every provider is a configuration the product never ships — the one
+exception, `app/global-error.tsx`, has its four strings inlined for exactly that
+reason.
+
+## Coordination
+
+Third and second migration-version collision of the sweep, both with the same
+parallel session. Main landed `0298_invites_update_manager_only` for the invite
+hole this branch also held a 0298 for; **0298 keeps the policy** and mine is
+renumbered to 0305 and rewritten to carry only the half it does not — the
+trigger fixing an invite's terms at issue.
+
+`lib/supabase/read-all.ts` was fixed by both sessions at once, and on one point
+the two **disagreed**. Main makes every truncated read an error; this branch made
+it silent unless the caller asked. Main's default is the better one and was
+taken: silence-by-default puts the error out of reach of exactly the call site
+nobody thought about, which is this module's own defect one level up. So
+`failOnMax` survives **inverted** — the default errors, and `failOnMax: false` is
+the explicit opt-out, passed at exactly one site (`wallet/activity`, which lists
+newest-first, so for a family with more than 2,000 transactions the 2,000 most
+recent ARE the answer). Main's probe row also rides along on the last page's
+range, one fewer round trip than this branch's follow-up request.
+
+Four of main's test cases were red against this branch's version when the two
+met. They were not adjusted to fit: the implementation changed to match them.
+Their tests were encoding the better rule.
+
+## Verification
+
+- **321/321 migrations replayed on PG16, 0 failed** · **29/29 boundary probes**
+- `npx tsc --noEmit` clean · `npx eslint` clean on every changed file
+- `npm run build` exits 0; bundle measured as above
+- All eight i18n gated surfaces clean
+
+**Status: the three migrations are FIXED IN CODE, NOT YET IN PRODUCTION**, like
+0296–0298 before them: inert until the F5 ledger blocker is cleared. **The
+paywall bypass and the cross-tenant billing-portal path are live in production
+until then.** The code-side changes — the two billing upserts moving to the
+service client, the missions result types, the catalogue split — ship on merge.

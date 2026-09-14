@@ -1,5 +1,5 @@
 import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderTranslated } from './helpers/render-translated';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PlaybookModule } from '@/components/modules/playbook-module';
 
@@ -24,7 +24,7 @@ function render(expires_at: string | null) {
     label: 'Shoe size', value: 'US 3', evidence: 'Mentioned at the fitting.',
     confidence: 72, status: 'suggested', expires_at,
   });
-  return renderToStaticMarkup(createElement(PlaybookModule));
+  return renderTranslated(createElement(PlaybookModule));
 }
 
 describe('pending memory expiry on the actual review screen', () => {

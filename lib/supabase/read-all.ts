@@ -56,12 +56,17 @@ type PageResult<T, E> = { data: T[] | null; error: E | null };
  * with exactly 1,000. Pass the number you actually mean here and it is honoured
  * by paging to it.
  *
- * REACHING that ceiling is reported. It used to be the one silent exit left in
+ * REACHING that ceiling is an ERROR. It used to be the one silent exit left in
  * this file: a caller asking for `{ max: 20000 }` got `error: null` whether the
  * table held 14,000 rows or 400,000, which is the same "you received rows and
  * believe that is the table" this helper was written against — only now with the
- * caller's own number on it. `truncated` says which happened, and
- * `failOnMax: true` turns it into the error shape the caller already handles.
+ * caller's own number on it. `truncated` also says which happened, for a caller
+ * that wants to render the fact rather than the failure.
+ *
+ * `failOnMax: false` opts out, and is the ONLY way to get a prefix back without
+ * an error. That direction matters: the alternative — silence by default, error
+ * on request — is the same defect one level up, because the call site that most
+ * needs the error is the one nobody thought about.
  *
  * Telling the two apart costs ONE extra ROW, not an extra round trip: the paging
  * loop runs to `max + 1` and the final range simply reaches one past the
@@ -71,10 +76,11 @@ type PageResult<T, E> = { data: T[] | null; error: E | null };
  * above makes, for the same reason — a count that might be the end and might be
  * a cap is not an answer.
  *
- * Use `failOnMax` wherever the rows are SUMMED rather than listed. A truncated
- * list is a display bug; a truncated sum is a wrong number presented as a right
- * one, and the reconciler's correct behaviour at the cap is the error state it
- * already renders, not a green "everything reconciles".
+ * Pass `failOnMax: false` only where the rows are LISTED rather than summed, and
+ * ordered so that the prefix is the useful end of the set. A truncated list is a
+ * display bug; a truncated sum is a wrong number presented as a right one, and
+ * the reconciler's correct behaviour at the cap is the error state it already
+ * renders, not a green "everything reconciles".
  */
 export async function readAll<T, E = { message: string }>(
   page: (from: number, to: number) => PromiseLike<PageResult<T, E>>,
@@ -139,21 +145,27 @@ export async function readAll<T, E = { message: string }>(
     };
   }
 
-  if (options.failOnMax) {
-    return {
-      rows: capped,
-      error: {
-        message: `readAll reached the caller's max of ${ceiling} rows and more remain. `
-          + 'These rows are a PREFIX, not the whole set — treat this as a failed read, '
-          + 'or raise the max.',
-      },
-      truncated: true,
-    };
+  // Truncation is an ERROR BY DEFAULT. A caller's `max` is a bound they expect
+  // the data to fit under, so reaching it is not success — it means rows exist
+  // that were never read, and the admin reconciliation page's own header says
+  // reading part of a ledger is worse than not reading it at all.
+  //
+  // `failOnMax: false` is the explicit opt-out, for the one shape where a prefix
+  // IS the answer: a list ordered newest-first that shows recent activity rather
+  // than summing it. Making that the opt-out rather than the opt-in means a new
+  // call site that forgets the flag gets the error, not the silence.
+  if (options.failOnMax === false) {
+    return { rows: capped, error: null, truncated: true };
   }
-  // Without `failOnMax` the read still succeeds and `truncated` carries the
-  // fact. `wallet/activity` wants exactly this: it LISTS recent rows rather
-  // than summing them, so a prefix of the newest is the right answer there.
-  return { rows: capped, error: null, truncated: true };
+  return {
+    rows: capped,
+    error: {
+      message: `readAll reached the caller's max of ${ceiling} rows and more remain. `
+        + 'These rows are a PREFIX, not the whole set — treat this as a failed read, '
+        + 'or raise the max.',
+    },
+    truncated: true,
+  };
 }
 
 /**

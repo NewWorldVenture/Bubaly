@@ -32,7 +32,13 @@ export default async function WalletActivityPage() {
     // Balances are summed from these rows, so a capped read is a wrong balance —
     // and `.limit(N)` above 1,000 never applied, because PostgREST caps a
     // response at db-max-rows whatever the client asked for.
-    readAllAsQuery((from, to) => supabase.from('wallet_transactions').select('id, child_wallet_id, type, status, direction, amount_cents, description, created_at').eq('family_id', familyId).order('created_at', { ascending: false }).order('id').range(from, to), { max: 2000 }),
+    readAllAsQuery((from, to) => supabase.from('wallet_transactions').select('id, child_wallet_id, type, status, direction, amount_cents, description, created_at').eq('family_id', familyId).order('created_at', { ascending: false }).order('id').range(from, to),
+      // `failOnMax: false`: this page LISTS recent transactions newest-first
+      // rather than summing them, so the 2,000 most recent ARE the answer for a
+      // family with more than 2,000. Erroring here would replace a correct
+      // recent-activity view with a failure page. Every summing call site keeps
+      // the default, which errors.
+      { max: 2000, failOnMax: false }),
     supabase.from('family_members').select('id, display_name').eq('family_id', familyId),
   ]);
   if (childWalletsError) { console.error('[wallet-activity] Child wallets read failed', childWalletsError); dataWarnings.push('Child wallets'); }
