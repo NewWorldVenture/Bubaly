@@ -1286,3 +1286,61 @@ Disposition: No change. Recorded here rather than edited into audit/claude-2.md 
           original claim is worth less than one that sits beside it.
 Status:   VERIFIED (not a defect)
 ```
+
+## A3-014 — Claude-4's money HIGH: the last silent exit in readAll
+
+```
+[CLAUDE-1][HIGH][MONEY] A caller-chosen ceiling truncated a read and reported success, so the reconciler reconciled a prefix and said it balanced
+Path:     lib/supabase/read-all.ts:93 · app/(app)/admin/wallet/reconciliation/page.tsx:23,28
+          · app/(app)/admin/wallet/page.tsx:34 · app/(app)/economy/page.tsx:28
+          · app/(app)/wallet/treasury/page.tsx:40
+Source:   Claude-4 of this session, [CLAUDE-4][HIGH][MONEY] C-4-01. Verified here
+          by reading the helper and every money call site.
+Problem:  `readAll` exists to defeat PostgREST's silent 1,000-row cap, and it had
+          two exits that were not symmetric. The DEFAULT ceiling returned an
+          error ("probably not terminating"); a CALLER-SUPPLIED `max` returned
+            return { rows: rows.slice(0, options.max), error: null };
+          So `{ max: 20000 }` could not distinguish "the table has 14,000 rows"
+          from "the table has 400,000 and you were handed the first 20,000".
+          That is the same "the caller receives rows and believes that is the
+          table" the file's own header argues against — with the caller's number
+          on it.
+Evidence: The reconciler's read is platform-wide (`createServiceClient()`, no
+          family filter) and ordered `created_at DESC`, so the rows dropped are
+          the OLDEST. A ledger reconciled from its newest 20,000 rows is not
+          incomplete, it is arithmetically wrong — every child whose opening
+          balance predates the cut-off reconciles against a partial history — and
+          the page then renders "Everything reconciles" from that prefix.
+          `economy/page.tsx` documents the same invariant it breaks in its own
+          comment: "Balances are summed from these rows, so a capped read is a
+          wrong balance", at `{ max: 5000 }`.
+Fix:      `readAll` and `readAllAsQuery` now answer `{ …, truncated }`, and take
+          `failOnMax` to turn a truncated read into the error shape the caller
+          already handles.
+          Telling the two apart takes ONE extra round trip, and only when the
+          ceiling is actually reached: a request for a single row past it. A
+          table of EXACTLY `max` rows answers it empty and is reported complete —
+          that case is why a flag alone would not have done, because the loop
+          exits identically either way. A probe that FAILS reports truncated
+          rather than claiming a completeness it did not establish.
+          `failOnMax: true` is applied to the five reads whose rows are SUMMED
+          rather than listed: both reconciler reads, the platform-wide admin
+          wallet total, the children's economy page, and the treasury. Each
+          already has an error branch, so the correct behaviour at the cap is the
+          ErrorState it renders — no new UI.
+          `wallet/activity` keeps the silent ceiling deliberately: it LISTS
+          transactions. A truncated list is a display bug; a truncated sum is a
+          wrong number presented as a right one.
+Status:   FIXED
+Guard:    tests/supabase-read-all.test.ts gains five cases — truncated vs complete
+          at exactly `max` (the probe's whole purpose), `failOnMax` erroring and
+          NOT erroring on a complete read, a failing probe reporting truncated,
+          and the probe's row never entering the answer. The existing
+          "asks for only the remainder" case is updated rather than deleted: it
+          now pins the extra call and asserts the ceiling still holds on the rows.
+Not done: Claude-4's second recommendation — scoping or aggregating the two
+          platform-wide admin reads in SQL (`sum()` in a view) rather than paging
+          them into Node — is a performance change, not a correctness one, and is
+          left for whoever owns that page. With `failOnMax` the wrong answer is
+          now an error rather than a green tick, which was the defect.
+```

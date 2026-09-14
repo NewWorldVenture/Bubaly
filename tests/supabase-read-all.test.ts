@@ -121,11 +121,60 @@ describe('readAll with a ceiling the caller chose', () => {
     expect(rows.at(-1)).toEqual({ id: 4999 });
   });
 
-  it('asks for only the remainder on the last page', async () => {
+  it('asks for only the remainder on the last page, then one row past the ceiling', async () => {
     const page = table(6500);
-    await readAll<{ id: number }>(page, { max: 2500 });
-    // 1000 + 1000 + 500 — never more rows than the ceiling allows.
-    expect(page.mock.calls).toEqual([[0, 999], [1000, 1999], [2000, 2499]]);
+    const { rows } = await readAll<{ id: number }>(page, { max: 2500 });
+    // 1000 + 1000 + 500 to fill the ceiling, then [2500, 2500]: the single-row
+    // probe that tells "the table ends here" from "there is more and you cannot
+    // see it". Guessing between those is what made the ceiling exit silent.
+    expect(page.mock.calls).toEqual([[0, 999], [1000, 1999], [2000, 2499], [2500, 2500]]);
+    // The probe's row is never part of the answer — the ceiling still holds.
+    expect(rows).toHaveLength(2500);
+    expect(rows.at(-1)).toEqual({ id: 2499 });
+  });
+
+  it('says truncated when the table holds more than the ceiling, and complete when it does not', async () => {
+    const more = await readAll<{ id: number }>(table(6500), { max: 2500 });
+    expect(more.truncated).toBe(true);
+    expect(more.error).toBeNull();
+
+    // A table of EXACTLY `max` rows is complete, not truncated. This is the
+    // case the probe exists to get right: the loop exits identically either way.
+    const exact = await readAll<{ id: number }>(table(2500), { max: 2500 });
+    expect(exact.truncated).toBe(false);
+    expect(exact.error).toBeNull();
+    expect(exact.rows).toHaveLength(2500);
+  });
+
+  it('turns a truncated read into an error when the caller asks it to', async () => {
+    const { rows, error, truncated } = await readAll<{ id: number }>(table(6500), { max: 2500, failOnMax: true });
+    expect(truncated).toBe(true);
+    expect(error?.message).toContain('2500-row ceiling');
+    // The rows read are still returned; the caller decides what to do with a
+    // prefix it has been told is a prefix.
+    expect(rows).toHaveLength(2500);
+  });
+
+  it('does not error a complete read even under failOnMax', async () => {
+    const { error, truncated } = await readAll<{ id: number }>(table(2500), { max: 2500, failOnMax: true });
+    expect(truncated).toBe(false);
+    expect(error).toBeNull();
+  });
+
+  it('calls a probe that fails truncated rather than reporting a completeness it did not establish', async () => {
+    let call = 0;
+    const page = async (from: number, to: number) => {
+      call += 1;
+      // Fill the ceiling, then fail the probe.
+      if (from >= 2500) return { data: null, error: { message: 'connection reset' } };
+      const rows = Array.from({ length: to - from + 1 }, (_, i) => ({ id: from + i }));
+      return { data: rows, error: null };
+    };
+    const { truncated, error } = await readAll<{ id: number }>(page, { max: 2500 });
+    expect(call).toBeGreaterThan(3);
+    expect(truncated).toBe(true);
+    // Without failOnMax the read still succeeds — `truncated` is the signal.
+    expect(error).toBeNull();
   });
 
   it('stops early when the table ends before the ceiling', async () => {
@@ -177,13 +226,23 @@ describe('readAllAsQuery', () => {
   // place, without taking the batch apart and re-numbering its tuple.
   it('answers in the shape a query answers', async () => {
     const result = await readAllAsQuery<{ id: number }>(table(2011));
-    expect(result).toEqual({ data: expect.any(Array), count: null, error: null });
+    expect(result).toEqual({ data: expect.any(Array), count: null, error: null, truncated: false });
     expect(result.data).toHaveLength(2011);
   });
 
-  it('honours a ceiling', async () => {
-    const { data } = await readAllAsQuery<{ id: number }>(table(6500), { max: 5000 });
+  it('honours a ceiling, and carries the truncation flag through', async () => {
+    const { data, truncated } = await readAllAsQuery<{ id: number }>(table(6500), { max: 5000 });
     expect(data).toHaveLength(5000);
+    expect(truncated).toBe(true);
+  });
+
+  it('reports a truncated read as a failed read when the caller asks', async () => {
+    // This is what the wallet reconciler passes. Its correct behaviour at the
+    // cap is the ErrorState it already renders for a read failure, not a green
+    // "everything reconciles" computed from the newest 20,000 rows.
+    const { data, error } = await readAllAsQuery<{ id: number }>(table(6500), { max: 5000, failOnMax: true });
+    expect(data).toBeNull();
+    expect(error?.message).toContain('ceiling');
   });
 
   it('reports a failure as null data, never as an empty table', async () => {
