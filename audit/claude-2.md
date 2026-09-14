@@ -1,5 +1,31 @@
 # Claude-2 — Frontend / UI / UX / Responsive / Accessibility
 
+## STATUS (session 2, 2026-09-14)
+
+CURRENT: in progress. IMPORTANT CONTEXT FOR CLAUDE-1: this file already held a
+complete 14-finding pass (C2-01–C2-14, below) from an earlier parallel session,
+merged into `finalaudit.md` as **Pass D (F-D01–F-D14)**. `audit/status.md`'s
+top board and `finalaudit.md`'s Part 0 coverage table both currently say
+Frontend/UX-Accessibility is "not audited — worker hit the account session
+limit" — **that line is stale**; Pass D exists and is substantial. This
+session does NOT repeat that pass. It reads C2-01–C2-14 first (done) and then
+audits the specific angles the new brief calls out that Pass D did not cover:
+failed-read states surfaced as empty/silent rather than errors, success
+toasts after discarded write errors, i18n key leakage, and responsive/modal
+behaviour beyond the CI device-matrix gate. New findings are numbered
+continuing from C2-15 and appear in a clearly marked "Session 2" section below
+the original pass, so nothing from the first pass is disturbed.
+COMPLETED SO FAR: swept all 113 `useRealtimeQuery` consumers for dropped/
+unrendered `error` (systemic pattern is sound — see C2-15 for the two real
+exceptions); confirmed the blog-unsubscribe discarded-write-error bug the
+brief named is still live (C2-16).
+NEXT: i18n key-leak sweep, responsive/modal-at-360px pass, alt-text in the
+authenticated app, error-boundary granularity.
+FILES TOUCHED: none (audit-only, per hard rules).
+LAST-UPDATE: 2026-09-14 (in progress — updated incrementally)
+
+---
+
 Findings only. Format:
 
 ```
@@ -713,6 +739,309 @@ Recorded so a later pass does not spend time here.
   finding above is derived from source that was read, not from a live page.
 - `npx vitest run` was not executed (≈3 min, and no finding here depends on it).
   `npx next lint` was run in full; its complete output is quoted in C2-14.
+
+---
+
+# Session 2 (2026-09-14) — additional findings
+
+New brief priorities Pass D (C2-01–C2-14 above) did not cover: failed-read
+states, success-after-failed-write, i18n leakage, and responsive/modal
+behaviour beyond the CI gate. Findings continue the C2 numbering. Written
+incrementally as found.
+
+## C2-15
+
+```
+[CLAUDE-2][MEDIUM][A11Y] Two "delight" home-surface cards drop useRealtimeQuery's error entirely, so a failed read is indistinguishable from "nothing to show today"
+File:     components/memories/on-this-day-card.tsx:22
+          components/moments/home-moment-card.tsx:46
+Problem:  Both components destructure ONLY `{ data: rows }` from
+          useRealtimeQuery, discarding `error` (and `loading`). Both already
+          render `null` when there is nothing to show today (by design — they
+          are meant to disappear on an ordinary day). Because the read's error
+          is never captured, a genuinely FAILED read (RLS denial, network
+          error, 500) hits this exact same `return null` path — the widget
+          silently vanishes with no distinction from the correct "no memory
+          today" / "nothing to prep for" case.
+Evidence: $ grep -n "useRealtimeQuery" components/memories/on-this-day-card.tsx components/moments/home-moment-card.tsx
+            components/memories/on-this-day-card.tsx:22:  const { data: rows } = useRealtimeQuery<Photo>({
+            components/moments/home-moment-card.tsx:46:  const { data: rows } = useRealtimeQuery<Event>({
+
+          Systemic check confirms this is the ONLY exception in the app: every
+          other directory under components/ that calls useRealtimeQuery also
+          imports the shared ErrorState component and renders it on a failed
+          read (checked components/modules [118 files, 86 import ErrorState,
+          0 use useRealtimeQuery without it], plus components/vacations,
+          wallet, finance, family, meals, marketplace, dashboard — all clean):
+
+            $ comm -23 <(grep -rl useRealtimeQuery components/moments --include=*.tsx|sort) \
+                       <(grep -rl ErrorState       components/moments --include=*.tsx|sort)
+            components/moments/home-moment-card.tsx
+            $ comm -23 <(grep -rl useRealtimeQuery components/memories --include=*.tsx|sort) \
+                       <(grep -rl ErrorState       components/memories --include=*.tsx|sort)
+            components/memories/on-this-day-card.tsx
+
+          For contrast, the established (correct) pattern is e.g.
+          components/modules/chores-module.tsx:210-214 — `loading` guard,
+          THEN an `error` guard that renders <ErrorState onRetry=…>, and only
+          past both does the code reach any `.length === 0` empty-state check.
+Impact:   Low-to-moderate: these are optional bonus widgets on the Home
+          dashboard ("On this day" photo memories, the next-moment prep
+          card), not primary data views, and they already have a legitimate
+          silent-empty state, which caps the harm. But it is precisely the
+          "guard that cannot fail" shape the brief calls out: a family whose
+          photo read or calendar read is actually failing (bad RLS policy,
+          expired session edge case, transient 5xx) sees nothing wrong —
+          the card just never appears — with no signal to retry or report it.
+Fix:      Destructure `error` from both hooks and, when set (and rows is
+          empty), fall back to rendering nothing is still acceptable UX for a
+          non-critical delight surface, but log/report the error (e.g. to the
+          existing client error-reporting path) rather than discarding it
+          silently, OR gate on `error` the same way every other module does
+          if these are ever promoted to primary surfaces.
+Status:   OPEN
+```
+
+---
+
+## C2-16
+
+```
+[CLAUDE-2][HIGH][UX] Blog unsubscribe reports success to every visitor even when the database write fails — the exact discarded-write-error shape already shipped once in this codebase
+File:     app/api/blog/unsubscribe/route.ts:22-36
+Problem:  The GET handler looks up the subscriber, then does:
+            await supabase.from('blog_subscribers').update({ status: 'unsubscribed', … }).eq('id', data.id);
+          — the `{ error }` from that update is never destructured, never
+          checked, and never logged. Two lines later the handler
+          unconditionally sets `unsubscribed=1` and redirects to a "you have
+          been unsubscribed" confirmation on /blog, regardless of whether the
+          UPDATE actually committed.
+Evidence: app/api/blog/unsubscribe/route.ts:28-36
+            if (data && data.status !== 'unsubscribed') {
+              await supabase
+                .from('blog_subscribers')
+                .update({ status: 'unsubscribed', unsubscribed_at: new Date().toISOString() })
+                .eq('id', data.id);
+            }
+            home.searchParams.set('unsubscribed', data ? '1' : 'invalid');
+            return NextResponse.redirect(home);
+
+          The neighbouring, more-recently-touched endpoint gets this right,
+          which is direct proof the correct pattern was known and just not
+          applied here — app/api/blog/subscribe/route.ts:60-66:
+            const { error } = await supabase.from('blog_subscribers').update({…}).eq('id', existing.id);
+            if (error) return NextResponse.json({ error: t('subscribe.couldNotSubscribeRightNow') }, { status: 500 });
+
+          This is the same shape the task brief names as already having
+          shipped in this exact endpoint family ("The repo shipped this in
+          blog unsubscribe") — confirmed still present in the current tree,
+          not yet fixed.
+Impact:   A visitor who clicks the one-click unsubscribe link in a marketing
+          email, whose UPDATE fails (RLS hiccup, connection pool exhaustion,
+          transient DB error — anything that makes `error` non-null), is told
+          "you're unsubscribed" and closes the tab believing it. They remain
+          `status: 'active'` in blog_subscribers and keep receiving digest
+          emails they explicitly asked to stop. Beyond the trust/UX cost, an
+          unsubscribe mechanism that can silently no-op is a compliance
+          exposure (CAN-SPAM / GDPR-style consent-withdrawal expectations)
+          for a **public, unauthenticated** endpoint — every future digest
+          recipient is exposed to this failure mode, not just logged-in users.
+Fix:      Capture `{ error }` from the update, and when it is set, either
+          retry once or set `home.searchParams.set('unsubscribed', 'error')`
+          and render a "something went wrong, try again / contact us" state
+          instead of the success confirmation — mirroring exactly what
+          subscribe/route.ts already does two files away.
+Status:   OPEN
+```
+
+---
+
+## C2-17
+
+```
+[CLAUDE-2][HIGH][UX] Google Calendar OAuth callback tells the user "connected" even when persisting the token fails
+File:     app/api/google/calendar/callback/route.ts:57-70
+Problem:  After exchanging Google's auth code for a token, the handler upserts
+          it into user_preferences.notification_prefs WITHOUT destructuring or
+          checking `{ error }`:
+            await supabase.from('user_preferences').upsert({ user_id: userId, notification_prefs: merged }, { onConflict: 'user_id' });
+            return redirect('connected');
+          The whole block sits in a try/catch, but a Supabase query does not
+          throw on a write failure — it resolves to `{ data, error }` — so an
+          RLS denial, a constraint violation, or any transient DB error on
+          this specific upsert is invisible to the catch and the handler falls
+          straight through to `redirect('connected')`.
+Evidence: app/api/google/calendar/callback/route.ts:66-70 (quoted above) — no
+          `const { error }` capture anywhere around the upsert, confirmed by
+            $ grep -n "upsert\|error" app/api/google/calendar/callback/route.ts
+            57:    const { data: prefs } = await supabase
+            66:    await supabase
+            67:      .from('user_preferences')
+            68:      .upsert({ user_id: userId, notification_prefs: merged }, { onConflict: 'user_id' });
+            70:    return redirect('connected');
+            72:  } catch (err) {
+          i.e. the catch block (line 72) is the ONLY error handling in the
+          function, and it cannot see a non-throwing query failure.
+          For contrast, the sibling route that refreshes an already-stored
+          token (app/api/google/calendar/sync/route.ts:60-62,74-76) has the
+          identical unchecked-upsert shape but is lower risk — a failed
+          refresh-persist there just means the next request refreshes again
+          from the same stored (still-valid) token, i.e. it is self-healing.
+          The callback path is not: it is the ONE TIME the token is written,
+          and there is no other path that will retry it.
+Impact:   A user who connects Google Calendar and hits this failure is
+          redirected to /dashboard/calendar?gcal=connected — the app tells
+          them the integration is live. It is not: no token was stored, so
+          the very next sync attempt (or the sync page's own load) finds
+          nothing to sync with. The user has no way to know their earlier
+          "success" didn't take; the natural next step is to file a confusing
+          bug report ("it says connected but nothing syncs") rather than
+          simply reconnecting, because nothing told them it failed.
+Fix:      Capture `{ error }` from the upsert and redirect to the existing
+          `error` state (`redirect('error')`) when it is set, exactly as
+          every other exit path in this function already does for thrown
+          exceptions.
+Status:   OPEN
+```
+
+---
+
+## Verified sound (session 2)
+
+- **The `useRealtimeQuery` error contract is honoured almost everywhere.**
+  113 consumers checked; of the 111 that destructure `error`, every single one
+  is used downstream (no dead/discarded `error` bindings — confirmed by a
+  name-occurrence sweep), and every directory under `components/` that calls
+  the hook also imports the shared `ErrorState` component (`components/modules`
+  86/118 files import it and 0 call the hook without it; `vacations`, `wallet`,
+  `finance`, `family`, `meals`, `marketplace`, `dashboard` all clean). Spot
+  checks (`chores-module.tsx:210-214`, `finances-module.tsx:168-170`,
+  `wallet-hub.tsx:104-158`) confirm the render order is correct — `loading`,
+  then `error` → `<ErrorState onRetry=…>`, and only past both does an
+  `.length === 0` empty-state check run. The two exceptions are C2-15.
+- **Rollback-on-partial-failure in the child-login flow is a genuinely good
+  pattern, not a gap.** `app/(app)/family/child-login-actions.ts:52-94` checks
+  every write (`createUser`, the `family_members` link, the `child_logins`
+  row, the `user_preferences` upsert) and unwinds everything already done if
+  a later step fails (delete the auth user, null the link, etc.) before
+  returning `{ ok: false }`. The one unchecked write in the same function
+  (clearing a stale login-throttle row at line 86-88) is best-effort cleanup
+  after the real action has already succeeded, not a false-success path, so
+  it is not flagged.
+- **The blog like/save toggle endpoints look like the same "discarded delete"
+  shape as C2-16 but are not a bug.** `app/api/blog/like/route.ts:83-95` and
+  `app/api/blog/save/route.ts:87-97` don't check the error of the `delete()`
+  that completes a toggle after a unique-constraint conflict, but the response
+  sent to the client is always a **fresh re-query** of actual DB state
+  (`likeState`/`saveState`) rather than an assumed value — so even if that
+  delete silently fails, the client is told the true state, not a false
+  success. Read in full to confirm before excluding.
+- **Non-English catalogues do NOT leak into the client JS bundle.** Checked by
+  necessity, not assumption — `lib/i18n/messages.ts` statically imports all 11
+  locale JSON files at module scope, and the client-only `translate()`
+  function it exports falls back through `SOURCE_MESSAGES` (the en-US
+  catalogue), which made me suspect webpack could not tree-shake the other 10
+  out of any client bundle importing this module (which `locale-provider.tsx`,
+  used app-wide, does). Verified directly against the existing production
+  build already on disk (`.next/`, built 2026-09-13 by Claude-1's F-C03 work —
+  not rebuilt by me): a distinctive German string
+  (`"konnte nicht festgelegt werden"`, from `de-DE.json`) does not appear
+  anywhere under `.next/static/chunks` (0 matches across 717 client chunk
+  files) but does appear in `.next/server/chunks` (SSR only, correct). Tree-
+  shaking is working; the "ships one language" claim in scopes.ts holds at
+  the JS-bundle level too, not just the RSC-payload level Pass C measured.
+- **The exact "raw catalogue key leaks to a visitor" class the brief names has
+  real, working regression coverage — with two genuine historical incidents
+  as proof it isn't theoretical.** `tests/catalogue-key-not-rendered-raw.test.ts`
+  and `tests/catalogue-key-rendered-through-t.test.ts` both exist because of
+  real production bugs (the footer literally showed "siteFooter.acceptableUse"
+  to every visitor; `/pricing` showed "pricingContent.sharedFamilyCalendar" in
+  every language). Ran both (not part of the full suite — single targeted
+  files, per the audit's evidence standard):
+    $ npx vitest run tests/catalogue-key-not-rendered-raw.test.ts tests/catalogue-key-rendered-through-t.test.ts
+    Test Files  2 passed (2)   Tests  3 passed (3)
+  One of the three is itself a proof the guard catches the bad case (a unit
+  test against a known-bad fixture matching the exact pricing-page incident),
+  which satisfies this audit's "prove the guard can fail" standard without me
+  needing to plant a regression in product source. `tests/i18n-client-scope.test.ts`
+  additionally walks the real import graph from every page and fails if a
+  scoped surface's namespace list falls behind its components' t() calls —
+  read in full, sound design, not run (no live gap to reproduce).
+- **Hand-rolled modals size correctly at small viewports.** `components/ui/modal.tsx:90-105`
+  — `max-h-[85dvh] overflow-y-auto`, a bottom-sheet layout below `sm:`, safe-
+  area-aware bottom padding (`env(safe-area-inset-bottom)`), and a 40px
+  (`h-10 w-10`) close target. No overflow or clipping risk at 360px width from
+  the source.
+- **`<img>`/`<Image>` alt text in the authenticated app is clean, matching
+  Pass A's public-page result.** Scanned all 57 `<img>` and 6 `<Image>`
+  elements under `components/` + `app/(app)/`: 0 missing `alt`. (One apparent
+  hit, `components/blog/blog-cover.tsx:53`, was a false positive — a naive
+  regex matched a literal `<img>` written inside a code COMMENT describing the
+  component's behaviour; the component renders inline SVG, no `<img>` tag
+  exists there at all. Recorded so a future pass doesn't re-flag it.)
+- **Sticky elements read as intentional, not content-covering** — checked all
+  13 files using `sticky` (`app-shell.tsx`/`admin-shell.tsx` top bars,
+  `site-header.tsx`, `rules-editor.tsx`'s sticky header+footer,
+  `print-sheet.tsx`, `assistant/workspace.tsx`'s segmented control). All are
+  headers/toolbars/footers with backdrop blur and consistent z-index
+  layering, the standard pattern for this. **Caveat, stated plainly: this is
+  a source-reading judgement, not a measurement** — confirming no sticky
+  element actually overlaps scrollable content at 360-400px needs the app
+  running in a real viewport, which this pass did not do (no browser
+  available). Not claimed as verified in the same sense as the items above.
+
+---
+
+## C2-18
+
+```
+[CLAUDE-2][MEDIUM][A11Y] Zero component-level error boundaries anywhere in the app — a render throw in any one Home widget takes down the entire dashboard, not just that widget
+File:     app/(app)/home/page.tsx (797 lines, 13 distinct widget components composed inline)
+Problem:  The first C2 pass verified route-level error.tsx boundaries exist
+          (16 files) and called that "adequate" — true for the question it
+          asked, but it did not examine GRANULARITY. There is no per-widget
+          error isolation anywhere in the codebase: zero uses of a component
+          named ErrorBoundary, and zero <Suspense> boundaries wrap any Home
+          widget (Suspense exists in exactly 6 places app-wide, none of them
+          Home). Home composes HomeMomentCard, OnThisDayCard, TimeOfDayFocus,
+          AskBar, NeedsAttention, WorkingOn, CompletedByBubaly,
+          TimeSavedBanner, FamilyValueComparison, ReferralHomeCard,
+          DoOneThingCard, OutcomesStrip and more, all as plain inline JSX in
+          one server-rendered tree.
+Evidence: $ grep -rl "ErrorBoundary\b" . --include=*.tsx --include=*.ts | grep -v node_modules
+            (no matches — the string does not exist anywhere in app source)
+          $ grep -rn "<Suspense" app components --include=*.tsx
+            6 matches total, in signup/login/billing/join/marketplace-nav —
+            none in app/(app)/home/page.tsx or any widget it renders.
+          $ grep -n "^import.*components/" "app/(app)/home/page.tsx" | wc -l
+            13
+          Because React's error boundary is a class-component concept with no
+          function-component equivalent, and none exists in this codebase, a
+          thrown error during the render of ANY of those 13 widgets is caught
+          only by the nearest ancestor error.tsx — which for Home is the
+          route-group root (app/(app)/error.tsx) or dashboard layout's, i.e.
+          the boundary that also covers chores, calendar, finances and every
+          other authenticated surface reachable from that layout.
+Impact:   A defect confined to one small, low-stakes widget (say, a null
+          check missed in a date-formatting helper inside ReferralHomeCard or
+          OutcomesStrip) currently has the blast radius of the WHOLE Home
+          dashboard: every family member who opens the app sees a full error
+          screen instead of "everything except one card". This is the
+          inverse of graceful degradation — the app has no mechanism to
+          degrade partially, only wholly. It compounds C2-15 in the other
+          direction: C2-15 is a widget that fails silently (too quiet);
+          this is the app having no way for ANY widget to fail quietly even
+          if it wanted to.
+Fix:      Add a small class-component <WidgetErrorBoundary fallback={null}>
+          (or a name matching house style) and wrap each independently-
+          optional Home card in it, so one widget's exception renders nothing
+          (or a small inline retry) instead of replacing the page. Prioritise
+          Home first — it is the highest-traffic, most widget-dense page —
+          then apply the same wrapper to other dashboards that compose many
+          independent data sources in one tree (e.g. any *-module.tsx that
+          itself renders several unrelated sub-panels).
+Status:   OPEN
+```
 
 ---
 

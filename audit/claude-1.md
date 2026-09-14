@@ -833,3 +833,33 @@ genuinely separate accounts, which is what the brief describes.
 likewise absent from the PR job, and correctly so — each makes network calls
 against a deployed URL (3, 4 and 6 env/fetch references respectively). The e2e job
 runs the two that work against its isolated Supabase.
+
+### [CLAUDE-1][VERIFIED][TESTING] The boundary-probe infrastructure — examined, sound, with one narrow gap closed
+
+Applying the lens that found the i18n gate (a guard nothing invokes) to the SQL
+probes. The result is mostly a clean bill, which is worth recording as such.
+
+- **All 18 `docs/audit/*-check.sql` genuinely assert.** Counted per file:
+  `wallet-write-rls` 15, `sensitive-role-boundary` 12, `money-write-boundary` 11,
+  `family-credentials-boundary` 10, `document-vault-boundary` 9, down to
+  `household-trail` 1. None is report-only.
+- **The four files outside the glob are report-only by design** —
+  `migration-ledger-state`, `money-boundary-state`, `money-policy-diagnostic`,
+  `demo-mode-teardown`. Their `-state` / `-diagnostic` / `-teardown` names are
+  load-bearing, and none contains an assertion, so nothing is parked where the
+  runner cannot see it. Verified, not assumed.
+- **`run-probes.sh` already refuses to pass vacuously.** With an empty glob it
+  exits 1 — *"no probes found in docs/audit — the boundary proofs have been
+  deleted"*. Without that branch, `shopt -s nullglob` would report `0/0 passed`
+  and exit 0. Someone here had already thought about exactly this defect class,
+  which is worth saying out loud given how often it is the finding.
+- **The gap, now closed:** nothing stopped a *future* `*-check.sql` from
+  asserting nothing, or an assertion from being written into a report-only file.
+  `tests/boundary-probes-actually-assert.test.ts` covers both.
+- **Proved load-bearing:** a planted `tmp-vacuous-check.sql` containing only
+  `select 1;` fails with *"runs in CI but asserts nothing — it can only ever
+  pass"*; a `raise exception` appended to `money-boundary-state.sql` fails with
+  *"does not end in -check.sql, so run-probes.sh never executes it"*. Both
+  removed, 4 pass.
+- **Status:** VERIFIED (infrastructure sound) · FIXED (guard added).
+  13,662 tests pass.

@@ -1,6 +1,132 @@
 # Claude-4 — QA / Features / Flows / Performance / Edge Cases
 
-Findings only. Format:
+## STATUS (top of file — updated by whichever Claude-4 run is current)
+
+CURRENT: Session 3 (relaunched on Sonnet after an Opus rate-limit on session 2;
+  session 1's findings below — C-4-01..13 and the "## Findings" block starting
+  at the old line 909 — stand; session 2 is the one that produced Pass F-K in
+  `finalaudit.md`, which I read and did not duplicate). This session ran a
+  further sweep for NEW vacuous-test instances, flow dead-ends, division-by-zero
+  edge cases and pagination gaps not already covered, per the brief.
+COMPLETED (this session):
+  - Confirmed still-OPEN as of this session (not re-reported, just dated):
+    F-F01 (caller `max` truncates a read, `error: null`) — `lib/supabase/read-all.ts:93-95`
+    still returns `{ rows: rows.slice(0, options.max), error: null }` on a
+    reached caller ceiling; `admin/wallet/reconciliation/page.tsx` still passes
+    `{ max: 20000 }`, `economy/page.tsx` still `{ max: 5000 }`.
+    F-F02 (Greenwich-day bug survivors) — `app/(app)/kids/page.tsx:22` still
+    reads `new Date(); start.setHours(0,0,0,0)`.
+    RESEND_API_KEY still absent from `FEATURE_ENV` in `lib/health/status.ts`;
+    `notification-emails.ts` still destructures only `{ ok }`, never `skipped`.
+    `family_code` still has zero read call sites outside display/copy —
+    grepped fresh, same result as session 2.
+    No `family_members` trigger exists yet guarding the last manager.
+  - New vacuous-guard sweep of `docs/audit/*.sql` (Pass G's sweep re-run, one
+    session later, to catch anything added since): 22 files now exist (was a
+    smaller set at G1-time going by the fix list). `grep -l "when others"` now
+    also matches `family-credentials-boundary-check.sql` and
+    `sensitive-role-boundary-check.sql` in addition to G1's three — read both in
+    full: in both, the only `when others` text is inside a COMMENT explaining
+    G1's lesson; the live `exception when` clauses are already narrowed to
+    `insufficient_privilege`. Not vacuous. Also confirmed the 4 files that do
+    NOT match the CI runner's `*-check.sql` glob (`money-boundary-state.sql`,
+    `migration-ledger-state.sql`, `money-policy-diagnostic.sql`,
+    `demo-mode-teardown.sql`) are deliberately named outside it — each opens
+    with "READ ONLY, changes nothing" / "paste into the Supabase SQL editor",
+    i.e. operator tools, not CI gates that look like they run but don't. Sound.
+  - Confirmed `docs/audit/pg-bootstrap.sh` (run before `run-probes.sh` in
+    `ci.yml`'s `database` job) applies "the anchor account and SEED_ALL" before
+    any probe runs — the empty-database class (F-020, this repo's worst
+    instance) stays closed for the whole probe suite, not just the migration
+    replay.
+  - Swept ~50 average/percentage calculators across `lib/**` and
+    `components/modules/**` (`.reduce(...) / xs.length` shape) for an
+    empty-array edge case (a new/single-member family with no logged data yet
+    is the realistic trigger). Every site checked — `lib/sleep/coach.ts`,
+    `lib/family/safety.ts`, `lib/home/utilities.ts`,
+    `lib/medications/adherence.ts`, `lib/workload/balance.ts`,
+    `components/modules/health-module.tsx`,
+    `components/modules/family-signals-module.tsx`, and 6 more in the money/
+    school/career/sleep/marketplace libs — guards on `.length` (or `>= 2`,
+    `>= 3` where a single point is statistically meaningless) before every
+    division. No NaN-rendering finding here; recorded so a future pass doesn't
+    re-run the same sweep.
+  - Checked candidate N+1 sites outside those already fixed (missions, weekly
+    digest): `lib/server/push.ts` fan-out memoizes `membersOf(familyId)` in a
+    `Map` before the per-notification loop — not an N+1, a genuine cache hit
+    the second time a family recurs in a batch. `messages-module.tsx`'s
+    per-message `read_by` update loop is a **fallback only** (RPC
+    `mark_conversation_read` is tried first; the loop runs only if the RPC
+    itself fails) and is capped at `.slice(-100)`. Both sound.
+  - Checked `app/(app)/guardian/history/page.tsx` and
+    `app/(app)/admin/audit/page.tsx` for the PostgREST 1,000-row cap
+    (F-008/F-011/F-013's class) outside the cron surface Pass H already closed:
+    guardian history uses real `.range()` pagination; admin audit self-declares
+    a bounded 1,000-row window in a comment ("admin-scale auditing would page
+    server-side, flagged here rather than hidden") rather than hiding the cap.
+    Both sound.
+  - Traced the chore -> approval -> reward -> wallet path
+    (`app/(app)/missions/actions.ts` `finalizeApproval`,
+    `app/(app)/dashboard/rewards/actions.ts`,
+    `supabase/migrations/0295_reward_redemption_decision_guard.sql`): the money
+    side (`0217`/`0205`, service-role only) and the points/badge side
+    (`reward_redemptions`, explicitly documented in 0295 as "mints no money…
+    the points economy is separate from the wallet") are two different systems
+    by design, not a dead-ended flow. `decideRedemptionAction` does not check
+    the requester's point total before a manager approves — read this as
+    parent-discretion-by-design (0295's own comment says the points system is
+    non-monetary), not reported as a defect: no user-facing copy promises a
+    hard balance check, so I could not tie it to a broken contract. Flagging
+    the reasoning here rather than asserting a bug I couldn't pin down.
+  - Read `finalizeOnboardingAction` (`app/onboarding/actions.ts:317+`): explicit
+    double-submit/idempotency handling (adopts an auto-provisioned family,
+    treats a repeat submit as idempotent) with real reasoning in the comments.
+    Sound.
+  - Re-verified 3 TODOs that looked like dead UI on first grep and are not:
+    `app/(app)/money/actions.ts:129` (Trust Engine gate, live code, not a stub),
+    `app/(app)/dashboard/concierge/runs/page.tsx:15-20` (explicitly offers NO
+    Undo button rather than an inert one, specifically to avoid the "wired to
+    nothing" class this audit hunts for), `components/family/invite-form.tsx`
+    (presets intentionally don't promise a delegation the schema can't yet
+    carry; says so in a header comment).
+  - Spot-checked `tests/move-date-recalculation-api.test.ts`: a flat single-
+    assertion-per-`it` scan flagged several `it` blocks as "one assertion
+    only, and it's `.not.toHaveBeenCalled()`" — read in full, every one calls a
+    shared `expectFailure(response, status, code)` helper first (which asserts
+    the real HTTP status/body), so the flat scan undercounted; not vacuous.
+  - Spot-checked `tests/public-bucket-objects-are-unguessable.test.ts`,
+    `tests/reward-redemption-write-path.test.ts` (session 2 already covered the
+    latter's subject; re-read to confirm): both build real offender lists from
+    source and assert `toEqual([])`, or exercise the in-memory Supabase fake and
+    assert on resulting table rows — not on a mock's own return value. Sound.
+NEXT: nothing further planned this session. If resumed: the mock-return-value
+  and constant-substitution vacuity patterns (brief patterns 2-3) were sampled
+  but not exhaustively swept across all ~1,250 files — a scripted AST-level
+  check (which test bodies only assert equality with a literal that appears
+  verbatim in a `mockResolvedValue`/`mockReturnValue` call in the same `it`)
+  would be more reliable than the regex heuristics used here and is the
+  natural next tool to build.
+FILES-EXAMINED (this session, beyond the list already in the file):
+  lib/supabase/read-all.ts, app/(app)/kids/page.tsx, lib/health/status.ts,
+  lib/server/notification-emails.ts, lib/email.ts, components/family/family-module.tsx
+  references, docs/audit/*.sql (all 22), docs/audit/run-probes.sh,
+  docs/audit/pg-bootstrap.sh (referenced), .github/workflows/ci.yml:135-225,
+  lib/server/push.ts, components/modules/messages-module.tsx,
+  app/(app)/guardian/history/page.tsx, app/(app)/admin/audit/page.tsx,
+  app/(app)/missions/actions.ts, app/(app)/dashboard/rewards/actions.ts,
+  supabase/migrations/0295_reward_redemption_decision_guard.sql,
+  app/onboarding/actions.ts, app/(app)/money/actions.ts,
+  app/(app)/dashboard/concierge/runs/page.tsx, components/family/invite-form.tsx,
+  tests/move-date-recalculation-api.test.ts,
+  tests/public-bucket-objects-are-unguessable.test.ts, and the ~15 lib/component
+  files listed above in the divide-by-zero sweep.
+BLOCKERS: none. No live database or running app in this sandbox, same as prior
+  sessions — everything above is static/source verification.
+LAST-UPDATE: 2026-09-14
+
+---
+
+Findings only below this line, in each session's own historical format:
 
 ```
 [CLAUDE-4][SEVERITY][AREA] Title
