@@ -596,3 +596,619 @@ recommendation instead of editing.
 ## Findings
 
 _(none yet)_
+
+---
+---
+
+# Session 3 (2026-09-14) — the pgvector replay and the marketing platform spine
+
+**Appended, not merged.** Everything above this delimiter is left exactly as the
+two earlier sessions wrote it. This section closes one named gap and, in doing
+so, **contradicts one of my own earlier "verified healthy" items** — that
+contradiction is recorded here rather than by editing the claim above.
+
+CURRENT: done — `0237` / `0239` / `0292` replayed, marketing platform spine
+  audited against the live catalogue, a sample of Pass E re-verified
+COMPLETED:
+  - pgvector is installed, so for the first time **all 310 migrations applied
+    with zero failures** (`docs/audit/verify-pg.sh up`). Every prior pass ran
+    against a schema missing the nine spine tables.
+  - Audited the nine tables `0237` creates for RLS / FORCE RLS / policies /
+    grants / SECURITY DEFINER / search_path, against `pg_policies`,
+    `information_schema.role_table_grants` and `pg_proc` — plus behavioural
+    probes as `anon` and as an ordinary `authenticated` user.
+  - Exercised the spine's trigger and job-queue machinery, which had never
+    executed anywhere before (enqueue, `0239`'s backfill suppression, stale-lock
+    recovery, dead-letter at `max_attempts`).
+  - Ran the repo's own gates against the complete schema: **18/18 boundary
+    probes pass** (including `privileged-rpc-grants-check.sql`, which could
+    never run before because `0292` never applied), and
+    `scripts/check-conflict-targets.mjs` passes at 181 targets / 491 tables.
+  - Re-verified six Pass E claims. Four confirmed, **one refuted**
+    (verified-healthy #3), **one no longer holds** (F-E04, fixed by `0297`).
+  - 4 findings: 2 MEDIUM, 2 LOW. 13 new verified-healthy items.
+NEXT: nothing queued.
+FILES-TOUCHED: `audit/claude-3.md` only. **No application source, no migration,
+  no other audit file was modified.** Scratch work under
+  `/tmp/claude-0/.../scratchpad/` and the throwaway database at
+  `/tmp/pgaudit_db` (port 54399), both outside the repo.
+BLOCKERS:
+  - **Production, still.** Every statement below is the committed migrations
+    replayed locally. `finalaudit.md` F-001/F5/F-C08 say there is no working
+    path to apply a migration to production, so production may carry none of
+    this schema. Not verifiable without operator credentials.
+LAST-UPDATE: 2026-09-14
+
+---
+
+## The replay, so the evidence below is reproducible
+
+```
+$ bash docs/audit/verify-pg.sh up
+== shims ==
+== migrations ==
+== migrations applied: 310, failed: 0 ==
+== bootstrap complete: anchor_family=00000000-0000-4000-8000-0000000000f1 ==
+== harness up: db=bubaly host=/tmp/pgaudit_db port=54399 ==
+
+$ psql -qAt -c "select extname, extversion, n.nspname from pg_extension e
+                join pg_namespace n on n.oid=e.extnamespace where extname='vector';"
+vector|0.6.0|extensions
+
+$ psql -qAt -c "select count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace
+                where n.nspname='public' and c.relkind='r';"
+491
+```
+
+**310 applied, 0 failed** — against Pass E's "308 applied, 3 failed". 491 public
+tables against 482. The nine tables that were missing are exactly the spine:
+`marketing_pages`, `marketing_page_versions`, `marketing_content_templates`,
+`marketing_brand_rules`, `marketing_generation_jobs`,
+`marketing_page_relationships`, `marketing_embeddings`,
+`marketing_provider_observations`, `marketing_provider_syncs`.
+
+I used the repository's own harness rather than a hand-rolled prelude. That is
+deliberate, and it is the reason finding C3-S3-02 below exists: Pass E built its
+own Supabase-shaped prelude, and a prelude that does not reproduce Supabase's
+default privileges produces a boundary result that is **safer than production** —
+the same defect `finalaudit.md` F-004 records against the old CI shim.
+
+---
+
+## Findings
+
+```
+[CLAUDE-3][MEDIUM][DATABASE] anon and authenticated hold TRUNCATE on all nine
+                             marketing-spine tables, and RLS does not constrain
+                             TRUNCATE
+File:     supabase/migrations/0237_marketing_platform_spine.sql:236-248 (the grant block)
+
+Problem:  0237 reasons about the grant layer explicitly — its own comment reads
+          "RLS is authorization, not table privilege. Keep the public surface
+          narrow" — and it does revoke from `authenticated` on one table:
+
+            grant select on public.marketing_page_versions to authenticated;
+            revoke insert, update, delete on public.marketing_page_versions
+              from authenticated;
+
+          It never revokes anything from `anon`, and it never revokes TRUNCATE
+          from anyone. Supabase's default privileges (`alter default privileges
+          in schema public grant all on tables to anon, authenticated,
+          service_role`) mean every table the migration creates carries
+          `arwdDxt` for `anon` from the moment it exists.
+
+          For INSERT / UPDATE / DELETE that does not matter: RLS refuses them,
+          and I verified that it does. **TRUNCATE is different — PostgreSQL does
+          not apply row-level security to TRUNCATE at all.** The grant is the
+          only thing in the way, and it is open.
+
+Evidence: 1. The grants, from the live catalogue (not the SQL text):
+
+   $ psql -c "select table_name, grantee, string_agg(privilege_type,', ' order by privilege_type)
+              from information_schema.role_table_grants
+              where table_schema='public' and grantee in ('anon','authenticated')
+                and table_name in (<the nine spine tables>)
+              group by 1,2 order by 1,2;"
+
+              table_name           |    grantee    |                          privs
+   -------------------------------+---------------+---------------------------------------------------------------
+    marketing_brand_rules         | anon          | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+    marketing_brand_rules         | authenticated | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+    marketing_content_templates   | anon          | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+    marketing_embeddings          | anon          | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+    marketing_generation_jobs     | anon          | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+    marketing_page_relationships  | anon          | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+    marketing_page_versions       | anon          | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+    marketing_page_versions       | authenticated | REFERENCES, SELECT, TRIGGER, TRUNCATE          <-- the revoke landed
+    marketing_pages               | anon          | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+    marketing_provider_observations | anon        | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+    marketing_provider_syncs      | anon          | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+   (27 rows over the nine tables)
+
+   Note `marketing_page_versions`/`authenticated`: the author WAS thinking about
+   the grant layer on that one line, and still left `anon` untouched and TRUNCATE
+   in place on all nine.
+
+2. RLS holds for the DML — each statement in its own transaction, rolled back:
+
+   anon           INSERT marketing_pages             DENIED  -> ERROR: new row violates row-level security policy for table "marketing_pages"
+   anon           UPDATE marketing_pages (published) 0 rows changed (USING filtered everything)
+   anon           DELETE marketing_pages             0 rows deleted
+   anon           INSERT marketing_generation_jobs   DENIED  -> ERROR: new row violates row-level security policy
+   anon           INSERT marketing_brand_rules       DENIED  -> ERROR: new row violates row-level security policy
+   authenticated  (same five, same results — the anchor user is not a super admin)
+
+3. TRUNCATE is not filtered, and it succeeds:
+
+   begin;
+     select count(*) as pages_before from public.marketing_pages;   -- 2
+     set local role anon;
+     truncate table public.marketing_pages cascade;
+     NOTICE:  truncate cascades to table "marketing_page_versions"
+     NOTICE:  truncate cascades to table "marketing_page_relationships"
+     TRUNCATE TABLE
+     reset role;
+     select count(*) as pages_after_anon_truncate from public.marketing_pages;   -- 0
+   rollback;
+
+   The same succeeds as `anon` on all nine, and on `marketing_audit_logs`
+   (the spine's own audit trail, RLS on with zero policies).
+
+Reachability (stated plainly, because it bounds the severity):
+   This is NOT reachable through PostgREST today. PostgREST maps HTTP verbs to
+   SELECT/INSERT/UPDATE/DELETE and `rpc/`; it has no TRUNCATE verb. I checked the
+   two RPC paths that could launder one:
+
+     -- functions whose body truncates, and who may execute them
+     select p.proname, p.prosecdef, has_function_privilege('anon',p.oid,'EXECUTE')
+     from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+     where n.nspname='public' and p.prosrc ~* 'truncate';
+     (0 rows)
+
+     -- SECURITY INVOKER dynamic-SQL functions anon may call
+     select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+     where n.nspname='public' and p.prosrc ~* 'execute format'
+       and has_function_privilege('anon',p.oid,'EXECUTE')
+       and not p.prosecdef and p.prorettype <> 'trigger'::regtype;
+     0
+
+   So this is a missing layer, not a live exploit — exactly the disposition
+   `0290` took for the money tables, and for the same reason.
+
+Impact:  The entire public marketing content spine, its version history, its
+         AI job queue, its embeddings and its admin audit trail can be emptied
+         by a single statement that RLS is architecturally unable to see. Any
+         future SQL-execution primitive — an injection, a leaked `authenticator`
+         connection, a psql session opened with the anon role — destroys the
+         marketing site's content and the record of who changed it, with no row
+         to restore from because `marketing_page_versions` cascades with it.
+         `marketing_audit_logs` is the table that would otherwise say what
+         happened, and it goes too.
+
+Fix:     One migration in `0290`'s exact shape, at the end of the chain (0292's
+         lesson: a lockdown must be re-asserted where the chain ends, because a
+         later `create table if not exists` or a re-created object can hand the
+         default privileges back). For each of the nine tables plus
+         `marketing_audit_logs`:
+
+           revoke insert, update, delete, truncate on public.<t> from anon;
+           revoke truncate                          on public.<t> from authenticated;
+
+         Keep `select` on `marketing_pages` and `marketing_page_relationships`
+         for anon — those two have deliberate public-read policies and the
+         public site reads them with the anon key (lib/marketing/seo.ts,
+         lib/marketing/aeo.ts, lib/marketing/public-pages.tsx). Nothing
+         legitimate loses a write: every admin path goes through
+         `createServiceClient()` behind `requireMarketingAdmin()`, and
+         `service_role` is `bypassrls` and keeps its grants.
+
+         Close it with a verification DO block like 0290's and 0292's, asserting
+         `has_table_privilege('anon','public.<t>','TRUNCATE')` is false for all
+         ten, so the next migration that re-creates one of these is caught.
+
+         CI will not object: `tests/migrations-are-additive.test.ts:28-38`
+         already masks the TRUNCATE *privilege* inside a `revoke … on … from`
+         list precisely so 0290's shape passes the bare `\btruncate\b` scan.
+
+Status:  OPEN (VERIFIED locally — reproduced end to end against the replay)
+```
+
+```
+[CLAUDE-3][MEDIUM][DATABASE] CONTRADICTS my own Pass E verified-healthy #3:
+                             anon holds write grants on 483 of 491 tables, not zero
+File:     audit/claude-3.md:463-467 (the claim), and the platform generally
+
+Problem:  Pass E recorded, in the list explicitly written so later workers would
+          NOT re-check it:
+
+            "3. anon holds no write privilege on any table at all (not just the
+             five money tables of F-003): the role_table_grants query for
+             INSERT/UPDATE/DELETE/TRUNCATE to anon returns zero rows across all
+             482."
+
+          That is false. Re-running the same query against the complete replay
+          returns 1,931 rows. The claim was an artefact of the prelude Pass E
+          built by hand (`/var/tmp/pgaudit`, port 5599), which did not reproduce
+          Supabase's default privileges — the identical defect `finalaudit.md`
+          F-004 records against the old CI shim, made a second time in the
+          harness written to check the first one.
+
+          `finalaudit.md` F-003 names the mechanism correctly ("Supabase's
+          default privileges grant arwdDxt on every new public table to anon,
+          and no migration revoked it") but `0290` closes it for **five money
+          tables**. Nobody measured what was left. This is that measurement.
+
+Evidence: Pass E's own query, verbatim, against the 310-migration replay:
+
+   $ psql -qAt -c "select count(*) from information_schema.role_table_grants
+                   where table_schema='public' and grantee='anon'
+                     and privilege_type in ('INSERT','UPDATE','DELETE','TRUNCATE');"
+   1931
+
+   $ psql -qAt -c "select privilege_type, count(distinct table_name)
+                   from information_schema.role_table_grants
+                   where table_schema='public' and grantee='anon'
+                     and privilege_type in ('INSERT','UPDATE','DELETE','TRUNCATE')
+                   group by 1 order by 1;"
+   DELETE|483
+   INSERT|482
+   TRUNCATE|483
+   UPDATE|483
+
+   The eight tables where a migration DID revoke — the complete list:
+
+   $ psql -c "select c.relname from pg_class c join pg_namespace n on n.oid=c.relnamespace
+              where n.nspname='public' and c.relkind='r'
+                and not exists (select 1 from information_schema.role_table_grants g
+                  where g.table_schema='public' and g.table_name=c.relname
+                    and g.grantee='anon' and g.privilege_type in ('INSERT','UPDATE','DELETE'))
+              order by 1;"
+     child_wallets
+     family_wallets
+     finance_transaction_operation_receipts
+     move_date_recalculations
+     vacation_confirmation_imports
+     wallet_buckets
+     wallet_rules
+     wallet_transactions
+   (8 rows)
+
+Impact:  Two distinct harms.
+         (a) **The record is wrong in the direction that stops work.** A
+             verified-healthy entry is a licence for the next worker not to
+             look. This one licenses not looking at 483 tables.
+         (b) The substantive exposure is the same one as the finding above,
+             platform-wide: RLS covers the DML, TRUNCATE is outside RLS on 483
+             tables, and the only reason nothing burns is that no TRUNCATE path
+             is reachable through PostgREST. That is one stray permissive policy
+             `TO public` (the shape `0275` had to sweep off the money tables)
+             away from mattering for the DML too.
+
+Fix:     1. Claude-1: strike or annotate verified-healthy #3 when merging — it
+            must not read as checked-and-clean. I have not edited the claim
+            above, per the append-only rule.
+         2. Treat the residue as a sweep, not a one-off: a migration that
+            revokes `insert, update, delete, truncate` from `anon` on every
+            `public` table that has no permissive policy naming `anon`, with a
+            verification block that fails if any remain. The nine spine tables
+            and `marketing_audit_logs` are the urgent subset (finding above);
+            the rest is the same shape at lower pressure.
+         3. The durable fix is the one `0292` models: assert the end-state, not
+            the state at the migration's own moment. A
+            `docs/audit/anon-write-grants-check.sql` probe would make this a CI
+            gate instead of a thing someone has to remember.
+
+Status:  OPEN (VERIFIED — Pass E's own query, re-run, returns 1931)
+```
+
+```
+[CLAUDE-3][LOW][DATABASE] The marketing platform spine has no boundary probe,
+                          so CI cannot see it regress
+File:     docs/audit/*-check.sql (the eighteen that exist), .github/workflows/ci.yml:203
+
+Problem:  The Database CI job globs `docs/audit/*-check.sql` and every boundary
+          this repository cares about has one — the money tables, the document
+          vault, the password vault, cross-family isolation, the privileged
+          RPCs, the AI surface, the household trail. The nine spine tables have
+          none. `0237` leaves its verification as a SQL comment at the bottom of
+          the file ("Production verification (run after `supabase db push`)"),
+          which nothing runs.
+
+          That is how this gap stayed open for 55 migrations: the spine's
+          authorization has never been asserted by anything that can go red.
+
+Evidence: $ bash docs/audit/run-probes.sh
+          PASS  ai-surface-role-privacy-check.sql
+          PASS  approval-dedupe-check.sql
+          PASS  dead-letter-reconcile-check.sql
+          PASS  document-vault-boundary-check.sql
+          PASS  family-credentials-boundary-check.sql
+          PASS  family-delete-cascade-check.sql
+          PASS  family-facts-provenance-check.sql
+          PASS  family-scoped-index-check.sql
+          PASS  family-self-read-check.sql
+          PASS  household-trail-check.sql
+          PASS  money-write-boundary-check.sql
+          PASS  privileged-rpc-grants-check.sql
+          PASS  reward-redemption-decision-check.sql
+          PASS  rls-isolation-check.sql
+          PASS  sensitive-role-boundary-check.sql
+          PASS  wallet-concurrency-check.sql
+          PASS  wallet-overspend-check.sql
+          PASS  wallet-write-rls-check.sql
+          == probes: 18/18 passed ==
+
+          $ ls docs/audit/ | grep -i marketing
+          (no output)
+
+          Note `privileged-rpc-grants-check.sql` in that list: it asserts
+          `claim_marketing_generation_jobs` is service-role only, and **this is
+          the first time it has ever run**, because it needs 0292, which needs
+          0237, which needed pgvector. It passes. But it is the only line of
+          spine coverage in the whole probe suite, and it covers one function.
+
+Impact:  Every assertion in the two findings above is a thing a human ran once.
+         The next migration that re-creates one of these tables, or a policy
+         edited to `TO public`, or a grant handed back by Supabase's default
+         privileges, lands green.
+
+Fix:     Add `docs/audit/marketing-spine-boundary-check.sql` asserting, with
+         RAISE EXCEPTION so ON_ERROR_STOP makes it red:
+           - all nine tables have `relrowsecurity`;
+           - as `anon`: a draft page is invisible, a published one is visible,
+             INSERT/UPDATE/DELETE are refused on all nine;
+           - as a non-super-admin `authenticated` user: zero rows on all nine
+             except the published page;
+           - as a super admin: full read/write (the positive control, without
+             which the probe passes for the wrong reason);
+           - `has_table_privilege('anon', <t>, 'TRUNCATE')` is false for all
+             nine (this is what would have caught the finding above);
+           - `has_function_privilege('anon'|'authenticated',
+             'public.claim_marketing_generation_jobs(integer)','EXECUTE')` is
+             false.
+         Per this repo's own standard (finalaudit F-004, and Claude-1's note on
+         the board about guards that cannot fail): prove it non-vacuous by
+         breaking each assertion once and confirming it goes red.
+
+Status:  OPEN
+```
+
+```
+[CLAUDE-3][LOW][DATABASE] The regeneration-loop guard tests the column's value,
+                          not whether the statement set it
+File:     supabase/migrations/0237_marketing_platform_spine.sql:277-283, 316-320
+          supabase/migrations/0239_marketing_backfill_queue_cleanup.sql:15-38
+
+Problem:  0237 says what the guard is for: "Worker writes leave updated_by null
+          so they do not recursively enqueue themselves." Both triggers
+          implement it as `new.updated_by is not null` — the value ON THE ROW
+          after the update, not "did this statement assign updated_by".
+
+          `updated_by` is a persisted column. Once an admin has edited a page it
+          stays non-null forever. So any writer that updates a tracked column
+          and simply OMITS `updated_by` bumps the version and enqueues another
+          `regenerate_page` job — whose worker rewrites the page, which is
+          another update.
+
+          **No shipped caller does this today**, which is why this is LOW and
+          not a live defect. It holds only because every writer sets the column
+          explicitly, and the one that matters does so on purpose:
+          `lib/marketing/platform.ts:268` writes `updated_by: null` in the
+          worker's write-back. The safety of the whole queue rests on that one
+          line, and nothing states the requirement or tests it.
+
+Evidence: Faithful worker path — clean:
+
+   -- admin insert + admin edit
+   version_after_admin_edit = 2 ; jobs_after_admin_edit = 2
+   -- worker write-back, exactly as platform.ts:261-269 does it
+   update public.marketing_pages set body='ai body', updated_by=null where id=…;
+   version_after_worker_writeback   = 2      <-- no bump
+   jobs_after_worker_writeback      = 2      <-- no new job
+
+   A writer that merely omits the column, on the same already-edited row:
+
+   update public.marketing_pages set body='b2' where id=…;   -- no updated_by
+   update public.marketing_pages set body='b3' where id=…;   -- no updated_by
+   version_after_two_omitting_writes  = 4    <-- +2
+   jobs_after_two_omitting_writes     = 4    <-- +2 regenerate_page jobs
+
+   Each of those jobs is an AI generation call (`generateWithAI`,
+   lib/marketing/platform.ts:256). finalaudit F19 records that AI endpoints run
+   unmetered.
+
+Impact:  Latent. A future writer to `marketing_pages` that does not know about
+         the `updated_by` convention starts a self-feeding AI rewrite loop on
+         the public marketing site, billed per iteration. The trigger comment
+         asserts a protection the trigger does not actually provide.
+
+Fix:     Make the guard say what it means. Either compare against the old row —
+         `new.updated_by is not null and new.updated_by is distinct from
+         old.updated_by` — or, better, key the enqueue on an explicit marker the
+         worker controls rather than on an audit column that happens to be null.
+         Whichever is chosen, a comment on `platform.ts:268` saying that
+         `updated_by: null` is load-bearing, and a test that fails if it is
+         dropped, is the part that keeps it true.
+
+Status:  OPEN
+```
+
+---
+
+## Verified healthy — the marketing spine (13 items, do not re-spend effort here)
+
+Each is a query or a behavioural probe against the complete 310-migration
+replay, not a reading of the SQL. Commands are given so any can be re-opened.
+
+1. **All nine spine tables have RLS enabled**, and so do all 491 public tables —
+   Pass E's verified-healthy #1 still holds at the larger count.
+   `select relname from pg_class c join pg_namespace n on n.oid=c.relnamespace
+    where n.nspname='public' and relkind='r' and not relrowsecurity;` → **empty**.
+
+2. **The read boundary holds.** As `anon` and as an ordinary `authenticated`
+   user (the anchor account, `is_super_admin() => false`), row counts across the
+   nine tables are: `marketing_pages` 1 (the published probe row only — the
+   draft is invisible), and **0 on the other eight**. Verified for both roles
+   with `set local role … ; set local request.jwt.claims = …`.
+
+3. **Every write is refused.** INSERT on `marketing_pages`,
+   `marketing_generation_jobs` and `marketing_brand_rules` raises
+   *"new row violates row-level security policy"* for `anon` and for a
+   non-super-admin `authenticated` user; UPDATE and DELETE affect 0 rows.
+   (TRUNCATE is the exception — that is finding C3-S3-01 above.)
+
+4. **The policies are what the migration claims.** All eleven read from
+   `pg_policies`: nine `for all to authenticated using/with check
+   (is_super_admin())`, one SELECT-only admin read on
+   `marketing_page_versions`, and two deliberate public reads —
+   `marketing_pages_public_read` (`status='published' and deleted_at is null`)
+   and `marketing_page_relationships_public_read`, which requires BOTH endpoint
+   pages to be published and undeleted.
+
+5. **No `using (true)` and no policy `TO public` anywhere on the spine.**
+   `select tablename||'.'||policyname from pg_policies where schemaname='public'
+    and tablename like 'marketing_%' and roles::text like '%public%';` → empty.
+   Pass E's verified-healthy #2 is unchanged: the same four literally-true
+   policies, all SELECT-only global reference data (`badges`, `feature_flags`,
+   `meal_ideas`, `service_descriptions`).
+
+6. **`claim_marketing_generation_jobs` is service-role only, at the end of the
+   chain.** `0292` is the migration that re-asserts it and it had never run.
+   It ran, its own verification DO block passed, and the ACL confirms it:
+   `postgres=X/postgres | service_role=X/postgres`. Behaviourally,
+   `set role anon; select * from public.claim_marketing_generation_jobs(5);`
+   → `ERROR: permission denied for function claim_marketing_generation_jobs`,
+   and the same as `authenticated`. `docs/audit/privileged-rpc-grants-check.sql`
+   (A-13) passes for the first time.
+
+7. **Every SECURITY DEFINER function pins its search_path** — now 65 of them,
+   the extra one being `claim_marketing_generation_jobs`.
+   `select count(*) filter (where prosecdef) as secdef,
+           count(*) filter (where prosecdef and proconfig is null) as unpinned
+    from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public';` → **65|0**. The spine's two definer functions
+   (`claim_marketing_generation_jobs`, `enqueue_marketing_page_generation`) both
+   carry `{search_path=public}` and reference every table fully qualified, so
+   there is no unqualified-relation shadowing surface. This extends Pass E's
+   verified-healthy #10 to the tables it could not see.
+
+8. **`enqueue_marketing_page_generation` is not callable.** It is SECURITY
+   DEFINER with a default (PUBLIC-executable) ACL, but `returns trigger`, so
+   PostgreSQL refuses a direct call and PostgREST does not expose it. Same
+   disposition as Pass E's trigger functions.
+
+9. **Nothing anon-callable can truncate.** `select p.proname from pg_proc p …
+   where n.nspname='public' and p.prosrc ~* 'truncate';` → **0 rows**; and the
+   count of SECURITY INVOKER `execute format(...)` functions executable by
+   `anon` that are not trigger functions → **0**. This is what bounds finding
+   C3-S3-01 to defence-in-depth.
+
+10. **The trigger and queue machinery works.** Exercised for the first time
+    anywhere, in a rolled-back transaction:
+    - admin INSERT (`updated_by` set) → exactly one `regenerate_page` job,
+      `idempotency_key = marketing-page:<id>:v:1`, priority 50, `created_by` set;
+    - backfill INSERT (`updated_by` null **and** `content ? 'source'`) → **no**
+      job — `0239`'s suppression works, and it correctly does *not* suppress an
+      insert without the `source` marker;
+    - admin UPDATE → version 1→2 and a second job at `:v:2`;
+    - `claim_marketing_generation_jobs(10)` as `service_role` claims 4/4, sets
+      `running`, `attempts=1`, `locked_at`;
+    - a job backdated 20 minutes is recovered and re-claimed;
+    - the same job at `attempts=5, max_attempts=5` moves to `dead_letter` with
+      `"Recovered after a stale worker lock."` and is claimed 0 times.
+
+11. **Every marketing-platform server action authorizes independently.** All six
+    in `app/(app)/admin/marketing/platform/actions.ts` (`createPlatformPage`,
+    `updatePlatformPage`, `archivePlatformPage`, `saveMarketingTemplate`,
+    `saveMarketingBrandRule`, `retryMarketingJob`) open with
+    `await requireMarketingAdmin()`, which is `getUser()` then `isSuperAdmin()`
+    and only then hands back the service client
+    (`lib/marketing/admin.ts:20-24`). This matters more than usual here because
+    `page.tsx:21` reads with `createServiceClient()` — RLS is bypassed on that
+    path, so the `/admin` layout and these six guards are the whole boundary, and
+    a Next.js layout does not cover a server action.
+
+12. **The public render path is not a stored-XSS vector.** `grep -rn
+    "dangerouslySetInnerHTML" lib/marketing/ 'app/(marketing)'` → **no hits**.
+    `lib/marketing/public-pages.tsx` splits `body` on blank lines and renders
+    the parts as React text, so AI-generated page content
+    (`generateWithAI` → `marketing_pages.body`) cannot inject markup. The public
+    reads go through the anon key / user-scoped server client
+    (`seo.ts:14`, `aeo.ts:31`, `public-pages.tsx:29`), so the published-only
+    policy is genuinely the boundary on that path rather than being bypassed.
+
+13. **`ON CONFLICT` targets are inferable with the spine present.**
+    `node scripts/check-conflict-targets.mjs` → *"181 checked against 491 tables
+    in the live catalog. Every target names a unique index Postgres can infer."*
+    This gate has only ever run against 482 tables; the spine's upserts
+    (`marketing_page_versions` on `(page_id,version)`, `marketing_embeddings` on
+    `(source_type,source_id,chunk_index,content_hash)`,
+    `marketing_provider_observations` on
+    `(provider,engine,observed_for,page_path,query)`,
+    `marketing_provider_syncs` on `provider`, `marketing_pages` on `path`) are
+    covered for the first time. No 42P10 planning failure waiting in production.
+
+**Two things I checked and am deliberately NOT raising as findings**, so the
+reasoning is on the record rather than implied:
+
+- **No spine table is FORCE RLS** (`relforcerowsecurity`) — but neither is any
+  of the 491, table owner is `postgres`, and PostgREST never connects as the
+  owner (`authenticator` → `set role anon|authenticated`). `service_role` is
+  `bypassrls` by design. Nothing reachable turns on it.
+- **The spine tables carry no `family_id`.** "Readable across families" does not
+  apply to them: they are platform-global marketing content, and the only
+  boundary is super-admin versus everyone. That boundary holds (items 2 and 3).
+  Worth saying explicitly, because the brief asks about cross-family reads and
+  the honest answer is that the axis does not exist here, not that it is clean.
+
+---
+
+## Re-verification of Pass E against the complete replay
+
+Asked for as capacity allowed. Six claims re-run; **four confirmed, one refuted,
+one no longer holds.**
+
+| Pass E claim | Re-run result | Verdict |
+|---|---|---|
+| VH#1 — RLS coverage is total | tables with RLS off: **empty**, now over 491 | **CONFIRMED** |
+| VH#2 — exactly 4 literally-true policies, all reference data | same 4: `badges`, `feature_flags`, `meal_ideas`, `service_descriptions`, all SELECT | **CONFIRMED** |
+| VH#3 — anon holds no write privilege on any table | **1931** grant rows over 483 tables | **REFUTED** — see C3-S3-02 |
+| VH#11 — 57 tables with RLS on and zero policies are deliberate | **57**, unchanged (the spine adds policies to all nine of its own) | **CONFIRMED** |
+| F-E01 — child reads the family password vault | `family-credentials-boundary-check.sql` → *"0296 OK: the child is refused read, insert, update and delete; parent and adult keep the vault"* | **CONFIRMED fixed** by 0296, now proven against the complete 310-migration chain rather than a partial one |
+| F-E02 — step-up MFA is presentational | `select count(*) from pg_policies where schemaname='public' and (qual ilike '%aal%' or with_check ilike '%aal%')` → **0** | **STILL OPEN** |
+| F-E03 — `family-media` bucket is public | `select id, public from storage.buckets` → `family-media t` | **STILL OPEN** (also public: `avatars`, `feedback-attachments`, `marketplace-photos`) |
+| F-E04 — `social_account_tokens` is family-member readable | all four policies now read `can_manage_family(family_id)`, and `sensitive-role-boundary-check.sql` passes with *"0297 OK: a child is refused … the OAuth tokens"* | **NO LONGER HOLDS** — `0297_sensitive_tables_respect_role.sql` fixed it after Pass E was written. Claude-1 should mark F-E04 fixed. |
+
+```
+$ psql -c "select tablename, policyname, cmd, roles, left(coalesce(qual,with_check),40)
+           from pg_policies where schemaname='public'
+             and tablename in ('social_account_tokens','sync_tokens') order by 1,2;"
+       tablename       |          policyname          |  cmd   |  roles   |             expr
+-----------------------+------------------------------+--------+----------+------------------------------
+ social_account_tokens | social_account_tokens_delete | DELETE | {public} | can_manage_family(family_id)
+ social_account_tokens | social_account_tokens_insert | INSERT | {public} | can_manage_family(family_id)
+ social_account_tokens | social_account_tokens_select | SELECT | {public} | can_manage_family(family_id)
+ social_account_tokens | social_account_tokens_update | UPDATE | {public} | can_manage_family(family_id)
+ sync_tokens           | tokens service only          | ALL    | {public} | false
+```
+
+---
+
+## What this session still could not reach
+
+- **Production.** Unchanged and unchangeable from here: no credentials, and
+  applying migrations is human-owned (`docs/PENDING_PROD_MIGRATIONS.md`). If
+  F-001 holds, production carries none of the spine at all — in which case the
+  live risk is not finding C3-S3-01 but that `/lp/*`, `/guides/*` and the SEO
+  overlay have no table to read, which `lib/marketing/legacy-bridge.ts:63-66`
+  and `public-pages.tsx:34-37` both handle explicitly as a compatibility state.
+  That handling is evidence the team expects production to be behind.
+- **PostgREST.** There is no local Supabase (no docker daemon, no CLI), so the
+  HTTP layer was not exercised. My statement that TRUNCATE is unreachable
+  through PostgREST rests on the absence of a TRUNCATE verb and on the two
+  catalogue queries in C3-S3-01, not on a refused request.
+  `scripts/verify-marketing-public-access.mjs` is exactly the probe that would
+  settle it and it needs a running project.
+- **The other 474 tables** in finding C3-S3-02 were measured, not individually
+  reasoned about. I assert the count and the mechanism; I do not assert that
+  every one of them is as harmless as the DML result suggests.

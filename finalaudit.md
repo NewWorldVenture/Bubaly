@@ -6,7 +6,7 @@
 `Executive Summary — session record` sections below are the earlier summaries,
 kept verbatim; where they disagree with this part, this part is newer.*
 
-**Eleven passes, A–K. 90 numbered findings.**
+**Twelve passes, A–L. 94 numbered findings.**
 
 | Pass | Surface | Findings |
 |---|---|---:|
@@ -21,6 +21,7 @@ kept verbatim; where they disagree with this part, this part is newer.*
 | I | `F-F04` — the spring-forward DST bug | fix |
 | J | A reconciliation check that reconciled nothing | fix |
 | K | A Stripe event acknowledged that nobody finished | fix |
+| L | The marketing platform spine — the tables that had never replayed | 4 (`L1`–`L4`) |
 
 Session record 1 says "87 findings across six passes". That was true when
 written; passes G–K have landed since, and Pass A is `F1`–`F22`, which is 22 and
@@ -55,9 +56,14 @@ holds the CRITICAL finding away from production:
 | | Finding | State |
 |---|---|---|
 | `F-E01` | Every child could read, edit and delete the family password vault; `secret` stored plaintext | Fixed by `0296` + a CI probe — **cannot reach production until the pair above clears** |
+| `F-E04` | OAuth tokens in `social_account_tokens` were family-member readable | Fixed by `0297` (`can_manage_family`) — same constraint: in the repo, not in production |
 
 **Open, no operator needed:** `F-E02` (step-up MFA is presentational — no policy
-references `aal`), `F-E03` (`family-media` bucket public), `F-F01` (a caller
+references `aal`), `F-E03` (`family-media` bucket public), `L1` (`anon` holds
+TRUNCATE on all nine marketing-spine tables; RLS cannot constrain TRUNCATE — a
+missing layer, not a live exploit, since PostgREST has no TRUNCATE verb), `L3`
+(the spine has no probe), `L4` (the regeneration-loop guard tests a column value
+rather than the statement), `F-F01` (a caller
 `max` truncates a money read and still renders "Everything reconciles"),
 `F-F02` (the `F-017` timezone bug live on eleven server-rendered surfaces),
 `F-F03` (`/missions` — up to 240 sequential storage round trips), `F-D01`
@@ -86,7 +92,7 @@ not read the same on this page.*
 | Backend / API / auth / security | Pass E | deep, **local replay only** |
 | QA / flows / performance / edge cases | Pass F | deep |
 | Architecture / integration seams | Claude-1, passes C/G/H | deep |
-| Marketing platform spine tables (`0237`, `0239`, `0292`) | **Claude-3, in progress 2026-09-14** | was **not audited** |
+| Marketing platform spine tables (`0237`, `0239`, `0292`) | Claude-3, Pass L | deep — **gap closed 2026-09-14**, local replay only |
 | Rendered accessibility: contrast, tab order, screen-reader output | **in progress 2026-09-14** | was **not audited** |
 | Production schema as actually deployed | **nobody** | **not audited** — needs credentials |
 
@@ -99,10 +105,13 @@ not read the same on this page.*
    the **public** surface — there is no local Supabase here (no usable docker
    daemon, no CLI), so the authenticated app cannot be signed into and Pass D's
    `app/(app)` findings stay statically derived.*
-2. **`0237`, `0239` and `0292` never replayed**, because the `vector` extension
-   was absent, so the marketing platform spine tables were never audited at all.
-   *2026-09-14: pgvector is now installed; Claude-3 is replaying and auditing
-   those tables.*
+2. ~~**`0237`, `0239` and `0292` never replayed**~~ — **CLOSED 2026-09-14.**
+   pgvector installed; 310 migrations applied, 0 failed; the nine spine tables
+   audited. See **Pass L**. It found a real gap (`L1`) and, more importantly,
+   **refuted one of Pass E's verified-healthy claims** (`L2`) — `anon` does hold
+   write privilege on 483 of 491 tables, and the "zero" was an artefact of a
+   hand-built test prelude. A wrong clean bill is worse than an unaudited area,
+   because it stops the next person looking.
 3. **Production was never verified.** Every Pass E finding describes the
    committed migrations replayed **locally**. If `F-001` holds, production may
    not carry even the policies verified correct. *Permanently blocked for agent
@@ -4065,3 +4074,111 @@ and the other 3 are regression guards for behaviour that was already right
 `npx tsc --noEmit` and eslint clean.
 
 **Status: FIXED.** No migration, so it reaches production with the deploy.
+
+---
+
+# Pass L — the marketing platform spine, and a clean bill that was not one
+
+*Claude-3, 2026-09-14. Merged by Claude-1. Evidence in `audit/claude-3.md`.*
+
+This pass exists because of a gap the Verification Checklist named: `0237`,
+`0239` and `0292` had never replayed — the `vector` extension was absent — so
+the nine **marketing platform spine** tables had never been audited at all.
+pgvector was installed and the replay run through the repo's own harness
+(`docs/audit/verify-pg.sh`, the same `pg-bootstrap.sh` CI uses, rather than a
+hand-rolled prelude — which turns out to matter, see L2).
+
+**310 migrations applied, 0 failed**, against Pass E's 308 applied / 3 failed.
+491 public tables against Pass E's 482.
+
+## L1 — `anon` holds TRUNCATE on all nine spine tables, and RLS cannot see it
+
+`MEDIUM`. RLS correctly refuses anon and non-admin `INSERT`/`UPDATE`/`DELETE`
+on every spine table — each verified. **TRUNCATE is not subject to RLS.**
+
+```
+set role anon; truncate public.marketing_pages cascade;   -- succeeds
+```
+
+It empties the table and cascades to `marketing_page_versions` and
+`marketing_page_relationships`. Same on all nine plus `marketing_audit_logs`.
+`0237` reasons about the grant layer explicitly and revokes from
+`authenticated` on one table, but never touches `anon` and never revokes
+TRUNCATE; Supabase hands every new table `arwdDxt` to `anon` by default.
+
+**Not reachable through PostgREST** — there is no TRUNCATE verb, and Claude-3
+confirmed zero anon-callable functions that truncate and zero anon-callable
+`SECURITY INVOKER` dynamic-SQL functions. So this is a **missing layer, not a
+live exploit**, and takes the same disposition `0290` took for the money tables.
+Fix is one migration in `0290`'s shape.
+
+*Caveat, stated because it is load-bearing:* with no PostgREST available (no
+docker, no Supabase CLI) the unreachability rests on catalogue queries and the
+absence of a TRUNCATE verb — not on an HTTP request being refused.
+
+## L2 — Pass E's verified-healthy #3 is false, and it was written to stop people re-checking
+
+`MEDIUM`, and the most important entry in this pass.
+
+Pass E recorded, in the list explicitly kept *so nobody re-derives it*:
+
+> **3. `anon` holds no write privilege on any table at all** — zero rows across
+> all 482.
+
+Re-running **Pass E's own query** against the complete replay returns **1,931
+grant rows across 483 of 491 tables**. Only 8 tables were ever revoked.
+
+The zero was an artefact of Pass E's hand-built prelude not reproducing
+Supabase's default privileges — *the identical defect this document already
+records as `F-004` against the old CI shim.*
+
+This is the pattern in Part 0 in its purest form: **a guard that could not see
+what it was named for**, then written down as a clean bill and marked
+do-not-re-check. A wrong "verified healthy" is worse than an unaudited area,
+because it actively stops the next person looking. Claude-3 did not edit the
+claim — correct, it is not their file to rewrite. It is **struck here**:
+
+> **Pass E verified-healthy #3 is REFUTED. Do not rely on it.**
+
+## L3 — the spine has no probe, and its own verification was a comment
+
+`LOW`. 18 of 18 `docs/audit/*-check.sql` probes pass and **none touches the nine
+spine tables**. `0237` left its verification as a SQL comment, which nothing
+runs. Proposed probe contents are in `audit/claude-3.md`.
+
+## L4 — the regeneration-loop guard tests the column value, not the statement
+
+`LOW`. `new.updated_by is not null` is permanently true once an admin has edited
+a page, so a writer that *omits* the column re-bumps the version and enqueues
+another AI job. Measured: 2 omitting writes → +2 versions, +2 jobs. No shipped
+caller does this; it holds solely because `platform.ts:268` writes
+`updated_by: null` on purpose — which nothing states and nothing tests.
+
+## Re-verified from Pass E
+
+| Claim | Outcome |
+|---|---|
+| VH#1, VH#2, VH#11 | confirmed |
+| **VH#3** (anon has no write privilege) | **REFUTED — see L2** |
+| `F-E01` (password vault) | confirmed fixed by `0296`, now against the *complete* chain |
+| `F-E02`, `F-E03` | still open |
+| **`F-E04`** (OAuth tokens family-member readable) | **fixed** by `0297_sensitive_tables_respect_role.sql` — `social_account_tokens` select/insert/update now `can_manage_family(family_id)`. Verified independently by Claude-1 by reading the migration. Subject to `F-001` like every other migration: fixed in the repo, not yet in production. |
+
+## Verified healthy in Pass L
+
+13 items recorded in `audit/claude-3.md` so a later pass does not re-derive them,
+including: RLS on all nine spine tables; the read/write boundary holding for
+anon and for a non-super-admin authenticated user; 65 `SECURITY DEFINER`
+functions with **0 unpinned** `search_path`; the trigger/queue machinery
+exercised end to end (enqueue, `0239` backfill suppression, stale-lock recovery,
+dead-letter); all six platform server actions calling `requireMarketingAdmin()`
+— which matters precisely because `page.tsx` reads with the service client, so
+RLS is bypassed on that path.
+
+Two probes passed **for the first time ever**, because they needed the three
+migrations that had never replayed: `privileged-rpc-grants-check.sql`, and
+`check-conflict-targets.mjs` at 181/491 with the spine present.
+
+*Given L2, the phrase "verified healthy" in this pass means: verified against a
+faithful replay through the repo's own bootstrap. It does not mean verified
+against production, which remains unaudited and needs operator credentials.*
