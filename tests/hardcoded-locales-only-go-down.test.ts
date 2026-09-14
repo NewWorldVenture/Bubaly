@@ -31,6 +31,13 @@
 //       reading chat/route.ts:110, which builds its fmtDate inside the prompt text.
 //   13  lib/ai/* context and result builders — same.
 //    9  Super Admin / operator pages — the platform's own books in its own currency.
+//    1  lib/marketing/crm.ts formatCents — SUPER ADMIN. Its only three callers are
+//       app/(app)/admin/marketing/{affiliates,pipeline,proposals}/page.tsx, which are the
+//       platform's own books in its own currency.
+//    1  lib/assistant/tools.ts — a TOOL RESULT read by the model, not a person. Its
+//       sibling on the next line uses 'en-CA' as a YYYY-MM-DD formatter, which is a
+//       mechanism, and its own `note` field addresses the model directly.
+//    1  lib/meals/pantry-chef.ts — the header says "Vision prompt". Read by the model.
 //    1  lib/services/finances/index.ts formatDollars — NOT A DISPLAY FORMATTER either,
 //       and this one reads like one. Its 27 callers are (a) lib/ai/tools/finances.ts
 //       summarize/consequences strings, which the MODEL reads, and (b) activity-ledger
@@ -70,6 +77,15 @@ const FORMATTER_WITH_LOCALE =
 
 /**
  * The ceiling, measured when the shared formatter was made locale-aware.
+ *
+ * A SECOND CLASS THIS CEILING CANNOT SEE, measured while working the eighth tranche:
+ * FIFTY-ONE money values write the currency symbol as a LITERAL — `$${x.toFixed(2)}`
+ * — which holds no locale for this scan to find and has no locale at all: `toFixed`
+ * always emits a "." and never groups. Even at ceiling ZERO those fifty-one would
+ * still render "2768.00" to a German reader with the symbol on the American side.
+ * Held by tests/the-currency-symbol-is-not-a-literal.test.ts (I18N-003). This is the
+ * second such class after the English-literal time labels; a ceiling on hardcoded
+ * locales is necessary and not sufficient, twice over.
  *
  * Now 80, and the eight that fell name a CLASS rather than a coincidence: SIX modules
  * — career, moving, projects, vacations, weekend and twin — wrote the currency symbol

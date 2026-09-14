@@ -2980,3 +2980,75 @@ The binding inserter asserts its "insert after the translator" match falls withi
 characters of the component start. On `ProjectDetail` it fired — that component declares no
 `useTranslations()`, so the match belonged to a component further down. Pass AO learned
 that from a tsc error; this time the script refused before writing.
+
+---
+
+## Pass AQ — I18N-003: fifty-one money values whose symbol is a literal
+
+**Status: VERIFIED, measured, pinned. Deliberately NOT converted — see below.**
+
+### `[CLAUDE-1][HIGH][I18N]` the second class the locale ratchet cannot see
+
+The ceiling counts `'en-US'` in a formatter position. It cannot see this:
+
+```ts
+`$${(cents / 100).toFixed(2)}`
+```
+
+And this is **worse** than a hardcoded locale, not milder. `toFixed` has **no locale at
+all**: it always emits a `.` decimal mark and never groups. A German reader gets
+`"2768.00"` where their convention is `"2.768,00"`, with the symbol on the American side.
+**Even at ceiling zero, fifty-one money values would still render that way.**
+
+Nor would a locale swap fix it — the symbol is *text*, so the best a swap achieves is
+`"$2.768,00"`: the American symbol position with German separators, which nobody writes.
+
+**51 sites across 43 files**, after excluding the operator console and model-read text
+structurally. Among them: the billing module's seven plan prices, the pricing page, the
+upgrade modal, the trial paywall, the approval card, Closet, Dining, Inventory, Voting,
+the marketplace's auction, negotiation, listing, price-coach and price-history helpers,
+and `lib/stripe/service-fee.ts`.
+
+This is the **second** class of this shape, after the English-literal time labels of Pass
+AK. A ceiling on hardcoded locales is necessary and not sufficient — twice over, now.
+
+### Why this pass pins rather than converts
+
+Every one of the 51 needs one of two things first, and neither is a formatter change:
+
+- **a locale threaded from a caller that does not have one.** `lib/autopilot/engine.ts`
+  takes a `FamilySnapshot`; `lib/intelligence/hard-signals.ts` takes rows. Neither carries
+  a reader.
+- **the English prose around the amount moved to the catalogue.** `"Spent $120 of your
+  $400 monthly Fun budget"` is not fixed by localising two numbers inside an English
+  sentence.
+
+Converting without that lowers a number while changing nothing a family sees — the
+"optional parameter nobody passes" this audit has refused since Pass Z. So it is held at
+51, visible, and may only fall. `scripts/audit-hand-written-currency.mjs` names every
+site; `tests/the-currency-symbol-is-not-a-literal.test.ts` holds the count with a positive
+control (two files certain to hold the shape), a negative control (a like count and a
+distance label, which must **not** appear), and a structural assertion that no admin or AI
+path is ever counted. Planting one back: **"52 hand-written currency symbols, held at 51."**
+
+### And the first instrument I wrote for it was useless
+
+My first regex was `` [`'"]\s*[$€£¥]\s*\$?\{ `` — which matches `` `${ `` itself, because
+the `$` of a template placeholder is a dollar sign. It reported **167 sites**, most of them
+percentages and counts. A measurement I could not defend is not a measurement. The dollar
+must be **doubled** (`` `$${x}` ``) or sit outside the braces (`` `${x} $` ``) for the
+symbol to be a literal.
+
+### Three more reclassifications, from reading callers
+
+- **`lib/marketing/crm.ts formatCents` — Super Admin.** Its only three callers are
+  `app/(app)/admin/marketing/{affiliates,pipeline,proposals}/page.tsx`.
+- **`lib/assistant/tools.ts` — model-read.** Its `note` field addresses the model directly
+  (*"These are the busy blocks; open time is the gaps between them"*), and the line below
+  it uses `'en-CA'` as a YYYY-MM-DD formatter, which is a mechanism.
+- **`lib/meals/pantry-chef.ts` — model-read.** Its own header says *"Vision prompt"*.
+
+That is six exempt sites found by reading callers rather than the call, across this
+segment. And one **near-miss in the other direction**: I had `lib/marketing/format.ts
+formatFamilies` written down as dead before checking — it is used twice inside its own
+module, by `familiesNote` and `formatHandled`. I checked before acting.
