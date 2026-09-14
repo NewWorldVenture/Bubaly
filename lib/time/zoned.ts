@@ -120,6 +120,25 @@ export function daysInMonth(year: number, month: number): number {
  * returned is NOT a real instant and must never be stored: read its wall-clock
  * fields back out and resolve them with `zonedLocalToInstant`.
  */
+/**
+ * `now` re-expressed so that UTC getters report the family's wall clock.
+ *
+ * The UTC twin of `asWallClockIn`, and the one a SERVER should use. A Date built
+ * from local fields is normalised by the runtime's own DST rules, so on a host
+ * in a DST-observing zone the family's wall clock can be silently moved before
+ * anyone reads it back — 02:30 on a spring-forward morning becomes 03:30, and
+ * the request the family actually made is gone. UTC observes no DST, so the
+ * fields written are the fields read.
+ *
+ * Pair it with the parser's `{ utc: true }` option, and resolve the answer with
+ * `instantForLocalTime`. Like its twin, the Date returned is NOT a real instant
+ * and must never be stored.
+ */
+export function asWallClockUtc(instant: Date, timezone: string): Date {
+  const p = localPartsAt(instant, timezone);
+  return new Date(Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, 0, 0));
+}
+
 export function asWallClockIn(instant: Date, timezone: string): Date {
   const p = localPartsAt(instant, timezone);
   return new Date(p.year, p.month - 1, p.day, p.hour, p.minute, 0, 0);
