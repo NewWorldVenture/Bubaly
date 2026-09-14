@@ -82,7 +82,7 @@ export const INVITE_PRESETS: InvitePreset[] = [
 ];
 
 export function InviteForm({ familyId, userId, onSent, onCancel }: {
-  familyId: string; userId: string; onSent: () => void; onCancel: () => void;
+  familyId: string; userId: string; onSent: (emailed: boolean) => void; onCancel: () => void;
 }) {
   const t = useTranslations();
   const { error: toastError } = useToast();
@@ -109,15 +109,26 @@ export function InviteForm({ familyId, userId, onSent, onCancel }: {
     }).select('id').single();
     if (error || !invite) { setLoading(false); return toastError(describeDbError(error, t('settingsModule.failed'))); }
 
-    // Fire invite email (non-blocking — don't fail UI if email fails)
-    void fetch('/api/email/invite', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ inviteId: invite.id }),
-    });
+    // The invite ROW is written above and is what actually grants access, so a
+    // failed email is not a failed invite — the modal still closes. But it is
+    // not a sent one either, and `/api/email/invite` is careful to say so: it
+    // answers 502 when the provider rejects the send. Discarding that response
+    // made "Invite sent" unconditional, so a household could wait on an email
+    // that was never delivered while the screen said it had been.
+    let emailed = false;
+    try {
+      const res = await fetch('/api/email/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inviteId: invite.id }),
+      });
+      emailed = res.ok;
+    } catch {
+      emailed = false;
+    }
 
     setLoading(false);
-    onSent();
+    onSent(emailed);
   }
 
   return (

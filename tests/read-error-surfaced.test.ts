@@ -19,10 +19,6 @@ import { readdirSync, readFileSync } from 'node:fs';
 const EXEMPT: Record<string, string> = {
   'components/concierge/run-timeline.tsx':
     'Both queries are liveness stamps that schedule a router.refresh(); the timeline content comes from server props, so a failed stamp read costs an auto-refresh, not correctness.',
-  'components/memories/on-this-day-card.tsx':
-    'Renders null when it has nothing, so a failed read costs an additive Home card rather than asserting anything false. An error box here would be the worse answer.',
-  'components/moments/home-moment-card.tsx':
-    'Same shape: returns null with no moment to show, so a failed read hides an optional card instead of making a claim.',
 };
 
 function sources(dir: string, out: string[] = []): string[] {

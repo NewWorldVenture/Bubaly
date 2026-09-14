@@ -414,7 +414,14 @@ export function SettingsModule({ referralConfig }: { referralConfig?: ReferralCo
           familyId={family.id}
           userId={userId}
           onClose={() => setInviteOpen(false)}
-          onSent={() => { setInviteOpen(false); setShowReferralCta(true); success(t('settingsModule.inviteSent')); }}
+          onSent={(emailed) => {
+            setInviteOpen(false);
+            setShowReferralCta(true);
+            // The invite exists either way — it is the row, not the email, that
+            // grants access. Saying "sent" when it was not is the defect.
+            if (emailed) success(t('settingsModule.inviteSent'));
+            else toastError(t('actions.couldNotSendTheInvite'));
+          }}
         />
       )}
 
@@ -482,7 +489,7 @@ function EditMemberModal({ member, isSelf, onClose }: {
 
 function InviteModal({ familyId, userId, onClose, onSent }: {
   familyId: string; userId: string;
-  onClose: () => void; onSent: () => void;
+  onClose: () => void; onSent: (emailed: boolean) => void;
 }) {
   const t = useTranslations();
   return (

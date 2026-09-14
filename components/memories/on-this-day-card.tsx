@@ -4,7 +4,7 @@
 // taken on today's date in past years. Renders nothing on an ordinary day, so it
 // only ever appears as a warm little gift, never as clutter.
 
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { Sparkles, ChevronRight } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
@@ -19,12 +19,21 @@ export function OnThisDayCard() {
   const t = useTranslations();
   const { familyId } = useApp();
 
-  const { data: rows } = useRealtimeQuery<Photo>({
+  const { data: rows, error } = useRealtimeQuery<Photo>({
     table: 'family_photos', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('family_photos').select('*')
       .eq('family_id', familyId).not('taken_at', 'is', null).not('url', 'is', null)
       .order('taken_at', { ascending: false }).limit(400),
   });
+
+  // This card is meant to disappear on an ordinary day, so rendering nothing is
+  // the right UX — but it was ALSO what a failed read did, which made the two
+  // indistinguishable and left the failure with nowhere to surface. Staying
+  // quiet on screen is fine for a delight surface; staying quiet everywhere is
+  // not. (C2-15.)
+  useEffect(() => {
+    if (error) console.error('[on-this-day] memories read failed — card hidden', error);
+  }, [error]);
 
   const memories = useMemo(() => pickOnThisDay(rows ?? [], new Date(), 6), [rows]);
   if (memories.length === 0) return null;
