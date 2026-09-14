@@ -455,7 +455,7 @@ export function FamilyModule() {
         <EditFamilyModal family={family} onClose={() => setEditOpen(false)} onSaved={(f) => { setFamily(f); setEditOpen(false); }} />
       )}
       {inviteOpen && (
-        <InviteModal code={family?.family_code ?? null} onClose={() => setInviteOpen(false)} onCopy={copyCode} />
+        <InviteModal onClose={() => setInviteOpen(false)} />
       )}
       <Modal open={!!removeMember} title={t('family.removeMember')} onClose={() => setRemoveMember(null)}>
         <div className="space-y-4">
@@ -596,16 +596,30 @@ function EditFamilyModal({ family, onClose, onSaved }: { family: Family; onClose
 }
 
 // ── Invite modal ────────────────────────────────────────────────────────────
-function InviteModal({ code, onClose, onCopy }: { code: string | null; onClose: () => void; onCopy: () => void }) {
+//
+// This modal used to LEAD with the family code — the copy button, the big
+// monospace string, and the line "Share your family code so a new member can
+// join". Nothing in the product redeems a family code. There is no route, server
+// action or RPC that reads `families.family_code` as an input: every reference to
+// it is a write, a display, or the migration that creates it. The only working
+// join path is /join?token=… -> rpc('accept_invite', p_token), which matches
+// `invites.token`, a per-invite value with no relationship to the family code.
+// Someone receiving the code has nowhere to type it, and /join without a token
+// answers "This invite link is missing its token".
+//
+// (`marketplace_circles.join_code` DOES have a redemption path — 0176 matches on
+//  `join_code = upper(trim(p_code))`. The same thing was built for circles and
+//  never for families, which is how this got missed.)
+//
+// So the modal now offers only the path that works. The code itself is still
+// shown on the Family screen under "Family Code", where it reads as the
+// identifier it is rather than as an invitation someone can act on.
+function InviteModal({ onClose }: { onClose: () => void }) {
   const t = useTranslations();
   return (
     <Modal open title={t('family.inviteFamily')} onClose={onClose}>
       <div className="space-y-4">
-        <p className="text-sm text-muted">{t('family.shareYourFamilyCodeSoA')}</p>
-        <div className="flex items-center justify-between rounded-xl border border-border bg-surface/40 px-4 py-3">
-          <span className="font-mono text-lg font-bold tracking-widest">{code ?? '—'}</span>
-          {code && <Button size="sm" variant="secondary" onClick={onCopy}><Copy className="h-4 w-4" /> {t('family.copy')}</Button>}
-        </div>
+        <p className="text-sm text-muted">{t('onboardingWizard.inviteByEmail')}</p>
         <Link href="/family/members" className="btn-cta inline-flex w-full items-center justify-center" onClick={onClose}>{t('family.manageMembersInvites')}</Link>
       </div>
     </Modal>
