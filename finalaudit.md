@@ -6,7 +6,7 @@
 `Executive Summary — session record` sections below are the earlier summaries,
 kept verbatim; where they disagree with this part, this part is newer.*
 
-**Thirteen passes, A–M. 96 numbered findings.**
+**Fourteen passes, A–N. 107 numbered findings.**
 
 | Pass | Surface | Findings |
 |---|---|---:|
@@ -23,6 +23,7 @@ kept verbatim; where they disagree with this part, this part is newer.*
 | K | A Stripe event acknowledged that nobody finished | fix |
 | L | The marketing platform spine — the tables that had never replayed | 4 (`L1`–`L4`) |
 | M | Reporting a failure is not surviving one; a feature nobody can enable | 2 (`M1`, `M2`) |
+| N | The browser, finally — runtime, page weight, flows | 11 (`N1`–`N3` + 8) |
 
 Session record 1 says "87 findings across six passes". That was true when
 written; passes G–K have landed since, and Pass A is `F1`–`F22`, which is 22 and
@@ -70,7 +71,16 @@ rather than the statement), `F-F01` (a caller
 `F-F03` (`/missions` — up to 240 sequential storage round trips), `F-D01`
 (photo lightbox: no `role="dialog"`, no Escape, no focus trap), `F-D02`/`F-D03`
 (55 detached labels, 65 unnamed `<select>`), `F-C07` (19 undocumented env vars),
-`F-C09`, `F-C10`, `F19`, `F6`, `M2` (the calendar feed nobody can enable).
+`F-C09`, `F-C10`, `F19`, `F6`, `M2` (the calendar feed nobody can enable), and
+**`F-C03`, REOPENED** — see `N1`.
+
+**`F-C03` is reopened, and that matters more than its severity.** It is indexed
+below as "fixed and verified in production", and half of it was: the RSC payload
+no longer carries the catalogue. The client bundle still does — 246 KB gzipped on
+every marketing page — and the Verification Checklist item it was signed off
+against, *"`/cookies` under 25 KB gzipped"*, **fails on this build at 26,593 B**.
+A finding verified against a check that only covered half of it reads, from the
+index, exactly like one that is closed.
 
 `F-D10` is the root cause under the accessibility findings and is worth more
 than any single one of them: `.eslintrc.json` is `next/core-web-vitals` alone,
@@ -215,7 +225,7 @@ not carry even the policies verified correct.
 | F-D02 / F-D03 | 55 labels detached from their control; 65 `<select>` with no accessible name | OPEN |
 | F21 | A child could grant themselves a reward | Half fixed and live, half awaiting the operator |
 | F1, F9, F10, F15, F16, F18, F20 | sitemap dead URLs; whole i18n catalogue per page; seeded records shown as real customer stories; Autopilot running for every family; paid features enforced by a padlock; ungated endpoints; a child clearing the chore board | **all fixed** |
-| F-C01, F-C02, F-C03 | sitemap dated by generation time; 445 non-indexable URLs; the catalogue on every public page | **all fixed and verified in production** |
+| F-C01, F-C02, F-C03 | sitemap dated by generation time; 445 non-indexable URLs; the catalogue on every public page | **all fixed and verified in production** — *`F-C03` later REOPENED by `N1`; see Part 0* |
 
 ---
 
@@ -4269,3 +4279,106 @@ surfaces the URL, plus a test that a published calendar is reachable end to end)
 or retire it (drop the route, the carve-out and `feed-token.ts`). Choosing
 between shipping and retiring a user-facing capability is a product decision,
 not an audit one.
+
+---
+
+# Pass N — the browser, finally
+
+*Claude-4, 2026-09-14. Merged by Claude-1. Evidence in `audit/claude-4.md`.*
+*Partial: Claude-2's accessibility half is still running and lands in this pass.*
+
+This is the first pass with a real browser. Eleven public routes, cold cache and
+a fresh context each, CDP byte accounting, console/`pageerror`/network capture;
+malformed slugs across all six DB-backed marketing route families; an
+internal-link crawl; and the login, signup and contact forms driven by hand.
+
+**11 findings: 3 HIGH, 6 MEDIUM, 2 LOW.** Claude-1 independently verified the
+mechanism of all three HIGH before merging — the greps are below each.
+
+## N1 — the catalogue still ships on every public page, as JavaScript
+
+`HIGH`. **This contradicts `F-C03`, which this document indexes as "fixed and
+verified in production".** `F-C03` fixed the RSC-payload half of the defect and
+left the bundle half.
+
+`components/i18n/locale-provider.tsx` is a **client** module and imports
+`translate` from `lib/i18n/messages.ts`, whose `translate()` falls back through
+`SOURCE_MESSAGES` — which *is* `en-US.json`. That drags the whole catalogue into
+the client bundle:
+
+```
+components/i18n/locale-provider.tsx:1   'use client'
+components/i18n/locale-provider.tsx:13  import { translate } from '@/lib/i18n/messages'
+lib/i18n/messages.ts:42                 export const SOURCE_MESSAGES: Messages = enUS;
+lib/i18n/messages.ts:129                messages[key] ?? SOURCE_MESSAGES[key] ?? key
+```
+
+Confirmed by size, not inference: `.next/static/chunks/19933-*.js` is
+**818,794 B** uncompressed against an `en-US.json` of **869,523 B**. The chunk is
+the catalogue. Claude-4 measured **246,392 B gzipped** — the largest resource on
+`/cookies` and 60% of the 412 KB of script every marketing page loads — and
+found 92.7% of en-US long strings verbatim, including wallet errors and
+admin-studio copy on a cookie policy. That is `F-C03`'s own description of the
+defect it closed.
+
+**The Verification Checklist item *"`/cookies` under 25 KB gzipped"* fails on
+this build: 26,593 B, and the real page is 515.8 KB.**
+
+`tests/i18n-client-scope.test.ts` asserts *scope coverage*, not bundle content,
+so it cannot see this — a guard that could not see what it was named for, again.
+
+## N2 — the homepage ships a 1.79 MB PNG to draw five ~24px avatars
+
+`HIGH`. `FaceAvatar` in `components/marketing/visual-mocks.tsx` uses the image
+as a CSS `background-image`, which **bypasses `next/image` entirely** — no
+resizing, no format negotiation.
+
+```
+public/images/family-ai-lifestyle.png   1,878,096 bytes
+```
+
+**77% of the homepage's 2.39 MB**, served `Cache-Control: public, max-age=0`, to
+render five avatars about 24px across.
+
+## N3 — a database blip 404s every blog article
+
+`HIGH`. `lib/blog/posts.ts` `getPost()` wraps its read in a bare `catch {` after
+`.maybeSingle()` and returns null, so a read *failure* is indistinguishable from
+*no such post*. Observed with Supabase down: `/blog/<slug>` → **404**, while
+`/lp/`, `/p/`, `/features/`, `/glossary/`, `/compare/` and `/f/` all → 500.
+
+A 404 tells a crawler the article is gone. `/lp/[slug]` carries a comment
+explaining exactly why that is the wrong answer — 2 of 8 blog readers got the fix.
+
+## Medium and low
+
+Logo fetched at `w=1200` (43 KB) on every page for a 104×56 render · 541 of 546
+routes dynamic, so nothing is CDN-cacheable, root cause `getLocaleContext()` in
+the **root** layout · the 404 page emits two contradictory `robots` meta tags
+(`noindex` and `index, follow`) · the rate limiter fails **closed** as
+`429 "Too many requests"` across 25 endpoints during a database outage, observed
+on a first-ever contact submit · the marketing surface has zero `error.tsx` /
+`not-found.tsx` / `loading.tsx` against the app's 18 · public TTFB serially
+coupled to ≥2 untimed Supabase reads · a footer link to `/dashboard/migrate` on
+all 15 public pages that 307s every signed-out visitor · error toasts
+auto-dismiss at 4.2 s.
+
+## Verified healthy — the class a static pass could not reach
+
+**Zero hydration mismatches and zero page errors across all 11 routes.** No
+broken internal links. The 404/traversal contract holds. All three forms
+validate client-side, guard double-submit, and surface a real error (toast at
++353 ms, `role="alert"`). Claude-4 also disproved its own "prefetch storm"
+hypothesis — prefetch returns 191 B in 6.9 ms — and recorded that, which is the
+right instinct: a hypothesis that dies in measurement is worth the same note as
+one that survives.
+
+Still OPEN and unchanged: `F-F01`, `F-F03`, `F-F05`, `F-F12`. `F-F01`'s blast
+radius is **59** `{ max: }` call sites, not the five listed.
+
+## Blocked
+
+No session, so `app/(app)` was never rendered; `N3` on a real blog slug and
+`F-F03` in a browser are both blocked on it. Link discovery could not reach
+DB-driven links. **All wall-clock numbers are stub-inflated** and were used only
+to count and order blocking reads — never as production latency.

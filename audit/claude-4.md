@@ -1067,3 +1067,883 @@ LAST-UPDATE: 2026-09-13
   per-family `loadCompareLine` reads into one cohort query outside the loop. The bounded-batch pattern
   in `provider-sync` is the in-repo precedent to copy.
 - **Status:** OPEN
+
+---
+---
+
+# Claude-4 — Session 3 (2026-09-14): the browser pass Pass F never had
+
+> **Delimiter.** Everything above this line is earlier work and is not edited.
+> This section is appended.
+
+STATUS
+- **CURRENT:** complete — runtime pass over the public surface of the production
+  build serving at `http://localhost:3210`, using Chromium + Playwright. Pass F
+  (`F-F01`–`F-F13`) was written entirely from source and `vitest`; **no browser
+  had ever been run against this application.** This section is that run.
+- **COMPLETED:**
+  - Console errors, page errors, failed requests and **real transferred bytes**
+    (Chrome DevTools Protocol `Network.loadingFinished.encodedDataLength`,
+    cold cache, one fresh browser context per route) on 11 public routes.
+  - Page-weight re-measurement against the `F-C01`–`F-C03` claims and the
+    Verification Checklist item *"`/cookies` under 25 KB gzipped"*. **Contradicted
+    — see C-4-14 and C-4-15.**
+  - Error/loading states: `/nope`, a bad blog slug, malformed slugs on all six
+    DB-backed marketing route families, path-traversal and whitespace slugs.
+  - The three reachable flows — login, signup, contact — driven in a real
+    browser: client validation, double-submit, pending state, and what the user
+    actually sees when the backend fails.
+  - Internal-link crawl over the public surface (37 unique internal hrefs).
+  - Re-verified four still-OPEN Pass F findings that need no session.
+- **NEXT:** nothing queued. C-4-14, C-4-15 and C-4-17 are the three that pay for
+  themselves immediately and none of them needs an operator.
+- **FILES-TOUCHED:** `audit/claude-4.md` (this file, appended) only. **No
+  application source modified.** Throwaway scripts live in the session
+  scratchpad, not in the repo.
+- **BLOCKERS:** Supabase is stubbed with dummy credentials
+  (`NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co`), so there is no
+  session and `app/(app)` cannot be signed into. Every DB-backed surface renders
+  empty or throws. **An empty list is not reported as a defect anywhere below.**
+  Where the stub limited what could be seen, the finding says so and is marked
+  BLOCKED rather than clean.
+- **LAST-UPDATE:** 2026-09-14
+
+## Method, and what it can and cannot see
+
+Environment: `next-server (v15.5.25)` production build, one shared instance on
+`:3210` (not rebuilt or restarted — other workers share it). Chromium 1194 via
+the globally installed `playwright@1.56.1` (the repo's `playwright@1.61.0`
+expects browser revision 1228, which is not present; `playwright install` was
+not run, per instruction).
+
+Two measurement notes that matter for reading the numbers below:
+
+1. **Transferred bytes are CDP `encodedDataLength`**, i.e. what actually crossed
+   the wire, gzipped, with a cold cache and a fresh browser context per route.
+   This is a different quantity from the one Pass C reported. Pass C measured the
+   **document** (`curl | gzip`); the numbers below are **document + JS + CSS +
+   images**. Both are correct; they answer different questions, and the gap
+   between them is C-4-14.
+2. **Wall-clock TTFB is inflated by the stub.** Every server render that touches
+   Supabase blocks on a DNS failure for `example.supabase.co` (~7 s per read
+   through the agent proxy). Measured TTFB is therefore *not* a production
+   number. It is still evidence of something real — how many blocking reads a
+   render performs, and that none of them has a timeout — and that is how it is
+   used (C-4-24), never as a claim about production latency.
+
+Verified serving, matching the brief: `/` `/pricing` `/features` `/security`
+`/faq` `/privacy` `/mobile` `/login` `/cookies` `/terms` `/contact` `/blog`
+`/ai` `/how-it-works` `/acceptable-use` `/signup` `/welcome` → 200;
+`/nope` → 404; `/dashboard` → 307 → `/login`.
+
+---
+
+## Measured page weight — the table Pass C did not have
+
+Cold cache, one fresh context per route, CDP byte counts, KB = 1024 B.
+
+| route | status | reqs | **total** | document | script | css | image |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `/` | 200 | 21 | **2388.5** | 65.0 | 412.0 | 32.5 | **1877.6** |
+| `/pricing` | 200 | 27 | 546.1 | 35.3 | 425.5 | 32.5 | 42.2 |
+| `/security` | 200 | 20 | 558.4 | 70.3 | 412.0 | 32.5 | 42.2 |
+| `/features` | 200 | 20 | 538.9 | 50.8 | 412.0 | 32.5 | 42.2 |
+| `/contact` | 200 | 21 | 533.4 | 26.3 | 431.0 | 32.5 | 42.2 |
+| `/terms` | 200 | 22 | 523.4 | 32.2 | 412.0 | 32.5 | 42.2 |
+| `/privacy` | 200 | 20 | 523.2 | 35.1 | 412.0 | 32.5 | 42.2 |
+| `/faq` | 200 | 21 | 519.5 | 29.4 | 412.7 | 32.5 | 42.2 |
+| `/cookies` | 200 | 20 | **515.8** | **27.7** | 412.0 | 32.5 | 42.2 |
+| `/mobile` | 200 | 20 | 515.2 | 27.1 | 412.0 | 32.5 | 42.2 |
+| `/login` | 200 | 27 | 606.9 | 14.1 | **516.6** | 32.5 | 42.2 |
+
+Read the `/cookies` row against the Verification Checklist item
+*"`/cookies` under 25 KB gzipped"*. The **document** is 27.7 KB, and the **page**
+is 515.8 KB. Both halves of that are findings; the document half is C-4-19's
+sibling below and the 412 KB of script is C-4-14.
+
+Independent `curl` confirmation of the document figure, so it does not rest on
+CDP's header accounting:
+
+```
+$ curl -s -H "Accept-Encoding: gzip, br" -o ck.gz http://localhost:3210/cookies
+$ grep -i content-encoding h.txt        # Content-Encoding: gzip
+$ stat -c%s ck.gz
+26593                                    # 25.97 KiB / 26.6 KB
+```
+
+**Verdict on the checklist item:** *"`/cookies` under 25 KB gzipped"* **FAILS on
+this build** — 26,593 bytes gzipped, over the gate on either definition of KB.
+`finalaudit.md` `F-C03` records 20 KB gzipped measured *in production*; this is
+the local production build, so the two are not the same artifact and this does
+not prove the production number was wrong. It does mean the gate as written does
+not currently pass, and nobody has re-measured it since.
+
+---
+
+## C-4-14
+
+```
+[CLAUDE-4][HIGH][PERF/DELIVERY] The whole en-US message catalogue still ships to
+every public page — as a 246 KB JavaScript chunk. F-C03 fixed the RSC-payload
+half of this and left the JavaScript half in place
+File:     lib/i18n/messages.ts:11-21, :70
+          components/i18n/locale-provider.tsx:13
+URL:      http://localhost:3210/cookies  (and every other public route)
+```
+
+**Problem.** `F-C03` is indexed in Part 0 as *"the catalogue on every public
+page — **all fixed and verified in production**"*, and its evidence is the
+gzipped **document** falling from 266 KB to 20 KB. That fix is real and it holds.
+But the catalogue reaches the browser by a **second** route that the fix never
+touched: it is bundled as JavaScript.
+
+`components/i18n/locale-provider.tsx` is a `'use client'` module. Line 13:
+
+```ts
+import { translate, type Messages } from '@/lib/i18n/messages';
+```
+
+`lib/i18n/messages.ts` statically imports all eleven catalogues at module top
+level (`lib/i18n/messages/` is 6.4 MB on disk) and, at line 70, `translate()`
+falls back through the English one:
+
+```ts
+const template = messages[key] ?? SOURCE_MESSAGES[key] ?? key;
+```
+
+`SOURCE_MESSAGES` is `en-US.json`. So the client bundle that provides `t()` to
+every marketing component drags the entire English catalogue in with it. Webpack
+tree-shakes the other ten (verified below — only en-US survives); en-US cannot be
+shaken because `translate` references it.
+
+**Evidence.** The largest single resource on `/cookies` — the page the
+Verification Checklist names — is the chunk carrying the catalogue:
+
+```
+ROUTE /cookies TOTAL 528156 REQS 20
+   246392 Script      200 /_next/static/chunks/19933-eb3487e0d0322831.js
+    55865 Script      200 /_next/static/chunks/4bd1b696-bad92808725a934a.js
+    47702 Script      200 /_next/static/chunks/31255-2e48f83e850421e0.js
+    43228 Image       200 /_next/image?url=%2Fbrand%2Fbubaly-logo.png&w=1200&q=75
+    33300 Stylesheet  200 /_next/static/css/efe55d1639ee1e52.css
+    28336 Document    200 /cookies
+```
+
+246,392 bytes over the wire, 818,794 bytes on disk — **60% of the 412 KB of
+script that every marketing page loads**, and nine times the document it is
+delivered alongside.
+
+Proof that the chunk *is* the catalogue, not a coincidence of shared strings —
+every long value in `en-US.json` matched verbatim against the chunk text:
+
+```
+total keys 13456
+long values (>25 chars): 4231   present in chunk 19933: 3923 = 92.7%
+sample keys found: App.couldNotSetTheDefaultDashboard, App.couldNotSwitchActiveFamily,
+                   App.couldNotVerifyFamilyMembership, acceptableUse.breakDisableOrOverloadThe, ...
+```
+
+And the same test run over **every** chunk in `.next/static/chunks`, for all
+seven populated catalogues, 200 sampled long strings each:
+
+```
+en-US -> 19933-eb3487e0d0322831.js (193/200, 818794B)
+        (de-DE, es-ES, fr-FR, it-IT, nl-NL, pt-PT: no chunk above threshold)
+```
+
+Sampling the chunk's own string literals returns exactly what `F-C03` said it had
+removed from the cookie policy:
+
+```
+ 5 "Could not load the family wallet. Refresh and try again."
+ 7 "AI is not configured (OpenAI API key missing)."
+ 5 "Relationship insights are temporarily unavailable from Supabase."
+ 4 "Too many billing requests. Please try again shortly."
+ 3 "No savings goals yet."     3 "Recent Transactions"
+ 3 "Webhook storage unavailable"
+```
+
+Wallet errors and admin-studio copy, on a cookie policy — `F-C03`'s own words for
+the defect it closed.
+
+**Why the guard cannot see it.** `tests/i18n-client-scope.test.ts` walks the
+import graph and asserts that a route's declared **scope covers the keys its
+client components ask for**. It says nothing about what lands in the client
+*bundle*. A scope of 26 keys and a bundle of 13,456 both pass it. This is the
+document's own recurring pattern — a guard that cannot see what it was named for
+— in the delivery layer rather than the data layer.
+
+**Impact.** Every first visit to any public page, and every crawl, pays 246 KB of
+gzipped JavaScript that exists to translate 26 keys. It is parse-and-compile work
+on the main thread, not just transfer, so it lands squarely on TBT/INP as well as
+LCP. Also: the module's own header comment — *"the browser downloads one language
+rather than eleven"* — is true of the RSC payload and false of the bundle, so the
+file documents a property it does not have.
+
+**Recommended fix.** Keep the English fallback out of the client-imported module.
+Either (a) resolve it on the server: merge the scoped English strings into
+`messages` inside `scopeMessages()` before handing the object to the provider, and
+let the client `translate` be `messages[key] ?? key`; or (b) split `translate`
+into a module with no catalogue imports and keep `SOURCE_MESSAGES` in a
+server-only one. Then add the guard the current one is missing: assert that no
+file under `.next/static/chunks` contains more than N strings from
+`en-US.json` — the check that would have failed here, and would fail again.
+
+**Status:** OPEN — contradicts the "fixed and verified" status of `F-C03` as
+indexed in Part 0. The RSC-payload half of `F-C03` is **VERIFIED still fixed**
+(the `/cookies` document is 27.7 KB, not 266 KB); the headline claim that the
+catalogue no longer ships on every public page is **CONTRADICTED**.
+
+---
+
+## C-4-15
+
+```
+[CLAUDE-4][HIGH][PERF] The homepage downloads a 1.79 MB PNG to draw five ~24px
+avatars, because it is a CSS background-image and so bypasses next/image entirely
+File:     components/marketing/visual-mocks.tsx:93-107  (FACE_POSITIONS + FaceAvatar)
+          public/images/family-ai-lifestyle.png
+URL:      http://localhost:3210/
+```
+
+**Problem.** `FaceAvatar` renders each face by pointing a `background-image` at
+the full-size hero photograph and cropping it with `background-size: 620% auto`
+plus one of five `background-position` values:
+
+```tsx
+style={{
+  backgroundImage: "url('/images/family-ai-lifestyle.png')",
+  backgroundPosition: FACE_POSITIONS[index % FACE_POSITIONS.length],
+  backgroundSize: '620% auto',
+}}
+```
+
+A CSS `url()` is not a `next/image` request, so none of the optimisation applies:
+no resize, no AVIF/WebP negotiation, no `srcset`. The raw file is fetched.
+
+**Evidence.** Cold cache, CDP byte counts. The homepage is 2.39 MB and **77% of
+it is this one file**:
+
+```
+ROUTE / TOTAL 2444844 REQS 21
+  1879444 Image       200 /images/family-ai-lifestyle.png     <-- 77%
+   246392 Script      200 /_next/static/chunks/19933-…js       (C-4-14)
+    65598 Document    200 /
+    43226 Image       200 /_next/image?url=%2Fbrand%2Fbubaly-logo.png&w=1200&q=75  (C-4-17)
+```
+
+The asset itself, and how it is served:
+
+```
+$ file public/images/family-ai-lifestyle.png
+PNG image data, 1774 x 887, 8-bit/color RGB, non-interlaced       # 1,878,096 B
+
+$ curl -sI http://localhost:3210/images/family-ai-lifestyle.png
+Content-Type: image/png
+Content-Length: 1878096
+Cache-Control: public, max-age=0        <-- revalidated on every repeat visit
+```
+
+A photograph stored as a lossless RGB PNG, served uncompressed and uncacheable,
+to produce five circular thumbnails roughly 24 px across. (The *hero* use of the
+same file at `visual-mocks.tsx:418` is correct — it goes through `<Image fill
+priority sizes=…>`. Only the avatar path is raw. The two share a URL, so the
+browser fetches the raw file once and the optimised variant never runs.)
+
+**Impact.** 1.79 MB is on the critical path of the marketing homepage. On a
+typical 4G connection (~1.6 Mbps effective) that is roughly 9 seconds of transfer
+for decoration. It is the single largest lever on this site's LCP and it is on
+the page most visitors see first.
+
+**Recommended fix.** Export the five faces as five small WebP/AVIF files (or one
+small sprite) at the size they are displayed, and reference those. Re-encode the
+hero itself to AVIF/WebP — a 1774×887 photograph belongs nowhere near 1.8 MB. Add
+a `headers()` entry in `next.config.mjs` giving `/images/:path*` a long-lived
+immutable `Cache-Control` (the config already does exactly this for `/sw.js`, so
+the pattern is in the file).
+
+**Status:** OPEN
+
+---
+
+## C-4-16
+
+```
+[CLAUDE-4][HIGH][SEO/EDGE CASE] getPost() discards the read error, so a Supabase
+blip answers 404 for every published article — the exact failure the sibling
+landing-page route documents itself as avoiding
+File:     lib/blog/posts.ts:255-268
+          app/(marketing)/blog/[slug]/page.tsx:108-109
+Compare:  app/(marketing)/lp/[slug]/page.tsx:27-32
+```
+
+**Problem.** `getPost` destructures `{ data }` only — the PostgREST `error` is
+never examined — and wraps the whole thing in a bare `catch` that returns
+`undefined`:
+
+```ts
+export async function getPost(slug: string): Promise<BlogPost | undefined> {
+  if (isSyntheticBlogSeedSlug(slug)) return undefined;
+  try {
+    const { data } = await anonClient().from('blog_posts').select('*')
+      .eq('slug', slug).eq('published', true).maybeSingle();
+    return data ? toPost(data) : undefined;
+  } catch { return undefined; }
+}
+```
+
+The page then does `if (!post) notFound()`. "The database did not answer" and
+"there is no such article" are the same value, and both render **404** — a
+permanent-gone signal, to a crawler, for a live article.
+
+The repository already knows this is wrong and says so, four directories away, in
+`app/(marketing)/lp/[slug]/page.tsx:27-32`:
+
+> *"Distinguish 'genuinely not found' (→ 404) from a transient read failure. If we
+> swallow the error and return null, a real published page 404s on a DB blip — a
+> permanent-gone signal that de-indexes the page. Throw so it renders a retryable
+> 5xx instead, and reserve `notFound()` for a truly missing slug."*
+
+**Evidence.** Observed, with Supabase unreachable — the two routes behave
+differently under the identical failure:
+
+```
+404 46605  /blog/this-post-does-not-exist      <- swallowed; indistinguishable from a real slug
+500 39901  /lp/not-a-landing-page              <- throws, as its comment intends
+500 39798  /p/zzz
+500 39826  /features/zzz
+500 39826  /glossary/zzz
+500 39822  /compare/zzz
+500 39988  /f/00000000-0000-0000-0000-000000000000
+```
+
+Confirmed server-side in the build's own error log:
+
+```
+[server-error] digest=1479015789 route=/lp/[slug] (GET /lp/not-a-landing-page, render)
+  Failed to load landing page "not-a-landing-page": TypeError: fetch failed
+```
+
+— and no corresponding line for `/blog/…`, because nothing was raised. The
+failure is in `anonClient().from(...)` and is therefore **slug-independent**: with
+the database unreachable, a real published slug gets the same 404 this
+nonexistent one got. I could not demonstrate that on a *real* slug because the
+stub means there are no rows to name; the code path is the same one either way.
+
+The same swallow-without-rethrow appears in `getCategoryCounts` (:236),
+`getPostsByCategory` (:250), `getFeaturedPost` (:281), `getRelatedPosts` (:299)
+and `getAdjacentPosts` (:329). `getAllPosts` (:184) and `getAllPostRefs` (:215)
+are the two that were fixed — they call `unstable_rethrow(error)` first and log
+before degrading. **Two of eight got the lesson.**
+
+**Impact.** The blog is the largest indexed surface on the site (`F-C02` counts
+1,063 sitemap URLs). A Supabase incident long enough for a crawl turns every
+article into a 404, which is the strongest de-indexing signal there is, and
+recovery from a mass de-index is measured in weeks. `getRelatedPosts` and
+`getAdjacentPosts` additionally strip internal links during the same window,
+and `getCategoryCounts` silently renders every category as empty.
+
+**Recommended fix.** Give `getPost` the `/lp/[slug]` treatment: read `error`,
+`unstable_rethrow` first, and throw on a read failure so the route renders a
+retryable 5xx; reserve `undefined` for `data === null`. Apply the same to the
+other five. A regression guard should assert that a *failing* client produces a
+throw rather than `undefined` — that is the direction this codebase's guards keep
+failing to cover.
+
+**Status:** OPEN
+
+---
+
+## C-4-17
+
+```
+[CLAUDE-4][MEDIUM][PERF] The site logo is fetched at 1200px wide — 43 KB — on
+every public page, because <Image> is given width/height but no `sizes`
+File:     components/brand/logo.tsx:52-59
+```
+
+**Problem.**
+
+```tsx
+<Image src="/brand/bubaly-logo.png" alt={t('logo.bubaly')}
+       width={1143} height={618} priority
+       className="h-14 w-auto object-contain" />
+```
+
+`width={1143}` is the intrinsic size of the source file, not the rendered size.
+With no `sizes`, `next/image` generates a `srcset` and the browser picks from the
+declared width, so it requests the 1200 px candidate for an image CSS lays out at
+`h-14` — 56 px tall, about 104 px wide. (`LogoMark`, twenty lines above in the
+same file, gets this right: `fill sizes="96px"`.)
+
+**Evidence.** The same request, same byte count, on every route measured:
+
+```
+43226 Image 200 /_next/image?url=%2Fbrand%2Fbubaly-logo.png&w=1200&q=75
+```
+
+— `/`, `/pricing`, `/features`, `/security`, `/faq`, `/privacy`, `/mobile`,
+`/login`, `/cookies`, `/terms`, `/contact`, all 42.2 KB in the image column of
+the weight table above. It is `priority`, so it also competes for bandwidth
+during the initial paint.
+
+**Impact.** ~40 KB of avoidable transfer on every page view of the entire public
+site, at the highest fetch priority, for a logo. On `/cookies` it is larger than
+the document.
+
+**Recommended fix.** Add `sizes="(max-width: 640px) 96px, 112px"` (or set
+`width`/`height` to the rendered size). Expected ~3–5 KB. Re-encoding
+`public/brand/bubaly-logo.png` (270 KB for a logotype) is a second, separate win.
+
+**Status:** OPEN
+
+---
+
+## C-4-18
+
+```
+[CLAUDE-4][MEDIUM][DELIVERY] 541 of 546 routes are server-rendered on demand —
+including every legal page — so no public page is cacheable by any CDN
+File:     app/layout.tsx:66  (RootLayout -> getLocaleContext)
+          lib/i18n/server.ts:57  (requestSignals -> cookies() + headers())
+```
+
+**Problem.** `RootLayout` awaits `getLocaleContext()`, which awaits `cookies()`
+and `headers()`. Reading a request API in the **root** layout opts every route
+beneath it out of static rendering — which is every route in the application.
+
+**Evidence.** The build's own route table (`next build`, from the build log this
+session's server was started from):
+
+```
+○  (Static)   prerendered as static content     ->   5 routes
+ƒ  (Dynamic)  server-rendered on demand         -> 541 routes
+●  (SSG)      prerendered as static HTML        ->   0 routes
+```
+
+and the prerender manifest agrees — the only four prerendered app routes are the
+ones that do not use the root layout:
+
+```
+$ node -e "console.log(Object.keys(require('./.next/prerender-manifest.json').routes))"
+[ '/manifest.webmanifest', '/robots.txt', '/twitter-image', '/opengraph-image' ]
+```
+
+`app/(marketing)/cookies/page.tsx` declares no `dynamic`, no `revalidate`, and
+reads nothing per-request of its own — and is still `ƒ`. The consequence reaches
+the wire as a response header on a static legal document:
+
+```
+$ curl -sI http://localhost:3210/cookies | grep -i cache-control
+Cache-Control: private, no-cache, no-store, max-age=0, must-revalidate
+```
+
+`private, no-store` on a cookie policy: no CDN edge cache, no browser cache, a
+full origin render for every visitor and every crawler.
+
+Seventeen files under `app/(marketing)` additionally declare `force-dynamic`
+themselves, several of which are genuinely dynamic; that is a separate and
+smaller question. The root layout is what makes the *legal and evergreen* pages
+dynamic.
+
+**Impact.** Vercel serves the whole marketing site from the origin. Every
+`/cookies`, `/terms`, `/privacy`, `/faq` view is a Node render with the DB reads
+C-4-24 describes, where a cached 27 KB document would do. It also removes the
+headroom that would absorb a traffic spike, and it is why C-4-24's failure mode
+is felt by every visitor rather than by the first one after a cache expiry.
+
+**Recommended fix.** Move the locale resolution out of the root layout: resolve
+it in middleware (which already runs on every request and already reads cookies
+and headers) and pass it down via a request header, or scope `getLocaleContext()`
+to the route groups that need per-request locale and let the legal and evergreen
+pages prerender. Whatever the shape, the test is `next build` reporting `○`/`●`
+for `/cookies`, `/terms` and `/privacy`.
+
+**Status:** OPEN — not a re-derivation of `F-C01`–`F-C03`, which were about what
+a page *contains*; this is about whether it is rendered at all.
+
+---
+
+## C-4-19
+
+```
+[CLAUDE-4][MEDIUM][SEO] The 404 page emits two contradictory robots meta tags,
+and carries the site's default title and a self-referential canonical
+File:     app/layout.tsx:49  (metadata.robots = { index: true, follow: true })
+          app/not-found.tsx  (no metadata export)
+URL:      http://localhost:3210/nope
+```
+
+**Problem.** The Verification Checklist asks for *"`/nope` returns 404 with
+`noindex`"*. It returns 404, and it returns `noindex` — **and also `index,
+follow`, in the same `<head>`**:
+
+```
+$ curl -s http://localhost:3210/nope | grep -o '<meta name="robots"[^>]*>'
+<meta name="robots" content="noindex"/>
+<meta name="robots" content="index, follow"/>
+
+$ curl -sI http://localhost:3210/nope | head -1
+HTTP/1.1 404 Not Found
+```
+
+The first is injected by Next for the not-found boundary. The second is the root
+layout's `robots: { index: true, follow: true }`, which is redundant in the first
+place — absence of the tag already means index/follow — and here it directly
+contradicts the one that matters.
+
+Two smaller things on the same response: the `<title>` is the site default
+(`Bubaly — Less Managing Life. More Living It.`) rather than anything saying the
+page is missing, and the page carries `<link rel="canonical" href="…/nope"/>`.
+
+**Evidence.** Above, verbatim. Google's documented resolution for conflicting
+robots rules is that the more restrictive wins, so `noindex` should prevail
+*there*; other crawlers are not all documented to do the same, and a tag that
+says `index` on a 404 is an ambiguity with no upside.
+
+**Impact.** Low on Google, unquantified elsewhere, and it makes the checklist
+item unverifiable as written — the box cannot honestly be ticked from this
+output. Every route in the app also carries the redundant `index, follow`.
+
+**Recommended fix.** Drop `robots` from `app/layout.tsx`'s metadata (the default
+is already index/follow) and set `robots: { index: false }` only where it is
+meant, as `app/(auth)/login/page.tsx:6` already does correctly. Add
+`export const metadata = { title: 'Page not found' }` to `app/not-found.tsx`.
+
+**Status:** OPEN — the checklist item *"`/nope` returns 404 with `noindex`"* is
+**partially verified**: the 404 and the `noindex` are both present, the page is
+not unambiguously `noindex`. The other half of that item, *"`/dashboard` still
+307s to `/login`"*, is **VERIFIED** (`307` in 3 ms, `Location: /login`).
+
+---
+
+## C-4-20
+
+```
+[CLAUDE-4][MEDIUM][RESILIENCE/UX] The durable rate limiter fails closed, so a
+Supabase outage makes 25 endpoints answer "Too many requests" — observed on the
+first-ever contact-form submit from a fresh browser
+File:     lib/server/rate-limit-db.ts:19-22, :36
+          lib/server/request-rate-limit.ts:17-19
+          app/api/contact/route.ts:19-24  (+ 24 other routes)
+```
+
+**Problem.** `rateLimitDb` returns `{ ok: failOpen }` whenever the
+`rate_limit_hit` RPC errors, and `failOpen` defaults to `false`. Failing closed
+is a deliberate, documented abuse-control choice and is not itself the finding.
+The finding is the **answer it produces**: callers map `!ok` to `429 Too Many
+Requests` with `Retry-After`, so "the limiter is unavailable" is reported to the
+client, and to the logs, as "you are calling too often". The two need different
+handling and are indistinguishable.
+
+**Evidence.** A brand-new browser context, one contact form filled in and
+submitted once — never having called anything:
+
+```
+REQ  POST http://localhost:3210/api/contact
+RESP 429  http://localhost:3210/api/contact
+CONSOLE[error] Failed to load resource: the server responded with a status of 429
+```
+
+and the same on the analytics beacon, which then logs a console error on every
+public page view:
+
+```
+BAD 429 http://localhost:3210/api/mkt/track     (on /, /pricing, /features, /security,
+                                                 /faq, /privacy, /mobile, /cookies,
+                                                 /terms, /contact — 10 of 11 routes)
+$ curl -sD- -X POST -d '{}' http://localhost:3210/api/mkt/track
+HTTP/1.1 429 Too Many Requests
+retry-after: 5
+{"error":"Too many requests"}
+```
+
+The trigger here is the stub (`rate_limit_hit` cannot be reached), and in
+production these would pass. That is exactly the point: **this is what the
+production code does during a database incident**, and the incident is invisible
+because it looks like traffic. 25 routes use `enforceRequestRateLimit`, among
+them `/api/contact`, `/api/blog/subscribe`, `/api/push/subscribe`,
+`/api/marketing/unsubscribe` and all four `/api/billing/*` endpoints — so during
+an outage a customer trying to check out, and a recipient trying to unsubscribe,
+are both told they are making too many requests.
+
+**Impact.** Wrong status code (429 rather than 503) on a fail-closed path means
+a client that honours `Retry-After: 5` hammers a database that is already down,
+an incident is buried in what looks like rate-limit noise, and a first-time
+visitor is told they are abusive. `/api/marketing/unsubscribe` answering 429 has
+a compliance edge to it as well.
+
+**Recommended fix.** Return a distinguishable outcome from `rateLimitDb` —
+`{ ok: false, reason: 'limited' | 'unavailable' }` — and let callers answer
+`503` with a longer `Retry-After` for `unavailable` while keeping `429` for real
+throttling. Log the `unavailable` branch, which today is silent. Separately,
+teach the client tracker to swallow a non-2xx so an analytics beacon does not put
+an error in every visitor's console.
+
+**Status:** OPEN
+
+---
+
+## C-4-21
+
+```
+[CLAUDE-4][MEDIUM][UX] The public marketing surface has no error boundary, no
+not-found boundary and no loading boundary — the authenticated app has eighteen
+Files:    app/(marketing)/**  (none of error.tsx / not-found.tsx / loading.tsx)
+```
+
+**Problem.**
+
+```
+$ find "app/(marketing)" -name error.tsx -o -name not-found.tsx -o -name loading.tsx
+(nothing)
+
+$ find app -name error.tsx -o -name not-found.tsx | wc -l
+20          # app/error.tsx, app/not-found.tsx, and 18 under app/(app)
+$ find app -name loading.tsx
+app/(app)/loading.tsx
+app/(app)/guardian/loading.tsx
+```
+
+Every marketing failure therefore falls all the way to the root boundaries, which
+render **outside the marketing chrome** — no site header, no footer, no
+navigation — and whose primary call to action is a button labelled *"Go to
+Dashboard"* (`app/not-found.tsx:13`, `app/error.tsx:27`). For the signed-out
+visitor who is the entire audience of a marketing 404, that button is a 307 to a
+login form.
+
+The missing `loading.tsx` matters more here than it normally would, because of
+C-4-18: every marketing route is dynamic, so a client-side navigation cannot be
+served from a prefetch and has nothing to show while the server renders. Measured
+with the RSC navigation request the router actually issues:
+
+```
+$ curl -s -H "RSC: 1" -H "Next-Router-Prefetch: 1" ".../cookies?_rsc=probe1"
+200  0.0069s  191 bytes      # prefetch is correctly short-circuited — cheap
+$ curl -s -H "RSC: 1"        ".../cookies?_rsc=probe2"
+200  14.08s   45876 bytes    # the real navigation; nothing renders until it lands
+```
+
+**Impact.** With a healthy database the navigation is fast and this is cosmetic.
+With a slow one there is no feedback of any kind — the previous page simply sits
+there — and any render error drops the visitor out of the site's own shell onto a
+page offering them a dashboard they do not have. The asymmetry is the tell: the
+authenticated app, which has a session and a way back, is boundaried everywhere;
+the public funnel, which does not, is boundaried nowhere.
+
+**Recommended fix.** Add `app/(marketing)/error.tsx` and
+`app/(marketing)/not-found.tsx` that render inside `MarketingLayout` with
+marketing-appropriate actions (home, blog, search, contact — not "Go to
+Dashboard"), and an `app/(marketing)/loading.tsx` skeleton. Change the root
+`not-found.tsx` / `error.tsx` CTA to `/` for an anonymous visitor.
+
+**Status:** OPEN
+
+---
+
+## C-4-22
+
+```
+[CLAUDE-4][LOW][UX/SEO] Every public page's footer links to /dashboard/migrate,
+which 307s every signed-out visitor and every crawler to /login
+File:     components/marketing/site-footer.tsx:59
+          app/(marketing)/security/page.tsx:247   (/dashboard/trust)
+```
+
+**Evidence.** `{ href: '/dashboard/migrate', labelKey: 'siteFooter.switchToBubaly' }`
+appears in the footer of all fifteen public pages fetched this session
+(`acceptable-use, ai, blog, contact, cookies, family-display, faq, features,
+how-it-works, index, mobile, pricing, privacy, security, terms`), and:
+
+```
+307 /dashboard/migrate
+307 /dashboard/trust
+307 /display
+```
+
+`/login` is `robots: { index: false, follow: false }`, so a crawler following the
+site's most-repeated internal link lands on a redirect to a noindex page from
+every page on the site. "Switch to Bubaly" is a conversion CTA aimed at people
+who do not yet have an account, pointing at a page only account holders can open.
+
+**Impact.** Small but site-wide: a dead-end CTA for the audience it targets, and
+the most frequently repeated internal link on the site is a redirect chain.
+
+**Recommended fix.** Point the footer entry at a public marketing page about
+migrating (or gate the link on a session, as the `/contact` page already does
+correctly at `app/(marketing)/contact/page.tsx:56-85` — it renders `/feedback`
+for signed-in visitors and `/login?redirect=%2Ffeedback` for everyone else, with
+a line of copy explaining the hop). `/security`'s trust-centre CTA needs the same
+treatment.
+
+**Status:** OPEN
+
+---
+
+## C-4-23
+
+```
+[CLAUDE-4][LOW][UX] An error toast disappears after 4.2 seconds, which is the
+only notification a failed sign-in, sign-up or contact submission produces
+File:     components/ui/toast.tsx:60
+```
+
+**Evidence.** `setTimeout(() => setToasts(...), action ? 7000 : 4200)` — an error
+with no action button is removed after 4.2 s. Observed on a failed sign-in: the
+toast appears at **+353 ms** and is gone well before a user who looked away can
+read it; twenty-five seconds after the same click there is no trace of the
+failure anywhere on the page, and the form is back to its resting state as if
+nothing had been submitted.
+
+**Impact.** A visitor who blinks sees a sign-in button that did nothing. The
+information needed to act ("network problem, try again") existed and expired.
+
+**Recommended fix.** Do not auto-dismiss `tone === 'error'` toasts, or give them
+a much longer timeout plus an explicit dismiss control. Errors on the auth forms
+would be better rendered inline near the submit button, the way the existing
+`authError` banner at `components/auth/login-form.tsx:69-73` already is.
+
+**Status:** OPEN
+
+---
+
+## C-4-24
+
+```
+[CLAUDE-4][MEDIUM][PERF/RESILIENCE] Every public marketing render blocks on at
+least two serial Supabase reads with no timeout, so public-page TTFB is coupled
+1:1 to database latency and unbounded on a hang
+File:     lib/marketing/seo.ts:87-88   (resolveMarketingMetadata -> getSeoPage)
+          components/marketing/site-footer.tsx  (getCachedSocialLinks)
+          lib/server/social-links.ts:72-79
+```
+
+**Problem.** A page as static as `/cookies` performs a `marketing_pages` lookup
+for its metadata and an `app_settings` lookup for the footer's social links, in
+series, on every request — because of C-4-18 there is no cached render to serve
+instead. Neither read carries an `AbortSignal` or a timeout, so the render waits
+as long as the connection does.
+
+`getCachedSocialLinks` is otherwise carefully built — `unstable_cache` with a tag
+so an admin save invalidates immediately, and the `catch` deliberately placed
+**outside** the cache so a failure is not cached for an hour. That last decision
+is correct and it has a cost the comment does not mention: nothing is stored on
+failure, so during an outage **every single request retries**, at full failure
+latency, rather than one request paying it.
+
+**Evidence.** With Supabase unreachable, `curl` against the running build:
+
+```
+/               14.15s      /cookies       14.09s      /terms     14.11s
+/pricing        21.13s      /privacy       14.43s      /contact   14.16s
+/blog           14.09s      /sitemap.xml   22.14s
+/login           0.034s     /nope           0.036s     /dashboard  0.003s
+```
+
+The pattern is a ~7 s unit: `/cookies` pays two, `/pricing` and `/sitemap.xml`
+pay three. `/login` and `/nope` — which touch no marketing table — return in
+milliseconds through the same middleware, which is what isolates the cost to the
+page's own reads rather than to the session refresh. The server log carries a
+`[social-links] cached read failed` and a `[marketing-aeo] … read failed` line
+per marketing render.
+
+**The wall-clock numbers are an artifact of the stub and are not production
+latency.** What they establish is the *count* and *seriality* of the blocking
+reads, and that no timeout bounds any of them.
+
+**Impact.** The public marketing site — the acquisition funnel and the crawl
+surface — has no independent availability from the database. A Supabase
+slow-period does not degrade the homepage, it stops it, and with C-4-18 there is
+no cached copy anywhere to serve in the meantime. The `/sitemap.xml` figure is
+the crawler-facing version of the same.
+
+**Recommended fix.** Fix C-4-18 first — a cacheable page removes most of this by
+construction. Independently: put an `AbortSignal.timeout(...)` on both reads and
+render the fallback (`{}` social links, catalogue-derived metadata) when it
+fires; and give the *failure* path of `getCachedSocialLinks` a short negative
+cache (30–60 s) so an outage costs one round trip a minute rather than one per
+visitor — which keeps the property the current comment is protecting (a
+recovering database is picked up quickly) without the property it accidentally
+created.
+
+**Status:** OPEN
+
+---
+
+## Checked in a browser and found healthy — recorded so it is not re-derived
+
+Each of these was actively exercised this session, not inferred.
+
+1. **No hydration mismatches, anywhere on the public surface.** Eleven routes,
+   fresh context each, `load` plus a 4 s settle so effects and hydration
+   complete. `pageerror` count: **0 on every route.** Console `error` count:
+   **1 on each of ten routes, and it is C-4-20's 429 beacon in every case** —
+   no React hydration warning, no `Text content did not match`, no
+   `useLayoutEffect` warning, no CSP violation. This was the single most likely
+   class of defect a static pass could not see, and it is not there.
+2. **No broken internal links found on the reachable public surface.** 37 unique
+   internal hrefs harvested from fifteen fetched pages; every one resolves 200
+   except the three protected routes in C-4-22 (307) — no 404. *Partially
+   BLOCKED:* the crawl could not reach any DB-driven link (blog posts, `/lp/*`,
+   `/glossary/*`, `/guides/*`), because with the stub those lists render empty.
+   The eight `[slug]`-only families (`/resources`, `/guides`, `/customers`,
+   `/compare`, `/glossary`, `/alternatives`, `/audiences`, `/questions`) have no
+   index page and answer 404 at the bare prefix — nothing currently links to
+   them, but a future footer or breadcrumb entry would break silently.
+3. **The 404 / redirect contract holds.** `/nope` 404; `/blog/this-post-does-not-exist`
+   404; `/blog/%20bad%20slug` 404 (whitespace slug handled, not 500);
+   `/blog/../../etc/passwd` 404 with no traversal; `/dashboard` 307 → `/login`;
+   `/display`, `/dashboard/migrate`, `/dashboard/trust` 307 → `/login`.
+4. **Login, signup and contact are correctly built.** All three validate on the
+   client before any network call (`"Enter a valid email address"`,
+   `"Enter your password"`, `"Please enter your name"`, `"Please add a little
+   more detail"`), all three surface a real error rather than hanging, and login
+   and signup disable the submit button for the duration of the request
+   (`components/ui/button.tsx:35`, `disabled={disabled || loading}`) — a second
+   click during flight does nothing. Measured on a failed sign-in: toast at
+   **+353 ms**, `role="alert"`, text *"Network problem — check your connection and
+   try again."* No unhandled rejection, no silent hang, no double POST. The only
+   complaint is how quickly that toast leaves (C-4-23).
+5. **RSC prefetch is not the storm it looks like.** Each marketing page fires
+   10–13 `?_rsc=` requests that show as `ERR_ABORTED` in the network log, which
+   reads like a prefetch stampede against 541 dynamic routes. It is not: a
+   prefetch request (`Next-Router-Prefetch: 1`) returns **191 bytes in 6.9 ms**
+   because Next short-circuits prefetch for a dynamic route with no loading
+   boundary. Recorded because the hypothesis was wrong and someone else will
+   form it too.
+6. **Server-side error instrumentation works.** Every 500 this session produced a
+   `[server-error] digest=… route=… (GET …, render) …` line naming the route, the
+   digest and the underlying cause. The digest in the log matches the one
+   `app/error.tsx:32` shows the user, so a support report can be traced to a log
+   line. That is better than most codebases manage and is worth keeping.
+
+## Re-verified Pass F findings (rule 4 — verified, not re-derived)
+
+Checked against the working tree as it stands this session. All four are
+**unchanged and still OPEN**; none is newly reported.
+
+| | Claim | Verified |
+|---|---|---|
+| `F-F01` | caller-supplied `max` returns `error: null` | **Still present.** `lib/supabase/read-all.ts:93`: `if (options.max !== undefined) return { rows: rows.slice(0, options.max), error: null };`. Callers unchanged, and the blast radius is wider than Pass F's five: `grep -rn "{ max:" app/ lib/` returns **59** call sites, including `readAllAsQuery(..., { max: 20000 })` at `admin/wallet/reconciliation/page.tsx:23,28`, `{ max: 5000 }` at `economy/page.tsx:28`, and `api/ai/wallet`, `api/ai/wallet/child/[childId]`, `api/ai/habits`, five `api/cron/*` routes, `api/sync/feeds/[token]`, `admin/social/usage` and `admin/feedback`. Not every one of the 59 is a money read, but every one of them takes the `error: null` exit. |
+| `F-F03` | `/missions` — up to 240 sequential storage round trips | **Still present.** `app/(app)/missions/page.tsx:70-77` still nests `for (const s of subs) { for (const path of …slice(0,4)) { await …createSignedUrl(path, 600) } }`. Not exercised in a browser — the page needs a session (BLOCKED). |
+| `F-F05` | no `testTimeout` configured anywhere | **Still true.** `grep testTimeout vitest.config.ts` → no match. |
+| `F-F12` | the vitest config's JSX block is dead under vitest 4 | **Still true, and now provably so.** `vitest.config.ts:5-14` sets `esbuild: { jsx: 'automatic' }` under a comment reading *"vitest 2.x / vite 5 transforms with esbuild… the `oxc` key only applies to vitest 3+/rolldown and is a no-op here"* — and the installed vitest is **4.1.10**, so the two keys have swapped roles and the comment now describes the opposite of the truth. |
+
+## What this session could not see — BLOCKED, and not to be read as clean
+
+- **Everything behind a session.** No Supabase, no sign-in, so `app/(app)` was
+  never rendered in a browser. `F-F01`, `F-F02`, `F-F03`, `F-F08` and every
+  Pass D finding about the authenticated app remain statically derived. C-4-16's
+  proof on a *real* blog slug is blocked for the same reason.
+- **Production.** All measurements are against the local production build on
+  `:3210`. `F-C03`'s "20 KB in production" figure is not contradicted by
+  C-4-14's 26,593 B here; they are different artifacts and nobody has measured
+  the production one since.
+- **Production latency.** Every wall-clock number above is inflated by the
+  stub's DNS failures and is used only to count and order blocking reads.
+- **Anything a real database populates.** Blog posts, landing pages, glossary and
+  comparison pages, AEO question blocks and the marketing-page registry all
+  render empty or throw. No empty list anywhere above is reported as a defect.
+- **Accessibility.** Deliberately out of scope this session — Claude-2 owns
+  contrast, tab order and focus on these same routes, and no finding above
+  touches them.
