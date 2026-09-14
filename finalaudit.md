@@ -1,5 +1,116 @@
 # Bubaly — Final Audit
 
+# Part 0 — Consolidated index (authoritative)
+
+*Rebuilt 2026-09-14 by Claude-1. This is the one current view. The two
+`Executive Summary — session record` sections below are the earlier summaries,
+kept verbatim; where they disagree with this part, this part is newer.*
+
+**Eleven passes, A–K. 90 numbered findings.**
+
+| Pass | Surface | Findings |
+|---|---|---:|
+| A | Public surface: marketing, SEO, crawler contract, entitlements | 22 (`F1`–`F22`) |
+| B | Data layer: RLS, grants, nightly jobs, query plans, money concurrency | 20 (`F-001`–`F-020`) |
+| C | Delivery and integration: page weight, routing, env contract, workflows | 10 (`F-C01`–`F-C10`) |
+| D | Frontend and accessibility: the authenticated app | 14 (`F-D01`–`F-D14`) |
+| E | Backend, auth and security: catalogue-verified RLS, 141 routes, storage | 9 (`F-E01`–`F-E09`) |
+| F | QA, flows, performance, edge cases | 13 (`F-F01`–`F-F13`) |
+| G | The audit's own instruments | 2 (`G1`, `G2`) |
+| H | The auth-user ceiling; "manager" pinned to the database | fixes, unnumbered |
+| I | `F-F04` — the spring-forward DST bug | fix |
+| J | A reconciliation check that reconciled nothing | fix |
+| K | A Stripe event acknowledged that nobody finished | fix |
+
+Session record 1 says "87 findings across six passes". That was true when
+written; passes G–K have landed since, and Pass A is `F1`–`F22`, which is 22 and
+not the 21 its table carried. Corrected here rather than in place.
+
+## The one pattern worth carrying forward
+
+**The failures in this repository are mostly guards that could not see what they
+were named for.** A sweep that read one line at a time (Pass C). A probe that
+granted itself the privileges it was testing for (`F-015`). A concurrency check
+that never ran two things at once (`F-019`). An index test blind to `UNIQUE`.
+A migration replay that only ever ran against an empty database (`F-020`).
+Three boundary probes that passed while asserting nothing (`G1`). A bucket-drift
+check that could not fire for any input (Pass J).
+
+Verifying that a guard **fails when it should** is the highest-yield check in
+this repository. Break what it protects and confirm it goes red; a guard nobody
+has ever seen red is not evidence.
+
+## What is still open
+
+**Release blocker, needs a human operator — agents must not do this:**
+
+| | Finding | State |
+|---|---|---|
+| `F5` / `F-001` | Production migration ledger records only `0001`–`0003`; every schema release halts at the baseline guard | **BLOCKED — operator credentials** |
+| `F-C08` | Forward-release pinned to `0240`–`0254`; the repo is far past it | Code half fixed; the release itself is operator work |
+
+That pair is the most important thing in this document, because it is also what
+holds the CRITICAL finding away from production:
+
+| | Finding | State |
+|---|---|---|
+| `F-E01` | Every child could read, edit and delete the family password vault; `secret` stored plaintext | Fixed by `0296` + a CI probe — **cannot reach production until the pair above clears** |
+
+**Open, no operator needed:** `F-E02` (step-up MFA is presentational — no policy
+references `aal`), `F-E03` (`family-media` bucket public), `F-F01` (a caller
+`max` truncates a money read and still renders "Everything reconciles"),
+`F-F02` (the `F-017` timezone bug live on eleven server-rendered surfaces),
+`F-F03` (`/missions` — up to 240 sequential storage round trips), `F-D01`
+(photo lightbox: no `role="dialog"`, no Escape, no focus trap), `F-D02`/`F-D03`
+(55 detached labels, 65 unnamed `<select>`), `F-C07` (19 undocumented env vars),
+`F-C09`, `F-C10`, `F19`, `F6`.
+
+`F-D10` is the root cause under the accessibility findings and is worth more
+than any single one of them: `.eslintrc.json` is `next/core-web-vitals` alone,
+which enables **none** of the `jsx-a11y` rules that describe `F-D02`, `F-D03`
+and `F-D06` — so `next lint` runs clean over ~1,000 files and the gap reads as a
+green light.
+
+## Coverage — and what "not audited" means here
+
+*A heading with no findings says so. An area nobody has audited is recorded as
+**not yet audited**, never as "clean": "we checked" and "we could not see" must
+not read the same on this page.*
+
+| Area | Audited by | Depth |
+|---|---|---|
+| Public surface, SEO, entitlement, child sign-in | Pass A | deep |
+| Data layer, RLS, grants, cron, query plans, money concurrency | Pass B | deep |
+| Delivery, routing, env contract, workflows | Pass C | deep |
+| Frontend / UI / responsive / accessibility | Pass D | deep, but **static only — see below** |
+| Backend / API / auth / security | Pass E | deep, **local replay only** |
+| QA / flows / performance / edge cases | Pass F | deep |
+| Architecture / integration seams | Claude-1, passes C/G/H | deep |
+| Marketing platform spine tables (`0237`, `0239`, `0292`) | **Claude-3, in progress 2026-09-14** | was **not audited** |
+| Rendered accessibility: contrast, tab order, screen-reader output | **in progress 2026-09-14** | was **not audited** |
+| Production schema as actually deployed | **nobody** | **not audited** — needs credentials |
+
+### The three gaps this audit named as blocking its own completion
+
+1. **No browser had ever been run.** Every Pass D finding is derived from
+   reading source; colour contrast, real tab order and screen-reader output were
+   unverified. *2026-09-14: this environment has Chromium, Playwright and
+   `@axe-core/playwright`, so it is finally actionable and in progress. Scoped to
+   the **public** surface — there is no local Supabase here (no usable docker
+   daemon, no CLI), so the authenticated app cannot be signed into and Pass D's
+   `app/(app)` findings stay statically derived.*
+2. **`0237`, `0239` and `0292` never replayed**, because the `vector` extension
+   was absent, so the marketing platform spine tables were never audited at all.
+   *2026-09-14: pgvector is now installed; Claude-3 is replaying and auditing
+   those tables.*
+3. **Production was never verified.** Every Pass E finding describes the
+   committed migrations replayed **locally**. If `F-001` holds, production may
+   not carry even the policies verified correct. *Permanently blocked for agent
+   workers: it needs operator credentials.*
+
+---
+
+
 > **Two audit sessions ran against this repository at the same time**, and both
 > consolidated into this file. Git merged them cleanly, which is why there are
 > two `# Executive Summary` sections: the first is this session's six-pass
@@ -17,7 +128,11 @@
 > something to do by picking a winner.
 
 
-# Executive Summary
+# Executive Summary — session record 1 (six-pass consolidation, superseded as the index)
+
+> Kept verbatim. Part 0 at the top of this file is the current index; this is the
+> summary as that session wrote it, with its own caveats intact. Its Pass A row
+> reads 21; the pass is F1-F22, which is 22. Corrected in Part 0, not here.
 
 **87 findings across six passes.** This document is the consolidated record.
 The sections below are an **index**: each entry names a finding and links it to
@@ -400,7 +515,7 @@ Everything else is disjoint.
 
 ---
 
-# Part 0 — Consolidated view
+# Part 0 — Consolidated view (session record 2, superseded by Part 0 at the top)
 
 Maintained by **Claude-1** (coordinator). This part is a roll-up **over** the
 detailed passes below, not a replacement for them: every entry points at the
@@ -425,7 +540,12 @@ worker has audited yet is recorded as *not yet audited*, never as "clean" —
 | Backend / API / auth / security | Claude-3 | **running** |
 | QA / flows / performance / edge cases | Claude-4 | **running** |
 
-# Executive Summary
+# Executive Summary — session record 2 (parallel session, superseded as the index)
+
+> Kept verbatim. Written while passes A and B were complete and C-F were still
+> running, so its counts are of that moment. Its "guards that could not see what
+> they were named for" reading is the most useful paragraph in this file, and is
+> carried up into Part 0.
 
 Two deep passes are complete (41 findings, `F1`–`F22` and `F-001`–`F-020`), and
 a coordinator pass on architecture and integration is in progress. **Three

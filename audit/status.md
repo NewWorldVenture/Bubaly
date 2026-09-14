@@ -37,43 +37,43 @@ as genuinely separate checkouts, neither is necessary.
 ---
 
 ## Claude-1
-CURRENT: Architecture/integration seams. Done: config contract, cron auth, cron failure visibility, service-role boundary. Next: push/APNs, calendar feeds, AI provider fallbacks.
-COMPLETED:
-  - F-020 migration-idempotency defect: found, fixed (18 migrations + 0226), made a permanent CI gate. On main.
-  - Version collision 0295 between main (#542) and #541; renumbered to 0296.
-  - #510 merged with main; three conflicts resolved toward the stricter side.
-  - /audit scaffolding + finalaudit.md Part 0 consolidated view. On main.
-  - F13 marked superseded — it was telling future workers to revert main #544.
-  - Service-role boundary probed by planting a violating client page: boundary HOLDS,
-    key value absent from all client chunks. Declared the boundary explicitly in the
-    two modules that inherited it. LOW / hardening, not a vulnerability.
-  - HIGH: /api/health reported `ok` while a missing CRON_SECRET silently 401'd all 24
-    scheduled jobs, and a missing CHILD_LOGIN_SECRET disabled child sign-in. Added a
-    FEATURE_ENV tier reported as degraded/200 (never 503), with 10 tests proved
-    load-bearing by reverting.
-  - HIGH: 5 of 24 cron routes answered 200 while counting their own failures (4 via
-    `{ ok: true, ...summary }`). 0 of 24 write a durable run record, so the HTTP status
-    is the only signal. Fixed; each revert proved load-bearing individually.
-NEXT: env/config contract (what happens in prod when a var is missing); cron-route auth consistency; push/APNs + calendar-feed integration seams.
-FILES-TOUCHED:
-  - finalaudit.md (Claude-1 owns exclusively), audit/claude-1.md, audit/status.md
-  - docs/audit/rehearse-ledger-repair.sh, .github/workflows/ci.yml
-  - lib/supabase/server.ts, lib/network/benchmarks-server.ts  (server-only declarations)
-  - lib/health/status.ts, app/api/health/route.ts, tests/health-feature-secrets.test.ts
-  - app/api/cron/{feedback-github-sync,library-feeds,automations,marketing-social,marketing}/route.ts
-  - tests/cron-failed-runs-are-visible.test.ts
-  - tests/mobile-imports-stay-bundleable.test.ts
-  - supabase/migrations/* (idempotency guards — landed on main, do not re-edit)
+CURRENT: Session 3 (2026-09-14). Closing the two gaps the Verification Checklist
+  names as blocking completion, using tooling no previous pass had.
+COMPLETED (session 3 so far):
+  - Read the full board before touching anything. The audit is NOT new work: 87
+    findings over passes A-H already exist and most are fixed. Rule 4 applies —
+    this session verifies and closes gaps rather than re-deriving.
+  - Established the runtime every prior pass lacked:
+      * Chromium + Playwright 1.61 + @axe-core/playwright are present -> the
+        "Run a browser" gap (Pass D) is finally actionable.
+      * INSTALLED pgvector (postgresql-16-pgvector). Pass E could not replay
+        0237/0239/0292 because `vector` was absent, so the marketing platform
+        spine tables were never audited. That blocker is now gone.
+      * Docker daemon is NOT usable and the Supabase CLI is absent, so there is
+        no local Supabase: the AUTHENTICATED app cannot be signed into here.
+        Browser work this session is therefore scoped to the public surface,
+        and that limit is stated rather than left implied.
+  - Dispatched Claude-3 (pgvector replay + marketing spine).
+PRIOR SESSIONS (unchanged, see history below): F-020 migration idempotency;
+  /api/health FEATURE_ENV tier; 5 cron routes answering 200 on their own
+  failures; service-role boundary probe; 0296 renumber.
+NEXT: reconcile the two Executive Summaries into one authoritative index — the
+  document names this as a deliberate follow-up and it is the coordinator's job;
+  merge worker findings; verify a sample of Pass G/H fixes against current main.
+FILES-TOUCHED (session 3):
+  - audit/status.md (this section only), audit/claude-1.md, finalaudit.md
+  - none in application source yet
 BLOCKERS:
-  - F-001: applying migrations to production needs operator credentials. Agents must not
-    (docs/PENDING_PROD_MIGRATIONS.md, LB-016 §4). Permanent for agent workers.
+  - F-001/F5/F-C08: applying migrations to production needs operator
+    credentials. Permanent for agent workers.
+  - No local Supabase (no docker daemon, no CLI) -> no authenticated-app browser
+    pass. Pass D's findings about app/(app) stay statically-derived.
 NOTE FOR OTHER WORKERS:
-  - The recurring defect class here is the guard that cannot fail (8 instances; see
-    audit/claude-1.md). Break what a guard protects and confirm it goes red. Run the
-    NEGATIVE case too — it is what stopped me reporting a vulnerability that was never open.
-  - A Next folder starting with `_` is excluded from routing. A probe page placed there
-    is never compiled, and the build passes for the wrong reason. I lost two builds to it.
-LAST-UPDATE: 2026-09-13
+  - The recurring defect class here is the guard that cannot fail (8 instances;
+    see audit/claude-1.md). Break what a guard protects and confirm it goes red.
+  - A Next folder starting with `_` is excluded from routing; a probe page placed
+    there is never compiled and the build passes for the wrong reason.
+LAST-UPDATE: 2026-09-14
 
 ## Claude-2
 CURRENT: RUNNING — launched by Claude-1 as a parallel worker. Status block lives at the top of audit/claude-2.md; mirrored here on completion.
