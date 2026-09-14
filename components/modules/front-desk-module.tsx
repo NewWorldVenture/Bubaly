@@ -481,7 +481,7 @@ export function FrontDeskModule({ channel, voice, unavailable }: {
 
       {/* Detail panel */}
       {selected && (
-        <div className="fixed inset-0 z-50 bg-background flex flex-col pt-[var(--safe-top)] pb-[var(--safe-bottom)] pl-[var(--safe-left)] pr-[var(--safe-right)] lg:pt-0 lg:pb-0 lg:pl-0 lg:pr-0 lg:static lg:inset-auto lg:z-auto lg:w-[400px] lg:rounded-2xl lg:border lg:border-border lg:bg-surface/30 lg:max-h-[calc(100vh-120px)] lg:overflow-y-auto lg:self-start lg:sticky lg:top-4">
+        <div className="fixed inset-0 z-50 bg-bg flex flex-col pt-[var(--safe-top)] pb-[var(--safe-bottom)] pl-[var(--safe-left)] pr-[var(--safe-right)] lg:pt-0 lg:pb-0 lg:pl-0 lg:pr-0 lg:static lg:inset-auto lg:z-auto lg:w-[400px] lg:rounded-2xl lg:border lg:border-border lg:bg-surface/30 lg:max-h-[calc(100vh-120px)] lg:overflow-y-auto lg:self-start lg:sticky lg:top-4">
           <CallDetail call={selected} familyId={familyId} userId={userId} onClose={() => setSelected(null)} />
         </div>
       )}
@@ -633,7 +633,7 @@ function CallDetail({ call, familyId, userId, onClose }: {
               {actions.map((a, i) => {
                 const added = addedItems.has(i);
                 return (
-                  <div key={i} className="flex items-center gap-2 rounded-lg bg-amber-500/8 border border-amber-500/20 px-3 py-2">
+                  <div key={i} className="flex items-center gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2">
                     <span className="h-1.5 w-1.5 rounded-full bg-amber-400 flex-shrink-0" />
                     <span className="flex-1 text-xs text-fg/90">{a}</span>
                     <button onClick={() => addReminder(a, i)} disabled={added || busyItem !== null}

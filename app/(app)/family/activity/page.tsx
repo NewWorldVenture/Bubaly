@@ -46,7 +46,7 @@ export default async function FamilyActivityPage() {
           <ul className="space-y-1">
             {lines.map((l) => (
               <li key={l.id} className="flex items-center gap-3 rounded-lg px-2 py-2 text-sm hover:bg-surface/40">
-                <div className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${l.byAssistant ? 'bg-brand-500/15' : 'bg-violet-500/15'}`}>
+                <div className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${l.byAssistant ? 'bg-brand/15' : 'bg-violet-500/15'}`}>
                   {l.byAssistant ? <Sparkles className="h-4 w-4 text-brand-text" /> : <FileEdit className="h-4 w-4 text-brand-text" />}
                 </div>
                 <span className="min-w-0 flex-1">

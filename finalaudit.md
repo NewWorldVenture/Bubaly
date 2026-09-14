@@ -113,7 +113,7 @@ as the next task in `audit/claude-1.md`.
 
 **Fixed and live:** F1, F9 (closed as a recorded decision), F10, F15, F16, F18,
 F20, C-01 … C-05, C-07, E-01, F-a, F-b, H-01, L-01, L-02, L-03, **P-01**,
-**U-02**, **P-02**, **P-03**, **U-03**.
+**U-02**, **P-02**, **P-03**, **U-03**, **P-04**.
 
 | id | finding | found by | state |
 |---|---|---|---|
@@ -123,7 +123,7 @@ F20, C-01 … C-05, C-07, E-01, F-a, F-b, H-01, L-01, L-02, L-03, **P-01**,
 | **P-02** | **Three of the six routing rows the Guardian settings form renders had no writer anywhere in the application.** `save()` named three fields by hand and the action's input type accepted the same three, so `default_mode_immediate`, `default_mode_close` and `default_mode_trusted` only ever held their column DEFAULT — while `resolveFromProfile` (`lib/guardian/pipeline.ts:144`) routes every inbound call from immediate family, close family and trusted friends through exactly those three. Changing one highlighted the new mode, answered "Settings saved", and reverted on reload | **Claude-1** (found reading U-02's save path) | **Fixed** |
 | **P-03** | A greeting the family **deleted came back**: `form.ai_greeting_template \|\| undefined` turned a cleared field into an omitted key, and the upsert left the old text in the column. Neither the AI greeting nor the voicemail greeting could be removed once set; both columns are nullable, so there was a correct value to write | **Claude-1** (same path) | **Fixed** |
 | **U-03** | `.focus-ring` (`app/globals.css:179`) emits `outline: 2px solid transparent` plus an unconditional ring and **no `:focus-visible` selector** — so the ring is always on and the native focus indicator is suppressed. 218 uses, **16 correct**, and all 16 are on the marketing surface plus kid login: the public site was fixed, the signed-in app was not. One-line fix, no call-site edits | **Claude-2**, verified + fixed by Claude-1 | **Fixed** |
-| **P-04** | **Classes the app uses that compile to nothing.** `btn-primary` (one admin button), `no-scrollbar` (**13** tab strips), `bg-card`, `prose-family`, and six colour-opacity modifiers off the scale (`/12`, `/8` — `bg-brand/10` emits, `bg-brand/12` does not), two of them on the **public** pricing and security pages: each renders with no background, border, divider or scrollbar suppression, and neither CSS nor the build reports an unknown class. **Eight fixed.** Three further families are confirmed by compiling each token — shadcn-style tokens this theme never defines (`bg-primary`, `text-foreground`, `bg-background`, `bg-surface-2`), `tailwindcss-animate` classes with `plugins: []`, and more off-scale values — and are **OPEN with an exact inventory**: `scripts/audit-unstyled-classes.mjs` reports **47** class names across ~40 files that compile to no rule — 23 off-scale opacity modifiers, ten shadcn theme tokens this theme never defines (`bg-card`, `bg-primary`, `text-foreground`, `bg-background`…), four `tailwindcss-animate` classes with `plugins: []`, and the rest. Getting that number honest took four corrections: 157→65 (a regex read `k === 'high'` as a class), 65→35 (Tailwind escapes a comma as `\2c ` **with a trailing space**, truncating every `grid-cols-[minmax(0,1fr)_…]`), 35→51 (the sweep could not see a literal whose tokens are ALL unstyled — `className="h-4.5 w-4.5"`), 51→47 (an argument to a function that *computes* a class is not a class) | **Claude-1** (found checking a line number in U-03's report) | **Part fixed, part OPEN** |
+| **P-04** | **Classes the app uses that compile to nothing.** `btn-primary` (one admin button), `no-scrollbar` (**13** tab strips), `bg-card`, `prose-family`, and six colour-opacity modifiers off the scale (`/12`, `/8` — `bg-brand/10` emits, `bg-brand/12` does not), two of them on the **public** pricing and security pages: each renders with no background, border, divider or scrollbar suppression, and neither CSS nor the build reports an unknown class. **Eight fixed.** Three further families are confirmed by compiling each token — shadcn-style tokens this theme never defines (`bg-primary`, `text-foreground`, `bg-background`, `bg-surface-2`), `tailwindcss-animate` classes with `plugins: []`, and more off-scale values — are **all fixed** — 134 replacements across 54 files, with `scripts/audit-unstyled-classes.mjs` now reporting zero and `tests/every-class-in-the-app-styles-something.test.ts` holding it there (five positive controls plant a known-bad token each, because with every real offender fixed a clean sweep is otherwise indistinguishable from a blind one). The inventory was **47** class names across 54 files — 23 off-scale opacity modifiers, ten shadcn theme tokens this theme never defines (`bg-card`, `bg-primary`, `text-foreground`, `bg-background`…), four `tailwindcss-animate` classes with `plugins: []`, and the rest. Getting that number honest took four corrections: 157→65 (a regex read `k === 'high'` as a class), 65→35 (Tailwind escapes a comma as `\2c ` **with a trailing space**, truncating every `grid-cols-[minmax(0,1fr)_…]`), 35→51 (the sweep could not see a literal whose tokens are ALL unstyled — `className="h-4.5 w-4.5"`), 51→47 (an argument to a function that *computes* a class is not a class) | **Claude-1** (found checking a line number in U-03's report) | **Fixed** |
 | **U-04** | The whole AI Call Guardian surface — five pages — discards every read error, and none appears in the 127 `*-read-boundary` guards. A failed read renders **"0 scams blocked"** on the safety dashboard | **Claude-2** | OPEN |
 | **U-05** | Calendar events, note cards and photo rows are bare `<div onClick>` — mouse-only, WCAG 2.1.1 | **Claude-2** | OPEN |
 
@@ -249,6 +249,19 @@ whose error is discarded, and an empty state shown in its place. Six surfaces:
 `lib/supabase/settle.ts` was written to retire after it "took out /dashboard" in
 production. Six have no error handling at all, including the public
 `app/(marketing)/blog/page.tsx`.
+
+**And a whole class of defect nothing in the toolchain reports (P-04, fixed).** An
+unknown class is not an error in CSS, in Tailwind, or in `next build`; the element
+simply renders without what was asked for. **47 class names** were in that state:
+28 cards on `bg-card` with no background, `bg-primary` / `text-foreground` /
+`bg-background` / `bg-surface-2` (shadcn's vocabulary, used as if this theme
+defined it — it names them `brand`, `fg`, `bg`, `elevated`), `btn-primary` on an
+admin Save button, `no-scrollbar` on thirteen tab strips, the onboarding wizard's
+`animate-in fade-in slide-in-from-bottom-2` against `plugins: []`, and 23 colour
+opacities that are not multiples of five — `bg-brand/10` works, `bg-brand/12`
+resolves to nothing, and two of those were on the public pricing and security
+pages. All fixed, and held at zero by a guard that compiles the real stylesheet
+with the real config.
 
 Already established: the whole 848 KB i18n catalogue was serialized into every
 page (**F9**, closed as a recorded decision); five public pages had no `<h1>`
@@ -574,7 +587,7 @@ Run before calling any of this done:
 ```bash
 npx tsc --noEmit                       # clean
 npm run lint                           # 0 errors (4 pre-existing warnings)
-npx vitest run                         # 1,194 files / 13,707 tests
+npx vitest run                         # 1,203 files / 13,779 tests
 npm run db:audit:queries               # 491 tables, 78 functions, 141 routes resolve
 npm run db:audit:migrations            # no version collisions
 bash docs/audit/pg-bootstrap.sh        # 311 migrations, 0 failed

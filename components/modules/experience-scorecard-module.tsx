@@ -92,7 +92,7 @@ export function ExperienceScorecardModule() {
         <>
           {/* Overall + weakest dimensions */}
           <div className="grid gap-4 md:grid-cols-3">
-            <div className="rounded-2xl border border-border bg-card p-5">
+            <div className="rounded-2xl border border-border bg-surface/40 p-5">
               <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted"><Gauge className="h-4 w-4" /> {t('experienceScorecard.overall')}</div>
               <div className="mt-2 flex items-end gap-3">
                 <span className="text-4xl font-bold tabular-nums">{card.overall}</span>
@@ -104,7 +104,7 @@ export function ExperienceScorecardModule() {
               <p className="mt-1 text-xs text-muted">{card.auditedSurfaces} {t('experienceScorecard.surfaces')} {card.needsWorkCount} {t('experienceScorecard.belowTheBar')}</p>
             </div>
 
-            <div className="rounded-2xl border border-border bg-card p-5 md:col-span-2">
+            <div className="rounded-2xl border border-border bg-surface/40 p-5 md:col-span-2">
               <div className="text-xs font-medium uppercase tracking-wide text-muted">{t('experienceScorecard.byDimension')}</div>
               <div className="mt-3 space-y-2.5">
                 {card.dimensionAverages.map((d) => (

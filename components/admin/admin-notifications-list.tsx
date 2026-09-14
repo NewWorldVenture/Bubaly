@@ -134,7 +134,7 @@ export function AdminNotificationsList({ notifications }: { notifications: Admin
       </div>
 
       {/* List */}
-      <div className="overflow-hidden rounded-xl border border-border bg-card">
+      <div className="overflow-hidden rounded-xl border border-border bg-surface/40">
         {visible.length === 0 ? (
           <p className="px-4 py-16 text-center text-sm text-muted">
             {notifications.length === 0 ? 'No notifications yet. You’re all caught up. 🎉' : 'Nothing matches these filters.'}
@@ -153,7 +153,7 @@ export function AdminNotificationsList({ notifications }: { notifications: Admin
                   )}
                 >
                   <span className={cn('mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-elevated', meta.tone)}>
-                    <Icon className="h-4.5 w-4.5" />
+                    <Icon className="h-[1.125rem] w-[1.125rem]" />
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">

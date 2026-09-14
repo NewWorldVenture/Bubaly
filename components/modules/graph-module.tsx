@@ -127,7 +127,7 @@ export function GraphModule() {
         <div className="grid gap-6 lg:grid-cols-3">
           {/* Left: entity list + hubs */}
           <div className="space-y-4 lg:col-span-1">
-            <div className="rounded-xl border border-border bg-card p-4">
+            <div className="rounded-xl border border-border bg-surface/40 p-4">
               <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-muted">
                 <Users className="size-4" /> {t('graph.entities')}{graph.entities.length})
               </h3>
@@ -138,7 +138,7 @@ export function GraphModule() {
                     onClick={() => setSelectedId(e.id)}
                     className={cn(
                       'flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition',
-                      selectedId === e.id ? 'border-primary bg-primary/10' : 'border-transparent hover:bg-muted/5',
+                      selectedId === e.id ? 'border-brand bg-brand/10' : 'border-transparent hover:bg-muted/5',
                     )}
                   >
                     <span className="truncate">{e.name}</span>
@@ -151,7 +151,7 @@ export function GraphModule() {
             </div>
 
             {topHubs.length > 0 && (
-              <div className="rounded-xl border border-border bg-card p-4">
+              <div className="rounded-xl border border-border bg-surface/40 p-4">
                 <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-muted">
                   <Sparkles className="size-4" /> {t('graph.householdHubs')}
                 </h3>
@@ -171,7 +171,7 @@ export function GraphModule() {
           {/* Right: reasoning panels */}
           <div className="space-y-4 lg:col-span-2">
             {/* Path finder */}
-            <div className="rounded-xl border border-border bg-card p-4">
+            <div className="rounded-xl border border-border bg-surface/40 p-4">
               <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-muted">
                 <Route className="size-4" /> {t('graph.howAreTheseRelated')}
               </h3>
@@ -199,7 +199,7 @@ export function GraphModule() {
 
             {/* Selected entity: connections + impact */}
             {selected ? (
-              <div className="rounded-xl border border-border bg-card p-4">
+              <div className="rounded-xl border border-border bg-surface/40 p-4">
                 <div className="mb-3 flex items-center gap-2">
                   <span className={cn('rounded-full border px-2 py-0.5 text-[10px]', KIND_STYLE[selected.kind] ?? KIND_STYLE.other)}>{selected.kind}</span>
                   <h3 className="text-base font-semibold">{selected.name}</h3>

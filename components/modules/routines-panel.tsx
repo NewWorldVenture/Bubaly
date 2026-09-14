@@ -122,7 +122,7 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
   // events that no longer exist.
   const applyIds = useRef<Record<string, string>>({});
 
-  if (loading) return <div className="rounded-xl border border-border bg-card p-4 text-sm text-muted">{tr('routines.loadingRoutines')}</div>;
+  if (loading) return <div className="rounded-xl border border-border bg-surface/40 p-4 text-sm text-muted">{tr('routines.loadingRoutines')}</div>;
   if (error) return <ErrorState message={tr('routinesPanel.couldNotLoadRoutinesRefresh')} onRetry={refreshAll} />;
 
   function applyTemplate(t: Template) {

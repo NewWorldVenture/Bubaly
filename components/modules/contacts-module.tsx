@@ -192,7 +192,7 @@ export function ContactsModule() {
                     onClick={() => setSelected(isSelected ? null : contact)}
                     className={cn(
                       'flex cursor-pointer items-center gap-4 border-b border-border/50 px-4 py-3 transition last:border-0',
-                      isSelected ? 'bg-brand/8' : 'hover:bg-elevated/30',
+                      isSelected ? 'bg-brand/10' : 'hover:bg-elevated/30',
                     )}>
                     {/* Avatar */}
                     <div className="relative flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold text-fg"

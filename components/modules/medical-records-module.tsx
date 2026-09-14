@@ -253,7 +253,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
             {canEdit ? (
               <>
                 <Button onClick={() => setCheckInPicker(true)} className="btn-cta"><ClipboardList className="h-4 w-4" /> {t('medicalRecords.atTheDoctor')}</Button>
-                <Button onClick={() => setProviderForm({ ...blankProvider })} className="btn-secondary"><Plus className="h-4 w-4" /> Add {providerWord}</Button>
+                <Button onClick={() => setProviderForm({ ...blankProvider })} variant="secondary"><Plus className="h-4 w-4" /> Add {providerWord}</Button>
               </>
             ) : (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs text-muted"><Lock className="h-3.5 w-3.5" /> {t('medicalRecords.viewOnly')}</span>

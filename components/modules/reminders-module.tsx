@@ -291,7 +291,7 @@ export function RemindersModule() {
 
       {/* Overdue alert */}
       {overdue.length > 0 && (
-        <div className="flex items-start gap-3 rounded-2xl border border-danger/30 bg-danger/8 p-4">
+        <div className="flex items-start gap-3 rounded-2xl border border-danger/30 bg-danger/10 p-4">
           <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-danger" />
           <div>
             <p className="text-sm font-bold text-danger">{overdue.length} {tr('reminders.overdueReminder')}{overdue.length > 1 ? 's' : ''}</p>

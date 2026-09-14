@@ -18,10 +18,10 @@ import { useTranslations } from '@/components/i18n/locale-provider';
 // forecast, so it gets a neutral chip of its own — never the green "Yes", which
 // would be an affirmative money answer with no evidence behind it.
 const VERDICT: Record<AffordabilityVerdict, { labelKey: string; icon: typeof CheckCircle2; chip: string; ring: string }> = {
-  not_assessed: { labelKey: 'affordabilityScenario.verdictNotAssessed', icon: Info, chip: 'bg-slate-500/12 text-slate-600 dark:text-slate-300', ring: 'border-border' },
-  ok: { labelKey: 'affordabilityScenario.verdictOk', icon: CheckCircle2, chip: 'bg-emerald-500/12 text-emerald-600 dark:text-emerald-400', ring: 'border-emerald-500/30' },
-  tight: { labelKey: 'affordabilityScenario.verdictTight', icon: AlertTriangle, chip: 'bg-amber-500/12 text-amber-600 dark:text-amber-400', ring: 'border-amber-500/30' },
-  breaches: { labelKey: 'affordabilityScenario.verdictBreaches', icon: XCircle, chip: 'bg-rose-500/12 text-rose-600 dark:text-rose-400', ring: 'border-rose-500/30' },
+  not_assessed: { labelKey: 'affordabilityScenario.verdictNotAssessed', icon: Info, chip: 'bg-slate-500/10 text-slate-600 dark:text-slate-300', ring: 'border-border' },
+  ok: { labelKey: 'affordabilityScenario.verdictOk', icon: CheckCircle2, chip: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400', ring: 'border-emerald-500/30' },
+  tight: { labelKey: 'affordabilityScenario.verdictTight', icon: AlertTriangle, chip: 'bg-amber-500/10 text-amber-600 dark:text-amber-400', ring: 'border-amber-500/30' },
+  breaches: { labelKey: 'affordabilityScenario.verdictBreaches', icon: XCircle, chip: 'bg-rose-500/10 text-rose-600 dark:text-rose-400', ring: 'border-rose-500/30' },
 };
 
 const RECURRENCES: { value: ScenarioRecurrence; labelKey: string }[] = [

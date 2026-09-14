@@ -523,7 +523,7 @@ export function HealthModule() {
           action={
             <div className="flex gap-2">
               <Button onClick={() => setMetricOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> {tr('health.logMetric')}</Button>
-              <Button onClick={() => setWorkoutOpen(true)} className="btn-secondary"><Dumbbell className="h-4 w-4" /> {tr('health.logWorkout')}</Button>
+              <Button onClick={() => setWorkoutOpen(true)} variant="secondary"><Dumbbell className="h-4 w-4" /> {tr('health.logWorkout')}</Button>
             </div>
           }
         />
@@ -699,7 +699,7 @@ export function HealthModule() {
                 <span className="rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-bold text-rose-300">{tr('healthDashboard.activeCount', { count: activeSymptomCount.toLocaleString(locale) })}</span>
               )}
             </div>
-            <Button onClick={() => setSymptomOpen(true)} className="btn-secondary"><Plus className="h-4 w-4" /> {tr('health.logSymptom')}</Button>
+            <Button onClick={() => setSymptomOpen(true)} variant="secondary"><Plus className="h-4 w-4" /> {tr('health.logSymptom')}</Button>
           </div>
           {sortedSymptoms.length === 0 ? (
             <EmptyState icon={Thermometer} title={tr('health.noSymptomsLogged')} description={tr('healthModule.trackIllnessesAndSymptomsOver')} action={<Button onClick={() => setSymptomOpen(true)} className="btn-cta"><Plus className="h-4 w-4" /> {tr('health.logSymptom')}</Button>} />

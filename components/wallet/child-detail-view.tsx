@@ -141,7 +141,7 @@ function SpendingCardPreview({ child }: { child: Child }) {
       <div className="relative flex items-start justify-between">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-widest text-muted">{t('childDetail.bubalyFamily')}</p>
-          <p className="mt-0.5 text-base font-bold text-foreground">{child.name}</p>
+          <p className="mt-0.5 text-base font-bold text-fg">{child.name}</p>
         </div>
         <div className="flex items-center gap-1.5 rounded-lg border border-border bg-surface/70 px-2 py-1">
           <CreditCard className="h-3.5 w-3.5 text-muted" />
@@ -152,10 +152,10 @@ function SpendingCardPreview({ child }: { child: Child }) {
       {/* Balance */}
       <div className="relative mt-4">
         <p className="text-[10px] uppercase tracking-widest text-muted">{t('childDetail.availableSpendBalance')}</p>
-        <p className="text-3xl font-black text-foreground">{formatCents(spendable)}</p>
+        <p className="text-3xl font-black text-fg">{formatCents(spendable)}</p>
       </div>
 
-      <p className="relative mt-3 text-sm font-semibold text-foreground">{t('childDetail.noPaymentCardIssued')}</p>
+      <p className="relative mt-3 text-sm font-semibold text-fg">{t('childDetail.noPaymentCardIssued')}</p>
       <p className="relative mt-1 text-xs text-muted">{t('childDetail.thisBalanceIsTrackedInThe')}</p>
 
       {/* Bottom row */}
@@ -222,7 +222,7 @@ function AICoachCard({ childId }: { childId: string }) {
   }
 
   return (
-    <div className="rounded-2xl border border-brand/20 bg-gradient-to-br from-brand/8 to-violet-500/5 p-4">
+    <div className="rounded-2xl border border-brand/20 bg-gradient-to-br from-brand/10 to-violet-500/5 p-4">
       <div className="mb-2 flex items-center justify-between">
         <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-brand-text">
           <Sparkles className="h-3.5 w-3.5" /> {t('childDetail.aiMoneyCoach')}

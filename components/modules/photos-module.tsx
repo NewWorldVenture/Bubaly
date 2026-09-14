@@ -239,7 +239,7 @@ export function PhotosModule() {
           <button key={key} onClick={() => { setTab(key); setActiveAlbum(null); }}
             className={cn('tab-item', tab === key ? 'tab-item-active' : 'tab-item-inactive')}>
             {tr(labelKey)}
-            {key === 'favorites' && <span className="ml-1 rounded-full bg-current/10 px-1.5 text-[10px]">
+            {key === 'favorites' && <span className="ml-1 rounded-full bg-fg/10 px-1.5 text-[10px]">
               {allPhotos.filter((p) => p.is_favorite).length}
             </span>}
           </button>

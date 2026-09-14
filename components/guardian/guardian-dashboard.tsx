@@ -153,7 +153,7 @@ export function GuardianDashboard({ recentComms, suggestions, escalations, membe
       {unacknowledgedEscalations.length > 0 && (
         <div className="space-y-2">
           {unacknowledgedEscalations.map((esc) => (
-            <div key={esc.id} className="flex items-start gap-3 rounded-2xl border border-red-500/40 bg-red-500/8 p-4">
+            <div key={esc.id} className="flex items-start gap-3 rounded-2xl border border-red-500/40 bg-red-500/10 p-4">
               <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-red-400">

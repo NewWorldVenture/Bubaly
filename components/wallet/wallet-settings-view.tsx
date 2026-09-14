@@ -107,7 +107,7 @@ function ChildRuleCard({ row, canManage }: { row: ChildRuleRow; canManage: boole
         </div>
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
           {BUCKETS.map((b) => (
-            <div key={b.key} className="rounded-xl border border-border bg-background/40 p-2.5">
+            <div key={b.key} className="rounded-xl border border-border bg-bg/40 p-2.5">
               <div className="mb-1 flex items-center gap-1.5">
                 <span className={cn('h-2 w-2 rounded-full', b.color)} />
                 <span className="text-[11px] font-medium text-muted">{b.label}</span>
@@ -126,7 +126,7 @@ function ChildRuleCard({ row, canManage }: { row: ChildRuleRow; canManage: boole
       {/* Toggles */}
       <div className="mt-4 space-y-2">
         <button type="button" disabled={!canManage} onClick={() => setAutoAccept((v) => !v)}
-          className="flex w-full items-center gap-3 rounded-xl border border-border bg-background/40 px-3 py-2.5 text-left transition hover:bg-elevated disabled:opacity-60">
+          className="flex w-full items-center gap-3 rounded-xl border border-border bg-bg/40 px-3 py-2.5 text-left transition hover:bg-elevated disabled:opacity-60">
           <Gift className="h-4 w-4 flex-shrink-0 text-pink-400" />
           <div className="min-w-0 flex-1">
             <div className="text-sm font-medium">{t('walletSettings.autoAcceptGifts')}</div>
@@ -137,7 +137,7 @@ function ChildRuleCard({ row, canManage }: { row: ChildRuleRow; canManage: boole
           </div>
         </button>
 
-        <div className="flex items-center gap-3 rounded-xl border border-border bg-background/40 px-3 py-2.5">
+        <div className="flex items-center gap-3 rounded-xl border border-border bg-bg/40 px-3 py-2.5">
           <ShieldCheck className="h-4 w-4 flex-shrink-0 text-amber-400" />
           <div className="min-w-0 flex-1">
             <div className="text-sm font-medium">{t('walletSettings.approvalThreshold')}</div>

@@ -250,7 +250,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
               {dealBadge && (
                 <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold',
                   dealBadge.tone === 'ok' ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-                  : dealBadge.tone === 'good' ? 'bg-sky-500/12 text-sky-600 dark:text-sky-400'
+                  : dealBadge.tone === 'good' ? 'bg-sky-500/10 text-sky-600 dark:text-sky-400'
                   : dealBadge.tone === 'warn' ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
                   : 'bg-border/60 text-muted')}
                   title={compBand ?? undefined}>

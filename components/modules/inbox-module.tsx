@@ -296,7 +296,7 @@ export function InboxModule() {
 
       {/* Detail panel */}
       {selected && (
-        <div className="fixed inset-0 z-50 bg-background flex flex-col pt-[var(--safe-top)] pb-[var(--safe-bottom)] pl-[var(--safe-left)] pr-[var(--safe-right)] lg:pt-0 lg:pb-0 lg:pl-0 lg:pr-0 lg:static lg:inset-auto lg:z-auto lg:w-[400px] lg:rounded-2xl lg:border lg:border-border lg:bg-surface/30 lg:max-h-[calc(100vh-120px)] lg:overflow-y-auto lg:self-start lg:sticky lg:top-4">
+        <div className="fixed inset-0 z-50 bg-bg flex flex-col pt-[var(--safe-top)] pb-[var(--safe-bottom)] pl-[var(--safe-left)] pr-[var(--safe-right)] lg:pt-0 lg:pb-0 lg:pl-0 lg:pr-0 lg:static lg:inset-auto lg:z-auto lg:w-[400px] lg:rounded-2xl lg:border lg:border-border lg:bg-surface/30 lg:max-h-[calc(100vh-120px)] lg:overflow-y-auto lg:self-start lg:sticky lg:top-4">
           <CommDetail comm={selected} familyId={familyId} userId={userId}
             onClose={() => setSelected(null)} onArchive={() => void archive(selected)} onRefresh={refreshComms} />
         </div>
@@ -536,7 +536,7 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
               {actions.map((a, i) => {
                 const added = addedItems.has(i);
                 return (
-                  <div key={i} className="flex items-center gap-2 rounded-lg bg-amber-500/8 border border-amber-500/20 px-3 py-2">
+                  <div key={i} className="flex items-center gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2">
                     <span className="h-1.5 w-1.5 rounded-full bg-amber-400 flex-shrink-0" />
                     <span className="flex-1 text-xs text-fg/90">{a}</span>
                     <button onClick={() => addReminder(a, i)} disabled={added || busyItem !== null}
@@ -570,7 +570,7 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
             <textarea value={draft} onChange={e => setDraft(e.target.value)}
               placeholder={tr('inbox.tapDraftReplyForAnAi')}
               rows={draft ? 5 : 2}
-              className="w-full resize-none rounded-lg border border-border bg-background/60 p-2.5 text-xs leading-relaxed placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand/30" />
+              className="w-full resize-none rounded-lg border border-border bg-bg/60 p-2.5 text-xs leading-relaxed placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-brand/30" />
             {draft && (
               <div className="mt-2 flex items-center justify-end gap-2">
                 <button onClick={copyDraft} className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-[11px] font-medium hover:border-brand/40 hover:text-brand-text transition">

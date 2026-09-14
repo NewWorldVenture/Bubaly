@@ -12,9 +12,9 @@ import { useTranslations } from '@/components/i18n/locale-provider';
 type Member = { id: string; display_name: string };
 
 const VERDICT: Record<Verdict, { label: string; icon: typeof CheckCircle2; chip: string; ring: string }> = {
-  clear: { label: 'Clear', icon: CheckCircle2, chip: 'bg-emerald-500/12 text-emerald-600 dark:text-emerald-400', ring: 'border-emerald-500/30' },
-  tight: { label: 'Tight', icon: AlertTriangle, chip: 'bg-amber-500/12 text-amber-600 dark:text-amber-400', ring: 'border-amber-500/30' },
-  conflict: { label: 'Conflict', icon: XCircle, chip: 'bg-rose-500/12 text-rose-600 dark:text-rose-400', ring: 'border-rose-500/30' },
+  clear: { label: 'Clear', icon: CheckCircle2, chip: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400', ring: 'border-emerald-500/30' },
+  tight: { label: 'Tight', icon: AlertTriangle, chip: 'bg-amber-500/10 text-amber-600 dark:text-amber-400', ring: 'border-amber-500/30' },
+  conflict: { label: 'Conflict', icon: XCircle, chip: 'bg-rose-500/10 text-rose-600 dark:text-rose-400', ring: 'border-rose-500/30' },
 };
 
 const SEV_ICON = {

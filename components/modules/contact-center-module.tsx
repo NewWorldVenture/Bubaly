@@ -76,7 +76,7 @@ export function ContactCenterModule({ channel, messages, suggestedLocal, twilioR
       {/* Identity cards */}
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Email */}
-        <div className="rounded-2xl border border-border bg-card p-5">
+        <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-3 flex items-center gap-2"><Mail className="h-4 w-4 text-brand-text" /><h2 className="text-sm font-bold">{t('contactCenter.familyEmailAddress')}</h2></div>
           {email ? (
             <p className="text-lg font-semibold tracking-tight">{email}</p>
@@ -107,7 +107,7 @@ export function ContactCenterModule({ channel, messages, suggestedLocal, twilioR
         </div>
 
         {/* Phone */}
-        <div className="rounded-2xl border border-border bg-card p-5">
+        <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="mb-3 flex items-center gap-2"><Phone className="h-4 w-4 text-brand-text" /><h2 className="text-sm font-bold">{t('contactCenter.familyPhoneNumber')}</h2></div>
           {phone ? (
             <p className="text-lg font-semibold tracking-tight">{formatPhone(phone)}</p>
@@ -139,7 +139,7 @@ export function ContactCenterModule({ channel, messages, suggestedLocal, twilioR
 
       {/* AI concierge controls */}
       {canManage && (
-        <div className="rounded-2xl border border-border bg-card p-5">
+        <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2"><Bot className="h-4 w-4 text-brand-text" /><h2 className="text-sm font-bold">{t('contactCenter.aiConcierge')}</h2></div>
             <button
@@ -193,9 +193,9 @@ export function ContactCenterModule({ channel, messages, suggestedLocal, twilioR
               const meta = intentMeta(m.ai_intent ?? 'other');
               const outbound = m.direction === 'outbound';
               return (
-                <li key={m.id} id={`inbox-message-${m.id}`} className={cn('scroll-mt-24 rounded-2xl border border-border bg-card p-4', m.status === 'new' && !outbound && 'ring-1 ring-brand/30')}>
+                <li key={m.id} id={`inbox-message-${m.id}`} className={cn('scroll-mt-24 rounded-2xl border border-border bg-surface/40 p-4', m.status === 'new' && !outbound && 'ring-1 ring-brand/30')}>
                   <div className="flex items-start gap-3">
-                    <span className={cn('mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-elevated', meta.tone)}><Icon className="h-4.5 w-4.5" /></span>
+                    <span className={cn('mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-elevated', meta.tone)}><Icon className="h-[1.125rem] w-[1.125rem]" /></span>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         {outbound

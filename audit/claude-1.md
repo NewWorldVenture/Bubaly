@@ -964,7 +964,7 @@ build says so, because an unknown class is not an error in CSS or in Tailwind.
 - **Status:** FIXED for the eight above. **The inventory is NOT complete** — see
   the next entry, which is the honest state of it.
 
-### [CLAUDE-1][MEDIUM][FRONTEND][OPEN] P-04 — the same defect is systemic: 47 class names style nothing
+### [CLAUDE-1][MEDIUM][FRONTEND] P-04 — the same defect was systemic: 47 class names styled nothing. All fixed.
 
 `scripts/audit-unstyled-classes.mjs` (written for this) now gives an exact
 inventory: **47 distinct class names, across ~1,216 files, that compile to no rule
@@ -1005,13 +1005,67 @@ had the sweep reporting a defect that was not there, or missing one that was:
   `kindMeta('bug').tone` and `cfg.color.split(' ')[1].replace('text', 'bg')` gave
   four more. Only `cn`/`clsx`/`cx`/`classNames`/`twMerge`/`twJoin` arguments count.
 
-- **Why it is still open:** each of the 47 needs a replacement chosen, and the
-  177 grep hits behind them span roughly 40 files. That is its own change, and it
-  should land with the auditor wired in as a test so the list cannot grow back.
-- **Status:** OPEN, inventory exact and reproducible (`node
-  scripts/audit-unstyled-classes.mjs`, exits 1 with the list). `group`, `peer` and
-  named groups like `group/snooze` are allow-listed, because Tailwind correctly
-  emits nothing for them.
+**Fixed: 134 replacements across 54 files, and the audit now reports zero.**
+
+| what | fix |
+|---|---|
+| `bg-card` (28 cards) | `bg-surface/40` — the pattern every other card in the app uses |
+| `bg-background`, `/40`, `/60` | `bg-bg`, `bg-bg/40`, `bg-bg/60` |
+| `bg-primary`, `bg-primary/10`, `border-primary` | `bg-brand`, `bg-brand/10`, `border-brand` |
+| `text-foreground` (6) | `text-fg` |
+| `bg-surface-2` (3) | `bg-elevated` |
+| `bg-brand-500/15` | `bg-brand/15` — the colour was wrong, not the opacity (`/15` is a multiple of five and compiles) |
+| 23 opacity modifiers | rounded to the nearest multiple of five: `/12`→`/10`, `/8`→`/10`, `/58`→`/60`, `/63`→`/65`, `/73`→`/75`, `/92`→`/90`, `/98`→`/95` |
+| `animate-in fade-in slide-in-from-bottom-2 duration-300` | `animate-fade-in-up` — the theme's own keyframe, which is the same gesture |
+| `animate-in fade-in zoom-in-95 duration-100` | `animate-fade-in` |
+| `btn-secondary` (3) | `variant="secondary"` — the `Button` component has had that variant all along, and the three sites are `<Button>`s. My first pass put `btn-inline` on them, which would have stacked a second border and background on top of the Button's own; caught by reading the component instead of the class name. |
+| `duration-400` | `duration-300` |
+| `h-4.5`, `w-4.5` (4 each) | `h-[1.125rem]`, `w-[1.125rem]` |
+| `bg-current/10`, `text-current/70` | `bg-fg/10`, `opacity-70` — `currentColor` takes no opacity modifier |
+| `reference-page` | removed; it sat beside `soft-grid-bg`, which is the class that does the work |
+
+- **Status:** FIXED, and guarded.
+  `tests/every-class-in-the-app-styles-something.test.ts` runs the audit over the
+  whole app (4 s) and asserts the offender list is empty — plus **five positive
+  controls** that plant one known-bad token each in a temp file and require the
+  audit to report it. Those controls are the point: with every real offender fixed,
+  "0 offenders" is otherwise indistinguishable from a sweep that has gone blind.
+  The test also asserts the sweep actually looked at the app (>800 files, >10,000
+  class lists), because a glob that matched nothing would also report zero.
+  `group`, `peer` and named groups like `group/snooze` are allow-listed: Tailwind
+  correctly emits nothing for them.
+
+### [CLAUDE-1][MEDIUM][TESTING] A guard anchored on the text of the broken class unhooked itself when the class was fixed
+
+- **File/path:** `tests/mobile-fullscreen-panel-safe-area.test.ts:22`
+- **Found by:** the full suite going red on the P-04 fix — 2 failed, 13,777 passed.
+- **Problem:** the test finds the panel it checks by searching for a literal:
+
+  ```ts
+  const shell = src.split('\n').find((l) => l.includes('fixed inset-0 z-50 bg-background')) ?? '';
+  ```
+
+  `bg-background` is one of the 47 names that styled nothing. Renaming it to
+  `bg-bg` made `.find` return undefined, `?? ''` turned that into an empty string,
+  and all six assertions then failed — on a file whose safe-area padding, the only
+  thing this test is about, had not changed at all.
+- **Impact:** two ways round. Before the fix, the guard was pinned to a defect: as
+  long as `bg-background` stayed, the test passed and said nothing about the class
+  being dead. And `?? ''` means "not found" and "found, missing everything" are the
+  same outcome — so had someone deleted the takeover entirely, this would have
+  reported six assertion failures rather than "the panel is gone".
+  **This is Claude-4's finding #2 in a different file**: a test that asserts the
+  exact text of defective code makes the fix look like the regression.
+- **Fix (applied):** anchor on the STRUCTURE — `fixed inset-0 z-50` — and assert
+  there is exactly one such shell per file, so "not found" and "found but wrong"
+  are different failures. A separate assertion now checks the panel has *some*
+  themed background (`bg-bg`, `bg-surface` or `bg-elevated`) without naming which,
+  which is the property that was actually broken.
+- **Status:** FIXED.
+- **Worth generalising:** I then grepped `tests/` and `e2e/` for every one of the
+  47 replaced tokens. This was the only one. Recorded because the answer being
+  "one" is itself the finding — a sweep like that is cheap and it is the only way
+  to know a mass rename did not quietly unhook a guard somewhere else.
 
 **Method note.** The finding came from checking a line number in someone else's
 report. It would have been easy to read "globals.css:414 (.btn-primary)", see a

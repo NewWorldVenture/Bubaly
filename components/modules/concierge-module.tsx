@@ -288,7 +288,7 @@ export function ConciergeModule() {
                         <button key={plan.id} onClick={() => setSelectedPlan(plan)}
                           className="w-full flex items-center gap-3 rounded-2xl border border-border bg-surface/40 px-4 py-3 text-left transition hover:bg-surface/60">
                           <div className={cn('grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl', cfg.color)}>
-                            <cfg.icon className="h-4.5 w-4.5" />
+                            <cfg.icon className="h-[1.125rem] w-[1.125rem]" />
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="truncate text-sm font-semibold">{plan.title}</div>

@@ -30,7 +30,7 @@ export default async function PrivatePurchasePage({ params, searchParams }: {
   if (!result.ok && result.code === SERVICE_CODES.denied) notFound();
   const report = result.ok ? result.data : null;
   const failed = !result.ok || query.retry === 'failed';
-  const button = 'inline-flex items-center rounded-xl border border-border px-4 py-2 text-sm font-medium hover:bg-surface-2';
+  const button = 'inline-flex items-center rounded-xl border border-border px-4 py-2 text-sm font-medium hover:bg-elevated';
 
   return <section className="mx-auto max-w-3xl space-y-5 p-6">
     <h1 className="text-2xl font-semibold">{t('purchaseAdvice.privateTitle')}</h1>
