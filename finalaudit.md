@@ -3689,3 +3689,59 @@ non-vacuous — reintroducing the short-page termination fails 4 of its 10 tests
 
 **Status: FIXED**, and unlike `0296`/`0297` this one needs no migration, so it
 reaches production with the deploy.
+
+## Also fixed in Pass H — nothing pinned "manager" to the database
+
+"Manager" was stated three times and nothing tied them together:
+
+```
+lib/constants/roles.ts   MANAGER_ROLES = ['parent', 'adult']
+lib/constants/roles.ts   isManager = role === 'parent' || role === 'adult'
+0003_functions_triggers  can_manage_family: role in ('parent','adult')
+```
+
+All three agree today, and `MANAGER_ROLES` appeared in **zero** tests. This is
+the source of the class that dominates this audit — F16, F18, F20, F21, F-003,
+F-006, F-E01, F-E02, *one mistake in eight places*: authorization drawn on the
+screen rather than in the database. `roles.ts` says so itself: *"Used for UI
+gating; the database RLS is the real enforcement boundary."*
+
+`tests/manager-role-agrees-with-the-database.test.ts` reads the roles out of the
+migration that defines each function and asserts the sets match, and that
+`can_manage_family` stays strictly narrower than membership — never `child` or
+`teen`, the equivalence `0296`/`0297` had to undo. Non-vacuous against all three
+drift directions (array 3/6, predicate 2/6, SQL 2/6).
+
+## Swept and found clean in Pass H
+
+Recorded so a later pass does not re-derive them.
+
+**The service-role surface** (it bypasses RLS entirely, so it is the one place
+where every database boundary in this audit is irrelevant):
+
+* 71 service-role API routes and 30 service-role server-action files — all gated.
+* 24/24 cron routes call `hasCronAuthorization`, which fails closed on a missing
+  secret.
+* 9 Twilio webhooks validate `x-twilio-signature` through a validator that fails
+  closed on a missing token and uses `timingSafeEqual`.
+* The three ungated public actions (`gift`, `reviews/new`, `s/[slug]`) are IP
+  rate-limited and scoped by an unguessable token or a public slug.
+* 0/24 cron routes contain an unbounded `select()` — the PostgREST 1,000-row cap
+  class is closed there.
+
+**The child sign-in path**, which is the most attackable surface in the product
+(guessable username, 4-digit PIN, real auth users):
+
+* A wrong PIN records a failure and a success clears the counter — the throttle
+  is not decorative.
+* The `ilike` wildcard hole is fixed and documented in place.
+* `child_login_throttle` is RLS-on-with-no-policies, so it is deny-all to every
+  client role and cannot be reset by the account being throttled.
+* `resetChildPinAction` checks `isManager` **and** that the member belongs to the
+  caller's own family, so it is not a cross-family takeover.
+
+**The rate limiter**: `rate_limit_hit` is a single atomic
+`insert … on conflict do update … returning count`, so there is no read-then-write
+race; execute is revoked from `public`/`anon`; and an authenticated caller may
+only use a key containing their own `auth.uid()`, so one user cannot exhaust
+another's bucket. `rateLimitDb` fails closed by default.
