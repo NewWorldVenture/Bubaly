@@ -787,3 +787,58 @@ someone makes next, and does anything stop it?
 same session had already shipped: *the cron now reports the failure — but does
 anything act on it?* Reporting and recovering are different properties, and a
 visible failure is the more comfortable of the two to stop at.
+
+## C1-S3-02 — the public calendar feed cannot be turned on by anybody
+
+`[CLAUDE-1][MEDIUM][BROKEN FEATURE]`
+
+- **Files:** `app/api/sync/feeds/[token]/route.ts`, `lib/sync/feed-token.ts`,
+  `middleware.ts` (PUBLIC carve-out), `supabase/migrations/0018_sync_platform.sql`
+- **Problem:** The outbound iCalendar feed is complete, hardened and
+  unreachable. The route documents itself as the way "Apple Calendar, Outlook,
+  Google ('From URL'), and Alexa can all subscribe to this URL" — but nothing in
+  the codebase ever mints a `feed_token` or sets `feed_enabled = true`, so the
+  query `.eq('feed_token', token).eq('feed_enabled', true)` can never match a
+  row and the route answers 404 to every request that will ever be made to it.
+- **Evidence:**
+  ```
+  grep -rn "generateFeedToken" app lib components tests
+    lib/sync/feed-token.ts:13:export function generateFeedToken(): string {   # the definition, and nothing else
+  grep -rn "feed_token|feedToken" app/(app) components
+    (no matches)
+  ```
+  `0018_sync_platform.sql:150` declares the column `feed_token text unique`
+  with the comment *"nullable until published"* — and nothing ever publishes.
+  `components/dashboard/calendar-sync-panel.tsx` is **not** this feature: it
+  drives `calendar_feeds`, the INBOUND subscription table, a different thing
+  with a confusingly similar name.
+- **Why it reads as finished.** Everything around it is real work: two rate
+  limiters (in-memory and durable), token-shape validation, a strict
+  `feed_enabled` scope, `readAll` pagination carrying a comment about a
+  previously-fixed truncation bug, a constant-time HMAC verifier, and two test
+  files. `middleware.ts` carves `/api/sync/feeds` out of the auth guard with a
+  comment explaining that the unguessable token IS the authorization. Every
+  signal says shipped feature; the one thing missing is the only thing a user
+  needs.
+- **Impact:** Two, and the second is the one that matters.
+  1. A documented capability nobody can use. Anyone reading the route, the
+     migration or the middleware carve-out reasonably concludes calendar
+     publishing works.
+  2. A **public route carve-out maintained for dead code**. `/api/sync/feeds` is
+     exempted from the authentication guard — a deliberate security decision,
+     correct for a live feature, pure unearned attack surface for one that
+     cannot be enabled. Carve-outs are reviewed as a set; this one has been
+     carrying a justification that is not currently true.
+- **Recommended fix:** owner's call between two, and the choice should be made
+  rather than inherited:
+  - **Finish it** — a server action that calls `generateFeedToken()`, writes it
+    with `feed_enabled = true`, and surfaces the subscribe URL; plus a test that
+    a published calendar is actually reachable end to end.
+  - **Retire it** — drop the route, the PUBLIC carve-out and `feed-token.ts`.
+    The column can stay; an unused column is cheap, an unused public route is not.
+  Either way the gap that let this sit is that **both test files exercise the
+  route against a token they supply themselves**. Nothing asserts a token can be
+  obtained, so the tests pass on a feature no user can reach — the Part 0 pattern
+  again, in its "tested the half that works" form.
+- **Status:** OPEN — deliberately not fixed. Choosing between shipping and
+  retiring a user-facing capability is a product decision, not an audit one.

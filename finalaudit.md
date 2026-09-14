@@ -6,7 +6,7 @@
 `Executive Summary — session record` sections below are the earlier summaries,
 kept verbatim; where they disagree with this part, this part is newer.*
 
-**Thirteen passes, A–M. 95 numbered findings.**
+**Thirteen passes, A–M. 96 numbered findings.**
 
 | Pass | Surface | Findings |
 |---|---|---:|
@@ -22,7 +22,7 @@ kept verbatim; where they disagree with this part, this part is newer.*
 | J | A reconciliation check that reconciled nothing | fix |
 | K | A Stripe event acknowledged that nobody finished | fix |
 | L | The marketing platform spine — the tables that had never replayed | 4 (`L1`–`L4`) |
-| M | Reporting a failure is not surviving one | 1 (`M1`) |
+| M | Reporting a failure is not surviving one; a feature nobody can enable | 2 (`M1`, `M2`) |
 
 Session record 1 says "87 findings across six passes". That was true when
 written; passes G–K have landed since, and Pass A is `F1`–`F22`, which is 22 and
@@ -70,7 +70,7 @@ rather than the statement), `F-F01` (a caller
 `F-F03` (`/missions` — up to 240 sequential storage round trips), `F-D01`
 (photo lightbox: no `role="dialog"`, no Escape, no focus trap), `F-D02`/`F-D03`
 (55 detached labels, 65 unnamed `<select>`), `F-C07` (19 undocumented env vars),
-`F-C09`, `F-C10`, `F19`, `F6`.
+`F-C09`, `F-C10`, `F19`, `F6`, `M2` (the calendar feed nobody can enable).
 
 `F-D10` is the root cause under the accessibility findings and is worth more
 than any single one of them: `.eslintrc.json` is `next/core-web-vitals` alone,
@@ -4231,3 +4231,41 @@ restored → green.
 *visible* — the cron 502s, the `/api/health` FEATURE_ENV tier, the dead-letter
 tables — deserves the same second question. Visibility is where this codebase
 tends to stop, and it is only half of the property.
+
+## M2 — the public calendar feed cannot be turned on by anybody
+
+`MEDIUM`. `app/api/sync/feeds/[token]/route.ts` is complete, hardened and
+unreachable. It documents itself as how "Apple Calendar, Outlook, Google
+('From URL'), and Alexa" subscribe to a bubaly calendar. Nothing in the
+codebase ever mints a `feed_token` or sets `feed_enabled = true`:
+
+```
+grep -rn "generateFeedToken" app lib components tests
+  lib/sync/feed-token.ts:13:export function generateFeedToken()   # the definition, and nothing else
+grep -rn "feed_token|feedToken" app/(app) components
+  (no matches)
+```
+
+So `.eq('feed_token', token).eq('feed_enabled', true)` can never match, and the
+route answers 404 to every request that will ever reach it. `0018` declares the
+column "nullable until published" and nothing publishes.
+
+Everything *around* it is real: two rate limiters, token-shape validation,
+`readAll` pagination carrying a comment about a previously-fixed truncation, a
+constant-time HMAC verifier, two test files. Both test files exercise the route
+against **a token they supply themselves** — nothing asserts a token can be
+obtained, so they pass on a feature no user can reach. The Part 0 pattern in its
+*tested the half that works* form.
+
+The part that outlives the dead feature: `middleware.ts` carves
+`/api/sync/feeds` out of the authentication guard, with a comment explaining
+that the unguessable token IS the authorization. That is correct for a live
+feature and unearned attack surface for one that cannot be enabled. Carve-outs
+get reviewed as a set, and this one has been carrying a justification that is
+not currently true.
+
+**Left OPEN deliberately.** Finish it (an action that mints the token and
+surfaces the URL, plus a test that a published calendar is reachable end to end)
+or retire it (drop the route, the carve-out and `feed-token.ts`). Choosing
+between shipping and retiring a user-facing capability is a product decision,
+not an audit one.
