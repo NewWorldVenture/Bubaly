@@ -47,6 +47,18 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      # The same suite on a DST-OBSERVING host. lib/capture/parse.ts does its
+      # date arithmetic on Date fields, and a Date built from LOCAL fields is
+      # normalised by the runtime's own DST rules: on the spring-forward morning
+      # a 02:30 appointment became 03:30 instead of moving to 03:00, the first
+      # minute that exists. Production runs UTC, so the whole suite passed on
+      # every run while the bridge was host-dependent — this job is the only
+      # thing that would have caught it, and is what keeps it caught.
+      - name: Unit tests (DST-observing host)
+        run: npm test
+        env:
+          TZ: America/Los_Angeles
+
       # Build BEFORE Typecheck, deliberately. next.config.mjs turns off the
       # type-check and lint passes inside `next build` — they were a duplicate
       # of the two steps here, and the one worker that ran them peaked at

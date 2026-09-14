@@ -6,7 +6,7 @@
 
 import { suggestKind, parseEvent, parseDueDate, type CaptureKind } from '@/lib/capture/parse';
 import { cleanTranscript } from '@/lib/voice/transcript';
-import { asWallClockIn, instantForLocalTime } from '@/lib/time/zoned';
+import { asWallClockUtc, instantForLocalTime } from '@/lib/time/zoned';
 
 /** Leading filler/wake phrases people say before the real command. */
 const WAKE_PREFIXES = [
@@ -102,10 +102,19 @@ export type VoiceRoute = {
 function withDates(
   kind: CaptureKind, text: string, explicit: boolean, now: Date, timezone?: string,
 ): VoiceRoute {
-  const clock = timezone ? asWallClockIn(now, timezone) : now;
+  // UTC-anchored, not local-anchored. A wall clock carried in LOCAL fields is
+  // normalised by the runtime's own DST rules: on a host in a DST-observing zone
+  // the parser's `setMinutes(150)` on the spring-forward morning lands at 03:30
+  // rather than 02:30, so the time the family asked for is destroyed before
+  // instantForLocalTime below ever sees it, and the appointment moves an hour
+  // instead of to the first minute that exists. UTC has no DST. Production runs
+  // UTC so this was latent, but the bridge claimed to be host-independent and
+  // was not.
+  const utc = Boolean(timezone);
+  const clock = timezone ? asWallClockUtc(now, timezone) : now;
 
   if (kind === 'event') {
-    const parsed = parseEvent(text, clock);
+    const parsed = parseEvent(text, clock, { utc });
 
     // No subject left once the date is taken out — "put it on the calendar
     // tomorrow at 6pm", where "it" refers to something Bubaly never heard.
@@ -124,8 +133,8 @@ function withDates(
       // morning the named time may not exist, and an appointment should move to
       // the first minute that does rather than vanish.
       startsAt = instantForLocalTime(
-        startsAt.getFullYear(), startsAt.getMonth() + 1, startsAt.getDate(),
-        startsAt.getHours() * 60 + startsAt.getMinutes(), timezone,
+        startsAt.getUTCFullYear(), startsAt.getUTCMonth() + 1, startsAt.getUTCDate(),
+        startsAt.getUTCHours() * 60 + startsAt.getUTCMinutes(), timezone,
       );
     }
     return {
@@ -139,7 +148,7 @@ function withDates(
   if (kind === 'task') {
     // `dueDate` is a local YYYY-MM-DD, so getting the family's calendar right is
     // the whole job — there is no instant to convert.
-    const parsed = parseDueDate(text, clock);
+    const parsed = parseDueDate(text, clock, { utc });
     return {
       text: cleanTranscript(parsed.title) || cleanTranscript(text),
       kind, explicit, startsAt: null, allDay: false, dueDate: parsed.dueDate,

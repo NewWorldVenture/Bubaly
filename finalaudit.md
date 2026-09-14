@@ -3745,3 +3745,72 @@ where every database boundary in this audit is irrelevant):
 race; execute is revoked from `public`/`anon`; and an authenticated caller may
 only use a key containing their own `auth.uid()`, so one user cannot exhaust
 another's bucket. `rateLimitDb` fails closed by default.
+
+---
+
+# Pass I — F-F04, the DST bug, fixed
+
+`F-F04` was recorded as *"a genuine production bug"*, VERIFIED, with a diagnosis
+and a proposed fix — and then left. It is fixed now.
+
+**Reproduced first, not taken on trust:**
+
+```
+TZ=UTC                  tests/assistant-capture-fidelity  38 passed
+TZ=America/Los_Angeles  × moves an appointment to the first minute that exists
+                        AssertionError: expected '03:30' to be '03:00'
+```
+
+**The mechanism.** `lib/capture/parse.ts` does its arithmetic on Date *fields*,
+which is right in a browser, where the runtime zone IS the family's zone. The
+server bridged to it with `asWallClockIn`, a Date whose LOCAL fields spell the
+family's wall clock — and a Date built from local fields is normalised by the
+runtime's own DST rules:
+
+```
+TZ=America/Los_Angeles  new Date(2026, 2, 8, 2, 30)  ->  03:30
+TZ=UTC                  new Date(2026, 2, 8, 2, 30)  ->  02:30
+```
+
+So on the spring-forward morning the parser's `setMinutes(150)` on local
+midnight landed at 03:30, and the 02:30 the family asked for was destroyed
+*before* `instantForLocalTime` could move it to 03:00, the first minute that
+exists. The appointment shifted an hour instead of to the top of the hour.
+
+**The fix.** UTC observes no DST, so arithmetic in UTC fields cannot be
+normalised. `parse.ts` gained a `DateOps` pair — local and UTC — selected by an
+optional `{ utc }`; `asWallClockUtc` is the UTC twin of the bridge; the voice
+router uses both and reads UTC fields back. **The browser path is untouched**:
+`utc` defaults false, and local is the correct answer there.
+
+**The guard, which is the half that matters.** Production runs UTC, so the whole
+suite passed on every run while the bridge was host-dependent. Nothing would
+have caught the next one:
+
+* `vitest.config.ts` pins `TZ` so a run is hermetic — but as
+  `process.env.TZ ?? 'UTC'`, never a bare literal, so an explicit TZ still wins.
+  A hard-coded value would have silently overridden the CI job below and made it
+  prove nothing.
+* CI now runs the suite a **second time under `TZ=America/Los_Angeles`**.
+
+Verified from inside a test worker rather than from the reporter, which runs in
+the main process and never sees `test.env`:
+
+| Invocation | Worker resolves |
+|---|---|
+| pin only, no shell `TZ` | `ENV=UTC RESOLVED=UTC OFFSET=0` |
+| `TZ=America/Los_Angeles` | `ENV=America/Los_Angeles RESOLVED=America/Los_Angeles OFFSET=420` |
+
+**Result:** the full suite, 13,643 tests, passes under UTC *and* under
+America/Los_Angeles. Before the fix it failed under the latter. Also spot-checked
+green under Australia/Sydney (southern-hemisphere DST) and Asia/Kolkata (a
+half-hour offset). Non-vacuous: restoring the old bridge fails LA again with the
+same `'03:30' to be '03:00'`.
+
+**Not fixed, and not claimed:** `classifyVoiceCommand` still calls `suggestKind`
+with the raw `now` rather than the family's wall clock. It only chooses a KIND —
+`withDates` re-parses with the correct clock — so the blast radius is a
+misclassification near a family's midnight, not a wrong time. Left alone rather
+than widened into.
+
+**Status: FIXED.** No migration, so it reaches production with the deploy.
