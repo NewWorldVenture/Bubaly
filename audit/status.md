@@ -94,6 +94,20 @@ COMPLETED (session 3 so far):
     contract had no WCAG contrast formula anywhere. That is what let C2-B02 and
     C2-B03 through. Filed, not fixed: closing it turns the suite red on
     C2-B03's palette, which is a product decision, not an audit one.
+  - FIXED C1-S3-04, found by running the full suite before pushing:
+    tests/ai-prompt-injection.test.ts TIMED OUT instead of running. Three tests
+    await import() the AI module graph inside the test body; the first pays the
+    ~4.9s transform inside its own timer and the body needs ~6.3s, against
+    vitest's default 5000ms. It could not pass on this machine whether or not
+    the defence works. Reproduced on origin/main in a clean worktree, so NOT
+    this branch's — fixed anyway: three lines, and an unverified
+    prompt-injection defence is not something to hand back as a comment.
+    The point worth carrying: the red line said "timed out in 5000ms", which
+    names TIME, not the defence. Every other guard in this audit CANNOT FAIL;
+    this one fails in a way that DISGUISES WHAT BROKE.
+    Proven load-bearing: with fenceUntrusted() neutered, 3 tests fail (the
+    hostile-title assertion now failing on its merits at 6378ms rather than
+    running out of time); restored byte-for-byte, 11 passed.
 PRIOR SESSIONS (unchanged, see history below): F-020 migration idempotency;
   /api/health FEATURE_ENV tier; 5 cron routes answering 200 on their own
   failures; service-role boundary probe; 0296 renumber.
@@ -108,7 +122,8 @@ FILES-TOUCHED (session 3):
     scripts/i18n-scan.mjs, app/globals.css, tailwind.config.ts,
     components/ui/input.tsx, design/tokens.json, and the 7 .tsx files carrying
     the now-redundant `focus-visible:focus-ring` prefix (C2-B01/C2-B04).
-  - tests: push-failure-is-not-delivery, focus-and-boundary-contract.
+  - tests: push-failure-is-not-delivery, focus-and-boundary-contract,
+    ai-prompt-injection (timeout budget only — no assertion changed).
 BLOCKERS:
   - F-001/F5/F-C08: applying migrations to production needs operator
     credentials. Permanent for agent workers.
