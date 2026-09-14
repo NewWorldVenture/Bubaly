@@ -3945,3 +3945,91 @@ and the other 3 are regression guards for behaviour that was already right
 `npx tsc --noEmit` and eslint clean.
 
 **Status: FIXED.** No migration, so it reaches production with the deploy.
+
+---
+
+## Pass L — an invitee could rewrite the invite they were about to accept
+
+**F-L01 — privilege escalation: `guest` → `parent`, and into families never invited to.**
+
+`accept_invite` copies the invite's `role` straight into `family_members`. So
+whoever controls that column controls the role. `invites_update`, as 0118 left
+it, handed that control to the invitee:
+
+```sql
+create policy invites_update on public.invites for update
+  using (public.can_manage_family(family_id)
+         or lower(email) = lower(coalesce(auth.jwt()->>'email','')));
+```
+
+Two faults compound. The second arm gives the **invitee** update rights over
+their own invite row, with nothing constraining which columns. And because the
+policy declares `USING` with **no `WITH CHECK`**, Postgres reuses the USING
+expression as the check on the NEW row — an expression still satisfied by "the
+email is mine", so `family_id` and `expires_at` are unconstrained too.
+
+**Measured**, not argued: on a database replayed from these migrations, as
+`authenticated`, with controls proving RLS was live throughout.
+
+| | |
+|---|---|
+| invite role after the invitee's own UPDATE | **parent** |
+| `family_members.role` they ended up with | **parent** |
+| `can_manage_family` afterwards | **true** |
+| rows repointed to an **unrelated** family | **1** |
+| role obtained in that unrelated family | **parent** |
+
+The controls that make those numbers mean something — each run in the same
+session, as the same impersonated invitee:
+
+| Control | Result |
+|---|---|
+| `current_user` | `authenticated` (not the table owner) |
+| another person's invite visible | 0 rows — SELECT policy holding |
+| direct `family_members` insert | refused, 42501 |
+| updating someone else's invite | 0 rows — USING holding |
+| **updating my own invite** | **1 row — the hole** |
+
+So a person invited at the product's *lowest* privilege promotes themselves to
+family manager; and anyone holding a single pending invite can repoint it at any
+family id and become a manager of a household that never invited them.
+
+**The fix — 0298.** The invitee arm is not needed by anything: `accept_invite`
+is SECURITY DEFINER and writes `status`/`accepted_by` itself, and the only other
+update in the product is the admin revoke, which runs as the service role. So
+the policy now says what was meant, with an explicit `WITH CHECK` so a manager
+cannot push an invite into a family they do not manage either:
+
+```sql
+create policy invites_update on public.invites for update
+  using (public.can_manage_family(family_id))
+  with check (public.can_manage_family(family_id));
+```
+
+SELECT is deliberately unchanged — seeing an invite addressed to your own email
+is the invite flow working, not a leak.
+
+**Verification.** After 0298, on the same database: role rewrite **0 rows**,
+family pivot **0 rows**, expiry extension **0 rows**, while the invitee still
+reads their own invite, `accept_invite` still lands them at the **granted**
+role (`guest`), and re-accepting is still idempotent (0136 intact). Managers
+still revoke and amend their own invites and are refused (42501) when moving one
+out of their family.
+
+`docs/audit/invite-role-escalation-check.sql` makes it permanent and is
+**non-vacuous in both directions**: restoring the 0118 policy fails it with
+`INVITE-ESC FAIL: the invitee rewrote their own invite role (1 rows)`, and it
+passes again once 0298 is re-applied. 0298 applied twice is clean (LB-016 §4).
+
+No regression: the probe suite fails the same 6 probes with and without this
+change on this local harness — a pre-existing local-only artefact of the 3
+migrations that need pgvector, which CI has and this container does not.
+
+Full suite **13,658 / 13,658** under pinned UTC and `TZ=America/Los_Angeles`
+(one run in each zone hit **F-F05**, the known `api-ai-runs` 5s-timeout flake,
+which passes in isolation and on re-run — it is also, retroactively, the
+unidentified single failure reported in Pass J).
+
+**Status: FIXED IN CODE, NOT YET IN PRODUCTION.** This is a migration, so like
+0296 and 0297 it is inert until the F5 ledger blocker is cleared. **The
+escalation is live in production until then.**
