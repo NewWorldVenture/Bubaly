@@ -28,11 +28,23 @@ export default async function ReferralsPage() {
   const summary = summarizeReferrals(referrals);
 
   // Did this family itself get referred?
-  const { data: wasReferred } = await supabase
+  //
+  // The error is read, not dropped, because this page is fail-closed everywhere
+  // else — `listReferralsForFamily` throws rather than render "no referrals yet"
+  // over an unreadable list, and `getOrCreateReferralCode` throws too. This one
+  // read used to swallow its error and hand the panel `alreadyReferred: false`,
+  // which is a claim about the family, not an absence of data: a family that HAD
+  // been referred was offered the "enter a code" box again, and the write behind
+  // it can only fail with `already_referred`.
+  const { data: wasReferred, error: wasReferredError } = await supabase
     .from('referrals')
     .select('id')
     .eq('referred_family_id', familyId)
     .maybeSingle();
+  if (wasReferredError) {
+    console.error('[referrals] referred-by read failed', { familyId, error: wasReferredError });
+    throw new Error('Could not check whether your family was referred. Refresh and try again.');
+  }
 
   const rows = referrals.map((r) => ({
     id: r.id,

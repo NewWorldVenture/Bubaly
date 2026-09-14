@@ -3750,6 +3750,15 @@ never ran.
   shows a family when their referral code cannot be read is a design decision.
 - **`app/api/blog/save/route.ts`** — two raw queries with no error handling at all.
 
+> **Correction, Pass BB.** I over-called `referrals`. Reading its helpers,
+> `listReferralsForFamily` **throws on purpose** — *"Fail closed: the referrals page
+> is source-of-truth. A swallowed read error would show 'no referrals yet' when the
+> list is merely unreadable"* — and `getOrCreateReferralCode` throws too. The page is
+> deliberately fail-closed, so a `Promise.all` rejection reaching the error boundary
+> is the same destination every other read failure already has. **The `Promise.all`
+> is not the defect there**, which makes it the sixth false positive in that census
+> and the first one that was mine. What IS a defect on that page is recorded below.
+
 ### And my own guard from Pass AY was wrong in a way worth writing down
 
 `nothing reaches for an unpaginated listUsers again` matched raw file text, so it went
@@ -3901,3 +3910,51 @@ it to four and the control went red, so finishing the job looked identical to th
 scanner breaking. That is the sixth instance of this exact error in the audit, and
 the second time I have written it *after* recording the lesson. It asserts by name
 now: the four routes that hand-inline the correct pattern and are not going away.
+
+---
+
+## Pass BB — closing my own two, and one of them was not the defect I said it was
+
+**Status: FIXED** (both), **CORRECTED** (my own Pass AZ note), **RECORDED** (one
+residue that needs a client change).
+
+### `app/(app)/referrals/page.tsx` — the one read that broke the page's own stance
+
+Not the `Promise.all`. That page fails closed everywhere by design (see the
+correction above), so a rejection goes where every other read failure already goes.
+
+The defect is `wasReferred`, which **dropped its error** and handed the panel
+`alreadyReferred: false`. That is not an absence of data, it is a claim about the
+family: one that HAD been referred was offered the "enter a code" box again, and the
+write behind it can only fail with `already_referred`. It now reads the error and
+throws with a reason, which is what its neighbours on the same page do.
+
+### `app/api/blog/save/route.ts` — a toggle that re-read the fact it had just written
+
+Three defects, and the middle one has teeth.
+
+1. `Promise.all` over the count and the this-reader's-save reads: a transport
+   rejection rejected the batch, which on POST happened **after the write had
+   landed** — so the bookmark existed and the caller got a 500.
+2. Both errors were dropped. `count: 0` over an unreadable aggregate claims nobody
+   saved the article. `saved: false` over an unreadable row claims something about
+   **the reader**, and that is the one that costs them something: the heart renders
+   empty for an article they have saved, and the toggle behind it is
+   insert-then-delete-on-conflict, so their next tap **removes the bookmark**.
+3. POST re-read the state it had just written to decide what to report. A read that
+   failed after a write that succeeded reported the opposite of what happened.
+
+Fixed in that order: `settleAll`; GET answers **503 rather than a state it could not
+read** (the client's `r.ok ? r.json() : null` then leaves its own state alone); and
+POST derives `saved` from **the branch it took**, consulting `saveState` for the
+count only — reported as `null` rather than `0` when unreadable, which the client
+already handles by keeping its last good number.
+
+### The residue, recorded rather than half-built
+
+The heart's client state starts at `saved: false`. During an outage at first paint,
+GET's 503 leaves it there, so a saved article still shows an empty heart and a tap
+still unsaves. Closing that needs a **three-state heart** — saved, not saved,
+unknown — which is a client change on a marketing surface, and the failure needs an
+outage at exactly first paint. Named here rather than built, and the server no longer
+*asserts* the wrong state, which is the half that was a lie.
