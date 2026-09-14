@@ -22,6 +22,7 @@ import { ProviderInfoSheet, CheckInSheet } from '@/components/medical/print-shee
 import { cn } from '@/lib/utils/cn';
 import type { Tables, RecordKind } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Provider = Tables<'health_providers'>;
 type Policy = Tables<'insurance_policies'>;
@@ -59,6 +60,7 @@ function CardImage({ path, label }: { path: string | null; label: string }) {
 
 export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
   const t = useTranslations();
+  const askConfirm = useConfirm();
   const { familyId, userId, members, selfMember, role } = useApp();
   const { success, error: toastError } = useToast();
   const canEdit = isManager(role);
@@ -141,6 +143,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
   }
 
   async function deleteProvider(id: string) {
+    if (!(await askConfirm({ title: t('medicalRecords.deleteProviderQ'), body: t('confirm.cannotBeUndone') }))) return;
     const sb = createClient();
     const { error: err } = await sb.from('health_providers').delete().eq('id', id);
     if (err) { toastError(t('medicalRecordsModule.couldNotDelete')); return; }
@@ -189,6 +192,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
   }
 
   async function deletePolicy(id: string) {
+    if (!(await askConfirm({ title: t('medicalRecords.deletePolicyQ'), body: t('medicalRecords.deletePolicyBody') }))) return;
     const sb = createClient();
     const { error: err } = await sb.from('insurance_policies').delete().eq('id', id);
     if (err) { toastError(t('medicalRecordsModule.couldNotDelete')); return; }

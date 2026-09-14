@@ -15,6 +15,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, MetricType } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { useConfirm } from '@/components/ui/confirm';
 
 type HealthMetric = Tables<'health_metrics'>;
 type WorkoutLog = Tables<'workout_logs'>;
@@ -105,6 +106,7 @@ function workoutIcon(activity: string) {
 
 export function HealthModule() {
   const tr = useTranslations();
+  const askConfirm = useConfirm();
   const { code: locale } = useLocale();
   const { familyId, userId, members } = useApp();
   const { success, error: toastError } = useToast();
@@ -448,6 +450,7 @@ export function HealthModule() {
   }
 
   async function deleteSymptom(s: SymptomLog) {
+    if (!(await askConfirm({ title: tr('health.deleteSymptomQ'), body: tr('confirm.cannotBeUndone') }))) return;
     const sb = createClient();
     const { error: err } = await sb.from('symptom_logs').delete().eq('id', s.id);
     if (err) { toastError(tr('healthModule.failedToDeleteSymptom')); return; }

@@ -3300,3 +3300,117 @@ The parent's intended day is **not recoverable from anything currently stored**,
 needs a column, which is a migration, which is the owner's and gated behind **F-001**.
 Recorded there rather than half-built — an `anchorDay` parameter nobody can supply is the
 same lie as an optional locale nobody passes.
+
+---
+
+## Pass AV — the question a destructive click never asked, and the language it asked it in
+
+**Status: FIXED** (19 sites + one shared primitive), **NAMED AND PINNED** (21 + 26).
+
+### `[CLAUDE-2 → CLAUDE-1][MEDIUM][UX]` a single tap deleted a record, and there was no primitive to ask with
+
+Claude-2 filed this as LOW against two modules. Verified exactly as described, then
+**measured the class instead of fixing the two cited sites** — and the measurement moved
+the severity and found a second defect underneath it.
+
+**40 destructive clicks across 27 files** reach a delete with nothing on the path that
+asks. Six are the scan reading a toggle as a delete (`vote`, `castVote`, `logDose` clear a
+row to write another); **34 are real**.
+
+**The severity is not uniform, so the fix is not a sweep.** What separates them is what is
+lost and whether it comes back:
+
+- A weather city, a packing item, a gift idea, a leftover: one tap to re-add.
+- An insurance policy carrying the member ID, group and RX BIN/PCN numbers **and the card
+  photos**; an uploaded warranty document; a contractor's quote; a vaccination record; a
+  guardian routing rule. None of those is re-keyable from memory, and two of them are a
+  file the family no longer has anywhere.
+
+Sixteen handlers in the second group now ask; the twenty-one in the first are listed by
+name in the guard as deliberately unconfirmed. Blanket-adding a confirmation to all 34
+would have made the trivial ones worse for no gain and buried the ones that matter.
+
+**There was no primitive to route them through.** Claude-2's fix said *"route both through
+the shared `Modal` confirm the codebase already uses"* — the codebase has an excellent
+accessible `Modal`, but no confirmation built on it. The 32 places that do ask call raw
+`window.confirm()`. So `components/ui/confirm.tsx` is new: a `ConfirmProvider` mounted in
+the **authenticated** layout (not the root — that would put its strings and the Modal's in
+the scope every marketing page ships) and a `useConfirm()` returning
+`(request) => Promise<boolean>` that never rejects and settles `false` on every exit.
+
+Two decisions in it are deliberate and are the opposite of what the neighbouring
+primitive does:
+
+- **Outside the provider it falls back to `window.confirm`, where `useToast` throws.** The
+  property this exists to hold is that a destructive click *asks*; a forgotten provider
+  should cost the styling, not the question. Returning `false` instead would have been
+  worse than either — every delete button in that subtree would become a silent no-op that
+  still reported success.
+- **It is called `askConfirm` at the call sites, not `confirm`.** Nine of the ten files it
+  was adopted into still contain `window.confirm` calls elsewhere. Binding the name
+  `confirm` would have shadowed the global, and `if (confirm('…'))` against a
+  promise-returning function is **always truthy** — every one of those remaining dialogs
+  would have silently stopped gating anything.
+
+**`Modal` needed one fix to make nesting honest.** A confirmation opens on top of the
+dialog whose Delete button was pressed (`WarrantyModal.removeFile`). Both listen on
+`document`, so one Escape dismissed **both**, and closing the inner one lifted the scroll
+lock while the outer was still open. `Modal` now keeps a stack and only the top-most dialog
+answers keys.
+
+### `[CLAUDE-1][MEDIUM][I18N]` I18N-004 — 32 confirmations ask in English regardless of the reader
+
+Found by reading what the *confirmed* sites say, which is the only way it could have been
+found: it is a third defect the hardcoded-locale ratchet is structurally blind to, for the
+same reason as I18N-002 and I18N-003 — **there is no locale in the source to count.**
+
+```tsx
+confirm(`Delete “${m.title}” with all its tasks and boxes? This cannot be undone.`)
+confirm(`Delete ${m.name}? This also removes its schedules and dose history.`)
+```
+
+A German reader is asked, in English, to authorise something irreversible. That is worse
+than a mis-grouped number: a number rendered oddly is still legible, and this is a question
+the reader may simply not be able to read — gating the one class of action that cannot be
+taken back. **32 calls across 26 files.**
+
+The count had to be measured rather than taken from the first grep, which reported 44
+files. Eighteen of those already pass a `t()` lookup — they ask in the reader's language
+and only through the browser's unstyled dialog, which is a smaller and different problem.
+Listing them would have been a false accusation *and* a weaker guard: a genuinely new
+English literal added to one of the eighteen would have passed silently.
+
+Two of them were the audit's own exhibit and are fixed in this pass:
+`notes-module.tsx` asked `confirm('Delete?')` — untranslated *and* uninformative — twice.
+All three of its asks now go through the primitive. The remaining 26 files are listed by
+name in the guard, which fails when a new one appears — and when a listed one is fixed
+without being struck off.
+
+### The instrument, and why it pins names rather than a number
+
+`tests/a-destructive-click-asks-first.test.ts` holds both inventories **by name**. This is
+the ratchet lesson applied deliberately: a count falls as the work succeeds, which turns
+the scanner's blind spots into false assurance. A named list fails in both directions — a
+new unconfirmed click, **and** a listed one that quietly started asking without being
+struck off.
+
+It also has a not-blind control that asserts by name that the scan still reaches
+`weather-module::removeCity` and `voting-module::vote`, and no longer reports the two sites
+the audit named. Three planted defects were each caught: removing one adopted guard went
+red in three independent assertions; a new English `confirm()` literal in an unlisted file
+went red in the fourth.
+
+**One thing the instrument got wrong first, and it was me reading it, not the scan.** The
+first run appeared to miss `billing-module.tsx` — the file Claude-2 explicitly cited — and
+I spent a debugging round inside the AST walk looking for the blind spot. Every piece
+worked in isolation because there was no blind spot: I had piped the sorted output through
+`tail -40`, and `billing-module` sorts near the top. The scanner was honest; the reading of
+it was not.
+
+### Two claims I nearly shipped that the schema refused
+
+The body text for `deleteSchedule` and `deleteAccount` was going to say the dose history
+and the transactions went with them. **Both are `ON DELETE SET NULL`** — `medication_doses.schedule_id`
+(`00261`) and `transactions.account_id` (`0006`). The rows survive, unlinked. Checked
+before writing, so the copy now says that, which is both accurate and the more reassuring
+thing to read.

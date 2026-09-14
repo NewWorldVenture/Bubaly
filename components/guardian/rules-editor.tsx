@@ -8,6 +8,7 @@ import { ROUTING_MODE_LABELS, type RoutingMode } from '@/lib/guardian/pipeline';
 import { createRuleAction, toggleRuleAction, deleteRuleAction } from '@/app/(app)/guardian/actions';
 import { useToast } from '@/components/ui/toast';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Rule = {
   id: string;
@@ -41,6 +42,7 @@ const ROUTING_MODES: RoutingMode[] = [
 
 export function RulesEditor({ rules: initial }: { rules: Rule[] }) {
   const t = useTranslations();
+  const askConfirm = useConfirm();
   const tr = useTranslations();
   const { success: toastSuccess, error: toastError } = useToast();
   const [rules, setRules] = useState(initial);
@@ -55,6 +57,7 @@ export function RulesEditor({ rules: initial }: { rules: Rule[] }) {
   }
 
   async function handleDelete(id: string) {
+    if (!(await askConfirm({ title: t('rulesEditor.deleteRuleQ'), body: t('rulesEditor.deleteRuleBody') }))) return;
     const res = await deleteRuleAction(id);
     if (!res.ok) { toastError(res.error); return; }
     setRules(prev => prev.filter(r => r.id !== id));

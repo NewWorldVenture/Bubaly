@@ -23,6 +23,7 @@ import {
 import { compareQuotes as rankQuotes } from '@/lib/services/providers/compare';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Project = Tables<'home_projects'>;
 type Material = Tables<'project_materials'>;
@@ -297,6 +298,7 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
   const locale = useLocale();
   const fmtDate = fmtDateIn(locale.code);
   const tr = useTranslations();
+  const askConfirm = useConfirm();
   // Money follows the reader; the currency stays the money's own.
   const money = (cents: number | null | undefined) => moneyIn(cents, locale.code);
   const { success, error: toastError } = useToast();
@@ -320,6 +322,7 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
   }
 
   async function deleteMaterial(m: Material) {
+    if (!(await askConfirm({ title: tr('projects.deleteMaterialQ'), body: tr('confirm.cannotBeUndone') }))) return;
     const { error } = await createClient().from('project_materials').delete().eq('id', m.id);
     if (error) return toastError(describeDbError(error));
     success(tr('projectsModule.materialRemoved'));
@@ -358,6 +361,7 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
   }
 
   async function deleteQuote(q: Quote) {
+    if (!(await askConfirm({ title: tr('projects.deleteQuoteQ'), body: tr('confirm.cannotBeUndone') }))) return;
     const { error } = await createClient().from('project_quotes').delete().eq('id', q.id);
     if (error) return toastError(describeDbError(error));
     success(tr('projectsModule.quoteRemoved'));

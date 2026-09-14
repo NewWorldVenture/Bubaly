@@ -24,6 +24,7 @@ import {
 } from '@/lib/medications/adherence';
 import type { Tables, DoseStatus } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Medication = Tables<'medications'>;
 type Schedule = Tables<'medication_schedules'>;
@@ -72,6 +73,7 @@ function AdherenceRing({ rate, size = 96 }: { rate: number | null; size?: number
 
 export function MedicationsModule() {
   const t = useTranslations();
+  const askConfirm = useConfirm();
   const { familyId, userId, members, role } = useApp();
   const { success, error: toastError } = useToast();
   const canEdit = isManager(role);
@@ -247,6 +249,7 @@ export function MedicationsModule() {
   }
 
   async function deleteSchedule(id: string) {
+    if (!(await askConfirm({ title: t('medications.deleteScheduleQ'), body: t('medications.deleteScheduleBody') }))) return;
     const sb = createClient();
     const { error: err } = await sb.from('medication_schedules').delete().eq('id', id);
     if (err) toastError(describeDbError(err));

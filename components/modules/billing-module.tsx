@@ -59,6 +59,7 @@ import type { Tables, SubscriptionStatus, AccountType, TransactionType, BudgetPe
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import { FamilyDeliveredValue } from '@/components/billing/family-delivered-value';
 import type { LocaleCode } from '@/lib/i18n/locales';
+import { useConfirm } from '@/components/ui/confirm';
 
 type FinancialAccount = Tables<'financial_accounts'>;
 type Transaction = Tables<'transactions'>;
@@ -515,6 +516,7 @@ function AddSavingsGoalModal({ open, onClose, familyId, userId, onDone }: {
 
 export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: string | null } = {}) {
   const tr = useTranslations();
+  const askConfirm = useConfirm();
   // Money follows the reader's locale; the currency does not.
   const locale = useLocale();
   const fmtCurrency = (n: number, showSign = false) => currencyIn(locale.code, n, showSign);
@@ -883,6 +885,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
 
   // ── CRUD helpers ────────────────────────────────────────────────────────
   async function deleteTransaction(id: string) {
+    if (!(await askConfirm({ title: tr('billing.deleteTransactionQ'), body: tr('confirm.cannotBeUndone') }))) return;
     const res = await deleteTransactionAction(id);
     if (!res.ok) return toastError(res.error);
     success(tr('billingModule.transactionRemoved'));
@@ -890,6 +893,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   }
 
   async function deleteBudget(id: string) {
+    if (!(await askConfirm({ title: tr('billing.deleteBudgetQ'), body: tr('confirm.cannotBeUndone') }))) return;
     const res = await deleteBudgetAction(id);
     if (!res.ok) return toastError(res.error);
     success(tr('billingModule.budgetRemoved'));
@@ -897,6 +901,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   }
 
   async function deleteBill(id: string) {
+    if (!(await askConfirm({ title: tr('billing.deleteBillQ'), body: tr('confirm.cannotBeUndone') }))) return;
     const supabase = createClient();
     const { error } = await supabase.from('bills').delete().eq('id', id);
     if (error) return toastError(describeDbError(error));
@@ -913,6 +918,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   }
 
   async function deleteGoal(id: string) {
+    if (!(await askConfirm({ title: tr('billing.deleteGoalQ'), body: tr('confirm.cannotBeUndone') }))) return;
     const res = await deleteSavingsGoalAction(id);
     if (!res.ok) return toastError(res.error);
     success(tr('billingModule.goalRemoved'));
@@ -920,6 +926,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
   }
 
   async function deleteAccount(id: string) {
+    if (!(await askConfirm({ title: tr('billing.deleteAccountQ'), body: tr('billing.deleteAccountBody') }))) return;
     const supabase = createClient();
     const { error } = await supabase.from('financial_accounts').delete().eq('id', id);
     if (error) return toastError(describeDbError(error));

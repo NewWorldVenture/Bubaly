@@ -25,6 +25,7 @@ import {
 } from '@/lib/pets/care';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Pet = Tables<'pets'>;
 type CareRecord = Tables<'pet_care_records'>;
@@ -348,12 +349,14 @@ function PetDetail({ pet, records, onClose, onAddCare, onRemove }: {
   const locale = useLocale();
   const fmtDate = fmtDateIn(locale.code);
   const t = useTranslations();
+  const askConfirm = useConfirm();
   const { error: toastError } = useToast();
   const meta = speciesMeta(pet.species);
   const age = petAgeLabel(pet.birthday);
   const sorted = [...records].sort((a, b) => (a.record_date < b.record_date ? 1 : -1));
 
   async function deleteRecord(id: string) {
+    if (!(await askConfirm({ title: t('pets.deleteRecordQ'), body: t('confirm.cannotBeUndone') }))) return;
     const { error } = await createClient().from('pet_care_records').delete().eq('id', id);
     if (error) toastError(describeDbError(error));
   }

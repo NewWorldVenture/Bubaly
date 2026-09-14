@@ -25,6 +25,7 @@ import { cn } from '@/lib/utils/cn';
 import { formatInsightsForNote, type NotesInsights } from '@/lib/notes/ai';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Note = Tables<'notes'>;
 
@@ -86,6 +87,7 @@ function renderChecklist(body: string) {
 
 export function NotesModule() {
   const t = useTranslations();
+  const askConfirm = useConfirm();
   const { familyId } = useApp();
   const { success, error: toastError } = useToast();
   const [activeCategory, setActiveCategory] = useState('all');
@@ -224,7 +226,7 @@ export function NotesModule() {
                   {t('notes.edit')}
                 </button>
               </div>
-              <button aria-label={t('a11y.delete')} onClick={() => { if (confirm(t('notesModule.deleteThisNote'))) remove(viewing.id); }}
+              <button aria-label={t('a11y.delete')} onClick={async () => { if (await askConfirm({ title: t('notesModule.deleteThisNote'), body: t('confirm.cannotBeUndone') })) remove(viewing.id); }}
                 className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger transition">
                 <Trash2 className="h-4 w-4" />
               </button>
@@ -257,6 +259,7 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
   onDuplicate: (n: Note) => void;
 }) {
   const t = useTranslations();
+  const askConfirm = useConfirm();
   if (view === 'list') {
     return (
       <div className="overflow-hidden rounded-2xl border border-border divide-y divide-border/50">
@@ -290,7 +293,7 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
                   {note.is_pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
                 </button>
                 <button aria-label={t('a11y.copy')} onClick={() => onDuplicate(note)} className="rounded p-1.5 text-muted hover:text-fg"><Copy className="h-3.5 w-3.5" /></button>
-                <button aria-label={t('a11y.delete')} onClick={() => { if (confirm('Delete?')) onDelete(note.id); }} className="rounded p-1.5 text-muted hover:text-danger">
+                <button aria-label={t('a11y.delete')} onClick={async () => { if (await askConfirm({ title: t('notesModule.deleteThisNote'), body: t('confirm.cannotBeUndone') })) onDelete(note.id); }} className="rounded p-1.5 text-muted hover:text-danger">
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </div>
@@ -362,7 +365,7 @@ function NoteGroup({ notes, view, onOpen, onTogglePin, onDelete, onDuplicate }: 
                 <button aria-label={t('a11y.unpin')} onClick={() => onTogglePin(note)} className="rounded p-1 text-muted hover:text-brand-text">
                   {note.is_pinned ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}
                 </button>
-                <button aria-label={t('a11y.delete')} onClick={() => { if (confirm('Delete?')) onDelete(note.id); }} className="rounded p-1 text-muted hover:text-danger">
+                <button aria-label={t('a11y.delete')} onClick={async () => { if (await askConfirm({ title: t('notesModule.deleteThisNote'), body: t('confirm.cannotBeUndone') })) onDelete(note.id); }} className="rounded p-1 text-muted hover:text-danger">
                   <Trash2 className="h-3 w-3" />
                 </button>
               </div>

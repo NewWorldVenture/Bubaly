@@ -20,6 +20,7 @@ import {
 } from '@/lib/language/practice';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 import type { LocaleCode } from '@/lib/i18n/locales';
+import { useConfirm } from '@/components/ui/confirm';
 
 type Goal = Tables<'language_goals'>;
 type Session = Tables<'language_sessions'>;
@@ -31,6 +32,7 @@ export function LanguageModule() {
   const locale = useLocale();
   const fmtDate = fmtDateIn(locale.code);
   const tr = useTranslations();
+  const askConfirm = useConfirm();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -103,6 +105,7 @@ export function LanguageModule() {
   }
 
   async function deleteCard(c: Card) {
+    if (!(await askConfirm({ title: tr('language.deleteCardQ'), body: tr('confirm.cannotBeUndone') }))) return;
     const { error } = await createClient().from('vocab_cards').delete().eq('id', c.id);
     if (error) return toastError(describeDbError(error));
     success(tr('languageModule.cardRemoved'));
