@@ -68,7 +68,16 @@ export async function loadTrustInputs(supabase: DB, familyId: string): Promise<{
 }> {
   const nowIso = new Date().toISOString();
   const [{ data: policies }, { data: grants }, { data: dels }, { data: emergencies }] = await settleAll([
-    supabase.from('trust_policies').select('*').eq('family_id', familyId).eq('enabled', true),
+    // Ordered. lib/trust/engine.ts sorts by `priority` alone, and
+    // Array.prototype.sort is stable, so with equal priorities the winner is
+    // whichever row came back first — and a query with no ORDER BY does not
+    // promise one. 0302 stops the specific case that made this reachable (two
+    // live system policies with one name), but a family may still write two
+    // hand-made policies at the same priority, and which of those governs
+    // should not depend on a query plan. Newest first, id as the final
+    // tiebreak, so the answer is the same on every read.
+    supabase.from('trust_policies').select('*').eq('family_id', familyId).eq('enabled', true)
+      .order('priority', { ascending: false }).order('updated_at', { ascending: false }).order('id'),
     supabase.from('permission_grants').select('member_id, domain, capability, effect').eq('family_id', familyId),
     supabase.from('trust_delegations').select('to_member_id, domains, starts_at, expires_at, revoked_at')
       .eq('family_id', familyId).is('revoked_at', null).gt('expires_at', nowIso),
