@@ -25,6 +25,7 @@ import { Card } from '@/components/ui/card';
 import { isManager } from '@/lib/constants/roles';
 import { fmtDateTime } from '@/lib/utils/format';
 import { sessionStrength, type Assurance } from '@/lib/auth/mfa';
+import { settleAll } from '@/lib/supabase/settle';
 
 type AuditRow = {
   id: string;
@@ -71,7 +72,7 @@ export function PrivacyCenter() {
       const columns = 'id, actor_kind, actor_id, domain, capability, decision, reason, created_at';
       // Two reads on purpose: a busy ledger can push the last export past the
       // 50-row window, and "No exports yet" would then be a false statement.
-      const [recentRes, exportsRes] = await Promise.all([
+      const [recentRes, exportsRes] = await settleAll([
         supabase.from('trust_audit_logs').select(columns).order('created_at', { ascending: false }).limit(50),
         supabase.from('trust_audit_logs').select(columns).eq('domain', 'privacy').eq('capability', 'export').order('created_at', { ascending: false }).limit(10),
       ]);

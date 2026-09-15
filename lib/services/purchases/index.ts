@@ -7,6 +7,7 @@ import { recallFacts } from '@/lib/services/memory';
 import { readAllPages } from '@/lib/supabase/read-all-pages';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
 import { adviseOnPurchase, type BudgetRow, type FactRow, type PurchaseAdvice } from '@/lib/purchases/advisor';
+import { settle } from '@/lib/supabase/settle';
 
 export type PurchaseAdvisorResult = { advice: PurchaseAdvice; budgetRestricted: boolean; memoryRestricted: boolean };
 export type BeforeYouBuyInput = {
@@ -44,27 +45,27 @@ export async function advisePurchase(scope: ServiceScope, input: BeforeYouBuyInp
       memoryRestricted = settings.data?.memory_enabled === false;
     }
     const [inventory, locations, assets, wardrobe, wishes, facts] = await Promise.all([
-      readAllPages((from, to) => supabase
+      settle(readAllPages((from, to) => supabase
         .from('inventory_items')
         .select('id, name, category, location_id, quantity, value_cents, brand, model, serial_number, tags, status, lent_to, lent_on, warranty_until')
         .eq('family_id', familyId)
-        .order('id').range(from, to)),
-      readAllPages((from, to) => supabase.from('home_locations').select('id, name, kind, parent_id').eq('family_id', familyId).order('id').range(from, to)),
-      readAllPages((from, to) => supabase
+        .order('id').range(from, to))),
+      settle(readAllPages((from, to) => supabase.from('home_locations').select('id, name, kind, parent_id').eq('family_id', familyId).order('id').range(from, to))),
+      settle(readAllPages((from, to) => supabase
         .from('home_assets')
         .select('id, name, category, location, brand, model, serial_number, purchase_price, warranty_until')
         .eq('family_id', familyId)
-        .order('id').range(from, to)),
-      readAllPages((from, to) => supabase
+        .order('id').range(from, to))),
+      settle(readAllPages((from, to) => supabase
         .from('wardrobe_items')
         .select('id, member_id, name, category, brand, color, size, status, price_cents')
         .eq('family_id', familyId)
-        .order('id').range(from, to)),
-      readAllPages((from, to) => supabase
+        .order('id').range(from, to))),
+      settle(readAllPages((from, to) => supabase
         .from('wishlist_items')
         .select('id, member_id, title, price, is_purchased')
         .eq('family_id', familyId)
-        .order('id').range(from, to)),
+        .order('id').range(from, to))),
       // Memories come through the memory service, never a raw query: it is what
       // hides medical and account facts (and sensitive wording in any category)
       // from a child or teen, and drops facts whose `expires_at` has passed. A

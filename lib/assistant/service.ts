@@ -22,6 +22,7 @@ import { splitItems, parseGroceryItem } from '@/lib/capture/parse';
 import { instantForLocalTime } from '@/lib/time/zoned';
 import { expandEventsInZone } from '@/lib/calendar/recurrence';
 import { readAISettings } from '@/lib/services/ai-settings';
+import { settleAll } from '@/lib/supabase/settle';
 
 type Client = SupabaseClient<Database>;
 
@@ -145,7 +146,7 @@ async function readEvents(
   supabase: Client, familyId: string, window: { from: string; to: string }, timezone: string,
 ): Promise<AgendaEvent[]> {
   const columns = 'id, title, starts_at, ends_at, all_day, recurrence, recurrence_until';
-  const [single, series] = await Promise.all([
+  const [single, series] = await settleAll([
     supabase.from('calendar_events').select(columns)
       .eq('family_id', familyId).eq('recurrence', 'none')
       .gte('starts_at', window.from).lt('starts_at', window.to)

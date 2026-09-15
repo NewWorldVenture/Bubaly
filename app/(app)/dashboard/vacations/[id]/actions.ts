@@ -17,6 +17,7 @@ import { scopeFromUserContext } from '@/lib/services/scope';
 import { reportTripDisruption, type DisruptionRequest, type ReportedDisruption } from '@/lib/services/trips';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 
 export type DisruptionBooking = { id: string; label: string; detail: string };
 
@@ -31,7 +32,7 @@ export async function listDisruptableBookingsAction(vacationId: string): Promise
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
 
-  const [flights, lodging] = await Promise.all([
+  const [flights, lodging] = await settleAll([
     supabase.from('vacation_flights').select('id, airline, flight_number, depart_airport, arrive_airport, arrive_at, depart_at')
       .eq('family_id', familyId).eq('vacation_id', vacationId).order('depart_at', { ascending: true }).limit(100),
     supabase.from('vacation_lodging').select('id, name, check_in, check_out')

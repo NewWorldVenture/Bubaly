@@ -48,6 +48,7 @@ import { HIGH_STAKES_AI_DOMAINS, type AutonomyBehavior } from '@/lib/trust/engin
 import { settingsFromRow } from '@/lib/ai/family-settings';
 import { AI_CATEGORIES } from '@/lib/ai/categories';
 import { loadRecentToolCalls, type ToolCallLedgerRow } from '@/lib/ai/runs/store';
+import { settle } from '@/lib/supabase/settle';
 
 /** One line of "what Bubaly did", with the run it belongs to. Never the arguments. */
 export type TrustToolCall = {
@@ -172,14 +173,14 @@ export async function loadTrustActivity(
 
   const [callsRes, settings, contexts] = await Promise.all([
     loadRecentToolCalls(scope, { db, limit: opts?.toolCallLimit ?? 25 }),
-    db.from('family_ai_settings').select('*').eq('family_id', scope.familyId).maybeSingle(),
+    settle(db.from('family_ai_settings').select('*').eq('family_id', scope.familyId).maybeSingle()),
     canManage
-      ? db
+      ? settle(db
           .from('ai_request_context')
           .select('request_id, sensitive_omitted, snapshot, created_at')
           .eq('family_id', scope.familyId)
           .order('created_at', { ascending: false })
-          .limit(contextLimit)
+          .limit(contextLimit))
       : Promise.resolve({ data: [] as ContextRow[], error: null }),
   ]);
 
