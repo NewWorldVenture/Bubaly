@@ -15,7 +15,13 @@ and both sessions independently labelled a pass **"L"** for different work, so
 theirs is relabelled **L′** while its finding ID `F-L01` is left exactly as its
 author wrote it.*
 
-**Sixteen passes, A–O plus L′. 127 numbered findings.**
+**Seventeen passes, A–P plus L′. 137 distinct finding IDs are named in this
+document**, of which Pass P added 17. The passes' own totals are larger than the
+IDs named here — Pass P alone produced 38 findings — because this index cites
+the significant ones individually and the remainder by range; the worker files
+hold every one in full. That distinction is stated rather than papered over with
+a single impressive number, since a count nobody can reproduce from the document
+is the same defect this audit keeps finding elsewhere.
 
 | Pass | Surface | Findings |
 |---|---|---:|
@@ -35,6 +41,7 @@ author wrote it.*
 | N | The browser, finally — runtime, page weight, flows (Claude-4) and rendered accessibility (Claude-2) | 28 (`N1`–`N3` + 8; `C2-B01`–`C2-B17`) |
 | O | `C2-B01` + `C2-B04` fixed together; a contrast contract that computes no contrast; a security test that could not pass | 2 (`C1-S3-03`, `C1-S3-04`) + 2 fixes |
 | L′ | *(parallel session)* An invitee could rewrite the invite they were about to accept | 1 (`F-L01`) |
+| P | Three surfaces nobody had audited: server actions, the Expo app, inside `app/(app)` | 38 (`C2-M01`–`M16`, `C3-S4-01`–`07`, `C4-S4-01`–`13`, `C1-S4-01`–`02`) |
 
 Session record 1 says "87 findings across six passes". That was true when
 written; passes G–K have landed since, and Pass A is `F1`–`F22`, which is 22 and
@@ -110,6 +117,25 @@ BLOCKED and *not* cleared; the other 120 instances are in `app/(app)`),
 `F-C09`, `F-C10`, `F19`, `F6`, `M2` (the calendar feed nobody can enable), and
 **`F-C03`, REOPENED** — see `N1`.
 
+**Open and new in Pass P** (full detail in that pass): `C2-M03` — **the largest
+open finding in this document**, ~251 `en-US`-pinned date/time call sites across
+~135 files against an 11-locale catalogue, carrying a recorded trap (`dayKey()`
+uses `en-US` as a *parse* locale and must NOT be switched, or a Hijri/Buddhist
+calendar corrupts every day-grouping key); `C4-S4-01` (13 of 59 `readAll` call
+sites never migrated, now rendering zero where they rendered a prefix);
+`C4-S4-04` (a payment instrument reporting "Issued N virtual cards!" while
+discarding Trust-Engine denials); `C3-S4-02` (a family member who is neither
+party to a marketplace hand-off silently becomes "buyer" and receives the
+hand-off code); `C3-S4-03` (social RBAC un-configurable — fails closed, so a
+dead subsystem rather than a hole); `C1-S4-01`, `C1-S4-02`, and
+`C4-S4-05`–`C4-S4-13`.
+
+**Fixed in Pass P:** `C3-S4-01` (three server actions were the only unmetered
+doors to the LLM, against 31 of 31 API routes that all carry a limit),
+`C4-S4-02` (a truncated money read became a $0.00 child balance fed to an LLM —
+under a comment naming that exact hazard), and `C2-M01` (the mobile half of
+`C2-B04`, worse there because React Native has no focus ring to mask it).
+
 **Fixed in Pass O:** `C2-B01` (`.focus-ring` painted permanently on 202
 elements, so focus was invisible everywhere outside the marketing header) and
 `C2-B04` (text inputs had a 1.28:1 border over a fill identical to the card).
@@ -163,6 +189,9 @@ not read the same on this page.*
 | Data layer, RLS, grants, cron, query plans, money concurrency | Pass B | deep |
 | Delivery, routing, env contract, workflows | Pass C | deep |
 | Frontend / UI / responsive / accessibility | Pass D | deep, but **static only — see below** |
+| The `mobile/` Expo app — a SECOND application | Claude-2, Pass P | **gap closed 2026-09-15**, static only — the app was never run |
+| Server actions (132 files, 439 exported actions) | Claude-3, Pass P | **gap closed 2026-09-15** — Pass E covered the 141 API routes; this is the other public POST surface |
+| Flows / state / performance INSIDE `app/(app)` | Claude-4, Pass P | **gap closed 2026-09-15**, static — no session exists here |
 | Backend / API / auth / security | Pass E | deep, **local replay only** |
 | QA / flows / performance / edge cases | Pass F | deep |
 | Architecture / integration seams | Claude-1, passes C/G/H | deep |
@@ -261,7 +290,7 @@ The invite toast and two Home widgets remain.
 | F-C08 | The forward-release mechanism is pinned to `0240–0254`; the repo is 38 migrations past it | **Code half fixed — re-pinning is now a manifest change; the release itself is still owner/operator** |
 | F-E02 | Step-up MFA is presentational; no policy references `aal`, and guarded pages fetch straight from PostgREST | OPEN |
 | F-E03 | The `family-media` bucket is public; photos and attachments are served with no session | OPEN (known, tracked as LB-009) |
-| F-F01 | A caller-supplied `max` truncates a money read and reports success; reconciliation renders "Everything reconciles" from a prefix | OPEN |
+| F-F01 | A caller-supplied `max` truncates a money read and reports success; reconciliation renders "Everything reconciles" from a prefix | **RE-SCOPED — half closed.** The helper now reads one row past `max` and errors, and the reconciliation page returns `<ErrorState>` before rendering, so the quoted symptom is unreachable. What remains is the 13 of 59 call sites never migrated, which now render ZERO where they used to render a prefix — see `C4-S4-01`. |
 | F-F02 | F-017's timezone bug still live on eleven server-rendered surfaces, including the kids page | OPEN |
 | F-F03 | `/missions` issues up to 240 sequential storage round trips on the parent approval queue | OPEN |
 | F-D01 | The photo lightbox strands keyboard users: no `role="dialog"`, no Escape, no focus trap | OPEN |
@@ -5149,3 +5178,247 @@ because the guard now makes that class impossible to reintroduce quietly.
 
 **Verification.** Full suite **13,682 / 13,682** under pinned UTC and
 `TZ=America/Los_Angeles`. `tsc`, eslint and the Supabase query audit clean.
+
+---
+
+# Pass P — three surfaces nobody had audited, and the fixes they demanded
+
+*Round 4, 2026-09-15. Claude-2, -3 and -4 dispatched by Claude-1 at the three
+thinnest-covered surfaces; merged and independently verified by Claude-1.
+Evidence in `audit/claude-2.md` (Session 3), `audit/claude-3.md` (Session 4),
+`audit/claude-4.md` (Session 4) and `audit/claude-1.md` (`C1-S4-*`).*
+
+This round chose **coverage over severity**. The next-most-severe known finding
+(`C2-B05`) had been fixed on `main` by the parallel session before it could be
+reached, so the dispatch went instead to the three areas with the least
+attention in the whole document: the 132 `'use server'` files, the `mobile/`
+Expo app, and the inside of `app/(app)`.
+
+**38 findings: 7 HIGH, 17 MEDIUM, 12 LOW, plus 2 from Claude-1.** Four were
+fixed in the same round; the rest are open and listed below.
+
+**A bookkeeping note, because it affects every cross-reference below.**
+Claude-3 filed its seven findings with the charter's required
+`[CLAUDE-3][SEVERITY][AREA]` prefix but **without sequential ids**. The ids
+`C3-S4-01`…`C3-S4-07` used here were assigned by Claude-1 at merge time, in the
+order the findings appear in `audit/claude-3.md`, so that this document can
+reference them stably. They will not be found by searching that file for the id
+— search for the severity/area prefix instead. Claude-2 (`C2-M01`–`M16`) and
+Claude-4 (`C4-S4-01`–`13`) numbered their own.
+
+## The three fixes applied
+
+### `C3-S4-01` HIGH — three server actions were the only unmetered doors to the LLM
+
+`askMarketAssistantAction`, `draftPaperworkReplyAction` and
+`draftReconnectMessageAction` each reached `resolveProvider()` →
+`provider.complete()` with **no rate limit, no plan gate and no role check**.
+
+What makes the evidence unusually clean is that the convention is perfectly
+uniform everywhere else. Verified independently:
+
+```
+$ for f in $(grep -rl 'resolveProvider\|provider\.complete' app/api --include=route.ts); do
+    grep -q "enforceAIRateLimit\|rateLimit" "$f" || echo "UNLIMITED: $f"; done
+(no output)          31 of 31 API routes that reach the model are limited.
+```
+
+And the same intake exists as *both* a route and an action —
+`app/api/ai/requests/route.ts` and `app/(app)/dashboard/inbox/actions.ts` — with
+the limit on **both**. So the pattern was established for actions too; these
+three simply sat outside it. A server action is a public POST endpoint: the UI
+that only shows the button to a parent is not a control.
+
+`askMarketAssistantAction` was the worst: it capped history *turns* at 8 while
+never measuring each turn's `content`, beside a question capped at 500 chars.
+Both are bounded now. **FIXED**, all three carrying the inbox intake's budget.
+
+**A placement lesson worth keeping.** The first attempt put the limit ahead of
+the contacts action's history reads, and 27 tests went red: a failed history
+read began reporting *"too many requests"* instead of the failure that actually
+happened, breaking that action's own read-boundary contract. The limit belongs
+where the inbox intake puts it — after the loads, immediately before the AI
+work. The call site now carries a comment saying why it sits there.
+
+### `C4-S4-02` HIGH — a truncated money read became a $0.00 balance, fed to a model
+
+`readAllAsQuery` reports a failed **or truncated** read as `data: null` plus an
+error — deliberately, so it can sit inside a `settleAll([...])` batch and let
+each caller branch on it (`lib/supabase/read-all.ts:139-141`). Two AI wallet
+routes destructured only `{ data }`, so `(txns ?? [])` computed **every child's
+balance as $0.00** and handed those figures to an LLM that wrote confident
+coaching prose about them.
+
+The detail that makes this the sharpest instance in the document: both files
+carry the comment
+
+```
+// Money, so a quietly truncated read is a wrong balance, not a short list.
+```
+
+**directly above the line that drops the error.** The hazard was understood,
+written down, and reintroduced on the next line.
+
+Both routes now refuse with 502 rather than invent a number. `FIXED`.
+`tests/read-all-error-is-consumed.test.ts` is the guard that did not exist —
+`no-limit-above-the-row-cap.test.ts` already enforced the read's *shape*, and
+nothing enforced that its *error* is consumed, which is how thirteen call sites
+drifted. Proven red by reverting the wallet route; it also asserts its own
+matcher finds call sites, since a matcher that silently matches nothing is this
+repository's signature defect.
+
+### `C2-M01` HIGH — the mobile half of `C2-B04`, and worse than the web's
+
+`mobile/src/components/Field.tsx` took `colors.border` — 1.38:1 dark, 1.28:1
+light — rather than `colors.borderInput` at 3.56/3.52. **FIXED.**
+
+It mattered more on mobile than on the web, for a reason the web fix makes
+visible only in hindsight: on the web, `C2-B01`'s permanently-on focus ring was
+*accidentally* outlining every field. React Native has no such accident —
+`TextInput` gets no focus ring and `Field` defines no focus state — so mobile's
+version had no boundary at all. Claude-2's computed ratios match the browser
+measurement and the web guard's assertion to two decimals.
+
+**The shared token contract did not drift**, which is the good news the dispatch
+did not anticipate: `design/tokens.ts` builds `palette()` from
+`Object.keys(colors.dark)`, so `borderInput` reached the Expo app automatically
+the moment it was added for the web.
+
+## `C2-M03` HIGH — the largest open finding in this document
+
+**Every date and time in BOTH apps is pinned to `en-US`.** Found through the
+mobile lens; the web is where it lives. Claude-1's independent count, with a
+broader regex than the worker's: **~251 hard-pinned call sites across ~135
+files**. `components/modules/calendar-module.tsx` alone has 14 — the calendar,
+where date format matters most.
+
+The repository ships **11 locales** behind a careful precedence chain in
+`lib/i18n/resolve.ts` (cookie > geo > accept-language > default) that these call
+sites never ask. Eight of the eleven use 24-hour time; `en-GB` writes "6 Sep",
+not "Sep 6". A German family reads a fully localised UI and then
+*"Fußball · 4:00 PM"*.
+
+**A trap recorded before anyone attempts the fix.** `mobile/src/lib/format.ts`
+uses `'en-US'` in three functions and only two are defects:
+
+| function | `'en-US'` is… | verdict |
+|---|---|---|
+| `dayLabel()` | output — emits `"Sat, Sep 6"` | **defect** |
+| `formatTime()` | output — emits `"3:00 PM"` | **defect** |
+| `dayKey()` | a **parse locale**: extracts numeric parts and reassembles `YYYY-MM-DD` | **correct — do not change** |
+
+Switching `dayKey()` to the user's locale would be a worse bug than the one
+being fixed: an Arabic or Thai locale can return Hijri or Buddhist calendar
+parts, corrupting every day-grouping key in the app. The naive sweep — replace
+every `'en-US'` — breaks it.
+
+## Open, from Claude-3 (backend / auth)
+
+`C3-S4-02` MEDIUM — `marketplace/handoff/actions.ts`: `loadOrderRole` scopes to
+the family and stops, then both writers infer `role = seller_member === me ?
+'seller' : 'buyer'`, so a family member who is **neither party** silently becomes
+"buyer". They can overwrite a confirmed pickup (the upsert resets
+`confirm_code:null, confirmed_at:null`), **receive the hand-off code**, cancel,
+and complete. The RPC only checks `is_family_member`, so the database does not
+backstop it — while the action's own string table renders the refusal as *"You
+are not part of this marketplace exchange."* The exact missing check sits 90
+lines away in the same feature. Bounded: integrity and code disclosure **inside
+a household**, not theft — there is no escrow.
+
+`C3-S4-03` MEDIUM — social RBAC is **un-configurable**. TS says
+`admin: ALL.filter(p => p !== 'manage_access')`; SQL says `when 'admin' then
+true`. `grantAccessAction` requires `manage_access`, only `owner` holds it in TS,
+and `defaultSocialRoleForMember` never returns `owner` — and that action is the
+only writer of `social_access_permissions` in the tree. No one can ever grant a
+social role. It fails **closed** (TS never grants what SQL denies), so this is a
+dead subsystem rather than an escalation hole.
+
+**Verified clean, including everything Claude-1's spot check had flagged:**
+`app/gift/actions.ts`, `app/reviews/new/actions.ts` and
+`app/(auth)/signup/actions.ts` are legitimately public and correctly built —
+server-side token/slug validation, `.eq()` not `ilike()`, bounded strings, IP
+rate limits, gift pledges landing `pending` with no money movement. The three
+files that looked alarming were the three that were fine, which is the reason to
+verify rather than assume in either direction.
+
+## Open, from Claude-4 (flows / state / performance)
+
+`C4-S4-01` HIGH — **`readAll`'s contract was fixed and 13 of its 59 call sites
+were not migrated**. The helper now reads one row past `max` and errors when
+rows remain, so `F-F01`'s mechanism is closed at the helper. But 13 sites
+destructure only `{ data }`, and they used to render a *prefix* — they now
+render **zero**. Two of them are `C4-S4-02` above; the rest are open.
+
+`C4-S4-04` HIGH — `money-cards-view.tsx`: "issue cards for everyone" discards
+every `issueCardAction` result and toasts `Issued N virtual cards!`. The four
+other call sites in the same file check `res.ok`. What is discarded includes
+Trust-Engine denials and "Finish account setup first" — **the product refusing,
+reported as success, on a payment instrument.**
+
+`C4-S4-05` MEDIUM — `journeys/page.tsx` carries the comment *"A failed telemetry
+read must not masquerade as 'no events'"* and the next line does exactly that;
+three headline tiles render 0/0/0% above the error branch · `C4-S4-06` MEDIUM —
+the ICS feed publishes a truncated calendar at **HTTP 200**, and clients
+reconcile against the body, so a transient failure removes events from every
+subscriber's device · `C4-S4-07` MEDIUM — `/home` is ~11 sequential round-trip
+waves, four groups collapsible with no behaviour change, in a file that
+demonstrates the right technique 120 lines earlier · `C4-S4-08` MEDIUM — a
+per-rule timezone read inside a cron loop, error discarded, silent fallback to
+`America/New_York`, so routines fire on the wrong day for non-US households ·
+`C4-S4-10` MEDIUM and `C4-S4-11`–`13` LOW.
+
+## Three corrections to this document's own framing
+
+Each came from a worker rebuilding a measurement rather than inheriting it.
+
+1. **`F-F01` is half-closed and is still indexed as fully open.** Line 264 lists
+   it with the original mechanism. The helper-level defect is fixed; the
+   *reconciliation page* now returns `<ErrorState>` before rendering, so
+   "Everything reconciles" over a truncated read is unreachable. It should be
+   **re-scoped to the 13 unmigrated call sites**, not closed and not left as
+   written.
+2. **"8 of 132 `'use server'` files make no auth call" was the wrong unit.**
+   Rebuilt as *exported actions* with a transitive fixpoint over 685 auth-bearing
+   names (so `guard()` / `managerCtx()` helpers count): **439 exported actions,
+   9 of which reach no auth path.** The naive file-level grep flags 94, and 85 of
+   those authorize through a local helper. The old conclusion held; its count and
+   method did not.
+3. **"Optimistic UI that lies" is not this repo's second-most-common defect.** A
+   sweep of ~530 `success()` call sites in client components found **one** real
+   offender (`C4-S4-04`); three candidates were false positives. The class lives
+   in **server reads**, not client mutations. The label is corrected here rather
+   than left to mislead the next pass.
+
+## Verified healthy — measured, not assumed
+
+**Mobile auth does not repeat the web's session bugs; it is the port of the
+fix.** `auth-session.ts` refuses to read `INITIAL_SESSION`-null as sign-out,
+`auth-core.ts` re-implements `isRetryableAuthError` with an in-file
+justification for the duplication (the Metro watch-folder constraint), plus
+chunked SecureStore and revision-guarded device-scoped sign-out. No finding
+filed against it.
+
+**Zero unnamed touchables in the Expo app** — all 12 `<Pressable>` sites carry a
+label or a `Text` child, which is *better than the web*, where `C2-11` found two
+unnamed icon-only buttons. **Error boundaries in `app/(app)` are good**: 16
+segment `error.tsx` plus a root one, and nothing renders blank — the real gap is
+**loading**, at 2 `loading.tsx` for 354 pages, 222 of them `force-dynamic`.
+Two guards were examined specifically for the "cannot fail" defect and cleared
+as sound.
+
+## Blocked
+
+Unchanged and permanent in this environment: **no authenticated session** (no
+docker daemon, no Supabase CLI), so not one of the 439 server actions was
+POSTed, and every claim about what an `app/(app)` page renders is a reading of
+its JSX under a state proven reachable at the helper boundary — not an
+observation. **The Expo app was never run** — no simulator, no device, no
+bundle; every mobile contrast figure is computed from `design/tokens.json`, not
+sampled from pixels. No screen reader, no `forced-colors`, no real device.
+Claude-2 attached an 8-row BLOCKED table and Claude-3 a 5-item list so none of
+it reads as clean.
+
+One environment note: `mobile/node_modules` here is a **partial** install
+(`expo-audio`, `@expo/ui`, `@expo/metro-runtime` absent). Verified against the
+lockfile that CI's `npm ci` does not hit it; with those excluded the Expo app
+typechecks clean.

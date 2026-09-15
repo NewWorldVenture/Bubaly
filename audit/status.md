@@ -126,7 +126,35 @@ COMPLETED (session 3 so far):
 PRIOR SESSIONS (unchanged, see history below): F-020 migration idempotency;
   /api/health FEATURE_ENV tier; 5 cron routes answering 200 on their own
   failures; service-role boundary probe; 0296 renumber.
-NEXT: collect those three, merge into finalaudit.md as Pass P. Then reconcile
+  - ROUND 4 MERGED as Pass P (2026-09-15). All three workers reported; every
+    HIGH verified independently before anything was applied.
+      * FIXED C3-S4-01 (3 server actions were the only unmetered doors to the
+        LLM, vs 31/31 API routes that all carry a limit), C4-S4-02 (a truncated
+        money read became a $0.00 child balance fed to an LLM, under a comment
+        naming that exact hazard), C2-M01 (mobile's field border — the half of
+        C2-B04 that had not landed, and worse on RN, which has no focus ring to
+        mask it). Guard added: tests/read-all-error-is-consumed.test.ts, proven
+        red.
+      * MY OWN ERROR, recorded: the first placement put the contacts rate limit
+        ahead of its history reads, so a failed read reported "too many
+        requests" instead of what actually failed. 27 tests went red. The limit
+        belongs where the inbox intake puts it — after the loads, immediately
+        before the AI work. Fixed and amended before pushing.
+      * Three of this document's own framings corrected by workers rebuilding a
+        measurement rather than inheriting it: F-F01 is HALF closed and was
+        still indexed as fully open; "8 of 132 'use server' files lack auth" was
+        the wrong unit (439 exported actions, 9 reach no auth, via a transitive
+        fixpoint); "optimistic UI that lies" is NOT the second-most-common
+        defect (1 real offender in ~530 client call sites — the class lives in
+        server reads).
+      * Part 0's headline count was corrected too: it now states the 137
+        distinct ids the document actually names, and says plainly that the
+        passes' totals are larger, rather than quoting a number nobody can
+        reproduce from the document.
+NEXT: C2-M03 is the largest open finding — ~251 en-US-pinned date/time call
+  sites across ~135 files against an 11-locale catalogue. The trap is recorded
+  in Pass P: dayKey() uses 'en-US' as a PARSE locale and must not be switched.
+  Then reconcile the two Executive Summaries into one authoritative index. Then reconcile
   the two Executive Summaries into one authoritative index — the document names
   this as a deliberate follow-up and it is the coordinator's job.
 FILES-TOUCHED (session 3):
