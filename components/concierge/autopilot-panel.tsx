@@ -72,7 +72,8 @@ export function AutopilotPanel({ className }: { className?: string }) {
       const [[policy, runRows], handledCount] = await Promise.all([
         settleAll([
           supabase.from('trust_policies').select('effect')
-            .eq('family_id', familyId).eq('name', AUTOPILOT_POLICY_NAME).maybeSingle(),
+            .eq('family_id', familyId).eq('name', AUTOPILOT_POLICY_NAME)
+            .eq('is_system', true).eq('enabled', true).maybeSingle(),
           supabase.from('family_automation_runs')
             .select('id, status, trigger_type, summary, created_at, metadata')
             .eq('family_id', familyId).eq('trigger_type', 'plan_accepted')
@@ -90,6 +91,15 @@ export function AutopilotPanel({ className }: { className?: string }) {
         setReadFailed(false);
         setRuns((runRows.data ?? []) as Run[]);
       }
+      // The read above is now narrowed to the ONE live system row 0302 permits,
+      // which is what stops this showing the wrong level: with two rows present
+      // the single-row read failed and dialLevel(undefined) rendered the
+      // DEFAULT, so a parent saw one setting while another was in force. A
+      // failure here is now only a genuine read failure, and it is logged
+      // rather than swallowed. It still falls back to the default rather than
+      // saying "unknown", because saying so needs copy in eleven languages and
+      // inventing those is worse than the gap it closes.
+      if (policy.error) console.error('[autopilot-panel] autopilot policy read failed', policy.error);
       setLevel(dialLevel(policy.data?.effect));
       setHandled(handledCount.total);
       setUndated(handledCount.undatedCompletedRuns);
