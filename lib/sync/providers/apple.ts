@@ -73,7 +73,11 @@ export function appleBasicAuth(packed: string): string {
 /** Normalize an href (absolute URL or absolute path) to a leading-slash path. */
 export function hrefPath(href: string): string {
   const h = href.trim();
-  if (/^https?:\/\//i.test(h)) { try { return new URL(h).pathname; } catch { return h; } }
+  // A string that matched ^https?:// and then failed `new URL()` is malformed;
+  // returning it unchanged handed an unnormalised absolute-looking value back
+  // to callers that had asked for a path. '/' is refused by dav() the same way
+  // any other non-path would be, which is the point. Audit C3-S5-07.
+  if (/^https?:\/\//i.test(h)) { try { return new URL(h).pathname; } catch { return '/'; } }
   return h;
 }
 
@@ -275,8 +279,16 @@ function escapeXml(s: string): string {
 type DavResult = { status: number; text: string; etag: string | null };
 
 async function dav(packed: string, method: string, path: string, body?: string, extraHeaders?: Record<string, string>): Promise<DavResult> {
-  const url = path.startsWith('http') ? path : `${ICLOUD_CALDAV}${path}`;
-  const res = await fetchWithDeadline(url, {
+  // Every `path` that reaches here originates in XML the REMOTE server
+  // returned, and this function attaches the app-specific password to whatever
+  // it is given. All four parsers do normalise through hrefPath() — so this is
+  // defence in depth, not a live hole — but the invariant belongs to the
+  // function that depends on it, not to four callers that may drift.
+  // Audit C3-S5-07.
+  if (!path.startsWith('/')) {
+    throw new SyncApiError(400, 'iCloud CalDAV path must be server-relative');
+  }
+  const res = await fetchWithDeadline(`${ICLOUD_CALDAV}${path}`, {
     method,
     headers: {
       Authorization: appleBasicAuth(packed),
@@ -284,7 +296,20 @@ async function dav(packed: string, method: string, path: string, body?: string, 
       ...(extraHeaders ?? {}),
     },
     ...(body ? { body } : {}),
+    // The CalDAV guards elsewhere in this repo revalidate every hop rather than
+    // letting fetch follow up to 20 of them. Node strips Authorization across
+    // an origin change, so the credential does not travel — but the REQUEST
+    // does, unvalidated, and there is no legitimate redirect in this protocol
+    // flow. Audit C3-S5-07.
+    redirect: 'manual',
   }, 20_000);
+  // With redirect: 'manual', undici hands the 3xx back rather than following
+  // it, and a 3xx is neither a DAV response nor an error status the callers
+  // check for — so it would arrive as an empty body and a confusing parse
+  // failure. Named here instead.
+  if (res.status >= 300 && res.status < 400) {
+    throw new SyncApiError(res.status, `iCloud CalDAV redirected (${res.status}); refusing to follow it`);
+  }
   const bounded = await readBoundedResponseText(res, 4 * 1024 * 1024);
   if (!bounded.ok) throw new SyncApiError(res.status, `iCloud CalDAV ${res.status} response too large`, '[provider response exceeded 4 MiB]');
   return { status: res.status, text: bounded.text, etag: res.headers.get('etag') };

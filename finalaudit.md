@@ -5882,3 +5882,27 @@ coming back — and spells the banned identifier in halves rather than exempting
 its own path, since an exemption is how a guard stops covering itself. Its limit
 is stated in the file: it polices the name, and cannot tell whether a given call
 site's URL is constant.
+
+**C3-S5-07 — FIXED.** `dav()` in the iCloud CalDAV transport attaches the
+app-specific password to whatever URL it is handed, and every path it receives
+originates in XML the remote server returned. All four parsers *do* normalise
+through `hrefPath()` — Claude-3 checked each one, which is why this is LOW and
+defence in depth rather than a live hole — but the invariant belonged to the
+function that depends on it, not to four callers that may drift.
+
+`dav()` now rejects any path that does not start with `/`, and the
+absolute-URL branch is gone entirely, so there is no longer a code path that
+sends that credential anywhere but the configured base. `redirect: 'manual'` is
+set, with a named error on a 3xx: undici hands the redirect back rather than
+following it, and a 3xx is neither a DAV response nor a status the callers
+check, so it would otherwise have surfaced as a confusing parse failure.
+
+`hrefPath()`'s fall-through is closed too: a string that matched `^https?://`
+and then failed `new URL()` used to be returned *unchanged*, handing an
+absolute-looking value back to a caller that asked for a path. It answers `/`
+now, which `dav()` treats like any other path.
+
+The guard for this blanks comments before scanning — the file's own comments
+quote both `redirect: 'manual'` and the path check, and a guard satisfied by the
+prose explaining it is precisely C4-S5-01 one rung up. Caught by mutation, not
+by care: the first draft passed with the real line deleted.
