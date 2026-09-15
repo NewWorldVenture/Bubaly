@@ -7,7 +7,7 @@
 // Replaces the old acknowledge-only cookie notice.
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Cookie, ShieldCheck, X, Check, Lock } from 'lucide-react';
+import { Cookie, Check, Lock } from 'lucide-react';
 import type { ConsentState, ConsentCategory } from '@/lib/marketing/consent';
 import {
   CONSENT_UI, presetAcceptAll, presetRejectNonEssential, shouldShowBanner,
@@ -17,6 +17,7 @@ import {
   initialConsent, postConsent, trackTouchOnce,
 } from '@/lib/marketing/visitor';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { Modal } from '@/components/ui/modal';
 
 export const OPEN_CONSENT_EVENT = 'bubaly:open-consent';
 
@@ -148,20 +149,26 @@ function PreferenceCenter({
   const [state, setState] = useState<ConsentState>(initial);
   const toggle = (key: ConsentCategory) => setState((s) => ({ ...s, [key]: !s[key], necessary: true }));
 
+  // Uses the shared Modal rather than hand-rolled dialog markup. The markup here
+  // declared `aria-modal="true"` — a promise that the rest of the page is inert —
+  // while doing none of what makes that true: focus never entered the dialog, Tab
+  // walked the page behind it, Escape did nothing, and on close focus was wherever
+  // it had been left rather than back on the control that opened this.
+  //
+  // For a keyboard or screen-reader user that is worse than a plain div, because
+  // the attribute tells assistive technology to ignore a background the user can
+  // still reach. On a cookie preference centre it also means the one surface whose
+  // entire job is recording a deliberate choice was the hardest to operate
+  // deliberately.
+  //
+  // components/ui/modal.tsx already implements all of it — focus trap, Escape,
+  // scroll lock, focus restore — and says so in its own header. It also labels by
+  // id (`aria-labelledby`) rather than repeating the title in `aria-label`. This
+  // is the same lesson as the four duplicated escapeLike helpers and the kiosk's
+  // private error boundary: the fix existed and had not reached this call site.
   return (
-    <div className="fixed inset-0 z-[80] flex items-end justify-center p-3 sm:items-center" role="dialog" aria-modal="true" aria-label={t('consentManager.privacyPreferences')}>
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} aria-hidden />
-      <div className="animate-fade-in-up relative w-full max-w-lg rounded-2xl border border-border bg-surface p-5 shadow-glass sm:p-6">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand/10 text-brand-text"><ShieldCheck className="h-4 w-4" /></span>
-            <h2 className="text-base font-bold">{t('consentManager.privacyPreferences')}</h2>
-          </div>
-          <button onClick={onClose} aria-label={t('consentManager.close')} className="rounded-lg p-1.5 text-muted transition hover:bg-elevated hover:text-fg">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
+    <Modal open onClose={onClose} title={t('consentManager.privacyPreferences')}>
+      <div>
         {gpc && (
           <p className="mt-3 rounded-lg bg-emerald-500/10 px-3 py-2 text-[11px] text-emerald-300">{t('consentManager.yourBrowserSendsAGlobal')}</p>
         )}
@@ -211,7 +218,7 @@ function PreferenceCenter({
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 

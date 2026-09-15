@@ -30,6 +30,16 @@ import { KitchenTimers } from './kitchen-timers';
 import { PhotoFrame } from './photo-frame';
 import { HintsTicker } from './hints-ticker';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { WidgetBoundary } from '@/components/ui/widget-boundary';
+
+// The kiosk degrades to a quiet dash on dark glass rather than to nothing, so a
+// failed tile still holds its place in the grid. The BEHAVIOUR now lives in
+// components/ui/widget-boundary.tsx — this surface only supplies its look.
+const KIOSK_FALLBACK = (
+  <div className="flex h-full min-h-[60px] items-center justify-center text-center text-white/30">
+    <p className="text-sm">—</p>
+  </div>
+);
 
 // ── Types ────────────────────────────────────────────────────────────────────
 type Ev = { id: string; title: string; starts_at: string; all_day: boolean; location: string | null; assignee_id: string | null };
@@ -325,32 +335,6 @@ function Empty({ icon: Icon, text }: { icon: typeof Calendar; text: string }) {
   return <div className="flex h-full flex-col items-center justify-center py-4 text-center text-white/40"><Icon className="h-8 w-8 opacity-60" /><p className="mt-2 text-sm">{text}</p></div>;
 }
 
-/**
- * Per-section error boundary — the kiosk's structural guarantee. A widget that
- * throws on an unexpected data shape (a malformed date once crashed the whole
- * display into an endless recover loop) degrades to a quiet placeholder while
- * every other tile keeps working. Retries itself on the next data refresh
- * (AutoRefresh remounts the tree with fresh props every two minutes).
- */
-class WidgetBoundary extends Component<{ label?: string; children: ReactNode }, { failed: boolean }> {
-  state = { failed: false };
-  static getDerivedStateFromError() { return { failed: true }; }
-  componentDidCatch(error: unknown) { console.error(`[display] widget "${this.props.label ?? 'section'}" crashed:`, error); }
-  componentDidUpdate(prev: { children: ReactNode }) {
-    // Fresh props (a new server render) → give the widget another chance.
-    if (this.state.failed && prev.children !== this.props.children) this.setState({ failed: false });
-  }
-  render() {
-    if (this.state.failed) {
-      return (
-        <div className="flex h-full min-h-[60px] items-center justify-center text-center text-white/30">
-          <p className="text-sm">—</p>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
 
 function MonthCalendar({ cal }: { cal: DisplayData['calendar'] }) {
   const first = new Date(cal.year, cal.month, 1).getDay();
@@ -672,7 +656,7 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
 
         {/* Now & Next */}
         <div className="mt-4 shrink-0">
-          <WidgetBoundary label="now-next">
+          <WidgetBoundary label="now-next" fallback={KIOSK_FALLBACK}>
             <NowNextStrip events={data.events} memberById={memberById} now={now} />
           </WidgetBoundary>
         </div>
@@ -680,7 +664,7 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
         {/* First run: how to make this tablet behave like a wall display. Hidden
             while editing so the settings panel owns the screen. */}
         {!editing && !setupDismissed && (
-          <WidgetBoundary label="setup-card">
+          <WidgetBoundary label="setup-card" fallback={KIOSK_FALLBACK}>
             <DisplaySetupCard wakeLock={wakeLock} onDismiss={() => void dismissSetup()} dismissing={dismissing} />
           </WidgetBoundary>
         )}
@@ -723,7 +707,7 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
                   hidden) as a safety net so nothing is ever hard-clipped, while
                   the size-aware widgets above keep content fitting by design. */}
               <div className={cn(tile.widget === 'featured' || tile.widget === 'service' ? 'h-full' : 'min-h-0 flex-1 overflow-y-auto scrollbar-none')}>
-                <WidgetBoundary label={tile.widget}>
+                <WidgetBoundary label={tile.widget} fallback={KIOSK_FALLBACK}>
                   {tile.widget === 'service'
                     ? <ServiceTile href={tile.href ?? '/dashboard'} />
                     : <WidgetBody widget={tile.widget} size={tile.size} data={data} memberById={memberById} now={now} />}
@@ -784,11 +768,11 @@ export function DisplayShell({ initialTiles, initialSettings, data, familyId, us
       </div>
 
       {/* Echo-style rotating hints, pinned to the bottom */}
-      {!editing && <WidgetBoundary label="hints"><HintsTicker hints={hints} /></WidgetBoundary>}
+      {!editing && <WidgetBoundary label="hints" fallback={KIOSK_FALLBACK}><HintsTicker hints={hints} /></WidgetBoundary>}
 
       {/* Idle photo frame (family photos + clock) — wakes on any interaction */}
       {!editing && (
-        <WidgetBoundary label="photo-frame">
+        <WidgetBoundary label="photo-frame" fallback={KIOSK_FALLBACK}>
           <PhotoFrame
             photos={ambientPhotos}
             idleMinutes={settings.idleMinutes}

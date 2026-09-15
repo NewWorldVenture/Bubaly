@@ -39,7 +39,12 @@ const reminderOutput = z.object({
  * than asking them to try again.
  */
 async function findReminder(scope: ServiceScope, title: string): Promise<ServiceResult<{ id: string; title: string }>> {
-  const term = title.trim().replace(/[%_]/g, (m) => `\\${m}`);
+  // Escaped ONCE, at the call site below. Escaping here as well produced
+  // `50\\\%`, which LIKE reads as a literal backslash followed by a literal
+  // percent — so a reminder actually titled "50% off groceries" stopped being
+  // findable. Verified in Postgres 16: `ilike '%50\% off groceries%'` is true,
+  // `ilike '%50\\\% off groceries%'` is false.
+  const term = title.trim();
   if (!term) return fail('Which reminder did you mean?', { code: SERVICE_CODES.invalidInput });
 
   const { data, error } = await scope.db

@@ -295,7 +295,8 @@ export async function searchTodos(scope: ServiceScope, input: SearchTodosInput =
   if (input.listId) query = query.eq('list_id', input.listId);
   if (input.dueBefore) query = query.lte('due_date', input.dueBefore);
   if (input.query?.trim()) {
-    const term = input.query.trim().replace(/[%_]/g, (m) => `\\${m}`);
+    // Escaped once, at the call site — see lib/ai/tools/reminders.ts.
+    const term = input.query.trim();
     query = query.ilike('title', `%${escapeLike(term)}%`);
   }
 
