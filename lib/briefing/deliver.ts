@@ -33,6 +33,7 @@ import type { ConciergeSnapshot } from '@/lib/concierge/digest';
 import type { Database } from '@/lib/database.types';
 import type { AiActivityRow, CompletedRunRow } from '@/lib/home/today';
 import { notify } from '@/lib/services/notifications';
+import { readAll } from '@/lib/supabase/read-all';
 import { dayKeyInTz, hourInTz, scopeForSystem, zonedDayBoundsMs, zonedTimeMs } from '@/lib/services/scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
 import { buildBrief, type Brief } from './build';
@@ -224,7 +225,12 @@ async function deliverMorningBrief(db: DB, family: { id: string; timezone: strin
 /** The cron step: one morning brief per family per family-local day. */
 export async function deliverMorningBriefs(db: DB, now: Date = new Date()): Promise<MorningDeliveryResult> {
   const result: MorningDeliveryResult = { delivered: 0, families: 0, skipped: 0, failed: 0 };
-  const { data: families, error } = await db.from('families').select('id, timezone');
+  // Every family, not the first 1,000: an unbounded select is capped by
+  // PostgREST's db-max-rows and says nothing about it, so family 1,001 onwards
+  // would silently never get a brief while `result.families` reported the job
+  // complete. The sibling notification crons page for exactly this reason.
+  const { rows: families, error } = await readAll<{ id: string; timezone: string | null }>((from, to) =>
+    db.from('families').select('id, timezone').order('id').range(from, to));
   if (error) {
     console.error('[briefing] morning brief families read failed', error);
     result.failed += 1;

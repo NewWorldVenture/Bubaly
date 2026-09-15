@@ -2,6 +2,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { runSteps, type Step } from '@/lib/marketing/automation-steps';
+import { readInChunks } from '@/lib/supabase/chunked-in';
 import { getMarketingCustomersWithError, type MarketingCustomer } from '@/lib/marketing/customers';
 
 type DB = SupabaseClient<Database>;
@@ -72,10 +73,30 @@ export async function runAutomations(supabase: DB, opts: { maxPerWorkflow?: numb
     if (subjects.length === 0) continue;
 
     // Skip subjects this workflow already ran for.
-    const { data: prior, error: priorError } = await supabase.from('marketing_automation_runs')
-      .select('id, subject_key, status').eq('workflow_id', flow.id);
+    //
+    // Asked for the workflow's WHOLE history, this read is answered with at
+    // most db-max-rows and no error, and it carries no `.order()`, so which
+    // thousand come back is the server's business. One row accumulates per
+    // subject, so past a thousand families the dedupe map stops containing the
+    // subjects in front of it and the workflow re-runs for them — re-sending an
+    // automation email the docstring above promises happens once. Nothing
+    // downstream catches that: the insert's `23505` branch is waiting on a
+    // unique constraint the schema does not have (0020 indexes
+    // (workflow_id, created_at) and does not make it unique), so this read is
+    // the only guard there is.
+    //
+    // Ask only about the subjects actually in play. At most `cap` of them, in
+    // batches of a hundred, so the answer cannot reach the cap and the map is
+    // complete for every subject it is consulted about.
+    const { data: prior, error: priorError } = await readInChunks<
+      { id: string; subject_key: string | null; status: string }, { message: string }
+    >(
+      subjects.map((c) => c.familyId),
+      (chunk) => supabase.from('marketing_automation_runs')
+        .select('id, subject_key, status').eq('workflow_id', flow.id).in('subject_key', chunk),
+    );
     if (priorError) throw new Error('Could not load automation run history.');
-    const priorBySubject = new Map((prior ?? []).filter((r) => r.subject_key).map((r) => [r.subject_key as string, r]));
+    const priorBySubject = new Map(prior.filter((r) => r.subject_key).map((r) => [r.subject_key as string, r]));
 
     const steps = Array.isArray(flow.steps) ? (flow.steps as unknown as Step[]) : [];
     let ran = 0;

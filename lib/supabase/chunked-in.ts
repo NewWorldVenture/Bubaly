@@ -1,4 +1,5 @@
 import 'server-only';
+import { readAll } from './read-all';
 
 /**
  * Run an `.in(column, ids)` read in batches.
@@ -35,4 +36,45 @@ export async function readInChunks<Row, Err>(
     if (result.data) data.push(...result.data);
   }
   return { data, error };
+}
+
+/**
+ * `.in(column, ids)` where BOTH limits bite: the URL and the row count.
+ *
+ * `readInChunks` above solves the first — a hundred ids per request keeps the
+ * query string inside the gateway's limit. It does not solve the second. A
+ * chunk of a hundred families matches a hundred families' worth of rows, and
+ * chores, transactions or members run to dozens each, so one chunk's response
+ * reaches PostgREST's `db-max-rows` long before the id list does. The answer
+ * comes back short, with no error, exactly as `read-all.ts` describes.
+ *
+ * So chunk the ids AND page each chunk. Pass the range through to `.range()`
+ * and give the query a `.order()` that is unique — a primary key, not the
+ * `family_id` being filtered on — or pages can repeat and skip rows.
+ *
+ * A failed read returns `data: null`, not the rows gathered so far: for a
+ * caller that aggregates per owner, a partial answer is not a smaller answer,
+ * it is a WRONG one, and `null` is what its error branch already keys on.
+ */
+export async function readAllInChunks<Row, Err = { message: string }>(
+  ids: readonly string[],
+  page: (chunk: string[], from: number, to: number) => PromiseLike<{ data: Row[] | null; error: Err | null }>,
+  options: { chunkSize?: number } = {},
+): Promise<{ data: Row[] | null; error: Err | { message: string } | null }> {
+  if (ids.length === 0) return { data: [], error: null };
+  const chunkSize = options.chunkSize ?? 100;
+
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += chunkSize) chunks.push(ids.slice(i, i + chunkSize));
+
+  const settled = await Promise.all(
+    chunks.map((chunk) => readAll<Row, Err>((from, to) => page(chunk, from, to))),
+  );
+
+  const data: Row[] = [];
+  for (const result of settled) {
+    if (result.error) return { data: null, error: result.error };
+    data.push(...result.rows);
+  }
+  return { data, error: null };
 }
