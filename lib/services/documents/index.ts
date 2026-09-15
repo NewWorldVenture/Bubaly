@@ -103,7 +103,7 @@ export async function listDocuments(scope: ServiceScope, input: ListDocumentsInp
     .eq('family_id', scope.familyId)
     .order('created_at', { ascending: false })
     .limit(Math.min(Math.max(input.limit ?? 100, 1), MAX_ROWS));
-  if (input.category?.trim()) query = query.ilike('category', input.category.trim().replace(/[%_]/g, (m) => `\\${m}`));
+  if (input.category?.trim()) query = query.ilike('category', escapeLike(input.category.trim()));
   if (input.memberId) query = query.eq('member_id', input.memberId);
   if (input.query?.trim()) query = query.ilike('title', `%${escapeLike(input.query.trim())}%`);
   const { data, error } = await query;

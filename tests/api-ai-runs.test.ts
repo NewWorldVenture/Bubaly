@@ -11,7 +11,7 @@
 // answer, resume and rerun sit behind the concierge feature/plan gate while
 // pause and cancel stay open; the controls map service codes to statuses and
 // resume kicks the continuation.
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 
 const getUserContext = vi.fn();
@@ -150,6 +150,30 @@ function post(id: string, action: string, body?: unknown) {
   });
 }
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
+
+// Compile the six route modules ONCE, before any test's clock starts.
+//
+// Each test does its own `await import(...)`, which is cheap after the first —
+// the module cache serves it. The first one pays the whole cold compile of the
+// route and its transitive imports, and it pays it inside a 5s test timeout
+// while the rest of the suite is competing for the same workers. So the first
+// test in this file, '401s anonymous callers', intermittently timed out at
+// ~5.01s having asserted nothing, and passed whenever run in isolation — a
+// failure that tracked scheduling rather than code.
+//
+// beforeAll has no per-test timeout budget here, so the cost is paid once and
+// outside the assertions. Raising the timeout instead would only widen the
+// window in which the same asymmetry hides.
+beforeAll(async () => {
+  await Promise.all([
+    import('@/app/api/ai/runs/[id]/route'),
+    import('@/app/api/ai/runs/[id]/answer/route'),
+    import('@/app/api/ai/runs/[id]/cancel/route'),
+    import('@/app/api/ai/runs/[id]/pause/route'),
+    import('@/app/api/ai/runs/[id]/rerun/route'),
+    import('@/app/api/ai/runs/[id]/resume/route'),
+  ]);
+});
 
 beforeEach(() => {
   db = makeDb(respond);

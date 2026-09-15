@@ -510,7 +510,10 @@ export async function pantryList(
     .order('name', { ascending: true })
     .limit(Math.min(Math.max(input.limit ?? 300, 1), 1000));
   if (isPantryLocation(input.location)) q = q.eq('location', input.location);
-  const term = input.query?.trim().replace(/[%_]/g, (m) => `\\${m}`);
+  // Escaped once, at the call site. Escaping here too produced `50\\\%`, which
+  // LIKE reads as a literal backslash then a literal percent, so a row actually
+  // named "50% off" stopped matching.
+  const term = input.query?.trim();
   if (term) q = q.ilike('name', `%${escapeLike(term)}%`);
 
   const { data, error } = await q;
@@ -571,7 +574,7 @@ export async function pantryAdjust(scope: ServiceScope, input: PantryAdjustInput
     if (!data) return fail('That pantry item could not be found.', { code: SERVICE_CODES.notFound });
     existing = data;
   } else {
-    const { data, error } = await scope.db.from('pantry_items').select('*').eq('family_id', scope.familyId).ilike('name', `%${name.replace(/[%_]/g, (m) => `\\${m}`)}%`).limit(20);
+    const { data, error } = await scope.db.from('pantry_items').select('*').eq('family_id', scope.familyId).ilike('name', `%${escapeLike(name)}%`).limit(20);
     if (error) {
       console.error('[service:groceries] pantry lookup failed', error);
       return fail(describeDbError(error, 'Could not look up the pantry.'), { code: SERVICE_CODES.db });
