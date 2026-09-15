@@ -29,13 +29,21 @@ function walk(dir: string, out: string[] = []): string[] {
 
 const sources = [...walk('components'), ...walk('app'), ...walk('lib')];
 
-describe('objects in the public family-media bucket cannot be guessed', () => {
+/** Buckets whose SELECT policy is `bucket_id = '<id>'` with no scoping. */
+const PUBLIC_READ_BUCKETS = ['family-media', 'avatars', 'feedback-attachments', 'marketplace-photos'];
+
+describe('objects in the public buckets cannot be guessed', () => {
   it('no storage path takes its only variable part from the clock', () => {
-    // The rule is CLOCK-ONLY, not "mentions Date.now". A name that also mixes in
-    // Math.random still has real entropy (feedback-attachments does this), and
-    // the randomUUID fallbacks legitimately reference the clock alongside
-    // randomness. What is enumerable is a name whose sole varying component is
-    // the millisecond.
+    // The rule is CLOCK-ONLY, not "mentions Date.now": the shared namer's own
+    // fallback references the clock alongside randomness. A name whose sole
+    // varying component is the millisecond is enumerable outright.
+    //
+    // This rule used to be the ONLY one, and its comment said a name mixing in
+    // Math.random "still has real entropy (feedback-attachments does this)".
+    // That was wrong and it is why the weak path survived: `Math.random()
+    // .toString(36).slice(2, 8)` is SIX base36 characters — 31 bits, a 2.2e9
+    // keyspace, measured — from a generator that is explicitly not a CSPRNG.
+    // The rule below is what actually holds the line.
     const offenders: string[] = [];
     for (const file of sources) {
       const src = readFileSync(file, 'utf8');
@@ -48,9 +56,41 @@ describe('objects in the public family-media bucket cannot be guessed', () => {
     expect(offenders, offenders.join('\n')).toEqual([]);
   });
 
-  it('the shared namer is what the public buckets use', () => {
-    // avatars and family-media both go through it; marketplace-photos builds its
-    // own randomUUID name and feedback-attachments mixes in Math.random.
+  it('every upload into a publicly-readable bucket names its object with the shared helper', () => {
+    // Not "has some entropy" — the helper, which is crypto.randomUUID (122 bits).
+    // A private copy is how escapeLike reached four call sites with two of them
+    // still wrong, so the requirement is the helper itself.
+    const offenders: string[] = [];
+    for (const file of sources) {
+      const src = readFileSync(file, 'utf8');
+      if (!/\.upload\(/.test(src)) continue;
+      const bucket = PUBLIC_READ_BUCKETS.find((b) => src.includes(`'${b}'`) || src.includes(`_BUCKET`) && src.includes(b));
+      if (!bucket) continue;
+      // family-media goes through familyMediaPath, which calls the helper.
+      if (src.includes('unguessableObjectName') || src.includes('familyMediaPath')) continue;
+      offenders.push(`${file} uploads to a public bucket without unguessableObjectName`);
+    }
+    expect(offenders, offenders.join('\n')).toEqual([]);
+  });
+
+  it('no public-bucket path takes its entropy from Math.random', () => {
+    // Math.random is not a CSPRNG. The helper's fallback is the one permitted
+    // use, and it lives in lib/storage/object-name.ts alone.
+    const offenders: string[] = [];
+    for (const file of sources) {
+      if (file.replace(/\\/g, '/').endsWith('lib/storage/object-name.ts')) continue;
+      const src = readFileSync(file, 'utf8');
+      if (!/\.upload\(/.test(src)) continue;
+      for (const line of src.split('\n')) {
+        if (/const path\s*=/.test(line) && /Math\.random/.test(line)) {
+          offenders.push(`${file}: ${line.trim()}`);
+        }
+      }
+    }
+    expect(offenders, offenders.join('\n')).toEqual([]);
+  });
+
+  it('the shared namer is what the storage modules use', () => {
     for (const file of ['lib/storage/avatars.ts', 'lib/storage/family-media.ts']) {
       expect(readFileSync(file, 'utf8')).toContain('unguessableObjectName');
     }

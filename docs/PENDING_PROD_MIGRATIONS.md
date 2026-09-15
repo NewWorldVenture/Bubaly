@@ -514,9 +514,12 @@ passed; production application of the atomic `0240-0254` release remains pending
 ## Migrations added since this document's stated baseline (2026-09-12)
 
 The status line at the top of this file is dated **2026-09-05** against main
-`01881fb2`. **Seventy-one** migration files have landed since, `0255` through
-`0295`, and none of them appear anywhere above. (This read "thirty-one, `0255`
-through `0285`" until 2026-09-13; the range had simply grown past the sentence.)
+`01881fb2`. **Forty-five** migration files have landed since, `0255` through
+`0302`, and none of them appear anywhere above. (This read "thirty-one, `0255`
+through `0285`" until 2026-09-13 and "seventy-one, `0255` through `0295`" until
+2026-09-15; the range keeps growing past the sentence. The count is the number
+of files in that range, which is what `ls supabase/migrations` reports — the
+earlier "seventy-one" did not match its own stated range.)
 Nothing here authorizes applying any of them; this section exists so the gap is
 visible rather than inferred from the absence of a row.
 
@@ -657,16 +660,175 @@ make the inventory look more complete than it is.
 above. The others do not, and the honest summary is that this document stopped
 being a complete picture at `0254`.
 
+
+### `0300` takes the paywall out of the browser — unapplied
+
+Authored 2026-09-15. **Not applied**, and it needs the same credentialed
+operator as every step above, in the same order.
+
+`lib/server/entitlement.ts` decides what a family may use from three facts: the
+maximum plan across `active`/`trialing` rows in `subscriptions`, and
+`families.trial_ends_at` and `families.closed_at`. All three were writable from
+the browser with the public anon key.
+
+`subs_manage` was `FOR ALL … USING is_family_admin(family_id) WITH CHECK
+is_family_admin(family_id)`, and Supabase grants every table in `public` to
+`authenticated`, so the policy was the only thing in the way and it agreed.
+`handle_new_family()` seeds each new family with a `free`/`trialing` row, so the
+row to edit is already there:
+
+| Statement, as an ordinary signed-in parent | Result |
+|---|---|
+| `update subscriptions set plan='plus_annual', status='active' where family_id=…` | 1 row — `planLevel` 2, `effectiveLevel` 2, `locked` false |
+| `update families set trial_ends_at=null where id=…` | 1 row — NULL is the GRANDFATHERED case, never locked |
+| `insert into families (name, created_by, trial_ends_at) values (…, null)` | created grandfathered; the column carried a 5-day default, not a refusal |
+| `update families set closed_at=null where id=…` | 1 row |
+| `update billing_customers set customer_ref='cus_…' where family_id=…` | 1 row — and `/api/billing/portal` hands that value to Stripe |
+
+Family+ in full, for nothing, without Stripe being contacted. None of it needs a
+server action, so nothing in `app/api/billing/*` could have stopped it:
+PostgREST is a first-class client and RLS is the only boundary it answers to.
+
+`0300` drops both `FOR ALL` policies, revokes client DML on `subscriptions` and
+`billing_customers`, and narrows the `families` grant to the columns the product
+actually writes — `name`, `address`, `timezone`, `cover_url`, `avatar_url`. A
+table-level grant cannot be narrowed by revoking one column, so the grant is
+dropped and re-issued. Reads are untouched: `subs_select` and `billing_select`
+stay, so the billing page still shows the plan.
+
+No legitimate write is lost. Every write to `subscriptions` in the product
+already used `createServiceClient()`; `billing_customers` had two upserts on the
+user-scoped client and the same commit moves them to the service client, in
+routes that already resolve the family from `requireUserContext()` and take the
+customer id from Stripe's own response. Closing and reopening an account stay a
+parent's decision through `app/(app)/account/actions.ts`, which already uses the
+service client.
+
+**Measured, not argued.** `docs/audit/entitlement-write-boundary-check.sql` runs
+as a real `authenticated` session under RLS. Five of its assertions fail against
+the previous schema, naming each statement above; all pass after `0300`; and it
+asserts the other direction too — a parent can still rename their family and
+still read their own plan, so a revoke that broke the product would not read as
+a pass. Each attempt is judged on the row count as well as the refusal, because
+an UPDATE that RLS filters to no visible row changes nothing and raises nothing.
+CI replays it against the fully bootstrapped schema on every pull request.
+
+Until it is applied, a signed-in parent can give their own family Family+ for
+nothing, in one request, in production.
+
+
+### `0301` decides who may address and rewrite a notification — unapplied
+
+Authored 2026-09-15. **Not applied**, same credentialed operator as everything
+above, same order.
+
+`notifications` is not an in-app list. The cron reads it with the service role
+and turns each row into an email from Bubaly's own sender
+(`lib/server/notification-emails.ts`) and a device push (`lib/server/push.ts`).
+Its write policies were written for a list.
+
+`notif_insert` checked only `is_family_member(family_id)`; `user_id` was a plain
+FK to `auth.users` with no family constraint. The email cron selects on
+`sent_at is null`, `user_id is not null` and `send_at <= now()` — **no family
+filter** — so the `family_id` a row claims never reaches the delivery decision.
+Measured as a CHILD of one family, with a control proving a non-member is
+refused the same statement:
+
+| Statement | Result |
+|---|---|
+| `insert into notifications (family_id, user_id, …) values (<my family>, <a user in ANOTHER family>, …)` | 1 row, matching the cron's selection exactly |
+| `update notifications set title='Rent is CANCELLED this month', body='— Bubaly' where user_id is null` | 1 row — any member rewrites a notice the product generated |
+| `update notifications set sent_at=null, pushed_at=null where user_id=<me>` | 1 row — the stamps are the only thing making delivery once-only |
+
+`notif_update` had a `USING` clause and no `WITH CHECK`, so Postgres reused
+`USING` as the new-row test, and its second branch is the family-wide row.
+
+`0301` pins the recipient — `user_id` must be NULL or an **active member of the
+row's own family**, which is exactly what `resolveRecipients` already builds —
+and narrows the table's UPDATE grant to `is_read`, the only column the browser
+writes (`components/modules/notifications-module.tsx`). `sent_at` and
+`pushed_at` are stamped by the cron under the service role. Both rewrite and
+re-delivery close together, without touching who may mark a notice read.
+
+**Not closed, and stated rather than implied.** A member can still file a
+notification with an arbitrary title and body for someone in their **own**
+family, which the cron will email from Bubaly's sender. That cannot be decided
+at the RLS layer: the legitimate paths look identical — the AI notify tool, the
+trip-disruption report and the geofence alert all insert member-authored text
+through the caller's own session. Closing it means routing every `notify()`
+write through the service client, which touches the AI run executor, and that is
+a change to make deliberately rather than as a rider.
+
+**Measured, not argued.** `docs/audit/notification-authorship-check.sql` runs as
+a real `authenticated` child session under RLS. Its three attack assertions fail
+against the previous schema, naming each statement; all pass after `0301`; and
+it asserts the other direction too — marking read, addressing an in-family
+recipient, and filing the family-wide row all still work, so a revoke that broke
+the product would not read as a pass. CI replays it on every pull request.
+
+
+### `0302` keeps one live system policy per family, per name — unapplied
+
+Authored 2026-09-15. **Not applied**, same credentialed operator as everything
+above, same order.
+
+`trust_policies` had exactly one unique index: the primary key on `id`.
+`setConciergeAutopilotAction` is a check-then-insert over
+`(family_id, name='Concierge autopilot')`, and it did not destructure the read
+error. That is what made this self-worsening rather than merely racy. Measured
+on a replayed database:
+
+| Step | Result |
+|---|---|
+| insert two rows, same name, effects `allow` and `deny`, both priority 10 | accepted — no constraint objects |
+| the single-row read the action performs | matches 2 rows, which PostgREST rejects |
+
+With the error discarded, `existing?.id` is undefined and the action takes its
+INSERT branch — adding a **third** row. Every later change to the dial adds
+another. `components/concierge/autopilot-panel.tsx` read the same row the same
+way, checked only the run feed's error, and rendered `dialLevel(undefined)`:
+the default. A parent's control over whether Bubaly executes accepted plans on
+its own silently stopped taking effect and stopped reporting its own state.
+
+**What is not claimed.** Which duplicate governs is undefined by contract —
+`lib/trust/engine.ts` sorts by `priority` alone and `loadTrustInputs` issued no
+`ORDER BY` — but the order was **not observed to flip** in this harness (an
+index scan served both reads), so no such claim is made. The ordering is fixed
+anyway, because which policy governs should not depend on a query plan.
+
+`0302` adds a partial unique index on `(family_id, name) where is_system and
+enabled`, scoped to `is_system` so a family's own hand-written policies may
+still share a name across domains. The repair **disables** superseded rows
+rather than deleting them: `loadTrustInputs` filters `enabled = true`, so a
+disabled row leaves the engine at once, and no household loses a row to make an
+index fit. The survivor in each group is the most recently updated — the
+parent's latest intent. A replay disables nothing.
+
+The action now checks its read error and treats a racing `23505` as "someone
+else created it, apply my level over it". The panel's read is narrowed to the
+one live row the index permits, which is what stops the wrong level rendering;
+its error is logged rather than swallowed, and it still falls back to the
+default rather than saying "unknown", because saying so needs copy in eleven
+languages and inventing those is worse than the gap it closes.
+
+**Measured, not argued.** `docs/audit/system-policy-uniqueness-check.sql`
+asserts the refusal, that a superseded row can still be kept alongside the live
+one, that the engine sees exactly one, that the index does **not** reach a
+family's own policies, and that the repair keeps the latest intent. Its first
+assertion fails against the previous schema, naming the count. CI replays it on
+every pull request.
+
 ## Security-relevant migrations awaiting production
 
 Added after this document's inventory stopped being complete, and listed here
 because their value is zero until they are applied:
 
-- **`0300_social_tokens_service_role_only.sql`** — drops the four
+- **`0303_social_tokens_service_role_only.sql`** (renumbered from `0300`, which
+  `main` took for the entitlement fix above) — drops the four
   `can_manage_family` policies `0297` added to `public.social_account_tokens`.
   `0034` created that table with no policy and a comment saying never to add
   one; `0297` added them on the stated premise that "every policy was
-  is_family_member", when there were none. Until `0300` is applied, any family
+  is_family_member", when there were none. Until `0303` is applied, any family
   manager can `select` the OAuth token rows through PostgREST. The columns hold
   ciphertext and no code writes the table yet, which bounds the exposure; it
   does not remove it. Verified locally against a full replay (313 migrations

@@ -162,6 +162,18 @@ describe('no claimed write discards its result', () => {
     trust_audit_logs: 'dashboard/trust and api/privacy/export are answered from it',
     stripe_authorizations: 'the admin page and the assistant explain declines from it',
     push_devices: 'an unpruned dead endpoint is retried on every later notification',
+    // The seventh through thirteenth instances of the same shape. Each of these
+    // sat inside a try/catch whose message named this very write — and a
+    // PostgREST call RESOLVES with { data, error }, rejecting only under
+    // .throwOnError(), so those catches saw a client that could not be built and
+    // nothing else. The handler existed and could not fire.
+    feedback_ideas: 'it is the only record that a GitHub issue exists, so a lost write files a SECOND one next sync',
+    admin_notifications: 'the /admin feed is where a super admin finds out at all',
+    mkt_consent_events: 'the consent ledger is what api/privacy/export cites',
+    expense_splits: 'the rollback is what keeps "never leave a parent without shares" true',
+    onboarding_progress: 'the onboarding funnel is read from it',
+    crm_contacts: 'the contact its owner and lifecycle are read from',
+    mkt_visitors: 'the visitor spine that attributes a person to a contact',
   };
 
   it.each(Object.entries(WATCHED))('%s is never written in statement position', async (table) => {
@@ -174,7 +186,9 @@ describe('no claimed write discards its result', () => {
       }
       return out;
     };
-    const files = [...walk('app'), ...walk('lib')];
+    // components/ too: the expense rollback is a client component, and a
+    // discarded write is no less discarded for running in a browser.
+    const files = [...walk('app'), ...walk('lib'), ...walk('components')];
     expect(files.length, 'the walk found nothing, so it proves nothing').toBeGreaterThan(100);
 
     const offenders: string[] = [];

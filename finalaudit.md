@@ -15,9 +15,12 @@ and both sessions independently labelled a pass **"L"** for different work, so
 theirs is relabelled **L′** while its finding ID `F-L01` is left exactly as its
 author wrote it.*
 
-**Eighteen passes, A–Q plus L′. 150 distinct finding IDs are named in this
-document**, of which Pass P added 17 and Pass Q 12 (plus one earlier ID, C3-S3-02,
-now cited individually rather than by range). The passes' own totals are larger than the
+**Nineteen passes, A–Q plus L′ and the parallel session's own N. 151 distinct
+finding IDs are named in this document**, of which Pass P added 17 and Pass Q 12
+(plus one earlier ID, C3-S3-02, now cited individually rather than by range).
+The count was verified across the merge with `main` rather than asserted: 150
+IDs here, 99 there, 151 in the union and 151 in the merged file, with none
+lost. The passes' own totals are larger than the
 IDs named here — Pass P alone produced 38 findings — because this index cites
 the significant ones individually and the remainder by range; the worker files
 hold every one in full. That distinction is stated rather than papered over with
@@ -5182,6 +5185,54 @@ because the guard now makes that class impossible to reintroduce quietly.
 
 ---
 
+## Pass N — a public bucket named its objects with Math.random, and my own guard said that was fine
+
+**F-N01 — feedback screenshots behind 31 bits of non-cryptographic randomness.**
+
+Swept the storage boundary this pass: 6 buckets, 22 `storage.objects` policies. Per
+bucket the command coverage is complete (`chore-proof` and `feedback-attachments`
+have no UPDATE policy, which fails closed and is right for immutable objects), and
+only three policies carry no family or owner scope — all three the deliberate
+`FOR SELECT USING (bucket_id = '…')` public reads on `avatars`,
+`feedback-attachments` and `marketplace-photos`.
+
+For a publicly-readable bucket the object NAME is the whole boundary, and the first
+path segment is the user id, which is not secret. `feedback-attachments` named its
+objects:
+
+```js
+const path = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+```
+
+**Measured**, not estimated: the random part is always **6** base36 characters —
+**31 bits**, a **2.18e9** keyspace — against a UUID's 122. `Date.now()` is not
+secret, and `Math.random()` is not a CSPRNG. These are screenshots *of the product*,
+so they carry names, schedules and balances.
+
+**This one is mine.** Pass H added
+`tests/public-bucket-objects-are-unguessable.test.ts`, and when its first version
+flagged every `Date.now()` I narrowed it to CLOCK-ONLY — writing, in the test
+itself, that *"a name that also mixes in Math.random still has real entropy
+(feedback-attachments does this)"*. The narrowing was right to avoid false
+positives on the helper's own fallback; the blessing of `Math.random` was not, and
+it is exactly why this call site survived a guard written to catch it.
+
+**Fix.** Both public-bucket uploads now build their path through the shared
+`unguessableObjectName` (crypto.randomUUID). `marketplace-photos` already used
+`crypto.randomUUID` directly but kept the six-character string as its fallback and
+was a fourth private copy of the same idea — the shape that let the escapeLike
+defect reach four call sites with two still wrong.
+
+The guard gains two rules, replacing the comment that blessed the weakness:
+every upload into a publicly-readable bucket must name its object with the shared
+helper, and no public-bucket path may take its entropy from `Math.random` (the
+helper's own fallback is the single permitted use). **Both fail against the
+previous code**, naming both files.
+
+**Verification.** Full suite **13,729 / 13,729**. `tsc` and eslint clean.
+
+**Status: FIXED.** No migration, so it reaches production with the deploy.
+
 # Pass P — three surfaces nobody had audited, and the fixes they demanded
 
 *Round 4, 2026-09-15. Claude-2, -3 and -4 dispatched by Claude-1 at the three
@@ -5641,7 +5692,7 @@ tree contains the string `"export function "` — true of any repository, and th
 very defect one rung up; it now matches each helper's definition, and both its
 assertions are proved red.
 
-**C3-S5-01 — FIXED.** `supabase/migrations/0300_social_tokens_service_role_only.sql`
+**C3-S5-01 — FIXED.** `supabase/migrations/0303_social_tokens_service_role_only.sql`
 drops the four policies and restores 0034's invariant. Verified on a full local
 replay: **313 migrations applied, 0 failed**, and `pg_policies` now lists
 `social_account_tokens` with none, alongside `sync_tokens`' single deny-all.
@@ -5657,7 +5708,7 @@ built for has not been written. So 0297 published an empty store — and would
 have published a full one the day it was filled.
 
 `tests/social-tokens-stay-service-role-only.test.ts` makes the comment
-mechanical: no migration after 0300 may create a policy on the table, 0300 must
+mechanical: no migration after 0303 may create a policy on the table, 0303 must
 drop all four and leave RLS enabled (with RLS off, "no policy" means
 unrestricted, not denied), and no application code may reach the table outside
 the service-role path. All three assertions proved red.
