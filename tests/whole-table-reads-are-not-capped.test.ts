@@ -242,6 +242,13 @@ describe('no delivery-contract read is left unbounded', () => {
     { file: 'app/(app)/admin/marketing/push/actions.ts', table: 'marketing_suppressions', why: 'a missing row sends to someone who opted out' },
     { file: 'lib/marketing/send.ts', table: 'marketing_suppressions', why: 'a missing row emails someone who unsubscribed' },
     { file: 'lib/marketing/automation-runner.ts', table: 'marketing_automation_runs', why: 'the only guard against re-running a workflow for the same family' },
+    // Source-level rather than behavioural, because the cron routes read their
+    // auth and service client at module scope and no test in the repo invokes
+    // one — the two existing allowance cron tests assert on the source for the
+    // same reason. The consequence is the sharpest in this file: a plan row
+    // that does not come back is not read as unknown, it is read as free, and
+    // the child's allowance is SKIPPED while the run reports itself clean.
+    { file: 'app/api/cron/wallet-allowance/route.ts', table: 'subscriptions', why: 'a plan that does not come back skips a child\'s allowance' },
   ];
 
   it.each(WATCHED)('$file reads $table whole ($why)', async ({ file, table }) => {
