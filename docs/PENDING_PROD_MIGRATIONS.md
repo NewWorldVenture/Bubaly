@@ -656,3 +656,20 @@ make the inventory look more complete than it is.
 `0272`, `0273` and `0275` already have full entries in the historical inventory
 above. The others do not, and the honest summary is that this document stopped
 being a complete picture at `0254`.
+
+## Security-relevant migrations awaiting production
+
+Added after this document's inventory stopped being complete, and listed here
+because their value is zero until they are applied:
+
+- **`0300_social_tokens_service_role_only.sql`** — drops the four
+  `can_manage_family` policies `0297` added to `public.social_account_tokens`.
+  `0034` created that table with no policy and a comment saying never to add
+  one; `0297` added them on the stated premise that "every policy was
+  is_family_member", when there were none. Until `0300` is applied, any family
+  manager can `select` the OAuth token rows through PostgREST. The columns hold
+  ciphertext and no code writes the table yet, which bounds the exposure; it
+  does not remove it. Verified locally against a full replay (313 migrations
+  applied, 0 failed) and by `docs/audit/sensitive-role-boundary-check.sql`,
+  which was amended in the same change — it previously asserted the opened
+  state as a requirement. Audit C3-S5-01.

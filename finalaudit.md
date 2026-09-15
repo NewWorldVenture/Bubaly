@@ -5614,3 +5614,63 @@ authenticity entirely on `NODE_ENV === 'production'`, which cannot be observed
 here and which no test exercises. Production env values and production schema
 remain unverifiable (F-001). `lib/server/push.ts`'s FCM/APNs branches, VAPID
 storage, and `mobile/` were not covered by this sweep.
+
+## Pass Q, applied — three of the round's findings are now FIXED
+
+Merged and then fixed in the same round, each proved by mutation *after* the
+fix as well as before:
+
+**C4-S5-02 — FIXED.** `tests/helpers/source-order.ts` exports `at()`, which
+asserts presence before returning an index; 139 ordering assertions across 47
+files now go through it, and `tests/ordering-guards-fail-on-absence.test.ts`
+keeps the bare form out. Deleting `markReferralConverted` from the Stripe
+webhook now turns `tests/referral-reward.test.ts` **red**; so does deleting the
+`if (error) return;` guards from `assistant-module`. The meta-guard blanks
+comments before scanning, because its own docstring quotes the pattern it
+forbids — the same trap Pass O recorded, avoided deliberately this time.
+
+**C4-S5-01 — FIXED.** The trailing `(` was appended at the 46 proven sites plus
+18 further assertions naming the same helpers — 64 across 44 files. Removing
+`requireMarketingAdmin()` from the lead-scores action, or all four
+`logWalletAudit(` calls from the money actions, now fails the suite.
+`tests/boundary-helpers-must-be-called.test.ts` is a **named-helper ratchet over
+the 21 helpers that were actually mutation-tested**, not a general rule over the
+several hundred bare assertions that remain; that scope is stated in the file
+rather than implied by the name. Its own first draft asserted that the source
+tree contains the string `"export function "` — true of any repository, and this
+very defect one rung up; it now matches each helper's definition, and both its
+assertions are proved red.
+
+**C3-S5-01 — FIXED.** `supabase/migrations/0300_social_tokens_service_role_only.sql`
+drops the four policies and restores 0034's invariant. Verified on a full local
+replay: **313 migrations applied, 0 failed**, and `pg_policies` now lists
+`social_account_tokens` with none, alongside `sync_tokens`' single deny-all.
+`docs/audit/sensitive-role-boundary-check.sql` — which asserted the opened state
+as a *requirement* — was amended to assert the closed one, and proved red by
+re-adding the policies to the live replay.
+
+One fact found while fixing it, which sharpens the finding rather than softening
+it: **nothing writes that table at all yet.** `lib/social/` publishes through
+`social_accounts`, and `lib/social/crypto`, the encryption module 0034's own
+header names, does not exist in the tree. The OAuth connect flow the table was
+built for has not been written. So 0297 published an empty store — and would
+have published a full one the day it was filled.
+
+`tests/social-tokens-stay-service-role-only.test.ts` makes the comment
+mechanical: no migration after 0300 may create a policy on the table, 0300 must
+drop all four and leave RLS enabled (with RLS off, "no policy" means
+unrestricted, not denied), and no application code may reach the table outside
+the service-role path. All three assertions proved red.
+
+**Not restored, and here is why.** Claude-4 flagged that
+`tests/silent-empty-read-ratchet.test.ts` had `assistant-module` and
+`journeys/page.tsx` pruned from its BASELINE on the strength of fixes whose
+guards it then proved vacuous. Checked rather than reverted: the *fixes*
+themselves are present in both files — the `if (error) return;` guards and the
+journeys early-return — and it was only the guards holding them that could not
+fail. Those guards now can. The pruning stands; the reasoning behind it is
+sound as of this commit, which it was not before it.
+
+**Still open from this round:** C3-S5-02 (the plaintext Google refresh token —
+a fix has to encrypt *and* migrate existing rows, so it is not a one-line
+change), C3-S5-03 (the string-only push SSRF guard), and C3-S5-04..09.
