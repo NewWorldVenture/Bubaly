@@ -86,13 +86,47 @@ describe('memberTagline', () => {
 
 describe('weekStrip', () => {
   it('returns Mon→Sun with today flagged', () => {
-    const now = new Date('2026-05-14T09:00:00'); // a Thursday (local)
-    const days = weekStrip(now);
+    const days = weekStrip('2026-05-14'); // a Thursday
     expect(days).toHaveLength(7);
     expect(days[0].dow).toBe('Mon');
     expect(days[6].dow).toBe('Sun');
+    expect(days.map((d) => d.date)).toEqual([
+      '2026-05-11', '2026-05-12', '2026-05-13', '2026-05-14',
+      '2026-05-15', '2026-05-16', '2026-05-17',
+    ]);
     const today = days.find((d) => d.isToday);
-    expect(today?.date).toBe(isoDate(now));
+    expect(today?.date).toBe('2026-05-14');
     expect(today?.dow).toBe('Thu');
+    expect(today?.dom).toBe(14);
+  });
+
+  // It takes the family's day KEY, so there is no host clock left in it to be
+  // wrong. It used to take `now` and call setHours(0,0,0,0) — the host's
+  // midnight — while its only caller had already resolved the family's day two
+  // lines above. On a UTC host the strip highlighted tomorrow from 17:00 for a
+  // Californian household, every day.
+  it('does not consult the host clock at all', () => {
+    const before = weekStrip('2026-05-14');
+    const realNow = Date.now;
+    try {
+      // Six months away and mid-afternoon: enough to move the host's day in
+      // either direction. The strip must not notice.
+      Date.now = () => new Date('2026-11-02T23:30:00Z').getTime();
+      expect(weekStrip('2026-05-14')).toEqual(before);
+    } finally {
+      Date.now = realNow;
+    }
+  });
+
+  it('crosses a month boundary by day key rather than by adding milliseconds', () => {
+    // The week containing Sun 1 Nov 2026 — which is also a US DST fall-back day,
+    // a 25-hour local day that millisecond arithmetic slips an hour on.
+    const days = weekStrip('2026-11-01');
+    expect(days.map((d) => d.date)).toEqual([
+      '2026-10-26', '2026-10-27', '2026-10-28', '2026-10-29',
+      '2026-10-30', '2026-10-31', '2026-11-01',
+    ]);
+    expect(days[6].dom).toBe(1);
+    expect(days.find((d) => d.isToday)?.date).toBe('2026-11-01');
   });
 });

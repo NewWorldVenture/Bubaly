@@ -2948,3 +2948,64 @@ session's block: **I shipped a regression and CI found it, not me.**
      a family until the user asks for one.
 - **Status:** OPEN — owner decision (copy, in 11 locales). The security question
   their finding raised is answered and closed.
+
+### [CLAUDE-1][HIGH][CORRECTNESS] "Today" was the host's today on eleven server-rendered surfaces
+
+- **Raised by:** Claude-4 as C-4-02. Verified and **closed on eleven of the
+  seventeen tracked sites**, including one they did not rank and which turned out
+  to be the worst in the set.
+- **Files:** the four AI routes, `app/(app)/guardian/page.tsx`,
+  `app/(app)/dashboard/moments/page.tsx`, both dashboards, `lib/home/home-data.ts`
+  + `app/(app)/home/page.tsx`, `lib/family/signals.ts`, `lib/calendar/scheduling.ts`
+- **Problem:** `new Date(); d.setHours(0, 0, 0, 0)` is the SERVER's midnight — on
+  a UTC host, 17:00 in California and 11:00 the same morning in Sydney. A "today"
+  built that way runs 17:00 yesterday → 17:00 today.
+- **The worst one was not in the report.** `lib/calendar/scheduling.ts` types
+  `WorkingHours` as *"local hours, e.g. 9–17"* and applied them with
+  `setHours(hours.startHour, …)` on the host. So on a UTC host a Californian
+  family's 9–17 working window was proposed as **09:00–17:00 UTC = 01:00–09:00
+  local**: the AI schedule route suggested meetings in the middle of their night
+  and treated their actual working day as unavailable. All-day events blocked the
+  host's day, one function up, with the same consequence.
+- **Also found, being the same defect a layer out:**
+  - `app/(app)/dashboard/moments/page.tsx` was **half** fixed — `todayIso` asked
+    for the family's day and `tomorrowStart` two lines below asked for the host's.
+  - `app/(app)/home/page.tsx` resolved `todayKey` correctly and then called
+    `weekStrip(now)`, which threw that away and redid it on the host clock. Its
+    `monthStart` was `new Date(now.getFullYear(), now.getMonth(), 1)` — the host's
+    month — and the label rendered with no `timeZone`, so a family east of UTC
+    could be shown the previous month's name.
+  - `lib/family/signals.ts` had **both** halves at once: `setHours(0,0,0,0)` for
+    the instant and `toISOString().slice(0, 10)` for the day key, which is the
+    UTC date of that instant — the day before, for a household east of UTC.
+- **Two decisions worth stating.**
+  1. **`weekStrip` now takes a day KEY, not a `Date`.** That removes the zone
+     question from the function rather than answering it, and the whole strip is
+     day-key arithmetic, so a 23- or 25-hour DST day cannot shift a column.
+  2. **`gatherSignalsResult` resolves the zone itself instead of taking a
+     parameter.** Six call sites reach it, and the finding is precisely that the
+     same correction kept failing to reach every site: an optional `tz` defaulting
+     to the host would have rebuilt the bug at whichever caller forgot. One
+     lookup, no caller can get it wrong. `SlotOptions.tz` is required for the same
+     reason — a default there would silently mean the host.
+- **`lib/chores/dashboard.ts:dueLabel` is deliberately NOT converted.** Its only
+  caller is a client module, where `new Date()` is the user's own device clock
+  and already right. Converting it would be motion, not a fix. Six such pure
+  helpers remain tracked, each called from both server and client, and each needs
+  the zone threaded from its server callers rather than a blanket conversion.
+- **Status:** FIXED (11 of 17). Both existing ratchets shrank —
+  `server-midnight-is-not-the-familys-midnight.test.ts` from 17 entries to 6, and
+  the older `family-day-not-greenwich-day.test.ts` lost its now-stale
+  `lib/family/signals.ts` exemption. **Both refused to let me leave a stale
+  entry**, which is how a ratchet is supposed to behave and is worth recording as
+  the mechanism working.
+- **Non-vacuity** on the new scheduling assertions: put working hours back on the
+  host clock → *"a slot started at 1:00 local: expected 1 to be greater than or
+  equal to 9"*; put all-day blocking back on the host's day → the local midnight
+  assertion fails. **One mutation I could NOT make fail**, recorded because it is
+  a fact about the design rather than a gap: stepping days by a drifting timestamp
+  does not break the DST case, because each step re-derives the day key and
+  `zonedTimeMs` re-anchors from it. The day-key formulation is self-correcting —
+  which is the reason to prefer it, and the reason the DST case is a regression
+  net rather than a proof.
+- **Verified:** tsc and eslint clean; **13,901 tests green across four shards**.

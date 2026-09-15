@@ -5,6 +5,7 @@ import { createServer } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
 import { computeStress, type StressInput, type StressResult } from './stress';
 import { completionScore, nextBestActions, type NextAction } from './operations';
+import { addDaysToDayKey, dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
 
 const DAY = 86_400_000;
 const iso = (d: Date) => d.toISOString();
@@ -43,11 +44,30 @@ export type FamilySignalsResult = {
 export async function gatherSignalsResult(familyId: string): Promise<FamilySignalsResult> {
   const supabase = await createServer();
   const now = new Date();
-  const start = new Date(now); start.setHours(0, 0, 0, 0);
-  const todayStr = ymd(start);
-  const end = new Date(start.getTime() + DAY);
-  const in3 = new Date(start.getTime() + 3 * DAY);
-  const in7 = new Date(start.getTime() + 7 * DAY);
+
+  // The family's day, not the host's, and resolved HERE rather than taken as a
+  // parameter on purpose. Six call sites reach this function and the finding
+  // being fixed is that the same correction kept failing to reach every site —
+  // an optional `tz` that falls back to the host zone would have rebuilt the
+  // bug at whichever caller forgot. One lookup, and no caller can get it wrong.
+  //
+  // `setHours(0, 0, 0, 0)` was the host's midnight (17:00 in California on a
+  // UTC host), and `ymd` was `toISOString().slice(0, 10)` — the UTC date of that
+  // instant, which for a household east of UTC is yesterday. These signals drive
+  // the stress score, the reports page and the AI's proactive context, so both
+  // halves moved a family's whole day.
+  const { data: fam, error: famError } = await supabase
+    .from('families').select('timezone').eq('id', familyId).maybeSingle();
+  if (famError) return { data: null, error: famError };
+  const tz = fam?.timezone || 'UTC';
+
+  const todayStr = dayKeyInTz(now, tz);
+  const start = new Date(zonedDayBoundsMs(todayStr, tz).start);
+  // Day keys rather than `+ n * DAY`: a 23- or 25-hour DST day slips a
+  // millisecond window by an hour, and these bounds feed date-column filters.
+  const end = new Date(zonedDayBoundsMs(addDaysToDayKey(todayStr, 1), tz).start);
+  const in3 = new Date(zonedDayBoundsMs(addDaysToDayKey(todayStr, 3), tz).start);
+  const in7 = new Date(zonedDayBoundsMs(addDaysToDayKey(todayStr, 7), tz).start);
 
   const [
     weekEvents,
@@ -80,7 +100,7 @@ export async function gatherSignalsResult(familyId: string): Promise<FamilySigna
     supabase.from('family_routines').select('days_of_week')
       .eq('family_id', familyId).eq('status', 'active'),
     supabase.from('meal_plans').select('id', { count: 'exact', head: true })
-      .eq('family_id', familyId).gte('plan_date', todayStr).lte('plan_date', ymd(in7)),
+      .eq('family_id', familyId).gte('plan_date', todayStr).lte('plan_date', addDaysToDayKey(todayStr, 7)),
     supabase.from('grocery_items').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('is_checked', false),
   ]);
@@ -124,7 +144,7 @@ export async function gatherSignalsResult(familyId: string): Promise<FamilySigna
   const billRows = bills.data ?? [];
   const overdueBills = billRows.filter((b) => b.status === 'overdue').length;
   const billsDueSoon = billRows.filter(
-    (b) => b.status === 'upcoming' && b.due_date >= todayStr && b.due_date <= ymd(in7),
+    (b) => b.status === 'upcoming' && b.due_date >= todayStr && b.due_date <= addDaysToDayKey(todayStr, 7),
   ).length;
   const billsPaid = billRows.filter((b) => b.status === 'paid').length;
 

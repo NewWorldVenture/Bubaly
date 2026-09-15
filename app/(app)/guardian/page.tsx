@@ -5,6 +5,7 @@ import { isTwilioConfigured } from '@/lib/guardian/twilio';
 import { GuardianDashboard } from '@/components/guardian/guardian-dashboard';
 import { Shield } from 'lucide-react';
 import { getTranslations } from '@/lib/i18n/server';
+import { dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
 
 export const metadata: Metadata = { title: 'AI Call Guardian · Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -15,8 +16,13 @@ export default async function GuardianPage() {
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // The family's midnight, not the host's. Guardian screens calls and shows the
+  // day's activity, so on a UTC host a Pacific household's "today" began at
+  // 17:00 the previous afternoon — calls from this morning were filed under
+  // yesterday. Same defect and same fix as the kitchen display
+  // (app/(app)/display/page.tsx:122).
+  const tz = ctx.active.family.timezone || 'UTC';
+  const today = new Date(zonedDayBoundsMs(dayKeyInTz(new Date(), tz), tz).start);
 
 
   const [

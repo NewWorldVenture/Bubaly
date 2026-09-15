@@ -13,11 +13,21 @@ import { describe, expect, it } from 'vitest';
 // pattern miss and it reports clean. Its own header calls itself "a floor rather
 // than a proof"; this is what was under the floor.
 //
-// This is a RATCHET, not a proof. Seventeen server-side sites remain, each
-// needing its own decision about which family's day it means — some have a
-// familyId in hand, some are pure helpers whose caller owns the zone. Listing
-// them stops the eighteenth being added silently while they are worked down,
-// and shrinking the list is the only edit that should ever be made to it.
+// This is a RATCHET, not a proof. Seventeen server-side sites were listed here;
+// eleven are now closed and six remain, each needing its own decision about
+// which family's day it means. Listing them stops the next one being added
+// silently while they are worked down, and shrinking the list is the only edit
+// that should ever be made to it.
+//
+// What is left is deliberately the harder half: every remaining entry is a PURE
+// helper that takes a `now` and is called from BOTH server and client code
+// (`lib/pantry/logic.ts` has six server callers and two client ones). In a
+// client component `new Date()` is the user's own device clock and is already
+// right, so these cannot simply be converted — the zone has to be threaded from
+// each server caller, or the helper has to take a day key the way
+// `weekStrip` now does. `lib/chores/dashboard.ts:dueLabel` is the clearest
+// case: its only caller is a client module, so it is listed but may well be
+// correct as it stands.
 //
 // To close one: route it through `dayKeyInTz` / `zonedDayBoundsMs`
 // (lib/services/scope.ts), as app/(app)/display/page.tsx and
@@ -28,19 +38,8 @@ const ROOTS = ['app', 'lib', 'components'];
 // Known, tracked, and not yet converted. Every entry is a defect waiting for the
 // family-zone decision its call site needs — never a site that is fine as it is.
 const TRACKED = new Set([
-  'app/(app)/dashboard/moments/page.tsx',
-  'app/(app)/guardian/page.tsx',
-  'app/api/ai/invest/route.ts',
-  'app/api/ai/relationship/route.ts',
-  'app/api/ai/wallet/child/[childId]/route.ts',
-  'app/api/ai/wallet/route.ts',
-  'components/dashboard/family-dashboard.tsx',
-  'components/dashboard/personal-dashboard.tsx',
-  'lib/calendar/scheduling.ts',
   'lib/capture/parse.ts',
   'lib/chores/dashboard.ts',
-  'lib/family/signals.ts',
-  'lib/home/home-data.ts',
   'lib/marketplace/returns.ts',
   'lib/pantry/logic.ts',
   'lib/relationship/dates.ts',
@@ -91,8 +90,17 @@ describe('a family day does not turn over at the server\'s midnight', () => {
     expect(stale).toEqual([]);
   });
 
-  it('holds the two surfaces already converted', () => {
-    for (const path of ['app/(app)/display/page.tsx', 'app/(app)/kids/page.tsx']) {
+  it('holds the surfaces already converted', () => {
+    for (const path of [
+      'app/(app)/display/page.tsx',
+      'app/(app)/kids/page.tsx',
+      'app/(app)/guardian/page.tsx',
+      'app/api/ai/wallet/route.ts',
+      'components/dashboard/family-dashboard.tsx',
+      'components/dashboard/personal-dashboard.tsx',
+      'lib/calendar/scheduling.ts',
+      'lib/family/signals.ts',
+    ]) {
       const source = withoutComments(readFileSync(path, 'utf8'));
       expect(SERVER_MIDNIGHT.test(source), `${path} reverted to the server's midnight`).toBe(false);
       expect(source).toContain('zonedDayBoundsMs');
