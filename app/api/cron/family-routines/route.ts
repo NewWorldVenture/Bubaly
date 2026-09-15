@@ -62,7 +62,10 @@ export async function GET(req: NextRequest) {
   // matches — so a relative routine was unreachable by construction, and a
   // routine nulled by a pause never came back. This is the pass that arms
   // them, and it is why `next_run_at` is no longer a one-way door.
-  const armed = await armPendingRoutines(db, now);
+  // One reader for the whole tick: both loops share its cache, so a family's
+  // timezone is read once per tick rather than once per rule. Audit C4-S4-08.
+  const timezoneOf = timezoneReader(db);
+  const armed = await armPendingRoutines(db, now, timezoneOf);
 
   const { data: due, error } = await db
     .from('family_automation_rules')
@@ -86,8 +89,8 @@ export async function GET(req: NextRequest) {
     const dueAt = rule.next_run_at;
     if (!dueAt) continue;
 
-    const { data: family } = await db.from('families').select('timezone').eq('id', rule.family_id).maybeSingle();
-    const tz = family?.timezone ?? 'America/New_York';
+    const tz = await timezoneOf(rule.family_id);
+    if (!tz) { problems.push(rule.id); continue; }
 
     // Reserve the occurrence first. A duplicate key means another worker has
     // it — not an error, just somebody else's turn.
@@ -200,6 +203,45 @@ export async function GET(req: NextRequest) {
 }
 
 /** The next fire for a schedule of either kind, in one call. */
+/**
+ * A family's timezone, read ONCE per family per tick.
+ *
+ * Both callers previously did this inline, inside their loop:
+ *
+ *     const { data: family } = await db.from('families')...maybeSingle();
+ *     const tz = family?.timezone ?? 'America/New_York';
+ *
+ * which had two defects in two lines. It was an N+1 — one round trip per RULE,
+ * repeating the identical read for every rule a family owns. And it discarded
+ * the error, so a failed read became `America/New_York` silently: a household
+ * in Berlin or Sydney gets its routines fired against New York's clock, on the
+ * wrong DAY near midnight, with nothing failing anywhere. Audit C4-S4-08.
+ *
+ * `null` means "could not establish the timezone" and the caller must SKIP the
+ * rule. Skipping is safe and self-correcting: the rule's next_run_at is
+ * untouched, so it stays due and the next tick retries it. Firing at the wrong
+ * time is not recoverable.
+ *
+ * A read that succeeds with no timezone set is NOT an error — the documented
+ * default stands for that case, which is what it was written for.
+ */
+function timezoneReader(db: DB) {
+  const cache = new Map<string, string | null>();
+  return async function timezoneOf(familyId: string): Promise<string | null> {
+    const hit = cache.get(familyId);
+    if (hit !== undefined) return hit;
+    const { data: family, error } = await db.from('families').select('timezone').eq('id', familyId).maybeSingle();
+    if (error) {
+      console.error('[cron:family-routines] timezone read failed; skipping rather than guessing a clock', { familyId, error });
+      cache.set(familyId, null);
+      return null;
+    }
+    const tz = family?.timezone ?? 'America/New_York';
+    cache.set(familyId, tz);
+    return tz;
+  };
+}
+
 async function nextFireAfter(
   db: DB,
   familyId: string,
@@ -220,7 +262,14 @@ async function nextFireAfter(
  * than repeatedly rewritten. Returns how many were armed, which the response
  * reports so a quiet tick is distinguishable from a broken one.
  */
-async function armPendingRoutines(db: DB, now: Date): Promise<number> {
+async function armPendingRoutines(
+  db: DB,
+  now: Date,
+  // Passed in rather than created here, so a family's timezone is read once per
+  // TICK and not once per loop — which is what this function's caller's
+  // docstring claims, and a claim a test now holds to.
+  timezoneOf: (familyId: string) => Promise<string | null>,
+): Promise<number> {
   const { data: pending, error } = await db
     .from('family_automation_rules')
     .select('id, family_id, schedule_kind, schedule_expr, anchor_key, offset_days, at_hour, said, next_run_at')
@@ -237,8 +286,11 @@ async function armPendingRoutines(db: DB, now: Date): Promise<number> {
   for (const rule of pending ?? []) {
     const schedule = scheduleOf(rule);
     if (!schedule) continue;
-    const { data: family } = await db.from('families').select('timezone').eq('id', rule.family_id).maybeSingle();
-    const tz = family?.timezone ?? 'America/New_York';
+    const tz = await timezoneOf(rule.family_id);
+    // Arming against the wrong clock schedules the routine for the wrong
+    // moment. Leaving next_run_at NULL keeps it in this function's own
+    // selection, so the next tick tries again.
+    if (!tz) continue;
     const next = await nextFireAfter(db, rule.family_id, schedule, now, tz);
     if (!next) continue;
     // `armed` is returned and reported in the response precisely so a quiet tick

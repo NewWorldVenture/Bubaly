@@ -1664,3 +1664,52 @@ then did exactly that. With the two AI wallet routes, that is **three separate
 files where the hazard is written down in a comment immediately above the line
 that reintroduces it.** The knowledge was never missing. What was missing was
 anything that could fail when the knowledge was ignored.
+
+---
+
+## C1-S5-01 — concurrent typechecks corrupt a shared incremental cache and invent errors
+
+```
+[CLAUDE-1][MEDIUM][TOOLING] `tsc --noEmit` reported TS1156 in a file nobody had
+touched, on syntax that is legal; a re-run with nothing changed was clean
+File:     tsconfig.json:15  ("incremental": true)
+          tsconfig.tsbuildinfo (the shared cache)
+Problem:  With `incremental: true`, every `tsc` invocation reads and writes ONE
+          `tsconfig.tsbuildinfo` at the repo root — including under `--noEmit`.
+          Two processes typechecking at once interleave on that file, and the
+          loser reads a half-written cache. What comes out is not "no errors
+          found yet"; it is CONFIDENT ERRORS IN ARBITRARY FILES.
+Evidence: Observed while two audit workers and Claude-1 were all running:
+
+            components/display/display-grid.tsx(130,5): error TS1156:
+              'const' declarations can only be declared inside a block.
+            components/display/display-grid.tsx(464,5): error TS1156: ...
+
+          Three things rule out a real defect:
+            1. `git status` showed the file UNMODIFIED — only my two files were.
+            2. Line 130 is `const t = setInterval(...)` inside an arrow function
+               inside useEffect. That is legal, and TS1156 cannot be true of it.
+            3. Re-running `tsc --noEmit` with nothing changed produced a clean
+               result.
+          `tsconfig.tsbuildinfo` is 1,014,855 bytes and rewritten per run.
+Impact:   A false failure is worse than a missing check, because it spends the
+          reader's trust in the opposite direction. A developer, a CI log reader
+          or a future agent seeing TS1156 in an untouched file either chases a
+          phantom or — worse, and more likely the second time — learns to
+          disregard typecheck output. This audit has spent most of its length on
+          guards that cannot fail; this is a guard that fails when nothing is
+          wrong, and it degrades the same trust from the other side.
+
+          It is also a live hazard for THIS audit's own method: every worker is
+          told to run `npx tsc --noEmit` to validate, and they run in parallel.
+Fix:      Give concurrent invocations separate caches, or none:
+            - `tsc --noEmit --incremental false` for ad-hoc/CI checks, or
+            - `--tsBuildInfoFile` pointed at a per-invocation path.
+          `audit/status.md` already records the sibling hazard — "concurrent
+          source edits and concurrent `next build` runs against one `.next`
+          directory corrupt each other" — and the same reasoning applies here.
+          The board did not cover tsbuildinfo, and now does.
+Status:   OPEN — observed once, cause identified by elimination rather than by
+          reproducing it deliberately. Stated at that strength on purpose: the
+          three eliminations are solid, a forced reproduction is not attempted.
+```
