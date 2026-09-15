@@ -1,5 +1,5 @@
 import 'server-only';
-import { fetchExternal } from '@/lib/server/external-fetch';
+import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
 import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
 
 // Minimal GitHub Issues client for the feedback tracker. Key-gated: every call
@@ -39,7 +39,7 @@ class GithubError extends Error {
 }
 
 async function gh<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetchExternal(`${API}${path}`, {
+  const res = await fetchWithDeadline(`${API}${path}`, {
     ...init,
     headers: {
       Authorization: `Bearer ${githubToken()}`,
@@ -116,7 +116,7 @@ export async function setIssueState(number: number, state: 'open' | 'closed', st
 export async function githubRepoStatus(): Promise<{ ok: boolean; repo: string; detail: string }> {
   if (!isGithubConfigured()) return { ok: false, repo: githubRepo(), detail: 'GITHUB_TOKEN / GITHUB_FEEDBACK_REPO not set' };
   try {
-    const res = await fetchExternal(`${API}/repos/${githubRepo()}`, {
+    const res = await fetchWithDeadline(`${API}/repos/${githubRepo()}`, {
       headers: { Authorization: `Bearer ${githubToken()}`, Accept: 'application/vnd.github+json', 'User-Agent': 'bubaly-feedback-bot' },
     }, 10_000);
     if (!res.ok) { await readBoundedResponseJson(res, 4096).catch(() => ({})); return { ok: false, repo: githubRepo(), detail: `GitHub returned ${res.status}` }; }

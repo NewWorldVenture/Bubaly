@@ -5,7 +5,7 @@ import { fenceUntrustedBlock } from '@/lib/ai/safety/untrusted';
 import { isProviderStubEnabled, scriptedProvider } from '@/lib/ai/provider-stub';
 import { usageFromOpenAI, type TokenUsage } from '@/lib/ai/usage';
 import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
-import { fetchExternal } from '@/lib/server/external-fetch';
+import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
 import { describeActionError } from '@/lib/supabase/errors';
 
 export type AITool = {
@@ -240,7 +240,7 @@ function messageContent(message: AIMessage) {
 
 /**
  * Combine a caller's cancellation with the transport deadline. Returning
- * undefined lets `fetchExternal` install its own timeout, so a caller that
+ * undefined lets `fetchWithDeadline` install its own timeout, so a caller that
  * passes no signal keeps exactly the previous behaviour.
  */
 function withDeadline(signal: AbortSignal | undefined, timeoutMs: number): AbortSignal | undefined {
@@ -269,7 +269,7 @@ export class OpenAIProvider implements AIProvider {
   }
 
   private post(body: string, signal?: AbortSignal): Promise<Response> {
-    return fetchExternal(OPENAI_CHAT_URL, {
+    return fetchWithDeadline(OPENAI_CHAT_URL, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${this.apiKey}` },
       body,

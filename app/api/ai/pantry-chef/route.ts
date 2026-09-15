@@ -6,7 +6,7 @@ import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { getAIConfig } from '@/lib/ai/settings';
 import { MAX_FLYER_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
-import { fetchExternal } from '@/lib/server/external-fetch';
+import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
 import {
   annotateAllergens, buildPantryChefPrompt, normalizeAllergies, normalizePlanDate, parsePantryRecipes,
 } from '@/lib/meals/pantry-chef';
@@ -144,7 +144,7 @@ export async function POST(req: NextRequest) {
     const model = aiConfig.model && /^(gpt-|o\d|chatgpt-)/i.test(aiConfig.model) ? aiConfig.model : 'gpt-4o';
 
     const prompt = buildPantryChefPrompt(allergies, new Date());
-    const aiRes = await fetchExternal('https://api.openai.com/v1/chat/completions', {
+    const aiRes = await fetchWithDeadline('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({

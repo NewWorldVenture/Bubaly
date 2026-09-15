@@ -5841,3 +5841,44 @@ message reached nobody and the form used to say otherwise.
 
 Both mechanisms proved red by mutation: `===` restored, the length check
 removed, the refusal deleted, and the error read dropped.
+
+**C3-S5-09 — FIXED, widened past its own finding.**
+`supabase/migrations/0304_no_truncate_for_the_public_roles.sql` revokes TRUNCATE
+from `anon` and `authenticated` on **every** table in `public`, not just the two
+credential stores, and revokes it from the schema's default privileges so later
+tables do not arrive with it. RLS does not constrain TRUNCATE at all — the
+privilege is checked against the GRANT and never against the policy, so
+`using (false)` does not stop `truncate public.sync_tokens`.
+
+Stated precisely rather than overread, as Claude-3 did: PostgREST does not
+expose TRUNCATE, so this was never reachable over the REST API. It was reachable
+by anything executing SQL as those roles — a `security invoker` function, a
+future RPC, a direct connection with a leaked anon key. Nothing in the product
+uses it, which is what makes the revoke free.
+
+**The assertion is deliberately not in the migration.**
+`tests/migrations-are-additive.test.ts` scans migrations for the bare word
+TRUNCATE outside a grant/revoke privilege list, and my first draft's diagnostic
+`do` block tripped it. That ratchet guards production against destructive DDL
+and is *right*; loosening it so a migration can quote the word in a message
+would be trading a real protection for a cosmetic one. The check moved to
+`docs/audit/no-truncate-for-public-roles-check.sql`, which CI replays on every
+pull request — verified green on a full local replay (317 applied, 0 failed) and
+red against a re-granted privilege.
+
+**C3-S5-04 — FIXED.** `lib/server/external-fetch.ts` → `fetch-with-deadline.ts`,
+`fetchExternal` → `fetchWithDeadline`, across 25 files. The old name sat in a
+directory whose other members really are SSRF guards, and promised something it
+never did: fifteen lines that add an `AbortSignal` deadline and perform no URL
+validation, no scheme check, no DNS resolution and no redirect policy. No caller
+passed a non-constant URL, so there was no live hole — the finding is that the
+dispatch brief for this very session misread it as the SSRF guard, which is the
+evidence that a developer eventually would.
+
+Its header now says what it is in its first line and names
+`public-document-fetch.ts` as the thing to reach for instead.
+`tests/the-timeout-wrapper-is-not-a-guard.test.ts` keeps the old name from
+coming back — and spells the banned identifier in halves rather than exempting
+its own path, since an exemption is how a guard stops covering itself. Its limit
+is stated in the file: it polices the name, and cannot tell whether a given call
+site's URL is constant.

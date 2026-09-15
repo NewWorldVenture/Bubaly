@@ -6,7 +6,7 @@ import { cleanTranscript, isValidAudioUpload } from '@/lib/ai/voice';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
-import { fetchExternal } from '@/lib/server/external-fetch';
+import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
     upstream.append('model', model);
     upstream.append('response_format', 'json');
 
-    const res = await fetchExternal('https://api.openai.com/v1/audio/transcriptions', {
+    const res = await fetchWithDeadline('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
       headers: { authorization: `Bearer ${apiKey}` },
       body: upstream,

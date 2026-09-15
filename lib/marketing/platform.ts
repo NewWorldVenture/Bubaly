@@ -7,7 +7,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json, Tables } from '@/lib/database.types';
 import { isAIConfigured, resolveProvider } from '@/lib/ai/provider';
 import { getAIConfig } from '@/lib/ai/settings';
-import { fetchExternal } from '@/lib/server/external-fetch';
+import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
 import { readBoundedResponseJson } from '@/lib/server/bounded-response-body';
 import { syncMarketingProviders } from './provider-sync';
 
@@ -320,7 +320,7 @@ async function openAIEmbeddings(textInputs: string[], configuredKey?: string | n
   const apiKey = configuredKey ?? process.env.OPENAI_API_KEY ?? '';
   if (!apiKey) throw new Error('Embedding provider is not configured. Set OPENAI_API_KEY.');
   const model = process.env.OPENAI_EMBEDDING_MODEL ?? 'text-embedding-3-small';
-  const response = await fetchExternal('https://api.openai.com/v1/embeddings', {
+  const response = await fetchWithDeadline('https://api.openai.com/v1/embeddings', {
     method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({ model, input: textInputs.map((input) => input.slice(0, 6_000)) }),
   }, 60_000);

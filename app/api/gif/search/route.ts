@@ -3,7 +3,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { readBoundedResponseJson } from '@/lib/server/bounded-response-body';
-import { fetchExternal } from '@/lib/server/external-fetch';
+import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
 
 export const runtime = 'nodejs';
 
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
     : `https://api.giphy.com/v1/gifs/trending?api_key=${key}&limit=24&rating=pg`;
 
   try {
-    const res = await fetchExternal(endpoint, { next: { revalidate: 60 } }, 10_000);
+    const res = await fetchWithDeadline(endpoint, { next: { revalidate: 60 } }, 10_000);
     if (!res.ok) return NextResponse.json({ error: t('search.gifSearchFailed') }, { status: 502 });
     const json = await readBoundedResponseJson<{ data?: Array<{ id: string; title?: string; images?: Record<string, { url?: string; width?: string; height?: string }> }> }>(res, 2 * 1024 * 1024);
     const gifs: GifResult[] = (json.data ?? []).flatMap((g) => {

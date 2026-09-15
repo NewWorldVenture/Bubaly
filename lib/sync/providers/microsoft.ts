@@ -19,7 +19,7 @@ import type {
 import { SyncApiError } from '@/lib/sync/adapter';
 import { eventContentHash, reminderContentHash } from '@/lib/sync/hash';
 import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
-import { fetchExternal } from '@/lib/server/external-fetch';
+import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
 
 const TENANT = process.env.MICROSOFT_SYNC_TENANT || 'common';
 const AUTHORITY = `https://login.microsoftonline.com/${TENANT}/oauth2/v2.0`;
@@ -75,7 +75,7 @@ export function microsoftCalendarReadAuthUrl(redirectUri: string, state: string)
 }
 
 async function tokenRequest(body: Record<string, string>): Promise<OAuthTokens> {
-  const res = await fetchExternal(`${AUTHORITY}/token`, {
+  const res = await fetchWithDeadline(`${AUTHORITY}/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -115,7 +115,7 @@ async function revokeToken(): Promise<void> {
 }
 
 async function gfetch<T>(url: string, accessToken: string, init?: RequestInit): Promise<T> {
-  const res = await fetchExternal(url.startsWith('http') ? url : `${GRAPH}${url}`, {
+  const res = await fetchWithDeadline(url.startsWith('http') ? url : `${GRAPH}${url}`, {
     ...init,
     headers: {
       Authorization: `Bearer ${accessToken}`,

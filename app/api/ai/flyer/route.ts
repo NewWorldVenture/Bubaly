@@ -7,7 +7,7 @@ import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { getAIConfig } from '@/lib/ai/settings';
 import { MAX_FLYER_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
-import { fetchExternal } from '@/lib/server/external-fetch';
+import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
 
 export const runtime = 'nodejs';
 
@@ -124,7 +124,7 @@ Rules:
       ? { type: 'file' as const, file: { filename: 'flyer.pdf', file_data: `data:application/pdf;base64,${data}` } }
       : { type: 'image_url' as const, image_url: { url: `data:${mediaType};base64,${data}` } };
 
-    const aiRes = await fetchExternal('https://api.openai.com/v1/chat/completions', {
+    const aiRes = await fetchWithDeadline('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({

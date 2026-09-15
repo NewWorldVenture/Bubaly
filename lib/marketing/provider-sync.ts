@@ -2,7 +2,7 @@ import 'server-only';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json } from '@/lib/database.types';
-import { fetchExternal } from '@/lib/server/external-fetch';
+import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
 import { readBoundedResponseJson } from '@/lib/server/bounded-response-body';
 
 type Db = SupabaseClient<Database>;
@@ -71,7 +71,7 @@ async function syncGoogle(db: Db): Promise<ProviderSyncOutcome> {
     const end = new Date();
     const start = new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000);
     const property = encodeURIComponent(siteUrl());
-    const response = await fetchExternal(`https://searchconsole.googleapis.com/webmasters/v3/sites/${property}/searchAnalytics/query`, {
+    const response = await fetchWithDeadline(`https://searchconsole.googleapis.com/webmasters/v3/sites/${property}/searchAnalytics/query`, {
       method: 'POST',
       headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
       body: JSON.stringify({ startDate: isoDate(start), endDate: isoDate(end), dimensions: ['page', 'query'], rowLimit: 25_000 }),
@@ -102,7 +102,7 @@ async function syncBing(db: Db): Promise<ProviderSyncOutcome> {
   }
   try {
     const url = `https://ssl.bing.com/webmaster/api.svc/json/GetRankAndTrafficStats?siteUrl=${encodeURIComponent(siteUrl())}&apikey=${encodeURIComponent(apiKey)}`;
-    const response = await fetchExternal(url, { method: 'GET' }, 60_000);
+    const response = await fetchWithDeadline(url, { method: 'GET' }, 60_000);
     if (!response.ok) throw new Error(`Bing Webmaster returned ${response.status}.`);
     const data = await readBoundedResponseJson<{ d?: unknown[] }>(response, 4 * 1024 * 1024);
     const rows: Observation[] = (data.d ?? []).map((row) => ({
@@ -127,7 +127,7 @@ async function syncAiCitations(db: Db): Promise<ProviderSyncOutcome> {
     return { status: 'not_configured', rows: 0 };
   }
   try {
-    const response = await fetchExternal(endpoint, { method: 'GET', headers: { authorization: `Bearer ${apiKey}`, accept: 'application/json' } }, 60_000);
+    const response = await fetchWithDeadline(endpoint, { method: 'GET', headers: { authorization: `Bearer ${apiKey}`, accept: 'application/json' } }, 60_000);
     if (!response.ok) throw new Error(`AI citation provider returned ${response.status}.`);
     const data = await readBoundedResponseJson<{ rows?: Record<string, unknown>[] } | Record<string, unknown>[]>(response, 4 * 1024 * 1024);
     const sourceRows = Array.isArray(data) ? data : data.rows ?? [];

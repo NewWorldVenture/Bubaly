@@ -32,7 +32,7 @@ import { SyncApiError } from '@/lib/sync/adapter';
 import { eventContentHash, reminderContentHash } from '@/lib/sync/hash';
 import { buildVevent, parseICS, toIcsUtc } from '@/lib/sync/ics';
 import { readBoundedResponseText } from '@/lib/server/bounded-response-body';
-import { fetchExternal } from '@/lib/server/external-fetch';
+import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
 
 const ICLOUD_CALDAV = process.env.APPLE_CALDAV_BASE_URL || 'https://caldav.icloud.com';
 const PRODID = '-//bubaly.com//Sync Platform//EN';
@@ -276,7 +276,7 @@ type DavResult = { status: number; text: string; etag: string | null };
 
 async function dav(packed: string, method: string, path: string, body?: string, extraHeaders?: Record<string, string>): Promise<DavResult> {
   const url = path.startsWith('http') ? path : `${ICLOUD_CALDAV}${path}`;
-  const res = await fetchExternal(url, {
+  const res = await fetchWithDeadline(url, {
     method,
     headers: {
       Authorization: appleBasicAuth(packed),

@@ -11,7 +11,7 @@ import 'server-only';
 import webpush from 'web-push';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { fetchExternal } from '@/lib/server/external-fetch';
+import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
 import { childrenBlockedOn } from '@/lib/notifications/child-channels';
 import { isDeliverablePushEndpoint } from '@/lib/server/push-endpoint';
 
@@ -51,7 +51,7 @@ async function sendFcm(token: string, payload: PushPayload): Promise<boolean> {
   const key = process.env.FCM_SERVER_KEY;
   if (!key) return false;
   // FCM legacy HTTP send. Swap for HTTP v1 (service-account OAuth) in production.
-  const res = await fetchExternal('https://fcm.googleapis.com/fcm/send', {
+  const res = await fetchWithDeadline('https://fcm.googleapis.com/fcm/send', {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `key=${key}` },
     body: JSON.stringify({

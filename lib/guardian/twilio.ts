@@ -2,7 +2,7 @@
 // Covers: TwiML generation, call control, SMS, number provisioning.
 
 import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
-import { fetchExternal } from '@/lib/server/external-fetch';
+import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
 
 const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID ?? '';
 const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN ?? '';
@@ -15,7 +15,7 @@ function authHeader(): string {
 
 async function twilioFetch(path: string, body?: Record<string, string>): Promise<unknown> {
   const url = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}${path}`;
-  const res = await fetchExternal(url, {
+  const res = await fetchWithDeadline(url, {
     method: body ? 'POST' : 'GET',
     headers: {
       authorization: authHeader(),
@@ -181,7 +181,7 @@ export async function lookupCallerName(phoneNumber: string): Promise<string | nu
   if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) return null;
   try {
     const url = `https://lookups.twilio.com/v1/PhoneNumbers/${encodeURIComponent(phoneNumber)}?Type=caller-name`;
-    const res = await fetchExternal(url, { headers: { authorization: authHeader() } }, 15_000);
+    const res = await fetchWithDeadline(url, { headers: { authorization: authHeader() } }, 15_000);
     if (!res.ok) return null;
     const data = await readBoundedResponseJson<{ caller_name?: { caller_name?: string } }>(res, 256 * 1024);
     return data.caller_name?.caller_name ?? null;

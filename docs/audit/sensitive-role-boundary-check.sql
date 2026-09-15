@@ -123,7 +123,7 @@ begin
   if not found then
     raise exception '0297: an ADULT cannot manage a child login — the fix is too strict';
   end if;
-  -- 0300: the OAuth token store answers to NOBODY holding a JWT, adult
+  -- 0303: the OAuth token store answers to NOBODY holding a JWT, adult
   -- included. This probe previously asserted the opposite — that an adult
   -- could insert and then read a token row, on the reasoning that "the fix
   -- must not lock the grown-ups out". That reasoning is right for licences
@@ -134,7 +134,7 @@ begin
   -- so it is corrected rather than deleted.
   select count(*) into n from public.social_account_tokens where family_id = fam;
   if n <> 0 then
-    raise exception '0300: an ADULT reads % social OAuth token row(s) — service-role only', n;
+    raise exception '0303: an ADULT reads % social OAuth token row(s) — service-role only', n;
   end if;
   refused := false;
   begin
@@ -143,9 +143,9 @@ begin
   exception when insufficient_privilege then refused := true;
   end;
   if not refused then
-    raise exception '0300: an ADULT inserted a social OAuth token row';
+    raise exception '0303: an ADULT inserted a social OAuth token row';
   end if;
 
   reset role;
-  raise notice '0297/0300 OK: a child is refused a parent licence and a sibling login and keeps their own licence; parent and adult keep those; NOBODY with a JWT reaches the OAuth tokens';
+  raise notice '0297+0303 OK: a child is refused a parent licence and a sibling login and keeps their own licence; parent and adult keep those; NOBODY with a JWT reaches the OAuth tokens';
 end $$;
