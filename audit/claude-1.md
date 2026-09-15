@@ -1495,3 +1495,68 @@ one that survives — Pass N credited Claude-4 for exactly this.
 
 The finding that survives is narrower than either: **a `default` branch that
 consumes what it cannot process, in a namespace it does not own.**
+
+---
+
+## C1-S4-02 — one OAuth redirect override is registered, its sibling is not
+
+```
+[CLAUDE-1][LOW][INTEGRATIONS] `GOOGLE_CALENDAR_REDIRECT_URI` gates the Google
+Calendar OAuth callback and is absent from the environment registry, while the
+sync integration's equivalent is present
+File:     lib/google.ts:42          (the consumer)
+          docs/architecture/environment-registry.md   (does not list it)
+Problem:  googleCalendarRedirectUri() takes GOOGLE_CALENDAR_REDIRECT_URI as a
+          first-precedence override, ahead of NEXT_PUBLIC_APP_URL and ahead of
+          the request origin. It is read in `lib/`, which the registry
+          explicitly declares within its scan scope ("The source scan covered
+          app, lib, scripts and .github").
+
+          The registry lists ten GOOGLE_* variables INCLUDING
+          `GOOGLE_SYNC_REDIRECT_URI` — the sync integration's redirect override
+          — so this is not a category the registry declines to cover. One
+          redirect override is documented and its sibling is not.
+Evidence: grep count of GOOGLE_CALENDAR_REDIRECT_URI in the registry: 0
+          Registered GOOGLE_* names: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
+          GOOGLE_SEARCH_CONSOLE_ACCESS_TOKEN, GOOGLE_SEARCH_CONSOLE_KEY,
+          GOOGLE_SYNC_CALENDAR_READONLY_SCOPE, GOOGLE_SYNC_CALENDAR_SCOPES,
+          GOOGLE_SYNC_CLIENT_ID, GOOGLE_SYNC_CLIENT_SECRET,
+          GOOGLE_SYNC_REDIRECT_URI, GOOGLE_SYNC_TASKS_SCOPES
+Impact:   Small but specific. An operator configuring Google Calendar OAuth
+          consults the registry, sees a redirect override for *sync* and none
+          for *calendar*, and reasonably concludes the calendar callback has no
+          override — when it does, and it takes precedence over the app URL. A
+          redirect_uri mismatch surfaces as Google's opaque Error 400, which
+          lib/google.ts's own header comment records as previously hard to
+          diagnose for exactly this family of reasons.
+Fix:      One row in the registry, classified `public-config` /
+          `optional-override`, evidence `lib/google.ts:42`.
+Status:   OPEN — verified by grep against both the consumer and the registry
+```
+
+### What is NOT a finding here, and why
+
+I measured the registry against actual `process.env` usage and initially read
+two defects into the result. Both dissolved on reading the document's own
+preamble, and that is worth recording so nobody re-derives them:
+
+- **"The registry is incomplete."** It does not claim otherwise. Its status line
+  reads *"partial static inventory"*; it states that the scan ran **once**, with
+  bounded context, did not read complete files, did not reread previously
+  inspected files, and that *"dynamic names, helper chains, ignored files, root
+  configuration and test consumers are not exhaustively covered."* That accounts
+  for `TEST_EMAIL`, `COOKIE_FILE`, the `E2E_*` family and similar.
+- **"Eight registered names have no consumer — the registry has rotted."** It
+  names three of them itself, in the preamble, under *"No captured consumer"*.
+  The rest are read in workflows and tests, which it says it does not cover
+  exhaustively.
+
+My first diff also excluded `tests/` and `.github/` and so overstated both
+columns. The corrected diff is what `C1-S4-02` rests on.
+
+**The document is unusually honest about its own limits, and that honesty is
+what made the one real gap findable.** A registry that had claimed completeness
+would have hidden `GOOGLE_CALENDAR_REDIRECT_URI` behind a false assurance; this
+one states its scope precisely enough that a variable inside that scope and
+missing from the table stands out. That is the opposite of this audit's
+recurring defect, and worth naming as such.
