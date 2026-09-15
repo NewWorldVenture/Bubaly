@@ -1,5 +1,43 @@
 # Claude-3 — Backend / API / Database / Auth / Security
 
+## STATUS (Session 4 — 2026-09-15, the server-action surface)
+
+CURRENT: Done. Round-4 dispatch: the 132 `'use server'` files, the one public
+  POST surface this audit had barely looked at (~14 mentions across all five
+  files, against 141 API routes audited thoroughly in Pass E).
+COMPLETED: 7 new findings (1 HIGH, 2 MEDIUM, 4 LOW) + 14 verified-clean items
+  + a 5-item BLOCKED list. Enumerated the surface properly for the first time:
+  **439 exported server actions** across 113 top-level action modules, with a
+  TRANSITIVE auth check (a fixpoint over 685 auth-bearing function names) so
+  actions guarded by a local `guard()`/`managerCtx()` helper are not miscounted.
+  **9 of 439 reach no auth path** — not the "8 files" a file-level grep reported
+  in the prior session's Verified-healthy item 12, and a different set; the naive
+  grep flagged 94, of which 85 authorize through a local helper. All 9 read in
+  full and accounted for.
+  Headline: **31 of 31 API routes that call the LLM carry `enforceAIRateLimit`;
+  0 of 3 server actions that call the LLM do.** Also found the marketplace
+  hand-off actions deriving a buyer/seller role by ternary with no check that
+  the caller is a party (the same feature's review action has exactly that
+  check), and a social-RBAC deadlock where the TS and SQL permission matrices
+  disagree on `manage_access` and the only role that holds it in TS is never
+  assigned to anyone.
+  Refuted nothing of another worker's; CORRECTED this file's own prior
+  server-action claim (the count and the method, not the conclusion — the three
+  public flows it named are confirmed clean, with one new note: `gift_links`
+  has an `expires_at` column the gift action never reads).
+NEXT: nothing queued. For Claude-1, in fix order: the three AI rate limits
+  (3 lines each, mechanical, and a guard test is trivially writable); then the
+  hand-off party check; then the social matrix decision (a product call).
+FILES-TOUCHED: audit/claude-3.md ONLY. No application source modified —
+  audit-only per the deviation recorded in audit/status.md.
+BLOCKERS: no local Supabase (no docker daemon, no CLI) -> **not one of the 439
+  actions was invoked**. Everything below is static + committed-SQL reading.
+  See "What I could NOT reach" at the end of Session 4 — five named limits,
+  including that Next's action-id replay premise itself was not demonstrated.
+LAST-UPDATE: 2026-09-15
+
+---
+
 ## STATUS (this run — 2026-09-14, continuation session)
 
 CURRENT: Done. A prior Claude-3 session (content preserved below, under
@@ -1478,3 +1516,541 @@ $ psql -c "select tablename, policyname, cmd, roles, left(coalesce(qual,with_che
 - **The other 474 tables** in finding C3-S3-02 were measured, not individually
   reasoned about. I assert the count and the mechanism; I do not assert that
   every one of them is as harmless as the DML result suggests.
+
+---
+
+# Session 4 (2026-09-15) — the server-action surface
+
+Dispatched to close the gap the board names: Pass E audited 141 API routes
+thoroughly; the **132 files containing `'use server'`** were mentioned ~14 times
+across all five audit files. A server action is a publicly-callable POST
+endpoint with a stable action id. The page that renders the button is not a
+control. Every action needs its own authorization, exactly like a route handler.
+
+## Method — what was actually enumerated
+
+Not a grep for `getUser`. The prior session's claim (this file, "Verified
+healthy" item 12: *"Of 132 files containing `'use server'`, 8 make no auth
+call"*) counts FILES and matches literal auth-function names. That misses two
+things: files whose actions authorize through a **local helper** (`guard()`,
+`assertSuperAdmin()`, `managerCtx()`, `ctx()`, `requireAdmin()`), and actions
+that authenticate correctly but then **authorize on a client-supplied value**.
+
+So this session built the unit of analysis properly — the exported action, not
+the file:
+
+1. `scan.mjs` → every `export async function` in a module whose first three
+   lines carry `'use server'`, plus inline `'use server'` function bodies:
+   **439 exported server actions across 113 top-level action modules**
+   (19 more files carry the string in a comment or an inline body only).
+2. `scan2.mjs` → a **transitive** auth-bearing name set. Seed on
+   `getUser(` / `requireUserContext` / `isSuperAdmin` / `supabase.auth.getUser`,
+   then iterate to a fixpoint over every function in `app/` + `lib/` that calls
+   an already-auth-bearing name. 685 names.
+3. `scan3.mjs` → re-ran (1) against (2).
+
+Result: **9 of 439 actions reach no auth path, transitively** — not the 8 files
+the prior pass reported, and a different set. All nine were read in full; all
+nine are accounted for below. The naive file-level grep had flagged **94**
+actions, i.e. 85 false positives, all authorizing through a local helper.
+
+Further passes: `scan5.mjs` (service-role use inside actions, 62 found),
+`scan6.mjs` (mutations of 30 sensitive tables vs. role gates, 60 found),
+`scan7.mjs` (actions that spend money — LLM, email, SMS, Stripe — vs. rate
+limits, 9 found), `scan8.mjs` (awaited writes whose `error` is never read).
+
+**Limits of this session, stated up front.** There is still no local Supabase
+(no docker daemon, no CLI), so **no action below was invoked**. Nothing here is
+a demonstrated exploit; each finding is read from source plus, where it decides
+the outcome, the committed RLS policy or RPC body. Where a claim rests on RLS I
+say which migration and quote it. "We could not sign in" is not "it is clean" —
+the BLOCKED list at the end says exactly which claims stay unproven.
+
+---
+
+### [CLAUDE-3][HIGH][RATE-LIMIT/COST] Three server actions are the only unmetered doors to the LLM in the product; one of them lets the caller choose most of the prompt
+
+- **File/path:**
+  - `app/(app)/marketplace/assistant-actions.ts:33` `askMarketAssistantAction` — **the HIGH**
+  - `app/(app)/dashboard/paperwork/actions.ts:167` `draftPaperworkReplyAction` — MEDIUM on its own
+  - `app/(app)/dashboard/contacts/[id]/actions.ts:67` `draftReconnectMessageAction` — MEDIUM on its own
+- **Problem:** All three call `resolveProvider()` → `provider.complete()` with
+  **no `enforceAIRateLimit`, no `assertAIAccess`, and no plan/feature gate**.
+  `askMarketAssistantAction` additionally forwards a caller-supplied `history`
+  array straight into the prompt: the turn COUNT is capped
+  (`history.slice(-MAX_TURNS)`, 8) but each entry's **`content` is never
+  measured, truncated or validated** — only `question` is (`q = question.trim()
+  .slice(0, 500)`, line 37). There is no zod schema on the parameter; a server
+  action's arguments are chosen by the caller, and TypeScript types are erased
+  at runtime. Next's default Server Actions `bodySizeLimit` (1 MB; no override
+  found — `grep -n "serverActions\|bodySizeLimit" next.config.*` returns
+  nothing) caps ONE request, so "unbounded" means unbounded relative to the
+  product's own 500-character cap, not literally infinite. With no rate limit,
+  the per-request cap is the only cap that exists.
+- **Evidence:**
+  1. The convention is uniform and this is the only place it breaks:
+
+         $ for f in $(grep -rl 'resolveProvider\|provider\.complete' app/api --include=route.ts); do
+             grep -q "enforceAIRateLimit\|rateLimit" "$f" || echo "  $f"; done
+         (no output)
+         AI routes calling the model:               31
+         ...of which rate-limited:                  31   (37 routes import it in all)
+
+     **31 of 31 API routes that reach the model carry a per-user limit. 0 of 3
+     server actions that reach the model do.** `app/api/ai/requests/route.ts`
+     and `app/(app)/dashboard/inbox/actions.ts:85-87` — the same intake, one as
+     a route and one as an action — BOTH carry
+     `enforceAIRateLimit(supabase, \`ai-requests:${ctx.user.id}\`, {limit:20,
+     windowMs:60_000})` + `assertAIAccess(ctx, ...)`. So the pattern is
+     established for actions too; these three simply skip it.
+  2. `withAiRequest` does not gate. `lib/ai/observability.ts` header:
+     *"BOOKKEEPING NEVER FAILS THE FAMILY'S WORK. If the row cannot be opened
+     the body still runs"*. It is observability only.
+  3. Nothing upstream covers it. `middleware.ts` has no rate limiter of any
+     kind (`grep -n "rateLimit" middleware.ts` → only the `matcher` line 168).
+  4. No truncation downstream either: `grep -n "slice(0,\|MAX_.*CHARS\|truncate"
+     lib/ai/provider.ts` returns only two error-message truncations (lines 189,
+     203). `messageContent()` (line 226) passes `message.content` through
+     verbatim.
+  5. One mitigation IS present and worth recording so the fix is not
+     over-scoped: `lib/ai/provider.ts:286,318,337,410` all
+     `.filter((m) => m.role === 'user' || m.role === 'assistant')`, so a caller
+     passing `role: 'system'` **cannot** inject a system message. A forged
+     `assistant` turn is still accepted, but its blast radius is the caller's
+     own reply.
+- **Impact:** Any authenticated member of any family — **including a `child` or
+  `teen` role, none of these three check role** — can POST the action id in a
+  loop. Two of the three are bounded per call (6 000 chars of paperwork text,
+  400 max_tokens). `askMarketAssistantAction` is not: 8 history entries of
+  arbitrary size each become one upstream request. That is unmetered spend on
+  the operator's API key, and the 60 s `OPENAI_TIMEOUT_MS` per call makes it a
+  cheap way to hold connections too. No cross-family data is exposed — the
+  snapshot is `.eq('family_id', ctx.active.familyId)` — so this is cost and
+  availability, not confidentiality.
+- **Fix:** In each of the three, immediately after `requireUserContext()`:
+  `const limited = await enforceAIRateLimit(supabase, \`ai-<surface>:${ctx.user.id}\`, { limit: N });`
+  (the sibling routes use 10-20/min), and `assertAIAccess(ctx, { db: supabase })`
+  where the surface is plan-gated. Separately, in `askMarketAssistantAction`,
+  bound the history the same way the question is bounded — e.g.
+  `history.slice(-MAX_TURNS).map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: String(m.content ?? '').slice(0, 2000) }))`
+  — so the cap is on bytes, not just turns. A guard test should assert that
+  every `'use server'` export reaching `resolveProvider` also reaches
+  `enforceAIRateLimit`; that is mechanically checkable and would have caught
+  all three.
+- **Status:** OPEN (static; the rate-limit absence is certain from source, the
+  cost magnitude is not measured — no provider key was exercised)
+
+---
+
+### [CLAUDE-3][MEDIUM][AUTHZ] The marketplace hand-off actions compute a party role by ternary and never check the caller IS a party — the same feature's review action has exactly the check that is missing
+
+- **File/path:** `app/(app)/marketplace/handoff/actions.ts` —
+  `loadOrderRole` (:33), `proposeHandoffAction` (:44), `confirmHandoffAction`
+  (:70), `cancelHandoffAction` (:112), `completeHandoffAction` (:125).
+- **Problem:** `loadOrderRole` scopes the order to
+  `.eq('family_id', ctx.active.familyId)` and stops there. Both writers then do:
+
+      const role = order.seller_member === ctx.active.member.id ? 'seller' : 'buyer';
+
+  A caller who is **neither** buyer nor seller falls into the `else` and is
+  silently treated as **the buyer**. Nothing anywhere in the file compares the
+  caller to `order.buyer_member`.
+- **Evidence:**
+  1. The intended contract is written down 90 lines away, in the same feature,
+     by the same convention — `app/(app)/marketplace/actions.ts:171-173`:
+
+         const isBuyer  = order.buyer_member  === memberId;
+         const isSeller = order.seller_member === memberId;
+         if (!isBuyer && !isSeller) return { ok: false, error: t('actions.onlyTheTwoPartiesCan') };
+
+     `submitMarketplaceReviewAction` refuses a non-party. The four hand-off
+     actions do not, and the file header claims only *"Family-scoped via
+     requireUserContext + RLS"* — which is true, and is the whole problem: the
+     product's boundary here is the PAIR, not the family.
+  2. The database does not backstop it. `supabase/migrations/0199_marketplace_handoff_completion.sql:34`
+     — the RPC's one authorization test is
+
+         if not public.is_family_member(v_order.family_id) then
+           return jsonb_build_object('ok', false, 'reason', 'forbidden');
+
+     Family membership only. Note the action's own string table
+     (`handoff/actions.ts:26`) renders that reason as *"You are not part of
+     this marketplace exchange."* — the UI already promises a party check the
+     code on neither side performs.
+  3. `marketplace_handoffs` RLS is the generic family-scoped loop, so RLS
+     cannot distinguish the two parties either.
+- **Impact** (intra-family; the marketplace is household-internal — listings
+  carry `family_id` + `member_id`, so the actor is a sibling or co-parent, not
+  a stranger):
+  - `proposeHandoffAction` upserts `onConflict: 'order_id'` and explicitly
+    resets `status:'proposed', confirm_code:null, confirmed_at:null,
+    calendar_event_id:null` (lines 59-60). A third party can therefore **wipe an
+    already-confirmed pickup** and rewrite its time and location.
+  - `confirmHandoffAction` guards only `if (role === handoff.proposer_role)`.
+    When the seller proposed, a third party is `'buyer'`, the guard passes, and
+    the action **returns the hand-off code to them** (`return { ok: true, data:
+    { code } }`, line 108). The real buyer never receives it.
+  - `cancelHandoffAction`'s doc comment says *"either party"*; it checks
+    nothing at all.
+  - `completeHandoffAction` + the RPC then let any family member close the
+    order with that code.
+  - **Bounded by:** no money moves. There is no escrow and no trigger on
+    `marketplace_orders` (`grep -rn "marketplace_orders" supabase/migrations/*.sql
+    | grep -i "trigger\|escrow"` → nothing; `grep -rln escrow` over migrations,
+    `lib/`, `app/` → nothing). Completion is a status change. So this is
+    integrity and disclosure-of-a-code within a household, not theft.
+- **Fix:** Have `loadOrderRole` return the party role as
+  `'seller' | 'buyer' | null` and refuse `null` in all four actions, reusing the
+  exact wording already in the catalogue
+  (`t('actions.onlyTheTwoPartiesCan')`). Mirror it in
+  `marketplace_complete_handoff` by comparing `auth.uid()`'s member id against
+  `buyer_member`/`seller_member`, so the RPC's `forbidden` reason becomes true
+  of what it says.
+- **Status:** OPEN (static; the ternary and the absent comparison are certain
+  from source, the end-to-end sequence was not executed — no session)
+
+---
+
+### [CLAUDE-3][MEDIUM][AUTHZ] The social RBAC cannot be configured by anyone: the TS matrix and the SQL matrix disagree on who holds `manage_access`, and the only role that holds it in TS is never assigned
+
+- **File/path:** `lib/social/roles.ts:45-68`, `lib/social/access.ts:26-63`,
+  `app/(app)/dashboard/social/actions.ts:307` (`grantAccessAction`),
+  `supabase/migrations/0034_social_command_center.sql:606-649, 765-771`.
+- **Problem — two defects that compound:**
+  1. **Divergence.** TS: `admin: ALL.filter((p) => p !== 'manage_access')`.
+     SQL: `when 'admin' then true`. The file's own header says *"The database
+     RLS (0024) is the real enforcement boundary; this mirrors it."* It does not
+     mirror it.
+  2. **Deadlock.** `grantAccessAction` requires `manage_access`. In TS only
+     `owner` holds it. `defaultSocialRoleForMember` (roles.ts:106) returns
+     `admin | marketing_manager | content_creator | read_only` — **never
+     `owner`**. The only writer of `social_access_permissions` anywhere in the
+     tree is `grantAccessAction` itself. So the only way to become `owner` is
+     through an action only an `owner` may call.
+- **Evidence:**
+
+      $ grep -rn "social_access_permissions" --include=*.ts --include=*.tsx app lib
+      app/(app)/dashboard/social/actions.ts:324   (the only write — an upsert)
+      app/(app)/dashboard/social/settings/page.tsx:27  (a read)
+
+  No other writer, no seeder, no migration insert, no delete path. A household
+  parent maps to `admin`; `requireSocialPermission(fid,'manage_access')` throws
+  for `admin`; `social_access_permissions` therefore stays empty for every
+  family, and every family silently runs on the member-role defaults forever.
+  Meanwhile SQL would have allowed it twice over —
+  `social_access_permissions_insert ... with check (public.is_family_admin(family_id)
+  or public.social_has_permission(family_id,'manage_access'))` (0034:765-767),
+  and `social_has_permission` returns true for `admin` unconditionally.
+- **Impact:** The divergence itself fails **closed** — I checked every row of
+  both matrices and TS never grants a permission SQL denies (`owner`, `marketing_manager`,
+  `social_manager`, `content_creator`, `approver`, `analyst`, `read_only` are
+  byte-identical; only `admin` differs, and TS is the stricter side). So this is
+  **not** a privilege-escalation hole. It is a whole authorization subsystem
+  that can never be turned on, documented as the enforcement boundary — which
+  matters because **the granular permission is the ONLY gate on most of the
+  feature**: 0034's policy loop gives every `social_*` table plain
+  `is_family_member` CRUD, and only two policies are tightened to the role
+  (`social_publish_jobs_insert`, `social_access_permissions_insert/update`).
+  For connecting accounts, creating posts, uploading media and changing
+  settings, the TS `requireSocialPermission` call IS the entire boundary. A
+  family that wanted to restrict a teen cannot; a family that wanted to promote
+  a trusted adult cannot.
+- **Secondary, same file:** `getSocialAccess` (access.ts:49) returns access when
+  `explicit` exists even with **no active `family_members` row**
+  (`if (!member && !explicit) return null;`), and an explicit row wins the role
+  resolution (line 51). SQL is stricter: `social_has_permission` is
+  `is_family_member(p_family_id) and (...)`, and `social_role_for` requires
+  `fm.is_active`. There is also **no revocation path** — no code anywhere
+  deletes a `social_access_permissions` row or sets `status` to anything but
+  `'active'`. Today RLS backstops this (every social write goes through
+  `createServer()`, the user-scoped client — verified: `grep -n
+  "createServiceClient" lib/social/*.ts` → no hits), so a deactivated member is
+  still blocked at the database. It is a defence-in-depth gap, not a live hole
+  — but it is the half of the pair that would become one if any social path
+  ever moved to the service role.
+- **Fix:** Decide which matrix is authoritative and make the other follow. The
+  likely intent is SQL's: give `admin` `manage_access` in `ROLE_PERMISSIONS`,
+  which un-deadlocks `grantAccessAction` for parents in one line. Add
+  `if (!member) return null;` to `getSocialAccess` so TS and
+  `social_has_permission` agree on deactivated members. Add a revoke path. A
+  test that asserts the TS matrix equals the SQL `case` arms (both are static
+  text) would pin all three.
+- **Status:** OPEN (matrices compared line-by-line from source; not executed)
+
+---
+
+### [CLAUDE-3][LOW][SURFACE] Three pure helpers are exported from `'use server'` modules, so each is a public POST endpoint — and this repo has already moved three others out for exactly that reason
+
+- **File/path:**
+  - `app/(app)/dashboard/paperwork/actions.ts:32` `paperworkInsertRow`
+  - `app/(app)/dashboard/inbox/actions.ts:55` `inboxRequestText`
+  - `app/(app)/marketplace/assistant-actions.ts:100` `previewMarketIntentAction`
+- **Problem:** Every export of a `'use server'` module becomes a callable action
+  id. These three touch no database and hold no session; they are helpers that
+  happen to live in an action file. Two of the three are three of the nine
+  no-auth actions `scan3.mjs` found — they are "unauthenticated" because they
+  are not actions at all.
+- **Evidence:** The codebase already knows this and says so three times, in
+  three files that did the opposite:
+
+      lib/groceries/add-summary.ts:9   "A plain module rather than an export of the action
+                                        file: everything a `'use server'` file exports becomes
+                                        a callable endpoint, and a pure string function has no
+                                        business being a network round trip."
+      lib/marketing/recurring-ads.ts:263 "Every export of a 'use server' module is a callable
+                                        endpoint, so a pure string parser has no business being one"
+      lib/library/ingest.ts:5          "This lived inside the library's `'use server'` actions
+                                        module, which made it unreachable from anywhere else"
+
+  `paperworkInsertRow` argues the other way in its own docblock — *"It exists as
+  its own exported function — async, which is all a `'use server'` module may
+  export"* — i.e. it was exported to be unit-testable, accepting an endpoint as
+  the price. The three files above show the repo's own answer: move it to a
+  plain module and test it there.
+- **Impact:** Small and worth saying plainly. None of the three reads or writes
+  anything; the caller supplies all input and gets a computed value back.
+  `paperworkInsertRow` runs `triagePaperwork()` over caller-supplied text with
+  no length cap before `raw_text` is sliced to 20 000, so it is a modest CPU
+  sink; `previewMarketIntentAction` likewise runs `routeMarketIntent()` on an
+  unbounded string. The real cost is surface-area hygiene: three endpoints that
+  need not exist, two of which will keep showing up as "unauthenticated action"
+  in every future audit.
+- **Fix:** Move `paperworkInsertRow` and `previewMarketIntentAction` to plain
+  modules (`lib/paperwork/row.ts`, alongside `lib/marketplace/assistant.ts`) and
+  import them; the existing tests import the function, not the endpoint, so they
+  keep passing. `inboxRequestText` is already trivial enough to inline.
+- **Status:** OPEN
+
+---
+
+### [CLAUDE-3][LOW][ERROR-HANDLING] Two money-surface actions discard the write error and revalidate as if it worked
+
+- **File/path:** `app/(app)/dashboard/money-timeline/actions.ts:19`
+  (`setMoneyInsightStatusAction`) and `:46` (`syncMoneyInsightsAction`).
+- **Problem:** Both `await supabase.from('money_timeline_insights').upsert({...})`
+  without destructuring `error`, then call `revalidatePath(PATH)` and return.
+  Both are typed `Promise<void>`, so there is no channel to report a failure on
+  even if one were read. A PostgREST write returns `{ error }` rather than
+  throwing, so a rejected upsert is indistinguishable from a successful one.
+- **Evidence:** `scan8.mjs` found 11 awaited writes inside server actions whose
+  result is never bound. Nine are compensating/rollback or best-effort writes
+  whose primary error IS reported (`child-login-actions.ts:68,77,78`;
+  `(auth)/actions.ts:147`; `library/actions.ts:63,101`;
+  `trip-intel/actions.ts:254`; `admin/marketing/content/actions.ts:123,124`).
+  These two are the only ones where the discarded write is **the action's whole
+  purpose**. Contrast the convention in the same tree —
+  `app/(app)/dashboard/auto/actions.ts:31-42` writes the reason out in full:
+  *"A PostgREST write returns `{ error }` without throwing, so an unchecked
+  write would let a form report success while the record was silently lost."*
+- **Impact:** A family dismisses a money insight; the row does not change; the
+  page revalidates and the insight returns on the next render with no error
+  shown. Cosmetic in isolation, but it is the repo's named second-most-common
+  defect class, on the money surface, in the two functions that define it.
+- **Fix:** Bind `const { error } = await ...`, return
+  `{ ok: false, error: describeActionError(error, ...) }` (change the signature
+  off `void`, as `trust/actions.ts` and `auto/actions.ts` already do), and log.
+- **Status:** OPEN
+
+---
+
+### [CLAUDE-3][LOW][AUTHZ] `lib/family/actions.ts`'s column whitelist admits a client-supplied `member_id` with no same-family check
+
+- **File/path:** `lib/family/actions.ts:22-33` (`WRITABLE`), used by
+  `createFamilyRecord` (:125) and `updateFamilyRecord` (:160).
+- **Problem:** `member_id` is a whitelisted writable column on seven tables
+  (`family_routines`, `family_digital_twin_profiles`,
+  `family_ai_recommendations`, `family_stress_signals`,
+  `family_knowledge_nodes`, `family_emergency_contacts`, `family_memories`,
+  `family_milestones`). `family_id` and `created_by` are correctly forced from
+  `ctx`, but `member_id` is taken from `values` and never checked against the
+  caller's family.
+- **Evidence:** The column's only constraint is a single-column FK —
+  `supabase/migrations/0022_family_os.sql:87`:
+
+      member_id uuid REFERENCES family_members(id) ON DELETE SET NULL,
+
+  There is no composite FK on `(family_id, member_id)` and no CHECK, so any
+  existing `family_members.id` is accepted, including one from another family.
+  RLS (0022's loop) constrains `family_id` only.
+- **Impact:** **No impact demonstrated, and I want that stated rather than
+  implied.** The planted row carries the caller's own `family_id`, so it is
+  readable only inside the caller's family, and the read paths I checked
+  (`lib/family/signals.ts:43,188`) filter by `family_id`. It is recorded because
+  it is precisely the shape this session was sent to find — an identifier the
+  caller controls being written into an authority column — and because this file
+  is otherwise the model the rest of the codebase should copy (table whitelist,
+  column whitelist, `MANAGER_ONLY` set, entitlement gate, forced `family_id`,
+  audit log). One missing check in the best-designed file is worth a line.
+- **Fix:** In `pick()`/`graphWrite()`, when `member_id` is present, resolve it
+  against `family_members` with `.eq('family_id', ctx.active.familyId)` and
+  refuse if absent — or add the composite FK, which fixes it for every writer at
+  once.
+- **Status:** OPEN (no exploit path found; recorded as hygiene with the
+  uncertainty named)
+
+---
+
+### [CLAUDE-3][LOW][AUTHZ] Any family member, including a child, can reassign another member's open chore
+
+- **File/path:** `app/(app)/dashboard/workload/actions.ts:15`
+  `moveAssignmentAction`.
+- **Problem:** The action verifies the TARGET member is in the caller's family
+  (:20-22) and scopes the update by `family_id` (:27) — but performs no role
+  check. `isManager` is not imported in the file.
+- **Evidence:** Compare the convention two directories away:
+  `app/(app)/dashboard/trust/actions.ts:36-40` defines `managerCtx()` and every
+  policy action opens with it; `lib/family/actions.ts:60` keeps a `MANAGER_ONLY`
+  set for exactly this decision. Rebalancing who does a chore is a parental
+  decision by the same logic.
+- **Impact:** Intra-family only, and reversible. A child can push their own open
+  chore onto a sibling; the `logAudit` call at :32 does record it, with
+  `{ rebalance: true, toMemberId }`, so it is visible after the fact. Recorded
+  as LOW, not raised higher, because the audit row exists and nothing crosses a
+  family boundary.
+- **Fix:** `if (!isManager(ctx.active.role)) return { ok: false, error: ... }`,
+  or — if a child moving their OWN chore is intended — allow it only when
+  `assignment.member_id === ctx.active.member.id`.
+- **Status:** OPEN
+
+---
+
+## Verified clean — checked against the negative case, not assumed
+
+Recorded so a later pass does not re-derive them. The first four are the exact
+actions the dispatch named as suspicious.
+
+1. **`app/gift/actions.ts:18` `submitGiftPledgeAction` — legitimately public,
+   correctly built.** Service client behind an unguessable token; `.eq('token',
+   token)` (not `ilike` — no LIKE-wildcard hole); `is_active` checked; amount
+   clamped by `clampGiftAmountCents`; every string bounded
+   (`slice(0,200)/80/500`); IP rate limit 10/window; pending pledges per link
+   capped at 25; the row lands `status:'pending'` and **no money moves until a
+   parent approves**. The notify failure is best-effort AFTER the gift is
+   recorded, which is the right order. One gap worth a line, not a finding:
+   `gift_links` has an `expires_at timestamptz` column
+   (`0088_family_wallet.sql:143`) and this action checks `is_active` but
+   **never reads `expires_at`** — an expired-but-active link still accepts
+   pledges. Whether `expires_at` is meant to be enforced is a product question I
+   cannot settle from source.
+2. **`app/reviews/new/actions.ts:14` `submitReviewAction` — legitimately
+   public.** Rating validated 1-5 and rounded; all strings bounded; IP rate
+   limit 5; auto-approve threshold read from `reputation_settings` server-side,
+   never from input. No auth needed and none missing.
+3. **`app/s/[slug]/actions.ts:14` `submitResponseAction` — legitimately
+   public.** Survey resolved by slug, `deleted_at is null`, `status === 'active'`
+   enforced, score validated against the survey's OWN `scale_min`/`scale_max`
+   (not a client-sent range), IP rate limit 10.
+4. **`app/(auth)/signup/actions.ts:12` `rememberReferralCodeAction` —
+   legitimately public.** Validates with `isPlausibleReferralCode`, normalizes,
+   writes an `httpOnly`, `sameSite:'lax'`, `secure`-in-prod cookie. Nothing to
+   authorize. Likewise `lib/i18n/actions.ts:21` `setLocale`, which validates
+   against the locale catalogue before writing — *"a crafted request can never
+   plant an arbitrary cookie value"*, and that is true as written.
+5. **`app/(auth)/actions.ts:76` `childSignInAction`.** The ILIKE fix has landed
+   and is load-bearing: `.eq('username', username)` at :125 and :46 of
+   `child-login-actions.ts`, each with the comment explaining that `_` is a LIKE
+   wildcard permitted by `USERNAME_RE`. Durable cross-instance throttle read
+   BEFORE the password is touched and checked **even for unknown usernames**, so
+   it is not a lookup oracle; IP rate limit 30; identical vague error for
+   unknown-user and wrong-PIN; throttle cleared only on success.
+6. **`app/(app)/actions.ts:37` `setActiveFamilyAction`** — the pivot of the
+   whole `ctx.active.familyId` model, and it is guarded: membership proven with
+   `.eq('family_id', familyId).eq('user_id', auth.user.id)` before the
+   `user_preferences` upsert. My scan flagged it only because it uses
+   `auth.user.id` directly rather than `ctx`.
+7. **`app/onboarding/actions.ts:326` `finalizeOnboardingAction`** — never trusts
+   a client `familyId`: it is resolved from `family_members` or minted under a
+   per-user DB lock (`onboarding_claim_family`), with
+   `verifyOnboardingOwner(supabase, auth.user.id, expectedOwner)`
+   (`lib/onboarding/verify-owner.ts`) refusing an adopted or ambiguous family
+   first. `saveFamilyDetailsAction` (:170) DOES take `input.familyId`, but the
+   write goes through the user-scoped client and
+   `0052_family_onboarding.sql:38-41` is
+   `for all to authenticated using (public.is_family_member(family_id)) with
+   check (public.is_family_member(family_id))` — so a foreign family is
+   rejected by RLS, and the service-role marketing writes that follow run
+   **only after** that upsert returns without error. The ordering is correct.
+8. **All 20 super-admin console actions.** `admin/actions.ts` (`assertSuperAdmin`
+   at :31), `admin/admins`, `admin/feedback`, `admin/tier-features`,
+   `admin/support-tickets`, `admin/marketing/social/recurring` — each opens with
+   a local `guard()`/`requireAdmin()` that is `isSuperAdmin()` (+ `getUser()`).
+   `recurring/actions.ts:5-6` states the principle the whole audit turns on:
+   *"a server action is its own endpoint: a gate in the page that renders the
+   form does not protect the function the form posts to."* These were the 85
+   false positives of the naive file-level grep.
+9. **`app/(app)/family/child-login-actions.ts`** — `isManager(ctx.active.role)`
+   first, then the target member is loaded by the SERVICE client and explicitly
+   compared: `if (!member || member.family_id !== ctx.active.familyId) return`.
+   That is the right shape for a service-role action: authorization re-proven in
+   code because RLS is bypassed. The unchecked rollback writes at :68/77/78 are
+   compensating paths whose primary error is returned; noted, not filed.
+10. **`lib/family/actions.ts`** — table whitelist, per-table column whitelist,
+    `MANAGER_ONLY` set, `refuseIfUnentitled`, forced `family_id`/`created_by`,
+    audit log, `.eq('family_id', ctx.active.familyId)` on every update and
+    delete. The one gap is the `member_id` LOW filed above.
+11. **`app/(app)/dashboard/concierge/runs/[id]/page.tsx:103` — an INLINE server
+    action inside a gated page, and it re-authorizes.** This is the classic trap
+    (the page calls `assertAIAccess` at :66; a POST to the action id does not
+    run the page) and it is handled: the action re-derives
+    `requireUserContext()`, compares `actor.active.familyId !== familyId`, and
+    the manager check is real, not just claimed — `editStepInput` →
+    `openRun(scope, runId, opts, /*requireManager*/ true)`
+    (`lib/ai/runs/controls.ts:36-53`) refuses a non-manager.
+12. **`app/(app)/marketplace/actions.ts:171`, `app/(app)/dashboard/trust/actions.ts`,
+    `app/(app)/dashboard/auto/actions.ts`, `app/(app)/dashboard/social/actions.ts`,
+    `app/(app)/account/actions.ts`, `app/(app)/settings/app-lock-actions.ts`,
+    `app/(app)/dashboard/workload/actions.ts:45`** — all scope by
+    `ctx.active.familyId` (or `ctx.user.id` for per-user rows) on every write,
+    and the first four gate on role where the product says they should
+    (`isBuyer/isSeller`, `managerCtx()`, `requireSocialPermission`, `isAdmin`).
+13. **`sendReferralEmailAction`** (`app/(app)/referrals/actions.ts:56`) — flagged
+    by `scan7.mjs` as an unmetered email sender; it is not. The throttle is
+    `recordReferralEmailInvite(... config ...)` returning `'throttled'`, counted
+    from the send timestamps on the `referrals` rows themselves
+    (`REFERRAL_EMAIL_POLICY.limit` per family per day), and a failed send is
+    rolled back (`rollbackReferralEmailInvite`). Recipient validated by
+    `emailSchema`; self-invite refused.
+14. **Prompt-injection surface of the three ungated AI actions.** The provider
+    filters every message to `role === 'user' || 'assistant'`
+    (`lib/ai/provider.ts:286,318,337,410`), so a caller cannot inject a system
+    turn; `draftPaperworkReplyAction` fences the OCR text
+    (`fenceUntrustedBlock('paperwork', source, 6000)` + `UNTRUSTED_CONTENT_RULE`)
+    and deliberately writes nothing from the document back onto the row. The
+    defence is real; only the metering is missing.
+
+---
+
+## What I could NOT reach this session — do not read these as clean
+
+1. **Nothing was executed.** No local Supabase (no docker daemon, no Supabase
+   CLI), so no session could be established and **not one of the 439 actions was
+   POSTed**. Every finding above is source + committed SQL. Specifically
+   unproven: that a third party can actually obtain the hand-off code
+   (C3-S4-02); that the ungated AI actions accept a multi-megabyte `history` in
+   practice rather than failing on Next's action-payload limit first
+   (C3-S4-01 — the Server Actions `bodySizeLimit` defaults to 1 MB, which
+   bounds but does not remove the finding, and I did not find an override in
+   `next.config`); that `family_onboarding`'s RLS actually rejects a foreign
+   `familyId` at runtime.
+2. **Next.js's own action-id protection was not tested.** The premise of this
+   whole pass — that an action id can be replayed by a caller who is not on the
+   page — is Next's documented model, but I could not build the app and read the
+   generated ids, so I could not demonstrate a replay. This does not change any
+   finding (each one is also reachable by a legitimate user of the feature,
+   which is the intra-family case I scoped them to), but it means the "anyone
+   with the id" framing is inherited from the dispatch, not verified here.
+3. **Production.** F-001 stands: if the production ledger really records only
+   `0001-0003`, the RLS I rely on in C3-S4-02 and in verified-clean items 7 and
+   the social secondary finding may not exist there. Every RLS-backstop claim
+   above is a claim about the committed migrations.
+4. **The 19 files carrying `'use server'` inside a function body or a comment**
+   were classified and the two real inline-action cases read
+   (`concierge/runs/[id]/page.tsx`, verified clean), but I did not exhaustively
+   enumerate inline actions the way I enumerated top-level exports — an inline
+   action does not match `^export async function`. If a later pass wants
+   completeness on the 439 number, that is where the remainder is.
+5. **`clientIp()` header trust** (`lib/server/rate-limit.ts:41-51`) takes the
+   first `x-forwarded-for` entry. Every public action's rate limit is keyed on
+   it. Whether the deployment's proxy makes that unspoofable is an
+   infrastructure question I cannot answer from the repo; flagging it because
+   three public actions' only defence rests on it.

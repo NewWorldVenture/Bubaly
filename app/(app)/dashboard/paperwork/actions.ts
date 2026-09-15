@@ -14,6 +14,7 @@ import { createReminder } from '@/lib/services/reminders';
 import { fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
 import { describeActionError } from '@/lib/supabase/errors';
 import { isPaperworkExtractionPartial } from '@/lib/paperwork/extraction';
+import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 
 const PATH = '/dashboard/paperwork';
 
@@ -155,6 +156,9 @@ export async function materializePaperworkActionAction(input: {
   revalidatePath(PATH);
 }
 
+/** Matches the inbox intake's budget — see app/(app)/dashboard/inbox/actions.ts. */
+const AI_RATE_LIMIT = { limit: 20, windowMs: 60_000 } as const;
+
 type DraftResult = { ok: true; draft: string } | { ok: false; error: string };
 
 /**
@@ -169,6 +173,11 @@ export async function draftPaperworkReplyAction(itemId: string): Promise<DraftRe
   if (!itemId) return { ok: false, error: tr('actions.invalidItem') };
   const ctx = await requireUserContext();
   const supabase = await createServer();
+
+  // Reaches a paid provider, so it carries the same budget as every API route
+  // that does and as the inbox intake. Audit C3-S4-01.
+  const limited = await enforceAIRateLimit(supabase, `ai-requests:${ctx.user.id}`, AI_RATE_LIMIT);
+  if (!limited.ok) return { ok: false, error: tr('inboxActions.tooManyRequestsRightNow') };
 
   const { data: item } = await supabase
     .from('paperwork_items').select('*')

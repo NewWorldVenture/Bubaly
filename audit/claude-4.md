@@ -2340,3 +2340,1039 @@ FEATURE_ENV, the family-code dead invite affordance, the zero-managers
 lockout) were each re-checked against the current tree in this session and are
 still open — see the STATUS block at the top of this file for the exact
 grep/read that confirmed each.
+
+---
+
+# Session 4 (2026-09-15) — inside the authenticated app
+
+## SESSION 4 STATUS
+
+*(Appended. The STATUS block at the top of this file is Session 3's and is left
+byte-for-byte intact, per the charter's rule 1 — "append; never delete or
+rewrite". Claude-1: this block is the current one.)*
+
+CURRENT: Session 4. Scope as briefed — a **static flow and state audit of
+`app/(app)`**, going after the classes a browser would not have shown anyway.
+No sign-in was attempted: there is no local Supabase in this sandbox (no docker
+daemon, no CLI), so no session can exist. That is stated, not worked around.
+
+HEADLINE: **the `readAll` contract was fixed and 13 of its 59 call sites were
+not migrated to it.** `lib/supabase/read-all.ts` now reads one row past the
+caller's `max` and returns an ERROR when rows remain (commit `f462cc7e`,
+2026-09-14) — so `F-F01`'s mechanism is closed at the helper. But
+`readAllAsQuery` answers a truncated read with `data: null`, and thirteen call
+sites destructure only `{ data }`. Those sites used to render a **prefix**; they
+now render **zero**. For a money total, a count, or an AI coaching prompt, zero
+is a more confident lie than a prefix was. Proven by execution, not inferred —
+see C4-S4-01.
+
+METHOD (what was executed vs. what is static):
+  - EXECUTED: `npx vitest run tests/supabase-read-all.test.ts` → 19 passed,
+    877ms. The helper's new contract holds.
+  - EXECUTED: a purpose-built reproduction in the scratchpad, run against the
+    REAL `lib/supabase/read-all.ts` through an isolated vitest config (the
+    repo's own config restricts `include` to `tests/**`, and this session writes
+    nothing into the repo). 2 passed. It shows a call site that destructures
+    only `{ data }` computing a total of **0** from a 3,001-row table read with
+    `{ max: 3000 }`, and the correct 299900 when the table fits. That is the
+    exact shape of `app/api/ai/wallet/route.ts:56-61`.
+  - STATIC: everything else. Every route-tree count, every call-site reading,
+    every N+1 and every sequential-await count below is read from source. Where
+    a claim is an inference about runtime behaviour it says so in the finding.
+
+FILES-EXAMINED (session 4): `lib/supabase/read-all.ts`, `lib/supabase/settle.ts`,
+  all 42 files containing a `readAll`/`readAllAsQuery` call (59 call sites),
+  `app/(app)/home/page.tsx`, `app/(app)/missions/page.tsx`,
+  `app/(app)/dashboard/journeys/page.tsx`,
+  `app/(app)/admin/wallet/{page,reconciliation/page}.tsx`,
+  `app/(app)/marketplace/{insights,questions,page,creators,collections}.tsx`,
+  `app/(app)/wallet/{activity,treasury,send}/page.tsx`,
+  `app/(app)/dashboard/{family-digital-twin,playbook,migrate}/*actions.ts`,
+  `app/api/ai/wallet/route.ts`, `app/api/ai/wallet/child/[childId]/route.ts`,
+  `app/api/sync/feeds/[token]/route.ts`, `app/api/cron/family-routines/route.ts`,
+  `app/(app)/money/actions.ts`, `app/(app)/family/child-login-actions.ts`,
+  `components/wallet/money-cards-view.tsx`, `components/modules/home-module.tsx`,
+  `components/modules/habits-module.tsx`, `components/ui/partial-read-banner.tsx`,
+  `lib/{marketplace/matches-server,feedback/github-sync,operating-index/server,
+  intelligence/hard-signals-server,finance/timeline-load,metric/strategy-server,
+  network/benchmarks-server,twin/project-server,reasoning/context,
+  marketing/customers,autopilot/scan,autopilot/policy-scan,i18n/server,
+  auth/child-throttle,storage/documents,metric/time-saved-server,
+  metric/value-server}.ts`, `tests/no-limit-above-the-row-cap.test.ts`,
+  `tests/supabase-read-all.test.ts`, `tests/read-all-pages.test.ts`,
+  the full `app/(app)` route tree (354 `page.tsx`, 20 `layout.tsx`).
+
+BLOCKERS: no authenticated session is possible here — permanent in this
+  environment. Every claim about what a page *renders* is therefore a reading of
+  the JSX given a state I proved reachable, not a screenshot.
+
+LAST-UPDATE: 2026-09-15
+
+---
+
+## C4-S4-01
+
+```
+[CLAUDE-4][HIGH][QA/MONEY] The readAll contract was fixed; 13 of its 59 call sites
+were not migrated, so a read past its own ceiling now renders ZERO rather than a
+prefix — and those sites render totals, counts and AI prompts from it
+File:     lib/supabase/read-all.ts:106-117  (the fixed helper)
+          13 call sites listed below
+Status:   OPEN — new this session; supersedes the call-site half of F-F01
+```
+
+**What changed under the call sites.** `F-F01` said `readAll` returned
+`{ rows: slice(0, max), error: null }` on a caller ceiling. That is no longer
+true at `HEAD`. The helper now reads one row *past* the ceiling and distinguishes
+the two cases:
+
+```ts
+// lib/supabase/read-all.ts:80
+const probe = ceiling + 1;
+...
+if (options.max !== undefined) {
+  return { rows: rows.slice(0, ceiling), error: { message:
+    `readAll reached the caller's max of ${ceiling} rows and more remain. ` +
+    'These rows are a PREFIX, not the whole set — treat this as a failed read, ' +
+    'or raise the max.' } };
+}
+```
+
+and `readAllAsQuery` converts that into the shape a batch consumes:
+
+```ts
+// lib/supabase/read-all.ts:150
+if (error) return { data: null, count: null, error };
+```
+
+`data: null`. Not a short array — **null**. So the failure mode flipped: a site
+that reads `(data ?? [])` used to get `max` rows and now gets `[]`.
+
+**Evidence (executed).** Against the real module, through an isolated vitest
+config so nothing is written into the repo:
+
+```
+$ npx vitest run --config <scratchpad>/vitest.audit.config.mjs
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+```
+
+```ts
+// 3,001 rows against the { max: 3000 } that app/api/ai/wallet/route.ts uses
+const { data: txns } = await readAllAsQuery(table(3001), { max: 3000 });
+expect(txns).toBeNull();                                     // passes
+expect((txns ?? []).reduce((s, t) => s + t.amount_cents, 0)).toBe(0);  // passes
+// and with 2,999 rows the same expression yields the true 299900
+```
+
+The repo's own guard already states this contract:
+`tests/supabase-read-all.test.ts:207` — *"honours a ceiling, and reports null
+data when the read was truncated"*. 19/19 green, run this session. The helper is
+correct and well tested. The call sites are the gap.
+
+**The full 59-site census.** I classified every call site by whether the `error`
+the helper returns is consumed. 46 consume it; 13 do not:
+
+| # | Call site | What it feeds | Consumes `error`? |
+|---|---|---|---|
+| 1 | `app/api/ai/wallet/route.ts:61` | child wallet balances → AI coaching prompt | **NO** |
+| 2 | `app/api/ai/wallet/child/[childId]/route.ts:72` | one child's balance → AI coaching prompt | **NO** |
+| 3 | `app/(app)/dashboard/family-digital-twin/actions.ts:80` | `spentCents` → "can we afford this?" verdict | **NO** |
+| 4 | `app/(app)/dashboard/family-digital-twin/actions.ts:137` | same, activity path | **NO** |
+| 5 | `app/(app)/dashboard/journeys/page.tsx:28` | 3 funnel stat tiles | **NO** (see C4-S4-05) |
+| 6 | `app/api/sync/feeds/[token]/route.ts:60` | the published ICS calendar body | **NO** (see C4-S4-06) |
+| 7 | `app/(app)/marketplace/insights/page.tsx:50` | active-listing / category / demand-gap counts | **NO** |
+| 8 | `app/(app)/marketplace/insights/page.tsx:52` | saves-per-listing counts | **NO** |
+| 9 | `app/(app)/marketplace/insights/page.tsx:53` | open-offer counts | **NO** |
+| 10 | `app/(app)/marketplace/questions/page.tsx:29` | the listing-title lookup every question renders | **NO** |
+| 11 | `app/(app)/dashboard/playbook/playbook-actions.ts:58` | meal-frequency signals | **NO** |
+| 12 | `app/(app)/dashboard/playbook/playbook-actions.ts:73` | grocery-frequency signals | **NO** |
+| 13 | `app/(app)/dashboard/playbook/playbook-actions.ts:94` | annual-tradition detection | **NO** |
+| 14 | `lib/marketplace/matches-server.ts:48` | the match strip (and its persisted snapshot) | **NO** |
+| 15 | `lib/feedback/github-sync.ts:64` | the reconcile map (see C4-S4-13) | **NO** |
+
+*(15 rows, 13 distinct sites plus the two extra `insights` reads; 8 distinct files.)*
+
+The other 46 consume it properly, via one of four in-repo patterns — and this is
+why the fix is cheap: **the remedy already exists here, four times over**:
+
+- a fatal `readError` + `<ErrorState>` — `admin/wallet/reconciliation/page.tsx:31`,
+  `admin/feedback/page.tsx:40`, `admin/marketing/affiliates/page.tsx:34`,
+  `admin/social/usage/page.tsx:37`, `economy/page.tsx:39`;
+- `PartialReadBanner` with a per-table failure list —
+  `admin/wallet/page.tsx:39-78`, `admin/system/page.tsx:64-102`
+  (`components/ui/partial-read-banner.tsx` returns `null` on an empty list, so
+  it costs nothing when everything read);
+- a `dataWarnings: string[]` note under the content — `wallet/treasury/page.tsx:49-54`
+  rendered at `:124`, and the same in `wallet/activity` and `wallet/send`;
+- a `ServiceResult` failure — `lib/intelligence/hard-signals-server.ts:57`,
+  `lib/operating-index/server.ts:86`, `lib/finance/timeline-load.ts:184`,
+  `lib/twin/project-server.ts:106`, `lib/autopilot/{scan,policy-scan}.ts`.
+
+**Impact.** Ranked by what the site claims:
+
+- Sites 1-4 are **money**. A family past the ceiling is told its children have
+  **$0.00**, and that number is then fed to an LLM that writes coaching prose
+  about it, or to a simulator that answers "does this purchase fit the budget?".
+  See C4-S4-02 and C4-S4-03.
+- Sites 5, 7-9 render **counts**. `marketplace/insights`' own comment says
+  *"Every figure on this page is a count over these rows, so a capped read is a
+  wrong number rather than a short list"* — and then the destructure at `:46` is
+  `[{ data: listings }, { data: saves }, { data: offers }]`, with no `error`
+  anywhere in the file. The page renders "0 active listings · 0 categories · 0
+  demand gaps" and the reassuring copy "Supply is keeping up with requests".
+- Site 6 publishes a **calendar** (C4-S4-06).
+- Sites 11-13 silently drop the evidence a playbook suggestion is built from, so
+  the playbook offers fewer suggestions and says nothing about why.
+- Site 14 returns `[]` from `computeMatches([])` and exits before its upsert, so
+  the strip shows "no matches" — no write damage, but a false empty.
+
+**Why this is worth ranking above every missing loading state.** The ceilings are
+2,000-20,000 rows. A household does not hit 3,000 wallet transactions quickly,
+but `wallet_transactions` is append-only and every allowance run, chore reward,
+transfer and reversal adds rows — so this is a defect that arrives with tenure,
+on exactly the families with the most money in the product, and it arrives
+silently. There is no error page, no log line at sites 1-4 and 7-14, and no
+degraded-view banner. The only symptom is a wrong number rendered confidently.
+
+**Fix.**
+1. Thirteen call sites: adopt whichever of the four in-repo patterns fits.
+   For sites 1-4 (money + AI) the correct answer is to **fail**, not degrade:
+   coaching computed over a read the system knows is incomplete should not be
+   generated at all. Sites 7-10 should use `PartialReadBanner`.
+2. Add the companion guard the repo is missing.
+   `tests/no-limit-above-the-row-cap.test.ts` is an excellent source-scanning
+   guard — it forbids `.limit(n > 1000)` across `app/` and `lib/`, and it carries
+   a real non-vacuity case (`it('recognises an over-cap limit when it sees one')`,
+   five positive and negative assertions). It enforces the *shape* of the read.
+   Nothing enforces that the read's *error* is consumed. A sibling scan —
+   "every `readAll`/`readAllAsQuery` call site must bind `error` (directly, or
+   positionally into a batch whose `.error` is inspected)" — would have caught
+   all thirteen and will hold the line afterwards. It is the same technique, in
+   the same file style, on the same call-site set.
+
+**Note for Claude-1 (rule 4).** `finalaudit.md:264` still lists `F-F01` as OPEN
+with the old mechanism ("a caller-supplied `max` truncates a money read and
+reports success; reconciliation renders 'Everything reconciles' from a prefix").
+That half is **FIXED**: `admin/wallet/reconciliation/page.tsx:31-44` now returns
+`<ErrorState>` before `reconcileLedger` is ever called, so the "Everything
+reconciles" copy is unreachable on a truncated read. The finding should be
+re-scoped to the call-site half above rather than closed or left as written.
+
+---
+
+## C4-S4-02
+
+```
+[CLAUDE-4][HIGH][MONEY] The AI Money Coach computes every child's balance as $0.00
+when the ledger read exceeds its ceiling, and writes coaching prose about it
+File:     app/api/ai/wallet/route.ts:56-92
+          app/api/ai/wallet/child/[childId]/route.ts:67-...
+Status:   OPEN
+```
+
+**Problem.** The route reads the family's whole ledger through `readAllAsQuery`
+with a comment that states the stake exactly:
+
+```ts
+// app/api/ai/wallet/route.ts:58-61
+// Money, so a quietly truncated read is a wrong balance, not a short
+// list. `.limit(3000)` never was 3,000 — PostgREST caps at db-max-rows.
+const [{ data: childWallets }, { data: buckets }, { data: txns }, { data: members }, { data: goals }] = await settleAll([
+  ...
+  readAllAsQuery((from, to) => supabase.from('wallet_transactions')...range(from, to), { max: 3000 }),
+```
+
+The destructure takes `data` and nothing else. No `error` is bound anywhere in
+the file for this batch. Past 3,000 rows, `txns` is `null`, and:
+
+```ts
+for (const t of txns ?? []) { ... }                       // iterates nothing
+const children = (childWallets ?? []).map((cw) => {
+  const entries = entriesByChild.get(cw.id) ?? [];         // []
+  return { ..., totalCents: balanceFromLedger(entries),    // 0
+            saveCents: bucketBalances(entries).save };     // 0
+});
+```
+
+Every child's `totalCents` and `saveCents` is 0, and `weeksToGoal(saved, target,
+0)` is computed from a weekly contribution rate of 0. Those numbers go straight
+into `buildWalletCoachPrompt({ children, goals, familyName })` and out to the
+model, which is asked to coach a family whose children it has been told have
+nothing saved and are contributing nothing.
+
+**Evidence.** Executed — see C4-S4-01's reproduction: `readAllAsQuery(3001 rows,
+{ max: 3000 })` returns `data: null`, and the reduce over `data ?? []` is `0`.
+The rest is a reading of this file; there is no `error` identifier bound to this
+batch anywhere in it (`grep -n "\.error" app/api/ai/wallet/route.ts` returns
+only `console.error` and the JSON `error:` response keys).
+
+**Impact.** The product's money surface is where the audit has repeatedly found
+its worst class, and this is that class with a language model bolted on: not a
+wrong number on a page a parent can sanity-check against another page, but a
+*paragraph of advice* generated from the wrong number, in the product's own
+voice, charged against the family's AI quota, and recorded through
+`withAiRequest` as a successful run. A parent reading "none of your children are
+saving anything — here is how to start" has no way to tell it came from a failed
+read.
+
+**Fix.** Bind the error and return a 502 with the existing
+`tr('wallet.couldNotGenerateCoachingRight')` copy, which the route already uses
+at `:112` for the analogous "the model gave us nothing" case. Coaching over a
+ledger the system knows it could not finish reading should not be generated.
+Same change in the per-child route.
+
+---
+
+## C4-S4-03
+
+```
+[CLAUDE-4][HIGH][MONEY] The Decision Simulator reports a budget as untouched when
+the spend read fails, so "can we afford this?" answers yes on no evidence
+File:     app/(app)/dashboard/family-digital-twin/actions.ts:80-85, 137-141
+Status:   OPEN
+```
+
+**Problem.** Both simulator paths compute the category's spend-to-date and hand
+it to `simulateDecision` as the budget's consumed amount:
+
+```ts
+// actions.ts:80-85
+const { rows: tx } = await readAll((from, to) => supabase
+  .from('transactions').select('amount').eq('family_id', familyId)
+  .eq('type', 'expense').ilike('category', escapeLike(b.category)).gte('date', start)
+  .order('id').range(from, to), { max: 2000 });
+const spentCents = Math.round((tx ?? []).reduce((s, t) => s + Number(t.amount ?? 0), 0) * 100);
+budgets = [{ category: b.category, limitCents: ..., spentCents }];
+```
+
+`readAll` returns `{ rows, error }`. Only `rows` is bound. `readAll`'s `rows` is
+a real array, so on a *transport* failure it is the partial prefix collected
+before the failure, and on a *ceiling* breach it is exactly `max` — either way
+`spentCents` understates, and in the transport case it can be near zero while
+the simulator is told the budget is nearly untouched. Identical code at `:137`.
+
+**Impact.** This is the "what-if" surface — a parent asks whether a purchase
+fits, and the answer is the difference between `limitCents` and a `spentCents`
+the code has no basis for. It is a *recommendation*, which is worse than a
+display bug: the family acts on it. The module header says "All reads are
+family-scoped via the RLS client; nothing is written — this is a safe 'what-if'
+that never touches live data" — safe with respect to writes, but the reasoning
+about reads never happened.
+
+**Evidence.** Static reading of the two blocks; `grep -n "error" ` over the file
+shows the only `error` bindings are for the two `settle`d calendar/vacation reads
+at `:117`/`:123` and the two write paths at `:172`/`:182`. The two `readAll`
+results are the only reads in the file whose error is never bound.
+
+**Fix.** Bind `error`; return the existing
+`{ ok: false, error: ... }` shape the file already uses at `:108` and `:172`
+rather than simulating over an unknown budget. The simulator's honest answer
+when it cannot read the spend is "I could not check", which it has no way to say
+today.
+
+---
+
+## C4-S4-04
+
+```
+[CLAUDE-4][HIGH][FLOW] "Issue cards for everyone" discards every result and reports
+a count it never verified — in payment-card issuance
+File:     components/wallet/money-cards-view.tsx:92-100
+Status:   OPEN
+```
+
+**Problem.** Four of the five `issueCardAction` call sites in this codebase check
+the result. The bulk one does not:
+
+```tsx
+// components/wallet/money-cards-view.tsx:92-100
+async function issueAllVirtual() {
+  setBusy('issue-all');
+  for (const child of childrenWithoutCards) {
+    await issueCardAction({ childWalletId: child.id, type: 'virtual',
+                            spendLimitCents: null, spendWindow: 'per_authorization' });
+  }
+  setBusy(null);
+  success(`Issued ${childrenWithoutCards.length} virtual card${childrenWithoutCards.length !== 1 ? 's' : ''}!`);
+  router.refresh();
+}
+```
+
+Compare the single-child version **eight lines above it**, in the same component:
+
+```tsx
+// :83-90
+const res = await issueCardAction({ childWalletId, ... });
+setBusy(null);
+if (!res.ok) return toastError(res.error);
+success(t('moneyCardsView.virtualCardCreated'));
+```
+
+and `toggleFreeze` at `:102`, `startSetup` at `:75`, and the physical-card modal
+at `:400` — all three check `res.ok`. Only the bulk path does not.
+
+**What is being discarded.** `issueCardAction`
+(`app/(app)/money/actions.ts:109-160`) is a careful function. It returns a
+typed failure for: a non-manager caller, Issuing not enabled on the platform,
+`card_issuing_enabled` false on the connected account ("Finish account setup
+first"), the child wallet not found, a **Trust Engine denial**
+(`Blocked by household policy: ${decision.reason}`), a failed cardholder read,
+and any Stripe exception via `actionFailure('issue the card', ...)`. Every one of
+those is thrown away here, and the toast says "Issued 3 virtual cards!".
+
+**Impact.** The parent is told three children hold spending cards. They do not.
+The most likely real-world trigger is the most damaging one: `card_issuing_enabled`
+false, or a Trust policy the household itself configured denying `finances/create`
+— i.e. the two cases where the product is *deliberately* refusing, and the UI
+reports the refusal as a success. `router.refresh()` immediately re-renders the
+list from the server, so the cards visibly do not appear, leaving the user with a
+success toast and an unchanged screen and no stated reason. This is the repo's
+"optimistic UI that lies" class at its highest stake — a payment instrument.
+
+Secondary: the loop is serial, so N children cost N sequential Stripe round
+trips with no progress indication beyond a single `busy` flag.
+
+**Evidence.** The five call sites, read in full. `grep -n "issueCardAction"
+components/wallet/money-cards-view.tsx` → `27, 85, 95, 401`; `:85` and `:401`
+bind and check `res`, `:95` does not. The action's failure returns are at
+`app/(app)/money/actions.ts:114, 117, 118, 124, 125, 126, 127, 135, 138, 158`.
+
+**Fix.** Collect the results, `Promise.allSettled` or keep the serial loop, and
+report honestly — `Issued ${ok} of ${n}` with `toastError` naming the first
+failure. The component already imports `toastError` and uses it four times.
+A partial success is a real outcome here and the UI has no vocabulary for it.
+
+---
+
+## C4-S4-05
+
+```
+[CLAUDE-4][MEDIUM][QA] A comment states the invariant the next line breaks: journey
+analytics renders "0 started · 0 completed · 0%" from a failed read, and puts the
+error message below the fold
+File:     app/(app)/dashboard/journeys/page.tsx:28-54
+Status:   OPEN
+```
+
+**Problem.** The page reads its telemetry, then says out loud what must not
+happen, then does it:
+
+```tsx
+// :28
+const { rows: data, error } = await readAll(..., { max: 5000 });
+
+// :36-38  — the comment
+// A failed telemetry read must not masquerade as "no events" — that would tell
+// the operator onboarding traffic is zero when the query actually errored.
+const events = (data ?? []) as JourneyEventLike[];
+
+// :39-42
+const rows = summarizeJourneys(events);
+const totalStarts = rows.reduce((a, r) => a + r.starts, 0);
+const totalCompletions = rows.reduce((a, r) => a + r.completions, 0);
+const overallRate = totalStarts > 0 ? totalCompletions / totalStarts : 0;
+
+// :51-55  — rendered UNCONDITIONALLY, above the error branch
+<div className="grid grid-cols-3 gap-3">
+  <StatTile label={t('dashboardJourneys.journeysStarted')} value={totalStarts} .../>
+  <StatTile label={t('dashboardJourneys.completed')}      value={totalCompletions} .../>
+  <StatTile label={t('dashboardJourneys.completion')}     value={formatRate(overallRate)} .../>
+</div>
+
+// :57-59  — the error is handled HERE, inside the card below
+<SectionCard title={t('dashboardJourneys.perJourneyMedians')} description="Measured from journey_events (0124) — no estimates.">
+  {error ? <MiniError text={t('journeys.couldnTLoadJourneyTelemetry')} /> : ...}
+```
+
+`error` *is* bound. It is simply consumed in the wrong place. The three headline
+tiles — the largest numbers on the page — are computed before it is checked and
+rendered above it.
+
+**Impact.** Lower than C4-S4-02/03 because the page is gated by
+`isSuperAdmin()` (`:22`), so the audience is operators, not families. But the
+claim is a funnel measurement, the card underneath advertises itself as
+"Measured from journey_events (0124) — **no estimates**", and an operator
+scanning three big zeros above a small error note will read "onboarding
+converted nobody" rather than "the query failed". The comment at `:36` proves the
+author knew precisely this; the guard just landed one JSX level too low.
+
+**Fix.** Two lines: hoist the `error` check above the tile grid, or render the
+tiles as `—` when `error` is set. `MiniError` is already imported.
+
+---
+
+## C4-S4-06
+
+```
+[CLAUDE-4][MEDIUM][FLOW] The public ICS feed answers 200 with a truncated or partial
+calendar, so a subscriber's calendar silently loses events
+File:     app/api/sync/feeds/[token]/route.ts:60-90
+Status:   OPEN
+```
+
+**Problem.** The feed route discards the read error entirely:
+
+```ts
+// :60-69  — note the destructure
+const { rows } = await readAll((from, to) => supabase
+  .from('sync_calendar_events').select(...)
+  .eq('calendar_id', calendar.id).is('deleted_at', null).lte('starts_at', horizon)
+  .order('starts_at', { ascending: true }).order('id')
+  .range(from, to), { max: 2000 });
+
+const events: IcsEvent[] = (rows ?? []).map((e) => ({ ... }));
+const body = generateICS(events, { ... });
+return new NextResponse(body, { status: 200, headers: { 'Content-Type': 'text/calendar; ...' } });
+```
+
+`readAll` returns `rows` collected-so-far alongside its error, so there are two
+bad outcomes and no branch for either:
+
+- **ceiling reached** (>2,000 events in the 400-day horizon): the first 2,000 are
+  published and the rest are omitted;
+- **a page fails mid-read** (the transport class `lib/supabase/settle.ts` was
+  written for — "what took out /dashboard while the production database was
+  reporting CONNECT_TIMEOUT"): a *partial* calendar is published.
+
+The route is 15 lines below its own `if (error || !calendar) return 404` for the
+calendar lookup, so the file is not error-blind in general — this one read is.
+
+**Impact.** This is the only finding in this session whose blast radius is
+*outside* the product. An ICS subscription is authoritative for the client:
+Google Calendar, Apple Calendar and Outlook re-poll and reconcile against the
+body they are served. Events absent from a fetch are removed from the
+subscriber's calendar. So a transient database hiccup during one poll deletes
+appointments from every device subscribed to that feed, and they reappear on the
+next successful poll. The user sees their calendar flicker and has no reason to
+suspect Bubaly; there is not even a log line here.
+
+This is an inference about calendar-client behaviour, not something I could
+execute — but the shape of the bug (200 + a valid, shorter document) is read
+directly from the source above.
+
+**Fix.** Bind `error` and return `503` with `Retry-After` rather than a short
+200. A feed that cannot be built completely must not be served as if it were —
+every calendar client already handles a failed poll by keeping what it has, which
+is exactly the desired behaviour. Raising `max` addresses only the first case.
+
+---
+
+## C4-S4-07
+
+```
+[CLAUDE-4][MEDIUM][PERFORMANCE] /home — the authenticated app's landing page — is
+about eleven sequential database round-trip waves, four of them collapsible with
+no change in behaviour
+File:     app/(app)/home/page.tsx:148-420
+Status:   OPEN
+```
+
+**Problem.** Pass N proved the marketing surface serialises its calls by
+measuring TTFB quantised at exact multiples of one timeout (1 call = 7s, 2 = 14s,
+3 = 21s). The same shape is in `app/(app)`, and `/home` — the page every
+authenticated session lands on — is the worst instance I found. Mapping every
+top-level `await` in `HomePage()`:
+
+| wave | line | what | independent of the previous wave? |
+|---|---|---|---|
+| 1 | 148 | `await getTranslations()` | — |
+| 2 | 149 | `await getTranslations()` again, same function | **yes — identical call** |
+| 3 | 150 | `await requireUserContext()` | yes |
+| 4 | 152 | `await createServer()` | no (needs ctx) |
+| 5 | 183 | `await settleAll([ …14 reads ])` | no |
+| 6 | 258 | `await supabase.from('meals')…in(mealIds)` | no (needs wave 5) |
+| 7 | 268 | `await supabase.from('chores')…in(choreIds)` | **yes — also only needs wave 5** |
+| 8 | 287 | `await listPending(scope)` | **yes** |
+| 9 | 295 | `await loadCompletedByBubaly(...)` | **yes** |
+| 10 | 302 | `await settleAll([ …7 reads ])` | **yes** |
+| 11 | ~360 | `await supabase.from('ai_plan_steps')…in(activePlanIds)` | no (needs wave 10) |
+| 12 | 363 | `await supabase.from('chores')…in(missingChoreIds)` | **yes — also only needs wave 10** |
+| 13 | 367 | `await schedulePromise` | already overlapped — correct, see below |
+| 14 | 379 | `await loadTimeSaved(...)` | **yes** |
+| 15 | 380 | `await loadFamilyValue(...)` | **yes** (and itself 2 more serial awaits) |
+| 16 | 396 | `await supabase.from('activation_events')` | **yes** |
+| 17 | 414 | `await getOnboardingProgress(...)` | **yes** (manager only) |
+| 18 | ~417 | `await resolveCompleteness(...)` | no |
+
+Eleven distinct waits on the network, and the page already knows the right
+technique — `schedulePromise` at `:242` is started early and awaited at `:367`
+with a comment explaining exactly why ("Started here, awaited before
+`buildToday`, so it overlaps the reads below"). That one read is handled
+correctly and the other six independent ones are not.
+
+The comment at `:291-294` explains why `loadCompletedByBubaly` is *outside*
+`settleAll` — it returns a `ServiceResult` with `ok`, not a `{ data, error }`,
+so `settleAll`'s rejection substitution would not fit. That reasoning is right,
+and it justifies not putting it *inside* the batch. It does not justify awaiting
+it *before* the batch: `await Promise.all([listPending(…), loadCompletedByBubaly(…),
+settleAll([…])])` keeps every shape intact and collapses waves 8, 9 and 10 into
+one.
+
+**Impact.** Collapsing the four safe groups — {6,7}, {8,9,10}, {11,12},
+{14,15,16} — takes eleven waves to about six. At a normal 30-60 ms Supabase RTT
+that is roughly 150-300 ms off the landing page's TTFB. Under the degraded
+conditions the codebase documents (`lib/supabase/settle.ts`'s CONNECT_TIMEOUT
+story), each wave is a *timeout*, and the page's latency is a multiple of it —
+the precise quantisation Pass N measured on marketing. This is the finding most
+likely to be visible to every user on every session.
+
+**Evidence.** Static: the await map above, derived from a scripted scan of
+top-level `await` statements outside `settleAll`/`Promise.all` array literals
+across all 354 `page.tsx` and 20 `layout.tsx` under `app/(app)`, then read by
+hand. `/home` is the deepest; `dashboard/concierge/runs/{page,[id]/page}.tsx`,
+`dashboard/graph/page.tsx` and `display/page.tsx` are the next tier at 3-4
+collapsible waves each. I could not measure TTFB — no authenticated session — so
+the millisecond figures are arithmetic on a stated RTT, not a measurement.
+
+**Fix.** Four `Promise.all` groupings, no behaviour change. Start with
+{8,9,10} — it is the largest single saving and the pattern the file already
+demonstrates 120 lines earlier.
+
+---
+
+## C4-S4-08
+
+```
+[CLAUDE-4][MEDIUM][EDGE CASE] The routines cron reads the family's timezone once per
+rule inside the loop and discards the error, so a failed read silently schedules a
+household on America/New_York
+File:     app/api/cron/family-routines/route.ts:89-90, 240-241
+Status:   OPEN
+```
+
+**Problem.** Two loops, the same two lines:
+
+```ts
+// :84-90  (the firing loop, over up to MAX_ROUTINES_PER_TICK = 25 rules)
+for (const rule of due ?? []) {
+  ...
+  const { data: family } = await db.from('families').select('timezone').eq('id', rule.family_id).maybeSingle();
+  const tz = family?.timezone ?? 'America/New_York';
+```
+
+```ts
+// :237-242  (the arming loop, same bound)
+for (const rule of pending ?? []) {
+  ...
+  const { data: family } = await db.from('families').select('timezone').eq('id', rule.family_id).maybeSingle();
+  const tz = family?.timezone ?? 'America/New_York';
+  const next = await nextFireAfter(db, rule.family_id, schedule, now, tz);
+```
+
+Two defects in one statement.
+
+**(a) N+1.** One `families` round trip per rule, not per family. A household with
+eight routines due in the same tick pays eight identical reads; the tick is
+bounded at 25 rules, so up to 25 avoidable round trips per loop, 50 per
+invocation, against a `TICK_BUDGET_MS` deadline the loop checks at `:85` — so the
+wasted round trips directly reduce how many routines a tick can actually fire.
+The repo already has the memoised-lookup pattern for exactly this:
+`lib/server/push.ts` caches `membersOf(familyId)` in a `Map` before its per-
+notification loop (I verified that one in session 3 and recorded it as sound).
+
+**(b) The discarded error is a silent timezone substitution.** `{ data: family }`
+binds no `error`. A refused or failed read is indistinguishable from "no such
+family", and both fall through `??` to **`America/New_York`**. That constant is
+then the entire basis for when the routine fires: `releaseWedgedOccurrence(db,
+rule, dueAt, now, tz)` and `nextFireAfter(db, familyId, schedule, now, tz)` both
+take it. For a household in Asia/Tokyo that is a 13-14 hour shift — a "7am school
+morning" routine files at 8 or 9pm the previous evening, on the wrong calendar
+day. This is the same family as `F-F02`'s Greenwich-day bug (a timezone decided
+by something other than the family's own), reached through a discarded error
+rather than a `Date` API.
+
+**Impact.** (a) is bounded and modest. (b) is a wrong-day automation for any
+non-US-Eastern household, arriving only when a read fails, with no log line and
+no way for the family to attribute it. The `armed` counter at `:250` is
+scrupulous about only counting writes that landed — the comment at `:247-249`
+argues the case ("a quiet tick reads differently from a broken one") — so the
+attention was there; it just did not reach the read two statements above.
+
+**Fix.** Hoist the timezone lookup: one `.in('id', familyIds)` read before the
+loop into a `Map<string, string>`, error bound and the tick failed or the rule
+skipped on failure. That fixes both halves at once, and the "skip the rule rather
+than guess its timezone" behaviour is the one consistent with `armed`'s own
+reasoning.
+
+---
+
+## C4-S4-09
+
+```
+[CLAUDE-4][MEDIUM][FLOW] Removing a document deletes the row whether or not the file
+was deleted, orphaning a private storage object, and says "File removed"
+File:     components/modules/home-module.tsx:440-448  (and the rollback at :425)
+Status:   OPEN
+```
+
+**Problem.**
+
+```tsx
+// :440-448
+async function removeFile(doc: WarrantyDoc) {
+  setRemovingId(doc.id);
+  const supabase = createClient();
+  await removeFamilyDocument(supabase, doc.storage_path);      // result DISCARDED
+  const { error } = await supabase.from('documents').delete().eq('id', doc.id);
+  setRemovingId(null);
+  if (error) return toastError(describeDbError(error));
+  success(tr('homeModule.fileRemoved'));
+  onChanged();
+}
+```
+
+`removeFamilyDocument` is explicitly designed to be checked —
+`lib/storage/documents.ts:48-54` returns `Promise<{ error: string | null }>` and
+the two other call sites in this same component check it (`:410-415` binds
+`uploadError` and toasts on it). Here it is awaited bare.
+
+**Impact.** Two consequences, in order of seriousness:
+
+1. **The user's intent is not honoured and they are told it was.** A parent
+   removing a warranty or a manual — plausibly because it contains a serial
+   number, a policy number or a photo of a document — is told "File removed".
+   The object stays in the private bucket. Because the `documents` row is gone,
+   nothing in the product references it any more, so the parent has no way to
+   see it, delete it, or know it is there. The only correct description of that
+   outcome is a privacy defect, and the user has been told the opposite.
+2. Orphaned objects accumulate in the bucket, billed and unreclaimable through
+   the product.
+
+The same discard is at `:425`, but that one is a genuine rollback path (the
+insert failed, so we are cleaning up an object nothing references) and a failed
+cleanup there is already the error case — lower stakes, worth the same one-line
+treatment.
+
+**Fix.** Bind the error; do not delete the row if the object survived, and toast
+the storage failure. Ordering matters: deleting the row first is what makes the
+leaked object invisible. `describeDbError` and `toastError` are both already in
+scope.
+
+---
+
+## C4-S4-10
+
+```
+[CLAUDE-4][MEDIUM][QA] The real loading/error/not-found picture inside app/(app):
+two loading skeletons for 354 pages, 222 of which are force-dynamic
+File:     app/(app)/**  (route tree)
+Status:   OPEN — extends F-D08 with the per-segment matrix it lacked
+```
+
+**The measurement.** Pass N established that the *marketing* surface has zero
+`loading.tsx`/`error.tsx`/`not-found.tsx` against the app's 18. Here is what
+those 18 actually are, per top-level segment:
+
+| segment | pages | `error.tsx` | `loading.tsx` | `not-found.tsx` | `layout.tsx` |
+|---|---|---|---|---|---|
+| (root of `(app)`) | — | yes | yes | — | yes |
+| dashboard | **215** | yes | — | yes | yes |
+| admin | 80 | yes | — | — | yes |
+| marketplace | 20 | yes | — | — | yes |
+| wallet | 12 | yes | — | yes | yes |
+| family | 6 | yes | — | — | yes |
+| guardian | 5 | yes | **yes** | — | yes |
+| capture / display / kids / missions / services | 2 each | yes | — | — | yes¹ |
+| economy / feedback / home / referrals | 1 each | yes | — | — | yes |
+| auth / parent | 1 each | — | — | — | — |
+| account / money / settings | 0 | — | — | — | — |
+
+¹ `display` has no `layout.tsx`. Totals: 354 `page.tsx`, **16** segment
+`error.tsx` + 1 root, **2** `loading.tsx`, **2** `not-found.tsx`, 20 `layout.tsx`.
+
+**What this corrects.** The error-boundary story inside `app/(app)` is *good*,
+and it is worth saying so plainly so a later pass does not spend a session on it:
+every segment that owns pages has an `error.tsx` except `auth` and `parent`
+(one page each), and `app/(app)/error.tsx` catches those. A page that throws
+degrades to an inline card inside the shell, with a `reset()` button and the
+`digest` reference — `app/(app)/error.tsx:32-50`. A route that fetches and
+crashes does **not** show a blank.
+
+**What is actually missing.**
+
+1. **Loading.** Two `loading.tsx` for 354 pages, and 222 of those pages declare
+   `export const dynamic = 'force-dynamic'` — i.e. they *will* suspend on every
+   navigation, so the skeleton is on the critical path for two thirds of the app.
+   All of them get `app/(app)/loading.tsx`: a 48-wide title bar, a 72-wide
+   subtitle and `SkeletonList count={4}`. That shape is a reasonable guess for a
+   list page. It is wrong for `/home` (a dense command centre), for
+   `admin/wallet` (a stat-tile grid), for `dashboard/graph`, and for every table
+   page under `admin/`. Each of those gets four card-shaped grey blocks and then
+   a layout that looks nothing like them — the layout shift the root file's own
+   comment says it exists to avoid ("It mirrors the common page rhythm (title +
+   content cards) to avoid layout shift"). `guardian/loading.tsx` is the one
+   segment that took the trouble; it is the model for the rest.
+   The highest-value additions, by traffic × mismatch: `home/`, `dashboard/`
+   (215 pages under one skeleton), `admin/`, `wallet/`.
+2. **Not-found.** Only `dashboard` and `wallet` have one. Every other segment's
+   `notFound()` — including `dashboard/journeys/page.tsx:22`, which calls it for
+   a non-super-admin — falls through to the app-wide 404. For
+   `journeys` specifically, a non-admin gets a generic "not found" rather than
+   anything explaining the surface is admin-only; that is arguably correct
+   (do not confirm the route exists) and is recorded as intentional-looking, not
+   as a defect.
+3. **One granularity gap worth naming on its own:** 215 pages share
+   `app/(app)/dashboard/error.tsx`. Any page under `/dashboard` that throws shows
+   the same "This page hit a snag" card, and the `reset()` re-renders the same
+   failing page. That is acceptable as a floor; it is not a substitute for the
+   per-page degraded views the better pages already build by hand.
+
+**Why this is MEDIUM and not higher.** Nothing here produces a wrong number.
+Every finding above it does. It is recorded at this length because the brief
+asked for the real per-route picture and because a future pass should not have to
+re-derive the matrix.
+
+**Fix.** Copy `app/(app)/guardian/loading.tsx`'s approach into `home/`,
+`dashboard/`, `admin/` and `wallet/`, shaped to each segment's actual layout.
+Four files.
+
+---
+
+## C4-S4-11
+
+```
+[CLAUDE-4][LOW][EDGE CASE] Resetting a child's PIN returns ok:true whether or not the
+brute-force lockout was lifted, so the child can stay locked out for 15+ minutes
+with the parent told the reset worked
+File:     app/(app)/family/child-login-actions.ts:117-119  (and :86-88)
+Status:   OPEN
+```
+
+**Problem.** `resetChildPinAction` updates the auth password, checks that error
+properly (`:114`), then:
+
+```ts
+// :115-119
+// A parent reset should also lift any brute-force lockout on that username, so
+// the child can sign in immediately with the new PIN.
+await admin.from('child_login_throttle')
+  .update({ fails: 0, locked_until: null, window_start: new Date().toISOString() })
+  .eq('username', normalizeUsername(row.username));
+```
+
+Result discarded, then `logAudit`, then `return { ok: true }`. The comment states
+the contract — *"so the child can sign in immediately with the new PIN"* — and
+the statement that delivers it is the one statement in the function whose error
+is not bound. The same discard is at `:86-88` in `createChildLoginAction`, where
+it exists to clear a stale lockout inherited from a previous holder of the
+username.
+
+**Impact.** Bounded but genuinely dead-ended. `lib/auth/child-throttle.ts:24-28`:
+`maxFails: 5`, `lockMs: 15 * 60_000`, and `:77` escalates —
+`locked_until = now + lockMs * factor`. So a child who tripped the throttle stays
+locked for 15 minutes or a multiple of it. The parent has just been told the PIN
+is reset. The child tries the new PIN, is refused before the password is even
+checked (`child-throttle.ts:48-49`), and tries again — which on a repeat lockout
+escalates the factor. `child_login_throttle` has no UI anywhere in the product,
+so there is no way for the parent to see the lock or clear it; the only remedy is
+waiting out a duration nobody is shown.
+
+**Evidence.** Static. The two discarded statements, `DEFAULT_POLICY`, and the
+escalation at `child-throttle.ts:72-79`. I could not exercise the throttle — no
+auth backend here.
+
+**Fix.** Bind the error and return a distinct failure ("PIN updated, but the
+lockout could not be cleared — try again in a few minutes"), or retry. The reset
+itself has already succeeded at that point, so the action must not report a plain
+`ok: true` and must not report a plain failure either; it is a third state, the
+same shape the blog-unsubscribe fix in `f462cc7e` introduced for exactly this
+reason.
+
+---
+
+## C4-S4-12
+
+```
+[CLAUDE-4][LOW][PERFORMANCE] 93 authenticated pages await getTranslations() two to
+five times in the same render, sequentially
+File:     app/(app)/**/page.tsx (93 files); lib/i18n/server.ts:28-38
+Status:   OPEN
+```
+
+**Problem.** `lib/i18n/server.ts` is explicit that it is **not** memoised, and
+explains why:
+
+> *"NOT memoised per request, deliberately. React's `cache()` would be the tool,
+> and this project is on React 18.3, which does not export it. What is left to
+> repeat per call is cheap… The expensive half — assembling the catalogue — is
+> memoised per LOCALE in `getMessages`."*
+
+The reasoning is sound. What it did not anticipate is the call pattern. 93 of the
+354 pages call `await getTranslations()` more than once in a single render:
+
+```
+5×  app/(app)/admin/integrations/page.tsx
+4×  app/(app)/admin/subscriptions/page.tsx
+3×  home, family/reports, dashboard/sync, dashboard/family-stress,
+    dashboard/family-operations, dashboard/contacts/[id],
+    dashboard/concierge/runs/[id], admin/system, admin/support,
+    admin/support-tickets, admin/onboarding, admin/marketing/{,video,referrals,
+    pipeline,personalization}, marketplace/selling, … (+ ~78 more at 2×)
+```
+
+`app/(app)/home/page.tsx:148-149` is the clearest case — two identical awaits on
+consecutive lines, bound to `i18nT` and `tr`, both used later in the same
+component.
+
+Each repeat is `await Promise.all([cookies(), headers()])` plus `resolveLocale`
+plus a `Map` hit. Individually negligible; but they are `await`s, so they are
+**sequential microtask boundaries on the render path**, and on `/home` two of
+them are waves 1 and 2 of C4-S4-07's eleven.
+
+**Fix.** Call it once per component and pass the translator down — mechanical,
+93 files, zero risk. I checked whether the module's own escape hatch had opened:
+`package.json:98-99` pins `react` and `react-dom` at `^18.3.1` (against
+`next: ^15.5.25`), so React's `cache()` is genuinely still unavailable and the
+module's stated reason for not memoising **stands**. This is a call-site fix, not
+a helper fix. If the app is ever moved to React 19, memoising `getLocaleContext`
+with `cache()` closes all 93 at once and the comment at `lib/i18n/server.ts:28`
+should be revisited at that point.
+
+---
+
+## C4-S4-13
+
+```
+[CLAUDE-4][LOW][INTEGRATION] The GitHub feedback sync silently reconciles nothing and
+reports "Nothing new — 0 issues in sync" to the super admin
+File:     lib/feedback/github-sync.ts:64-76
+Status:   OPEN
+```
+
+**Problem.** The reconcile half builds its idea lookup from a `readAll` whose
+error is discarded:
+
+```ts
+// :64-75
+const { rows: linked } = await readAll((from, to) => admin
+  .from('feedback_ideas').select('id, title, status, github_issue_number')
+  .not('github_issue_number', 'is', null).order('id').range(from, to), { max: 3000 });
+const byNumber = new Map(...); const byId = new Map(...);
+for (const row of linked ?? []) { ... }
+```
+
+On a failed read both maps are empty, so every issue hits `if (!idea) continue;`
+(`:83`), `reconciled` stays 0, no `feedback_ideas` row is updated, and
+`summarizeSync` (`:104-110`) reports `"Nothing new — 0 issues in sync."` —
+because `errors` was never incremented either.
+
+**Impact.** Low: read-only in effect, nothing is corrupted, and the next run
+recovers. But it is the repo's signature defect in miniature — a failure reported
+as a quiet success to the one person who could act on it — and the surrounding
+function is otherwise careful (`:56-58` returns `errors + 1` when the GitHub
+call throws). The header comment even anticipates the *other* direction of this
+bug ("past 1,000 linked ideas the sync stopped seeing the rest and would have
+started re-opening issues it believed unlinked"), which is what the `readAll`
+was added to fix; the error it now returns was not picked up.
+
+**Fix.** `const { rows: linked, error } = …; if (error) return { configured: true,
+created, reconciled: 0, changes, errors: errors + 1 };` — the same early return
+the function already uses eight lines above.
+
+---
+
+## Verified this session, not re-derived (rule 4)
+
+- **`F-F01` — half FIXED, half re-scoped.** The helper defect is closed at
+  `HEAD` (`lib/supabase/read-all.ts:80, 106-117`, landed in `f462cc7e`,
+  2026-09-14). `app/(app)/admin/wallet/reconciliation/page.tsx:31-44` now returns
+  `<ErrorState>` before `reconcileLedger` runs, so the "Everything reconciles"
+  copy is unreachable over a truncated read. `finalaudit.md:264` still describes
+  the old mechanism and marks it OPEN — see the note at the end of C4-S4-01. The
+  59-call-site blast radius the finding named is real and is now enumerated in
+  full; 46 of the 59 are clean.
+- **`F-F03` — still OPEN, verbatim.** `app/(app)/missions/page.tsx:70-78`:
+  `for (const s of subs)` over a read limited to 60 (`:30`), containing
+  `for (const path of (s.media_paths ?? []).slice(0, 4))` containing
+  `await supabase.storage.from('chore-proof').createSignedUrl(path, 600)`.
+  60 × 4 = **up to 240 sequential storage round trips** on the parent approval
+  queue. Worth adding to the finding: the batch API is **already used in this
+  repo** — `app/(app)/admin/marketing/assets/page.tsx:53` calls
+  `supabase.storage.from(BUCKET).createSignedUrls(imagePaths, 3600)` (plural) and
+  binds its error. One call replaces 240.
+- **`F-D08`** — confirmed and quantified; see C4-S4-10 for the per-segment matrix.
+- **`tests/no-limit-above-the-row-cap.test.ts` is NOT vacuous.** I went looking
+  for this repo's characteristic defect in the guard that most invited it, and it
+  is clean: it scans `app/` and `lib/` for `.limit(n > 1000)`, skips comment
+  lines, asserts `toEqual([])`, and carries an explicit non-vacuity test
+  (`it('recognises an over-cap limit when it sees one')`) with five positive and
+  negative cases. It enforces the read's *shape*; C4-S4-01's recommended sibling
+  guard would enforce the read's *error*. Recording it as sound so a later pass
+  does not re-check it.
+- **`tests/supabase-read-all.test.ts` is load-bearing.** 19 tests, executed this
+  session (877 ms, all green), including `:207` "honours a ceiling, and reports
+  null data when the read was truncated" — which is the exact contract the 13
+  call sites in C4-S4-01 fail to honour.
+
+## Checked this session and found healthy (recorded so it is not re-derived)
+
+- **46 of the 59 `readAll` call sites** consume their error correctly, through
+  four distinct in-repo patterns. Specifically sound: `admin/wallet/page.tsx`,
+  `admin/wallet/reconciliation`, `admin/system`, `admin/feedback`,
+  `admin/social/usage`, `admin/marketing/{affiliates,intelligence,experiments}`,
+  `economy`, `wallet/{activity,treasury,send}`, `marketplace/{creators,collections,page}`,
+  `dashboard/migrate/actions.ts` (all four), `lib/operating-index/server.ts`,
+  `lib/intelligence/hard-signals-server.ts`, `lib/finance/timeline-load.ts`
+  (with a deliberate `isMissingTableError` exemption), `lib/twin/project-server.ts`,
+  `lib/reasoning/context.ts`, `lib/marketing/customers.ts`,
+  `lib/network/benchmarks-server.ts`, `lib/autopilot/{scan,policy-scan}.ts`,
+  and all seven cron routes.
+- **`lib/metric/strategy-server.ts`** defines its *own* local `readAll` (`:20-38`)
+  that shadows the shared helper. It throws on error and pages by cursor rather
+  than by ceiling, so it is not exposed to the C4-S4-01 class at all. Noted
+  because a future grep for `readAll` will hit it and it is a different function.
+- **Optimistic-UI sweep.** ~530 `success(…)` call sites across client components,
+  scanned for a mutation whose result is discarded before a success signal. One
+  real offender (C4-S4-04). Three candidates read in full and cleared as false
+  positives of the scan window: `components/modules/recipes-module.tsx:183`
+  (`if (!result.ok)` at `:196`), `components/modules/trust-module.tsx:361`
+  (`if (!res.ok)` at `:378`), `components/auth/join-invite.tsx:55`
+  (`.catch(() => '/home')` — a deliberate fallback for a landing path, not a
+  swallowed mutation). `components/modules/habits-module.tsx:109-130` also checks
+  every branch. The class is, on this evidence, much rarer in client components
+  than the audit's "second-most-common defect" framing suggests — it lives in
+  *server* reads, not client mutations.
+- **N+1 sweep** over every `await` of a `.from(…)`/`.storage`/`.rpc(…)` inside a
+  `for`/`while`/`map(async)` across `app/`, `lib/` and `components/`. Of the page
+  renders, `missions/page.tsx` is the **only** one (`F-F03`). The rest are cron
+  and sync engines where a per-row write loop is the correct shape
+  (`lib/sync/engine/{generic,google}.ts` — per-event upsert against an external
+  calendar, unavoidable; `app/api/cron/{return-reminders,provider-sync,close-auctions}`
+  — per-row state transitions). The one true N+1 outside `/missions` is
+  C4-S4-08's per-rule timezone read. `lib/server/push.ts` and
+  `components/modules/messages-module.tsx` re-confirmed sound (session 3).
+- **`components/ui/partial-read-banner.tsx`** — correct: returns `null` on an
+  empty failure list, `role="status"`, names each failed read individually, and
+  carries a `hint` for the credential-failure case where every reason is the same
+  opaque string. It is the right target for C4-S4-01's page-level fixes and costs
+  nothing when reads succeed. Used on 6 pages today.
+- **`app/(app)/error.tsx`** — sound. Renders inside the app shell, logs with the
+  digest, offers `reset()` and a Home link.
+
+## What this session could not reach — BLOCKED, not clean
+
+- **No authenticated session exists in this sandbox** (no docker daemon, no
+  Supabase CLI). Every statement about what a page *renders* is a reading of its
+  JSX under a state I proved reachable, not an observation. In particular:
+  the zero-valued tiles in C4-S4-02, C4-S4-03 and C4-S4-05 were proven at the
+  *helper* boundary by execution and traced by hand from there to the JSX; I did
+  not see them on a screen.
+- **No TTFB measurement for `app/(app)`.** C4-S4-07's wave count is exact
+  (it is source), but the millisecond figures are arithmetic on an assumed RTT.
+  The quantisation Pass N measured on marketing is the evidence that the pattern
+  costs what it looks like it costs; reproducing that inside the app needs a
+  session.
+- **The ICS-client consequence in C4-S4-06 is an inference.** That a calendar
+  client removes events absent from a re-poll is well-established behaviour, but
+  I could not subscribe a client to a feed and watch it happen.
+- **The remaining vacuity sweep.** Session 3's NEXT still stands: the
+  mock-return-value and constant-substitution patterns were sampled, never swept
+  at AST level across ~1,250 test files. This session spent its budget on the
+  read-path thread instead, which the brief ranked higher. One guard was examined
+  in depth (`no-limit-above-the-row-cap`) and is sound.
+- **`app/(app)` pages 2-354.** I read roughly 45 of the 354 page files in full
+  and scanned all of them programmatically for the specific patterns above. A
+  page whose defect is none of {unconsumed `readAll` error, sequential await
+  wave, in-loop await, discarded mutation error} would not have been caught.
+

@@ -2135,3 +2135,949 @@ above took thirty seconds and should have come first.
 
 Plus 9 verified-clean items (one amended), 3 method corrections, and a
 7-row BLOCKED table.
+
+---
+---
+
+# Session 3 (2026-09-15) — the Expo app
+
+## STATUS (session 3, 2026-09-15)
+
+> NOTE: the STATUS block at the top of this file is session 2's. Rule 1 of this
+> file is "append; never delete or rewrite existing content", so it has been
+> left byte-for-byte alone rather than updated in place. **This block supersedes
+> it.** Claude-1: when rebuilding the board, read this one.
+
+CURRENT: **done.**
+SCOPE THIS SESSION: the `mobile/` Expo app — the second application in this
+  repo, which eleven prior passes had essentially not opened. The finalaudit
+  "Mobile/Responsive" section is about the *web* app at phone width; the only
+  two existing findings that touch `mobile/` at all are Claude-1's F-C10 (no
+  tests, thin CI) and the Metro watch-folder note. Nothing had looked at the
+  React Native accessibility API, the shared-token contract as the Expo app
+  actually consumes it, touch targets, font scaling, or mobile i18n.
+HARD LIMIT, STATED UP FRONT: **the app was never run.** No simulator, no
+  device, no Metro bundle, no `expo export`, no VoiceOver, no TalkBack, no
+  screenshot. Everything below is source reading plus arithmetic over
+  `design/tokens.json`. Where a claim needs a device to confirm, it says so in
+  its own Evidence block. "We could not look" is not "it is clean."
+NEW FINDINGS: `C2-M01`–`C2-M16` (2 HIGH, 9 MEDIUM, 5 LOW, 0 CRITICAL).
+  Numbered `M` so they cannot collide with `C2-01`–`C2-18` or `C2-B01`–`C2-B17`.
+  One of them (C2-M03) is mostly a **web** finding that the mobile lens
+  uncovered; it is filed here because it is i18n presentation, which is my
+  scope, and because no other worker has it.
+NOT REACHED: everything requiring a running app — see the BLOCKED table at the
+  end of this section (8 rows).
+FILES TOUCHED: `audit/claude-2.md` only (this append). No source file edited,
+  no `npm install` run in `mobile/`, no commit.
+LAST-UPDATE: 2026-09-15
+
+---
+
+## Is the Expo app a thin shell? No — but it is smaller than its file count suggests
+
+Honesty first, because the brief asked for it. `mobile/` is **21 `.tsx` files**
+(7 screens/layouts, 9 shared components, 5 others) plus 20 `.ts` library files.
+It is a real, working companion app: sign-in, a Today dashboard, calendar,
+chores with a write action, grocery with optimistic toggles, a voice assistant
+with recording and transcription, and a settings modal. It is not a stub.
+
+But its *surface* is narrow. Six of the seven screens are read-mostly; there
+are exactly three write paths (complete a chore, toggle a grocery item, add a
+grocery item) and everything else deep-links to the web app via
+`Linking.openURL(webUrl(...))`. So the defect density below is not the density
+of a 21-screen product — several findings are one line each, and I have marked
+the trivial ones LOW rather than inflating them.
+
+Two things about it are genuinely **good**, and it would be dishonest to bury
+them under sixteen findings:
+
+1. **Every touchable in the app has an accessible name.** I enumerated all 12
+   `<Pressable>` sites (there are no `TouchableOpacity`/`TouchableHighlight`
+   anywhere) and each one either sets `accessibilityLabel` or contains a `Text`
+   child that RN derives a name from. Zero unnamed touchables — *better than the
+   web app*, where C2-11 measured two unnamed icon-only buttons. The RN
+   equivalent of the classic "unnamed `<button>`" defect does not exist here.
+2. **The auth/session layer is a deliberate port of the web's persistent-login
+   work, not a repeat of its bugs.** The brief asked whether
+   `mobile/app/(auth)` repeats the web's session defects. It does not.
+   `mobile/src/lib/auth-session.ts:20-25` explicitly refuses to treat
+   `INITIAL_SESSION` with a null session as proof of sign-out;
+   `auth-core.ts:36-50` re-implements `isRetryableAuthError` with an in-file
+   comment explaining *why* it is duplicated rather than imported (Metro only
+   watches `mobile/` and `design/`, so a runtime import from the web `lib/`
+   would not resolve — that is the same constraint Claude-1 documented for the
+   Metro watch folders, correctly reasoned about here); sessions live chunked in
+   the Keychain/Keystore via `expo-secure-store`; `sign-out.ts` implements a
+   revision-guarded local-scope sign-out so signing out of the phone cannot
+   revoke the web session. It shares `shared/auth/refresh-fetch.ts` with the web.
+   This is the *output* of the session work, arriving on mobile — the opposite
+   of drift. **No finding is filed against it.**
+
+And the shared-token pipeline itself works. `design/tokens.ts:55-58` builds
+`palette(mode)` from `Object.keys(tokensJson.colors.dark)`, so a token added to
+`design/tokens.json` for the web is **automatically present** in the Expo app's
+`useTheme().colors` with no mobile-side change. `borderInput` is already there.
+That makes C2-M01 below a missed *call site*, not a broken contract — which is
+better news than the brief anticipated, and a much cheaper fix.
+
+### Method
+
+```
+$ find mobile -type f \( -name '*.tsx' -o -name '*.ts' \) -not -path '*/node_modules/*' | wc -l
+   41          (21 .tsx + 20 .ts)
+$ cd mobile && npx tsc --noEmit ; echo EXIT=$?
+   app/(tabs)/assistant.tsx(5,105): error TS2307: Cannot find module 'expo-audio'
+   EXIT=2                       <- 1 error, and it is an ARTEFACT OF THIS BOX:
+```
+`mobile/node_modules` here is a partial install (341 packages; `expo-audio`,
+`@expo/ui` and `@expo/metro-runtime` are absent from disk). I verified against
+the lockfile that this is **not** a repo defect before reporting it as noise:
+
+```
+declared deps NOT in lockfile: none
+lock root deps == package.json deps: True True
+declared deps NOT on disk here: ['@expo/metro-runtime', '@expo/ui', 'expo-audio']
+```
+So CI's `npm ci` installs them and this error does not occur there. **With those
+three excluded, the Expo app typechecks clean.** Per the brief I did not run
+`npm install` in `mobile/`.
+
+Contrast figures below are computed from `design/tokens.json` with the WCAG 2.1
+relative-luminance formula, and — where a colour sits on a glass surface — over
+the **composited** background (`glass` colour at its mode's alpha over `bg`),
+not the raw `bg`. That composite step is why several of my numbers are slightly
+worse than C2-B03's raw-token figures for the same tokens.
+
+---
+
+## C2-M01
+
+```
+[CLAUDE-2][HIGH][A11Y] The `borderInput` fix shipped to the web and never reached the Expo app — mobile text inputs are still at 1.28:1 / 1.38:1, with nothing masking it
+File:     mobile/src/components/Field.tsx:21
+Problem:  C2-B04 measured the web's text inputs at 1.28:1 (light) / 1.38:1
+          (dark) border-against-fill and recommended "a dedicated
+          `--border-input` token at >=3:1 against `--surface`". Claude-1 applied
+          exactly that (session 3 board, and `design/tokens.json` now carries
+          `borderInput` in both modes). The Expo app never got the call site:
+
+            mobile/src/components/Field.tsx:21
+              borderColor: error ? colors.danger : colors.border,
+                                                   ^^^^^^^^^^^^^
+
+          `Field` is the app's ONLY text-entry component — both sign-in fields,
+          the grocery "Add an item…" box and the assistant composer.
+Evidence: Computed from design/tokens.json (WCAG 2.1 relative luminance), border
+          against the TextInput's own fill (`backgroundColor: colors.surface`,
+          Field.tsx:22):
+
+                                          DARK        LIGHT
+            colors.border   on surface   1.38 : 1    1.28 : 1   <- shipped
+            colors.borderInput on surface 3.56 : 1   3.52 : 1   <- one word away
+
+          Those dark/light figures are the SAME two numbers C2-B04 measured in a
+          real browser on the web app, and the same two Claude-1's guard test
+          (tests/focus-and-boundary-contract.test.ts) re-derives from the token
+          file. Three independent derivations agree.
+Impact:   Worse than the web's pre-fix state, for a reason specific to RN. On
+          the web, C2-B01's unconditional `.focus-ring` was accidentally
+          outlining every input, which is what kept the fields visible while the
+          border was at 1.28:1 — one defect masking another. **React Native has
+          no such accident.** `Field` defines no focused state at all, and RN
+          gives a `TextInput` no platform focus ring. So on mobile the 1.28:1
+          border is the only boundary a low-vision user has, with nothing
+          compensating. WCAG 1.4.11 Non-text Contrast (AA) requires 3:1.
+Fix:      One word: `colors.border` -> `colors.borderInput` at Field.tsx:21.
+          No token work needed — `palette()` already exposes it
+          (design/tokens.ts:55-58 derives the palette from the JSON's key set,
+          so the token arrived on mobile the moment it was added for the web).
+          Then extend Claude-1's tests/focus-and-boundary-contract.test.ts with
+          one assertion that no RN component styles an input border from
+          `border`, so this cannot silently un-fix itself.
+Status:   OPEN — verified by computation, NOT rendered (no simulator available)
+```
+
+---
+
+## C2-M02
+
+```
+[CLAUDE-2][MEDIUM][A11Y] Nothing in the Expo app defines a focus state — and it ships with `supportsTablet: true`
+File:     mobile/src/components/{Field,Button,ListRow}.tsx, mobile/app/**/*.tsx
+Problem:  Zero components define a focused/focus-visible appearance. `Button`
+          and `ListRow` style only `pressed`; `Field` styles only `error`. There
+          is no `onFocus`/`onBlur` state anywhere in the app.
+Evidence: $ grep -rn "onFocus\|focusVisible\|isFocused" mobile/app mobile/src --include=*.tsx
+            (no output)
+          mobile/app.json: "ios": { "supportsTablet": true }
+Impact:   Touch users are unaffected. The people affected are iPadOS users with
+          a hardware keyboard and Full Keyboard Access on, and Android users
+          driving the app by D-pad or an external keyboard — RN's default
+          focus affordance for a `Pressable` is minimal to none, and this app
+          adds nothing. WCAG 2.4.7 Focus Visible. The web app treats this as
+          important enough that C2-B01 + C2-B04 shipped together as one commit;
+          the phone app has neither half.
+Fix:      Give `Button`, `ListRow` and `Field` a focused style driven by
+          Pressable's `({ focused })` / TextInput's `onFocus`, reusing the same
+          brand ring the web uses. Cheapest correct version: a 2px
+          `colors.brandText` outline at >=3:1 against the component's own fill.
+Status:   OPEN — static read. **Cannot be confirmed without an iPad + Full
+          Keyboard Access**; the source absence is certain, the rendered
+          severity is not.
+```
+
+---
+
+## C2-M03
+
+```
+[CLAUDE-2][HIGH][I18N] Every date and time in BOTH apps is formatted `en-US` — 160 hard-pinned call sites on the web, 1 on mobile, against 11 shipped locales
+File:     mobile/src/lib/format.ts:9  (the mobile instance — one chokepoint)
+          components/**, app/** (the web instance — 160 call sites, 86 files)
+Problem:  The mobile lens found this; it is much larger on the web.
+
+          mobile/src/lib/format.ts:9 — every date and time the Expo app renders
+          goes through this one function:
+            const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, ...options })
+                                                  ^^^^^^^
+          The locale is pinned. `formatTime` therefore always produces
+          "3:00 PM"; `dayLabel` always produces "Sat, Sep 6". The mobile app
+          ships a SEVEN-locale message catalogue
+          (mobile/src/lib/assistant-messages.json: en-US, de-DE, es-ES, fr-FR,
+          it-IT, nl-NL, pt-PT) and resolves the device locale at
+          mobile-i18n.ts:7-9 — so the app already knows the user reads German,
+          and still renders 12-hour US times to them.
+Evidence: $ grep -rnoE "toLocale(Date|Time)?String\('en-US'|Intl\.DateTimeFormat\('en-US'" \
+              components/ app/ --include=*.tsx --include=*.ts | wc -l
+            160
+          $ ... -l | wc -l
+            86            # files
+          $ grep -rnoE "toLocale(Date|Time)?String\(locale|Intl\.DateTimeFormat\(locale" \
+              components/ app/ --include=*.tsx --include=*.ts | wc -l
+            59            # the locale-aware minority
+
+          Worst offenders (call sites per file):
+            components/modules/calendar-module.tsx   14
+            components/modules/school-module.tsx      8
+            components/modules/meals-module.tsx       7
+            components/modules/sports-module.tsx      5
+            components/modules/family-module.tsx      4
+            app/(app)/home/page.tsx                   4
+
+          The calendar module — the single place where date format matters most
+          — is the single worst file.
+
+          Web locale catalogue (lib/i18n/locales.ts:11-18, and 12 JSON
+          catalogues in lib/i18n/messages/): en-US, en-GB, de-DE, es-ES, es-MX,
+          es-US, fr-FR, fr-CA, it-IT, nl-NL, pt-PT. Seven of those eleven
+          (de-DE, es-ES, es-MX, fr-FR, fr-CA, it-IT, nl-NL, pt-PT) use 24-hour
+          time as the everyday convention; en-GB writes "6 Sep", not "Sep 6".
+          The repo has a full, careful locale-resolution module
+          (lib/i18n/resolve.ts, with a documented cookie > geo >
+          accept-language > default precedence) whose answer 160 date call
+          sites never ask for.
+Impact:   Translated UI, untranslated time. A German family reads a fully
+          localised interface and then "Fußball · 4:00 PM". This is the class of
+          defect that reads as "this product was not really built for us" —
+          more damaging to trust than a missing string, because it looks
+          deliberate. It also silently affects en-GB, which otherwise looks
+          perfectly translated.
+Fix:      Mobile is one line and should go first — thread the resolved locale
+          into `partsFor()` (format.ts:7-14) and pass it to
+          `Intl.DateTimeFormat`; `mobileTranslate` already has the locale.
+          Web: introduce one `lib/i18n/format-date.ts` helper taking the
+          resolved locale, migrate the 86 files to it, and add a lint rule or a
+          unit test asserting no `'en-US'` literal appears in a
+          `toLocale*String` / `DateTimeFormat` call under components/ or app/.
+          Exempt the genuinely correct ones deliberately: lib/services/scope.ts
+          uses 'en-CA' to get YYYY-MM-DD keys and 'en-US' with hour12:false for
+          an hour key — those are machine formats, not user-facing, and must be
+          left pinned.
+Status:   OPEN — verified by grep + reading the locale catalogue. Not rendered.
+          Cross-checked against all four audit files and finalaudit.md: **no
+          existing finding covers this.**
+```
+
+---
+
+## C2-M04
+
+```
+[CLAUDE-2][MEDIUM][I18N] The Expo app translates exactly one screen; the other six and the tab bar are hardcoded English — and the seam runs through a single function
+File:     mobile/app/(auth)/sign-in.tsx, (tabs)/{_layout,index,calendar,chores,
+          grocery}.tsx, app/settings.tsx, app/_layout.tsx:37,
+          mobile/src/lib/{auth-core,format,chores-core}.ts
+Problem:  `mobile/src/lib/mobile-i18n.ts` + `assistant-messages.json` are a real,
+          working 7-locale i18n layer. EVERY key in that catalogue is namespaced
+          `mobileAssistant.*` — it was built for the assistant screen and stopped
+          there. 4 of 19 .tsx files import it:
+
+            $ grep -rln "mobile-i18n" mobile/app mobile/src
+              mobile/app/settings.tsx          (3 calls — sign-out strings only)
+              mobile/app/(tabs)/assistant.tsx  (20 calls — fully translated)
+              mobile/src/components/ReconnectingScreen.tsx  (4 calls)
+              mobile/src/lib/{voice-core,api,auth,assistant-core}.ts
+
+          Everything else is English literals. A partial census:
+            sign-in.tsx     "Run your family like a calm, connected team.",
+                            "Sign in with the account you use on the web.",
+                            label="Email", label="Password", title="Sign in",
+                            "Forgot password?", "Create an account", and the
+                            EXPO_PUBLIC_* misconfiguration notice (lines 57-58)
+            (tabs)/_layout  all five tab labels: Today, Calendar, Chores,
+                            Grocery, Assistant  (TABS const, lines 8-12)
+            app/_layout:37  title: 'Settings'   (the modal header)
+            index.tsx       "Chores open", "To buy", "Next 3 days", "Up next",
+                            "Chores due", "All caught up.", "Ask Bubaly",
+                            "Open the assistant", accessibilityLabel="Settings"
+            calendar.tsx    "Calendar", "The next two weeks", "A clear
+                            fortnight", "Nothing scheduled in the next 14 days…"
+            chores.tsx      "Chores", "Done", "Nothing open", "Every chore is
+                            done or waiting on approval."
+            grocery.tsx     "Grocery", "Add an item…", "New grocery item",
+                            "Add", "Your list is empty", "Add items above…"
+            settings.tsx    "Appearance", "Account", "About", "Dark", "Light",
+                            "Match device", "Manage family on the web",
+                            "Members, invites, billing", "Notification
+                            preferences", "Privacy", "Terms"
+            auth-core.ts    all 8 sign-in error + validation strings
+            format.ts       "Today", "Tomorrow", "All day", "No due date",
+                            "Good night/morning/afternoon/evening", "Overdue · ",
+                            "Due today · ", "Due "
+            chores-core.ts  "To do", "In progress", "Waiting for approval",
+                            "Needs another go"
+Evidence: The seam is visible inside a single function —
+          mobile/src/lib/auth.tsx:83-84:
+
+            if (error?.code === 'session_write_blocked')
+              return { error: mobileTranslate(deviceLocale(), 'mobileAssistant.signInRetry') };
+            return { error: error ? friendlyAuthError(error.message) : null };
+                                    ^^^^^^^^^^^^^^^^^ returns English literals
+
+          One branch is localised, the next line is not, in the same return
+          statement of the same function. That is the shape of a migration that
+          stopped rather than a decision that was made.
+Impact:   A non-English user signs in through an English form, navigates an
+          English tab bar, reads English empty states and English chore statuses
+          — and then reaches one screen, the assistant, that speaks their
+          language. The inconsistency is more confusing than uniform English
+          would be, and it makes the shipped 7-locale catalogue look broken.
+Fix:      Rename the namespace (`mobileAssistant.*` -> `mobile.*`, or add a
+          second `mobile.ui.*` block) and lift the ~60 strings above into it.
+          The three pure modules (format.ts, chores-core.ts, auth-core.ts) should
+          return KEYS, not sentences, so the pure/unit-tested layer stays
+          framework- and language-free — that is the same discipline
+          `assistant-core.ts` already follows by taking a `MobileTranslator`.
+          Pair this with C2-M03: they are the same user's experience.
+Status:   OPEN — verified by grep. Not rendered.
+```
+
+---
+
+## C2-M05
+
+```
+[CLAUDE-2][MEDIUM][A11Y] No headings, no live regions, no hints anywhere in the Expo app — and the only two `role="alert"` uses do not announce anything
+File:     all 21 mobile .tsx files; specifically mobile/src/components/Screen.tsx:23,
+          mobile/app/settings.tsx:68, mobile/src/components/ReconnectingScreen.tsx:20
+Problem:  React Native's accessibility API is not the web's, and three of its
+          parts are entirely unused:
+
+            $ for p in accessibilityRole=\"header\" accessibilityLiveRegion \
+                       accessibilityHint accessible= allowFontScaling \
+                       importantForAccessibility accessibilityElementsHidden; do
+                printf '%-34s %s\n' "$p" "$(grep -rno "$p" mobile/app mobile/src --include=*.tsx | wc -l)"
+              done
+              accessibilityRole="header"          0
+              accessibilityLiveRegion             0
+              accessibilityHint                   0
+              accessible=                         0
+              allowFontScaling                    0
+              importantForAccessibility           0
+              accessibilityElementsHidden         0
+
+          (a) **No headings.** `Screen.tsx:23` renders every screen title as
+              `<AppText variant="title">` — a plain `Text`. VoiceOver's rotor
+              and TalkBack's heading navigation find nothing on any of the seven
+              screens. This is the RN equivalent of a page with no `<h1>`.
+              `accessibilityRole="header"` is the one-prop fix and the app uses
+              `accessibilityRole` correctly 15 times elsewhere, so this is an
+              omission rather than an unfamiliarity.
+          (b) **Nothing is ever announced.** The assistant's replies arrive as
+              new `FlatList` rows (assistant.tsx:136 `<Bubble>`); errors arrive
+              as `role: 'error'` bubbles; chore-action failures render at
+              chores.tsx:46; grocery failures at grocery.tsx:76. None of these
+              is a live region and none calls
+              `AccessibilityInfo.announceForAccessibility`. A blind user sends a
+              voice command to a voice assistant and is told nothing came back.
+          (c) **The two `accessibilityRole="alert"` uses do not do what they
+              look like they do.** settings.tsx:68 and ReconnectingScreen.tsx:20
+              set `accessibilityRole="alert"` on a `Text` that appears when
+              sign-out fails. In RN, `alert` is a ROLE, not a live region: it
+              changes how the node is described once focus reaches it, and
+              triggers no announcement on either platform. Announcing requires
+              `accessibilityLiveRegion="assertive"` (Android) or
+              `AccessibilityInfo.announceForAccessibility` (iOS). Both files
+              read as though someone reached for the web's `role="alert"`
+              semantics and got the RN prop that shares its name.
+Evidence: The prop census above. `alert`'s RN behaviour: it is in RN's
+          accessibilityRole enum and is documented as describing the element;
+          Android live-region behaviour is a separate prop
+          (`accessibilityLiveRegion`), which is at 0 occurrences here.
+Impact:   Screen-reader users cannot navigate any screen structurally, get no
+          feedback when an action fails, and get no feedback when the assistant
+          — the app's headline feature — answers.
+Fix:      Three cheap changes, in this order:
+          1. `Screen.tsx:23` — add `accessibilityRole="header"` to the title
+             `AppText` (fixes all seven screens at once).
+          2. Wrap the error/status text in chores.tsx:46, grocery.tsx:76,
+             assistant.tsx:141-142 and the two sign-out failures in a small
+             `<Announce>` component that sets
+             `accessibilityLiveRegion="assertive"` and calls
+             `AccessibilityInfo.announceForAccessibility` on mount.
+          3. Announce assistant replies the same way (or at minimum the phase
+             transitions already rendered at assistant.tsx:138).
+Status:   OPEN — verified by census. **Screen-reader behaviour NOT observed** —
+          no device. The absence of the props is certain.
+```
+
+---
+
+## C2-M06
+
+```
+[CLAUDE-2][MEDIUM][A11Y] Two nested-touchable mistakes: a checkbox whose state lives on the wrong node, and a role+label on a View that is not an accessibility element
+File:     mobile/app/(tabs)/grocery.tsx:81-92
+          mobile/app/(tabs)/assistant.tsx:226-234
+Problem:  (a) grocery.tsx:81-92 — a `ListRow` with `onPress` (which renders a
+              `Pressable` with `accessibilityRole="button"` and
+              `accessibilityLabel={"Check Milk"}`, ListRow.tsx:30) contains, in
+              its `leading` slot, a SECOND `Pressable`:
+
+                <Pressable accessibilityRole="checkbox"
+                           accessibilityState={{ checked: item.is_checked }}
+                           onPress={() => toggle(item)} hitSlop={8}>
+
+              Both call the same `toggle`. The `checked` state — the only thing
+              that says whether this item is already in the cart — is on the
+              INNER node. The outer node, which spans the whole row and is what
+              a screen reader lands on first, announces "Check Milk, button"
+              with no state at all. Nested touchables are also ambiguous for
+              VoiceOver's element grouping: depending on platform the inner
+              checkbox is either swallowed or announced as a duplicate control
+              for the same action.
+          (b) assistant.tsx:226-234 — the assistant's result cards:
+
+                <GlassCard ... accessibilityRole={open ? 'button' : undefined}
+                               accessibilityLabel={section.title}>
+                  <Pressable onPress={open} disabled={!open} style={...}>
+
+              `GlassCard` renders a plain `View` (GlassCard.tsx:9). A `View` is
+              only exposed as a SINGLE accessibility element when
+              `accessible={true}` is set — and `accessible=` is at 0 occurrences
+              app-wide (C2-M05). So the role and label on the card are inert,
+              and the `Pressable` that actually handles the press has neither a
+              role nor a label: it is announced as its concatenated child text
+              with no indication that it is a button or that it opens the web.
+Evidence: The two code blocks above, read against RN's rule that `View` needs
+          `accessible` to become an a11y element, and against the app's own
+          census (`accessible=` : 0 occurrences).
+Impact:   (a) A blind user cannot tell which grocery items are already checked —
+          the list's entire state is invisible to them. (b) The assistant's
+          result cards do not announce as actionable, so the "open this on the
+          web" affordance is undiscoverable.
+Fix:      (a) Collapse to ONE touchable: put `accessibilityRole="checkbox"` and
+              `accessibilityState={{ checked: item.is_checked }}` on the
+              `ListRow` Pressable (add both as `ListRow` props) and make the
+              leading icon a non-interactive `View`/`Ionicons`. One control, one
+              label, one state.
+          (b) Move `accessibilityRole="button"` and `accessibilityLabel` from
+              the `GlassCard` onto the inner `Pressable`, and drop them from the
+              card.
+Status:   OPEN — verified by source reading. Announcement order NOT observed.
+```
+
+---
+
+## C2-M07
+
+```
+[CLAUDE-2][MEDIUM][A11Y] The theme picker's radios report `selected` instead of `checked` — and the same file's sibling pattern gets it right
+File:     mobile/app/settings.tsx:35-43
+Problem:  Three theme options are rendered as:
+
+            <Pressable
+              accessibilityRole="radio"
+              accessibilityState={{ selected: active }}
+              ...
+
+          For `accessibilityRole="radio"` the state key RN maps to the platform
+          is `checked` — on Android it drives
+          `AccessibilityNodeInfo.setChecked()`, which is what TalkBack reads out
+          as "selected"/"not selected" for a radio button. `selected` maps to a
+          different trait and is not what a radio's platform semantics read.
+          There is also no `accessibilityRole="radiogroup"` wrapper (the
+          container at settings.tsx:31 is a bare `View`), so there is no group
+          context and no "2 of 3" position.
+Evidence: The app's OWN sibling usage is correct — mobile/app/(tabs)/grocery.tsx:88
+            <Pressable accessibilityRole="checkbox"
+                       accessibilityState={{ checked: item.is_checked }}
+          Same codebase, same week, correct key. This is a slip, not a
+          misunderstanding, which is why it is cheap to fix.
+Impact:   A TalkBack user opening Settings hears three radio buttons and cannot
+          tell which theme is currently active. Small surface, but it is the
+          only settings control in the app.
+Fix:      `accessibilityState={{ checked: active }}` on each Pressable, and
+          `accessibilityRole="radiogroup"` on the wrapping `View` at line 31.
+Status:   OPEN — verified by source reading. Not heard.
+```
+
+---
+
+## C2-M08
+
+```
+[CLAUDE-2][MEDIUM][UX] A failed refresh is completely silent on three of four list screens — the error renders only where it cannot be seen
+File:     mobile/app/(tabs)/chores.tsx:66-74
+          mobile/app/(tabs)/calendar.tsx:46-54
+          mobile/app/(tabs)/grocery.tsx:94-102
+Problem:  All three screens put the load error inside `ListEmptyComponent`:
+
+            ListEmptyComponent={
+              chores.loading ? null : (
+                <View ...>
+                  {chores.error ? <AppText color={colors.danger}>{chores.error}</AppText>
+                                : <EmptyState ... />}
+                </View>
+              )
+            }
+
+          `ListEmptyComponent` renders ONLY when `data.length === 0`.
+          `useAsyncData` keeps the previous `data` on a failed load
+          (use-async-data.ts:26-33 sets `error` and leaves `data` untouched). So
+          the failure is visible only in the one case where the list was already
+          empty — precisely the case where it matters least. A pull-to-refresh
+          that fails while rows are on screen spins, stops, and changes nothing:
+          the user is looking at stale data believing it is current.
+Evidence: use-async-data.ts:26-33 — `setDataState` is only called in the success
+          branch; the catch branch sets `error` alone. And the same file's
+          `RefreshControl` (chores.tsx:45) resets regardless of outcome.
+Impact:   Same defect class as C2-15 on the web, in three fresh instances. A
+          parent pulls to refresh the chore list on a flaky connection, sees the
+          spinner complete, and acts on yesterday's data. On the chores screen
+          specifically this compounds with the optimistic write at
+          chores.tsx:31 — the local list can diverge from the server with no
+          signal at all.
+Evidence
+ (positive): mobile/app/(tabs)/index.tsx:62 gets this RIGHT —
+            {today.error ? <AppText variant="muted" color={colors.danger}>…</AppText> : null}
+            rendered above the content, unconditionally. So the correct pattern
+            exists in the app and three screens did not adopt it.
+Fix:      Move each `<X>.error` out of `ListEmptyComponent` and into
+            `ListHeaderComponent` (chores.tsx already has one, for `actionError`
+            — merge the two), rendered whenever `error` is non-null regardless
+            of `data.length`. Keep `EmptyState` in `ListEmptyComponent` for the
+            genuinely-empty case. Pair with C2-M05(b) so it is announced too.
+Status:   OPEN — verified by source reading.
+```
+
+---
+
+## C2-M09
+
+```
+[CLAUDE-2][MEDIUM][UX] Raw PostgREST error text is rendered straight to the user — including "permission denied for table …"
+File:     mobile/src/hooks/use-async-data.ts:30
+          mobile/src/lib/queries.ts:19,37,44,53,58,64,72,77 (every query)
+          rendered at chores.tsx:70, calendar.tsx:50, grocery.tsx:98,
+          chores.tsx:33,46, grocery.tsx:35,49,76
+Problem:  Every function in queries.ts ends `if (error) throw error;` — throwing
+          the Supabase `PostgrestError` object itself. `useAsyncData` then does:
+
+            setError(e instanceof Error ? e.message : 'Something went wrong.');
+
+          and the screens render that string into the UI verbatim:
+
+            <AppText color={colors.danger}>{chores.error}</AppText>
+
+          I checked whether `instanceof Error` actually catches it, because the
+          answer decides which defect this is:
+
+            $ grep -rn "class PostgrestError" mobile/node_modules/@supabase/
+              .../postgrest-js/src/PostgrestError.ts:25:
+                export default class PostgrestError extends Error {
+
+          It does. So the database's own message reaches the screen.
+Evidence: The vendored doc comment in that same file, describing what those
+          messages contain:
+            "For permission-denied errors (`42501`), this is the literal SQL to
+             fix the problem, e.g. \"Grant the required privileges to the current
+             role with: GRANT SELECT ON public.users TO anon;\""
+          An RLS policy gap on `chore_assignments` therefore surfaces to a
+          parent as PostgREST's message about roles and grants — and the same
+          path carries JWT-expiry and schema-cache messages.
+Impact:   Two harms. (1) Usability: the strings are meaningless to a family-app
+          user and there is no retry affordance attached. (2) Disclosure: table
+          names, column names and role names leak to anyone who can trigger a
+          query failure. Not a privilege escalation — this is the user's own
+          client — but it is internal schema detail on a consumer screen, and it
+          is the kind of string that ends up in a support screenshot.
+Fix:      The app already has the right pattern next door:
+          `mobile/src/lib/auth-core.ts:4-12` (`friendlyAuthError`) maps provider
+          messages to actionable copy. Add the data-side twin — a
+          `friendlyDataError(error)` in a pure module, mapping PostgREST codes
+          (42501, PGRST116, 23505, network/abort) to catalogue KEYS, and call it
+          from use-async-data.ts:30 and from the three `catch` blocks in
+          chores.tsx:32-34 and grocery.tsx:33-36, 48-51. Log the raw object;
+          show the mapped copy. (Doing this in a pure module also means it gets
+          covered by the existing root-level mobile-core unit tests.)
+Status:   OPEN — verified: PostgrestError's Error inheritance confirmed in the
+          installed package; render path traced. Not observed live.
+```
+
+---
+
+## C2-M10
+
+```
+[CLAUDE-2][MEDIUM][A11Y] Text scales with the OS font-size setting but the line boxes do not — fixed `lineHeight` against a scaling `fontSize`
+File:     mobile/src/components/AppText.tsx:13-14
+          mobile/src/components/ListRow.tsx:22-23
+Problem:  RN's `allowFontScaling` defaults to TRUE, so the app does honour iOS
+          Dynamic Type and the Android font-size setting — that part is right,
+          and `allowFontScaling` / `maxFontSizeMultiplier` are at 0 occurrences
+          precisely because the default is the correct one. The problem is what
+          scales alongside it:
+
+            AppText.tsx:13  body:  { fontSize: font.size.base, ..., lineHeight: 22 }
+            AppText.tsx:14  muted: { fontSize: font.size.sm,   ..., lineHeight: 20 }
+
+          `fontSize` scales with the OS multiplier; the literal `lineHeight`
+          does not. At iOS "Larger Accessibility Sizes" the multiplier reaches
+          roughly 3.1x — a 16pt body glyph rendered into a 22pt line box.
+          Descenders clip and consecutive lines overlap.
+
+          Compounded at ListRow.tsx:22-23, which caps the same text:
+            <AppText ... numberOfLines={2}>{title}</AppText>
+            <AppText variant="muted" numberOfLines={1}>{subtitle}</AppText>
+          so at large sizes a chore title or a grocery item name is truncated
+          rather than wrapped — and `ListRow` is the primitive behind the
+          grocery list, the calendar list, the Today dashboard and every
+          settings row.
+Evidence: The two style objects above; the census showing zero
+          `maxFontSizeMultiplier` anywhere. Note `Button.tsx:38` also overrides
+          to a literal `{ fontSize: 16 }` on a `heading` variant, and
+          settings.tsx:42 to `{ fontSize: 14 }` — both bypass the token scale,
+          which is a smaller instance of the same "literal beats token" habit.
+Impact:   Users who have enlarged system text — the largest single group of
+          users with a visual impairment — get clipped and overlapping text
+          across the whole app, and truncated list items. This is the
+          highest-population accessibility defect in the mobile app.
+Fix:      Express line height as a multiplier of the (scaled) font size rather
+          than a literal: drop the `lineHeight` entries and let RN compute, or
+          derive them in `AppText` from the resolved font size. Where a cap is
+          genuinely needed for layout, use `maxFontSizeMultiplier` explicitly so
+          the ceiling is a decision rather than an accident. Replace
+          `numberOfLines` caps in `ListRow` with wrapping, or make the cap
+          conditional on the current `PixelRatio.getFontScale()`.
+Status:   OPEN — static read. **NOT measured**: confirming the clipping needs a
+          device or simulator with Dynamic Type turned up, which is exactly what
+          this environment does not have.
+```
+
+---
+
+## C2-M11
+
+```
+[CLAUDE-2][MEDIUM][A11Y] Closes the gap C2-B03 named as unreachable: the status-colour consumer IS the mobile Pill, and composited it is worse than the raw tokens
+File:     mobile/src/components/Pill.tsx:12-13 (the consumer)
+          used by (tabs)/chores.tsx:57-58, (tabs)/index.tsx:76,87,
+          (tabs)/calendar.tsx:42, (tabs)/assistant.tsx:206
+Problem:  C2-B03 measured the light theme's `--success` / `--warning` / `--danger`
+          tokens below AA and said, verbatim: "`--success` / `--warning` are used
+          for status chips and toasts, which live behind the login wall, so I
+          could not render them ... The token ratios above are measured, the chip
+          usage is not." The `audit/claude-2.md` BLOCKED table carries the same
+          row. **`mobile/src/components/Pill.tsx` is that chip**, it is
+          statically readable, and its ground is worse than `bg`.
+
+            Pill.tsx:12-13
+              borderColor: color, paddingHorizontal: spacing[2], paddingVertical: 2
+              <AppText variant="caption" color={color}>{label}</AppText>
+                                                   // caption = 12px, weight 500
+
+          Every use sits inside a `GlassCard`, so the real background is the
+          glass composite, not `bg`:
+            light: glass [16,22,40] at alpha 0.03 over bg [245,247,252]
+                   => effective fill [238.1, 240.2, 245.6]
+Evidence: Computed from design/tokens.json, WCAG 2.1 relative luminance, 12px
+          text (needs 4.5:1):
+
+            LIGHT theme        on raw --bg   on GlassCard (real)
+              warning            2.70 : 1      **2.54 : 1**
+              success            2.91 : 1      **2.75 : 1**
+              danger             4.09 : 1      **3.85 : 1**
+              info               4.82 : 1        4.54 : 1   (marginal)
+              muted              4.91 : 1        4.63 : 1   (marginal)
+              brandText          6.36 : 1        5.99 : 1   ok
+            DARK theme: all six between 6.50 and 10.97 : 1 — comfortable.
+
+          So the composite makes B03's already-failing figures worse by
+          0.16-0.24, and pushes `info` and `muted` from "thin pass" to
+          "marginal". The Pill's BORDER is drawn in the same colour, so the
+          chip's outline fails 1.4.11's 3:1 too, for warning and success.
+
+          Which chips these are, concretely:
+            chores.tsx:57  Pill tone="warning"  -> "Waiting for approval"
+            chores.tsx:49  tone="danger"        -> an OVERDUE chore
+            assistant.tsx:206 tone="success"/"danger" -> whether the assistant's
+                           action actually worked
+          The three pieces of status a family most needs to read at a glance.
+
+          Separately, the same `danger` token is used for BODY error text at
+          16px (needs 4.5:1) at chores.tsx:46,70, calendar.tsx:50,
+          grocery.tsx:76,98, assistant.tsx:142, settings.tsx:68 —
+          **4.09:1 on `bg`, 3.85:1 on a GlassCard.** Every error message in the
+          mobile app is below AA in the light theme.
+Impact:   Upgrades C2-B03 from "token ratios measured, usage unverified" to
+          "usage verified, and the usage is worse than the token table implied".
+          It also shows the defect is not web-only: the same JSON file feeds both
+          apps, so re-deriving the light ramp fixes both at once.
+Fix:      As C2-B03 — re-derive light-theme `danger`/`success`/`warning` against
+          BOTH `bg` and the glass composite for >=4.5:1 as text, keeping the
+          current values as separate `*Fill` tokens if the lighter hue is wanted
+          for backgrounds. Add the glass composite to whatever contrast test
+          lands (Claude-1's C1-S3-03 notes the repo has no WCAG formula anywhere
+          outside the new guard) — testing against `bg` alone would pass values
+          that fail in situ.
+Status:   OPEN — computed, not rendered. **This is evidence FOR C2-B03, not a
+          separate defect**; Claude-1 should merge it into B03 rather than
+          count it twice in any severity total.
+```
+
+---
+
+## C2-M12
+
+```
+[CLAUDE-2][LOW][A11Y] All 17 icons are exposed to screen readers as glyph text
+File:     17 `<Ionicons>` sites across mobile/app and mobile/src
+Problem:  `@expo/vector-icons` renders an icon as a `<Text>` containing a
+          private-use-area codepoint, and sets NO accessibility props of its own.
+          Purely decorative icons are therefore accessibility elements that
+          announce an unmapped character (or, on some TalkBack versions, nothing
+          at all, leaving a silent focus stop).
+Evidence: $ head -30 mobile/node_modules/@expo/vector-icons/build/createIconSet.js
+            import { Text, PixelRatio } from 'react-native';
+          $ grep -rln "accessibilityElementsHidden\|importantForAccessibility" \
+              mobile/node_modules/@expo/vector-icons/
+            (no output)
+          And in this app: `accessibilityElementsHidden` 0,
+          `importantForAccessibility` 0, `accessible=` 0.
+          Decorative instances include EmptyState.tsx:20, index.tsx:94,
+          assistant.tsx:122, and every `leading` icon in settings.tsx:52-65 —
+          all of which sit beside text that already carries the meaning.
+Impact:   Extra silent or garbled stops while swiping through a screen. Low
+          severity, wide surface.
+Fix:      Add `accessibilityElementsHidden` + `importantForAccessibility="no"`
+          (or wrap in a `View` with `accessible={false}`) on the decorative
+          instances. The icons that ARE the only content of a control
+          (index.tsx:42, assistant.tsx:104, sign-in.tsx:45, the three at
+          assistant.tsx:164/176 and grocery.tsx:89) must NOT be hidden — their
+          parents already carry the label, so hiding the glyph is correct there
+          too.
+Status:   OPEN — verified in the installed package. Not heard.
+```
+
+---
+
+## C2-M13
+
+```
+[CLAUDE-2][LOW][A11Y] One touch target under 44pt — and the rest are right because they read the shared token
+File:     mobile/app/(tabs)/grocery.tsx:88
+Problem:  The grocery check circle is `Ionicons size={26}` with `hitSlop={8}`:
+          26 + 8 + 8 = **42 x 42**, under the 44pt iOS and 48dp Android floors.
+Evidence: I measured all 12 Pressables:
+            sign-in.tsx:44      icon 22 + hitSlop 12  = 46      ok
+            index.tsx:41        icon 24 + hitSlop 12  = 48      ok
+            assistant.tsx:103   icon 24 + hitSlop 12  = 48      ok
+            assistant.tsx:128   pv 12x2 + lineHeight  ~46      ok
+            assistant.tsx:143   minHeight 44                    ok
+            assistant.tsx:149   48 x 48 explicit                ok
+            assistant.tsx:169   48 x 48 explicit                ok
+            assistant.tsx:227   multi-line card                 ok
+            index.tsx:107       GlassCard, title+caption        ok
+            settings.tsx:40     minHeight layout.touchTarget    ok
+            Button.tsx:26       minHeight layout.touchTarget    ok
+            ListRow.tsx:19      minHeight layout.touchTarget    ok
+            grocery.tsx:88      26 + 8 + 8 = 42                 UNDER
+          Mitigation, stated honestly: that checkbox sits inside a `ListRow`
+          whose content View is `minHeight: layout.touchTarget` (44) and whose
+          Pressable fires the SAME `toggle`, so a near-miss still works. The
+          42x42 element is nonetheless the one a user aims at.
+          Secondary note: `design/tokens.json` `layout.touchTarget` is a single
+          `44` used on both platforms; Android's guidance is 48dp, so every
+          `minHeight: layout.touchTarget` control is 4dp under the Android
+          floor. That is a token decision, not a mobile bug.
+Impact:   Marginal — one control, with a working fallback.
+Fix:      `hitSlop={12}` at grocery.tsx:88 (26+24 = 50). Separately, consider
+          `touchTarget: { ios: 44, android: 48 }` in design/tokens.json, or just
+          raising it to 48 for both.
+Credit:   Worth recording the positive: the mobile app sizes its controls from
+          `layout.touchTarget` in the SHARED token file rather than from
+          literals. That is the pattern this repo keeps failing to use
+          elsewhere, used correctly here.
+Status:   OPEN — computed from source. Not measured on a device.
+```
+
+---
+
+## C2-M14
+
+```
+[CLAUDE-2][LOW][UX] The system keyboard renders light while the app renders dark
+File:     mobile/src/components/Field.tsx (no `keyboardAppearance`),
+          mobile/app.json:"userInterfaceStyle": "automatic"
+Problem:  `keyboardAppearance` is at 0 occurrences app-wide, so on iOS the
+          keyboard always uses the system appearance. The app's product default
+          is DARK regardless of the OS (`design/tokens.json` `theme.default:
+          "dark"`, resolved at theme-core.ts:25-28 — anything other than an
+          explicit 'light' resolves dark). So on a light-mode iPhone, a user who
+          has never opened Settings gets a dark app with a light keyboard, and
+          the same mismatch in any other native surface the OS styles.
+Evidence: `grep -rn keyboardAppearance mobile/` -> no matches.
+          app.json:"userInterfaceStyle": "automatic" (native follows the OS)
+          vs theme-core.ts:13 DEFAULT_THEME = DEFAULT_THEME_MODE = 'dark'.
+          These two defaults disagree by construction on a light-mode device.
+Impact:   Cosmetic, but it is the most-seen native surface in the app and it
+          appears on the sign-in screen — the first screen anyone sees.
+Fix:      `keyboardAppearance={mode === 'dark' ? 'dark' : 'light'}` in
+          `Field.tsx` (it already has `mode` available via `useTheme`). Decide
+          deliberately whether `userInterfaceStyle` should be `"dark"` to match
+          the product default, or whether the product default should become
+          `system` — right now neither was chosen, they just differ.
+Status:   OPEN — static read.
+```
+
+---
+
+## C2-M15
+
+```
+[CLAUDE-2][LOW][BUILD] Three declared mobile dependencies are referenced nowhere; one of them adds a native module to every build
+File:     mobile/package.json
+Problem:  Reference counts across mobile/app, mobile/src, mobile/app.json and
+          mobile/scripts:
+            @expo/ui            0     <- SwiftUI / Jetpack Compose primitives
+            expo-system-ui      0
+            react-dom           0
+            @expo/metro-runtime 0     <- but required indirectly by expo-router
+            react-native-screens 0    <- but required indirectly by react-navigation
+          The last two are legitimate at zero direct references and are NOT part
+          of this finding. `@expo/ui` and `expo-system-ui` are genuinely unused —
+          neither is imported and neither appears in app.json's `plugins`.
+          `react-dom` is only needed for `expo start --web`, and app.json has no
+          `web` block.
+Evidence: $ for d in ...; do grep -rl "$d" mobile/app mobile/src mobile/app.json mobile/scripts | wc -l; done
+          (counts above)
+Impact:   `@expo/ui` in particular ships a native module into every EAS build
+          for nothing — build time, binary size, and a native surface the app
+          does not use. Minor, but this is a two-app repo where `mobile/` has
+          its own lockfile and its own CI job, so unused native deps are easy to
+          leave behind unnoticed.
+Fix:      Remove `@expo/ui`, `expo-system-ui` and `react-dom` from
+          mobile/package.json; re-run `npm install` in `mobile/` to update its
+          lockfile; confirm with `npx expo-doctor` (already wired as
+          `npm run doctor`).
+Status:   OPEN — verified by reference count. Removal not attempted (the brief
+          forbids `npm install` in mobile/ in this environment).
+```
+
+---
+
+## C2-M16
+
+```
+[CLAUDE-2][LOW][UX] An invalid EMAIL reports its error underneath the PASSWORD field
+File:     mobile/app/(auth)/sign-in.tsx:24-30, 60-61
+Problem:  `submit` puts every validation and sign-in failure in one `error`
+          state, and that single state is passed to the second `Field` only:
+
+            sign-in.tsx:60  <Field label="Email"    ... />          <- no error prop
+            sign-in.tsx:61  <Field label="Password" ... error={error} />
+
+          `validateCredentials` (auth-core.ts:14-20) returns "Enter your email."
+          and "That doesn't look like an email address." — both of which render
+          under the password box, in danger red, with the PASSWORD field's border
+          also turned red (Field.tsx:21 `borderColor: error ? colors.danger : …`).
+          So an email typo visually marks the password as the invalid field.
+Evidence: The two lines above plus Field.tsx:21,27.
+Impact:   Small but genuinely misleading — the user retypes the password. It also
+          means the error is not programmatically associated with the field it
+          describes, which is the RN counterpart of a missing
+          `aria-describedby` (and there is no such association for either field
+          — `Field` renders its error as a sibling `AppText`, not as
+          `accessibilityHint` or an `accessibilityLabel` extension, and
+          `accessibilityHint` is at 0 occurrences app-wide per C2-M05).
+Fix:      Split the state into `emailError` / `formError`, route
+          `validateCredentials`' first two messages to the email `Field`, and
+          keep sign-in failures as a form-level message above the button. While
+          there, extend `Field` to fold its `error` into the input's
+          `accessibilityHint` so the association exists for screen readers too.
+Status:   OPEN — verified by source reading.
+```
+
+---
+
+## Verified clean (mobile) — recorded so a later pass does not re-derive
+
+| Checked | Result |
+|---|---|
+| Unnamed touchables (the RN "unnamed `<button>`") | **0 of 12.** Every Pressable has an `accessibilityLabel` or a `Text` child. Better than the web (C2-11 found 2). |
+| `TouchableOpacity` / `TouchableHighlight` | **0 uses.** The app is uniformly on `Pressable`. |
+| Touch target sizes | 11 of 12 meet 44pt, and do so by reading `layout.touchTarget` from `design/tokens.json`. The twelfth is C2-M13. |
+| Shared-token pipeline | **Works.** `design/tokens.ts:55-58` derives `palette()` from the JSON key set, so `borderInput` was available to mobile the moment it was added for the web. The contract did not drift — one call site (C2-M01) was missed. |
+| Auth / session handling in `mobile/app/(auth)` | **No finding.** Deliberate port of the web's persistent-login work: `INITIAL_SESSION`-null is not sign-out (auth-session.ts:20-25), retryable-error parity with `lib/auth/session.ts` with the duplication justified in-file (auth-core.ts:22-35), chunked SecureStore, revision-guarded local-scope sign-out (sign-out.ts), shared `shared/auth/refresh-fetch.ts`. Careful, not careless. |
+| Safe-area handling | Correct as far as source can show. `SafeAreaProvider` at the root (_layout.tsx:52); `Screen` uses `edges={['top','left','right']}` (bottom is the tab bar's / the list's `paddingBottom`), which is the right choice for tab screens and is landscape-correct given `"orientation": "default"` + `supportsTablet: true`. Not verified on a notched device. |
+| Keyboard avoidance | Present and correct-shaped on all three screens with a text input above the fold: sign-in.tsx:35, grocery.tsx:61, assistant.tsx:110 — `behavior="padding"` on iOS, undefined on Android (which relies on `adjustResize`), with `keyboardVerticalOffset={90}` on the two tab screens and `keyboardShouldPersistTaps="handled"` throughout. Not verified with a keyboard up. |
+| Does text scale with OS font size at all? | **Yes** — RN's `allowFontScaling` defaults true and nothing disables it. The defect is the fixed line boxes (C2-M10), not the scaling itself. |
+| Dark-theme contrast, all pairings | Comfortable: 6.50-17.53:1 across fg/muted/brandText/brandFg/info/danger/success/warning on bg, surface and the glass composite. Only the borders fail in dark, which is C2-M01's territory. |
+| Mobile typecheck (CI parity) | Clean. 1 error, entirely from a locally-missing `expo-audio`; lockfile verified consistent with package.json, so `npm ci` in CI does not hit it. |
+
+## BLOCKED — what this session could NOT reach
+
+These are the reasons a later pass with a device would still be worth running.
+**None of the rows below should be read as "clean".**
+
+| Not reached | Why | What it would settle |
+|---|---|---|
+| Any rendered mobile screen | No simulator, no device, no Metro bundle | Every contrast figure above is computed from tokens, not sampled from pixels |
+| VoiceOver / TalkBack output | No device | C2-M05, M06, M07, M12 — the *source* absences are certain, the announced result is inferred |
+| Dynamic Type at Larger Accessibility Sizes | No device | C2-M10's clipping and overlap; currently a source-level inference |
+| Focus behaviour with an iPad hardware keyboard | No device | C2-M02's real severity |
+| Keyboard-up layout on a small phone | No device | Whether the `keyboardVerticalOffset={90}` on grocery/assistant is right for every device height |
+| Safe-area on a notched device and in landscape | No device | Whether `edges={['top','left','right']}` leaves anything under the home indicator on the `scroll={false}` screens |
+| `expo export` / a real Metro bundle | Not run (and CI does not run it either — Claude-1's finding on the Metro watch folders stands unverified for the same reason) | Whether the three-root import graph actually bundles |
+| The three write paths end-to-end | No Supabase locally (Claude-1 session 3: Docker unusable, no Supabase CLI) | Whether C2-M08's silent-failure path and C2-M09's raw-error path produce what the source says they will |
+
+## Severity tally — session 3
+
+| Severity | Count | IDs |
+|---|---|---|
+| CRITICAL | 0 | — |
+| HIGH | 2 | C2-M01, C2-M03 |
+| MEDIUM | 9 | C2-M02, M04, M05, M06, M07, M08, M09, M10, M11 |
+| LOW | 5 | C2-M12, M13, M14, M15, M16 |
+| **Total new** | **16** | `C2-M01`–`C2-M16` |
+
+Note for the merge: **C2-M11 is evidence for the existing C2-B03**, not an
+independent defect — it closes the "could not render the chips" gap B03 itself
+flagged. Count it once. And **C2-M03 is predominantly a WEB finding** (160 call
+sites in 86 files) that the mobile lens surfaced; file it wherever the web
+findings live, not under Mobile.
+
+Running total for this file: 18 (sessions 1-2) + 16 = **34 findings**,
+7 HIGH / 18 MEDIUM / 9 LOW / 0 CRITICAL.

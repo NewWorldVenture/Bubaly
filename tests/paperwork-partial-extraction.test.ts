@@ -16,6 +16,12 @@ vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: async () => ({ user:
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }));
 vi.mock('@/components/i18n/locale-provider', () => ({ useTranslations: () => (key: string) => getMessages(state.locale)[key] ?? key }));
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (key: string) => getMessages(state.locale)[key] ?? key }));
+// The AI path now carries the same rate-limit budget as every API route that
+// reaches the model (audit C3-S4-01). The limiter deliberately fails CLOSED,
+// so against this file's stub client it would answer "too many requests" and
+// preempt the behaviour under test. Stubbed the way every other AI-path test
+// here does it; no assertion below is relaxed.
+vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: async () => ({ ok: true }) }));
 vi.mock('@/lib/ai/provider', async (importOriginal) => ({ ...await importOriginal<typeof import('@/lib/ai/provider')>(), isAIConfigured: vi.fn(async () => false) }));
 
 let db: ReturnType<typeof createInMemorySupabase>;
