@@ -1404,3 +1404,94 @@ stragglers. A census showing twelve of thirteen says the opposite: the correct
 implementation is the outlier, and every new dialog written in this codebase has
 so far been written the wrong way. That is a defect in the *default*, which is
 worth more than twelve tickets.
+
+---
+
+## C1-S4-01 — the money webhook permanently consumes events it does not handle, in a ledger it shares
+
+```
+[CLAUDE-1][MEDIUM][INTEGRATIONS] Two Stripe endpoints share one idempotency
+ledger keyed on event id alone, and the money endpoint marks ANY unrecognised
+event `processed` — so under the documented fallback configuration a billing
+event can be swallowed with 2xx returned at both ends
+File:     app/api/webhooks/money/route.ts:28 (secret fallback),
+          app/api/webhooks/money/route.ts:76-79 (`default: break`),
+          lib/stripe/webhook.ts:43-52 (recordEvent),
+          supabase/migrations/00901_stripe_money.sql:181-190
+            -> UNIQUE (stripe_event_id), no source/endpoint column
+Problem:  `/api/webhooks/stripe` (billing) and `/api/webhooks/money` (Issuing)
+          are deliberately separate routes with separate secrets. They share
+          ONE dedup table, and its uniqueness is `stripe_event_id` alone. There
+          is no column recording WHICH endpoint claimed an event.
+
+          The money route's switch ends:
+
+            default:
+              // Unhandled event types are acknowledged (and marked processed)
+              // so Stripe stops retrying.
+              break;
+
+          and then calls markEventProcessed(). So an event the money endpoint
+          does not understand is not merely ignored — it is CLAIMED, written to
+          the shared ledger as `processed`, and thereby made invisible to the
+          billing endpoint, whose recordEvent() returns `duplicate` for it and
+          returns 200 having done no work.
+
+          Both endpoints answer 2xx. Stripe never retries. Nothing logs an
+          error. The subscription state simply never updates.
+Evidence: Handled-type sets are disjoint, which is what makes the claim
+          asymmetric rather than mutual:
+            billing: checkout.session.completed, customer.subscription.created,
+                     customer.subscription.updated, customer.subscription.deleted
+            money:   account.updated, issuing_authorization.request,
+                     issuing_authorization.updated, issuing_transaction.created
+          Every billing type therefore lands in money's `default` branch.
+
+          The path in: money/route.ts:28 is
+            process.env.STRIPE_MONEY_WEBHOOK_SECRET
+              || process.env.STRIPE_WEBHOOK_SECRET || ''
+          so with the money-specific secret unset, a BILLING-signed event
+          verifies successfully at the money endpoint.
+TRIGGER:  Stated precisely, because the scarier readings do not hold:
+          this needs the money endpoint to actually RECEIVE billing events,
+          i.e. an operator running the documented fallback (money secret unset)
+          who also registers that endpoint for billing event types. That is a
+          misconfiguration. What makes it a finding is the SYSTEM'S RESPONSE to
+          it: silent, permanent, 2xx at both ends, with the event consumed.
+Impact:   A paid subscription event — created, updated, deleted, or a completed
+          checkout — is dropped with no error anywhere, and Stripe is told
+          twice that it was delivered. Entitlement then disagrees with billing
+          until someone replays the event by hand.
+Fix:      Two, and the first is worth doing on its own merits:
+          1. The money endpoint should not CLAIM what it cannot handle. Either
+             return 400 for an unhandled type, or record it without marking it
+             `processed`. "Acknowledged so Stripe stops retrying" and "written
+             to a shared ledger as done" are different decisions that this
+             `default` branch currently makes as one.
+          2. Scope the ledger: add a `source` column and make the constraint
+             UNIQUE (source, stripe_event_id). Two endpoints sharing one
+             idempotency namespace is the structural defect; the secret
+             fallback is only what makes it reachable.
+Status:   OPEN — verified by reading the route, recordEvent and the migration
+```
+
+### Two scarier readings I checked and had to drop
+
+Recorded because a hypothesis that dies in measurement deserves the same note as
+one that survives — Pass N credited Claude-4 for exactly this.
+
+1. **"The secret fallback is an undocumented oversight."** It is not. It is
+   deliberate and written down in three places:
+   `docs/architecture/environment-registry.md:102` classifies
+   `STRIPE_MONEY_WEBHOOK_SECRET` as **optional-alias** and states the fallback
+   and the 503-when-neither behaviour explicitly; `docs/AGENT_HANDOFF.md:3198`
+   says "if unset it falls back"; `.env.example:45` carries the key. Reporting
+   it as a hidden hole would have been wrong.
+2. **"The two endpoints collide in the intended configuration."** They do not.
+   With separate secrets a billing-signed event fails `constructEvent` at the
+   money endpoint, and the handled-type sets are disjoint, so Stripe has no
+   reason to deliver the same event id to both. The collision is confined to
+   the fallback configuration, which is why this is MEDIUM and not HIGH.
+
+The finding that survives is narrower than either: **a `default` branch that
+consumes what it cannot process, in a namespace it does not own.**
