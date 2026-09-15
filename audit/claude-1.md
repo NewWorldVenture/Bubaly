@@ -1206,7 +1206,7 @@ Evidence: pg_policies before the fix:
           SIBLING's row removes that sibling's ability to sign in — the lookup is
           `select … from child_logins where username = …` — and blanks the
           parent's /dashboard/family-access view.
-Fix:      0301.
+Fix:      0313 (written as 0301; renumbered when main landed its own 0301).
           child_logins: writes can_manage_family, and the name is finally true.
           Nothing legitimate is lost — EVERY write path goes through
           `createServiceClient()` after an isManager check, and the service role
@@ -1217,7 +1217,7 @@ Fix:      0301.
           it; REWRITING someone else's is not. `logged_by` makes that
           expressible. `points` here feeds AI insight summaries only — not an
           economy — so this is record integrity, not money.
-Status:   FIXED — migration 0301
+Status:   FIXED — migration 0313 (was 0301)
 Guard:    docs/audit/access-record-write-boundary-check.sql — the sibling-login
           delete, rewrite and mint refused; the child's rewrite and delete of a
           parent's note refused AND the stored note re-read, so the assertion
@@ -3137,3 +3137,24 @@ session's block: **I shipped a regression and CI found it, not me.**
 - **Verified:** 325 migrations replayed from scratch (0 failed), 322 re-applied
   onto the populated schema, **33/33 probes run twice**, **13,907 tests green
   across four shards**, tsc clean, lint at exactly its 100-warning cap.
+
+### [CLAUDE-1][MERGE] Seventh conflict, sixth number collision — two in one afternoon
+
+- main landed PR #560 (`0301_notification_authorship.sql`) minutes after the
+  previous merge, which is why the PR read `dirty` again with CI never starting.
+- **Sixth migration-number collision**, and the second within one afternoon:
+  their `0301` against my `0301_a_childs_own_record_is_not_theirs_to_rewrite`.
+  Mine is renumbered **0313**. Nothing between 0302 and 0312 touches `grades` or
+  `screen_time_limits`, so only the number changed.
+- **Two sessions are now colliding roughly once per merge.** 0297, 0298 (twice),
+  0299, 0300, 0301 — six. The version ratchet has caught every one, which is the
+  argument for asserting `nextVersion` as a literal rather than deriving it: a
+  derived value would have agreed with whatever was on disk and said nothing.
+- No probe or migration of mine referenced 0301 by number; the only remaining
+  `0301` strings belong to main's own notification probe. The two references in
+  `audit/claude-1.md` are updated. `audit/claude-3.md` and `audit/status.md` also
+  mention it and are **deliberately not touched** — they are other workers' files.
+- **Verified:** 326 migrations replayed from scratch (0 failed), 323 re-applied
+  onto the populated schema, **34/34 probes run twice** (main's new
+  `notification-authorship-check.sql` included), **13,907 tests green across four
+  shards**, tsc clean, lint at its 100-warning cap.
