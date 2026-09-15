@@ -29,9 +29,20 @@ function walk(dir: string, out: string[]): string[] {
 }
 
 /**
- * Destructuring positions in a `settleAll([...])`/await result that bind
- * `readAllAsQuery`'s output. We look for the binding pattern rather than parse
- * TS: a site that names `error` anywhere in its own destructure is consuming it.
+ * Sites binding `readAllAsQuery`'s output that never consume its error.
+ *
+ * The repository consumes it in THREE shapes, and a matcher that knows only one
+ * reports the other two as defects. Building this cost three passes and two
+ * false-positive sets — recorded here so the next reader does not repeat it:
+ *
+ *   1. inline        `const [{ data, error }] = await settleAll([...])`
+ *   2. result object `const [aRes, bRes] = ...; const e = aRes.error ?? bRes.error`
+ *   3. array search  `const e = [aRes, bRes].find((r) => r.error)?.error`
+ *
+ * So the rule is: a bound name that appears on any nearby line mentioning
+ * `error` is consuming it. Deliberately permissive — a guard that cries wolf
+ * gets weakened until it means nothing, which is the failure mode this
+ * repository is most prone to.
  */
 function unconsumedSites(source: string): string[] {
   const hits: string[] = [];
@@ -39,11 +50,16 @@ function unconsumedSites(source: string): string[] {
   lines.forEach((line, i) => {
     if (!/readAllAsQuery/.test(line)) return;
     // The destructure sits at the head of the statement, which may be lines above.
-    const window = lines.slice(Math.max(0, i - 12), i + 1).join('\n');
-    const destructure = /const\s*\[([\s\S]*?)\]\s*=\s*await\s+settleAll|const\s*\{([\s\S]*?)\}\s*=\s*await\s+readAllAsQuery/.exec(window);
+    const head = lines.slice(Math.max(0, i - 14), i + 1).join('\n');
+    const destructure = /const\s*\[([\s\S]*?)\]\s*=\s*await\s+settleAll|const\s*\{([\s\S]*?)\}\s*=\s*await\s+readAllAsQuery/.exec(head);
     if (!destructure) return;
     const bound = destructure[1] ?? destructure[2] ?? '';
-    if (!/\berror\b/.test(bound)) hits.push(`${i + 1}: ${line.trim().slice(0, 90)}`);
+    if (/\berror\b/.test(bound)) return;                       // shape 1
+    const names = bound.match(/[A-Za-z_$][\w$]*/g) ?? [];
+    const after = lines.slice(i, i + 25);
+    const consumed = names.some((n) =>
+      after.some((l) => l.toLowerCase().includes('error') && new RegExp(`\\b${n}\\b`).test(l)));
+    if (!consumed) hits.push(`${i + 1}: ${line.trim().slice(0, 90)}`);  // shapes 2 & 3
   });
   return hits;
 }
@@ -56,6 +72,18 @@ describe('a truncated read is never silently an empty array (C4-S4-02)', () => {
     // the defect class this repository is most prone to.
     const withCalls = files.filter((f) => readFileSync(f, 'utf8').includes('readAllAsQuery'));
     expect(withCalls.length).toBeGreaterThan(0);
+  });
+
+  it('NO file in the tree binds readAllAsQuery and drops its error', () => {
+    // The class, not the instances. C4-S4-01 found 13 of 59 call sites never
+    // migrated after the helper's contract changed: they used to render a
+    // PREFIX and now render ZERO, because a truncated read arrives as
+    // `data: null`. Enumerating the offenders would let the next one in.
+    const offenders = files.flatMap((f) => {
+      const rel = f.slice(f.indexOf('/Bubaly/') + 8);
+      return unconsumedSites(readFileSync(f, 'utf8')).map((h) => `${rel}:${h}`);
+    });
+    expect(offenders, 'these bind readAllAsQuery and never read its error').toEqual([]);
   });
 
   it('the two AI money routes consume the read error', () => {

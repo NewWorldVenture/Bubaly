@@ -1604,3 +1604,63 @@ Status:   OPEN — found while fixing C3-S4-02, which needed a refusal string an
           key mid-fix. The authorization fix is correct; its message inherits
           this defect and will be fixed with the table rather than alone.
 ```
+
+
+---
+
+## C1-S4-04 — the `readAll` census, corrected twice before it was acted on
+
+```
+[CLAUDE-1][METHOD][TESTING] C4-S4-01 reported 13 unmigrated `readAllAsQuery`
+call sites. Rebuilt, the real number is 4, and getting there took three
+matchers — the first two would have "fixed" correct code
+File:     tests/read-all-error-is-consumed.test.ts (the matcher)
+Problem:  Not a defect in the product — a defect in how the defect was counted,
+          recorded because acting on the first count would have damaged working
+          code and because the guard now shipping depends on getting it right.
+
+          `readAllAsQuery` reports a truncated or failed read as `data: null`
+          plus an error. A call site that never reads that error renders ZERO
+          where it used to render a prefix. Finding those sites means knowing
+          how this repository CONSUMES an error, and it does so in three shapes:
+
+            1. inline        const [{ data, error }] = await settleAll([...])
+            2. result object const [aRes, bRes] = ...;
+                             const e = aRes.error ?? bRes.error
+            3. array search  const e = [aRes, bRes].find((r) => r.error)?.error
+
+Evidence: Each matcher, and what it cost:
+            matcher 1 (shape 1 only)          -> 14 "offenders"
+            matcher 2 (+ shape 2)             ->  7 "offenders"
+            matcher 3 (+ shape 3)             ->  4 offenders, all genuine
+          Seven of the original fourteen were false positives, including
+          admin/wallet/reconciliation (which consumes via shape 2 five lines
+          later) and lib/intelligence/hard-signals-server.ts (shape 3, where the
+          bound names never appear as `name.error` at all). Both were confirmed
+          correct by reading them rather than by trusting any matcher.
+Impact:   Had the first count been acted on, seven working files would have been
+          "fixed" — and the guard built from that matcher would have failed the
+          suite on correct code forever after, which is how a guard gets
+          weakened until it means nothing. That is this repository's
+          characteristic defect arriving from the opposite direction: not a
+          check that cannot fail, but one that cannot stop failing.
+Fix:      APPLIED. The matcher recognises all three shapes and is deliberately
+          permissive at the margin. The four genuine sites are fixed
+          (2 AI wallet routes in 8ca19952, marketplace insights + questions
+          here), and the guard now asserts the CLASS — no file in the tree may
+          bind readAllAsQuery and drop its error — rather than naming the
+          instances, since an enumerated list lets the next one in.
+Status:   FIXED — proven red by reverting the insights page, which the guard
+          then names by file and line
+```
+
+**A note on the two pages fixed here, because the pattern is now three-for-three.**
+`marketplace/insights/page.tsx` carries the comment *"Every figure on this page
+is a count over these rows, so a capped read is a wrong number rather than a
+short list"* directly above the line that dropped the error — every count on the
+page rendered 0 and read as fact. `marketplace/questions/page.tsx` says *"a
+capped read leaves questions rendering without the listing they are about"*, and
+then did exactly that. With the two AI wallet routes, that is **three separate
+files where the hazard is written down in a comment immediately above the line
+that reintroduces it.** The knowledge was never missing. What was missing was
+anything that could fail when the knowledge was ignored.
