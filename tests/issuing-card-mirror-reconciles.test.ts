@@ -20,7 +20,20 @@ import { cardMirrorFromStripe, handleIssuingCardUpdated } from '@/lib/stripe/web
 const CARD_ROW = 'c0000000-0000-4000-8000-000000000001';
 const STRIPE_CARD = 'ic_test_123';
 
-function stripeCard(over: Partial<Stripe.Issuing.Card> = {}): Stripe.Issuing.Card {
+// Only the fields the reconciler reads. Stripe's own Card type demands a full
+// SpendingControls (six more fields this mapping never touches), so typing the
+// overrides as Partial<Card> forced a cast at every call site — and those casts
+// are what tsc rejected. Naming the shape the fixture actually builds keeps the
+// call sites plain and says what the mapping depends on.
+type CardOverrides = {
+  status?: Stripe.Issuing.Card['status'];
+  spending_controls?: {
+    spending_limits?: { amount: number; interval: string }[];
+    blocked_categories?: string[];
+  };
+};
+
+function stripeCard(over: CardOverrides = {}): Stripe.Issuing.Card {
   return {
     id: STRIPE_CARD,
     status: 'active',
@@ -68,7 +81,7 @@ describe('the card mirror follows Stripe', () => {
     db.seed('stripe_issuing_cards', [mirrorRow({ spend_limit_cents: 2000, spend_window: 'weekly' })]);
     await handleIssuingCardUpdated(client, stripeCard({
       spending_controls: { spending_limits: [{ amount: 50_000, interval: 'monthly' }], blocked_categories: ['gambling'] },
-    } as Partial<Stripe.Issuing.Card>));
+    }));
     const [row] = db.table('stripe_issuing_cards');
     expect(row.spend_limit_cents).toBe(50_000);
     expect(row.spend_window).toBe('monthly');
@@ -80,7 +93,7 @@ describe('the card mirror follows Stripe', () => {
     // `|| null` would turn a deliberate zero — spend nothing — into no limit at all.
     const zero = cardMirrorFromStripe(stripeCard({
       spending_controls: { spending_limits: [{ amount: 0, interval: 'daily' }], blocked_categories: [] },
-    } as Partial<Stripe.Issuing.Card>));
+    }));
     expect(zero.spend_limit_cents).toBe(0);
     expect(zero.spend_window).toBe('daily');
   });
