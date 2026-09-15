@@ -37,7 +37,27 @@ async function loadOrderRole(orderId: string) {
     .from('marketplace_orders')
     .select('id, family_id, listing_id, buyer_member, seller_member, status')
     .eq('id', orderId).eq('family_id', ctx.active.familyId).maybeSingle();
-  return { ctx, sb, order, orderError };
+
+  // The caller's PARTY role, resolved here rather than inferred at each call
+  // site. Every site used to write
+  //     const role = order.seller_member === me ? 'seller' : 'buyer';
+  // which silently made any family member who is NEITHER party a "buyer".
+  // Scoping to the family is not the same as being in the exchange: a third
+  // member could overwrite a confirmed pickup (the upsert resets confirm_code
+  // and confirmed_at), pass confirmHandoff's `role !== proposer_role` check and
+  // RECEIVE THE HAND-OFF CODE, cancel, and complete. The RPC only checks
+  // is_family_member, so the database does not backstop it — and this file's
+  // own reason table already carries the refusal that never fired.
+  //
+  // `null` means not a party. The same check exists in marketplace/actions.ts
+  // for reviews; returning it from the loader means no future call site can
+  // forget it, which is the lesson the four duplicated escapeLike helpers
+  // taught this repository. Audit C3-S4-02.
+  const role: 'seller' | 'buyer' | null =
+    order?.seller_member === ctx.active.member.id ? 'seller'
+      : order?.buyer_member === ctx.active.member.id ? 'buyer'
+        : null;
+  return { ctx, sb, order, orderError, role };
 }
 
 /** Propose (or re-propose) a pickup. Upserts the single handoff for the order. */
@@ -45,13 +65,13 @@ export async function proposeHandoffAction(input: {
   orderId: string; meetAtIso?: string | null; locationLabel: string; locationKind?: LocationKind; notes?: string;
 }): Promise<Result> {
   const t = await getTranslations();
-  const { ctx, sb, order, orderError } = await loadOrderRole(input.orderId);
+  const { ctx, sb, order, orderError, role } = await loadOrderRole(input.orderId);
   if (orderError) return actionFailure('load the order', t('marketplace.couldNotLoadTheOrder'), orderError);
   if (!order) return { ok: false, error: t('actions.orderNotFound') };
+  if (!role) return { ok: false, error: t(COMPLETE_REASON.forbidden) };
   if (['completed', 'cancelled'].includes(order.status)) return { ok: false, error: t('actions.thisOrderIsClosed') };
   if (!input.locationLabel?.trim()) return { ok: false, error: t('actions.pickOrTypeAMeetup') };
 
-  const role = order.seller_member === ctx.active.member.id ? 'seller' : 'buyer';
   const { error } = await sb.from('marketplace_handoffs').upsert({
     order_id: order.id, family_id: order.family_id, listing_id: order.listing_id,
     proposed_by: ctx.active.member.id, proposer_role: role,
@@ -69,16 +89,18 @@ export async function proposeHandoffAction(input: {
 /** The other party confirms the proposal → calendar event + hand-off code. */
 export async function confirmHandoffAction(orderId: string): Promise<Result<{ code: string }>> {
   const t = await getTranslations();
-  const { ctx, sb, order, orderError } = await loadOrderRole(orderId);
+  const { ctx, sb, order, orderError, role } = await loadOrderRole(orderId);
   if (orderError) return actionFailure('load the order', t('marketplace.couldNotLoadTheOrder'), orderError);
   if (!order) return { ok: false, error: t('actions.orderNotFound') };
+  // This action MINTS AND RETURNS the hand-off code, so it is the one a
+  // non-party most wanted to reach.
+  if (!role) return { ok: false, error: t(COMPLETE_REASON.forbidden) };
 
   const { data: handoff, error: handoffError } = await sb.from('marketplace_handoffs')
     .select('id, proposer_role, status, meet_at, location_label').eq('order_id', orderId).maybeSingle();
   if (handoffError) return actionFailure('load the pickup', t('handoff.couldNotLoadThePickup'), handoffError);
   if (!handoff) return { ok: false, error: t('actions.noPickupToConfirm') };
   if (handoff.status !== 'proposed') return { ok: false, error: t('actions.thisPickupCanTBe') };
-  const role = order.seller_member === ctx.active.member.id ? 'seller' : 'buyer';
   if (role === handoff.proposer_role) return { ok: false, error: t('actions.waitForTheOtherPerson') };
 
   const code = generateHandoffCode();
@@ -111,9 +133,10 @@ export async function confirmHandoffAction(orderId: string): Promise<Result<{ co
 /** Cancel a proposed/confirmed pickup (either party). */
 export async function cancelHandoffAction(orderId: string): Promise<Result> {
   const t = await getTranslations();
-  const { sb, order, orderError } = await loadOrderRole(orderId);
+  const { sb, order, orderError, role } = await loadOrderRole(orderId);
   if (orderError) return actionFailure('load the order', t('marketplace.couldNotLoadTheOrder'), orderError);
   if (!order) return { ok: false, error: t('actions.orderNotFound') };
+  if (!role) return { ok: false, error: t(COMPLETE_REASON.forbidden) };
   const { error } = await sb.from('marketplace_handoffs').update({ status: 'cancelled' })
     .eq('order_id', orderId).in('status', ['proposed', 'confirmed']);
   if (error) return actionFailure('cancel the pickup', t('handoff.couldNotCancelThePickup'), error);

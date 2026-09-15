@@ -1560,3 +1560,47 @@ would have hidden `GOOGLE_CALENDAR_REDIRECT_URI` behind a false assurance; this
 one states its scope precisely enough that a variable inside that scope and
 missing from the table stands out. That is the opposite of this audit's
 recurring defect, and worth naming as such.
+
+---
+
+## C1-S4-03 — a reason table where half the entries are keys and half are English sentences
+
+```
+[CLAUDE-1][MEDIUM][I18N] `COMPLETE_REASON` maps refusal reasons to a mix of
+i18n KEYS and literal English, and passes every one of them through `t()`
+File:     app/(app)/marketplace/handoff/actions.ts:22-32 (the table)
+          app/(app)/marketplace/handoff/actions.ts:139   (the consumer)
+Problem:  The table is typed Record<string, string> and read as
+            t(COMPLETE_REASON[String(result.reason)] ?? 'actions.couldNotCompleteThePickup')
+          so every value is used as a TRANSLATION KEY. One value is a real key:
+            order_not_found: 'actions.orderNotFound'
+          The other eight are English sentences:
+            forbidden:        'You are not part of this marketplace exchange.'
+            order_not_open:   'This order is already closed.'
+            code_mismatch:    'That code doesn't match. Check with the other person.'
+            ... and five more
+          `translate()` falls back to the key when it resolves nothing, so an
+          English sentence passed as a key renders as itself. It therefore LOOKS
+          correct in en-US and is untranslated in the other ten locales — the
+          failure mode is invisible in the locale the developer is reading.
+Evidence: One entry resolves, eight fall through:
+            $ grep -c "actions\." app/(app)/marketplace/handoff/actions.ts:22-32
+            1 of 9 values is a key
+          This is the same class the repository's translation work was about,
+          inverted: not a raw key leaking into the UI (the `siteFooter.
+          acceptableUse` screenshot), but raw COPY leaking through the key path.
+          A key that renders as readable English is harder to notice than one
+          that renders as `siteFooter.acceptableUse`.
+Impact:   Nine refusal messages on a money-adjacent flow — including the
+          hand-off authorization refusal this session just started using — read
+          in English for a French, German or Portuguese family, inside an
+          otherwise fully localised screen.
+Fix:      Lift the eight sentences into the catalogue and store keys, so the
+          table is uniformly keys. A guard is cheap and would hold the line:
+          assert every value in a table consumed by `t()` resolves in en-US.
+          That guard generalises past this file.
+Status:   OPEN — found while fixing C3-S4-02, which needed a refusal string and
+          had to use one of these entries to avoid inventing an eleven-catalogue
+          key mid-fix. The authorization fix is correct; its message inherits
+          this defect and will be fixed with the table rather than alone.
+```
