@@ -5,7 +5,7 @@ import { settleAll } from '@/lib/supabase/settle';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
-import { scopeFromUserContext } from '@/lib/services/scope';
+import { scopeFromUserContext, dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
 import { isMissingRelationError } from '@/lib/supabase/errors';
 import { logAudit } from '@/lib/server/audit';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
@@ -37,7 +37,13 @@ export async function POST() {
     );
 
     // Per-day metering (per family), counted from the family audit log.
-    const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
+    // The family's midnight, not the host's. This bound is the daily AI
+    // quota window: on a UTC host `setHours(0,0,0,0)` rolls over at 17:00 in
+    // California and 11:00 in Sydney, so a household's allowance reset in the
+    // middle of their afternoon and calls made after it were counted against
+    // tomorrow. Same defect and same fix as the kitchen display
+    // (app/(app)/display/page.tsx:122).
+    const startOfDay = new Date(zonedDayBoundsMs(dayKeyInTz(new Date(), ctx.active.family.timezone || 'UTC'), ctx.active.family.timezone || 'UTC').start);
     const { count: usedToday } = await supabase
       .from('audit_logs').select('id', { count: 'exact', head: true })
       .eq('family_id', familyId).eq('action', AI_AUDIT_ACTION)

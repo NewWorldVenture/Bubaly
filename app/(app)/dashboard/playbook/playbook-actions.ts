@@ -15,6 +15,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { learnPlaybook, type PlaybookSignal } from '@/lib/playbook/learn';
 import { readAll } from '@/lib/supabase/read-all';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: boolean; error?: string; added?: number };
 
@@ -143,7 +144,7 @@ export async function refreshPlaybookAction(): Promise<Result> {
   // ignoreDuplicates: never overwrite an existing suggestion (esp. accepted/dismissed).
   const { error } = await sb.from('family_playbook_suggestions')
     .upsert(rows, { onConflict: 'family_id,signature', ignoreDuplicates: true });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   return { ok: true, added: rows.length };
 }
 
@@ -179,6 +180,6 @@ export async function dismissSuggestionAction(input: { id: string }): Promise<Re
   if (!id) return { ok: false, error: tr('playbookActions.missingSuggestion') };
   const sb = await createServer();
   const { error } = await sb.from('family_playbook_suggestions').update({ status: 'dismissed' }).eq('id', id);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   return { ok: true };
 }

@@ -24,6 +24,7 @@ import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { FAMILY_EMAIL_MIN_PLAN_LEVEL } from '@/lib/constants/plans';
 import { shouldNotifyFamily } from '@/lib/contact-center/routing';
 import { fileEmailAttachments, MAX_MULTIPART_EMAIL_BYTES } from '@/lib/services/paperwork/email-attachments';
+import { secretEquals } from '@/lib/server/secret-equals';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -34,7 +35,7 @@ function authorized(req: NextRequest): boolean {
   const secret = process.env.CONTACT_CENTER_INBOUND_SECRET;
   if (!secret) return process.env.NODE_ENV !== 'production';
   const provided = new URL(req.url).searchParams.get('key') ?? req.headers.get('x-inbound-secret');
-  return !!provided && provided === secret;
+  return secretEquals(provided, secret);
 }
 
 // Pull the fields we need from either a parsed form or a JSON body.

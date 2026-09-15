@@ -70,26 +70,41 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
   const upcoming = sorted.filter((t) => t.status !== 'completed' && t.status !== 'cancelled');
   const current = upcoming.find((t) => isActive(t.start_date, t.end_date)) ?? upcoming[0];
 
+  const [saving, setSaving] = useState(false);
+
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(openCreate ? blank() : null);
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
-    if (!form?.title.trim()) return toastError(tr('vacationsList.giveYourTripAName'));
-    const { data, error } = await createClient().from('vacations').insert({
-      family_id: familyId, created_by: userId,
-      title: form.title.trim(),
-      kind: form.kind as Vacation['kind'],
-      destination: form.destination.trim() || null,
-      start_date: form.start_date || null,
-      end_date: form.end_date || null,
-      budget_cents: form.budget ? Math.round(parseFloat(form.budget) * 100) : null,
-      description: form.description.trim() || null,
-      is_international: form.is_international,
-    }).select('id').single();
-    if (error) return toastError(error.message);
-    success(tr('vacationsList.tripCreated'));
-    setForm(null);
-    router.push(`/dashboard/vacations/${data.id}/overview`);
+    // A pending button AND a re-entrance guard. The guard is not redundant:
+    // `disabled` covers the click, this covers the ENTER KEY, which submits the
+    // form without touching the button at all.
+    //
+    // preventDefault() stays ABOVE it. Returning before it on the second submit
+    // would hand the form to the browser's own native submission — a full page
+    // navigation — which is worse than the double insert this exists to stop.
+    if (saving) return;
+    setSaving(true);
+    try {
+      if (!form?.title.trim()) return toastError(tr('vacationsList.giveYourTripAName'));
+      const { data, error } = await createClient().from('vacations').insert({
+        family_id: familyId, created_by: userId,
+        title: form.title.trim(),
+        kind: form.kind as Vacation['kind'],
+        destination: form.destination.trim() || null,
+        start_date: form.start_date || null,
+        end_date: form.end_date || null,
+        budget_cents: form.budget ? Math.round(parseFloat(form.budget) * 100) : null,
+        description: form.description.trim() || null,
+        is_international: form.is_international,
+      }).select('id').single();
+      if (error) return toastError(error.message);
+      success(tr('vacationsList.tripCreated'));
+      setForm(null);
+      router.push(`/dashboard/vacations/${data.id}/overview`);
+    } finally {
+      setSaving(false);
+    }
   }
 
   // vmembers is who is on each trip and scores is the readiness ring: a card
@@ -182,7 +197,7 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
             </div>
             <div className="flex justify-end gap-2 pt-1">
               <Button type="button" variant="ghost" onClick={() => setForm(null)}>{tr('vacationsList.cancel')}</Button>
-              <Button type="submit">{tr('vacationsList.createTrip')}</Button>
+              <Button type="submit" loading={saving}>{tr('vacationsList.createTrip')}</Button>
             </div>
           </form>
         </Modal>

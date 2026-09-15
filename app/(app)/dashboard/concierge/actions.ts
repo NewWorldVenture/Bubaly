@@ -292,7 +292,7 @@ export async function setConciergeAutopilotAction(level: AutopilotLevel): Promis
     const { error } = await sb.from('trust_policies')
       .update({ effect, enabled: true })
       .eq('id', existing.id).eq('family_id', familyId);
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: describeActionError(error) };
   } else {
     const { error } = await sb.from('trust_policies').insert({
       family_id: familyId, name: AUTOPILOT_POLICY_NAME,
@@ -301,7 +301,7 @@ export async function setConciergeAutopilotAction(level: AutopilotLevel): Promis
       subject_kind: 'ai', effect, priority: 10, enabled: true, is_system: true,
       created_by: ctx.user.id,
     });
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: describeActionError(error) };
   }
 
   revalidatePath(PATH);

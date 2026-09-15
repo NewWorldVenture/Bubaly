@@ -39,7 +39,6 @@ const ALLOWED = new Map([
   // Each takes familyId but not a zone, so converting means threading one
   // through; worth doing, not yet done.
   ['lib/autopilot/scan.ts', 'background scan; needs a tz threaded through its signature'],
-  ['lib/family/signals.ts', 'background signals; needs a tz threaded through its signature'],
   ['lib/finance/timeline-load.ts', 'derived timeline; needs a tz threaded through its signature'],
   ['lib/operating-index/server.ts', 'snapshot key; needs a tz threaded through its signature'],
   ['lib/planning/prep-server.ts', 'prep generation; needs a tz threaded through its signature'],

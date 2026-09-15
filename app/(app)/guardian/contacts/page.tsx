@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
-import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { ContactList } from '@/components/guardian/contact-list';
 import { Users, ArrowLeft } from 'lucide-react';
 import { getTranslations } from '@/lib/i18n/server';
@@ -15,10 +14,9 @@ export default async function ContactsPage() {
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
-  const db = withGuardianTables(supabase);
 
   const [{ data: contacts }, { data: members }] = await Promise.all([
-    (db.from('guardian_contacts') as ReturnType<typeof supabase.from>)
+    supabase.from('guardian_contacts')
       .select('id, name, phone, email, trust_level, trust_override, notes, total_calls, total_sms, last_contact_at, spam_score')
       .eq('family_id', familyId)
       .order('name', { ascending: true }),

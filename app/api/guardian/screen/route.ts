@@ -5,8 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
-import { withGuardianTables } from '@/lib/supabase/guardian-tables';
-import { screeningTurn, summarizeScreening, type ScreeningTurn } from '@/lib/guardian/ai-screen';
+import { screeningTurn, summarizeScreening, type ScreeningTurn, type ScreeningDecision } from '@/lib/guardian/ai-screen';
 import {
   wrapTwiml, twimlSay, twimlGather, twimlRecord, twimlHangup,
   sendSms, validateTwilioSignature,
@@ -62,11 +61,9 @@ export async function POST(req: NextRequest) {
     await markGuardianCallbackProcessed(supabase, callbackId);
     return twimlResponse(xml);
   };
-  const db = withGuardianTables(supabase);
-  const gFrom = (t: Parameters<typeof db.from>[0]) => (db.from(t) as ReturnType<typeof supabase.from>);
 
   // Load session
-  const { data: session } = await gFrom('guardian_screening_sessions')
+  const { data: session } = await supabase.from('guardian_screening_sessions')
     .select('*, communication_id')
     .eq('id', sessionId)
     .maybeSingle();
@@ -88,13 +85,12 @@ export async function POST(req: NextRequest) {
     ));
   }
 
-  const sess = session as {
-    id: string;
-    family_id: string;
-    communication_id: string | null;
-    messages: ScreeningTurn[];
-    caller_number: string | null;
-    turn: number;
+  // `messages` is jsonb, so the row type says `Json`. The rows this route reads
+  // are the ones it wrote, turn by turn, as ScreeningTurn[] — narrow through
+  // `unknown` rather than widening the column's type for everyone.
+  const sess = {
+    ...session,
+    messages: (session.messages ?? []) as unknown as ScreeningTurn[],
   };
 
   // Quick scam check on what caller said
@@ -113,7 +109,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Load member/family context for AI
-  const { data: memberProfile } = await gFrom('guardian_member_profiles')
+  const { data: memberProfile } = await supabase.from('guardian_member_profiles')
     .select('*')
     .eq('family_id', sess.family_id)
     .maybeSingle();
@@ -145,7 +141,7 @@ export async function POST(req: NextRequest) {
     { role: 'assistant', content: responseText },
   ];
 
-  await gFrom('guardian_screening_sessions').update({
+  await supabase.from('guardian_screening_sessions').update({
     messages: newHistory,
     turn,
     caller_name_stated: decision?.callerName ?? (session as { caller_name_stated?: string }).caller_name_stated,
@@ -214,7 +210,7 @@ export async function POST(req: NextRequest) {
 
     const summary = await summarizeScreening(newHistory, decision?.callerName ?? null, memberName);
     if (sess.communication_id) {
-      await gFrom('guardian_communications').update({ summary, status: 'handled' }).eq('id', sess.communication_id);
+      await supabase.from('guardian_communications').update({ summary, status: 'handled' }).eq('id', sess.communication_id);
       await notifyFamily(supabase, sess.family_id, memberProfile as { member_id: string } | null, {
         commId: sess.communication_id,
         callerName: decision?.callerName ?? formatPhone(sess.caller_number),
@@ -255,13 +251,20 @@ async function endScreening(
   supabase: ReturnType<typeof createServiceClient>,
   sessionId: string,
   commId: string | null,
-  finalAction: string,
-  meta: { ai_risk: string; ai_urgency: string; ai_intent: string; resolution_summary: string },
+  // The decision's own field types, not `string`. These land in columns with
+  // CHECK constraints, so a value outside the set is rejected by Postgres at
+  // write time and the session silently stays open. Taking the union here
+  // makes that a compile error instead.
+  finalAction: ScreeningDecision['action'],
+  meta: {
+    ai_risk: ScreeningDecision['risk'];
+    ai_urgency: ScreeningDecision['urgency'];
+    ai_intent: string;
+    resolution_summary: string;
+  },
 ) {
-  const db = withGuardianTables(supabase);
-  const gFrom = (t: Parameters<typeof db.from>[0]) => (db.from(t) as ReturnType<typeof supabase.from>);
 
-  await gFrom('guardian_screening_sessions').update({
+  await supabase.from('guardian_screening_sessions').update({
     status: 'resolved',
     final_action: finalAction,
     ai_risk: meta.ai_risk,
@@ -271,7 +274,7 @@ async function endScreening(
   }).eq('id', sessionId);
 
   if (commId) {
-    await gFrom('guardian_communications').update({
+    await supabase.from('guardian_communications').update({
       status: 'handled',
       ai_decision_reason: meta.resolution_summary,
       sentiment: meta.ai_urgency === 'emergency' ? 'urgent' : meta.ai_risk.includes('scam') ? 'suspicious' : 'neutral',

@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { MonitorSmartphone, Plus, Trash2, Flame, Gauge, Settings2 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
+import { isManager } from '@/lib/constants/roles';
 import { progressBarA11y } from '@/lib/ui/a11y';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -30,7 +31,11 @@ const blank = () => ({ id: '', member_id: '', entry_date: today(), minutes: '30'
 
 export function ScreenTimeModule() {
   const t = useTranslations();
-  const { familyId, userId, members } = useApp();
+  const { familyId, userId, members, role } = useApp();
+  // A daily limit is set ON a child BY a parent. 0300 makes that the rule in the
+  // database; this is the same rule in the interface, so the control is absent
+  // rather than present-and-failing for everyone it does not belong to.
+  const canSetLimits = isManager(role);
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
@@ -47,6 +52,10 @@ export function ScreenTimeModule() {
   const error = entriesError || limitsError;
   const refresh = () => { void refreshEntries(); void refreshLimits(); };
 
+  const [savingLimit, setSavingLimit] = useState(false);
+
+  const [saving, setSaving] = useState(false);
+
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
   const [limitFor, setLimitFor] = useState<{ memberId: string; minutes: string } | null>(null);
 
@@ -62,22 +71,35 @@ export function ScreenTimeModule() {
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form) return;
-    const supabase = createClient();
-    const row = {
-      member_id: form.member_id || null,
-      entry_date: form.entry_date,
-      minutes: Math.max(0, Math.min(1440, parseInt(form.minutes, 10) || 0)),
-      category: form.category,
-      device: form.device.trim() || null,
-      note: form.note.trim() || null,
-    };
-    const { error } = form.id
-      ? await supabase.from('screen_time_entries').update(row).eq('id', form.id)
-      : await supabase.from('screen_time_entries').insert({ ...row, family_id: familyId, logged_by: userId });
-    if (error) return toastError(describeDbError(error));
-    success(form.id ? 'Updated' : 'Logged');
-    setForm(null);
+    // A pending button AND a re-entrance guard. The guard is not redundant:
+    // `disabled` covers the click, this covers the ENTER KEY, which submits the
+    // form without touching the button at all.
+    //
+    // preventDefault() stays ABOVE it. Returning before it on the second submit
+    // would hand the form to the browser's own native submission — a full page
+    // navigation — which is worse than the double insert this exists to stop.
+    if (saving) return;
+    setSaving(true);
+    try {
+      if (!form) return;
+      const supabase = createClient();
+      const row = {
+        member_id: form.member_id || null,
+        entry_date: form.entry_date,
+        minutes: Math.max(0, Math.min(1440, parseInt(form.minutes, 10) || 0)),
+        category: form.category,
+        device: form.device.trim() || null,
+        note: form.note.trim() || null,
+      };
+      const { error } = form.id
+        ? await supabase.from('screen_time_entries').update(row).eq('id', form.id)
+        : await supabase.from('screen_time_entries').insert({ ...row, family_id: familyId, logged_by: userId });
+      if (error) return toastError(describeDbError(error));
+      success(form.id ? 'Updated' : 'Logged');
+      setForm(null);
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function remove(id: string) {
@@ -88,14 +110,27 @@ export function ScreenTimeModule() {
 
   async function saveLimit(e: React.FormEvent) {
     e.preventDefault();
-    if (!limitFor) return;
-    const minutes = Math.max(0, Math.min(1440, parseInt(limitFor.minutes, 10) || 0));
-    const { error } = await createClient()
-      .from('screen_time_limits')
-      .upsert({ family_id: familyId, member_id: limitFor.memberId, daily_minutes: minutes, created_by: userId }, { onConflict: 'family_id,member_id' });
-    if (error) return toastError(describeDbError(error));
-    success(t('screenTimeModule.dailyLimitSaved'));
-    setLimitFor(null);
+    // A pending button AND a re-entrance guard. The guard is not redundant:
+    // `disabled` covers the click, this covers the ENTER KEY, which submits the
+    // form without touching the button at all.
+    //
+    // preventDefault() stays ABOVE it. Returning before it on the second submit
+    // would hand the form to the browser's own native submission — a full page
+    // navigation — which is worse than the double insert this exists to stop.
+    if (savingLimit) return;
+    setSavingLimit(true);
+    try {
+      if (!limitFor || !canSetLimits) return;
+      const minutes = Math.max(0, Math.min(1440, parseInt(limitFor.minutes, 10) || 0));
+      const { error } = await createClient()
+        .from('screen_time_limits')
+        .upsert({ family_id: familyId, member_id: limitFor.memberId, daily_minutes: minutes, created_by: userId }, { onConflict: 'family_id,member_id' });
+      if (error) return toastError(describeDbError(error));
+      success(t('screenTimeModule.dailyLimitSaved'));
+      setLimitFor(null);
+    } finally {
+      setSavingLimit(false);
+    }
   }
 
   if (loading) return <SkeletonList />;
@@ -128,9 +163,11 @@ export function ScreenTimeModule() {
               <div className="flex items-center gap-2">
                 <Avatar name={m?.display_name ?? 'Member'} size={28} />
                 <p className="font-semibold">{m?.display_name ?? 'Member'}</p>
-                <button onClick={() => setLimitFor({ memberId: mid, minutes: String(limit || 120) })} className="ml-auto text-muted hover:text-fg" title={t('screenTime.setDailyLimit')}>
-                  <Settings2 className="h-4 w-4" />
-                </button>
+                {canSetLimits && (
+                  <button onClick={() => setLimitFor({ memberId: mid, minutes: String(limit || 120) })} className="ml-auto text-muted hover:text-fg" title={t('screenTime.setDailyLimit')}>
+                    <Settings2 className="h-4 w-4" />
+                  </button>
+                )}
               </div>
               <div className="mt-3 flex items-end justify-between">
                 <div>
@@ -216,7 +253,7 @@ export function ScreenTimeModule() {
             <Field label={t('screenTime.noteOptional')}>{(id) => <Textarea id={id} value={form.note} onChange={(ev) => setForm({ ...form, note: ev.target.value })} />}</Field>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="secondary" onClick={() => setForm(null)}>{t('screenTime.cancel')}</Button>
-              <Button type="submit">{form.id ? 'Save' : 'Log it'}</Button>
+              <Button type="submit" loading={saving}>{form.id ? 'Save' : 'Log it'}</Button>
             </div>
           </form>
         </Modal>
@@ -231,7 +268,7 @@ export function ScreenTimeModule() {
             <p className="text-xs text-muted">{t('screenTime.set0ToRemoveTheLimit')}</p>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="secondary" onClick={() => setLimitFor(null)}>{t('screenTime.cancel')}</Button>
-              <Button type="submit">{t('screenTime.saveLimit')}</Button>
+              <Button type="submit" loading={savingLimit}>{t('screenTime.saveLimit')}</Button>
             </div>
           </form>
         </Modal>

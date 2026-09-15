@@ -35,6 +35,8 @@ export function SecurityModule() {
       .order('occurred_at', { ascending: false }).limit(1000),
   });
 
+  const [saving, setSaving] = useState(false);
+
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
   const [tab, setTab] = useState<'all' | 'open' | 'resolved'>('all');
   const all = useMemo(() => events ?? [], [events]);
@@ -70,11 +72,24 @@ export function SecurityModule() {
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form || !form.title.trim()) return;
-    const row = { kind: form.kind, severity: form.severity, title: form.title.trim(), detail: form.detail.trim() || null, occurred_at: new Date(form.occurred_at).toISOString() };
-    const { error } = await createClient().from('home_security_events').insert({ ...row, family_id: familyId, created_by: userId });
-    if (error) return toastError(describeDbError(error));
-    success(tr('securityModule.logged')); setForm(null);
+    // A pending button AND a re-entrance guard. The guard is not redundant:
+    // `disabled` covers the click, this covers the ENTER KEY, which submits the
+    // form without touching the button at all.
+    //
+    // preventDefault() stays ABOVE it. Returning before it on the second submit
+    // would hand the form to the browser's own native submission — a full page
+    // navigation — which is worse than the double insert this exists to stop.
+    if (saving) return;
+    setSaving(true);
+    try {
+      if (!form || !form.title.trim()) return;
+      const row = { kind: form.kind, severity: form.severity, title: form.title.trim(), detail: form.detail.trim() || null, occurred_at: new Date(form.occurred_at).toISOString() };
+      const { error } = await createClient().from('home_security_events').insert({ ...row, family_id: familyId, created_by: userId });
+      if (error) return toastError(describeDbError(error));
+      success(tr('securityModule.logged')); setForm(null);
+    } finally {
+      setSaving(false);
+    }
   }
   async function toggleResolved(ev: Event) {
     const { error } = await createClient().from('home_security_events').update({ resolved: !ev.resolved, resolved_at: !ev.resolved ? new Date().toISOString() : null }).eq('id', ev.id);
@@ -176,7 +191,7 @@ export function SecurityModule() {
             <Field label={tr('security.detail')}>{(id) => <Textarea id={id} value={form.detail} onChange={(e) => setForm({ ...form, detail: e.target.value })} />}</Field>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="secondary" onClick={() => setForm(null)}>{tr('security.cancel')}</Button>
-              <Button type="submit">{tr('security.logIt')}</Button>
+              <Button type="submit" loading={saving}>{tr('security.logIt')}</Button>
             </div>
           </form>
         </Modal>

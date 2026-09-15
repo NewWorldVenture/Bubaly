@@ -190,6 +190,7 @@ function ContactRow({
   onDelete: () => void;
   onTrustChange: (t: TrustLevel) => void;
 }) {
+  const tr = useTranslations();
   const [showTrustPicker, setShowTrustPicker] = useState(false);
 
   return (
@@ -238,9 +239,11 @@ function ContactRow({
           </>
         )}
       </div>
-      {/* Actions */}
-      <button onClick={onEdit} className="rounded-lg p-1.5 text-muted hover:bg-surface hover:text-fg transition"><Pencil className="h-4 w-4" /></button>
-      <button onClick={onDelete} className="rounded-lg p-1.5 text-muted hover:bg-red-500/10 hover:text-red-400 transition"><Trash2 className="h-4 w-4" /></button>
+      {/* Actions. Icon-only, so the label IS the name — a screen reader had
+          nothing to read here, and one of the two deletes a contact. The house
+          pattern is devices-module.tsx:97-98. */}
+      <button onClick={onEdit} aria-label={tr('contactList.edit')} className="rounded-lg p-1.5 text-muted hover:bg-surface hover:text-fg transition"><Pencil className="h-4 w-4" /></button>
+      <button onClick={onDelete} aria-label={tr('contactList.delete')} className="rounded-lg p-1.5 text-muted hover:bg-red-500/10 hover:text-red-400 transition"><Trash2 className="h-4 w-4" /></button>
     </div>
   );
 }

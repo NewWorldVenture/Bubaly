@@ -3,6 +3,7 @@
 // stay a thin Supabase reader.
 
 import type { MemberRole } from '@/lib/constants/roles';
+import { addDaysToDayKey, weekStartDayKey } from '@/lib/services/scope';
 
 // ── Finances ────────────────────────────────────────────────────────────────
 export type HomeTxn = { type: string; amount: number; date: string };
@@ -67,20 +68,26 @@ export function memberTagline(
 // ── Week strip (meal planner) ─────────────────────────────────────────────────
 export type WeekDay = { date: string; dow: string; dom: number; isToday: boolean };
 
-/** A Mon→Sun strip for the week containing `now` (each day's ISO date, label, today flag). */
-export function weekStrip(now: Date): WeekDay[] {
-  const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
-  // ISO week: Monday start. JS getDay(): 0=Sun..6=Sat.
-  const dow = (start.getDay() + 6) % 7; // 0=Mon..6=Sun
-  start.setDate(start.getDate() - dow);
-  const todayIso = isoDate(now);
+/**
+ * A Mon→Sun strip for the week containing `todayKey` (each day's ISO date,
+ * label, today flag).
+ *
+ * Takes the family's DAY KEY rather than a `Date`, which is what removes the
+ * zone question from this function instead of answering it wrongly. It used to
+ * take `now` and call `setHours(0, 0, 0, 0)` — the HOST's midnight — while its
+ * one caller had already resolved the family's day two lines above and passed
+ * the raw clock in anyway. On a UTC host that strip highlighted tomorrow from
+ * 17:00 onward for a Californian household.
+ *
+ * Built by day-key arithmetic rather than by adding days to a Date, so the
+ * 23- and 25-hour DST days cannot shift a column.
+ */
+export function weekStrip(todayKey: string): WeekDay[] {
+  const startKey = weekStartDayKey(todayKey);
   const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(start);
-    d.setDate(start.getDate() + i);
-    const iso = isoDate(d);
-    return { date: iso, dow: labels[i], dom: d.getDate(), isToday: iso === todayIso };
+    const date = addDaysToDayKey(startKey, i);
+    return { date, dow: labels[i], dom: Number(date.slice(8, 10)), isToday: date === todayKey };
   });
 }
 

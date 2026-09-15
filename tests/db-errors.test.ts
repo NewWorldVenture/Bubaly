@@ -30,8 +30,47 @@ describe('describeDbError', () => {
     expect(describeDbError(new Error('NetworkError when attempting to fetch resource'))).toMatch(/network/i);
   });
 
-  it('falls back to the raw message when unclassified', () => {
+  // An error the APPLICATION threw has no Postgres code, and its message was
+  // written for a person. That is still the best thing to show.
+  it('keeps the message of an unclassified error the app threw itself', () => {
     expect(describeDbError({ message: 'weird specific thing' })).toBe('weird specific thing');
+    expect(describeDbError(new Error('Pick a date first'))).toBe('Pick a date first');
+  });
+
+  // …and an unclassified error that CARRIES a code came from the database, where
+  // the message was written for whoever maintains the schema.
+  //
+  // The ten shapes classified above are not the only shapes there are. Each of
+  // these is a real string Postgres returns, and each hands out a piece of the
+  // schema to anyone who can make a query fail — the enum one gives away the
+  // type's whole grammar from a single bad write. On the AI paths it travels
+  // further than the browser: lib/ai/tools/* put this string into fail(), which
+  // reaches the model's context too.
+  it('does not hand out the schema when the database is the one talking', () => {
+    const leaks: [string, string][] = [
+      ['22P02', 'invalid input value for enum redemption_status: "bogus"'],
+      ['22003', 'value "99999999999" is out of range for type integer'],
+      ['42883', 'function public.award_allowance(uuid, bigint) does not exist'],
+      ['42P01', 'relation "public.wallet_ledger_private" does not exist'],
+      ['P0001', 'family_entitlement_is_not_self_written: trial_ends_at'],
+    ];
+    for (const [code, message] of leaks) {
+      const described = describeDbError({ code, message }, 'Could not save that.');
+      expect(described, `${code} leaked its raw message`).toBe('Could not save that.');
+      expect(described).not.toContain('redemption_status');
+      expect(described).not.toContain('wallet_ledger_private');
+      expect(described).not.toContain('award_allowance');
+    }
+  });
+
+  it('still classifies a coded error it recognises, rather than blanking it', () => {
+    // The fallback is for the UNRECOGNISED coded error. A code with a branch
+    // above must still produce its own written sentence, or this change would
+    // have traded a leak for a product that can no longer explain itself.
+    expect(describeDbError({ code: '42501', message: 'x' }, 'fb')).toMatch(/permission/i);
+    expect(describeDbError({ code: '23505', message: 'x' }, 'fb')).toMatch(/already exists/i);
+    expect(describeDbError({ code: 'PGRST116', message: 'x' }, 'fb')).toMatch(/could not be found/i);
+    expect(describeDbError({ code: '23514', message: 'x' }, 'fb')).toMatch(/required information/i);
   });
 
   it('handles thrown strings', () => {

@@ -19,6 +19,7 @@ import {
   AGG_DEFAULTS, type Contribution,
 } from './aggregate';
 import type { ConsentScope } from './insights';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type DB = SupabaseClient<Database>;
 
@@ -142,7 +143,7 @@ export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Pro
   // 1. Which families are opted in (master toggle on)?
   const { data: consents, error: cErr } = await sb.from('network_consent')
     .select('family_id, enabled, scopes').eq('enabled', true);
-  if (cErr) return { ok: false, error: cErr.message, contributors: 0, aggregates: 0 };
+  if (cErr) return { ok: false, error: describeActionError(cErr), contributors: 0, aggregates: 0 };
 
   const optedIn = consents ?? [];
 
@@ -212,10 +213,10 @@ export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Pro
       })),
       { onConflict: 'scope,cohort_key,metric,value' },
     );
-    if (upsertErr) return { ok: false, error: upsertErr.message, contributors: contributions.length, aggregates: 0 };
+    if (upsertErr) return { ok: false, error: describeActionError(upsertErr), contributors: contributions.length, aggregates: 0 };
   }
   const { error: pruneErr } = await sb.from('network_aggregates').delete().lt('computed_at', now.toISOString());
-  if (pruneErr) return { ok: false, error: pruneErr.message, contributors: contributions.length, aggregates: aggregates.length };
+  if (pruneErr) return { ok: false, error: describeActionError(pruneErr), contributors: contributions.length, aggregates: aggregates.length };
 
   return { ok: true, contributors: contributions.length, aggregates: aggregates.length };
 }

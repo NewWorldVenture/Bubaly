@@ -38,6 +38,8 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
     fetcher: (sb) => sb.from('immunizations').select('*').eq('family_id', familyId),
   });
 
+  const [saving, setSaving] = useState(false);
+
   const [memberFilter, setMemberFilter] = useState('all');
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
 
@@ -50,24 +52,37 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form?.vaccine.trim()) return;
-    const supabase = createClient();
-    const row = {
-      member_id: form.member_id || null,
-      vaccine: form.vaccine.trim(),
-      dose_label: form.dose_label.trim() || null,
-      date_given: form.date_given || null,
-      next_due_date: form.next_due_date || null,
-      provider_name: form.provider_name.trim() || null,
-      lot_number: form.lot_number.trim() || null,
-      notes: form.notes.trim() || null,
-    };
-    const { error } = form.id
-      ? await supabase.from('immunizations').update(row).eq('id', form.id)
-      : await supabase.from('immunizations').insert({ ...row, family_id: familyId, created_by: userId });
-    if (error) return toastError(describeDbError(error));
-    success(form.id ? 'Record updated' : 'Immunization added');
-    setForm(null);
+    // A pending button AND a re-entrance guard. The guard is not redundant:
+    // `disabled` covers the click, this covers the ENTER KEY, which submits the
+    // form without touching the button at all.
+    //
+    // preventDefault() stays ABOVE it. Returning before it on the second submit
+    // would hand the form to the browser's own native submission — a full page
+    // navigation — which is worse than the double insert this exists to stop.
+    if (saving) return;
+    setSaving(true);
+    try {
+      if (!form?.vaccine.trim()) return;
+      const supabase = createClient();
+      const row = {
+        member_id: form.member_id || null,
+        vaccine: form.vaccine.trim(),
+        dose_label: form.dose_label.trim() || null,
+        date_given: form.date_given || null,
+        next_due_date: form.next_due_date || null,
+        provider_name: form.provider_name.trim() || null,
+        lot_number: form.lot_number.trim() || null,
+        notes: form.notes.trim() || null,
+      };
+      const { error } = form.id
+        ? await supabase.from('immunizations').update(row).eq('id', form.id)
+        : await supabase.from('immunizations').insert({ ...row, family_id: familyId, created_by: userId });
+      if (error) return toastError(describeDbError(error));
+      success(form.id ? 'Record updated' : 'Immunization added');
+      setForm(null);
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function remove(id: string) {
@@ -179,7 +194,7 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
             <Field label={t('immunizations.notes')}>{(id) => <Textarea id={id} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} />}</Field>
             <div className="flex justify-end gap-2 pt-1">
               <Button type="button" variant="ghost" onClick={() => setForm(null)}>{t('immunizations.cancel')}</Button>
-              <Button type="submit">{form.id ? 'Save' : 'Add'}</Button>
+              <Button type="submit" loading={saving}>{form.id ? 'Save' : 'Add'}</Button>
             </div>
           </form>
         </Modal>

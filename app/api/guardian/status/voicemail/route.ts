@@ -7,7 +7,6 @@ import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { notify } from '@/lib/services/notifications';
 import { systemScopeForFamily } from '@/lib/services/scope';
-import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { wrapTwiml, twimlSay, twimlHangup, validateTwilioSignature } from '@/lib/guardian/twilio';
 import { formatPhone } from '@/lib/guardian/phone';
 import { claimGuardianCallback, isValidGuardianEventId, markGuardianCallbackProcessed } from '@/lib/guardian/callbacks';
@@ -65,11 +64,9 @@ export async function POST(req: NextRequest) {
       headers: { 'content-type': 'application/xml' },
     });
   }
-  const db = withGuardianTables(supabase);
-  const gFrom = (t: Parameters<typeof db.from>[0]) => (db.from(t) as ReturnType<typeof supabase.from>);
 
   // Fetch communication to get family context
-  const { data: comm } = await gFrom('guardian_communications')
+  const { data: comm } = await supabase.from('guardian_communications')
     .select('family_id, member_id, from_number, from_name')
     .eq('id', commId)
     .maybeSingle();
@@ -83,7 +80,7 @@ export async function POST(req: NextRequest) {
     };
 
     // Update the communication record with recording
-    await gFrom('guardian_communications').update({
+    await supabase.from('guardian_communications').update({
       status: 'handled',
       call_recording_url: recordingUrl,
       call_duration_secs: recordingDuration,
