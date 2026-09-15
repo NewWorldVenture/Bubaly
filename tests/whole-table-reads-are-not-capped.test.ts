@@ -23,6 +23,7 @@ import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memo
 import { deliverMorningBriefs } from '@/lib/briefing/deliver';
 import { runNetworkAggregation } from '@/lib/network/aggregate-server';
 import { getMarketingCustomersWithError } from '@/lib/marketing/customers';
+import { runAutomations } from '@/lib/marketing/automation-runner';
 
 type DB = SupabaseClient<Database>;
 
@@ -179,6 +180,44 @@ describe('the email campaign suppression lookup', () => {
   });
 });
 
+describe('the marketing automation runner', () => {
+  it('does not re-run a workflow for a subject whose run row sits past the cap', async () => {
+    const db = capped();
+    // Three lapsed customers — the `payment_failed` audience.
+    const families = ids('fam', 3);
+    const users = ids('user', 3);
+    db.seed('families', families.map((id) => ({ id, name: id, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-06-01T00:00:00Z' })));
+    db.seed('family_members', families.map((id, i) => ({ family_id: id, user_id: users[i], role: 'parent', is_active: true })));
+    db.seed('profiles', users.map((id) => ({ id, email: `${id}@example.com` })));
+    db.seed('subscriptions', families.map((id) => ({
+      family_id: id, plan: 'plus', status: 'past_due',
+      created_at: '2026-01-01T00:00:00Z', current_period_end: '2026-06-01T00:00:00Z',
+    })));
+    db.seed('marketing_automation_workflows', [{
+      id: 'wf-1', trigger: 'payment_failed', status: 'active', deleted_at: null, steps: [], run_count: 0,
+    }]);
+    // A workflow with history: one row per subject it has ever run for. The
+    // already-run family's row is the LAST of them, so a read capped at
+    // db-max-rows answers with the thousand in front of it and never sees it.
+    db.seed('marketing_automation_runs', [
+      ...ids('old', CAP).map((subject) => ({
+        id: `run-${subject}`, workflow_id: 'wf-1', subject_key: subject, status: 'completed', metadata: {},
+      })),
+      { id: 'run-already', workflow_id: 'wf-1', subject_key: families[0], status: 'completed', metadata: {} },
+    ]);
+
+    const summary = await runAutomations(db as unknown as DB);
+
+    // The two that had never run, and not the one that had. The runner's own
+    // docstring promises a (workflow, family) pair runs once — and nothing
+    // downstream would have caught a second: the insert's 23505 branch waits on
+    // a unique constraint the schema does not define.
+    expect(summary.runs).toBe(2);
+    const forAlready = db.table('marketing_automation_runs').filter((r) => r.subject_key === families[0]);
+    expect(forAlready).toHaveLength(1);
+  });
+});
+
 // Keep the fake's cap honest: it must apply to `.limit()` too, because the
 // server's does. `.limit(5000)` against a default project yields 1,000.
 describe('a limit is not a bound', () => {
@@ -202,6 +241,7 @@ describe('no delivery-contract read is left unbounded', () => {
     { file: 'app/(app)/admin/marketing/push/actions.ts', table: 'push_devices', why: 'the campaign audience' },
     { file: 'app/(app)/admin/marketing/push/actions.ts', table: 'marketing_suppressions', why: 'a missing row sends to someone who opted out' },
     { file: 'lib/marketing/send.ts', table: 'marketing_suppressions', why: 'a missing row emails someone who unsubscribed' },
+    { file: 'lib/marketing/automation-runner.ts', table: 'marketing_automation_runs', why: 'the only guard against re-running a workflow for the same family' },
   ];
 
   it.each(WATCHED)('$file reads $table whole ($why)', async ({ file, table }) => {
