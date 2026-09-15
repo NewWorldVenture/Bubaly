@@ -4488,3 +4488,166 @@ because the guard now makes that class impossible to reintroduce quietly.
 
 **Verification.** Full suite **13,682 / 13,682** under pinned UTC and
 `TZ=America/Los_Angeles`. `tsc`, eslint and the Supabase query audit clean.
+
+---
+
+# Pass P — the specialist workers' backlog, re-checked rather than taken on report
+
+Six commits on `claude/bubaly-repo-connect-etzqg7` (PR #548), working the OPEN
+findings in `audit/claude-2.md`, `-3.md` and `-4.md`.
+
+**Lettered P, not N.** Passes N and O are claimed by PR #556, which has not
+merged into this branch. Pass L was independently used by two sessions for
+different work and had to be relabelled `L′` after the fact; skipping two letters
+costs nothing and avoids repeating that.
+
+**The method, and what it kept finding.** Every reported finding was verified
+against current source before being worked. That is not ceremony: **six of the
+twelve were already fixed**, two of them by commits earlier in this same session.
+Of the six that were real, **four were larger than reported** — the reporter had
+named one instance of a class, and sweeping by *shape* found more:
+
+| reported | swept by shape | found |
+|---|---|---|
+| `marketplace_orders_update` | `pg_policy` where `with_check ≠ qual` | the `marketplace_offers` twin |
+| "14 bare `.message` returns" | a test, not a grep | **78**, in 30 files |
+| three `===` secret comparisons | every `=== … secret\|Bearer` | a fourth, `hasInternalSecret` |
+| eleven server-midnight surfaces | the repo's own ratchet | the worst one, in `scheduling.ts` |
+
+## P1 — MEDIUM: an UPDATE policy that guards the row you may touch, but not the row you turn it into
+
+`marketplace_orders_update` and `marketplace_offers_update` each restricted
+*which row* you could write — only the two parties, only the offerer or the
+listing's owner — and then let you rewrite it into a row you would never have
+been allowed to touch, because the `WITH CHECK` was `is_family_member(family_id)`
+and nothing more. The asymmetry `0297` fixed on `invites_update`.
+
+Swept by shape: the class has four members in `public`, and the other two are
+healthy — `member_locations_self_update`'s `WITH CHECK` is a strict **superset**
+of its `USING`, and `approval_requests_cancel_own` disagrees with its `USING` **on
+purpose** (`pending` in, `cancelled` out). So the rule in `0311` is *containment*,
+with that one transition guard named and its reason written down. My first sweep
+asserted equality and failed the replay by naming both healthy policies — worth
+recording, because a sweep that is too strict fails loudly, while the
+length-based filter I had used before it would have let a weaker-but-wordier
+`WITH CHECK` through in silence.
+
+Two rules, because the policy alone is not enough: `WITH CHECK` is a
+*disjunction*, so a seller still satisfying `seller_member = me` in the new row
+passes it while rewriting the buyer. `0311` carries the `USING` into the
+`WITH CHECK` **and** freezes the deal's terms with a trigger that does not care
+which branch admitted the row. Proven independently: five denials fire when only
+the triggers are dropped; a sixth — a listing owner pulling someone else's offer
+onto their own listing — survives that and fires only when the `WITH CHECK` is
+reverted.
+
+## P2 — MEDIUM: the database was talking straight to the browser
+
+`describeDbError` classified ten shapes and returned the raw Postgres string for
+everything else, and **78 server sites never called it at all**. An enum coercion
+answers with the whole grammar of a type: *invalid input value for enum
+`redemption_status`: "bogus"*. On the AI paths it goes further than the browser —
+`lib/ai/tools/*` put the string into `fail()`, which reaches the model's context.
+
+The line drawn is not *raw* vs *described* but **who wrote the string**: an error
+carrying a Postgres code came from the database; one without a code the
+application threw itself, and `throw new Error('Pick a date first')` is still the
+best thing to show. Client components are deliberately untouched — that error
+arrived from PostgREST in the browser's own memory.
+
+**One existing test was asserting the leak.** `twin-project-read-boundary`
+required the caller's error to *contain* `'row-level security'`.
+
+## P3 — MEDIUM: an authorization outcome carried in an English sentence
+
+`requireMarketingAdmin` threw to refuse and the status it deserved lived in the
+wording. Two routes recovered it by reading that English back, and the AI route
+matched on `'Forbidden'` — a word that module has never said — so a non-admin was
+answered **500 "Could not generate. Check that the OpenAI API key is set."** The
+failure that is nobody's fault was the one that paged.
+
+**The first fix was wrong and is now pinned.** `describeActionError(err)` looked
+right, since a `MarketingAuthError` carries no Postgres code. It is not:
+`describeDbError` matches `'permission denied'`, the refusal says *"do not have
+permission to manage"*, nothing classifies it, and the caller gets *"Something
+went wrong. Please try again."* — a refusal reported as a generic fault, which is
+the defect this change exists to remove, arriving by a different road.
+
+## P4 — HIGH: a family's day did not turn over at their midnight
+
+`setHours(0, 0, 0, 0)` is the SERVER's midnight — 17:00 in California on a UTC
+host. Eleven of seventeen tracked sites converted.
+
+**The sharpest was not in the report.** `lib/calendar/scheduling.ts` types
+`WorkingHours` as *"local hours, e.g. 9–17"* and applied them on the host, so a
+Californian family's working window was proposed as 09:00–17:00 UTC = **01:00–09:00
+local**: the AI schedule route suggested meetings in the middle of their night and
+treated their real working day as busy.
+
+Three sites show the defect a layer out, where a correction reached one
+expression and not the next — `moments/page.tsx` resolved *today* in the family's
+zone and *tomorrow* in the host's, two lines apart.
+
+Two shapes chosen so the next caller cannot get it wrong: `weekStrip` takes a day
+**key** rather than a `Date`, which removes the zone question instead of
+answering it; `gatherSignalsResult` resolves the zone itself rather than
+accepting an optional one that would default to the host at whichever of its six
+callers forgot.
+
+`dueLabel` is deliberately **not** converted: its only caller is a client module,
+where `new Date()` is the user's own device clock and already right.
+
+## P5 — MEDIUM: the undo was on a clock nothing could stop
+
+The toast auto-dismiss called `setTimeout` for its side effect and discarded the
+id, and the stack had no hover or focus handler — so WCAG 2.2.1's three options
+(pausable, extendable, turn-off-able) were all absent. For the three toasts that
+carry "Undo" the toast **is** the undo, and the stack renders after `{children}`,
+so a keyboard user tabs the whole page to reach it inside seven seconds.
+
+## Filed rather than fixed
+
+**A removed member is silently handed a new, empty family.** The security question
+the report left implicit is **answered and closed**: `ensure_family_for_user`'s
+`on conflict … set is_active = true` targets the family inserted two statements
+earlier, so it cannot reactivate the membership they were removed from — proven by
+driving the real RPC against a real replay after a real removal. What remains is
+that they are told nothing, and that **every removal-then-login mints a fresh
+14-day trial** (measured; not in the original report). Filed because the remedy is
+an interstitial whose copy is a product decision **in eleven locales**, and it
+cannot ship English-only now that `translate`'s English fallback is gone.
+
+## Things this pass got wrong first
+
+Recorded because the failure modes matter more than the fixes.
+
+1. **A fifth prose-as-code instance, and it was mine.** The secret-comparison
+   sweep flagged the doc comment explaining it — *"`secretEquals` rather than
+   `===`"*. Safe direction; comments are stripped now, line-preservingly.
+2. **A tautological assertion.** `expect(secretEquals('Bearer undefined',
+   \`Bearer ${undefined}\`)).toBe(false)` asks whether a string equals itself.
+   The property belongs to the call site and is tested there.
+3. **A fragile assertion, removed rather than kept.** `indexOf('isMarketingAuthError(')
+   < indexOf('status: 500')` passed a reordering that was merely *correct* — and
+   would have passed broken ones too. Source position is not reachability.
+4. **A mutation harness that clobbered a file.** Two backups named by basename
+   both resolved to `route.ts`. Restored from git; the harness now uses distinct
+   names.
+5. **A migration ratchet bumped one commit late**, so `9d8bea83` was red for
+   exactly one test. The bump belongs in the same commit as the migration.
+
+## One mutation that could not be made to fail, and why that is a result
+
+The DST case in the new scheduling test survives stepping days by a drifting
+timestamp — because each step re-derives the day key and `zonedTimeMs` re-anchors
+from it. The day-key formulation is **self-correcting**, which is the reason to
+prefer it and the reason that assertion is a regression net rather than a proof.
+Recorded rather than dressed up as a seventh caught mutation.
+
+## Verification
+
+- **324 migrations replayed from scratch, 0 failed**; 321 re-applied onto the
+  populated schema (idempotent); **32/32 boundary probes, run twice** for
+  isolation.
+- **13,901 tests green across four shards**; `tsc` and `eslint` clean.
+- CI green on `cde0fa24`, which carries every commit in this pass but the last.
