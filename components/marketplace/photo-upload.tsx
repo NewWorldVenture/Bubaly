@@ -2,13 +2,14 @@
 
 // Real listing photo upload (backlog #10 "listing photo uploads"). Pick or drop
 // an image → it uploads to the public `marketplace-photos` bucket at
-// {userId}/{ts}-{rand}.{ext} → the returned public URL becomes the listing's
+// {userId}/{unguessable}.{ext} → the returned public URL becomes the listing's
 // photo_url. Pasting an https URL still works for power users. Client-side
 // validation (image mime + ≤10 MB) keeps bad files off the bucket; a Remove
 // deletes the object we uploaded so abandoned drafts don't leak storage.
 import { useRef, useState } from 'react';
 import { ImagePlus, Loader2, X, Link2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { unguessableObjectName } from '@/lib/storage/object-name';
 import {
   MARKETPLACE_PHOTOS_BUCKET,
   removeMarketplacePhotoPath,
@@ -45,11 +46,11 @@ export function PhotoUpload({
     setUploading(true);
     try {
       const sb = createClient();
-      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
-      const unique = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const path = `${userId}/${unique}.${ext}`;
+      // Through the shared namer rather than a fourth private copy of the same
+      // idea. This one was already crypto.randomUUID, but its fallback was the
+      // six-character Math.random string, and a duplicated helper is how the
+      // escapeLike defect reached four call sites and two of them stayed wrong.
+      const path = `${userId}/${unguessableObjectName(file.name.toLowerCase())}`;
       const { data, error } = await sb.storage.from(MARKETPLACE_PHOTOS_BUCKET).upload(path, file, { upsert: false, cacheControl: '31536000' });
       if (error) { toastError(t('photoUpload.uploadFailedPleaseTryAgain')); return; }
       // Delete a previously-uploaded object we're replacing.
