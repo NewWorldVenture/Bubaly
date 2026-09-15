@@ -4180,3 +4180,53 @@ because the guard now makes that class impossible to reintroduce quietly.
 
 **Verification.** Full suite **13,682 / 13,682** under pinned UTC and
 `TZ=America/Los_Angeles`. `tsc`, eslint and the Supabase query audit clean.
+
+---
+
+## Pass N — a public bucket named its objects with Math.random, and my own guard said that was fine
+
+**F-N01 — feedback screenshots behind 31 bits of non-cryptographic randomness.**
+
+Swept the storage boundary this pass: 6 buckets, 22 `storage.objects` policies. Per
+bucket the command coverage is complete (`chore-proof` and `feedback-attachments`
+have no UPDATE policy, which fails closed and is right for immutable objects), and
+only three policies carry no family or owner scope — all three the deliberate
+`FOR SELECT USING (bucket_id = '…')` public reads on `avatars`,
+`feedback-attachments` and `marketplace-photos`.
+
+For a publicly-readable bucket the object NAME is the whole boundary, and the first
+path segment is the user id, which is not secret. `feedback-attachments` named its
+objects:
+
+```js
+const path = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+```
+
+**Measured**, not estimated: the random part is always **6** base36 characters —
+**31 bits**, a **2.18e9** keyspace — against a UUID's 122. `Date.now()` is not
+secret, and `Math.random()` is not a CSPRNG. These are screenshots *of the product*,
+so they carry names, schedules and balances.
+
+**This one is mine.** Pass H added
+`tests/public-bucket-objects-are-unguessable.test.ts`, and when its first version
+flagged every `Date.now()` I narrowed it to CLOCK-ONLY — writing, in the test
+itself, that *"a name that also mixes in Math.random still has real entropy
+(feedback-attachments does this)"*. The narrowing was right to avoid false
+positives on the helper's own fallback; the blessing of `Math.random` was not, and
+it is exactly why this call site survived a guard written to catch it.
+
+**Fix.** Both public-bucket uploads now build their path through the shared
+`unguessableObjectName` (crypto.randomUUID). `marketplace-photos` already used
+`crypto.randomUUID` directly but kept the six-character string as its fallback and
+was a fourth private copy of the same idea — the shape that let the escapeLike
+defect reach four call sites with two still wrong.
+
+The guard gains two rules, replacing the comment that blessed the weakness:
+every upload into a publicly-readable bucket must name its object with the shared
+helper, and no public-bucket path may take its entropy from `Math.random` (the
+helper's own fallback is the single permitted use). **Both fail against the
+previous code**, naming both files.
+
+**Verification.** Full suite **13,729 / 13,729**. `tsc` and eslint clean.
+
+**Status: FIXED.** No migration, so it reaches production with the deploy.
