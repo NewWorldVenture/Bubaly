@@ -154,6 +154,31 @@ describe('the push campaign suppression list', () => {
   });
 });
 
+describe('the email campaign suppression lookup', () => {
+  it('excludes an unsubscribed address when the audience is larger than the cap', async () => {
+    const { resolveRecipients } = await import('@/lib/marketing/send');
+    const db = capped();
+    const families = ids('fam', OVER);
+    const users = ids('user', OVER);
+    db.seed('families', families.map((id) => ({ id, name: id, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' })));
+    db.seed('family_members', families.map((id, i) => ({ family_id: id, user_id: users[i], role: 'parent', is_active: true })));
+    db.seed('profiles', users.map((id) => ({ id, email: `${id}@example.com` })));
+    // What truncates is the RESPONSE, not the filter, so the condition is more
+    // than a thousand MATCHES: a list on which over a thousand people have
+    // unsubscribed. Suppress all but six of the audience.
+    const unsubscribed = users.slice(0, OVER - 6).map((id) => `${id}@example.com`);
+    expect(unsubscribed.length).toBeGreaterThan(CAP);
+    db.seed('marketing_suppressions', unsubscribed.map((email) => ({ email })));
+
+    const recipients = await resolveRecipients(db as unknown as DB, { segment_id: null });
+
+    // Exactly the six who never unsubscribed, and not one person more. Read in
+    // a single `.in()`, the response stops at 1,000 and the five suppressions
+    // past it are mailed as if they had consented.
+    expect(recipients.sort()).toEqual(users.slice(OVER - 6).map((id) => `${id}@example.com`).sort());
+  });
+});
+
 // Keep the fake's cap honest: it must apply to `.limit()` too, because the
 // server's does. `.limit(5000)` against a default project yields 1,000.
 describe('a limit is not a bound', () => {
@@ -176,6 +201,7 @@ describe('no delivery-contract read is left unbounded', () => {
     { file: 'lib/marketing/customers.ts', table: 'profiles', why: 'joined onto every family row' },
     { file: 'app/(app)/admin/marketing/push/actions.ts', table: 'push_devices', why: 'the campaign audience' },
     { file: 'app/(app)/admin/marketing/push/actions.ts', table: 'marketing_suppressions', why: 'a missing row sends to someone who opted out' },
+    { file: 'lib/marketing/send.ts', table: 'marketing_suppressions', why: 'a missing row emails someone who unsubscribed' },
   ];
 
   it.each(WATCHED)('$file reads $table whole ($why)', async ({ file, table }) => {
@@ -196,7 +222,10 @@ describe('no delivery-contract read is left unbounded', () => {
       // callback) or it is not an unbounded read at all: a write chain, or a
       // read already bounded to one owner's rows by an explicit `.limit()`.
       const isWrite = /\.(insert|update|upsert|delete)\(/.test(chain);
-      const isBounded = chain.includes('.range(') || chain.includes('.limit(');
+      // Bounded means the response cannot reach the cap: it pages (`.range()`),
+      // it asks for a fixed few (`.limit()`), or it is a `readInChunks`
+      // callback, whose batch of at most 100 ids can never match 1,000 rows.
+      const isBounded = chain.includes('.range(') || chain.includes('.limit(') || /\.in\('[a-z_]+', chunk\)/.test(chain);
       expect(isWrite || isBounded, `unbounded read of ${table}: ${chain.replace(/\s+/g, ' ').slice(0, 160)}`).toBe(true);
     }
   });
