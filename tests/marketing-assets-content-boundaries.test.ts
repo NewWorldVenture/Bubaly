@@ -6,7 +6,7 @@ const content = readFileSync('app/(app)/admin/marketing/content/actions.ts', 'ut
 
 describe('marketing asset and content action boundaries', () => {
   it('uses sanitized failures and checks every asset mutation result', () => {
-    expect(assets).toContain('marketingActionFailure');
+    expect(assets).toContain('marketingActionFailure(');
     expect(assets).toContain('rollback failed');
     expect(assets).toContain(".select('id').maybeSingle()");
     expect(assets).toContain(".select('id, storage_path')");
@@ -14,7 +14,7 @@ describe('marketing asset and content action boundaries', () => {
   });
 
   it('fails closed across content reads, blog publishing, and unpublishing', () => {
-    expect(content).toContain('marketingActionFailure');
+    expect(content).toContain('marketingActionFailure(');
     expect(content).toContain('load the marketing content item');
     expect(content).toContain('publish the blog post');
     expect(content).toContain('mark the content item as published');

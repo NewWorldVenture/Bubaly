@@ -6,7 +6,7 @@ const migration = readFileSync('supabase/migrations/0198_guardian_suggestion_rev
 
 describe('Guardian safety action boundaries', () => {
   it('sanitizes database failures and checks safety-state writes', () => {
-    expect(actions).toContain('describeActionError');
+    expect(actions).toContain('describeActionError(');
     expect(actions).not.toMatch(/error:\s*[^\n]*\.message/);
     expect(actions).toContain("if (clashError) return actionFailure('check Guardian phone assignments', t('guardian.couldNotCheckGuardianPhoneAssignments'), clashError);");
     // Audit writes are best-effort and go through the service-role helper

@@ -18,7 +18,7 @@ describe('family membership tenant boundary', () => {
     const childLoginSource = readFileSync('app/(app)/family/child-login-actions.ts', 'utf8');
 
     expect(source).not.toMatch(/from\(['"]family_members['"]\)[\s\S]*?\.update\(/);
-    expect(profileSource).toContain('createServiceClient');
-    expect(childLoginSource).toContain('createServiceClient');
+    expect(profileSource).toContain('createServiceClient(');
+    expect(childLoginSource).toContain('createServiceClient(');
   });
 });

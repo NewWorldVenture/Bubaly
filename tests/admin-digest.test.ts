@@ -91,7 +91,7 @@ describe('admin digest route failure boundary', () => {
   });
 
   it('uses the delivery summary instead of counting boolean success blindly', () => {
-    expect(routeSource).toContain('summarizeDigestDelivery');
+    expect(routeSource).toContain('summarizeDigestDelivery(');
     expect(routeSource).toContain('summary.ok ? 200 : 502');
   });
 });

@@ -278,7 +278,7 @@ describe('the browser holds exactly one auth client', () => {
     for (const option of ['persistSession: true', 'autoRefreshToken: true', 'detectSessionInUrl: true']) {
       expect(client, option).toContain(option);
     }
-    expect(client).toContain('durableCookieOptions');
+    expect(client).toContain('durableCookieOptions(');
   });
 
   it('is the only place a browser client is constructed', () => {

@@ -20,7 +20,7 @@ describe('onboarding failure safety', () => {
   it('fails closed on required finalize writes instead of logging and continuing', () => {
     const source = readFileSync('app/onboarding/actions.ts', 'utf8');
 
-    expect(source).toContain('describeActionError');
+    expect(source).toContain('describeActionError(');
     expect(source).toContain('if (subErr) return onboardingFailure');
     expect(source).toContain('if (activeErr) return onboardingFailure');
     expect(source).toContain('if (detailsErr) return onboardingFailure');
