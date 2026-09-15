@@ -5796,3 +5796,22 @@ encryption, a deny-all credential table, refresh handling and an audit log. Two
 implementations of one integration is *why* they disagreed. That is a
 product-level consolidation, not an audit fix, so the weaker one now matches the
 stronger one instead of being deleted by an auditor.
+
+**C3-S5-06 — FIXED, and it mattered more after C3-S5-02 than before.** The
+SHA-256 fallback in `lib/sync/crypto.ts` accepted *any* string, so
+`SYNC_TOKEN_KEY=changeme` produced a perfectly valid AES-256-GCM key with the
+entropy of the word "changeme" — encrypting fine, decrypting fine, warning
+nobody. `hasEncryptionKey()` tested presence, so "we have a key" and "we have a
+key worth having" were the same question, and the OAuth callbacks' fail-closed
+path (`error=no_encryption_key`) let a placeholder walk straight past it.
+
+`loadKey()` now refuses a raw value under 32 characters — the documented hex and
+base64 forms are unaffected, and a real passphrase still works — and
+`hasEncryptionKey()` answers the second question, so the fail-closed path that
+already existed does the work. A minimum length is a crude proxy for entropy,
+and the code says so; it is the difference between a passphrase somebody chose
+and a placeholder somebody left.
+
+Fixed *after* C3-S5-02 deliberately: that change made this key protect the Google
+Calendar credential too, so the assumption it rests on had to stop being
+optional.
