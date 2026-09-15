@@ -2583,3 +2583,43 @@ session's block: **I shipped a regression and CI found it, not me.**
   assertions. Non-vacuity proven on both properties: removing one `loading={}`
   names the file; moving `preventDefault` below the guard now fails with *"a
   second submit would navigate the page"*.
+
+### [CLAUDE-1][MEDIUM][A11Y/UX] The only way back from a write was on a seven-second clock nothing could stop
+
+- **Raised by:** Claude-2 as C2-23. Verified and fixed as reported.
+- **File:** `components/ui/toast.tsx`
+- **Problem:** the toast auto-dismiss called `setTimeout` for its side effect and
+  **threw the id away**, so nothing in the component could reach the pending
+  dismissal; and the stack had no `onMouseEnter` and no focus handler to reach it
+  from. WCAG 2.2.1 (Timing Adjustable) asks a time limit on content to be
+  pausable, extendable or turn-off-able. This had none of the three.
+- **Why it is not merely a nuisance:** three toasts carry "Undo", and for each of
+  them the toast **is** the undo. `components/app/quick-capture.tsx:97`,
+  `components/app/command-bar.tsx:167` and `components/modules/voice-module.tsx:110`
+  each call `undoCapture` from a toast action and from nowhere else, so when the
+  toast goes the row it wrote stays. Worse for a keyboard user: the stack renders
+  **after `{children}`**, so reaching that button means tabbing past the entire
+  rest of the page — inside seven seconds.
+  (`components/capture/capture-shell.tsx:81` is the exception that shows the
+  rule: its undo is a durable in-page button, so nothing there is on a clock.)
+- **Fix:** keep the pending timer per toast id in a ref `Map`; `pauseAll` /
+  `resumeAll` on the stack, wired to hover **and** to `onFocusCapture` /
+  `onBlurCapture`. Focus is the half that matters for the user this is for — the
+  countdown stops as focus lands on the Undo button they were tabbing towards,
+  not when a pointer happens to move. Both buttons now route through `dismiss`,
+  so closing a toast takes its timer with it rather than leaving one aimed at an
+  id that no longer exists. `resumeAll` grants a **full** window rather than the
+  remainder: someone who stopped to read needs time to act, not the 100 ms they
+  had left.
+- **Status:** FIXED. `tests/a-toast-you-can-still-reach-waits.test.ts`, 8 tests.
+  It is **not** a source scan — it drives the real component through the real
+  hook lifecycle (the harness `tests/move-date-recalculation-ui.test.ts`
+  established) under fake timers, so every assertion is the consequence of a
+  `setTimeout` that did or did not fire. Non-vacuity proven by **seven**
+  mutations, each caught by exactly the assertion that names it: strip the
+  handlers → *"the toast stack has no hover handler"*; make `pauseAll`
+  unable to reach the timer (the original bug) → the hover and focus holds fail;
+  never re-arm on release → a paused toast becomes permanent; drop the focus
+  pair → the keyboard half fails alone; resume with the 100 ms sliver instead of
+  a full window → *"hands back a whole window"* fails; and either button
+  bypassing `dismiss` → a stray timer is left pending.
