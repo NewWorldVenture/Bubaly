@@ -2054,3 +2054,772 @@ actions the dispatch named as suspicious.
    it. Whether the deployment's proxy makes that unspoofable is an
    infrastructure question I cannot answer from the repo; flagging it because
    three public actions' only defence rests on it.
+
+---
+
+# Session 5 (2026-09-15) — the integration boundary
+
+## STATUS (Session 5 — 2026-09-15, third-party integration seams)
+
+CURRENT: Done. Round-5 dispatch: the **outbound and inbound integration
+  boundary** as a class — nobody had swept it, though its pieces had been
+  touched (Pass E routes, Session 4 actions, Pass L RLS, C1-S4-01 the Stripe
+  webhook pair, C1-S4-02 the env registry).
+COMPLETED: 9 findings, numbered `C3-S5-01`…`C3-S5-09` (1 HIGH, 2 MEDIUM,
+  5 LOW, 1 OBSERVATION) + 13 verified-clean boundaries + 3 refuted hypotheses.
+  Enumerated the surface: **11 inbound provider endpoints** (9 Twilio, 1 Svix/
+  Resend, 1 Alexa, plus the shared-secret inbound-email route and the two
+  Stripe routes C1 already did), and **every outbound call site** in `app/` and
+  `lib/` classified against the three SSRF guards this repo actually has.
+  Headline: **migration 0297 opened a credential store that migration 0034's
+  own comment says must never carry a policy — and a committed probe now pins
+  the loosened state as the correct one.** Verified against a freshly replayed
+  schema (312 migrations, 0 failed).
+  Also: the Google Calendar OAuth **refresh token is stored in plaintext** in a
+  column the user's own browser can read and write, twenty files away from an
+  AES-256-GCM deny-all store built for exactly that credential.
+  REFUTED three things the dispatch brief and my own first reading suspected —
+  see "Hypotheses that died in measurement".
+NEXT: nothing queued. For Claude-1, in fix order: C3-S5-01 (a migration plus a
+  probe edit — but it is a product call first: decide whether anything is meant
+  to read that table at all), then C3-S5-02, then C3-S5-03.
+FILES-TOUCHED: audit/claude-3.md ONLY. No application source modified. One
+  transient probe file (`tests/zz-c3s5-probe.test.ts`) was created, run, and
+  deleted in the same shell command; `git status --porcelain` confirmed clean
+  afterwards. Postgres was started and migrations replayed into the harness
+  database — that is `docs/audit/verify-pg.sh`'s own scratch cluster, not the
+  repository.
+BLOCKERS: no local Supabase (no docker daemon, no CLI) → **not one inbound
+  webhook was invoked, and no forged-signature request was sent to any route.**
+  See "What I could NOT reach" at the end.
+LAST-UPDATE: 2026-09-15
+
+---
+
+## The replay, so the SQL evidence below is reproducible
+
+```
+$ bash docs/audit/verify-pg.sh up
+== migrations applied: 312, failed: 0 ==
+== harness up: db=bubaly host=/tmp/pgaudit_db port=54399 ==
+```
+
+312 of 312, zero failures (Session 4's run was 310/0; Pass E's was 308/3).
+Every `pg_policies` / `role_table_grants` result quoted below is a query against
+that live catalogue, not a grep of migration text — which matters here, because
+the repository enables RLS and creates several of these policies through
+`DO $$ … EXECUTE format(…)` loops that a text scan reads wrongly.
+
+---
+
+## The surface, enumerated
+
+**Inbound (someone else calls us).** 11 provider-facing endpoints besides the
+two Stripe routes C1-S4-01 covered:
+
+| Endpoint | Gate | Verdict |
+|---|---|---|
+| `api/guardian/inbound/{sms,voice,whatsapp}` | Twilio HMAC-SHA1 | verifies |
+| `api/guardian/{screen,status/voicemail,escalate/twiml}` | Twilio HMAC-SHA1 | verifies |
+| `api/guardian/escalate` | `GUARDIAN_INTERNAL_SECRET`/`CRON_SECRET` | fail-closed |
+| `api/contact-center/{sms,voice,voice/transcription}` | Twilio HMAC-SHA1 | verifies |
+| `api/contact-center/email` | `CONTACT_CENTER_INBOUND_SECRET` | fail-closed in prod |
+| `api/webhooks/resend` | Svix HMAC-SHA256 + 300 s window | verifies |
+| `api/assistant/alexa` | signature + cert chain + 150 s window + skill id | verifies |
+
+All 9 Twilio call sites route through one verifier, `lib/guardian/twilio.ts:130`,
+which returns `false` when `TWILIO_AUTH_TOKEN` is unset and compares with
+`timingSafeEqual`. **No endpoint bypasses its verifier.**
+
+**Outbound (we call someone else).** The raw-`fetch` census across `app/` and
+`lib/` is 15 call sites, of which 10 are client-side (`'use client'` fetches to
+our own `/api/*`) and 5 are server-side against **fixed, env-configured provider
+hosts** (`lib/health/probe.ts`, `lib/recipes/providers/themealdb.ts`,
+`lib/sync/providers/{google,microsoft}.ts`, `app/api/weekend/discover`). Every
+call taking a **user- or DB-supplied** URL goes through one of three guards.
+Those three guards are not equally strong, which is C3-S5-03.
+
+---
+
+## Findings
+
+### C3-S5-01
+
+```
+[CLAUDE-3][HIGH][DATABASE] Migration 0297 added four permissive policies to the
+social OAuth-token store that migration 0034's own comment forbids — on a false
+premise — and a committed probe now asserts the loosened state is correct
+File:     supabase/migrations/0034_social_command_center.sql:746-749  (the invariant)
+          supabase/migrations/0297_sensitive_tables_respect_role.sql:44-51 (the premise)
+          supabase/migrations/0297_sensitive_tables_respect_role.sql:74-90 (the four policies)
+          docs/audit/sensitive-role-boundary-check.sql:88-131          (the probe that pins it)
+
+Problem:  0034 creates `social_account_tokens` (access_token_enc /
+          refresh_token_enc for the family's connected social accounts) and
+          deliberately gives it NO policy. Its RLS block enables row security on
+          every `social\_%` table, then applies the generic family-scoped CRUD
+          policies to a HARD-CODED list of 22 tables — and the token table is
+          not on that list. The comment immediately after says so in terms:
+
+            -- Tokens: NO policy -> only the service-role client (which bypasses
+            -- RLS) can touch them. RLS is enabled above, so authenticated users
+            -- get zero rows. This is the deliberate "secure token storage"
+            -- boundary; never add a permissive policy here.
+
+          Migration 0297 then adds four. Its rationale reads:
+
+            -- It holds access_token_enc / refresh_token_enc for the family's
+            -- connected social accounts, and every policy was is_family_member.
+
+          **That premise is false.** There were no policies at all. 0297
+          believed it was NARROWING a table readable by every family member
+          including children. It was in fact WIDENING a table readable by
+          nobody — from deny-all to "any adult who can manage the family", for
+          SELECT, INSERT, UPDATE and DELETE alike.
+
+Evidence: The two migrations are the only ones in all 312 that mention the
+          table (`grep -n social_account_tokens supabase/migrations/*.sql`
+          returns 0034 lines 12/122 and 0297 lines 44/74-89 and nothing else),
+          so there was no intervening migration that could have created the
+          is_family_member policies 0297 says it found.
+
+          Against the replayed schema (312 applied, 0 failed):
+
+            $ psql -qAt -c "select tablename||' | '||policyname||' | '||cmd
+                            ||' | USING '||coalesce(qual,'-')
+                            ||' | CHECK '||coalesce(with_check,'-')
+                            from pg_policies where schemaname='public'
+                            and tablename in ('social_account_tokens','sync_tokens');"
+            social_account_tokens | ..._select | SELECT | USING can_manage_family(family_id) | CHECK -
+            social_account_tokens | ..._insert | INSERT | USING -                            | CHECK can_manage_family(family_id)
+            social_account_tokens | ..._update | UPDATE | USING can_manage_family(family_id) | CHECK can_manage_family(family_id)
+            social_account_tokens | ..._delete | DELETE | USING can_manage_family(family_id) | CHECK -
+            sync_tokens           | tokens service only | ALL | USING false | CHECK false
+
+          The contrast in that last row is the point. This repository has TWO
+          provider-credential stores. `sync_tokens` is `using (false) with check
+          (false)` — the shape 0034 intended for its own. `social_account_tokens`
+          is not, and is the only one of the pair a browser session can reach.
+
+          The probe is the part that makes this durable rather than a slip.
+          `docs/audit/sensitive-role-boundary-check.sql` seeds a token row and
+          then asserts, as a REQUIREMENT:
+
+            insert into public.social_account_tokens (...) values (..., 'adult-added', 'enc');
+            select count(*) into n from public.social_account_tokens where family_id = fam;
+            if n <> 2 then
+              raise exception '0297: an ADULT sees %/2 social token rows ...';
+            end if;
+
+          under the heading "the fix must not lock the grown-ups out". Run today
+          against the replayed schema it passes:
+
+            $ psql -v ON_ERROR_STOP=1 -f docs/audit/sensitive-role-boundary-check.sql
+            NOTICE:  0297 OK: a child is refused a parent licence, a sibling login
+                     and the OAuth tokens; ... parent and adult keep everything
+
+          So restoring 0034's invariant would now FAIL a committed probe. The
+          audit's own instrument has been taught that the regression is correct.
+
+          And nothing needs the access it granted. The only references to the
+          table anywhere in `app/` or `lib/` are
+          `lib/ai/context/policy.ts` (which lists it as a table the AI must
+          NEVER read) and `lib/database.types.ts` (generated). **No application
+          code reads or writes it.** The four policies serve no caller.
+
+Impact:   A family manager — a role a child can be promoted into, and a role
+          held by anyone who compromises one parent's session — can, straight
+          from the browser via PostgREST and with no server code involved:
+            • SELECT every connected social account's `access_token_enc` and
+              `refresh_token_enc`, moving the ciphertext outside the server
+              trust boundary where it can be attacked offline at leisure;
+            • DELETE them, silently disconnecting every social integration;
+            • UPDATE or INSERT arbitrary values into the credential column.
+          The tokens are AES-256-GCM ciphertext, so this is not a plaintext
+          credential leak, and that is why this is not rated CRITICAL. What it
+          is: a credential store that the codebase states in writing must be
+          unreachable, reachable — and an audit probe that certifies it.
+Fix:      Three parts, and the first is a product decision, not a migration:
+          1. Decide whether ANYTHING is meant to read this table. On today's
+             evidence nothing is, and `lib/ai/context/policy.ts` classes it
+             "Credentials and tokens — absolute, no exception".
+          2. If nothing is: a new migration dropping the four 0297 policies,
+             restoring 0034's deny-all, and matching `sync_tokens`' explicit
+             `for all using (false) with check (false)` so the intent is stated
+             rather than inferred from absence — absence is exactly what 0297
+             misread.
+          3. Amend `docs/audit/sensitive-role-boundary-check.sql`: the adult
+             INSERT/SELECT assertions must become refusal assertions. Leaving
+             them is what would make the next fix fail CI.
+          Worth noting for the writeup: 0297's other two changes (`child_logins`,
+          `driver_licenses`) are correct and well-reasoned. This is one table in
+          a three-table migration, and the error is in its research, not its
+          method.
+Status:   OPEN — policies, grants and the probe's result all read from the
+          replayed schema; the 0034/0297 contradiction read from the committed
+          SQL. NOT verified against production (see "What I could NOT reach").
+```
+
+### C3-S5-02
+
+```
+[CLAUDE-3][MEDIUM][SECURITY] The Google Calendar refresh token is stored in
+plaintext in a row the user's own browser can read AND write, while the parallel
+sync platform encrypts the same credential into a table nobody can reach
+File:     app/api/google/calendar/callback/route.ts:75-80  (the write)
+          app/api/google/calendar/sync/route.ts:26-29,71-76 (the read + rewrite)
+          lib/google.ts:95-97                               (refreshToken is in the object)
+          lib/sync/crypto.ts + supabase/migrations/0018_sync_platform.sql:110-131
+                                                            (what the other one does)
+Problem:  The callback stores the whole `GoogleToken` — `{ accessToken,
+          refreshToken, expiresAt }` — as a plain JSON value inside
+          `user_preferences.notification_prefs`:
+
+            const merged = { ...existing, googleCalendarToken: token };
+            await supabase.from('user_preferences').upsert({ user_id: userId, notification_prefs: merged }, ...)
+
+          `user_preferences` is a self-service table. Against the replayed
+          schema:
+
+            $ psql -qAt -c "select policyname||' | '||cmd||' | USING '||coalesce(qual,'-')
+                            from pg_policies where tablename='user_preferences';"
+            user_preferences_select | SELECT | USING (user_id = auth.uid())
+            user_preferences_insert | INSERT | ...
+            user_preferences_update | UPDATE | USING (user_id = auth.uid())
+            user_preferences_delete | DELETE | USING (user_id = auth.uid())
+            prefs_all               | ALL    | USING (user_id = auth.uid())
+
+          so the browser Supabase client, holding the user's own session, can
+          `select notification_prefs` and read the Google **refresh** token in
+          the clear — and can `update` it too.
+
+          Twenty files away the repository does this properly. `lib/sync/`
+          encrypts provider tokens with AES-256-GCM before they touch the
+          database (`lib/sync/crypto.ts`), stores them in `sync_tokens`, and
+          locks that table to `using (false) with check (false)`. The sync
+          platform's own Google adapter connects the SAME provider for the SAME
+          purpose. Two Google-calendar integrations, two opposite answers to
+          "where does a refresh token live".
+Evidence: `lib/google.ts:95-97` — `refreshToken: data.refresh_token ?? null` is
+          a field of the object the callback writes, so it is the long-lived
+          half that lands in the column, not just the hour-long access token.
+          `app/api/google/calendar/sync/route.ts:29` reads it straight back out
+          and `getValidAccessToken` (lib/google.ts:153-161) refreshes with it.
+          Consumer census: `grep -rn googleCalendarToken app lib` returns 7
+          hits across exactly 3 files — the callback, the sync route, and an
+          admin page that only null-checks it for a count.
+Impact:   A Google OAuth refresh token is a long-lived bearer credential. It
+          survives the user's password change, it survives Supabase session
+          revocation, and with `access_type=offline` + the `calendar.readonly`
+          scope this app requests (lib/google.ts:59-66) it reads the user's
+          calendar until they revoke it at accounts.google.com — which nothing
+          in this product tells them to do. Any XSS on an authenticated page,
+          any malicious browser extension, any leaked session, and any future
+          over-broad `select('*')` on `user_preferences` hands that token over.
+          None of those reach `sync_tokens`.
+          Second, smaller: because the column is self-WRITABLE, a user can plant
+          an arbitrary `googleCalendarToken` object. The refresh endpoint is a
+          constant (`lib/google.ts:126-136` posts to Google's fixed token URL),
+          so this is not an SSRF primitive — it is a self-inflicted integrity
+          hole only, which is why it is a footnote and not the finding.
+Fix:      Two options, in preference order:
+          1. Retire this path. The sync platform already has a Google adapter
+             with encryption, a deny-all credential table, refresh handling and
+             an audit log. Two implementations of one integration is the reason
+             they disagree.
+          2. If it must stay: encrypt with `encryptSecret()` before the upsert
+             and decrypt server-side on read — `lib/sync/crypto.ts` is already
+             importable and already has a key. That alone removes the plaintext
+             credential from a browser-readable column. Better still, move the
+             ciphertext out of `user_preferences` entirely, since a preferences
+             blob is a place `select('*')` gets written against by habit.
+Status:   OPEN — policies read from the replayed schema; the write and read
+          paths read from source. NOT demonstrated by an authenticated
+          PostgREST call (no local Supabase).
+```
+
+### C3-S5-03
+
+```
+[CLAUDE-3][MEDIUM][SECURITY] Three SSRF guards, three different strengths — and
+the weakest one (push endpoints) does no DNS resolution at all, so any public
+hostname that resolves to an internal address is accepted and POSTed to
+File:     lib/server/push-request.ts:32-50    (tier 3 — string only)
+          lib/server/public-calendar-fetch.ts:98-113 (tier 2 — resolves, then fetches by name)
+          lib/server/public-document-fetch.ts:39-72,102-115 (tier 1 — resolves and PINS the socket)
+          lib/server/push.ts:81-89            (the send, with no re-validation)
+Problem:  `isPrivateOrReservedHost()` inspects the hostname STRING. It rejects
+          `localhost`, `*.local`, `*.internal`, IPv6 loopback/ULA/link-local,
+          and dotted-quad RFC1918 / loopback / link-local / CGNAT literals. It
+          never resolves anything. So a hostname that is perfectly public as a
+          string and resolves to an internal address passes.
+
+          Real push endpoints use public DNS names (`fcm.googleapis.com`), which
+          is the guard's own stated rationale — but the guard cannot tell that
+          name from an attacker's, because it never asks DNS what either one is.
+
+          `lib/server/push.ts:81-89` then reads `endpoint` back out of
+          `push_devices` and hands it to `webpush.sendNotification` with **no
+          second check** (`grep -n isPrivateOrReservedHost lib/server/push.ts`
+          → no matches). Registration time is the only gate there is.
+Evidence: Probe run against the real guard (temporary test file, run and
+          deleted in one command):
+
+            reg('https://localtest.me/x').ok  ===  true
+
+          `localtest.me` is an ordinary public DNS name whose A record is
+          127.0.0.1. It is accepted as a push endpoint.
+
+          Compare the calendar guard on the same input class. Its
+          `validatePublicCalendarUrl` calls `dns.lookup` on any non-literal host
+          and rejects if ANY returned address is blocked
+          (public-calendar-fetch.ts:106-111), so `localtest.me` is refused.
+          And compare the document/media guard, which goes further still: it
+          resolves, then installs a `LookupFunction` returning ONLY the pinned
+          address into a per-request `Agent` with `keepAlive: false`
+          (public-document-fetch.ts:104-112), so even DNS rebinding between
+          validation and connection cannot move the socket. Its own comment
+          names the reason: "Two copies of an SSRF guard is two guards that
+          drift, and the one that drifts is always the copy."
+          Three copies exist. The push one drifted furthest.
+Impact:   An authenticated user registers a push endpoint on a domain they
+          control whose A record points at an internal address — cloud metadata,
+          an internal admin port, a service on the VPC. Every subsequent
+          notification to that user makes the server POST an encrypted Web Push
+          payload to it. The attacker does not see the response body, so this is
+          a BLIND SSRF: an internal-POST primitive plus an existence/latency
+          oracle, repeatable on the product's own notification schedule. It is
+          not a read primitive, which is why this is MEDIUM.
+Fix:      Two lines of preference:
+          1. Make the push path use `resolvePublicAddresses` +
+             `isPublicDocumentAddress` from `public-document-fetch.ts` — the
+             exported-for-reuse pair the media proxy already shares, whose
+             docstring exists precisely so a third copy is not written.
+          2. Re-check at SEND time, not only at registration. The endpoint is
+             read from a table; a row can outlive the check that admitted it,
+             and DNS can change under a row that was valid when it was written.
+          Also worth folding in: `lib/social/unfurl.ts:66-84` is a FOURTH
+          string-only host check. It is currently harmless — `addByUrlAction`
+          passes the URL to `fetchPublicText` (the tier-2 guard) regardless, so
+          `isSafePublicUrl` is only a pre-filter — but it is one refactor away
+          from being load-bearing, and it is weaker than the push one (no CGNAT,
+          no 0.0.0.0/8 beyond the exact literal).
+Status:   OPEN — the accept was demonstrated against the real guard; the
+          downstream send path was read, not executed.
+```
+
+### C3-S5-04
+
+```
+[CLAUDE-3][LOW][INTEGRATIONS] `lib/server/external-fetch.ts` is a timeout
+wrapper named like a safety boundary, and `fetchExternal` is what a developer
+reaches for when they want "the safe outbound fetch"
+File:     lib/server/external-fetch.ts (all 15 lines)
+Problem:  The whole module is:
+
+            export function fetchExternal(input, init = {}, timeoutMs = 15_000) {
+              return fetch(input, { ...init, signal: init.signal ?? AbortSignal.timeout(timeoutMs) });
+            }
+
+          It performs no URL validation, no scheme check, no DNS resolution, no
+          redirect policy and no response bounding. Its docstring is accurate
+          ("Put a deadline on fixed-provider network calls") — but the module
+          name, the function name and its position in `lib/server/` alongside
+          `public-calendar-fetch.ts`, `public-document-fetch.ts` and
+          `public-media-fetch.ts` (which ARE guards) all read the other way.
+Evidence: Censused every `fetchExternal` caller. All are fixed provider hosts or
+          env-configured endpoints: `api.twilio.com` (lib/guardian/twilio.ts:17),
+          `api.resend.com` (lib/server/email.ts:32), Google's token and calendar
+          URLs (lib/google.ts:78,127,163), Search Console / Bing / the
+          `AI_CITATION_API_URL` endpoint (lib/marketing/provider-sync.ts:74,105,130),
+          and the CalDAV base (lib/sync/providers/apple.ts:279).
+          **No current caller passes a user- or DB-supplied URL**, so this is a
+          naming and future-proofing finding, not a live hole. Recorded because
+          the dispatch brief for this session itself assumed the file was the
+          SSRF guard — if the brief misread it, a developer will.
+Impact:   The next person who needs to fetch a URL from a database row picks the
+          function called `fetchExternal` from the directory full of guards, and
+          gets a timeout.
+Fix:      Rename to `fetchWithDeadline` (or `fetchProvider`), and add one line to
+          the header: "This is a TIMEOUT wrapper. For any URL that is not a
+          compile-time constant use lib/server/public-document-fetch.ts."
+          Optionally assert `input` is one of the known provider origins, which
+          would make the constraint mechanical rather than documentary.
+Status:   OPEN — census is a grep over app/ and lib/; complete for those trees.
+```
+
+### C3-S5-05
+
+```
+[CLAUDE-3][LOW][INTEGRATIONS] The public contact form answers "sent" when no
+mail provider is configured, and its own fallback path swallows its errors
+File:     lib/server/email.ts:28-31   (ok:true on skip)
+          app/api/contact/route.ts:49-73 (the fallback, in a bare catch)
+          app/api/contact/route.ts:96-99 (the check that misses it)
+Problem:  `sendEmail` returns `{ ok: true, skipped: true }` when
+          `RESEND_API_KEY` is unset. The contact route checks only `ok`:
+
+            const result = await sendEmail({ ... });
+            if (!result.ok) return NextResponse.json({ error: ... }, { status: 502 });
+            return NextResponse.json({ ok: true });
+
+          so with the key unset the submitter is told their message was sent.
+          The route does persist a `support_tickets` row first — but that write
+          sits in a `try { … } catch { /* non-fatal: the email below is the
+          primary path */ }` whose result is never read. So the backup is
+          silent-on-failure and the primary is silent-on-absence, and both can
+          miss while the user gets `{ ok: true }`.
+Evidence: `sendEmail`'s three-state return is handled correctly ONE file away:
+          `lib/admin/digest.ts:22-26` counts `r.ok && !r.skipped` as sent and
+          `r.ok && r.skipped` as skipped, and `app/api/cron/admin-digest`
+          reports them separately. The contract is right; one of its four
+          callers reads it wrongly. (The other two — lib/feedback/notify.ts:61
+          and the contact-centre auto-reply — are explicitly best-effort.)
+          This is the same defect C1-S3 fixed under "RESEND_API_KEY unset: mail
+          never sent, rows marked delivered"; that fix reached the notification
+          path and not this route.
+Impact:   Bounded by deployment: it needs `RESEND_API_KEY` unset in production,
+          which C1-S3 records as having actually happened once. When it does,
+          the public contact form — the only channel a non-customer has —
+          silently drops messages while thanking the sender. The ticket row is
+          usually the saving grace, and its failure is invisible.
+Fix:      `if (!result.ok || result.skipped)` return the 502, or better: capture
+          the `support_tickets` insert error, and return success when EITHER
+          path demonstrably succeeded. Right now success is returned when
+          neither did.
+Status:   OPEN — read from source; not executed (would need a live Resend key
+          or its absence, and a database).
+```
+
+### C3-S5-06
+
+```
+[CLAUDE-3][LOW][SECURITY] `SYNC_TOKEN_KEY` silently accepts any string and
+hashes it into a key, so a placeholder value produces a working, low-entropy
+credential-encryption key with no warning anywhere
+File:     lib/sync/crypto.ts:18-30 (loadKey), :68-70 (hasEncryptionKey)
+Problem:  loadKey() accepts 64-hex, or base64 decoding to 32 bytes, and
+          otherwise:
+
+            return createHash('sha256').update(raw).digest();
+
+          `SYNC_TOKEN_KEY=changeme` therefore yields a perfectly valid
+          AES-256-GCM key with roughly the entropy of the word "changeme".
+          Encryption succeeds, decryption succeeds, nothing logs anything, and
+          the health/capability check is only:
+
+            export function hasEncryptionKey(): boolean { return !!process.env.SYNC_TOKEN_KEY; }
+
+          — presence, never strength. The OAuth callback gates on exactly that
+          (`app/api/sync/[provider]/callback/route.ts:39`), so "we have a key"
+          and "we have a key worth having" are the same question to this code.
+Evidence: The module header documents the intended form and gives the generator
+          command, so the SHA-256 branch is a convenience fallback, not the
+          designed path. Nothing warns when that branch is taken.
+Impact:   This is the key protecting `sync_tokens` — the one credential store
+          this audit has otherwise found to be correctly locked down (deny-all
+          RLS, verified below). Every defence around that table assumes the
+          ciphertext is strong. A weak key makes the ciphertext offline-
+          crackable, which is the assumption C3-S5-01 also leans on.
+Fix:      When the SHA-256 branch is taken, log a startup warning naming the
+          variable; and make `hasEncryptionKey()` return false for a raw value
+          under some minimum length so the fail-closed path the callback
+          already has (`error=no_encryption_key`) does the work. Neither
+          changes the happy path.
+Status:   OPEN — read from source.
+```
+
+### C3-S5-07
+
+```
+[CLAUDE-3][LOW][SECURITY] The CalDAV transport will fetch any absolute URL it is
+given and attach the Apple app-specific password to it; nothing in the transport
+enforces the normalisation that makes that safe
+File:     lib/sync/providers/apple.ts:277-291 (dav)
+          lib/sync/providers/apple.ts:74-78   (hrefPath, the normalisation)
+Problem:  `dav()` builds its target as
+
+            const url = path.startsWith('http') ? path : `${ICLOUD_CALDAV}${path}`;
+
+          and unconditionally sends `Authorization: Basic <appleId:appPassword>`.
+          Every `path` it receives originates in XML the REMOTE server returned:
+          `parsePrincipalHref`, `parseCalendarHomeHref`, `parseCalendarCollections`
+          and `parseSyncResponse` all read `<href>` out of a multistatus document.
+          The safety of the whole adapter therefore rests on every one of those
+          parsers having called `hrefPath()`, which reduces an absolute URL to
+          its pathname.
+Evidence: I checked all four, and **all four do** call `hrefPath()`
+          (apple.ts:123, 131, 144, 168). So there is no live path by which a
+          remote href reaches `dav()` as an absolute URL. This is a
+          defence-in-depth finding, not a reachable bug, and it is recorded at
+          LOW for that reason.
+          Two residuals that are real:
+          • `hrefPath` returns its input unchanged if `new URL()` throws on a
+            string that already matched `^https?://` (apple.ts:76). The only
+            such strings are malformed ones, which then fail at fetch — harmless
+            today, but it is a fall-through that returns an unnormalised value.
+          • `dav()` calls `fetchExternal`, which is plain `fetch` with a timeout
+            and therefore FOLLOWS redirects (up to 20). The CalDAV guards
+            elsewhere in this repo use `redirect: 'manual'` and revalidate each
+            hop (public-calendar-fetch.ts:166-179). Node's fetch strips
+            `Authorization` on a cross-origin redirect, so the credential does
+            not travel — but the REQUEST does, unvalidated.
+Impact:   Requires the configured CalDAV server (`APPLE_CALDAV_BASE_URL`, default
+          `caldav.icloud.com`) to be hostile or MITM'd. Both are operator- or
+          TLS-level assumptions rather than user-reachable ones. The adapter is
+          additionally dark until `APPLE_SYNC_ENABLED=true`.
+Fix:      Assert in `dav()` itself rather than trusting four callers: reject a
+          `path` that does not start with `/`, and pass `redirect: 'manual'`.
+          Four lines, and it makes the invariant local to the function that
+          depends on it.
+Status:   OPEN — all four parsers read in full; no network call made.
+```
+
+### C3-S5-08
+
+```
+[CLAUDE-3][LOW][SECURITY] The inbound-email shared secret is accepted in the
+query string and compared non-constant-time
+File:     app/api/contact-center/email/route.ts:33-38
+Problem:  authorized() reads the secret from `?key=` OR the `x-inbound-secret`
+          header, and compares with `===`:
+
+            const provided = new URL(req.url).searchParams.get('key') ?? req.headers.get('x-inbound-secret');
+            return !!provided && provided === secret;
+
+          A secret in a query string is written to access logs, proxy logs,
+          browser history and `Referer` headers in a way a header is not — and
+          the `??` puts the query parameter FIRST, so it is the encouraged form.
+          The `===` is not constant-time; `timingSafeEqual` is already imported
+          in three sibling routes in this repository.
+Impact:   Low and conditional. The endpoint is not browser-navigated, so
+          `Referer` leakage needs a redirect; the timing channel over HTTP
+          against a high-entropy secret is largely theoretical. The log exposure
+          is the real one, and it is the kind that surfaces months later in a
+          log export.
+Fix:      Prefer the header, keep `?key=` only if a provider cannot send
+          headers, and compare with `timingSafeEqual` on equal-length buffers.
+Status:   OPEN — read from source.
+```
+
+### C3-S5-09
+
+```
+[CLAUDE-3][OBSERVATION][DATABASE] Both credential stores grant TRUNCATE to anon
+and authenticated, and RLS does not constrain TRUNCATE — so `using (false)` does
+not protect `sync_tokens` against it
+File:     supabase/migrations/0018_sync_platform.sql:663,719-721
+          supabase/migrations/0034_social_command_center.sql:722-726
+Problem:  This is C3-S3-02's mechanism (recorded there against the nine
+          marketing-spine tables) reaching the two tables this session is about.
+          Neither migration revokes anything from `anon` or `authenticated`, so
+          Supabase's default privileges stand.
+Evidence: $ psql -qAt -c "select table_name||' '||grantee||' '||privilege_type
+                          from information_schema.role_table_grants
+                          where table_name in ('social_account_tokens','sync_tokens')
+                          and grantee in ('anon','authenticated','service_role');"
+          … sync_tokens anon TRUNCATE
+          … sync_tokens authenticated TRUNCATE
+          … social_account_tokens anon TRUNCATE
+          … social_account_tokens authenticated TRUNCATE
+          (plus SELECT/INSERT/UPDATE/DELETE/REFERENCES/TRIGGER on both, for all
+          three roles.)
+Impact:   Worth stating precisely so it is not overread: PostgREST does not
+          expose TRUNCATE, so this is not reachable over the REST API. It is
+          reachable by anything that executes SQL as those roles — a
+          `security invoker` function, a future RPC, a direct connection with a
+          leaked anon credential. `sync_tokens` is the repository's model
+          credential store, with a deliberate `using (false)` policy, and that
+          policy does not stop `truncate public.sync_tokens` erasing every
+          family's encrypted OAuth credentials.
+Fix:      Same as C3-S3-02: `revoke truncate on <table> from anon, authenticated`
+          as part of whatever migration addresses that finding. This entry
+          exists so the fix's table list includes the credential stores, which
+          C3-S3-02's list did not.
+Status:   OPEN (extends C3-S3-02) — grants read from the replayed schema.
+```
+
+---
+
+## Verified healthy — boundaries that are genuinely well-built
+
+Recorded so the next pass does not re-derive them. Several of these are better
+than the repository average and one is the best SSRF implementation I have seen
+in this codebase.
+
+1. **All nine Twilio endpoints verify, through one verifier.** `guardian/inbound/
+   {sms,voice,whatsapp}`, `guardian/{screen,status/voicemail,escalate/twiml}`,
+   `contact-center/{sms,voice,voice/transcription}`. The verifier
+   (`lib/guardian/twilio.ts:130-147`) returns `false` when `TWILIO_AUTH_TOKEN` is
+   unset — fail-closed, not skip — and uses `timingSafeEqual`. Each route signs
+   over the full URL including the query string where one is present
+   (screen, voicemail, escalate/twiml, transcription), which is what Twilio
+   actually signs. A length mismatch throws inside `timingSafeEqual` and is
+   caught into `false`.
+2. **`guardian/escalate` is secret-gated and fail-closed**, not signature-gated,
+   because it is an internal trigger rather than a provider callback — and the
+   committed guard test knows and states the difference.
+3. **The Resend/Svix webhook is fail-closed and replay-bounded.**
+   `app/api/webhooks/resend/route.ts:19-46`: no secret → `false`; missing any of
+   the three `svix-*` headers → `false`; timestamp outside ±300 s → `false`;
+   HMAC-SHA256 over `id.ts.body` compared with `timingSafeEqual` against every
+   `v1,<sig>` pair. Verification happens before the body is parsed.
+4. **The Alexa endpoint verifies properly and nothing bypasses it.** The route
+   reads RAW BYTES (not re-serialised JSON, which would break the signature),
+   verifies before doing anything, returns a bare 403 with no speech, and logs
+   the reason server-side only. `lib/assistant/alexa-verify.ts` contains **no
+   `NODE_ENV` branch and no environment-gated skip** — the only `process.env`
+   read in the file is `ALEXA_SKILL_ID`. The cert-chain URL is validated against
+   Amazon's published host/path policy BEFORE the fetch, which its own header
+   comment identifies as the thing that stops the verifier becoming an SSRF
+   primitive, and the chain fetch resolves through `isPublicDocumentAddress` /
+   `resolvePublicAddresses`. One residual, not a finding: step 4 (skill-id match)
+   is skipped when `ALEXA_SKILL_ID` is unset, so another Amazon-signed skill
+   could point at the endpoint and clear steps 1-3 and 5. The variable IS in the
+   environment registry and in `.env.example`.
+5. **The contact-centre inbound-email secret is fail-closed in production** —
+   this directly answers the dispatch brief's concern. `authorized()` returns
+   `process.env.NODE_ENV !== 'production'` only when the secret is UNSET, i.e.
+   with no secret configured the endpoint rejects everything in production and
+   permits only local development. The header comment says exactly this and is
+   accurate. (Its two smaller problems are C3-S5-08.)
+6. **`sync_tokens` is the model credential store.** `for all using (false) with
+   check (false)`, verified against the replayed catalogue. Service-role only.
+7. **`lib/server/public-document-fetch.ts` and `public-media-fetch.ts` are the
+   strongest SSRF guards here.** They resolve with a dedicated `Resolver`,
+   reject via a `BlockList` covering IPv4 private/reserved space, Azure's
+   `168.63.129.16`, IPv6 non-global-unicast and documentation ranges — and then
+   **pin the resolved address into the socket** through a custom `LookupFunction`
+   on a per-request `Agent` with `keepAlive: false` and `autoSelectFamily: false`,
+   so DNS rebinding between check and connect cannot move the connection.
+   Redirects are handled hop-by-hop with the same validation. The media proxy
+   imports the document module's helpers rather than copying them, and says why.
+8. **`tests/calendar-sync-ssrf-guard.test.ts` is load-bearing, not vacuous** —
+   the brief asked. It pins the call SITE: the route must import
+   `fetchPublicCalendarText` from the guarded module, must call it, and must
+   contain **zero** raw `fetch(` calls (`route.match(/[^.\w]fetch\s*\(/g)` must
+   be empty). That third assertion is the one that makes it real: it fails if a
+   refactor adds a bare `fetch` anywhere in the route, which is precisely how
+   this class of guard usually gets bypassed. The underlying guard
+   (`public-calendar-fetch.ts`) resolves DNS, rejects 13 IPv4 ranges and the
+   IPv6 equivalents, rejects credentials in the URL, revalidates every redirect
+   hop with `redirect: 'manual'`, caps at 3 hops, and bounds the body by both
+   `content-length` and a streaming byte count.
+9. **The URL-unfurl path is guarded.** `addByUrlAction` looks like it uses a
+   hand-rolled `isSafePublicUrl`, but the actual fetch goes through
+   `fetchPublicText` — the tier-2 guard. `isSafePublicUrl` is a redundant
+   pre-filter (see the note in C3-S5-03).
+10. **Apple CalDAV href parsing normalises everywhere.** All four parsers call
+    `hrefPath()`; `insertEvent` derives its href from an already-normalised
+    collection path; the packed Basic credential is separated by `\x1f` so an
+    Apple ID or password containing `:` cannot be mis-split.
+11. **`lib/marketing/provider-sync.ts` does NOT report success on failure.** I
+    expected it to — the aggregate initialises every provider to `ok: true` and
+    the per-provider functions catch their own errors. But each catch block
+    ends in `throw error` (lines 92, 117, 147) after writing `status:'error'` to
+    the DB, so the outer catch does fire and sets `ok: false`. The one cosmetic
+    edge: with no provider configured, `completed` is `true` and `ready` is
+    `false`, which is the honest pair.
+12. **`app/api/cron/admin-digest` reads `sendEmail`'s three-state return
+    correctly** — `sent`, `skipped` and `failed` counted separately, 502 when
+    any failed. It is the reference implementation C3-S5-05's fix should copy.
+13. **No secret reaches a log line or a client error body.** A grep for
+    `console.*` calls carrying `SECRET|API_KEY|_TOKEN|accessToken|refreshToken|
+    apiKey|password|authToken` returns nothing but "not set" diagnostics; no
+    integration route interpolates `error.message` into a `NextResponse`.
+    `SyncApiError` carries a `body` field for provider detail and nothing
+    renders it to a user. One note, not a finding: the Bing key travels in a
+    query string (`provider-sync.ts:104`), so it is visible to any egress proxy
+    or provider-side access log, unlike the other three which use headers.
+
+**Test coverage of the inbound boundary is better than average and one guard is
+stronger than its sibling.** `tests/public-webhook-signature-boundary.test.ts`
+enumerates `app/api/guardian/**` **from disk**, so a newly-added guardian route
+is covered automatically; it also asserts the verifier itself is fail-closed on
+a missing `TWILIO_AUTH_TOKEN`. `tests/middleware-public-api-boundary.test.ts`
+covers the four contact-centre routes — but from a **hard-coded list**
+(`['email','sms','voice','voice/transcription']`), so a fifth route added under
+that public prefix would be unguarded and untested. Making that list read from
+disk the way the guardian one does is a small, worthwhile hardening. Together
+with `tests/alexa-request-verification.test.ts` and
+`tests/resend-webhook-replay-contract.test.ts`, 10 of the 11 inbound endpoints
+have a committed authenticity guard.
+
+---
+
+## Hypotheses that died in measurement
+
+Recorded per the convention C1-S4 and Pass N established — a hypothesis that
+dies deserves the same note as one that survives, because the next pass will
+otherwise form it again.
+
+1. **"The push guard misses numeric IPv4 literals."** `isPrivateOrReservedHost`
+   only matches dotted quads, and I confirmed on this machine that
+   `dns.lookup` resolves `2130706433`, `0x7f000001`, `017700000001` and `127.1`
+   all to `127.0.0.1`. So the bypass looked certain. It is not: Node's WHATWG
+   `URL` parser **normalises all four to `127.0.0.1` before the guard ever sees
+   the hostname**, and the dotted-quad regex then catches them. My probe
+   asserted the accept and FAILED, which is how I found out. The finding that
+   survives (C3-S5-03) is narrower and rests on `localtest.me` instead. Worth
+   knowing that the guard's correctness here is inherited from `new URL()`
+   rather than written down — remove the `new URL()` step in a refactor and the
+   bypass becomes real.
+2. **"The contact-centre inbound-email secret falls back open in production."**
+   The dispatch brief flagged this from the environment registry's wording. It
+   is the opposite: an unset secret rejects everything in production and permits
+   only `NODE_ENV !== 'production'`. Fail-closed, and documented as such at the
+   top of the file.
+3. **"`lib/marketing/provider-sync.ts` reports success on failure."** The
+   aggregate's `results` map initialises every provider to `ok: true` and each
+   provider function has its own catch — the exact shape of the defect. The
+   catches re-throw. It is correct.
+
+A fourth, smaller one: I expected `lib/server/external-fetch.ts` to be the SSRF
+guard the brief described and to find callers bypassing it. It is a timeout
+wrapper with no validation at all, and every caller is a fixed provider host.
+The finding inverted into C3-S5-04.
+
+---
+
+## What I could NOT reach
+
+Stated explicitly, because "we could not look" must never read as "it is clean".
+
+1. **No local Supabase (no docker daemon, no CLI). Not one inbound webhook was
+   invoked.** No request — forged, signed, or replayed — was sent to any of the
+   11 endpoints. Every "verifies correctly" above is a reading of the verifier
+   and its call site, not a demonstration that a forged request is rejected. In
+   particular I could not show that the Twilio URL reconstruction
+   (`${BASE_URL}${pathname}${search}`) matches what Twilio actually signs behind
+   whatever proxy production runs — a mismatch there would make every callback
+   401 rather than fail open, but it would be a live outage and nothing here
+   would have caught it.
+2. **Every `NODE_ENV`-gated conclusion is conditional on production actually
+   setting `NODE_ENV=production`.** Ten endpoints (nine Twilio plus the inbound
+   email route) gate their entire authenticity check on that string. Next sets
+   it during `next build`/`next start`, so this is near-certainly fine — but I
+   could not read the deployment, and if it is ever wrong, ten endpoints open at
+   once with no other signal. There is also no test that exercises the verifying
+   branch, because the branch only exists when `NODE_ENV === 'production'`.
+3. **Production environment values are unknown.** Whether `RESEND_API_KEY`,
+   `CONTACT_CENTER_INBOUND_SECRET`, `ALEXA_SKILL_ID`, `STRIPE_MONEY_WEBHOOK_SECRET`
+   or a strong `SYNC_TOKEN_KEY` are set is not observable from here. C3-S5-05
+   and C3-S5-06 are bounded by exactly that.
+4. **Production schema is not verified.** The SQL evidence in C3-S5-01 and
+   C3-S5-09 is the committed migrations replayed locally. `finalaudit.md`
+   F-001/F5/F-C08 record that there is no working path to apply a migration to
+   production, so production may carry neither 0034's invariant nor 0297's
+   reversal of it. Confirming which needs operator credentials.
+5. **No outbound request was made to any provider.** Google, Twilio, Resend,
+   Stripe, iCloud CalDAV, FCM/APNs and the marketing providers were all read,
+   never called. The SSRF findings rest on guard logic, not on an observed
+   connection to an internal address.
+6. **`lib/server/push.ts` was read only along the endpoint path.** The FCM and
+   APNs provider branches, their credential handling, and VAPID key storage were
+   not audited. That is a real gap in this session's coverage of "push", and it
+   should be somebody's next half-hour.
+7. **`mobile/` was not swept.** The Expo app has its own integration surface
+   (push registration, deep links, OAuth redirects) and nothing in this session
+   touched it. C1-S3 looked at the mobile bundle's secret exposure; the
+   integration seams there are unexamined.
+

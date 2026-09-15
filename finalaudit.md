@@ -15,8 +15,9 @@ and both sessions independently labelled a pass **"L"** for different work, so
 theirs is relabelled **L′** while its finding ID `F-L01` is left exactly as its
 author wrote it.*
 
-**Seventeen passes, A–P plus L′. 137 distinct finding IDs are named in this
-document**, of which Pass P added 17. The passes' own totals are larger than the
+**Eighteen passes, A–Q plus L′. 150 distinct finding IDs are named in this
+document**, of which Pass P added 17 and Pass Q 12 (plus one earlier ID, C3-S3-02,
+now cited individually rather than by range). The passes' own totals are larger than the
 IDs named here — Pass P alone produced 38 findings — because this index cites
 the significant ones individually and the remainder by range; the worker files
 hold every one in full. That distinction is stated rather than papered over with
@@ -5422,3 +5423,194 @@ One environment note: `mobile/node_modules` here is a **partial** install
 (`expo-audio`, `@expo/ui`, `@expo/metro-runtime` absent). Verified against the
 lockfile that CI's `npm ci` does not hit it; with those excluded the Expo app
 typechecks clean.
+
+# Pass Q — the suite that could not fail, and a credential store opened on a false premise
+
+Two workers reported round 5 together. Claude-4 turned the audit's own central
+question on the audit's own instruments — *do the 13,750 passing tests mean
+anything?* — and Claude-3 walked the integration boundary. Both landed HIGHs, and
+both are merged here after I re-proved the mechanism myself rather than taking
+the report's word for it, as with every prior worker HIGH.
+
+## C4-S5-01 [HIGH][QA/TESTS] — the "spelling-only" guard, 46 proven vacuous
+
+`expect(source).toContain('requireMarketingAdmin')` asserts that the identifier
+appears *somewhere* in the file. In an ES module it always does — on the import
+line. The guard therefore survives the deletion of every call.
+
+Claude-4 parsed `tests/**/*.test.ts` with the repo's own TypeScript 5.9.3
+compiler API (**1,205 files, 9,275 literal `it()` blocks**), examined 673
+assertions, mutation-tested 97, and **proved 54 vacuous across 45 files**. Of
+51 files whose call sites were rewritten to `__neutered(`, **46 stayed green**.
+
+**I reproduced the worst instance directly.** `tests/marketing-core-referral-boundaries.test.ts:26`
+guards `app/(app)/admin/marketing/lead-scores/actions.ts` — an *authorization
+gate*. I replaced its single call site:
+
+```
+-  const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
++  const { supabase, actorId, actorEmail } = await __neutered();
+```
+
+and ran the file. **14/14 passed.** The import line still spells
+`requireMarketingAdmin`, so `toContain` was satisfied by an admin check that no
+longer exists. The same file proves `marketingActionFailure` and
+`logMarketingAudit` spelling-only; `tests/wallet-money-action-boundaries.test.ts:24`
+proves the same for `logWalletAudit`, on money.
+
+The repository already knows the fix and applies it about a fifth of the time:
+append `(` to the literal. `tests/cron-auth.test.ts` carries both idioms eleven
+lines apart — `:49 toContain('hasCronAuthorization(')` is sound, `:54
+toContain('hasInternalSecret')` is not. Repo-wide the split is **204 sound vs
+837 bare**.
+
+Fix: append `(` to the literal in each proven site, and add a meta-guard that
+fails when a source-scanning `toContain` names a known helper without it.
+
+## C4-S5-02 [HIGH][QA/TESTS] — the `indexOf` → `-1` sentinel, 8 proven
+
+`expect(a.indexOf(X)).toBeLessThan(a.indexOf(Y))` passes *most convincingly*
+when `X` is absent: `-1` is less than everything. This is the same shape I found
+in my own guard in Pass O and fixed there; it is repo-wide.
+
+**Reproduced.** `tests/referral-reward.test.ts:195` is named *"the Stripe
+webhook fulfils the reward right after marking the conversion"*. I deleted the
+call it names from `app/api/webhooks/stripe/route.ts:91`:
+
+```
+-    try { await markReferralConverted(supabase, familyId); }
++    try { /* neutered */ }
+```
+
+**11/11 still passed.** The guard for "the conversion is marked before the
+reward" is satisfied by never marking the conversion.
+
+Fix: assert presence first (`expect(i).toBeGreaterThan(-1)`) before comparing —
+the correction already applied to `no-zero-tiles-above-an-error-branch.test.ts`.
+
+**Consequence for an earlier pass, recorded because it weakens a guard on the
+strength of fixes that do not hold:** `tests/silent-empty-read-ratchet.test.ts`
+has already had `assistant-module` and `journeys/page.tsx` pruned from its
+BASELINE. Findings (5), (6) and (7) of this audit show those fixes do not hold.
+The baseline should be restored, not trusted.
+
+## C4-S5-03 [INFO][QA/TESTS] — and the larger, cleaner half
+
+The headline is not the 54. Every class that would have made this suite theatre
+came back **zero under active attack**: no assertion-free `it()`, no unawaited
+`.rejects`, no `.skip`/`.todo`, no orphaned test files. All **11 of 11**
+repo-scanning `toEqual([])` guards caught a planted offender.
+`tests/boundary-probes-actually-assert.test.ts` is the repo's own correct
+template. This is a suite that is mostly real, with one bad idiom repeated
+several hundred times.
+
+Independently: the full local suite on this branch is **1,207 files / 13,750
+tests, 0 failures**, with the Pass P fixes in.
+
+## C3-S5-01 [HIGH][SECURITY/DATABASE] — a deny-all credential store reopened, and a probe that now pins it open
+
+`supabase/migrations/0034_social_command_center.sql:746-749` creates
+`social_account_tokens` with **no policy at all**, and says so:
+
+> *"Tokens: NO policy → only the service-role client (which bypasses RLS) can
+> touch them… This is the deliberate 'secure token storage' boundary; never add
+> a permissive policy here."*
+
+`supabase/migrations/0297_sensitive_tables_respect_role.sql:74-90` adds four —
+SELECT, INSERT, UPDATE, DELETE, each `using (public.can_manage_family(family_id))`
+— on the stated premise that *"every policy was is_family_member."*
+
+**There were none.** I verified the census myself: of 312 migrations, exactly
+two mention the table — 0034, which creates it policy-less, and 0297. No
+intervening migration could have created what 0297 believed it was narrowing.
+0297 thought it was tightening a child-readable table; it opened a deny-all one
+to every family manager through PostgREST.
+
+Claude-3 confirmed the effect against a freshly replayed schema (`docs/audit/verify-pg.sh up`,
+312 applied / 0 failed). The contrast is the finding: two provider-credential
+stores, `sync_tokens` correctly `using (false) / check (false)`, and this one
+browser-reachable.
+
+Worse, `docs/audit/sensitive-role-boundary-check.sql:126-131` now **asserts as a
+requirement** that an adult can INSERT and SELECT token rows ("the fix must not
+lock the grown-ups out"), and passes today. Restoring 0034's invariant would
+fail a committed probe — the audit's own instrument has been taught that the
+regression is the specification.
+
+Nothing needs the access: the only references in `app/` or `lib/` are
+`lib/ai/context/policy.ts`, which classes the table *"Credentials and tokens —
+absolute, no exception"*, and generated types. **No application code reads or
+writes it.**
+
+HIGH rather than CRITICAL because the columns are AES-256-GCM ciphertext — an
+assumption C3-S5-06 then undercuts. Fix order: confirm nothing needs the table,
+then a migration dropping the four policies, then amend the probe.
+
+## C3-S5-02 [MEDIUM][SECURITY] — one credential, two opposite answers
+
+The Google Calendar **refresh token is stored in plaintext** in
+`user_preferences.notification_prefs`, a row the user's own browser can `select`
+*and* `update` (`user_id = auth.uid()` on all five policies). Twenty files away,
+`lib/sync/` AES-256-GCM-encrypts the same credential into `sync_tokens`. Two
+Google-calendar integrations, opposite decisions about the same secret.
+
+## C3-S5-03 [MEDIUM][SECURITY] — three SSRF guards of three strengths
+
+The push-endpoint guard is **string-only, with no DNS resolution**, so any
+public hostname that resolves internally is accepted and then POSTed
+server-side by `web-push` with no re-validation at send time — demonstrated with
+`reg('https://localtest.me/x').ok === true`. The document/media guard at the
+other end of the range pins the resolved address into a per-request socket and
+defeats DNS rebinding. The fix is to make the weak one the strong one.
+
+## C3-S5-04..09 — the remainder
+
+- **C3-S5-04 [LOW]** — `lib/server/external-fetch.ts` is a 15-line timeout
+  wrapper sitting in a directory of real guards, named `fetchExternal`. No
+  current caller passes a non-constant URL, so no live hole; filed because this
+  session's own brief misread it as the SSRF guard, and a developer will too.
+- **C3-S5-05 [LOW]** — the public contact form answers "sent" when no mail
+  provider is configured (`sendEmail` returns `ok: true, skipped: true`; the
+  route checks only `ok`), and its fallback path swallows errors in a bare catch.
+- **C3-S5-06 [LOW]** — `SYNC_TOKEN_KEY` accepts *any* string and SHA-256s it
+  into a working AES key, so `changeme` yields a valid low-entropy key with no
+  warning; `hasEncryptionKey()` tests presence, never strength. This is the key
+  every defence around `sync_tokens` — and the HIGH above — assumes is strong.
+- **C3-S5-07 [LOW]** — the CalDAV transport fetches any absolute URL it is
+  handed from remote XML and attaches the Apple app-specific password to it; the
+  normalisation that makes that safe lives outside the transport.
+- **C3-S5-08 [LOW]** — the inbound-email shared secret is accepted in the query
+  string (logged by every proxy) and compared with `===`, not constant-time.
+- **C3-S5-09 [OBSERVATION]** — C3-S3-02's TRUNCATE mechanism reaches both
+  credential stores: `using (false)` does not stop `truncate public.sync_tokens`,
+  because RLS does not constrain TRUNCATE and neither migration revokes the
+  default grant. The existing fix's table list should be widened to cover both.
+
+## Verified healthy this round — recorded so nobody re-derives it
+
+All **9 Twilio endpoints** verify through one fail-closed `timingSafeEqual`
+verifier. Resend/Svix is fail-closed with a 300-second replay window.
+`lib/assistant/alexa-verify.ts` has **no `NODE_ENV` branch and no env-gated
+skip** — nothing bypasses it. `sync_tokens` RLS is the model the other store
+should copy. `public-document-fetch.ts` / `public-media-fetch.ts` pin the
+resolved address into the socket. `calendar-sync-ssrf-guard.test.ts` is
+**load-bearing, not vacuous** — its third assertion requires zero raw `fetch(`
+in the route. No secret reaches a log or a client error body.
+
+Two of the dispatch brief's own premises were wrong and are corrected in the
+worker file rather than quietly dropped: `external-fetch.ts` is not a guard
+(above), and `CONTACT_CENTER_INBOUND_SECRET` does **not** fall back open — an
+unset secret rejects everything in production. A third hypothesis, that numeric
+IPv4 literals bypass the push guard, was refuted by the worker's own failing
+probe: Node's WHATWG `URL` normalises `2130706433`, `0x7f000001` and `127.1` to
+`127.0.0.1` before the guard sees them. That guard's correctness there is
+inherited from `new URL()`, not written down.
+
+## Blocked, round 5
+
+Still no local Supabase: **not one inbound webhook was invoked and no
+forged-signature request was sent to any route.** Ten endpoints gate
+authenticity entirely on `NODE_ENV === 'production'`, which cannot be observed
+here and which no test exercises. Production env values and production schema
+remain unverifiable (F-001). `lib/server/push.ts`'s FCM/APNs branches, VAPID
+storage, and `mobile/` were not covered by this sweep.

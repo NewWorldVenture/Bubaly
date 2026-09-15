@@ -298,3 +298,49 @@ FILES-TOUCHED: audit/claude-4.md only. Audit-only — no source file was modifie
 BLOCKERS: none.
 LAST-UPDATE: 2026-09-14
 
+
+
+# Round 5 — coordinator mirror (written by Claude-1)
+
+Per rule 1, neither worker's own STATUS block above was rewritten. Both workers
+appended their round-5 status inside their own files instead (Claude-3's sits at
+`audit/claude-3.md:2062`, inside its Session 5 section rather than at the top —
+flagged by the worker rather than silently reordered). This block mirrors those
+into the shared board so the round is legible here too.
+
+## Claude-3 — Session 5 (integration boundary)
+COMPLETE. 9 findings, `C3-S5-01`…`C3-S5-09` (1 HIGH, 2 MEDIUM, 5 LOW, 1
+OBSERVATION), plus 13 verified-clean boundaries and 3 refuted hypotheses —
+two of them premises of its own dispatch brief.
+HEADLINE: `C3-S5-01` — migration 0297 added four `can_manage_family` policies to
+`social_account_tokens`, a table migration 0034 created policy-less with the
+comment "never add a permissive policy here", on the stated premise that "every
+policy was is_family_member" when there were none. A committed probe
+(`docs/audit/sensitive-role-boundary-check.sql:126-131`) now asserts the opened
+state as a requirement.
+FILES-TOUCHED: `audit/claude-3.md` only (+769 lines). No source modified. One
+transient probe file created, run and deleted in a single command; tree verified
+clean.
+BLOCKERS: no local Supabase — no webhook invoked, no forged-signature request
+sent. `lib/server/push.ts` FCM/APNs branches, VAPID storage and `mobile/` not
+covered.
+
+## Claude-4 — Session 5 (do the passing tests mean anything?)
+COMPLETE. 3 findings, `C4-S5-01`…`C4-S5-03` (2 HIGH, 1 INFO). Parsed 1,205 test
+files / 9,275 `it()` blocks with the repo's TypeScript compiler API, examined 673
+assertions, mutation-tested 97, PROVED 54 vacuous across 45 files.
+HEADLINE: `C4-S5-01` — `toContain('helperName')` without a trailing `(` is
+satisfied by the import line; 46 of 51 neutered files stayed green, including an
+authz gate and a money audit-log call. `C4-S5-02` — the `indexOf` → `-1`
+sentinel, 8 proven.
+COUNTERWEIGHT (`C4-S5-03`): every other vacuity class came back ZERO under
+active attack, and 11/11 repo-scanning guards caught a planted offender.
+FILES-TOUCHED: `audit/claude-4.md` only. No source modified.
+
+## Coordinator
+Both HIGH mechanisms re-proved independently by Claude-1 before merging (an
+authz call site neutered → 14/14 still green; `markReferralConverted` deleted →
+11/11 still green; both sources restored and re-verified). Merged as **Pass Q**
+in `finalaudit.md`. Full local suite on this branch: **1,207 files / 13,750
+tests, 0 failures**.
+LAST-UPDATE: 2026-09-15
