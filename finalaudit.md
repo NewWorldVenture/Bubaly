@@ -5815,3 +5815,29 @@ and a placeholder somebody left.
 Fixed *after* C3-S5-02 deliberately: that change made this key protect the Google
 Calendar credential too, so the assumption it rests on had to stop being
 optional.
+
+**C3-S5-08 — FIXED.** The inbound-email shared secret is now compared with
+`timingSafeEqual` behind a length check (the primitive throws on a length
+mismatch, so the order is load-bearing and a test pins it).
+
+The query-string form is **kept**, deliberately. The provider's webhook is
+configured outside this repository, and silently breaking a family's inbound
+mail is worse than the leak. It is no longer silent either way: a secret in a
+URL is written to every access log, proxy log and `Referer` along the path, so
+taking that route now says so, once per request, in the operator's own logs.
+Removing `?key=` is an operator action, not an auditor's.
+
+**C3-S5-05 — FIXED.** `sendEmail` reports a missing provider as `ok: true,
+skipped: true`, and the contact route checked only `ok` — so with no
+`RESEND_API_KEY` the form answered "sent" when nothing was sent. The other half
+was worse: the support-ticket insert that makes that answer *nearly* true sat
+inside a bare `try`, and a PostgREST call resolves with `{ error }` rather than
+throwing, so a refused insert was invisible.
+
+The insert's error is now read. The route still answers ok when the ticket
+landed — a human will find it, which is the promise the page makes — and returns
+502 when there is neither a provider nor a ticket, which is the case where the
+message reached nobody and the form used to say otherwise.
+
+Both mechanisms proved red by mutation: `===` restored, the length check
+removed, the refusal deleted, and the error read dropped.

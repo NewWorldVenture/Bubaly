@@ -44,10 +44,15 @@ export async function POST(req: Request) {
   const to = process.env.CONTACT_INBOX ?? 'support@bubaly.com';
 
   // Persist as a support ticket so it surfaces in the admin console even if
-  // email delivery is unavailable. Best-effort: never block the user on it.
+  // email delivery is unavailable. Best-effort for the USER — it never blocks
+  // the response on its own — but whether it landed is remembered, because it
+  // is the other half of the promise this endpoint makes. A PostgREST call
+  // resolves with { error } rather than throwing, so the catch below cannot
+  // see a refused insert; the error is read. Audit C3-S5-05.
+  let ticketFiled = false;
   const ticketNumber = `WEB-${Date.now()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
   try {
-    await supabase
+    const { error: ticketError } = await supabase
       .from('support_tickets')
       .insert({
         ticket_number: ticketNumber,
@@ -60,6 +65,8 @@ export async function POST(req: Request) {
         requester_email: email,
         tags: ['contact-form', `topic:${topic}`],
       });
+    if (ticketError) console.error('[contact] support ticket insert failed', ticketError);
+    else ticketFiled = true;
     // Surface it in the Super Admin Notification Center.
     const { recordAdminNotification } = await import('@/lib/admin/notify');
     await recordAdminNotification(supabase, {
@@ -95,6 +102,14 @@ export async function POST(req: Request) {
   });
 
   if (!result.ok) {
+    return NextResponse.json({ error: t('contact.weCouldnTSendYour') }, { status: 502 });
+  }
+  // `skipped` means no mail provider is configured, and sendEmail reports that
+  // as ok: nothing was sent. Answering "sent" is only honest while the ticket
+  // exists for a human to find. With neither, the message reached nobody, and
+  // the form used to say it had. Audit C3-S5-05.
+  if (result.skipped && !ticketFiled) {
+    console.error('[contact] no mail provider and no ticket — the message reached nobody');
     return NextResponse.json({ error: t('contact.weCouldnTSendYour') }, { status: 502 });
   }
   return NextResponse.json({ ok: true });

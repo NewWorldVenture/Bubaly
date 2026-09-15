@@ -9,6 +9,7 @@
 // endpoint is never an open relay; permitted in dev for local testing.
 
 import { NextRequest, NextResponse } from 'next/server';
+import { timingSafeEqual } from 'node:crypto';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settle } from '@/lib/supabase/settle';
 import { readBoundedRequestFormData, readBoundedRequestText } from '@/lib/server/bounded-request-body';
@@ -30,11 +31,30 @@ export const dynamic = 'force-dynamic';
 
 const MAX_BODY = 1024 * 1024; // inbound emails can carry a lot of text
 
+function secretsMatch(provided: string, secret: string): boolean {
+  // Constant-time: `===` on a secret leaks its prefix through timing, and this
+  // endpoint is reachable by anyone who can guess the URL. Audit C3-S5-08.
+  const a = Buffer.from(provided);
+  const b = Buffer.from(secret);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
 function authorized(req: NextRequest): boolean {
   const secret = process.env.CONTACT_CENTER_INBOUND_SECRET;
   if (!secret) return process.env.NODE_ENV !== 'production';
-  const provided = new URL(req.url).searchParams.get('key') ?? req.headers.get('x-inbound-secret');
-  return !!provided && provided === secret;
+  const header = req.headers.get('x-inbound-secret');
+  const query = new URL(req.url).searchParams.get('key');
+  // The query-string form still works, because the provider's webhook is
+  // configured outside this repository and silently breaking inbound mail is
+  // worse than the leak. It is not silent either way: a secret in a URL is
+  // written to every access log, proxy log, and Referer along the path, so
+  // taking that route says so, once per request, in the operator's own logs.
+  // Removing it is an operator action — see docs. Audit C3-S5-08.
+  if (!header && query) {
+    console.warn('[contact-center] inbound secret arrived in the query string; move the provider to the x-inbound-secret header');
+  }
+  const provided = header ?? query;
+  return !!provided && secretsMatch(provided, secret);
 }
 
 // Pull the fields we need from either a parsed form or a JSON body.
