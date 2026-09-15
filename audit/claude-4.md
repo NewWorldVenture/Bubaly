@@ -3376,3 +3376,391 @@ the function already uses eight lines above.
   page whose defect is none of {unconsumed `readAll` error, sequential await
   wave, in-loop await, discarded mutation error} would not have been caught.
 
+
+---
+
+# Session 5 (2026-09-15) — how many of the 13,746 passes mean anything
+
+Session 3's NEXT and session 4's "could not reach" both named the same gap: the
+AST-level vacuity sweep across the test suite was never run. This session ran it,
+and — because a grep count is not a finding — proved every reported instance by
+**neutering the code the test protects and showing the test still passes**. Every
+mutation was reverted in a `finally`; `git status --porcelain` was empty before
+and after (checked at four points during the session). Nothing in the repo was
+changed except this file.
+
+## Method
+
+`tests/**/*.test.ts` was parsed with the TypeScript compiler API (5.9.3, the
+repo's own) rather than grepped — **1,205 files, 9,275 literal `it()`/`test()`
+blocks** (the 13,746 figure is post-`it.each` expansion). Seven patterns were
+extracted structurally, then each candidate was put through a mutation harness
+that edits the real source file, runs `npx vitest run <file>`, and restores.
+
+Two mutation directions were used, because vacuity has two shapes:
+- **Neuter** — delete the protected code. A guard that stays green is vacuous.
+- **Plant** — insert the exact violation a repo-scanning guard claims to detect.
+  A scanner that stays green is vacuous. (This is the only way to test a
+  `toEqual([])` over a scan: the neuter direction cannot reach it.)
+
+Scanner scripts are in the session scratchpad, not the repo.
+
+## Scoreboard
+
+| Class | Candidates | Mutation-tested | PROVEN vacuous |
+|---|---|---|---|
+| A. `indexOf` sentinel ordering | 73 → 59 literal-LHS | 31 | **8** |
+| B. `toContain('<bareIdentifier>')` on a source file | 185 → 54 split | 51 | **46** |
+| C. repo-scan `toEqual([])` / `toHaveLength(0)` | 30 without a corpus check | 11 | **0** |
+| D. `it()` with no `expect` | 5 | 5 | **0** |
+| E. unawaited `.rejects` / `.resolves` | 0 | — | **0** |
+| F. `.skip` / `.todo` / `xit` | 0 | — | **0** |
+| G. every assertion inside a loop | 380 / 9,275 | spot-checked | **0 proven** |
+
+**54 assertions proven vacuous, across 45 test files.** Two classes account for
+all of them, and one of the two is systemic.
+
+---
+
+## C4-S5-01 [HIGH][QA/TESTS] The "spelling-only" boundary guard — 46 PROVEN, and it is the repo's largest vacuity class
+
+**Files:** 30 test files (full list below), each guarding a different action or
+route file.
+
+**Problem.** The dominant idiom for proving a boundary is honoured is
+`expect(source).toContain('helperName')` against a `readFileSync` of the source.
+That asserts **the identifier is spelled somewhere in the file** — and an ES
+module that *imports* a helper spells it on the import line. So the guard is
+satisfied by the import alone; every call site can be deleted and it stays green.
+
+**Evidence (mutation).** For each candidate the harness rewrote every call site
+`helperName(` → `__neutered(` in the real source file, **leaving the import line
+untouched**, then ran the whole test file. 46 of 51 stayed fully green.
+
+The starkest single case is an **authorization** gate:
+
+    tests/marketing-core-referral-boundaries.test.ts:26
+      expect(leadScores).toContain('requireMarketingAdmin');
+
+Every call to `requireMarketingAdmin` was removed from
+`app/(app)/admin/marketing/lead-scores/actions.ts`. The server action no longer
+checks that the caller is a marketing admin. The test file passed. The same file
+also proved spelling-only for `marketingActionFailure` (:27) and
+`logMarketingAudit` (:28) — so on that one page the admin check, the error
+sanitiser and the audit write can all be removed together and the suite is green.
+
+The second-starkest is a **money** guard, which is this audit's recurring theme:
+
+    tests/wallet-money-action-boundaries.test.ts:24
+      expect(moneyActions).toContain('logWalletAudit');
+
+All 4 `logWalletAudit(` call sites removed from `app/(app)/money/actions.ts`;
+green. Note that `tests/audit-write-failures-are-visible.test.ts` catches the
+*opposite* regression (writing `wallet_audit_logs` directly instead of through
+the helper — PROVEN load-bearing below), so the pair looks complete and is not:
+you cannot bypass the helper, but you can stop calling it at all.
+
+**The repo already knows the fix, and applies it 20% of the time.**
+`tests/cron-auth.test.ts` contains both idioms, eleven lines apart, with a
+comment explaining exactly why the paren matters:
+
+    :44  for (const file of cronRoutes) {
+    :47    // Must both CALL the gate and ACT on it (reject) — importing without
+    :48    // a 401 would leave the privileged job publicly triggerable.
+    :49    expect(source, file).toContain('hasCronAuthorization(');   <- sound
+    ...
+    :53  const welcome = readFileSync('app/api/email/welcome/route.ts', 'utf8');
+    :54  expect(welcome).toContain('hasInternalSecret');              <- PROVEN vacuous
+
+The loop got the trailing `(`. The one-off next to it did not. Repo-wide the
+split is **204 `toContain('ident(')` vs 837 `toContain('ident')`**.
+
+**Impact.** 46 boundary guards — covering admin authz, service-role usage,
+request-size bounds, SSRF containment, cron auth, audit logging and error
+sanitisation — cannot fail when the behaviour they name is removed. They are
+worse than no guard, because a reviewer reading the test file believes the
+boundary is pinned.
+
+**Fix (mechanical, low risk).** Append `(` to the asserted literal wherever the
+identifier is a function: `toContain('describeActionError(')`. For helpers used
+in non-call position, assert the shape that proves use, e.g.
+`toMatch(/catch[\s\S]{0,200}describeActionError\(/)`. A one-off codemod plus a
+meta-guard in the shape of `tests/boundary-probes-actually-assert.test.ts`
+("no `toContain` of a bare identifier that the target file only imports") would
+close the class and keep it closed.
+
+**PROVEN spelling-only (46).** Format `test:line  identifier  <- neutered file`:
+
+    admin-digest.test.ts:94                         summarizeDigestDelivery      app/api/cron/admin-digest/route.ts
+    admin-management-action-boundaries.test.ts:10   describeActionError          app/(app)/admin/admins/actions.ts
+    admin-management-action-boundaries.test.ts:21   toastError                   components/admin/admin-row-actions.tsx
+    admin-management-action-boundaries.test.ts:22   success                      components/admin/admin-row-actions.tsx
+    admin-marketing-content-campaigns-read-boundary.test.ts:24  getMarketingCustomersWithError  app/(app)/admin/marketing/campaigns/[id]/page.tsx
+    admin-marketing-crm-read-boundary.test.ts:13    getMarketingCustomersWithError  app/(app)/admin/marketing/customers/page.tsx
+    admin-tier-report-action-boundaries.test.ts:10  describeActionError          app/(app)/admin/tier-features/actions.ts
+    ai-action-boundaries.test.ts:11                 describeActionError          lib/ai/provider.ts
+    ai-action-boundaries.test.ts:13                 describeActionError          app/(app)/admin/ai/actions.ts
+    alexa-request-verification.test.ts:433          readBoundedRequestBytes      app/api/assistant/alexa/route.ts
+    assistant-bridge.test.ts:250                    readBoundedRequestJson       app/api/assistant/route.ts
+    assistant-bridge.test.ts:251                    readBoundedRequestBytes      app/api/assistant/alexa/route.ts
+    assistant-bridge.test.ts:290                    createServiceClient          app/api/assistant/route.ts
+    contact-center.test.ts:125                      readBoundedRequestFormData   app/api/contact-center/email/route.ts
+    cron-auth.test.ts:54                            hasInternalSecret            app/api/email/welcome/route.ts
+    display-ask-handled-tiles.test.ts:105           submitAIRequest              components/concierge/ask-bubaly.tsx
+    guardian-action-error-boundaries.test.ts:9      describeActionError          app/(app)/guardian/actions.ts
+    manifest-share-target.test.ts:49                sharedCaptureText            app/(app)/capture/page.tsx
+    marketing-assets-content-boundaries.test.ts:9   marketingActionFailure       app/(app)/admin/marketing/assets/actions.ts
+    marketing-assets-content-boundaries.test.ts:17  marketingActionFailure       app/(app)/admin/marketing/content/actions.ts   (14 call sites removed)
+    marketing-core-referral-boundaries.test.ts:19   marketingActionFailure       app/(app)/admin/marketing/referrals/actions.ts
+    marketing-core-referral-boundaries.test.ts:26   requireMarketingAdmin        app/(app)/admin/marketing/lead-scores/actions.ts
+    marketing-core-referral-boundaries.test.ts:27   marketingActionFailure       app/(app)/admin/marketing/lead-scores/actions.ts
+    marketing-core-referral-boundaries.test.ts:28   logMarketingAudit            app/(app)/admin/marketing/lead-scores/actions.ts
+    marketing-delivery-action-boundaries.test.ts:9  marketingActionFailure       app/(app)/admin/marketing/personalization/actions.ts
+    marketing-delivery-action-boundaries.test.ts:16 marketingActionFailure       app/(app)/admin/marketing/push/actions.ts
+    marketing-delivery-action-boundaries.test.ts:18 markFailedAndThrow           app/(app)/admin/marketing/push/actions.ts
+    marketing-experiment-exit-survey-boundaries.test.ts:10  marketingActionFailure  app/(app)/admin/marketing/experiments/actions.ts
+    marketing-experiment-exit-survey-boundaries.test.ts:11  hasConfiguredVariant    app/(app)/admin/marketing/experiments/actions.ts
+    marketing-experiment-exit-survey-boundaries.test.ts:18  marketingActionFailure  app/(app)/admin/marketing/exit-intent/actions.ts
+    marketing-experiment-exit-survey-boundaries.test.ts:24  marketingActionFailure  app/(app)/admin/marketing/surveys/actions.ts
+    marketing-reputation-video-review-boundaries.test.ts:10 marketingActionFailure  app/(app)/admin/marketing/reputation/actions.ts
+    marketing-reputation-video-review-boundaries.test.ts:17 marketingActionFailure  app/(app)/admin/marketing/video/actions.ts
+    marketing-reputation-video-review-boundaries.test.ts:24 marketingActionFailure  app/(app)/admin/marketing/reviews/actions.ts
+    marketing-social-proof.test.ts:15               createServiceClient          lib/marketing/reputation-server.ts
+    persistent-login.test.ts:280                    durableCookieOptions         lib/supabase/client.ts
+    recurring-ads-runner.test.ts:138                hasCronAuthorization         app/api/cron/marketing-social/route.ts
+    server-action-error-boundaries.test.ts:21       describeActionError          lib/intelligence/hard-signals-server.ts
+    social-feed-fetch-security.test.ts:33           fetchPublicText              app/(app)/dashboard/social-feed/actions.ts
+    support-ticket-action-boundaries.test.ts:10     describeActionError          app/(app)/admin/support-tickets/actions.ts
+    support-ticket-action-boundaries.test.ts:22     toastError                   components/admin/ticket-row-actions.tsx
+    support-ticket-action-boundaries.test.ts:23     success                      components/admin/ticket-row-actions.tsx
+    sync-job-persistence-boundaries.test.ts:28      getProviderAccessToken       lib/sync/engine/generic.ts
+    tenant-isolation-rls.test.ts:21                 createServiceClient          lib/server/profiles.ts
+    tenant-isolation-rls.test.ts:22                 createServiceClient          app/(app)/family/child-login-actions.ts
+    wallet-money-action-boundaries.test.ts:24       logWalletAudit               app/(app)/money/actions.ts
+
+**Sound (5, recorded so they are not re-tested):** the same mutation turned these
+RED, because the test also asserts the *branch* around the call —
+`admin-notification-boundary.test.ts:14`, `display-setup-page.test.ts:114/115/116`,
+`marketing-loyalty-action-boundaries.test.ts:8`.
+
+**Status:** OPEN. Audit-only session; no source or test modified.
+
+---
+
+## C4-S5-02 [HIGH][QA/TESTS] Eight ordering guards that a deleted statement satisfies — the `indexOf` → `-1` sentinel
+
+**Problem.** `expect(src.indexOf(A)).toBeLessThan(src.indexOf(B))` reads as "A
+happens before B". `String.prototype.indexOf` returns **-1** when A is absent,
+and `-1` is less than any index — so the assertion passes *most convincingly*
+when A has been deleted entirely. This is the exact shape Claude-1 found in a
+test it had just written this round; it is not a one-off.
+
+**Method.** 73 AST hits → 59 with a string-literal left-hand needle → 31 whose
+needle could be located in a source file the test reads. For each, the needle was
+deleted from the real source file and the whole test file re-run with
+`--reporter=verbose`, so the specific `it` could be named as passing.
+
+**PROVEN vacuous (8 assertions, 7 files).** Each line states what was removed
+from the product and what the suite said about it:
+
+1. **`tests/referral-reward.test.ts:195`** — removed
+   `await markReferralConverted(supabase, familyId)` (1 occurrence) from
+   `app/api/webhooks/stripe/route.ts`. The Stripe webhook no longer marks a
+   referral converted at all. **11/11 passed**, including the test whose own name
+   is *"the Stripe webhook fulfils the reward right after marking the
+   conversion"*. **This is the worst instance found this session**: the suite
+   affirms an ordering between two money events when the first one is gone.
+
+2. **`tests/display-setup-page.test.ts:190`** — removed all 4 `return;`
+   statements from `components/display/display-grid.tsx`, including the
+   early-return that stops `setSetupDismissed(true)` after a failed write.
+   **34/34 passed**, including *"does not claim the dismissal when the write
+   failed"*. Optimistic-UI, the class this audit calls its second-most-common
+   defect, guarded by an assertion that cannot see it.
+
+3. **`tests/inventory-module-write-boundary.test.ts:40`** — removed all 4
+   `from('inventory_items').update(` from `components/modules/inventory-module.tsx`.
+   **9/9 passed**, including *"a move updates the item first and reports a failed
+   history insert"*. The item update the test names does not have to exist.
+
+4. **`tests/closet-module-write-boundary.test.ts:27`** — removed
+   `from('outfit_logs').insert(` from `components/modules/closet-module.tsx`.
+   **10/10 passed**, including *"logs a wear before bumping wear counts"*. The
+   wear log need not be written.
+
+5. **`tests/dashboard-modules-keep-prior-read.test.ts:26`** and **`:33`** — removed
+   both `if (error) return;` guards from `components/modules/assistant-module.tsx`.
+   **3/3 passed**, including *"assistant conversation list keeps prior history on
+   error"* and *"assistant message load does not switch into a misleading greeting
+   on error"*. These two tests exist specifically to hold the A-05 / PLA-0792 fix
+   in place; `silent-empty-read-ratchet.test.ts` has already been edited to
+   *remove* assistant-module from its BASELINE on the strength of that fix. The
+   ratchet's own comment cites the fix these guards do not actually hold.
+
+6. **`tests/dashboard-analytics-read-boundary.test.ts:29`** — removed `error ?`
+   from `app/(app)/dashboard/journeys/page.tsx`, i.e. the entire error branch that
+   renders `MiniError`. **3/3 passed**, including *"journeys page surfaces a
+   failed telemetry read instead of a false-empty"*. The surviving
+   `toContain('MiniError')` is class C4-S5-01: the import still spells it.
+   Same provenance note as (5) — the ratchet baseline was pruned for this fix.
+
+7. **`tests/notification-actions.test.ts:244`** — removed both `if (!result.ok)`
+   branches from `components/modules/notifications-module.tsx`. **35/35 passed**,
+   including *"marks a row read only after the action succeeded"*. A chore whose
+   sign-off failed can be marked read and disappear, and the guard agrees.
+
+**Why the other 23 mutations went RED (worth knowing before anyone "fixes" them
+in bulk).** The safe form is a *pair* of assertions that bracket the needle, or a
+sibling `toContain` of the same literal. `tests/blog-updated-at-is-a-content-date.test.ts:23-24`
+is the model: `disable < update` and `update < enable`. Delete the update and the
+first assertion fails, so the pair is load-bearing even though the second half is
+individually sentinel-satisfiable. Sound by that construction:
+`0261-home-briefs-kind-uniqueness`, `0262-home-briefs-quarantine`,
+`admin-document-delete-boundary`, `chore-approval-authz`,
+`dashboard-analytics-read-boundary:38/39`, `dashboard-modules-keep-prior-read:20`
+(weather — a `toContain('if (error) return [];')` covers it),
+`family-hub-read-boundary`, `kids-submit-read-boundary` (both),
+`marketing-public-read-boundary` (both), `marketplace-reviews-read-boundary`,
+`mobile-sw-notification-focus`, `persistent-login:313`,
+`photos-mutation-boundary` (both), `referral-reward:202`,
+`server-page-read-boundary:44/66`, `sync-write-failures-are-visible:184`,
+`vacations-views-read-boundary`, `wishlists-actions-boundary:298`.
+
+**Fix.** Assert the needle exists before asserting the order. Two lines, no
+judgement call:
+
+    const at = (needle: string) => { const i = src.indexOf(needle);
+      expect(i, `missing: ${needle}`).toBeGreaterThan(-1); return i; };
+    expect(at(A)).toBeLessThan(at(B));
+
+Dropping that helper into `tests/helpers/` and using it at the 59 literal-LHS
+sites removes the whole class, including the 23 currently sound-by-accident.
+
+**Status:** OPEN. Audit-only session; every mutation reverted.
+
+---
+
+## C4-S5-03 [INFO][QA/TESTS] What the sweep found HEALTHY — and proved healthy
+
+This is the part of the answer the brief asked for plainly. Outside the two
+classes above, the suite held up under active attack.
+
+**Repo-scanning guards are load-bearing: 11 of 11 caught a planted violation.**
+The `toEqual([])`-over-a-filesystem-walk shape is the one the brief warned about
+("a glob that matched no files"). It was tested the only way that can settle it —
+by planting the exact offender each scanner claims to detect into a real source
+file — and every one went red:
+
+    no-limit-above-the-row-cap          planted `.limit(5000)`                     CAUGHT
+    csp-client-hosts                    planted a client fetch to an off-list host  CAUGHT
+    mobile-numeric-inputmode            planted type=number step=0.01, no inputMode CAUGHT
+    seo-registry-junk-cleanup           planted a 'Seed data' literal               CAUGHT
+    public-bucket-objects-are-unguessable  planted a Date.now()-only storage path   CAUGHT
+    silent-empty-read-ratchet           planted `const { data } = await supabase…`  CAUGHT
+    audit-write-failures-are-visible    planted a direct wallet_audit_logs insert   CAUGHT
+    family-day-not-greenwich-day        planted setHours(0,0,0,0) beside a date eq  CAUGHT
+    definer-search-path-pinned          planted a definer fn with no search_path    CAUGHT
+    catalogue-key-not-rendered-raw      planted a key-shaped label beside real copy CAUGHT
+    claimed-writes-that-did-not-land    planted a statement-position push_devices delete  CAUGHT
+
+Two of these needed a second, more careful plant: my first attempt at
+`catalogue-key-not-rendered-raw` and `claimed-writes-that-did-not-land` was not
+actually an offender by their own (narrower, deliberately justified) definitions.
+That is the scanners being precise, not lax — both caught the real thing. This is
+worth recording because it is the direct counter-evidence to the assumption that
+the ~1,030 `toEqual([])` assertions in the suite are decoration.
+
+Several carry their own explicit anti-vacuity siblings, which is why:
+`claimed-writes-that-did-not-land` asserts `files.length > 100` with the comment
+*"the walk found nothing, so it proves nothing"*; `no-limit-above-the-row-cap`
+has *"recognises an over-cap limit when it sees one"*; `mobile-numeric-inputmode`
+has a *"sanity"* total count; `silent-empty-read-ratchet` has a third test that
+fails if a BASELINE entry goes stale.
+
+**`tests/boundary-probes-actually-assert.test.ts` is the repo's own answer to
+this session's question, and it is correct.** It reads `docs/audit/*.sql` and
+asserts (a) `checks.length > 10` — an `it` literally titled *"finds probes at all
+(guards the guard)"*; (b) every `*-check.sql` contains at least one
+`raise exception`; (c) no `raise exception` is parked in a file the runner's glob
+does not match; (d) `run-probes.sh` exits 1 on an empty glob. That is the F-020 /
+`i18n:gate` lesson generalised and enforced. It should be the template for the
+meta-guards recommended in C4-S5-01 and C4-S5-02.
+
+**Clean on four whole classes:**
+- **`it()` with no assertion: 0 real.** 5 AST hits, all false positives of the
+  scanner — `family-cfo-read-boundary:170`, `trust-sharing-presets:159`,
+  `wishlists-actions-boundary:267` and `:307` assert through `expectSays` /
+  `expectTranslates`; `travel-import-provider-schema:33` asserts through
+  `strictProperties`, which contains the `toEqual`. Custom assertion helpers, not
+  empty tests.
+- **Unawaited async assertions: 0.** No `expect(...).rejects`/`.resolves` anywhere
+  in the suite is missing an `await` or `return`.
+- **Skipped/todo tests: 0.** No `it.skip`, `it.todo`, `describe.skip` or `xit`
+  in 1,205 files. Nothing is parked.
+- **Orphaned test files: 0.** `vitest.config.ts` includes only
+  `tests/**/*.test.ts`. There is no `.test.tsx`, `.spec.ts` or stray test file
+  anywhere in the repo outside `mobile/node_modules` — so no test exists that
+  looks like it runs and does not. (This was worth checking: a `.tsx` test would
+  have been silently excluded, and that is exactly the `i18n:gate` shape.)
+
+**One residual, not proven either way: 380 of 9,275 `it()` blocks place every
+assertion inside a loop** (`for…of`, `forEach`, `map`). If the collection is
+empty the test asserts nothing and passes. Nearly all iterate module constants
+(`ONBOARDING_FLOW`, `INSIGHT_META`, registries) that are non-empty by
+construction and separately length-asserted; the ones iterating a filesystem scan
+were checked and carry corpus guards. I did not mutate all 380, so I am not
+claiming the class is clean — I am claiming the sampled glob-driven members of
+it are, and that the constant-driven majority is low-risk. A cheap permanent
+answer exists: vitest's `expect.hasAssertions()` in a shared setup file, or
+`--expand-snapshot-diff`-style reporting of zero-assertion tests.
+
+---
+
+## Session 5 verdict
+
+**Examined:** 9,275 `it()` blocks across 1,205 files at AST level; 673 assertions
+matched one of seven vacuity shapes; **97 were put through an executed mutation**
+(neuter or plant) rather than eyeballed.
+
+**Proven vacuous: 54 assertions in 45 files.** Class B (spelling-only
+`toContain`) is 46 of them and is systemic — the repo uses the sound form
+(`toContain('name(')`) 204 times and the unsound form 837 times, and the split is
+visible *within a single test file eleven lines apart*. Class A (the `-1`
+sentinel) is 8 and is a drafting slip that a two-line helper eliminates.
+
+**Worst single instance:** `tests/referral-reward.test.ts:195`. Delete the call
+that marks a referral converted from the Stripe webhook and the test named for
+that exact ordering passes, 11/11. Runner-up, and arguably worse in kind:
+`tests/marketing-core-referral-boundaries.test.ts:26`, where an admin
+authorization check, an error sanitiser and an audit write can be removed from
+one server action together, and the file that names all three stays green.
+
+**Honest rate.** Of assertions, not tests: I proved ~54 vacuous out of 673
+examined, but I examined only the shapes most likely to be vacuous, so that ratio
+is not a suite rate. Extrapolating class B by its structural signature — a bare
+identifier `toContain` against a file that merely imports it — the untested
+remainder of the 837 sites plausibly contains **another 100–250 of the same
+defect**; that is an estimate from the 25% hit rate on the 185 I could resolve to
+a source file, not a measurement. Class A is bounded: 59 literal-LHS sites exist
+and all 31 reachable ones were tested.
+
+**But the headline is not the 54.** The classes that would have made this suite
+theatre — empty globs, skipped tests, assertion-free tests, unawaited promises,
+tests outside the runner's glob, scanners that detect nothing — came back
+**zero, under active attack, with a planted offender in every scanner I could
+plant one in**. This is a suite that is mostly real, with one bad idiom repeated
+several hundred times. Fixing the idiom is a codemod plus one meta-guard, and
+the repo has already written the template for that meta-guard itself.
+
+## NEXT (for whoever picks up Claude-4)
+
+1. The 837-site class B extrapolation is an estimate. Resolving `toContain`
+   subjects that are built by `.slice()`/function-call rather than a plain
+   `const x = readFileSync('literal')` would make it a count. The harness
+   generalises; it was the subject-resolution that stopped at 185.
+2. The 380 loop-only tests want `expect.hasAssertions()` in a setup file rather
+   than 380 mutations.
+3. Nothing from sessions 1–4 was re-derived. F-F01, F-F02, C4-S4-01..08 and the
+   RESEND_API_KEY / `family_code` / `family_members`-trigger items were not
+   re-checked this session and should be assumed still open unless Claude-1's
+   merge says otherwise.
