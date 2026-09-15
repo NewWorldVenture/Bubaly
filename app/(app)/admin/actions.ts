@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { isSuperAdmin, getUser } from '@/lib/supabase/auth';
 import { createServiceClient } from '@/lib/supabase/server';
 import { logAudit } from '@/lib/server/audit';
+import { listAllAuthUsers } from '@/lib/server/list-all-auth-users';
 import { sendReactEmail, APP_URL } from '@/lib/email';
 import { InviteEmail } from '@/lib/emails/invite';
 import { emailSchema } from '@/lib/validation';
@@ -100,10 +101,45 @@ export async function adminCreateFamilyAction(input: {
   if (!parsedEmail.success) return { ok: false, error: t('actions.enterTheOwnerSEmail') };
 
   const supabase = createServiceClient();
-  const { data: owner, error: ownerLookupError } = await supabase
-    .from('profiles').select('id, full_name, email').eq('email', parsedEmail.data).maybeSingle();
+
+  // The owner is resolved from the VERIFIED address in auth.users, not from
+  // `profiles.email`. profiles.email is a plain text column its own subject may
+  // set to anything — `profiles_update_self` constrains which ROW you may
+  // update, not which columns — and it is not unique. So a lookup keyed on it
+  // answers with whoever last claimed the string, and an operator provisioning
+  // a family for a customer could bind it to that account instead: the
+  // `created_by` below, and the parent seat upserted after it, would be theirs.
+  // Same root cause as the CRM identity fix, at the last call site that still
+  // trusted that column.
+  //
+  // listAllAuthUsers returns an error rather than a short list, and that
+  // distinction is load-bearing here: an incomplete read must not become "no
+  // account found with that email", which is the same false answer wearing a
+  // different hat.
+  const { users: authUsers, error: ownerLookupError } = await listAllAuthUsers(supabase);
   if (ownerLookupError) return actionFailure(ownerLookupError, t('actions.couldNotLookUpThe'));
-  if (!owner) return { ok: false, error: t('actions.noAccountFoundWithThat') };
+  const wantedEmail = parsedEmail.data.trim().toLowerCase();
+  const matches = authUsers.filter((u) => (u.email ?? '').trim().toLowerCase() === wantedEmail);
+  if (matches.length === 0) return { ok: false, error: t('actions.noAccountFoundWithThat') };
+  // Supabase keeps auth emails unique per project, so this is a "cannot happen"
+  // that must not silently pick one if it ever does.
+  if (matches.length > 1) {
+    return actionFailure(
+      new Error(`${matches.length} auth users share ${wantedEmail}`),
+      t('actions.couldNotLookUpThe'),
+    );
+  }
+  const authOwner = matches[0];
+
+  // The display name still comes from the profile — a self-chosen name is
+  // exactly what that column is for. Only the IDENTITY moved.
+  const { data: ownerProfile } = await supabase
+    .from('profiles').select('full_name').eq('id', authOwner.id).maybeSingle();
+  const owner = {
+    id: authOwner.id,
+    full_name: ownerProfile?.full_name ?? null,
+    email: authOwner.email ?? null,
+  };
 
   const { data: family, error } = await supabase.from('families').insert({
     name, timezone: input.timezone || 'UTC', created_by: owner.id,
