@@ -6025,3 +6025,36 @@ this repository considers lintable. Recorded rather than fixed: it is not this
 branch's, and widening a diff to tidy someone else's file is how audit branches
 become unreviewable. The gap between the two commands is the more interesting
 half, and belongs to whoever owns the lint configuration.
+
+**C1-S4-01 — FIXED, the half that stands on its own.** `/api/webhooks/money`
+and `/api/webhooks/stripe` are deliberately separate routes with separate
+signing secrets, and they share one idempotency ledger whose uniqueness is
+`stripe_event_id` alone — no column records which endpoint claimed an event.
+
+The money route's `default` branch marked any unrecognised type `processed`.
+That did not ignore a billing event, it **claimed** it: the billing endpoint
+then read `duplicate` and returned 200 having done no work. Both endpoints
+answer 2xx, Stripe never retries, nothing logs an error, and a subscription
+event — created, updated, deleted, a completed checkout — is dropped for good,
+with entitlement disagreeing with billing until someone replays it by hand.
+
+The route now decides what it handles **before** it claims anything, and
+acknowledges an unhandled type with 200 without touching the ledger.
+"Acknowledged so Stripe stops retrying" and "written to a shared ledger as done"
+are different decisions, and that branch was making them as one.
+
+Placement is the whole fix: the claim is inserted by `recordEvent` *before* the
+switch runs, so declining to mark it processed at the `default` branch would
+have left the row in `processing` and turned a silent drop into a 409 retry loop
+against the other endpoint. The gate has to come first.
+
+**Not done: scoping the ledger** (`UNIQUE (source, stripe_event_id)`). Two
+endpoints sharing one idempotency namespace is the structural defect and the
+secret fallback is only what makes it reachable — but that is a migration plus a
+backfill on a money table, and the endpoint no longer writes into the other's
+namespace, which removes the reachable consequence. Recorded for whoever owns
+the billing schema.
+
+Two scarier readings were checked and dropped when the audit filed this, and
+they stay dropped: the secret fallback is **documented** in three places, not an
+oversight, and the endpoints do **not** collide in the intended configuration.
