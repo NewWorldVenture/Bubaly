@@ -111,11 +111,24 @@ COMPLETED (session 3 so far):
 PRIOR SESSIONS (unchanged, see history below): F-020 migration idempotency;
   /api/health FEATURE_ENV tier; 5 cron routes answering 200 on their own
   failures; service-role boundary probe; 0296 renumber.
-NEXT: C2-B05 (the consent preference centre declares aria-modal and manages no
-  focus — regulatory surface, and components/ui/modal.tsx already implements
-  every missing piece) is the next most valuable fix. Then reconcile the two
-  Executive Summaries into one authoritative index — the document names this as
-  a deliberate follow-up and it is the coordinator's job.
+  - ROUND 4 DISPATCHED (2026-09-15). C2-B05 was fixed on main by the parallel
+    session before I reached it, so the loop moved to the three surfaces with
+    the THINNEST coverage rather than the next-most-severe known finding:
+      * Claude-3 -> the 132 `'use server'` files. Pass E audited 141 API routes
+        thoroughly; server actions are an equally public POST surface and are
+        mentioned ~14 times in the whole audit. Spot check found gift/,
+        reviews/new/ and signup/ actions with zero auth-check markers — some
+        may be legitimately public, which is exactly why it needs verifying.
+      * Claude-2 -> the mobile/ Expo app. A SECOND APPLICATION, 21 screens,
+        sharing design/tokens.json with the web. The finalaudit
+        "Mobile/Responsive" section is about the web app at phone width, not
+        about React Native at all.
+      * Claude-4 -> inside app/(app). Static flow/state audit, since no browser
+        can reach it here. Pointed at F-F01's real blast radius (59 `{ max: }`
+        call sites, not the five listed) as the highest-value thread.
+NEXT: collect those three, merge into finalaudit.md as Pass P. Then reconcile
+  the two Executive Summaries into one authoritative index — the document names
+  this as a deliberate follow-up and it is the coordinator's job.
 FILES-TOUCHED (session 3):
   - audit/status.md (this section only), audit/claude-1.md, finalaudit.md
   - source: lib/server/push.ts (M1), the calendar-feed route (M2),
