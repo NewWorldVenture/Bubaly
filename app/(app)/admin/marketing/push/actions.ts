@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from '@/lib/marketing/admin';
 import { sendPushToUsers } from '@/lib/server/push';
 import { selectPushRecipients, canSendPush } from '@/lib/marketing/push';
+import { readAll } from '@/lib/supabase/read-all';
 
 function s(fd: FormData, k: string): string | null {
   const v = String(fd.get(k) ?? '').trim();
@@ -51,13 +52,13 @@ export async function sendPushCampaignAction(id: string): Promise<void> {
     marketingActionFailure('send the push campaign', error);
   };
 
-  // Opted-in device owners.
-  const { data: devices, error: deviceError } = await supabase
-    .from('push_devices')
-    .select('user_id')
-    .eq('enabled', true);
+  // Opted-in device owners. Paged: an unbounded select stops at PostgREST's
+  // db-max-rows without a word, so past 1,000 devices a campaign would reach a
+  // prefix of its audience and record `recipients` as if that were everyone.
+  const { rows: devices, error: deviceError } = await readAll<{ user_id: string }>((from, to) =>
+    supabase.from('push_devices').select('user_id').eq('enabled', true).order('user_id').range(from, to));
   if (deviceError) await markFailedAndThrow(deviceError);
-  const userIds = (devices ?? []).map((d) => d.user_id);
+  const userIds = devices.map((d) => d.user_id);
 
   // Map user → email and pull the suppression list to exclude opted-out people.
   const uniqueIds = [...new Set(userIds.filter(Boolean))];
@@ -67,9 +68,15 @@ export async function sendPushCampaignAction(id: string): Promise<void> {
     if (profileError) await markFailedAndThrow(profileError);
     for (const p of profiles ?? []) emailByUser[p.id] = p.email;
   }
-  const { data: supp, error: suppressionError } = await supabase.from('marketing_suppressions').select('email');
+  // The suppression list MUST be read whole. `selectPushRecipients` excludes an
+  // address only by finding its row, so a truncated read does not send fewer
+  // messages — it sends to the people whose opt-out fell past the cap. Read
+  // completeness is the opt-out here, which is why the write side of this table
+  // is already guarded.
+  const { rows: supp, error: suppressionError } = await readAll<{ email: string }>((from, to) =>
+    supabase.from('marketing_suppressions').select('email').order('email').range(from, to));
   if (suppressionError) await markFailedAndThrow(suppressionError);
-  const suppressed = (supp ?? []).map((r) => r.email);
+  const suppressed = supp.map((r) => r.email);
 
   const recipients = selectPushRecipients(userIds, emailByUser, suppressed);
 

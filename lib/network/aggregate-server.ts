@@ -10,6 +10,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { settleAll } from '@/lib/supabase/settle';
+import { readAll } from '@/lib/supabase/read-all';
 import type { Database } from '@/lib/database.types';
 import {
   contributionFeatures, bedtimeToMinutes, typicalWeeklySpend, type ContributionInput,
@@ -140,11 +141,18 @@ async function buildContributionsBatch(sb: DB, familyIds: string[], now: Date): 
 
 export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Promise<AggregateResult> {
   // 1. Which families are opted in (master toggle on)?
-  const { data: consents, error: cErr } = await sb.from('network_consent')
-    .select('family_id, enabled, scopes').eq('enabled', true);
+  // Read whole, by paging. A short read here is not just a smaller
+  // aggregation: `keepIds` below is built from this list and drives a
+  // `not in` DELETE, so an opted-in family beyond PostgREST's db-max-rows
+  // would have its contribution DELETED as if it had opted out — and then be
+  // missing from the aggregates it consented to feed.
+  const { rows: consents, error: cErr } = await readAll<{
+    family_id: string; enabled: boolean; scopes: Database['public']['Tables']['network_consent']['Row']['scopes'];
+  }>((from, to) => sb.from('network_consent')
+    .select('family_id, enabled, scopes').eq('enabled', true).order('family_id').range(from, to));
   if (cErr) return { ok: false, error: cErr.message, contributors: 0, aggregates: 0 };
 
-  const optedIn = consents ?? [];
+  const optedIn = consents;
 
   // 2. CONTRIBUTE — refresh each opted-in family's coarse row; drop everyone else's.
   // Granular consent is enforced HERE: only metrics whose scope the family
