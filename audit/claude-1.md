@@ -2500,3 +2500,86 @@ most like a real finding.
   **shrink** — a new offender fails, and an entry that has been converted but
   left in the list also fails, so it cannot rot into a licence nobody is using.
 - **Status of the eleven:** OPEN, enumerated, contained.
+
+### [CLAUDE-1][HIGH][REGRESSION] My own catalogue fix broke every public route, and CI caught it
+
+Recorded first and in full, because it is the most important thing in this
+session's block: **I shipped a regression and CI found it, not me.**
+
+- **Symptom:** E2E on PR #548 went to **157 failed / 275 passed**, against main's
+  **2 failed / 430 passed**. Every extra failure was a public marketing route
+  overflowing horizontally — `/contact overflows by 49px at 320px wide`, and the
+  same on `/`, `/pricing`, `/features`, `/blog` and six more, across all eight
+  device projects.
+- **Cause:** raw catalogue keys rendering as visible text.
+  `contact.whatsThisAbout` is one unbreakable token, which is exactly 49px of
+  overflow at 320px. Reproduced locally by rendering `/contact` and grepping the
+  HTML: **seven raw keys** — `contact.sendMessage`, `contact.whatsThisAbout`,
+  `contactTopic.partnership`, `marketing.getStarted`, `marketing.getStartedFree`,
+  `consentManager.privacyChoices`, `skipLink.skipToContent`.
+- **What I got wrong:** removing the English fallback from the client translator
+  did not create this — it **revealed** it. `lib/i18n/scopes.ts` had been
+  incomplete since it was written, and the surfaces rendered correctly only
+  because `translate` fell back to the whole catalogue. The scoping worked on
+  paper and was load-bearing on nothing. I checked that the bundle shrank and
+  that the unit suite was green; I did not render a page.
+- **Why the repo's own guard missed it — two holes, both worth keeping in mind:**
+  1. `tests/i18n-client-scope.test.ts` scanned for calls to **`t(`** only.
+     `components/marketing/contact-form.tsx` writes `const tr = useTranslations()`,
+     so not one of its keys was ever seen. The binding is now read from each
+     file, so a component that renames its translator is covered by
+     construction.
+  2. Its entry glob was `app/(marketing)/**/layout.tsx`, and **git's `**`
+     requires at least one path segment** — so it matched *nothing*. Every route
+     group's ROOT layout and ROOT page were invisible, and those are precisely
+     the files that install `ScopedLocaleProvider` and render the chrome. The
+     aggregate `entries.length > 0` assertion could not see it either: a pattern
+     matching nothing hides behind a sibling matching 28 files. Each pattern is
+     now required to match on its own.
+- **Fix:** both test holes closed, then the scopes widened to what the corrected
+  test reports — **84 keys on marketing, 11 on the public links, 9 on auth, 1 on
+  the root chrome**, including four namespaces (`toast`, `logo`, `language`,
+  `modal`) that render under EVERY surface and belonged in the root chrome all
+  along.
+- **The size assertion had to move**, from `full/50` to `full/25`, and that is
+  part of the finding rather than a concession: the old ~2 KB marketing scope was
+  never honest. ~27 KB against ~814 KB is what the page actually needs, rather
+  than what it appeared to need while something else was quietly paying.
+- **Status:** FIXED. Verified by RENDERING, which is what I should have done the
+  first time: `/contact`, `/pricing`, `/`, `/blog`, `/login`, `/signup` each
+  report **zero** raw keys.
+
+### [CLAUDE-1][MEDIUM][UX/DATA] Fifteen forms had no pending state — and my first guard for them was vacuous
+
+- **Raised by:** Claude-2 as C2-19. Verified and fixed as reported.
+- **Problem:** fifteen create/edit forms awaited a Supabase write behind a bare
+  `<Button type="submit">` with neither `loading` nor `disabled`, and no
+  re-entrance guard. On a slow connection a parent taps "Log it", sees nothing,
+  and taps again: two behaviour logs, two immunisation records, two votes. The
+  codebase already knew the pattern and had applied it to the **wrong button** —
+  four of these files wire a `busy` flag to an AI-generate button while leaving
+  the primary write bare.
+- **Fix:** one state and two edits per form (sixteen buttons — screen-time has
+  two), in the shape those same files already use.
+- **One thing that had to be got right, and that I got wrong first:**
+  `e.preventDefault()` must stay **above** the re-entrance guard. My first
+  scripted pass put the guard first, which means a second submit returns before
+  `preventDefault` and the browser performs its **own native form submission** —
+  a full page navigation, worse than the double insert being prevented. I threw
+  that pass away and redid the transform with `preventDefault` pinned first and
+  an assertion in the script that it really is the first statement in all
+  fifteen.
+- **And the guard I wrote for it was VACUOUS on its first run.** The ordering
+  assertion did `body.indexOf('preventDefault()')` — and the handler's own
+  comment contains the words *"preventDefault() stays ABOVE it"*, so it found the
+  explanation rather than the call. Moving the real call below the guard changed
+  nothing the test could see. Comments are stripped before the scan now.
+  **This is the fourth time in this sweep that prose has been read as code**
+  (a `process.env.X` in a doc comment, a `return;` described in a header, a
+  `markGuardianCallbackProcessed` named in a comment that said it must NOT be
+  called) — and the first time it made a guard pass on broken code rather than
+  fail on good code, which is the far more dangerous direction.
+- **Status:** FIXED. `tests/a-write-form-says-it-heard-you.test.ts`, 63
+  assertions. Non-vacuity proven on both properties: removing one `loading={}`
+  names the file; moving `preventDefault` below the guard now fails with *"a
+  second submit would navigate the page"*.

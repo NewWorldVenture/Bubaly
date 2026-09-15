@@ -43,6 +43,8 @@ export function UtilitiesModule() {
     fetcher: (sb) => sb.from('utility_bills').select('*').eq('family_id', familyId).order('period_month', { ascending: false }),
   });
 
+  const [saving, setSaving] = useState(false);
+
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
   const [savings, setSavings] = useState<SavingsResult | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
@@ -53,15 +55,28 @@ export function UtilitiesModule() {
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form) return;
-    const cents = Math.round(parseFloat(form.amount || '0') * 100);
-    const row = {
-      kind: form.kind, provider: form.provider.trim() || null, period_month: form.period_month,
-      amount_cents: cents, usage: form.usage ? parseFloat(form.usage) : null, unit: form.unit.trim() || null, note: form.note.trim() || null,
-    };
-    const { error } = await createClient().from('utility_bills').insert({ ...row, family_id: familyId, created_by: userId });
-    if (error) return toastError(describeDbError(error));
-    success(t('utilitiesModule.billAdded')); setForm(null);
+    // A pending button AND a re-entrance guard. The guard is not redundant:
+    // `disabled` covers the click, this covers the ENTER KEY, which submits the
+    // form without touching the button at all.
+    //
+    // preventDefault() stays ABOVE it. Returning before it on the second submit
+    // would hand the form to the browser's own native submission — a full page
+    // navigation — which is worse than the double insert this exists to stop.
+    if (saving) return;
+    setSaving(true);
+    try {
+      if (!form) return;
+      const cents = Math.round(parseFloat(form.amount || '0') * 100);
+      const row = {
+        kind: form.kind, provider: form.provider.trim() || null, period_month: form.period_month,
+        amount_cents: cents, usage: form.usage ? parseFloat(form.usage) : null, unit: form.unit.trim() || null, note: form.note.trim() || null,
+      };
+      const { error } = await createClient().from('utility_bills').insert({ ...row, family_id: familyId, created_by: userId });
+      if (error) return toastError(describeDbError(error));
+      success(t('utilitiesModule.billAdded')); setForm(null);
+    } finally {
+      setSaving(false);
+    }
   }
   async function remove(id: string) {
     if (!confirm(t('utilitiesModule.deleteThisBill'))) return;
@@ -194,7 +209,7 @@ export function UtilitiesModule() {
             <Field label={t('utilities.note')}>{(id) => <Textarea id={id} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />}</Field>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="secondary" onClick={() => setForm(null)}>{t('utilities.cancel')}</Button>
-              <Button type="submit">Add</Button>
+              <Button type="submit" loading={saving}>Add</Button>
             </div>
           </form>
         </Modal>

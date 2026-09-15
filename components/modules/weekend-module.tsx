@@ -56,6 +56,8 @@ export function WeekendModule() {
   const error = eventsError || plansError || searchesError || feedsError;
   const refresh = () => { void refreshEvents(); void refreshPlans(); void refreshSearches(); void refreshFeeds(); };
 
+  const [saving, setSaving] = useState(false);
+
   const [zip, setZip] = useState('');
   const [radius, setRadius] = useState<number>(DEFAULT_RADIUS);
   const [days, setDays] = useState<number>(DEFAULT_DAYS);
@@ -117,10 +119,23 @@ export function WeekendModule() {
 
   async function addFeed(e: React.FormEvent) {
     e.preventDefault();
-    if (!feedForm.label.trim() || !feedForm.url.trim()) return toastError(t('weekendModule.nameAndUrlRequired'));
-    try { new URL(feedForm.url.trim()); } catch { return toastError(t('weekendModule.enterAValidUrl')); }
-    const { error } = await createClient().from('weekend_feeds').insert({ family_id: familyId, label: feedForm.label.trim(), url: feedForm.url.trim(), kind: feedForm.kind, created_by: userId });
-    if (error) toastError(describeDbError(error)); else { success(t('weekendModule.sourceAdded')); setFeedForm({ label: '', url: '', kind: 'ics' }); }
+    // A pending button AND a re-entrance guard. The guard is not redundant:
+    // `disabled` covers the click, this covers the ENTER KEY, which submits the
+    // form without touching the button at all.
+    //
+    // preventDefault() stays ABOVE it. Returning before it on the second submit
+    // would hand the form to the browser's own native submission — a full page
+    // navigation — which is worse than the double insert this exists to stop.
+    if (saving) return;
+    setSaving(true);
+    try {
+      if (!feedForm.label.trim() || !feedForm.url.trim()) return toastError(t('weekendModule.nameAndUrlRequired'));
+      try { new URL(feedForm.url.trim()); } catch { return toastError(t('weekendModule.enterAValidUrl')); }
+      const { error } = await createClient().from('weekend_feeds').insert({ family_id: familyId, label: feedForm.label.trim(), url: feedForm.url.trim(), kind: feedForm.kind, created_by: userId });
+      if (error) toastError(describeDbError(error)); else { success(t('weekendModule.sourceAdded')); setFeedForm({ label: '', url: '', kind: 'ics' }); }
+    } finally {
+      setSaving(false);
+    }
   }
   async function toggleFeed(f: Feed) {
     await createClient().from('weekend_feeds').update({ is_active: !f.is_active }).eq('id', f.id);
@@ -180,7 +195,7 @@ export function WeekendModule() {
               <Input value={feedForm.label} onChange={(e) => setFeedForm({ ...feedForm, label: e.target.value })} placeholder={t('weekend.nameEGCityCalendar')} className="h-9" />
               <Input value={feedForm.url} onChange={(e) => setFeedForm({ ...feedForm, url: e.target.value })} placeholder="https://…/events.ics" className="h-9" />
               <Select value={feedForm.kind} onChange={(e) => setFeedForm({ ...feedForm, kind: e.target.value as WeekendFeedKind })} className="h-9 sm:w-24"><option value="ics">ICS</option><option value="rss">RSS</option></Select>
-              <Button type="submit" size="sm" className="h-9"><Plus className="h-4 w-4" /> Add</Button>
+              <Button type="submit" loading={saving} size="sm" className="h-9"><Plus className="h-4 w-4" /> Add</Button>
             </form>
           </div>
         )}
