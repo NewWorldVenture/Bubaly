@@ -5946,3 +5946,66 @@ CI verified green on `7ccd0551` — the full matrix, including the migration
 replay with `0303` and the amended boundary probe, and E2E against live
 Supabase. That verdict had been superseded by rapid pushes five times before it
 finally landed.
+
+# Pass R — the landing page's eleven waits, and a deletion that was told it worked
+
+Round 5 closed the workers' findings. These two were left open from round 4 and
+are the highest-value of what remained: one is on the page every authenticated
+session lands on, the other tells a parent a document is gone when it is not.
+
+**C4-S4-09 — FIXED. A file the user deleted stayed in the bucket, and the screen
+said "File removed".** `removeFile` awaited `removeFamilyDocument` bare and
+deleted the `documents` row regardless. The ordering is what made it a privacy
+defect rather than a leak: deleting the row first is what makes a surviving
+object **invisible** — nothing in the product references it any more, so the
+family cannot see it, open it, or try again — while being told it is gone. A
+warranty or a manual is plausibly being deleted *because* it carries a serial or
+a policy number.
+
+The storage result is now read and the row delete does not happen if the object
+survived. The repository already had this exact shape one directory away:
+`adminDeleteDocumentAction` stops before the row delete when storage fails, and
+`tests/admin-document-delete-boundary.test.ts` holds it there. The client path
+had simply drifted from it — so the new guard asserts the admin path's ordering
+too, and would notice if *that* one ever drifted instead.
+
+The upload-rollback discard at the same file's `:425` is a genuine rollback (the
+row never landed, so a surviving object is referenced by nothing) and the user is
+already being told the upload failed — but it now names the leak in a log rather
+than swallowing it.
+
+**C4-S4-07 — FIXED. `/home` went from about eleven sequential waits on the
+network to six.** Four groups collapsed with no change in behaviour:
+
+| collapsed | what |
+|---|---|
+| the duplicate | two `await getTranslations()` calls on the same function, before the page had a session |
+| waves 8–10 | `listPending` + `loadCompletedByBubaly` + the fourteen-read `settleAll` batch |
+| waves 6–7 | the meals and chore-title id lookups |
+| waves 11–12 | plan steps + the chore titles the batch referenced |
+| waves 14–16 | `loadTimeSaved` + `loadFamilyValue` + the activation-milestone read |
+
+The two `ServiceResult` loaders stay **outside** `settleAll` — the file's comment
+explaining why is correct, and unchanged: `settleAll` substitutes the
+`{ data, error }` shape for a rejection, which has no `ok` to branch on. What
+that reasoning never justified was awaiting them *before* the batch. Each keeps
+its own `.catch` fallback, so a throw still costs that one list rather than every
+read beside it, and each conditional read keeps its "no ids, no query"
+short-circuit: the gain is in overlapping the waits, not in issuing queries
+nobody needs.
+
+The page already demonstrated the technique 120 lines in — `schedulePromise` is
+started early and awaited later, with a comment saying exactly why. It was
+applied to one read and not to the other six.
+
+**The ratchet guarding this had to be rewritten, and the reason is the round's
+own lesson.** The first draft counted *top-level* awaits — and could not see the
+shape it exists to prevent, because the original serial read puts its `await` on
+a continuation line, indented past any top-level anchor. Re-serialising the
+meals/chores pair left it green. It now counts every `await` in the function
+body: parallelising *removes* awaits, so the number only rises when a group is
+pulled apart. Caught by mutation, like the three before it.
+
+No TTFB measurement is claimed. There is still no authenticated session in this
+environment, so the arithmetic is round trips removed, not milliseconds observed
+— which is what the finding said, and it stays said.

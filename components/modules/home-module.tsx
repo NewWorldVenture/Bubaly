@@ -422,7 +422,12 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
     });
     setUploading(false);
     if (insertError) {
-      await removeFamilyDocument(supabase, path);
+      // Rollback: the row never landed, so a surviving object is referenced by
+      // nothing. Lower stakes than removeFile's case — the user is already
+      // being told this failed — but a leaked object is still a leaked object,
+      // so it is named rather than swallowed. Audit C4-S4-09.
+      const { error: rollbackError } = await removeFamilyDocument(supabase, path);
+      if (rollbackError) console.error('[home-module] upload rollback left an object behind', { path }, rollbackError);
       return toastError(describeDbError(insertError));
     }
     success(manual ? tr('homeModule.manualSaved') : tr('homeModule.warrantyDocumentSaved'));
@@ -440,7 +445,18 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
   async function removeFile(doc: WarrantyDoc) {
     setRemovingId(doc.id);
     const supabase = createClient();
-    await removeFamilyDocument(supabase, doc.storage_path);
+    // The object goes first and its result is READ. Deleting the row first is
+    // what would make a surviving object invisible: nothing in the product
+    // references it any more, so the family cannot see it, open it or remove
+    // it — while the screen says "File removed". A warranty or a manual is
+    // plausibly being deleted BECAUSE it carries a serial or policy number, so
+    // telling someone it is gone when it is not is the defect, not the leak.
+    // Audit C4-S4-09.
+    const { error: storageError } = await removeFamilyDocument(supabase, doc.storage_path);
+    if (storageError) {
+      setRemovingId(null);
+      return toastError(storageError);
+    }
     const { error } = await supabase.from('documents').delete().eq('id', doc.id);
     setRemovingId(null);
     if (error) return toastError(describeDbError(error));

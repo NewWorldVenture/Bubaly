@@ -145,8 +145,11 @@ const ACTIONS = [
 type Member = { id: string; display_name: string; color: string | null; role: string; birthday: string | null; user_id: string | null };
 
 export default async function HomePage() {
+  // One call, two names: `i18nT` and `tr` were two awaits on the same function,
+  // so the page paid for the identical resolution twice before it had a
+  // session. Audit C4-S4-07.
   const i18nT = await getTranslations();
-  const tr = await getTranslations();
+  const tr = i18nT;
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -252,23 +255,29 @@ export default async function HomePage() {
 
   const finances = summarizeMonthFinances((txns ?? []) as HomeTxn[], now);
 
-  // Resolve this week's dinner meals → today's pick + which days are planned.
+  // Two id-list lookups that both depend only on the batch above and on nothing
+  // from each other, so they go out together rather than one after the other.
+  // Each keeps its own "no ids, no query" short-circuit. Audit C4-S4-07.
   const plans = (dinnerPlans ?? []) as { plan_date: string; meal_id: string | null }[];
   const mealIds = [...new Set(plans.map((p) => p.meal_id).filter((x): x is string => !!x))];
-  const { data: meals } = mealIds.length
-    ? await supabase.from('meals').select('id, name, notes, recipe_url').in('id', mealIds)
-    : { data: [] as { id: string; name: string; notes: string | null; recipe_url: string | null }[] };
+  const choreList = (choreRows ?? []) as { id: string; status: string; member_id: string; chore_id: string }[];
+  const choreIds = [...new Set(choreList.map((c) => c.chore_id))];
+  const [{ data: meals }, { data: choreDefs }] = await Promise.all([
+    mealIds.length
+      ? supabase.from('meals').select('id, name, notes, recipe_url').in('id', mealIds)
+      : Promise.resolve({ data: [] as { id: string; name: string; notes: string | null; recipe_url: string | null }[] }),
+    choreIds.length
+      ? supabase.from('chores').select('id, title').in('id', choreIds).eq('family_id', familyId)
+      : Promise.resolve({ data: [] as { id: string; title: string }[] }),
+  ]);
+
+  // This week's dinner meals → today's pick + which days are planned.
   const mealById = new Map((meals ?? []).map((m) => [m.id, m]));
   const plannedDates = new Set(plans.filter((p) => p.meal_id).map((p) => p.plan_date));
   const todayPlan = plans.find((p) => p.plan_date === todayIso);
   const todayMeal = todayPlan?.meal_id ? mealById.get(todayPlan.meal_id) : undefined;
 
-  // Resolve chore titles for the listed assignments in one query.
-  const choreList = (choreRows ?? []) as { id: string; status: string; member_id: string; chore_id: string }[];
-  const choreIds = [...new Set(choreList.map((c) => c.chore_id))];
-  const { data: choreDefs } = choreIds.length
-    ? await supabase.from('chores').select('id, title').in('id', choreIds).eq('family_id', familyId)
-    : { data: [] as { id: string; title: string }[] };
+  // Chore titles for the listed assignments.
   const choreTitleById = new Map((choreDefs ?? []).map((c) => [c.id, c.title]));
 
   const msgs = (messages ?? []) as { id: string; sender_id: string | null; sender_name: string | null; sender_avatar: string | null; content: string | null; created_at: string; read_by: string[] }[];
@@ -281,25 +290,25 @@ export default async function HomePage() {
   // is a claim.
   const dayEndIso = todayEnd.toISOString();
   const manager = isManager(me.role);
-  // A ServiceResult, not a Postgrest response — awaited beside the batch
-  // rather than inside it, with its own fallback so a throw costs the
-  // approvals list instead of every read next to it.
-  const aiApprovalsRes = await listPending(scopeFromUserContext(ctx, supabase)).catch((cause) => {
-    console.warn('[home] pending AI approvals read threw', cause);
-    return { ok: false as const, error: String(cause) };
-  });
-  // "Completed by Bubaly" (M6): one fail-closed loader that reads the ledger for
-  // the tool that acted and the plan's reason. A ServiceResult, not a Postgrest
-  // response, so it is awaited BESIDE the batch — settleAll substitutes the
-  // { data, error } shape for a rejection, which has no `ok` to branch on.
-  const completedRes = await loadCompletedByBubaly(supabase, familyId, { now, limit: 6 }).catch((cause) => {
-    console.error('[home] completed-by-Bubaly read threw', cause);
-    return { ok: false as const, error: String(cause) };
-  });
-  const [
+  // These two are ServiceResults, not Postgrest responses, so they stay OUTSIDE
+  // settleAll — it substitutes the { data, error } shape for a rejection, which
+  // has no `ok` to branch on. That reasoning is right and unchanged. What it
+  // never justified was awaiting them BEFORE the batch: they depend on nothing
+  // in it, so three sequential waits were three round trips where one would do.
+  // Promise.all keeps every shape and every fallback intact. Audit C4-S4-07.
+  const [aiApprovalsRes, completedRes, [
     activeRunsRes, recsRes,
     moneyApprovalsRes, choreSignoffRes, todosDueRes, choresDueRes, remindersDueRes,
-  ] = await settleAll([
+  ]] = await Promise.all([
+    listPending(scopeFromUserContext(ctx, supabase)).catch((cause) => {
+      console.warn('[home] pending AI approvals read threw', cause);
+      return { ok: false as const, error: String(cause) };
+    }),
+    loadCompletedByBubaly(supabase, familyId, { now, limit: 6 }).catch((cause) => {
+      console.error('[home] completed-by-Bubaly read threw', cause);
+      return { ok: false as const, error: String(cause) };
+    }),
+    settleAll([
     supabase.from('family_automation_runs').select('id, summary, state, plan_id, updated_at, created_at')
       .eq('family_id', familyId).in('state', [...WORKING_RUN_STATES]).order('updated_at', { ascending: false }).limit(8),
     supabase.from('family_ai_recommendations').select('id, title, body, priority, cta_href, created_at')
@@ -318,6 +327,7 @@ export default async function HomePage() {
     supabase.from('family_reminders').select('id, title, remind_at, member_id, priority')
       .eq('family_id', familyId).eq('status', 'active').not('remind_at', 'is', null).lte('remind_at', dayEndIso)
       .order('remind_at', { ascending: true }).limit(20),
+    ]),
   ]);
   for (const [label, res] of [
     ['active runs', activeRunsRes],
@@ -330,10 +340,26 @@ export default async function HomePage() {
 
   const activeRuns = (activeRunsRes.data ?? []) as WorkingRunRow[];
   const activePlanIds = activeRuns.map((r) => r.plan_id).filter((x): x is string => !!x);
-  const { data: activeStepRows, error: activeStepError } = activePlanIds.length
-    ? await supabase.from('ai_plan_steps').select('plan_id, status').eq('family_id', familyId).in('plan_id', activePlanIds)
-    : { data: [] as WorkingStepRow[], error: null };
+  // Both of these depend on the batch above and on nothing from each other —
+  // the plan steps for the working-run strip, and the chore titles the batch's
+  // own rows referenced but the earlier lookup did not cover. One wait, not
+  // two. Audit C4-S4-07.
+  const choresDue = (choresDueRes.data ?? []) as TodayChoreRow[];
+  const missingChoreIds = [...new Set(choresDue.map((c) => c.chore_id).filter((id) => !choreTitleById.has(id)))];
+  const [
+    { data: activeStepRows, error: activeStepError },
+    { data: moreChores, error: moreChoresError },
+  ] = await Promise.all([
+    activePlanIds.length
+      ? supabase.from('ai_plan_steps').select('plan_id, status').eq('family_id', familyId).in('plan_id', activePlanIds)
+      : Promise.resolve({ data: [] as WorkingStepRow[], error: null }),
+    missingChoreIds.length
+      ? supabase.from('chores').select('id, title').in('id', missingChoreIds).eq('family_id', familyId)
+      : Promise.resolve({ data: [] as { id: string; title: string }[], error: null }),
+  ]);
   if (activeStepError) console.error('[home] active run steps read failed', activeStepError);
+  if (moreChoresError) console.error('[home] chore titles read failed', moreChoresError);
+  for (const c of moreChores ?? []) choreTitleById.set(c.id, c.title);
   const workingRuns = workingRunsFrom(activeRuns, (activeStepRows ?? []) as WorkingStepRow[]);
 
   const completedItems = completedRes.ok ? completedRes.data : [];
@@ -357,13 +383,6 @@ export default async function HomePage() {
   const needs = topNeeds(homeNeeds, 5);
   const needsHeader = needsHeadline(summarizeNeeds(homeNeeds));
 
-  const choresDue = (choresDueRes.data ?? []) as TodayChoreRow[];
-  const missingChoreIds = [...new Set(choresDue.map((c) => c.chore_id).filter((id) => !choreTitleById.has(id)))];
-  if (missingChoreIds.length) {
-    const { data: moreChores, error: moreChoresError } = await supabase.from('chores').select('id, title').in('id', missingChoreIds).eq('family_id', familyId);
-    if (moreChoresError) console.error('[home] chore titles read failed', moreChoresError);
-    for (const c of moreChores ?? []) choreTitleById.set(c.id, c.title);
-  }
   const scheduleRes = await schedulePromise;
   const today = buildToday({
     events: ((todayEvents ?? []) as TodayEventRow[]),
@@ -375,9 +394,16 @@ export default async function HomePage() {
     ...(scheduleRes.ok ? { insights: scheduleRes.data.byEvent } : {}),
   });
 
-  // R11 — the category metric: how much family admin the system removed this week.
-  const timeSaved = await loadTimeSaved(supabase, familyId, now);
-  const valueComparison = await loadFamilyValue(supabase, familyId, now);
+  // R11 — the category metric: how much family admin the system removed this
+  // week — beside the activation-milestone read below. Three independent reads
+  // that were three sequential waits. Audit C4-S4-07.
+  const [timeSaved, valueComparison, activationRead] = await Promise.all([
+    loadTimeSaved(supabase, familyId, now),
+    loadFamilyValue(supabase, familyId, now),
+    supabase.from('activation_events').select('id')
+      .eq('family_id', familyId).eq('user_id', ctx.user.id)
+      .eq('milestone', FIRST_VALUE_MILESTONE).limit(1),
+  ]);
 
   // Setup nudge — the ONLY route into /dashboard/setup (the re-onboarding
   // surface was otherwise unreachable). Managers only, and gated cheaply: one
@@ -393,10 +419,7 @@ export default async function HomePage() {
   // read hides the card and logs — the card is an offer, so withholding it says
   // nothing false, while showing it on a guess would claim they are new.
   let firstThing: FirstThing | null = null;
-  const { data: activated, error: activationError } = await supabase
-    .from('activation_events').select('id')
-    .eq('family_id', familyId).eq('user_id', ctx.user.id)
-    .eq('milestone', FIRST_VALUE_MILESTONE).limit(1);
+  const { data: activated, error: activationError } = activationRead;
   if (activationError) console.error('[home] activation milestone read failed', activationError);
   else if ((activated ?? []).length === 0 && Object.values(outcomeSnapshot).every((count) => count !== null)) {
     firstThing = pickFirstThing({
