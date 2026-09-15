@@ -4,7 +4,8 @@
 -- and the module's idea of who may write is a React boolean
 -- (`const canEdit = isManager(role)`, medications-module.tsx:77). A child is a
 -- real Supabase auth user, so a child session can call PostgREST directly and
--- RLS is the only boundary. Before 0300 the child's UPDATE and DELETE succeeded.
+-- RLS is the only boundary. Before 0312 the child's UPDATE and DELETE succeeded.
+-- (This migration was 0300 until main landed its own 0300 for the paywall.)
 --
 -- Deleting a schedule also silences the medication reminder, so this is a safety
 -- surface and not only a record.
@@ -14,7 +15,12 @@
 -- — `medication_doses` is deliberately left member-writable, because the person
 -- taking the medicine is the one who records it.
 grant usage on schema public to authenticated;
-grant select, insert, update, delete on all tables in schema public to authenticated;
+-- No blanket `grant ... on all tables in schema public` here. The bootstrap's
+-- `alter default privileges` already gives `authenticated` full DML on every
+-- table a migration creates, so the restatement was redundant — and once
+-- migrations began revoking DML deliberately (0300 takes the paywall columns
+-- away from the client), it stopped being redundant and started undoing them
+-- for every probe that runs after this one against the shared database.
 
 do $$
 declare
@@ -63,7 +69,7 @@ begin
   perform set_config('request.jwt.claim.sub', child_uid::text, true);
   set local role authenticated;
 
-  -- 1. Cannot change a dosage. Before 0300 this was UPDATE 1.
+  -- 1. Cannot change a dosage. Before 0312 this was UPDATE 1.
   update public.medications set dosage = '500mg' where id = med_id;
   get diagnostics n = row_count;
   if n <> 0 then

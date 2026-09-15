@@ -159,10 +159,9 @@ export async function POST(req: NextRequest) {
         metadata: { family_id: familyId, user_id: ctx.user.id },
       });
       customerId = customer.id;
-      // Service role for the same reason as billing/checkout: 0306 revokes the
-      // client write, because a self-written customer_ref opens the Stripe
-      // billing portal on whichever customer it names. Written from a customer
-      // this request just created, for the verified active family.
+      // Service client, per 0300 and 0306 — see the note in
+      // app/api/billing/checkout. Written from a customer this request just
+      // created, for the verified active family.
       const { error: customerWriteError } = await createServiceClient().from('billing_customers').upsert({ family_id: familyId, provider: 'stripe', customer_ref: customerId });
       if (customerWriteError) {
         console.error('[billing-change-plan] Billing customer write failed', customerWriteError);

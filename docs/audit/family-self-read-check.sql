@@ -36,10 +36,15 @@
 --
 -- Exit is non-zero (via RAISE EXCEPTION) if any invariant fails.
 
+-- No blanket `grant ... on all tables in schema public` here. The bootstrap's
+-- `alter default privileges` already gives `authenticated` full DML on every
+-- table a migration creates, so the restatement was redundant — and once
+-- migrations began revoking DML deliberately (0300 takes the paywall columns
+-- away from the client), it stopped being redundant and started undoing them
+-- for every probe that runs after this one against the shared database.
 \set FA '00000000-0000-4000-8000-0000000000f1'
 \set UA '00000000-0000-4000-8000-000000000001'
 
-grant select on all tables in schema public to authenticated;
 
 do $$
 declare

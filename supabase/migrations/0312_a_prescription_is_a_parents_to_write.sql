@@ -1,4 +1,11 @@
--- Bubaly :: 0300 - a prescription is a parent's to write
+-- Bubaly :: 0312 - a prescription is a parent's to write
+-- ----------------------------------------------------------------------------
+-- Renumbered from 0300. A parallel session landed
+-- `0300_entitlement_is_not_client_writable.sql` on main for a different
+-- finding while this was in flight — the FIFTH migration-number collision
+-- between the two sessions, after 0297, 0298 (twice) and 0299. The number is
+-- all that changed; nothing here depends on running before 0301-0304, which
+-- touch different tables.
 -- ----------------------------------------------------------------------------
 -- `medications` and `medication_schedules` resolve to membership-only policies:
 -- SELECT/UPDATE/DELETE `using (is_family_member(family_id))`, INSERT

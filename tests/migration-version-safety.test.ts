@@ -40,14 +40,16 @@ describe('Supabase migration filename safety', () => {
   // generation (00100 and 00101 both live in 0010). nextVersion reads the first
   // four digits, so those do not drag the next free number up to 1422.
   it('points new migrations at the next unused version', () => {
-    // Bumped whenever a migration lands — 0311 fixes the two UPDATE policies
-    // whose WITH CHECK was weaker than their USING. Stating it rather
-    // than deriving it is the point: the number is how a new migration
-    // announces itself, so a file that quietly reuses one, or a rebase that
-    // drops one, fails here. It has now caught FOUR real collisions — 0297,
-    // 0298 and 0299, each claimed twice by two sessions running at once, and
-    // 0298 twice over on the same finding.
-    expect(audit.nextVersion).toBe('0312');
+    // Bumped whenever a migration lands. Stating it rather than deriving it is
+    // the point: the number is how a new migration announces itself, so a file
+    // that quietly reuses one, or a rebase that drops one, fails here.
+    //
+    // It has now caught FIVE real collisions between two sessions running at
+    // once — 0297, 0298 (twice, on the same finding), 0299, and 0300, where
+    // main's paywall migration and this branch's prescription migration both
+    // claimed the number. The latter is now 0312, which is why this reads 0313
+    // rather than 0312: main's 0300 and this branch's 0301-0311 are both here.
+    expect(audit.nextVersion).toBe('0313');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

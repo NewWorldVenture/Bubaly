@@ -70,14 +70,16 @@ export async function POST(req: NextRequest) {
       });
       customerId = customer.id;
 
-      // The service role, not the caller's session: 0306 revokes the client
-      // write on billing_customers, because a customer_ref a family can write
-      // is a customer_ref it can point at ANOTHER family's Stripe customer —
-      // and /api/billing/portal hands this value straight to Stripe. The row is
-      // written here from a customer THIS request just created, so the server
-      // knows it belongs to this family; nothing about that needs the caller's
-      // own privileges. `familyId` is the verified active family and the route
-      // is already isAdmin-gated above.
+      // The service role, not the caller's session. Two sessions reached this
+      // independently — main's 0300 and this branch's 0306 — and both are
+      // right for the same reason: billing_customers chooses WHOSE Stripe
+      // portal opens, because /api/billing/portal hands `customer_ref`
+      // straight to stripe.billingPortal.sessions.create. 0300 takes the
+      // client's write grant away; 0306 adds RESTRICTIVE write guards on top.
+      // The row is written here from a customer THIS request just created, so
+      // the server knows it belongs to this family; nothing about that needs
+      // the caller's own privileges. `familyId` is the verified active family
+      // and the route is already isAdmin-gated above.
       const { error: customerWriteError } = await createServiceClient().from('billing_customers').upsert({
         family_id: familyId,
         provider: 'stripe',

@@ -31,8 +31,12 @@ insert into public.wallet_audit_logs (family_id, actor_user_id, action, entity_t
   values (:'FA', :'PARENT', 'wallet_activated', 'family_wallets', 'probe seed')
   on conflict do nothing;
 
--- The harness grants table privileges to `authenticated`; RLS is the real gate.
-grant select, insert, update, delete on all tables in schema public to authenticated;
+-- No blanket `grant ... on all tables in schema public` here. The bootstrap's
+-- `alter default privileges` already gives `authenticated` full DML on every
+-- table a migration creates, so the restatement was redundant — and once
+-- migrations began revoking DML deliberately (0300 takes the paywall columns
+-- away from the client), it stopped being redundant and started undoing them
+-- for every probe that runs after this one against the shared database.
 
 -- ── Invariant 1a: a child cannot MINT — a COMPLETE, valid $9,999.99 credit into
 --     wallet_transactions must be RLS-rejected (only RLS can block a valid row,

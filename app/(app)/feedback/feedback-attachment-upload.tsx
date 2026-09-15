@@ -1,12 +1,13 @@
 'use client';
 
 // Idea-attachment upload for the feedback form. Pick or drop an image → uploads
-// to the public `feedback-attachments` bucket at {userId}/{ts}-{rand}.{ext} → the
+// to the public `feedback-attachments` bucket at {userId}/{unguessable}.{ext} → the
 // returned public URL becomes the idea's image_url. Client-side validation keeps
 // bad files off the bucket; Remove deletes the object we uploaded.
 import { useRef, useState } from 'react';
 import { ImagePlus, Loader2, X, UploadCloud } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { unguessableObjectName } from '@/lib/storage/object-name';
 import {
   FEEDBACK_ATTACHMENTS_BUCKET, FEEDBACK_ATTACHMENT_MAX_BYTES,
   feedbackAttachmentPathFromUrl, removeFeedbackAttachmentPath,
@@ -37,8 +38,17 @@ export function FeedbackAttachmentUpload({
     setUploading(true);
     try {
       const sb = createClient();
-      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
-      const path = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      // This bucket is PUBLICLY READABLE (`for select using (bucket_id =
+      // 'feedback-attachments')`, no scoping), and the first path segment is the
+      // user id, which is not secret. So the object name is the only thing
+      // between a screenshot and the internet — and these screenshots are of the
+      // product, so they carry names, schedules and balances.
+      //
+      // It used to be `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`:
+      // a clock anyone can narrow plus SIX base36 characters — 31 bits, a 2.2e9
+      // keyspace — from Math.random, which is not a CSPRNG. The shared namer uses
+      // crypto.randomUUID (122 bits) and was already right there.
+      const path = `${userId}/${unguessableObjectName(file.name.toLowerCase())}`;
       const { data, error } = await sb.storage.from(FEEDBACK_ATTACHMENTS_BUCKET).upload(path, file, { upsert: false, cacheControl: '31536000' });
       if (error) { toastError(`Upload failed: ${error.message}`); return; }
       const previousPath = ownedPath ?? feedbackAttachmentPathFromUrl(value, process.env.NEXT_PUBLIC_SUPABASE_URL);

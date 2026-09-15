@@ -514,9 +514,12 @@ passed; production application of the atomic `0240-0254` release remains pending
 ## Migrations added since this document's stated baseline (2026-09-12)
 
 The status line at the top of this file is dated **2026-09-05** against main
-`01881fb2`. **Seventy-one** migration files have landed since, `0255` through
-`0295`, and none of them appear anywhere above. (This read "thirty-one, `0255`
-through `0285`" until 2026-09-13; the range had simply grown past the sentence.)
+`01881fb2`. **Forty-three** migration files have landed since, `0255` through
+`0300`, and none of them appear anywhere above. (This read "thirty-one, `0255`
+through `0285`" until 2026-09-13 and "seventy-one, `0255` through `0295`" until
+2026-09-15; the range keeps growing past the sentence. The count is the number
+of files in that range, which is what `ls supabase/migrations` reports — the
+earlier "seventy-one" did not match its own stated range.)
 Nothing here authorizes applying any of them; this section exists so the gap is
 visible rather than inferred from the absence of a row.
 
@@ -656,3 +659,59 @@ make the inventory look more complete than it is.
 `0272`, `0273` and `0275` already have full entries in the historical inventory
 above. The others do not, and the honest summary is that this document stopped
 being a complete picture at `0254`.
+
+
+### `0300` takes the paywall out of the browser — unapplied
+
+Authored 2026-09-15. **Not applied**, and it needs the same credentialed
+operator as every step above, in the same order.
+
+`lib/server/entitlement.ts` decides what a family may use from three facts: the
+maximum plan across `active`/`trialing` rows in `subscriptions`, and
+`families.trial_ends_at` and `families.closed_at`. All three were writable from
+the browser with the public anon key.
+
+`subs_manage` was `FOR ALL … USING is_family_admin(family_id) WITH CHECK
+is_family_admin(family_id)`, and Supabase grants every table in `public` to
+`authenticated`, so the policy was the only thing in the way and it agreed.
+`handle_new_family()` seeds each new family with a `free`/`trialing` row, so the
+row to edit is already there:
+
+| Statement, as an ordinary signed-in parent | Result |
+|---|---|
+| `update subscriptions set plan='plus_annual', status='active' where family_id=…` | 1 row — `planLevel` 2, `effectiveLevel` 2, `locked` false |
+| `update families set trial_ends_at=null where id=…` | 1 row — NULL is the GRANDFATHERED case, never locked |
+| `insert into families (name, created_by, trial_ends_at) values (…, null)` | created grandfathered; the column carried a 5-day default, not a refusal |
+| `update families set closed_at=null where id=…` | 1 row |
+| `update billing_customers set customer_ref='cus_…' where family_id=…` | 1 row — and `/api/billing/portal` hands that value to Stripe |
+
+Family+ in full, for nothing, without Stripe being contacted. None of it needs a
+server action, so nothing in `app/api/billing/*` could have stopped it:
+PostgREST is a first-class client and RLS is the only boundary it answers to.
+
+`0300` drops both `FOR ALL` policies, revokes client DML on `subscriptions` and
+`billing_customers`, and narrows the `families` grant to the columns the product
+actually writes — `name`, `address`, `timezone`, `cover_url`, `avatar_url`. A
+table-level grant cannot be narrowed by revoking one column, so the grant is
+dropped and re-issued. Reads are untouched: `subs_select` and `billing_select`
+stay, so the billing page still shows the plan.
+
+No legitimate write is lost. Every write to `subscriptions` in the product
+already used `createServiceClient()`; `billing_customers` had two upserts on the
+user-scoped client and the same commit moves them to the service client, in
+routes that already resolve the family from `requireUserContext()` and take the
+customer id from Stripe's own response. Closing and reopening an account stay a
+parent's decision through `app/(app)/account/actions.ts`, which already uses the
+service client.
+
+**Measured, not argued.** `docs/audit/entitlement-write-boundary-check.sql` runs
+as a real `authenticated` session under RLS. Five of its assertions fail against
+the previous schema, naming each statement above; all pass after `0300`; and it
+asserts the other direction too — a parent can still rename their family and
+still read their own plan, so a revoke that broke the product would not read as
+a pass. Each attempt is judged on the row count as well as the refusal, because
+an UPDATE that RLS filters to no visible row changes nothing and raises nothing.
+CI replays it against the fully bootstrapped schema on every pull request.
+
+Until it is applied, a signed-in parent can give their own family Family+ for
+nothing, in one request, in production.

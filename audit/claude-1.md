@@ -3066,3 +3066,74 @@ session's block: **I shipped a regression and CI found it, not me.**
 - **NOT claimed:** this does not fix C2-02, C2-03 or C2-06. It makes them
   countable and stops the next one landing silently, which is what C2-09 asked
   for.
+
+### [CLAUDE-1][HIGH][AUDIT INSTRUMENTS] Eleven of my probes were rewriting the schema they were measuring
+
+- **Raised by:** `main`, in `tests/audit-probes-do-not-rewrite-grants.test.ts`
+  (PR #559). Found on merging; **eleven of the offending probes were mine**, and
+  their fix had only reached the nine that existed on their side.
+- **Problem:** `run-probes.sh` runs every probe in glob order against **one
+  shared database**, and these opened with
+  ```sql
+  grant select, insert, update, delete on all tables in schema public to authenticated;
+  ```
+  That was redundant when written — `pg-bootstrap.sh` sets
+  `alter default privileges … grant all on tables`, so every table a migration
+  creates already carries full DML. **It stopped being redundant the moment a
+  migration revoked DML on purpose.** main's 0300 takes `UPDATE` and `INSERT` on
+  `families.trial_ends_at` away from the client because that column IS the
+  paywall; the first probe in glob order handed the grant straight back, and
+  every probe after it measured a schema no deploy will ever run.
+- **How it surfaced, which is the part worth keeping:** main's new
+  `entitlement-write-boundary-check.sql` **passed alone and failed inside the
+  suite**. On the merged tree it failed with
+  *"0300: a new family was created with trial_ends_at NULL — grandfathered on
+  arrival"* — and the live catalogue showed `authenticated` holding INSERT on
+  every column of `families`, including the two 0300 had deliberately withheld.
+  No migration after 0300 re-grants anything; the harness did.
+- **This is 0292's defect in the instruments rather than in a migration**: a
+  lockdown verified at its own moment in the chain, undone by what came later. It
+  is also the sharpest version of a failure this audit keeps finding — a guard
+  that reports on a state it created itself.
+- **Fix:** main's, applied to my eleven. The `grant usage on schema public`
+  stays; the blanket DML grant is replaced by the note explaining why it is not
+  there, so the next probe copied from a neighbour inherits the reason.
+- **Proof the grant really was redundant:** all eleven probes still pass without
+  it — **33/33, run twice**. If any had depended on it, this is where it would
+  have shown.
+- **Status:** FIXED.
+
+### [CLAUDE-1][MERGE] Sixth conflict, and the second time both sessions fixed one defect independently
+
+- **`mergeable_state: dirty` for the sixth time.** main landed PR #558 (Pass N,
+  the public bucket named with `Math.random`) and PR #559 (the paywall).
+- **A fifth migration-number collision.** main's
+  `0300_entitlement_is_not_client_writable.sql` against my
+  `0300_a_prescription_is_a_parents_to_write.sql`. Mine is renumbered **0312** —
+  it depends on nothing between, and the number was the only thing that changed.
+  The three probe comments that said "before 0300" meaning the prescription
+  migration are updated, which also removes a real ambiguity: **main's probes
+  already used "0300" to mean the paywall**.
+- **Both sessions fixed the paywall.** Second convergence after invites (their
+  0298, my 0305). The two are complementary and **both stay**:
+  - On `subscriptions`/`billing_customers` they agree — revoke the client's
+    write grants. Mine adds the RESTRICTIVE guards and the sweep by shape.
+  - On `families` they differ, and **theirs is stronger**: 0300 revokes `update`
+    wholesale and re-grants column by column, so the paywall columns are refused
+    at the **privilege** layer and never reach a policy or trigger. My
+    `family_entitlement_is_not_self_written` trigger is therefore now defence in
+    depth — **kept deliberately**, because a later migration re-granting `update`
+    on `families` broadly would silently undo 0300's column list, and a trigger
+    does not care about grants.
+  0306's header now says all of this, so the next reader is not left to work out
+  why two migrations address one finding.
+- **Conflicts resolved by union, never by picking a winner** — the two billing
+  route comments now carry both reasonings, and `finalaudit.md` keeps main's
+  Pass N and my Pass P, in letter order.
+- **Pass P's reason for skipping N is confirmed by events.** It was lettered P
+  because N and O were claimed by PR #556; main has since landed its own Pass N
+  here. Had I taken N, that would have been the second pass-letter collision
+  after `L`/`L′`.
+- **Verified:** 325 migrations replayed from scratch (0 failed), 322 re-applied
+  onto the populated schema, **33/33 probes run twice**, **13,907 tests green
+  across four shards**, tsc clean, lint at exactly its 100-warning cap.

@@ -1,5 +1,28 @@
 -- Bubaly :: 0306 - a family cannot write the row that decides what it paid for
 -- ----------------------------------------------------------------------------
+-- A PARALLEL SESSION REACHED THIS SAME FINDING and landed
+-- `0300_entitlement_is_not_client_writable.sql` on main while this was in
+-- flight — the second time the two sessions have converged on one defect, after
+-- invites (their 0298, this branch's 0305). Their migration runs FIRST, and the
+-- two are complementary rather than duplicative, so both stay:
+--
+--   * On `subscriptions` and `billing_customers` they agree, and agree with
+--     what the code already assumed: revoke the client's write grants. Running
+--     both is a no-op the second time. What this file adds on top is the
+--     RESTRICTIVE insert/update/delete guards and the sweep by SHAPE for stray
+--     permissive write policies, so a future migration re-granting one by name
+--     is caught rather than silently effective.
+--
+--   * On `families` they differ, and THEIR approach is the stronger one:
+--     0300 revokes `update` wholesale and re-grants it column by column, so
+--     `trial_ends_at` and `closed_at` are refused at the PRIVILEGE layer and
+--     never reach a policy or a trigger at all. This file's
+--     `family_entitlement_is_not_self_written` trigger is therefore now
+--     defence in depth rather than the boundary. It is kept deliberately: a
+--     later migration that re-grants `update` on `families` broadly — which is
+--     exactly the kind of thing that happens — would silently undo 0300's
+--     column list, and the trigger does not care about grants.
+-- ----------------------------------------------------------------------------
 -- `subscriptions` IS the paywall. `lib/server/plan.ts` reads it with the
 -- SERVICE-ROLE client, deliberately, and says so in its own header: "Reading the
 -- family's own plan is a trusted, server-side gating concern, so we use the
