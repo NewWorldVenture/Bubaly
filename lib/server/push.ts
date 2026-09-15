@@ -13,6 +13,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { fetchExternal } from '@/lib/server/external-fetch';
 import { childrenBlockedOn } from '@/lib/notifications/child-channels';
+import { isDeliverablePushEndpoint } from '@/lib/server/push-endpoint';
 
 type DB = SupabaseClient<Database>;
 
@@ -82,6 +83,16 @@ export async function sendPushToUser(supabase: DB, userId: string, payload: Push
     try {
       if (d.provider === 'webpush') {
         if (!vapid || !d.endpoint || !d.p256dh || !d.auth) { result.skipped++; continue; }
+        // Re-checked HERE and not only at registration: the endpoint is read
+        // back out of a table, so the row outlives the check that admitted it,
+        // and the DNS answer that made it safe can change underneath it. The
+        // result is cached per hostname, so a family's real push host costs one
+        // lookup every five minutes, not one per notification. Audit C3-S5-03.
+        if (!(await isDeliverablePushEndpoint(d.endpoint))) {
+          console.error('[push] endpoint no longer resolves somewhere we will POST to', { deviceId: d.id });
+          result.skipped++;
+          continue;
+        }
         try {
           await webpush.sendNotification(
             { endpoint: d.endpoint, keys: { p256dh: d.p256dh, auth: d.auth } },

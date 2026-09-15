@@ -5674,3 +5674,40 @@ sound as of this commit, which it was not before it.
 **Still open from this round:** C3-S5-02 (the plaintext Google refresh token —
 a fix has to encrypt *and* migrate existing rows, so it is not a one-line
 change), C3-S5-03 (the string-only push SSRF guard), and C3-S5-04..09.
+
+**C3-S5-03 — FIXED.** `lib/server/push-endpoint.ts` resolves the endpoint's
+hostname and applies the document fetcher's own address rules
+(`resolvePublicAddresses` + `isPublicDocumentAddress`), rather than writing a
+fourth copy of them — that module's comment is *"two copies of an SSRF guard is
+two guards that drift, and the one that drifts is always the copy"*, and this is
+the copy being deleted, not added. The string check still runs first as the
+cheap half.
+
+Checked at **both** ends, which was the second half of the finding: at
+registration, before the row is written, and again in `sendPushToUser` before
+the endpoint reaches `web-push`. A row outlives the check that admitted it, and
+a DNS answer can change under a row that was valid when written. Results are
+cached per hostname for five minutes, so a real push host costs one lookup per
+five minutes rather than one per notification.
+
+A host that answers with one public and one internal address is refused: half
+the connections would reach the internal one, which is not a guard. Resolution
+failure fails closed — a name that will not resolve is one `web-push` cannot
+deliver to either.
+
+`tests/push-endpoint-ssrf-guard.test.ts` drives the resolver instead of the
+network (a test that needs DNS to answer is a test that fails on a train), but
+keeps `isPublicDocumentAddress` **real**, since "the push path uses the document
+fetcher's rules" is the fix. Five of its nine assertions proved red against the
+pre-fix behaviour. The two source-order assertions use the `at()` helper from
+the C4-S5-02 fix, so they fail if either call site is deleted.
+
+One existing test changed: `tests/push-failure-is-not-delivery.test.ts` sends to
+`push.example.com`, which does not resolve, so the guard now skips it before the
+failure it is about can happen. The guard is stubbed open there and the reason
+is written in the file.
+
+**Not fixed, recorded:** `lib/social/unfurl.ts` is a fourth string-only host
+check and weaker than the push one was. It is currently only a pre-filter —
+`addByUrlAction` passes the URL to `fetchPublicText` regardless — so it is
+harmless today and one refactor away from not being.

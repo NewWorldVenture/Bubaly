@@ -5,6 +5,15 @@ import type { Database } from '@/lib/database.types';
 // A push that FAILED to send is still stamped `pushed_at`, and `pushed_at` is
 // the only thing the pending-push query filters on. Nothing ever clears it and
 // no retry exists, so a provider outage drops the notification permanently.
+// The endpoint's SSRF re-check (audit C3-S5-03) resolves the hostname before
+// each send and fails closed. This file is about how a FAILED send is counted,
+// not about where the endpoint points, and push.example.com does not resolve —
+// so the guard is stubbed open here to keep the subject of the test the send.
+vi.mock('@/lib/server/push-endpoint', () => ({
+  isDeliverablePushEndpoint: async () => true,
+  __resetPushEndpointCache: () => {},
+}));
+
 vi.mock('web-push', () => ({
   default: {
     setVapidDetails: () => {},
