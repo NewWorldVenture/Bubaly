@@ -285,6 +285,7 @@ describe('no delivery-contract read is left unbounded', () => {
     // that does not come back is not read as unknown, it is read as free, and
     // the child's allowance is SKIPPED while the run reports itself clean.
     { file: 'app/api/cron/wallet-allowance/route.ts', table: 'subscriptions', why: 'a plan that does not come back skips a child\'s allowance' },
+    { file: 'app/api/cron/chore-reminders/route.ts', table: 'families', why: 'every family with an open chore, in one request line' },
   ];
 
   it.each(WATCHED)('$file reads $table whole ($why)', async ({ file, table }) => {
