@@ -180,6 +180,42 @@ describe('the email campaign suppression lookup', () => {
   });
 });
 
+describe('network contributions', () => {
+  it('reads a household whole when the batch is larger than the cap', async () => {
+    const db = capped();
+    // Enough families that one `.in()` over all of them matches far more than
+    // a thousand member rows: 400 households of four.
+    const families = ids('fam', 400);
+    db.seed('network_consent', families.map((id) => ({ family_id: id, enabled: true, scopes: {} })));
+    db.seed('family_members', families.flatMap((familyId, f) => [
+      { id: `m-${f}-0`, family_id: familyId, role: 'parent', is_active: true, birthday: '1990-01-01' },
+      { id: `m-${f}-1`, family_id: familyId, role: 'adult', is_active: true, birthday: '1991-01-01' },
+      { id: `m-${f}-2`, family_id: familyId, role: 'child', is_active: true, birthday: '2016-01-01' },
+      { id: `m-${f}-3`, family_id: familyId, role: 'child', is_active: true, birthday: '2018-01-01' },
+    ]));
+
+    await runNetworkAggregation(db as unknown as DB, new Date('2026-09-07T11:00:00Z'));
+
+    // Every family's features must reflect its four members. A truncated read
+    // is indistinguishable from an empty household by construction — the
+    // batch builder gives a family with no rows a valid empty contribution —
+    // so the tail would be published with a household size of zero.
+    const rows = db.table('network_contributions');
+    expect(rows).toHaveLength(families.length);
+    // Every household is identical, so every banded feature row must be too: a
+    // size band for four, and the two child age bands. An empty household bands
+    // differently and lists no children at all.
+    const banded = new Set(rows.map((r) => {
+      const f = r.features as { sizeBand?: string; childBands?: string[] } | null;
+      return `${f?.sizeBand}:${(f?.childBands ?? []).join(',')}`;
+    }));
+    expect(banded.size).toBe(1);
+    const only = [...banded][0];
+    expect(only).not.toContain('undefined');
+    expect(only.split(':')[1]).not.toBe('');
+  });
+});
+
 describe('the marketing automation runner', () => {
   it('does not re-run a workflow for a subject whose run row sits past the cap', async () => {
     const db = capped();
@@ -275,6 +311,44 @@ describe('no delivery-contract read is left unbounded', () => {
       const isBounded = chain.includes('.range(') || chain.includes('.limit(') || /\.in\('[a-z_]+', chunk\)/.test(chain);
       expect(isWrite || isBounded, `unbounded read of ${table}: ${chain.replace(/\s+/g, ' ').slice(0, 160)}`).toBe(true);
     }
+  });
+});
+
+// readAllInChunks is now load-bearing for the nightly aggregation, so measure
+// it directly rather than only through its callers.
+describe('readAllInChunks', () => {
+  it('returns every row when each chunk holds more than one page', async () => {
+    const { readAllInChunks } = await import('@/lib/supabase/chunked-in');
+    // 250 owners, 12 rows each: more than one chunk, and each chunk of 100
+    // owners is 1,200 rows — over the cap a single page could return.
+    const owners = ids('owner', 250);
+    const rows = owners.flatMap((owner, i) =>
+      Array.from({ length: 12 }, (_, j) => ({ id: `r-${String(i).padStart(4, '0')}-${j}`, owner })));
+
+    const { data, error } = await readAllInChunks<{ id: string; owner: string }>(owners, (chunk, from, to) => {
+      const matching = rows.filter((r) => chunk.includes(r.owner));
+      // A server that caps every response, exactly as PostgREST does.
+      return Promise.resolve({ data: matching.slice(from, Math.min(to + 1, from + CAP)), error: null });
+    });
+
+    expect(error).toBeNull();
+    expect(data).toHaveLength(owners.length * 12);
+  });
+
+  it('returns no rows at all when a chunk fails', async () => {
+    const { readAllInChunks } = await import('@/lib/supabase/chunked-in');
+    const owners = ids('owner', 150);
+
+    const { data, error } = await readAllInChunks<{ id: string }>(owners, (chunk, from) =>
+      Promise.resolve(chunk.includes(owners[149])
+        ? { data: null, error: { message: 'offline' } }
+        // One row, then an empty page to end the healthy chunk honestly.
+        : { data: from === 0 ? [{ id: 'a' }] : [], error: null }));
+
+    // For a caller that aggregates per owner, a partial answer is not a smaller
+    // answer — it is a wrong one attributed to the owners that did come back.
+    expect(error).toEqual({ message: 'offline' });
+    expect(data).toBeNull();
   });
 });
 
