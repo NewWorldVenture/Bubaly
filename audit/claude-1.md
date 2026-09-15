@@ -2623,3 +2623,89 @@ session's block: **I shipped a regression and CI found it, not me.**
   pair → the keyboard half fails alone; resume with the 100 ms sliver instead of
   a full window → *"hands back a whole window"* fails; and either button
   bypassing `dismiss` → a stray timer is left pending.
+
+### [CLAUDE-1][MEDIUM][RLS] An UPDATE policy that guards the row you may touch, but not the row you turn it into
+
+- **Raised by:** Claude-3, as a LOW against `marketplace_orders_update`. Verified,
+  raised to MEDIUM, and closed — **with a second policy they had missed**.
+- **Files:** `supabase/migrations/0311_the_terms_of_a_deal_are_fixed_when_it_is_struck.sql`,
+  `docs/audit/marketplace-deal-terms-check.sql`
+- **Problem:** the USING clause is careful — only the two parties to an order,
+  only the offerer or the listing's owner for an offer. The WITH CHECK was
+  `is_family_member(family_id)` and nothing more, so the row you were allowed to
+  *touch* could be rewritten into a row you would never have been allowed to
+  touch: reassign `buyer_member`, re-price `amount_cents`, move an offer onto
+  another listing. The same asymmetry 0297 fixed on `invites_update`.
+- **Swept by shape, not by name**, which is what found the second one. Claude-3
+  reported `marketplace_orders_update`; the class query over `pg_policy`
+  (`polcmd in ('w','*') and polpermissive and polqual is not null and
+  polwithcheck is not null and with_check ≠ qual`) returns exactly **four** rows
+  in `public`, and they split two and two:
+  - `marketplace_orders_update` and `marketplace_offers_update` — the pair. The
+    offers one was not in the report.
+  - `member_locations_self_update` — WITH CHECK is a strict **superset** of the
+    USING. Correct, and it is why the sweep rule is *containment*, not equality.
+  - `approval_requests_cancel_own` — USING `status='pending'`, WITH CHECK
+    `status='cancelled'`. The two disagree **on purpose**: it is a transition
+    guard, you may take a pending request of your own and make it cancelled and
+    do nothing else to it. A containment rule cannot tell that from the
+    marketplace bug, so it is named in an allow-list with its reason rather than
+    quietly permitted by a looser heuristic.
+- **My first sweep was the wrong rule and said so.** I wrote it as
+  "with_check must equal qual" and it failed the replay by naming those last
+  two — both healthy. Worth recording: a shape sweep that is too strict fails
+  *loudly and immediately*, which is the safe direction. My earlier length-based
+  filter (`length(with_check) < length(qual)`) was the unsafe direction — it
+  reported only the two marketplace policies and would have let a future
+  weaker-but-wordier WITH CHECK through in silence.
+- **Fix — two rules, because the policy alone is not enough.** WITH CHECK is a
+  *disjunction*: a seller who still satisfies `seller_member = me` in the new row
+  passes it while rewriting `buyer_member` to somebody else. So (1) carry the
+  USING into the WITH CHECK, as 0297 did; and (2) a BEFORE UPDATE trigger that
+  freezes the terms by column, in 0303/0306's idiom, which does not care which
+  branch of the policy admitted the row. The frozen list travels as a trigger
+  argument so one function serves both tables.
+- **Checked, not assumed, that nothing wants to write those columns.** Every
+  UPDATE to either table from every path sets `status` and `updated_at` and
+  nothing else — the client action, `marketplace_complete_handoff`,
+  `marketplace_accept_offer`, `marketplace_decline_offer`,
+  `marketplace_negotiation_respond` — plus the return-reminder cron's two stamps,
+  which are not frozen, and the service role is let through regardless.
+  `kind` **is** frozen with the money, because the cron scopes itself
+  `where kind in ('rent','borrow')`: flipping it is how you walk away with a
+  borrowed bike and never see an overdue notice.
+- **Status:** FIXED. Probe `marketplace-deal-terms-check.sql`, positive controls
+  first. **Both rules proven independently load-bearing by mutation**, which
+  corrected my own expectation that the trigger subsumed the policy fix:
+  - drop the triggers, keep the symmetric WITH CHECK → five denials fire, each
+    naming its own defect when the earlier ones are neutralised in turn
+    (*"a seller reassigned the buyer on a live order"*, *"a seller re-priced a
+    struck deal"*, *"a borrow was quietly converted into a donation"*, *"an order
+    was moved onto a different listing"*, *"a listing owner re-priced an offer
+    made to them"*).
+  - the sixth denial **survives that** and fires only when the WITH CHECK is
+    reverted: a listing owner pulling an offer that is not theirs onto a listing
+    that is. The offers policy evaluates its disjunction against the NEW row's
+    `listing_id`, so that one is the policy's to catch, not the trigger's.
+  - revert the WITH CHECK alone and the behavioural assertions all hold — but the
+    **shape sweep** names both policies. Which is the point of having it.
+- **Verified:** 324 migrations replayed from scratch (0 failed), 321 re-applied
+  cleanly onto the populated schema (idempotent), **32/32 probes green, run
+  twice** for isolation.
+
+### [CLAUDE-1][INFO][RLS] `marketplace_member_id(family_id)` in 0154 binds to the inner table, not the outer row
+
+- **File:** `supabase/migrations/0154_marketplace_ownership.sql:216-221`
+- **Observed while reading the live policy for 0311, and deliberately left
+  alone.** 0154 wrote `l.member_id = public.marketplace_member_id(family_id)`
+  inside a subquery over `marketplace_listings l`, meaning the *offer's*
+  `family_id`. Postgres bound it to the inner `l.family_id`, which is what
+  `pg_get_expr` reads back. The SQL-level twin of the prose-as-code trap this
+  sweep keeps finding: what was written and what runs are different, and only
+  the catalogue says so.
+- **Why not changed:** the binding is benign and arguably the more correct of
+  the two — an offer and its listing are in the same family, and the listing's
+  family is the right scope for a listing-owner check. 0311 re-asserts the
+  policy with `l.family_id` written **explicitly**, so the next reader sees what
+  actually runs.
+- **Status:** FIXED (as documentation — the behaviour is unchanged by design).
