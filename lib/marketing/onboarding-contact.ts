@@ -1,6 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
+import { escapeLike } from '@/lib/supabase/escape-like';
 
 type DB = SupabaseClient<Database>;
 
@@ -47,9 +48,14 @@ export async function upsertOnboardingContact(admin: DB, p: {
 
   // Dedupe: an existing contact with the same email, else one already tied to
   // this family. `.limit(1)` (not maybeSingle) so a duplicate never throws.
+  //
+  // The pattern is ESCAPED. This runs as the service role against a table whose
+  // RLS is admin-only, and the match decides which row the update below
+  // overwrites — so an unescaped `%` here matched an arbitrary stranger's
+  // contact and rewrote it with this caller's name, email and family.
   let existingId: string | null = null;
   if (email) {
-    const { data } = await admin.from('crm_contacts').select('id').ilike('email', email).limit(1);
+    const { data } = await admin.from('crm_contacts').select('id').ilike('email', escapeLike(email)).limit(1);
     existingId = data?.[0]?.id ?? null;
   }
   if (!existingId && p.familyId) {

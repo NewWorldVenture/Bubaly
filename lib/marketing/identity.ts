@@ -2,6 +2,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { decideStitch, shouldCarryConsent, type StitchDecision } from './identity-core';
+import { escapeLike } from '@/lib/supabase/escape-like';
 
 type Admin = SupabaseClient<Database>;
 
@@ -32,7 +33,7 @@ export async function stitchVisitorIdentity(
   let contactId: string;
   try {
     const { data: existing } = await admin
-      .from('crm_contacts').select('id, owner_id').ilike('email', email).limit(1);
+      .from('crm_contacts').select('id, owner_id').ilike('email', escapeLike(email)).limit(1);
     if (existing?.[0]?.id) {
       contactId = existing[0].id;
       const patch: Record<string, unknown> = { lifecycle_stage: 'customer' };
