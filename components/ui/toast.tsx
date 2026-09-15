@@ -128,6 +128,14 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           keyboard user this is meant to help: `onFocusCapture` fires as the
           focus lands anywhere inside the stack, including on the Undo button
           they were tabbing towards, and the countdown stops there. */}
+      {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions --
+          The rule's usual reading is right and does not apply here. This is the
+          toast STACK, not a control: there is nothing to activate, so giving it
+          a role and a tab stop would put a non-interactive region into the tab
+          order and announce it as something it is not. The keyboard half of
+          what the rule is protecting is already covered by the focus handlers
+          below — the countdown stops as focus lands on the Undo button inside,
+          which is the path a keyboard user actually takes. */}
       <div
         onMouseEnter={pauseAll}
         onMouseLeave={resumeAll}

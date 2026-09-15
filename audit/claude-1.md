@@ -3009,3 +3009,60 @@ session's block: **I shipped a regression and CI found it, not me.**
   which is the reason to prefer it, and the reason the DST case is a regression
   net rather than a proof.
 - **Verified:** tsc and eslint clean; **13,901 tests green across four shards**.
+
+### [CLAUDE-1][VERIFIED] Claude-2's two `[HIGH][UX]` discarded-write findings are closed
+
+- **Blog unsubscribe** (`app/api/blog/unsubscribe/route.ts`) now reads BOTH
+  results and redirects to `unsubscribed=error` on either, with the reasoning in
+  the file: *"Consent is the one thing this endpoint exists to record."*
+- **Google Calendar OAuth callback** — fixed, and fixed better than reported.
+  Claude-2 named the discarded upsert; the file also guards the READ, and its
+  comment explains why that matters more than it looks: the upsert writes the
+  WHOLE `notification_prefs` object, so falling back to `{}` on a refused read
+  would silently reset every other notification preference the user has set as a
+  side effect of connecting a calendar.
+- **Status:** VERIFIED — no action.
+
+### [CLAUDE-1][MEDIUM][A11Y] The lint config could not catch the a11y findings — fixed, with one of the four rules rejected on evidence
+
+- **Raised by:** Claude-2 as C2-09. Fixed, **with a correction to their
+  prescribed fix.**
+- **Files:** `.eslintrc.json`, `package.json`, `components/ui/toast.tsx`
+- **Problem:** the whole config was `next/core-web-vitals`, which enables five
+  jsx-a11y rules and none of the ones that describe C2-02/C2-03/C2-06. The lint
+  run was nearly silent across ~1,000 `.tsx` files, and that silence read as a
+  green light.
+- **`eslint-plugin-jsx-a11y` was already installed** as a transitive dependency
+  of `eslint-config-next`, so this needed no new package.
+- **The correction: one of the four named rules is unusable in this codebase,
+  and enabling it would have buried the other three.** Measured rather than
+  assumed — `control-has-associated-label` produces **558** warnings against 98
+  from the other three combined. Two sampled at random:
+  - `announcements-module.tsx:168` — a checkbox wrapped in a `<label>` whose text
+    is `{t('announcements.pinToTop')}`. Correctly labelled.
+  - `billing-module.tsx:447` — a checkbox with `id="recurring"` and a matching
+    `<label htmlFor="recurring">{tr('billing.recurring')}</label>`. Correctly
+    labelled.
+
+  The rule cannot resolve `{t('…')}` as text content, and **every** label in this
+  product is translated. So it is 558 false positives, and Claude-2's *"extend
+  `plugin:jsx-a11y/recommended`… expect ~120 initial warnings"* would have
+  drowned the 98 real ones 6:1 — the failure mode their own finding is about.
+- **Fix:** the three rules that work, as warnings, plus
+  `next lint --max-warnings=100` so the backlog is **visible and cannot grow**.
+  Without the cap this would have changed nothing: `next lint` passes on warnings,
+  which is how the config came to be silent in the first place.
+  Current backlog: 50 `no-static-element-interactions`, 44
+  `click-events-have-key-events`, 3 `label-has-associated-control`, 3 pre-existing
+  `react-hooks/exhaustive-deps`.
+- **The first thing the new rules caught was my own toast fix**, and it is
+  exempted with its reason rather than silently: the flagged element is the toast
+  STACK, not a control — there is nothing to activate, so a role and a tab stop
+  would put a non-interactive region in the tab order and announce it as
+  something it is not. The keyboard half the rule protects is already covered by
+  the focus handlers inside it.
+- **Status:** FIXED. Non-vacuity proven directly: add one `<div onClick={…}>`
+  anywhere and `npm run lint` exits 1; remove it and it exits 0.
+- **NOT claimed:** this does not fix C2-02, C2-03 or C2-06. It makes them
+  countable and stops the next one landing silently, which is what C2-09 asked
+  for.
