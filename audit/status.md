@@ -108,9 +108,6 @@ COMPLETED (session 3 so far):
     Proven load-bearing: with fenceUntrusted() neutered, 3 tests fail (the
     hostile-title assertion now failing on its merits at 6378ms rather than
     running out of time); restored byte-for-byte, 11 passed.
-PRIOR SESSIONS (unchanged, see history below): F-020 migration idempotency;
-  /api/health FEATURE_ENV tier; 5 cron routes answering 200 on their own
-  failures; service-role boundary probe; 0296 renumber.
   - ROUND 4 DISPATCHED (2026-09-15). C2-B05 was fixed on main by the parallel
     session before I reached it, so the loop moved to the three surfaces with
     the THINNEST coverage rather than the next-most-severe known finding:
@@ -126,6 +123,9 @@ PRIOR SESSIONS (unchanged, see history below): F-020 migration idempotency;
       * Claude-4 -> inside app/(app). Static flow/state audit, since no browser
         can reach it here. Pointed at F-F01's real blast radius (59 `{ max: }`
         call sites, not the five listed) as the highest-value thread.
+PRIOR SESSIONS (unchanged, see history below): F-020 migration idempotency;
+  /api/health FEATURE_ENV tier; 5 cron routes answering 200 on their own
+  failures; service-role boundary probe; 0296 renumber.
 NEXT: collect those three, merge into finalaudit.md as Pass P. Then reconcile
   the two Executive Summaries into one authoritative index — the document names
   this as a deliberate follow-up and it is the coordinator's job.
