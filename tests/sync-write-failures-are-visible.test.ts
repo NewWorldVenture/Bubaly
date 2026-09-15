@@ -186,16 +186,43 @@ describe('a disconnect that did not happen is not reported as revoked access', (
   });
 
   // Revocation is best effort by design. Claiming it happened is not.
-  it('the provider-generic route only claims revocation when revokeToken succeeded', () => {
-    const source = readFileSync('app/api/sync/[provider]/disconnect/route.ts', 'utf8');
+  it.each(ROUTES)('%s only claims revocation when the revoke call succeeded', (file) => {
+    const source = readFileSync(file, 'utf8');
     // The outcome has to come from the call, not from reaching the end of the
     // function. `.catch(() => {})` discarding it is what made the claim
     // unconditional.
-    expect(source).toMatch(/revoked = await adapter\.revokeToken\(refresh\)\.then\(\(\) => true\)\.catch\(\(\) => false\)/);
-    expect(source).toMatch(/const outcome = revoked \? 'disconnected=1' : 'disconnected=kept';/);
-    // And `revoked` must start false, so the no-adapter and no-refresh-token
-    // paths — which revoke nothing at all — fall to the honest message too.
-    expect(source).toMatch(/let revoked = false;/);
+    expect(source).toMatch(/\.then\(\(\) => true\)\.catch\(\(\) => false\)/);
+    expect(source).toMatch(/const outcome = allRevoked \? 'disconnected=1' : 'disconnected=kept';/);
+    // Seeded from the COUNT, never from `true`. An empty list has nothing left
+    // un-revoked, so `= true` would graduate a disconnect of nothing into
+    // "access revoked" — the same overclaim in a new place.
+    expect(source).toMatch(/let allRevoked = \(accounts\?\.length \?\? 0\) > 0;/);
+    expect(source, 'allRevoked must not be seeded true').not.toMatch(/let allRevoked = true;/);
+  });
+
+  // The fifth way to reach that sentence, and the only one that skipped the
+  // DELETE as well as the revoke. `sync_accounts` is unique on
+  // (user_id, provider, external_id), so one person with a personal and a work
+  // account of the same provider is two rows — which the connect flow creates
+  // on purpose. `.maybeSingle()` rejects above one row, and with that error
+  // discarded `account` came back null, the whole block was skipped, and the
+  // route still reported a disconnect.
+  it.each(ROUTES)('%s reads every matching account, not one', (file) => {
+    const source = readFileSync(file, 'utf8');
+    expect(source, 'a single-row read cannot see a second connected account')
+      .not.toMatch(/\.eq\('user_id', ctx\.user\.id\)\s*\n\s*\.maybeSingle\(\)/);
+    expect(source).toMatch(/const \{ data: accounts, error: readError \}/);
+    expect(source).toMatch(/for \(const account of accounts \?\? \[\]\)/);
+  });
+
+  it.each(ROUTES)('%s reports a failed account read instead of claiming a disconnect', (file) => {
+    const source = readFileSync(file, 'utf8');
+    expect(source).toMatch(/if \(readError\)/);
+    const branch = source.slice(source.indexOf('if (readError)'));
+    const untilClose = branch.slice(0, branch.indexOf('\n  }'));
+    expect(untilClose, 'the read-failure branch falls through to the redirect below')
+      .toContain('return NextResponse.redirect');
+    expect(untilClose).toContain('error=disconnect_failed');
   });
 
   it('the page can render the disconnected-but-not-revoked outcome', () => {

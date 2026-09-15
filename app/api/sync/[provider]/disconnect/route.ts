@@ -16,13 +16,26 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ pro
   const admin = createServiceClient();
 
   const adapter = getAdapter(provider);
-  const { data: account } = await admin
+  // EVERY matching account, not one. `sync_accounts` is unique on
+  // (user_id, provider, external_id), so one person connecting a personal and a
+  // work account of the same provider is two rows, which the connect flow
+  // creates on purpose. `.maybeSingle()` rejects above one row and this error
+  // was discarded, so `account` came back null, the block below was skipped
+  // whole, and the redirect still reported a disconnect. A fifth way to reach
+  // the sentence the comment below exists to prevent — and the only one that
+  // skips the delete as well as the revoke.
+  const { data: accounts, error: readError } = await admin
     .from('sync_accounts')
     .select('id')
     .eq('family_id', ctx.active.familyId)
     .eq('provider', provider)
-    .eq('user_id', ctx.user.id)
-    .maybeSingle();
+    .eq('user_id', ctx.user.id);
+
+  if (readError) {
+    console.error('[sync] disconnect could not read the account rows', readError);
+    return NextResponse.redirect(
+      new URL(`/dashboard/sync/accounts/${raw}?error=disconnect_failed`, req.nextUrl.origin), 303);
+  }
 
   // Revocation is best effort by design, and that is fine — what is not fine is
   // saying it happened when it did not. There are three ways to reach the end of
@@ -31,13 +44,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ pro
   // used to land on the same "Account disconnected and access revoked." Deleting
   // our row does not withdraw a grant the provider is still holding, so a member
   // who wanted the grant gone is the one person who must not be told it is.
-  let revoked = false;
-  if (account) {
+  // Revocation is best effort; saying it happened is not. Seeded from the
+  // COUNT, not from `true`: with no rows nothing was revoked, and an empty
+  // disconnect must not graduate to "access revoked" — that is the same
+  // overclaim in a new place. Every account that cannot present a token, or
+  // whose revoke call fails, clears it.
+  let allRevoked = (accounts?.length ?? 0) > 0;
+  for (const account of accounts ?? []) {
     if (adapter) {
       const refresh = await getRefreshToken(admin, account.id).catch(() => null);
       if (refresh) {
-        revoked = await adapter.revokeToken(refresh).then(() => true).catch(() => false);
+        const ok = await adapter.revokeToken(refresh).then(() => true).catch(() => false);
+        if (!ok) allRevoked = false;
+      } else {
+        allRevoked = false;
       }
+    } else {
+      allRevoked = false;
     }
     // This delete IS the disconnect — the row is what keeps the account
     // connected and what every sync reads. Its result was discarded, and the
@@ -61,6 +84,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ pro
   }
 
   // 303 → the browser follows the POST with a GET.
-  const outcome = revoked ? 'disconnected=1' : 'disconnected=kept';
+  const outcome = allRevoked ? 'disconnected=1' : 'disconnected=kept';
   return NextResponse.redirect(new URL(`/dashboard/sync/accounts/${raw}?${outcome}`, req.nextUrl.origin), 303);
 }
