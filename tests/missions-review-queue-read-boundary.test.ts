@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 import { describe, expect, it } from 'vitest';
 import { readUiSource } from './helpers/i18n-source';
 import fs from 'node:fs';
@@ -21,6 +22,6 @@ describe('missions approval queue surfaces a failed read (A-07 §3e)', () => {
     expect(page).toContain('<ErrorState message=');
     // The error early-return must precede the "All caught up!" empty-state JSX
     // (match the JSX title, not the code comment that also mentions the phrase).
-    expect(page.indexOf('if (submissionsError)')).toBeLessThan(page.indexOf('title="All caught up'));
+    expect(at(page, 'if (submissionsError)')).toBeLessThan(at(page, 'title="All caught up'));
   });
 });

@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -20,8 +21,8 @@ describe('the updated_at backfill', () => {
     // row with the migration's own timestamp — the exact defect it repairs.
     expect(migration).toContain('disable trigger trg_blog_posts_updated_at');
     expect(migration).toContain('enable trigger trg_blog_posts_updated_at');
-    expect(migration.indexOf('disable trigger')).toBeLessThan(migration.indexOf('update public.blog_posts'));
-    expect(migration.indexOf('update public.blog_posts')).toBeLessThan(migration.indexOf('enable trigger'));
+    expect(at(migration, 'disable trigger')).toBeLessThan(at(migration, 'update public.blog_posts'));
+    expect(at(migration, 'update public.blog_posts')).toBeLessThan(at(migration, 'enable trigger'));
   });
 
   it('corrects only rows a bulk statement stamped, never a hand edit', () => {

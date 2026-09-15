@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 
@@ -17,8 +18,8 @@ describe('photos module mutations surface failures (A-05)', () => {
     expect(fn).toContain("const { error } = await supabase.from('family_photos').delete()");
     expect(fn).toContain('if (error) { toastError(describeDbError(error)); return; }');
     // Row delete + its guard must precede both the storage removal and the success toast.
-    expect(fn.indexOf('.delete()')).toBeLessThan(fn.indexOf(".storage.from('family-media').remove"));
-    expect(fn.indexOf('if (error)')).toBeLessThan(fn.indexOf("success(tr('photosModule.photoDeleted'))"));
+    expect(at(fn, '.delete()')).toBeLessThan(at(fn, ".storage.from('family-media').remove"));
+    expect(at(fn, 'if (error)')).toBeLessThan(at(fn, "success(tr('photosModule.photoDeleted'))"));
   });
 
   it('toggleFavorite and updateCaption surface write errors instead of swallowing them', () => {

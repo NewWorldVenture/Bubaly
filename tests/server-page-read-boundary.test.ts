@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 // The server half of "a failed read is not an empty one".
 //
 // Two pages read Supabase in a Server Component and let a failed read fall into
@@ -42,7 +43,7 @@ describe('the offer inbox cannot be emptied by a read it did not guard', () => {
     // The guard has to come before the loop that drops rows missing a listing,
     // or it is decoration: by then the inbox already reads as empty.
     expect(negotiations.indexOf('if (listingsError) {'))
-      .toBeLessThan(negotiations.indexOf('if (!l) continue;'));
+      .toBeLessThan(at(negotiations, 'if (!l) continue;'));
   });
 
   it('still returns an empty branch for a genuinely empty id list', () => {
@@ -64,7 +65,7 @@ describe('the independence ladder does not report a family with no children', ()
     expect(independence).toContain('<ErrorState message=');
     // The notice must short-circuit the module, not render alongside it.
     expect(independence.indexOf('if (membersError) {'))
-      .toBeLessThan(independence.indexOf('<IndependenceModule'));
+      .toBeLessThan(at(independence, '<IndependenceModule'));
   });
 
   it('keeps the milestone read degrading on its own terms', () => {

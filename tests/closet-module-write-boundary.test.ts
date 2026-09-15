@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 
@@ -24,7 +25,7 @@ describe('closet-module writes fail visibly', () => {
 
   it('logs a wear before bumping wear counts, and reports a failed bump', () => {
     const b = body('logWear');
-    expect(b.indexOf("from('outfit_logs').insert(")).toBeLessThan(b.indexOf("from('wardrobe_items').update("));
+    expect(at(b, "from('outfit_logs').insert(")).toBeLessThan(at(b, "from('wardrobe_items').update("));
     expect(b).toContain('const failed = results.find((r) => r.error);');
   });
 

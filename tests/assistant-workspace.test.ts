@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 // The assistant workspace (§54) and the card components (§53), server-rendered
 // the way Next renders client components on first paint. A throw here is the
 // route error boundary in production, so every kind is rendered in both
@@ -91,7 +92,7 @@ describe('result card components', () => {
     const html = render(React.createElement(ResultCardView, { card: CARDS[8] }));
     expect(html).toContain('role="meter"');
     expect(html).toContain('aria-valuenow="72"');
-    expect(html.indexOf('Passport expires')).toBeLessThan(html.indexOf('Renew Sam’s passport'));
+    expect(at(html, 'Passport expires')).toBeLessThan(at(html, 'Renew Sam’s passport'));
     expect(html).toContain('12 days to go');
   });
 
@@ -171,7 +172,7 @@ describe('result pane', () => {
 
   it('renders the groups, highlights the pointed-at card, and has empty / loading / error states', () => {
     const html = render(React.createElement(ResultPane, { messages, canDecide: false, highlightId: cardId('a2', 0) }));
-    expect(html.indexOf('1 overlap')).toBeLessThan(html.indexOf('5 dinners planned'));
+    expect(at(html, '1 overlap')).toBeLessThan(at(html, '5 dinners planned'));
     expect(html).toMatch(/data-card-id="a2:0"[^>]*ring-2/);
     expect(render(React.createElement(ResultPane, { messages: [], canDecide: false }))).toContain('Nothing planned yet');
     expect(render(React.createElement(ResultPane, { messages: [{ id: 'u', role: 'user', content: 'x' }, { id: 'a', role: 'assistant', content: '' }], streaming: true, canDecide: false }))).toContain('role="status"');

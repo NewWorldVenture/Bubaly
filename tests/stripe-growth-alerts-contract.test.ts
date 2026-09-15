@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -20,7 +21,7 @@ describe('Stripe growth-alert contract', () => {
     expect(route).toContain("kind: 'subscription'");
     expect(route).toContain("kind: 'subscription_churn'");
     // Conversion is checked first, churn only in the else branch — never both.
-    expect(route.indexOf('isNewPaidConversion(priorSub')).toBeLessThan(route.indexOf('isChurn(priorSub'));
+    expect(at(route, 'isNewPaidConversion(priorSub')).toBeLessThan(at(route, 'isChurn(priorSub'));
     expect(route).toMatch(/else if \(isChurn\(priorSub/);
   });
 
@@ -34,6 +35,6 @@ describe('Stripe growth-alert contract', () => {
 
   it('reads the prior subscription state before upserting (to diff transitions)', () => {
     expect(route).toContain('priorSub');
-    expect(route.indexOf('priorSub')).toBeLessThan(route.indexOf('.upsert('));
+    expect(at(route, 'priorSub')).toBeLessThan(at(route, '.upsert('));
   });
 });

@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 
@@ -14,7 +15,7 @@ describe('SW notification tap focuses the existing window (M-026)', () => {
     expect(block).toContain('win.focus()');
     expect(block).toContain('focused.navigate(target)');
     // openWindow must come AFTER the focus path (fallback only).
-    expect(block.indexOf('matchAll')).toBeLessThan(block.indexOf('openWindow'));
+    expect(at(block, 'matchAll')).toBeLessThan(at(block, 'openWindow'));
   });
 
   it('still closes the notification and defaults to /dashboard', () => {

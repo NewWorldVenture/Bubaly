@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { CATALOG_QUERY, baselineBlockedMessage, hasUnrecordedBaseline, moneyWriteVerdict, readProductionMigrationState } from '../scripts/audit-production-migration-state.mjs';
@@ -62,7 +63,7 @@ describe('production schema and migration history audit', () => {
     const workflow = readFileSync('.github/workflows/supabase-production-migrations.yml', 'utf8');
     const guard = workflow.indexOf('node scripts/audit-production-migration-state.mjs --enforce-history');
     expect(guard).toBeGreaterThan(0);
-    expect(guard).toBeLessThan(workflow.indexOf('run: supabase db push --yes'));
+    expect(guard).toBeLessThan(at(workflow, 'run: supabase db push --yes'));
     expect(workflow).toContain('if: always()');
     const audit = readFileSync('.github/workflows/supabase-schema-audit.yml', 'utf8');
     expect(audit).not.toContain('db push');

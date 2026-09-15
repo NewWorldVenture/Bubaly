@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 
@@ -37,7 +38,7 @@ describe('inventory-module writes fail visibly', () => {
   });
   it('a move updates the item first and reports a failed history insert', () => {
     const move = bodies('onSubmit').find((b) => b.includes("from('inventory_moves').insert("))!;
-    expect(move.indexOf("from('inventory_items').update(")).toBeLessThan(move.indexOf("from('inventory_moves').insert("));
+    expect(at(move, "from('inventory_items').update(")).toBeLessThan(at(move, "from('inventory_moves').insert("));
     expect(move).toContain('if (moveError) return toastError(describeDbError(moveError));');
   });
   it('"confirm it is here" writes a family-scoped move with from = to and the confirmed reason', () => {

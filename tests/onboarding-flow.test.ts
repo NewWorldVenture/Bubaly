@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 import { describe, it, expect } from 'vitest';
 import {
   ONBOARDING_FLOW, PROGRESS_STEPS, nextStep, prevStep, stepIndex, progressPct,
@@ -24,8 +25,8 @@ describe('step navigation', () => {
     expect(nextStep('value')).toBe('about');
     expect(prevStep('value')).toBe('family');
     // The value payoff comes BEFORE the deferrable configure steps.
-    expect(ONBOARDING_FLOW.indexOf('value')).toBeLessThan(ONBOARDING_FLOW.indexOf('members'));
-    expect(ONBOARDING_FLOW.indexOf('value')).toBeLessThan(ONBOARDING_FLOW.indexOf('pin'));
+    expect(at(ONBOARDING_FLOW, 'value')).toBeLessThan(at(ONBOARDING_FLOW, 'members'));
+    expect(at(ONBOARDING_FLOW, 'value')).toBeLessThan(at(ONBOARDING_FLOW, 'pin'));
   });
 
   it('knows the first and last form steps', () => {
