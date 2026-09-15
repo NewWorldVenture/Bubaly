@@ -1303,3 +1303,104 @@ Verified at the close: `tsc` clean · lint 0 errors · `npm run build` exits 0 �
   **shrink** — a new offender fails, and an entry that has been converted but
   left in the list also fails, so it cannot rot into a licence nobody is using.
 - **Status of the eleven:** OPEN, enumerated, contained.
+
+> **Independently corroborated.** The census below was run in this session
+> before the fix above was visible here, and the two agree on the substance:
+> the same thirteen components, the same one correct implementation, and —
+> notably — the same unprompted conclusion that the gates may *deliberately*
+> refuse Escape and must not be swept. Two workers reaching that caveat
+> separately is worth more than either finding alone.
+
+---
+
+## C1-S3-05 — `aria-modal="true"` is a promise; twelve of thirteen do not keep it
+
+```
+[CLAUDE-1][HIGH][A11Y] F-D04 records four hand-rolled modal dialogs with no
+focus management. The real count is TWELVE — and the obvious blanket fix is
+wrong for three of them
+File:     13 files declare aria-modal="true"; only components/ui/modal.tsx
+          implements the contract it declares.
+Problem:  `aria-modal="true"` tells assistive technology that everything outside
+          the dialog is inert. A screen reader stops exposing the rest of the
+          page on the strength of it. A component that declares it and does not
+          move focus in, trap Tab, or restore focus on close has made a promise
+          to AT that the DOM does not keep: the user tabs out of a dialog their
+          reader has been told is the only thing on screen, into content it will
+          not announce.
+
+          F-D04 names four. C2-B05 found a fifth on the public surface. A
+          census of the whole class finds twelve defective out of thirteen.
+Evidence: Static audit over every file declaring aria-modal="true":
+
+            FILE                                ESCAPE  FOCUS-IN  TAB-TRAP  RESTORE
+            app/account-closed-gate.tsx           NO       NO        NO       NO
+            app/ai-orb.tsx                        yes      NO        NO       NO
+            app/app-lock-gate.tsx                 NO       NO        NO       NO
+            app/app-shell.tsx                     NO       NO        NO       NO
+            app/blog-launcher.tsx                 yes      NO        NO       NO
+            app/command-bar.tsx                   yes      yes       NO       NO
+            app/trial-paywall-gate.tsx            NO       NO        NO       NO
+            guardian/contact-list.tsx             NO       NO        NO       NO
+            guardian/rules-editor.tsx             NO       NO        NO       NO
+            marketing/consent-manager.tsx         NO       NO        NO       NO
+            marketing/exit-intent.tsx             yes      NO        NO       NO
+            ui/camera-capture.tsx                 yes      NO        NO       NO
+            ui/modal.tsx                          yes      yes       yes      yes
+
+          **Twelve of thirteen trap nothing and restore nothing. Eleven never
+          move focus in. Seven ignore Escape.** One file — ui/modal.tsx — does
+          the whole job, and has done it correctly all along.
+
+          The public instance (consent-manager) is the one Claude-2 could drive
+          in a browser, and the measurement matched this table exactly: focus
+          fell to <body> on open, Tab escaped to the site nav at stop 10, and
+          Escape did nothing. That is the browser confirming the static census
+          on the one row it could reach.
+Impact:   Every hand-rolled dialog in the product is a place where a screen
+          reader user is told "nothing else exists" and then silently walked out
+          into the page. It is also the single most duplicated defect found in
+          this audit: twelve independent re-implementations of a pattern the
+          repository already implements correctly, once.
+Fix:      Root cause, not instance. `ui/modal.tsx` already contains the entire
+          correct effect — focus move-in, Tab trap, Escape, scroll lock and
+          focus restore. Lift it into a shared hook and consume it in all
+          thirteen, so no future dialog can declare aria-modal and forget.
+
+          **But NOT as a blanket change, and this is the part worth reading:**
+          three of these are deliberately NON-DISMISSIBLE gates.
+          `app-lock-gate.tsx` has no onClose and no dismiss path at all — it is
+          an app LOCK screen. Adding Escape to it, which is what a naive
+          "give every aria-modal dialog Escape" sweep would do, would let a user
+          dismiss the lock. `trial-paywall-gate` and `account-closed-gate` are
+          the same shape.
+
+          So the hook must take the Escape handler as OPTIONAL. Focus trap and
+          focus move-in are right for all thirteen — a gate absolutely should
+          trap focus. Escape is right for ten and wrong for three.
+Status:   PARTIALLY FIXED — the public instance (consent-manager) was fixed on
+          main by the parallel session while this census was being written: it
+          now routes through components/ui/modal.tsx, and
+          tests/consent-preference-centre-focus.test.ts holds the remaining
+          eleven as a list that may only SHRINK. That guard is the right shape
+          — a new offender fails it by name, and an entry that HAS been
+          converted but left listed also fails, so the list cannot rot into a
+          licence nobody is using.
+
+          The remaining ELEVEN are OPEN, enumerated and contained. They cannot
+          be rendered here (no session), and applying an untested behavioural
+          change to eleven screens nobody can open is the exact move this audit
+          keeps criticising. The three gates additionally need a judgement, not
+          a sweep.
+```
+
+**A shared hook was drafted here and then deleted rather than pushed.** It would
+have duplicated a fix that had already landed on main, in a file another worker
+was actively editing — rule 9. The census is the part of this finding that was
+worth keeping; the fix was not mine to write twice.
+
+**Why this is filed as HIGH when `F-D04` was not.** `F-D04` reads as four
+stragglers. A census showing twelve of thirteen says the opposite: the correct
+implementation is the outlier, and every new dialog written in this codebase has
+so far been written the wrong way. That is a defect in the *default*, which is
+worth more than twelve tickets.
