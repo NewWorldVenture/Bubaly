@@ -2774,3 +2774,93 @@ session's block: **I shipped a regression and CI found it, not me.**
   `marketplace_offers` twin their report had missed. Cross-referenced here so
   the two entries are not read as two open items.
 - **Status:** FIXED (0311).
+
+### [CLAUDE-1][VERIFIED] Claude-3's two ILIKE findings were already closed — with a ratchet
+
+- Their `[HIGH][AUTHZ]` inbound-mail `_`-wildcard finding and their `[MEDIUM]`
+  five-unescaped-sites finding are both **stale**, not wrong: commit `a50433ce`
+  ("One escapeLike, used at every call site, enforced by a test") landed one
+  definition in `lib/supabase/escape-like.ts`, converted four private copies and
+  two inline `.replace` expressions, and covered all 34 ILIKE sites in the repo.
+- **Verified rather than taken on the commit message.** Every one of the 34
+  `.ilike(` call sites passes through `escapeLike`, `lib/contact-center/server.ts:94`
+  — the unauthenticated inbound-mail route they flagged — included. The ratchet
+  `tests/ilike-patterns-are-escaped.test.ts` was checked for vacuity by
+  unescaping that exact site: it fails with *"lib/contact-center/server.ts passes
+  a value straight into an ILIKE pattern without escapeLike(): .ilike('email_local', local)"*.
+- **Status:** VERIFIED — no action. Recorded so the effort is not spent twice.
+
+### [CLAUDE-1][LOW][SECURITY] Four shared secrets compared byte by byte
+
+- **Raised by:** Claude-3 as three sites. Swept by shape; there are **four** —
+  `hasInternalSecret` was not in the report.
+- **Files:** `lib/server/secret-equals.ts` (new), `lib/server/cron-auth.ts`,
+  `app/api/guardian/escalate/route.ts`, `app/api/contact-center/email/route.ts`
+- **Problem:** `===` on strings short-circuits at the first differing byte, so how
+  long a check takes to fail is a function of how much of the secret the caller
+  guessed right. `lib/guardian/twilio.ts:143` three files away already reaches
+  for `timingSafeEqual`.
+- **Honest about the risk:** extracting a secret by remote timing over HTTP
+  against a serverless platform is not a practical attack, and Claude-3 said so.
+  It is here for the shape — the rule is written down in this repo and four call
+  sites did not follow it — and because those four gate every scheduled job,
+  every internal callback, the emergency escalation fan-out and inbound email.
+- **HMAC, not raw bytes.** `timingSafeEqual` **throws** on a length mismatch, so
+  a naive version needs a length check first — and that check leaks the length,
+  which is the thing the function exists to avoid. Both sides are HMAC'd under a
+  per-process random key, so the digests are always 32 bytes and reveal nothing.
+- **A FIFTH prose-as-code instance, and this one was mine.** The sweep flagged
+  the doc comment I had just added to `cron-auth.ts`, which contains the words
+  "`secretEquals` rather than `===`". It failed in the **safe** direction, which
+  is the only reason it is a footnote. Comments are stripped before the scan now,
+  line-preservingly so the reported line number still points at the offender.
+- **And one assertion in my own test was a tautology.** I wrote
+  `expect(secretEquals('Bearer undefined', \`Bearer ${undefined}\`)).toBe(false)`
+  — but `` `Bearer ${undefined}` `` **is** the string `"Bearer undefined"`, so
+  that asks whether a string equals itself. The real property belongs to the CALL
+  SITE, and is tested there: `hasCronAuthorization` with no secret configured
+  refuses even a literal `Bearer undefined` header.
+- **Status:** FIXED. `tests/a-secret-is-compared-in-constant-time.test.ts`.
+  Non-vacuity: restore `===` in the cron check or the contact-center check and
+  the sweep names the file and line.
+
+### [CLAUDE-1][LOW][API] A permissions refusal was reported as a server fault
+
+- **Raised by:** Claude-3. Fixed by their **better** suggestion (a typed error)
+  rather than their first (matching on more phrases), because the message-matching
+  IS the defect.
+- **Files:** `lib/marketing/admin.ts`, `app/api/admin/marketing/ai/route.ts`,
+  `app/api/admin/marketing/email/send/route.ts`
+- **Problem:** `requireMarketingAdmin` throws to refuse, and the status it
+  deserved lived in the **English of the message**. Two routes recovered it by
+  reading that English back, and the AI route matched on `'Forbidden'` — a word
+  this module has never said. So a non-admin was answered
+  `500 "Could not generate. Check that the OpenAI API key is set."` No access was
+  granted either way; the cost is operational, and it is the wrong way round —
+  the failure that is nobody's fault is the one that pages.
+- **Fix:** `MarketingAuthError` carries `status: 401 | 403`. Recognised
+  **duck-typed rather than by `instanceof`**, because a route handler and this
+  module can land in different bundles where `instanceof` compares two distinct
+  classes and quietly answers false — reinstating the defect. 117 of the 121
+  call sites are untouched; only the 4 that matched on text changed.
+- **I got the response body wrong first, and the test now pins it.** The AI route
+  was written to answer `describeActionError(err)`, reasoning that a
+  `MarketingAuthError` carries no Postgres code so its message passes through.
+  It does not: `describeDbError` matches `'permission denied'`, the refusal says
+  *"do not have permission to manage"*, nothing classifies it, and
+  `describeActionError` therefore returns **"Something went wrong. Please try
+  again."** — a refusal reported as a generic fault, which is the exact defect
+  this change exists to remove, arriving by a different road. The status would
+  have been right and the sentence useless, and nothing would have said so.
+  `marketingRefusalBody` returns fixed sentences by status, and the test asserts
+  both the right answer **and the trap**.
+- **Status:** FIXED. `tests/a-refusal-is-not-an-outage.test.ts`. Non-vacuity:
+  make the guard throw a bare `Error` → the typed-throw assertion fails; delete
+  the refusal check from the AI route → *"does not consult the typed refusal"*.
+- **One of my own assertions was fragile and was removed rather than kept.** I
+  had asserted `indexOf('isMarketingAuthError(') < indexOf('status: 500')`. A
+  mutation that reorders the catch to `if (!isMarketingAuthError(err)) return 500`
+  is still **correct**, and the positional test passed it — but it would equally
+  have passed some genuinely broken orderings, because source position is not
+  reachability. Replaced with an assertion on the decision itself.
+- **Verified:** tsc and eslint clean; **13,896 tests green across four shards**.

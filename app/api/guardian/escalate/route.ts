@@ -10,6 +10,7 @@ import { formatPhone } from '@/lib/guardian/phone';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 import { claimGuardianCallback, markGuardianCallbackError, markGuardianCallbackProcessed } from '@/lib/guardian/callbacks';
 import { guardianEscalationEventId, guardianEscalationSchema } from '@/lib/guardian/escalation';
+import { secretEquals } from '@/lib/server/secret-equals';
 
 export const runtime = 'nodejs';
 
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest) {
   // "disabled", never "open". (CRON_SECRET is the deploy-wide fallback.)
   const authHeader = req.headers.get('authorization');
   const secret = process.env.GUARDIAN_INTERNAL_SECRET || process.env.CRON_SECRET;
-  if (!secret || authHeader !== `Bearer ${secret}`) {
+  if (!secret || !secretEquals(authHeader, `Bearer ${secret}`)) {
     return NextResponse.json({ error: tr('escalate.unauthorized') }, { status: 401 });
   }
 
