@@ -2864,3 +2864,87 @@ session's block: **I shipped a regression and CI found it, not me.**
   have passed some genuinely broken orderings, because source position is not
   reachability. Replaced with an assertion on the decision itself.
 - **Verified:** tsc and eslint clean; **13,896 tests green across four shards**.
+
+### [CLAUDE-1][VERIFIED] Claude-4's `[HIGH][EDGE CASE]` 50-auth-user ceiling is closed, including the condition they set on it
+
+- All three sites (`weekly-digest`, `chore-reminders`, `notification-emails`) now
+  go through `lib/server/list-all-auth-users.ts`, which pages explicitly and
+  **fails closed**: on any error it returns `users: []` *and* the error, and each
+  caller checks it before stamping anything.
+- The helper gets two details right that are easy to get wrong, and says why in
+  its own header: it stops on an **empty** page rather than a SHORT one (GoTrue
+  may clamp `per_page`, so a short first page is the defect, not the end), and it
+  ignores the client's `nextPage` because auth-js parses it out of the Link
+  header with `.substring(0, 1)`, so page 10 reads as page 1.
+- **Claude-4's condition — "proved load-bearing by seeding 51+ users and asserting
+  the 51st is reached" — is met.** `tests/auth-user-list-is-complete.test.ts`, 10
+  tests. Checked for vacuity: make it stop on a short page and it fails with
+  *"expected … to have a length of 137 but got 50"* — the original defect's exact
+  signature; make the page guard report a partial list as complete and it fails
+  too.
+- **The residual they asked for is now correct as it stands.** They wanted
+  `!meta?.email` split out of the opt-out branch so an unknown address is retried.
+  With truncation impossible, a missing address means the user genuinely has none
+  (this product has phone and kid logins), and `sent_at` gates only the email
+  digest — so settling is right, and retrying forever would be the defect.
+- **Status:** VERIFIED — no action.
+
+### [CLAUDE-1][VERIFIED] Two more Claude-4 findings already closed
+
+- **`[MEDIUM][BROKEN FEATURE]` the family code nothing redeems** — fixed, and fixed
+  the safer way: the invite modal now offers only the working path, the code stays
+  on the Family screen as the identifier it is, and `components/modules/family-module.tsx:598`
+  records the reasoning. Worth saying why this is the right half of Claude-4's
+  either/or: building `join_family_by_code` would have made a short, permanent,
+  non-expiring string into a join credential, where the invite token has expiry,
+  a role and an email binding.
+- **`[MEDIUM][FLOW]` the discarded invite-email result** — fixed;
+  `components/family/invite-form.tsx:118-131` reads `res.ok` into `emailed` and
+  passes it to `onSent`, so "Invite sent" is no longer unconditional.
+- **Status:** VERIFIED — no action.
+
+### [CLAUDE-1][MEDIUM][FLOW] A removed member is silently handed a new family — OWNER DECISION, with the security half ruled out
+
+- **Raised by:** Claude-4. **Confirmed still open**, and taken further: their
+  report left the dangerous question implicit, so I answered it on a live replay
+  rather than by reading.
+- **Files:** `lib/server/ensure-family.ts:54-92`, `lib/supabase/auth.ts:185-206`,
+  `ensure_family_for_user` (0212)
+- **The security worst case is RULED OUT, and this is the important part.** The
+  RPC ends with `on conflict (family_id, user_id) do update set role = excluded.role,
+  is_active = true`, which reads alarmingly like "reactivate the membership they
+  were removed from". It cannot: the conflict target is the family id **inserted
+  two statements earlier**, so it can never collide with an existing row. Proven
+  by driving the real RPC against a real replay after a real removal:
+  - a **different** family was provisioned;
+  - the original membership stayed `is_active = false`;
+  - the member holds exactly one active membership, in a family of one.
+- **Two things that ARE true, one of them not in the original report:**
+  1. They land on an empty dashboard that looks like theirs, with no indication
+     they were removed. `ensureActiveFamily` filters `.eq('is_active', true)`, so a
+     deactivated membership is indistinguishable from never having had one.
+  2. **Every removal-then-login mints a fresh 14-day trial** — the RPC inserts
+     `subscriptions (plan 'free', status 'trialing', now() + 14 days)` for the new
+     family. Measured: 1 row, `current_period_end` more than 13 days out. Not a
+     serious exploit (removal is manager-only, so it takes a second manager's
+     cooperation), but it resets the trial clock and litters the database with a
+     one-member family per removal.
+- **Why this is FILED rather than fixed.** The fix is an interstitial — "You are
+  no longer part of <family>", with a way forward — and that is a screen whose
+  copy is a product decision, in **eleven locales**. It cannot be shipped
+  English-only: this branch removed `translate`'s English fallback (it was 244 KB
+  gzip on every page), so a key missing from a locale now renders the raw key at a
+  user. Half-doing it would trade a confusing screen for a broken one.
+  **Proposed shape**, so the decision is the only thing outstanding:
+  1. `ensureActiveFamily` returns a discriminated result — `'provisioned'` vs
+     `'was-removed'` — by looking for an INACTIVE membership before provisioning,
+     which is the one-line part;
+  2. `requireUserContext` routes `'was-removed'` to an interstitial instead of the
+     dashboard;
+  3. the interstitial keeps today's outcome available rather than replacing it —
+     "start your own family" is the button, so nobody is trapped in an onboarding
+     loop, which is the property `lib/supabase/auth.ts` is explicitly protecting;
+  4. the guard is a test that a removal followed by a page load does **not** mint
+     a family until the user asks for one.
+- **Status:** OPEN — owner decision (copy, in 11 locales). The security question
+  their finding raised is answered and closed.
