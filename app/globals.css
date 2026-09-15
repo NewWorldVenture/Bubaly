@@ -32,6 +32,12 @@
   --surface: 9 16 26;
   --elevated: 18 26 40;
   --border: 35 45 62;
+  /* Form-control boundary. `--border` is 1.38:1 against `--surface` here and
+     the control fill is identical to the card behind it, so the border was the
+     only boundary a field had and it was under WCAG 1.4.11's 3:1. Audit:
+     C2-B04. Kept separate from `--border` so raising it does not restyle every
+     divider in the product. 3.56:1 on --surface, 3.73:1 on --bg. */
+  --border-input: 94 107 133;
   --fg: 237 240 247;
   --muted: 148 160 184;
   --brand: 116 75 232;
@@ -72,6 +78,8 @@
   --surface: 255 255 255;
   --elevated: 255 255 255;
   --border: 222 228 240;
+  /* See the dark block. 3.52:1 on --surface, 3.29:1 on --bg. */
+  --border-input: 124 137 163;
   --fg: 23 28 42;
   --muted: 96 108 134;
   --brand: 99 91 230;
@@ -176,8 +184,21 @@ body::before {
     background-color: rgb(var(--elevated));
     border: 1px solid rgb(var(--border));
   }
+  /* A focus indicator has to be able to turn OFF. Written as a plain component
+     class this compiled to an unconditional ring — `outline: 2px solid
+     transparent` suppressing the browser's own outline, and the brand ring
+     painted permanently on all 202 elements carrying the class. Focusing
+     changed the computed style by zero bytes, so WCAG 2.4.7 failed not by
+     omission but by an indicator that was never off. Audit: C2-B01.
+
+     Scoped to :focus-visible here rather than at the call sites, so no call
+     site can forget it. The 16 `focus-visible:focus-ring` prefixes that existed
+     to work around this are now redundant and have been removed. */
   .focus-ring {
-    @apply outline-none ring-2 ring-brand/60 ring-offset-2 ring-offset-bg;
+    @apply outline-none;
+  }
+  .focus-ring:focus-visible {
+    @apply ring-2 ring-brand/60 ring-offset-2 ring-offset-bg;
   }
   .gradient-text {
     @apply bg-clip-text text-transparent;

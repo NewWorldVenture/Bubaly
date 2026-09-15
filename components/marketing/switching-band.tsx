@@ -78,7 +78,7 @@ export async function SwitchingBand({ compact = false }: { compact?: boolean }) 
 
       <div className="mt-6 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
         {privacy}
-        <Link href="/signup" className="focus-visible:focus-ring inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-blue-500 to-violet-600 px-7 text-sm font-semibold text-brand-fg shadow-glow transition hover:-translate-y-0.5 hover:brightness-110">
+        <Link href="/signup" className="focus-ring inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-blue-500 to-violet-600 px-7 text-sm font-semibold text-brand-fg shadow-glow transition hover:-translate-y-0.5 hover:brightness-110">
           {t('switching.cta')}
         </Link>
       </div>

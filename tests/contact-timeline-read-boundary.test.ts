@@ -56,6 +56,12 @@ vi.mock('@/lib/supabase/server', () => ({ createServer: async () => {
     return chain;
   } };
 } }));
+// The AI path now carries the same rate-limit budget as every API route that
+// reaches the model (audit C3-S4-01). The limiter deliberately fails CLOSED,
+// so against this file's stub client it would answer "too many requests" and
+// preempt the read-boundary contract under test. Stubbed the way every other
+// AI-path test here does it; no assertion below is relaxed.
+vi.mock('@/lib/server/ai-rate-limit', () => ({ enforceAIRateLimit: async () => ({ ok: true }) }));
 vi.mock('@/lib/ai/provider', () => ({ isAIConfigured: h.configured, resolveProvider: h.provider, describeAIError: () => ({ message: 'Provider failed' }) }));
 vi.mock('@/lib/ai/observability', () => ({ withAiRequest: async (_scope: unknown, meta: unknown, callback: (obs: unknown) => unknown) => {
   h.ledger(meta); return callback({ used: vi.fn(), failed: vi.fn() });

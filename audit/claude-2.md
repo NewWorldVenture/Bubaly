@@ -1135,3 +1135,1949 @@ recommendation instead of editing.
 ## Findings
 
 _(none yet)_
+
+---
+---
+
+# ══════════════════════════════════════════════════════════════════
+# SESSION 2 — 2026-09-14 — THE BROWSER PASS (public surface only)
+# ══════════════════════════════════════════════════════════════════
+
+Everything above this line was derived by **reading source**. Everything below
+was derived by **running Chromium against the production build on
+`http://localhost:3210`**. This section closes the gap `finalaudit.md` names as
+blocking completion:
+
+> - [ ] Run a browser: contrast, tab order, screen-reader output (Pass D).
+
+New findings in this section are numbered `C2-B01`… so they never collide with
+the session-1 `C2-01`…`C2-14`. Nothing above was edited or deleted.
+
+## STATUS
+
+```
+CURRENT:   COMPLETE — browser pass over the public marketing/auth surface.
+COMPLETED:
+  - axe-core 4.12 over 23 public routes x 2 viewports (1280 / 390) = 46 runs,
+    all HTTP 200, 0 script errors.
+  - Colour contrast measured in BOTH themes: 23 routes x 2 viewports x 2 themes
+    = 92 further axe runs, plus a design-token ratio table and a hand-rolled
+    gradient-aware sampler for the 2,263 nodes/theme axe could not compute.
+  - Real tab order (key-by-key), focus-visibility deltas, keyboard operation of
+    the nav, mobile drawer, language picker, FAQ tabs+accordion and the cookie
+    consent banner + preference centre.
+  - Accessibility-tree (ARIA) snapshots of /login, /contact, the consent dialog,
+    the language listbox and the FAQ panel — this is the "screen-reader output"
+    half of the gap, done through the a11y tree rather than a live SR.
+  - Responsive: overflow + tap-target measurement at 390px and 360px with
+    REAL touch emulation (hasTouch/isMobile), which is what makes the
+    `coarse:` (pointer:coarse) utilities apply.
+  - 17 new findings, C2-B01-C2-B17 (2 HIGH, 10 MEDIUM, 5 LOW)
+    + 9 verified-clean items (one of them amended after a browser re-check)
+    + 3 method corrections to my own first measurements.
+    C2-B17 and the third correction are in the Addendum at the end of the file.
+NEXT:      nothing queued. Awaiting Claude-1 triage.
+FILES-TOUCHED: audit/claude-2.md ONLY. **No application source was modified.**
+           Throwaway scripts + JSON/PNG evidence live in
+           /tmp/claude-0/-home-user-Bubaly/c1fd8263-765f-561d-b8eb-99365eb20176/scratchpad/
+           (scan.mjs, keyboard.mjs, focus2.mjs, touch.mjs, contrast2.mjs,
+            contrast3.mjs, tokens.mjs, aria.mjs, lightform.mjs, cta.mjs → out/*.json, out/*.png)
+BLOCKERS:  Supabase is stubbed with dummy credentials -> NO session exists, so
+           app/(app) (354 pages) could not be opened at all. Pass D's findings
+           about the authenticated app REMAIN STATICALLY DERIVED. Also
+           unreachable: /s/[slug], /gift/[token], /pay/[handle], /blog/[slug],
+           /customers/[slug] — every one needs a row from the database.
+           See "BLOCKED — what a browser still could not see" at the end.
+           Empty DB-backed lists are NOT reported as defects anywhere below.
+LAST-UPDATE: 2026-09-14
+```
+
+## How the theme actually works — a correction to the brief
+
+The task brief said `data-theme` / `prefers-color-scheme` drive the theme. In
+this app **neither is true**, and getting this wrong silently invalidates a
+contrast pass, so it is recorded first:
+
+- The theme is a **class** on `<html>` — `.dark` or `.light` (`app/globals.css:29`,
+  `components/theme/theme-script.tsx`). `data-theme` is **never set**
+  (measured: `document.documentElement.getAttribute('data-theme')` → `null`).
+- The source of truth is `localStorage['bubaly-theme']`, defaulting to `'dark'`.
+- `prefers-color-scheme` is consulted **only** when the stored value is
+  literally `'system'`. Measured on `/login` with three emulated OS settings:
+
+```
+colorScheme=light        -> html class "dark", body rgb(3,9,15),  prefersLight=true
+colorScheme=dark         -> html class "dark", body rgb(3,9,15),  prefersLight=false
+colorScheme=no-preference-> html class "dark", body rgb(3,9,15),  prefersLight=true
+```
+
+  A first-time visitor whose OS is in light mode gets the dark theme. That is a
+  deliberate product default (the code says so) and is **not** filed as a
+  defect — but it means a contrast pass driven by `prefers-color-scheme` alone
+  would have measured the dark theme twice and never seen the light one.
+  Every light-theme measurement below was taken by pinning
+  `localStorage['bubaly-theme']='light'` via `addInitScript` in a dedicated
+  browser context, and each run asserts the resulting `<html class>` before it
+  measures. 92/92 runs reported the theme they asked for.
+
+---
+
+## C2-B01
+
+```
+[CLAUDE-2][HIGH][A11Y] `.focus-ring` is an UNCONDITIONAL ring: 202 call sites paint a focus indicator permanently, so focus itself is invisible
+File:     app/globals.css:179-181  (the definition)
+          compiled: .next/static/css/efe55d1639ee1e52.css
+          worst public call sites: components/ui/input.tsx:5 (every Input /
+          Textarea / Select in the product), components/i18n/language-picker.tsx:113
+          and :160, components/marketing/faq-accordion.tsx:20,
+          components/marketing/faq-tabs.tsx:64, components/theme/theme-toggle.tsx,
+          components/marketing/site-footer.tsx:107
+Problem:  .focus-ring is written as a plain component class, not a state variant:
+
+            .focus-ring { @apply outline-none ring-2 ring-brand/60 ring-offset-2 ring-offset-bg; }
+
+          which compiles to an unconditional rule:
+
+            .focus-ring{outline:2px solid transparent;outline-offset:2px;
+              --tw-ring-color:rgb(var(--brand)/0.6);--tw-ring-offset-width:2px;
+              box-shadow:var(--tw-ring-offset-shadow),var(--tw-ring-shadow),...}
+
+          It therefore does two harmful things at once:
+            1. it paints the brand ring ALL THE TIME, on every element that
+               carries the class; and
+            2. `outline:2px solid transparent` suppresses the browser's own
+               focus outline.
+          The result is that focusing the element changes NOTHING — the
+          "focus indicator" was already on. WCAG 2.4.7 Focus Visible (AA) is
+          failed, not by omission but by a ring that never turns off.
+
+          Source counts (grep over app/ + components/):
+            bare `focus-ring`            202 occurrences
+            `focus-visible:focus-ring`    16 occurrences
+          The 16 correct ones are almost all in components/marketing/site-header.tsx.
+
+Evidence: (1) Measured on the rendered homepage while
+          `document.activeElement === document.body` (NOTHING focused).
+          8 elements carrying bare `.focus-ring` were painting the full ring:
+
+            {"tag":"button","cls":"...rounded-full glass transition focus-ring h-8 w-8...",
+             "boxShadow":"rgb(3, 9, 15) 0px 0px 0px 2px, rgba(116, 75, 232, 0.6) 0px 0px 0px 4px, ...",
+             "outline":"solid 2px"}
+            {"tag":"button","text":"en-USUSUnited States · English", ... same ring ... }
+            + the six footer social links ("Bubaly on Facebook" … "Bubaly on TikTok")
+
+          (2) Before/after on the SAME element, with a 400ms settle so the
+          150ms Tailwind `transition` cannot skew the read
+          (`[data-testid="language-picker"] > button`):
+
+            before: outline "solid 2px rgba(0, 0, 0, 0)"
+                    boxShadow "rgb(3, 9, 15) 0px 0px 0px 2px, rgba(116, 75, 232, 0.6) 0px 0px 0px 4px, ..."
+            after : outline "solid 2px rgba(0, 0, 0, 0)"
+                    boxShadow "rgb(3, 9, 15) 0px 0px 0px 2px, rgba(116, 75, 232, 0.6) 0px 0px 0px 4px, ..."
+            changed: FALSE      matchesFV: true      isActive: true
+
+          Byte-identical. The element matches `:focus-visible`, it IS the active
+          element, and its computed style does not move.
+
+          (3) /login, the most important public form, with activeIsBody === true:
+          BOTH text inputs, the submit button, the theme toggle and the language
+          trigger all render
+            "rgb(3, 9, 15) 0px 0px 0px 2px, rgba(116, 75, 232, 0.6) 0px 0px 0px 4px"
+          Focusing the email input returns the byte-identical box-shadow.
+          Screenshots: out/login-nothing-focused.png, out/login-light.png —
+          every control on the sign-in card wears a purple ring simultaneously.
+
+          (4) The language menu, open, 11 options: out/language-menu-open.png
+          shows all eleven `role="option"` buttons ringed at once. There is no
+          way to see which one the keyboard is on.
+Impact:   Keyboard-only and low-vision users cannot tell where focus is on the
+          sign-in form, the sign-up flow, the contact form, the FAQ accordion,
+          the language menu or the theme toggle — i.e. on every interactive
+          control that does not live in the marketing header. It is also a
+          plain visual defect for everyone: the product's own screenshots show
+          a login form where every field looks focused.
+Fix:      One-line root fix — make the class a state variant, then delete the
+          16 `focus-visible:` prefixes that exist only to work around it:
+            .focus-ring { @apply outline-none; }
+            .focus-ring:focus-visible { @apply ring-2 ring-brand/60 ring-offset-2 ring-offset-bg; }
+          (or move the whole thing into `@layer utilities` as
+          `focus-visible:ring-2 …` and keep the prefix at call sites.)
+          **Do not ship this without C2-B04.** The permanent ring is currently
+          the only thing that makes a text input's boundary visible; turning it
+          off while the 1.28:1 border stands would leave the fields with no
+          visible edge at all. The two must land together.
+          Regression guard (this is the F-D10 lesson again — no lint rule or
+          test could see this): assert in a Playwright test that
+          getComputedStyle(el).boxShadow differs before and after focus for one
+          element of each class.
+Status:   OPEN — VERIFIED IN BROWSER
+```
+
+---
+
+## C2-B02
+
+```
+[CLAUDE-2][HIGH][A11Y] Every primary CTA on the marketing site is white text at 3.68:1 — axe cannot see it because the background is a gradient
+File:     components/marketing/site-header.tsx:106,109 (10px text)
+          components/marketing/cta.tsx / sections.tsx (hero + section CTAs, 14px)
+          components/marketing/faq-tabs.tsx:66 (the SELECTED tab)
+          app/(marketing)/pricing/pricing-content.tsx ("Start Family Basic")
+Problem:  The brand CTA is `bg-gradient-to-r from-blue-500 to-violet-600` with
+          white text. Measured computed style, on the live homepage:
+
+            backgroundImage: linear-gradient(to right, rgb(59, 130, 246), rgb(124, 58, 237))
+            color:           rgb(255, 255, 255)
+            fontSize:        10px / 14px, fontWeight 500-600
+
+          Over the violet end (124,58,237) white is 5.90:1 — fine. Over the
+          BLUE end (59,130,246) white is **3.68:1**. The text is centred in a
+          wide pill, so its left-hand glyphs sit on the bluest part of the run.
+          At 10px/600 and 14px/600 this is normal-size text, so WCAG 1.4.3
+          (AA) requires 4.5:1. It fails.
+Evidence: Hand-computed from the measured colours (sRGB relative luminance):
+            L(white)              = 1.0000
+            L(rgb 59,130,246)     = 0.2355
+            ratio = (1.0 + 0.05) / (0.2355 + 0.05) = 3.68 : 1     need 4.5 : 1
+          Independently produced by the gradient-aware sampler on 11 of 12
+          scanned routes for the header CTA alone
+          (out/contrast3.json, theme=dark, "Get Started Free", 10px, 3.68:1).
+
+          Controls measured carrying exactly this gradient + white text:
+            "Get started"            10px 600   (mobile header CTA)
+            "Get Started Free"       10px 600   (desktop header CTA)
+            "Get Started Free"       14px 600
+            "Start Free Trial"       14px 600   (hero)
+            "Read the Trust Center"  14px 600
+            "Start free, no card"    14px 600
+            "Start Family Basic"     14px 600   (/pricing)
+            FAQ selected tab         14px 500   (/faq) — the SELECTED state is
+                                                 the least readable one
+          Why the axe pass missed it: over 92 contrast runs axe returned
+          **4,603 `incomplete` node instances**, the single largest reason being
+            326 x "Element's background color could not be determined due to a
+                   background gradient"
+          axe declines to judge gradient backgrounds, so the product's most
+          important buttons are exactly the elements its report is silent about.
+Impact:   The main conversion control on every marketing page is below the AA
+          text-contrast floor, at 10px in the header. Low-vision users, and
+          anyone outdoors on a phone, lose the primary call to action.
+Fix:      Darken the blue stop until white clears 4.5:1 — `blue-600` #2563eb
+          gives 4.68:1 with white; `blue-700` #1d4ed8 gives 6.30:1. Changing
+          only the FIRST stop keeps the gradient's look. Alternatively raise the
+          10px header CTAs to >=14px and keep them on the violet end.
+          Add a unit test over the token pair, since no scanner will catch this.
+Status:   OPEN — VERIFIED IN BROWSER
+```
+
+---
+
+## C2-B03
+
+```
+[CLAUDE-2][MEDIUM][A11Y] The LIGHT theme's semantic status colours are below AA — and light is the theme nobody had ever rendered
+File:     app/globals.css (the `.light` token block)
+Problem:  Dark and light do not have equivalent contrast. In dark every semantic
+          token is comfortable (7-12:1). In light, three of them fall below the
+          4.5:1 body-text floor and two fall below even the 3:1 large-text/UI
+          floor. Measured from the computed custom properties on a rendered page
+          in each theme (out/tokens.json):
+
+            token pair                 DARK          LIGHT
+            --fg      on --bg         17.53:1       15.85:1     ok / ok
+            --muted   on --bg          7.60:1        4.91:1     ok / ok (thin)
+            --muted   on --surface     7.25:1        5.27:1     ok / ok
+            --brand-text on --bg       6.96:1        6.36:1     ok / ok
+            --brand-fg on --brand      5.36:1        5.04:1     ok / ok
+            --info    on --bg          7.87:1        4.82:1     ok / ok (thin)
+            --danger  on --bg          7.13:1      **4.09:1**   ok / FAIL AA body
+            --danger  on --surface     6.80:1      **4.38:1**   ok / FAIL AA body
+            --success on --bg          9.64:1      **2.91:1**   ok / FAIL even 3:1
+            --warning on --bg         11.74:1      **2.70:1**   ok / FAIL even 3:1
+            --warning on --surface    11.20:1      **2.89:1**   ok / FAIL even 3:1
+            --brand   on --bg          3.73:1        4.70:1     large/UI only / ok
+Evidence: `--danger` is not theoretical on the public surface — it is the colour
+          of the required-field marker and of form error text. Measured live on
+          /login in the light theme:
+
+            required asterisk: text "*", color rgb(213, 70, 70), 14px,
+            on card rgb(255,255,255)  ->  4.38 : 1     (AA body needs 4.5)
+
+          `--success` / `--warning` are used for status chips and toasts, which
+          live behind the login wall, so I could not render them (see BLOCKED).
+          The token ratios above are measured, the chip usage is not.
+
+          Why axe reported none of this: axe skips single-character content
+          ("Element content is too short to determine if it is actual text
+          content" — 81 such incompletes across the runs), and no error/success
+          state was on screen during an unauthenticated crawl.
+Impact:   In the light theme the marker that says a field is mandatory, and the
+          colour that says "this went wrong", are the least legible text on the
+          page. The dark theme hides the problem entirely, which is why eleven
+          prior passes did not see it.
+Fix:      Re-derive the light-theme `--danger`, `--success` and `--warning`
+          ramps against `--bg` and `--surface` for >=4.5:1 as TEXT (they are
+          currently picked as though they were only fills). Keep the current
+          values as separate `--*-fill` tokens if the lighter hue is wanted for
+          backgrounds. A 20-line unit test over the token table would pin this.
+Status:   OPEN — VERIFIED IN BROWSER
+```
+
+---
+
+## C2-B04
+
+```
+[CLAUDE-2][MEDIUM][A11Y] Text inputs have no visible boundary of their own: border 1.28:1 (light) / 1.38:1 (dark), fill identical to the card
+File:     components/ui/input.tsx:4-5  (`base`, shared by Input, Textarea, Select)
+Problem:  `base` is `bg-surface/60 border border-border`. Measured on the live
+          /login card:
+
+                              LIGHT                         DARK
+            input border      rgb(222, 228, 240)            rgb(35, 45, 62)
+            input fill        rgba(255, 255, 255, 0.6)      rgba(9, 16, 26, 0.6)
+            card background   rgba(255, 255, 255, 0.72)     rgba(9, 16, 26, 0.72)
+            border : fill        **1.28 : 1**                  **1.38 : 1**
+            fill   : card        **1.00 : 1**                  **1.00 : 1**
+
+          WCAG 1.4.11 Non-text Contrast (AA) requires 3:1 for the visual
+          information needed to identify a user-interface component. The fill
+          is indistinguishable from the card behind it (1.00:1), so the border
+          is the only boundary — and the border is at 1.28:1.
+Evidence: out/login-light.png and out/login-nothing-focused.png. The fields are
+          currently legible ONLY because C2-B01's permanent ring outlines them.
+Impact:   A low-vision user cannot see where the text fields are. Today the bug
+          in C2-B01 is masking it.
+Fix:      Raise `--border` (dark 1.44:1 / light 1.19:1 against `--bg` — both far
+          under 3:1), or give form controls a dedicated `--border-input` token
+          at >=3:1 against `--surface`. **Sequence matters: this must land with
+          or before C2-B01**, or fixing the focus ring will make every input
+          invisible.
+Status:   OPEN — VERIFIED IN BROWSER
+```
+
+---
+
+## C2-B05
+
+```
+[CLAUDE-2][MEDIUM][A11Y] The cookie preference centre declares aria-modal="true" and manages no focus at all — the public instance of the F-D04 class
+File:     components/marketing/consent-manager.tsx:140-150 (PreferenceCenter)
+Problem:  Same defect class as finalaudit F-D04, but in a FIFTH file that F-D04
+          does not list, on a page every visitor sees, and reached from the
+          consent banner that blocks the bottom of every marketing route.
+            <div className="fixed inset-0 z-[80] …" role="dialog" aria-modal="true" …>
+          `aria-modal="true"` tells assistive tech everything outside is inert.
+          Nothing moves focus in, nothing traps Tab, nothing handles Escape.
+Evidence: Driven by keyboard only, on a fresh no-storage context:
+            open via Enter on "Manage preferences"
+            dialog present:        {"label":"Privacy preferences","aria-modal":"true"}
+            focus after open:      {"none": true}     <- focus fell to <body>
+            Tab x 16 walk:
+              1 Close            inDialog=true
+              2 Analytics        inDialog=true  (role=switch)
+              3 Personalization  inDialog=true
+              4 Email updates    inDialog=true
+              5 Text updates     inDialog=true
+              6 Reject non-essential  inDialog=true
+              7 Accept all       inDialog=true
+              8 Save choices     inDialog=true
+              9 (body)
+             10 "Skip to content"      inDialog=FALSE   <- escaped the dialog
+             11 "Bubaly home"          inDialog=FALSE
+             12-16 the whole site nav  inDialog=FALSE
+            escapedDialog:         true
+            Escape pressed -> stillOpenAfterEscape: true
+          The ARIA tree is otherwise good — `dialog "Privacy preferences"`, the
+          four toggles expose `role=switch` with `aria-checked` and names.
+          The semantics are right; the focus behaviour is absent.
+Impact:   A screen-reader user opening privacy preferences tabs out of a dialog
+          their AT has been told is modal, into content it will not announce,
+          with no Escape. This is the consent surface, so it is also the one
+          dialog with a regulatory reason to be operable.
+Fix:      Route it through components/ui/modal.tsx, which already implements
+          focus move-in, Tab trap, Escape, scroll lock and focus restore. If the
+          bespoke chrome must stay, lift that effect verbatim.
+          Note the banner itself (role="dialog", no aria-modal) is correctly
+          NON-modal and needs no trap — only the preference centre does.
+Status:   OPEN — VERIFIED IN BROWSER (new file; extends F-D04 to the public surface)
+```
+
+---
+
+## C2-B06
+
+```
+[CLAUDE-2][MEDIUM][A11Y] The language listbox sits BEFORE its trigger in the DOM, so Tab walks out of the open menu; arrow keys do nothing
+File:     components/i18n/language-picker.tsx:96-141 (listbox) vs :152-176 (trigger)
+Problem:  The menu is rendered above the trigger in source order and positioned
+          with `absolute bottom-full`. Visually it is a popup over the button;
+          in the tab sequence it is eleven stops BEFORE it. It also declares
+          `role="listbox"` / `role="option"` but implements none of that
+          pattern's keyboard contract: no roving tabindex, no
+          aria-activedescendant, no Arrow/Home/End handling, and every option is
+          a natively-focusable `<button>` (so all eleven are tab stops).
+Evidence: Driven from the trigger on the live homepage:
+            children of [data-testid=language-picker] in DOM order:
+              ["listbox", "button"]                 <- menu first, trigger second
+            optionCount: 11
+            Enter on trigger      -> listbox opens, focus STAYS on the trigger
+            Tab                   -> "Bubaly on Facebook" (the next footer link) —
+                                     focus left the open menu entirely
+            ArrowDown             -> focus unchanged (still the trigger)
+            Shift+Tab from trigger-> option "Português (Portugal)" — the LAST
+                                     option, i.e. the only way in is backwards
+            Escape                -> menu closes, focus returns to the trigger  (correct)
+          ARIA tree is good: `listbox "Choose your language"` with
+          `option "English (United States)" [selected]` and ten more.
+Impact:   A keyboard user who opens the language menu and presses Tab — the
+          natural next key — is thrown out of it into the footer, with the menu
+          still open behind them. Reaching a language requires guessing
+          Shift+Tab and then walking the list backwards from Portuguese. Bubaly
+          ships eleven locales; this is the control that selects them.
+Fix:      Render the listbox AFTER the trigger in source order (keep
+          `absolute bottom-full` for the upward placement), move focus to the
+          selected option on open, give options `tabIndex={-1}` with a roving
+          index, and handle ArrowUp/ArrowDown/Home/End/Enter. Escape and the
+          focus-restore already work and should be kept.
+          (Its options also carry bare `focus-ring` — see C2-B01 — so even with
+          arrow keys added, the moving focus would still be invisible.)
+Status:   OPEN — VERIFIED IN BROWSER
+```
+
+---
+
+## C2-B07
+
+```
+[CLAUDE-2][MEDIUM][A11Y] Footer link tap targets are 11px tall on a phone (WCAG 2.5.8 requires 24px); the legal row is 17px
+File:     components/marketing/site-footer.tsx:122  (`text-[10px] text-muted`)
+          components/marketing/site-footer.tsx (bottom legal row + ConsentReopenLink)
+Problem:  The footer's four link columns render at `text-[10px]`, which at the
+          default line-height gives an 11px-high hit area with no padding. WCAG
+          2.2 Success Criterion 2.5.8 Target Size (Minimum), level AA, requires
+          24x24 CSS px. The "inline in a sentence" exception does not apply —
+          these are stacked navigation links in a `<ul>`.
+Evidence: Measured at 390x844 with REAL touch emulation
+          (`isMobile:true, hasTouch:true`, so `@media (pointer: coarse)` applies
+          — confirmed `pointerCoarse: true` on every run). Present on 10 of 10
+          marketing routes measured:
+
+            a 106x11  "What Bubaly handles"      text-[10px] text-muted
+            a  64x11  "How it works"
+            a  34x11  "Pricing"
+            a  55x11  "Mobile app"
+            a  68x11  "Kitchen Mode"
+            a  80x11  "Handled for you"
+            a  61x11  "Trust Center"
+            a  22x11  "Blog"
+            a  39x11  "Contact"
+            a  19x11  "FAQ"
+            a  76x11  "Create account"
+            a  30x11  "Log in"
+            a  84x11  "Switch to Bubaly"
+            a  68x11  "Privacy Policy"
+            a  82x11  "Terms of Service"
+            a  77x11  "Acceptable Use"
+            a  66x11  "Cookie Policy"
+            a  40x17  "Privacy"        (bottom legal row)
+            a  32x17  "Terms"
+            a  85x17  "Acceptable Use"
+            a  43x17  "Cookies"
+            button 85x17 "Privacy choices"   (the consent re-open control)
+
+          Passing 24px but under the 44px touch guideline, for completeness:
+            button  98x32 "Accept all"            (consent banner)
+            button 172x34 "Reject non-essential"
+            button 163x32 "Manage preferences"
+            button  40x40 theme toggle in the AUTH layout — see C2-B14
+Impact:   18 links per page, including every legal link and the control that
+          re-opens privacy choices, are an 11px-tall strip on a phone. Anyone
+          with a motor impairment, and most people on a moving bus, will miss.
+Fix:      `py-1.5` (or `min-h-6` / `coarse:min-h-11`) on the footer `<li>`
+          anchors and on the legal row. The footer already knows how — its
+          social icons carry `coarse:min-h-11 coarse:min-w-11` and measure 36px
+          (44 on touch). The text links were simply never given it.
+          Raising `text-[10px]` to `text-xs` would fix the target and C2-B15
+          at once.
+Status:   OPEN — VERIFIED IN BROWSER
+```
+
+---
+
+## C2-B08
+
+```
+[CLAUDE-2][MEDIUM][A11Y] The shared Field primitive exposes "required" as a red asterisk and nothing else — no aria-required, no aria-invalid, no aria-describedby
+File:     components/ui/input.tsx:31-60 (Field)
+Problem:  Field renders `{required && <span className="ml-0.5 text-danger">*</span>}`
+          INSIDE the `<label>`, and passes `required` to nothing. It also
+          renders `hint` and an `error` with `role="alert"` as loose siblings,
+          with no `aria-describedby` linking them to the control and no
+          `aria-invalid` on the control when an error is showing.
+Evidence: Accessibility tree of /login `<main>` (Playwright ariaSnapshot):
+
+            - textbox "Email*":
+                /placeholder: you@example.com
+            - textbox "Password*":
+                /placeholder: ••••••••
+
+          No `[required]` state. The name is the literal string "Email*" — a
+          screen reader says "Email star, edit text". Attribute audit on the
+          same page:
+
+            {name:"email",    labelText:"Email*",    requiredAttr:false,
+             ariaRequired:null, ariaInvalid:null, ariaDescribedby:null}
+            {name:"password", labelText:"Password*", requiredAttr:false,
+             ariaRequired:null, ariaInvalid:null, ariaDescribedby:null}
+
+          And with a real failed submit driven through the browser, the error
+          renders correctly but stays unlinked:
+
+            [role=alert] text: "Network problem — check your connection and try again."
+            colour rgb(23,28,42) 14px on rgb(255,255,255) -> 16.99:1  (contrast fine)
+            input aria-invalid: null      no aria-describedby anywhere on the form
+
+          (The message wording is the Supabase stub failing, which is expected
+          here; what is being measured is the wiring of the error, not its text.)
+          Same shape on /contact: `textbox "Your name*"`, `textbox "Email*"`,
+          `combobox "What's this about?"`, `textbox "Message*"` — all named,
+          none required-marked.
+Impact:   Required fields are announced as optional. When submission fails, the
+          alert fires once into the live region and is then orphaned: a user who
+          tabs back to the field hears the name and placeholder with no
+          indication that this is the field that is wrong. Field is the primitive
+          behind ~1,066 call sites, so the fix is one file for the whole product.
+Fix:      In Field: pass `required` through to the control (`aria-required` or
+          the native attribute), `useId()` the hint and error nodes, set
+          `aria-describedby` to whichever is present, and set
+          `aria-invalid={!!error}`. Keep the visible asterisk — add
+          `aria-hidden="true"` to it so the name stops being "Email star".
+Status:   OPEN — VERIFIED IN BROWSER (distinct from F-D02/F-D03, which are about
+          the NAME; this is about state and description)
+```
+
+---
+
+## C2-B09
+
+```
+[CLAUDE-2][MEDIUM][A11Y] axe `heading-order`: the footer jumps to <h4> on 24 of 46 page/viewport runs; /contact jumps h1 -> h3
+File:     components/marketing/site-footer.tsx:118  <h4 className="text-[11px] font-semibold text-fg">
+          app/(marketing)/contact/page.tsx:40        <h3 className="font-semibold">
+          app/(marketing)/mobile/page.tsx            <h3 className="mt-4 text-lg font-semibold">iOS & Android</h3>
+          app/(marketing)/how-it-works/page.tsx      <h3 className="text-[13px] …">Good morning, The Johnson Family 👋</h3>
+Problem:  Every marketing page ends with four footer column titles marked up as
+          `<h4>`. On the legal and content pages the deepest preceding heading is
+          `<h2>`, so the document skips h3. On /contact the page's own content
+          goes h1 -> h3 with no h2. On /how-it-works an `<h3>` is used for
+          decorative copy inside a phone mock-up illustration.
+Evidence: axe-core 4.12, rule `heading-order`, impact moderate, 26 node
+          instances over 24 of the 46 structural runs. Distinct nodes:
+
+            <h4 class="text-[11px] font-semibold text-fg">Product</h4>
+              -> desktop+mobile on /security /faq /terms /privacy /cookies
+                 /acceptable-use /blog /ai /contact /mobile /how-it-works
+                 /family-display  (18 runs)
+            <h3 class="font-semibold">Email us</h3>            -> /contact (2 runs)
+            <h3 class="mt-4 text-lg font-semibold">iOS &amp; Android</h3> -> /mobile (2 runs)
+            <h3 class="text-[13px] font-semibold leading-4">Good morning,<br>The Johnson Family 👋</h3>
+                                                              -> /how-it-works (2 runs)
+
+          Confirmed against the real heading outline of /faq:
+            ["H1: Questions, answered", "H2: Less Managing Life. More Living It.",
+             "H4: Product", "H4: Company", "H4: Get started", "H4: Legal"]
+Impact:   Heading navigation is how screen-reader users skim a page. A level
+          that jumps tells them a section was missed. On /faq the outline is
+          also wrong in a second way — see C2-B12.
+Fix:      Footer column titles -> `<h2>` (the footer is a peer of main content)
+          and keep the 11px look with classes. /contact: give the three contact
+          cards an `<h2>` section heading or demote them to `<p>`.
+          /how-it-works: the phone-mock copy is decoration — use `<p>`.
+Status:   OPEN — VERIFIED IN BROWSER
+```
+
+---
+
+## C2-B10
+
+```
+[CLAUDE-2][MEDIUM][A11Y] /join and /offline render no <main> landmark, so all their content sits outside any landmark — and they have no skip link either
+File:     app/join/page.tsx:10-19, app/join/layout.tsx
+          app/offline/page.tsx:8-17  (uses the ROOT layout, which has no chrome)
+Problem:  The `(marketing)` and `(auth)` layouts both provide `<main>`; these two
+          routes are outside both route groups and provide nothing. Their whole
+          content is therefore in no landmark, and `SkipLink`
+          (components/a11y/skip-link.tsx, which targets `#main-content`) is not
+          rendered on them.
+Evidence: axe-core, both viewports:
+            landmark-one-main (moderate) — 4 runs:
+              desktop /join, mobile /join, desktop /offline, mobile /offline
+              node: <html lang="en-US" dir="ltr">
+            region (moderate) — 10 node instances over the same 4 runs:
+              /join    <div class="mb-8">
+                       <h1 class="mt-4 text-xl font-semibold">Invite problem</h1>
+                       <p class="mt-2 text-sm text-muted">This invite link is missing its token.</p>
+              /offline <h1 class="text-2xl font-semibold">You're offline</h1>
+                       <p class="mt-2 max-w-sm text-sm text-muted">Check your connection …</p>
+          Accessibility tree of /offline's <body>, entire page:
+            - img
+            - heading "You're offline" [level=1]
+            - paragraph: Check your connection — Bubaly will reconnect …
+            - alert
+          No main, no nav, no banner, no contentinfo.
+Impact:   Landmark navigation ("go to main content"), which is the primary way
+          screen-reader users skip chrome, finds nothing on these two pages.
+          /join is the first page an invited family member ever sees.
+Fix:      Wrap both in `<main id="main-content">`. For /join, adding SkipLink +
+          `<main>` to app/join/layout.tsx covers it; /offline needs the element
+          in the page (it renders under the root layout).
+          (The "Invite problem / missing its token" copy is the correct empty
+          state for a tokenless URL, not a stub artefact — the page was reached
+          without a token on purpose.)
+Status:   OPEN — VERIFIED IN BROWSER
+```
+
+---
+
+## C2-B11
+
+```
+[CLAUDE-2][LOW][A11Y] axe `scrollable-region-focusable`: two horizontal scrollers at 390px cannot be scrolled by keyboard
+File:     app/(marketing)/pricing/pricing-content.tsx:386
+            <div className="mt-7 overflow-x-auto rounded-2xl border border-white/10">
+          app/(marketing)/family-display/page.tsx:194
+            <div className="mt-8 overflow-x-auto">
+Problem:  Both become horizontally scrollable at phone width and contain no
+          focusable child, so a keyboard user cannot reach the columns that are
+          off-screen.
+Evidence: axe-core, rule `scrollable-region-focusable`, impact **serious**,
+          2 node instances — `mobile /pricing` and `mobile /family-display`
+          only (both clean at 1280px, which is why a desktop-only pass would
+          have missed them). This is the plan-comparison table on the pricing
+          page, i.e. the content a buyer needs most.
+Impact:   On a phone, a keyboard user (external keyboard, switch access) cannot
+          read the right-hand plan columns at all.
+Fix:      `tabIndex={0}` plus `role="group"` and an `aria-label` on the
+          scrolling `<div>`, which is axe's own recommended remedy. The pricing
+          table would be better as a real `<table>` with a caption.
+Status:   OPEN — VERIFIED IN BROWSER
+```
+
+---
+
+## C2-B12
+
+```
+[CLAUDE-2][LOW][A11Y] The FAQ accordion is half-marked: aria-expanded with no aria-controls, panels with no id or role, and the questions are not headings — while the page emits FAQPage structured data for crawlers
+File:     components/marketing/faq-accordion.tsx:14-34
+Problem:  The trigger has `aria-expanded` but no `aria-controls`; the panel it
+          opens has no `id`, no `role="region"` and no `aria-labelledby`; and the
+          question is a bare `<span>` inside a `<button>` rather than a button
+          inside a heading. Meanwhile app/(marketing)/faq/page.tsx renders
+          `FaqStructuredData`, so Google is handed the full Q&A outline that
+          assistive technology is not.
+Evidence: Driven by keyboard on /faq. Operation itself is FINE:
+            first trigger aria-expanded "true" -> Enter -> "false" -> Space -> "true"
+          Semantics:
+            aria-controls: null      button id: ""      panel id: none
+            panel: <div class="border-t border-border px-5 py-4 text-sm text-muted …">
+            nearest heading ancestor of the trigger: null
+          Accessibility tree of the open panel:
+            - tabpanel "Privacy & Security 1":
+              - button "Is my family's data private?" [expanded]
+              - text: Yes. Every database table enforces row-level security, …
+          The answer is loose text with no association to the question.
+          Real heading outline of the whole /faq page:
+            H1 "Questions, answered"
+            H2 "Less Managing Life. More Living It."
+            H4 "Product"  H4 "Company"  H4 "Get started"  H4 "Legal"
+          Thirteen FAQ questions, zero of them reachable by heading navigation.
+Impact:   On a page whose entire purpose is a list of questions, heading
+          navigation surfaces six headings, four of which are the footer. The
+          crawler gets better structure than the screen-reader user.
+Fix:      `useId()` the pair; `aria-controls={panelId}` on the button,
+          `id={panelId} role="region" aria-labelledby={buttonId}` on the panel,
+          and wrap each trigger in an `<h3>` so the questions join the outline
+          (which also removes the h2 -> h4 jump in C2-B09).
+          The sibling `faq-tabs.tsx` is a model of how to do this — see the
+          verified-clean list.
+Status:   OPEN — VERIFIED IN BROWSER
+```
+
+---
+
+## C2-B13
+
+```
+[CLAUDE-2][LOW][UX] The cookie banner is the last thing in the DOM: it is visible immediately but is more than 60 tab stops away
+File:     app/(marketing)/layout.tsx:19  (<ConsentManager /> after SkipLink, header,
+          main, footer, RegisterSW, ExitIntent)
+Problem:  The banner appears on first load, pinned bottom-right over the page,
+          and offers Accept all / Reject non-essential / Manage preferences.
+          Because it renders at the end of the layout it is also at the end of
+          the tab sequence, and nothing moves focus to it or announces it.
+Evidence: On a fresh no-storage context the banner IS present:
+            [{"label":"Cookie consent","aria-modal":null,
+              "text":"We value your privacyWe use strictly-necessary cookies…"}]
+          A 60-press tab walk from the top of the homepage reached: skip link,
+          logo, six nav links, theme toggle, two header CTAs, and then every
+          link in the page and the whole footer — and never reached
+          "Accept all". The banner's three buttons come after all 60.
+          The ARIA tree is otherwise correct:
+            - dialog "Cookie consent": … button "Accept all",
+              button "Reject non-essential", button "Manage preferences"
+Impact:   A keyboard or screen-reader user must traverse the entire page before
+          they can accept or reject cookies, on a control that is visually the
+          most prominent thing on screen. Not a WCAG failure on its own (the
+          banner is correctly NON-modal), but it inverts the experience.
+Fix:      Either render ConsentManager before <main> in the layout, or move
+          focus to the banner's first button when it appears and return focus on
+          dismissal. Announcing it via `aria-live="polite"` would also help.
+Status:   OPEN — VERIFIED IN BROWSER
+```
+
+---
+
+## C2-B14
+
+```
+[CLAUDE-2][LOW][UX] The theme toggle in the AUTH layout is 40x40 on touch; the identical control in the marketing header is 44x44
+File:     app/(auth)/layout.tsx:24   <ThemeToggle />                       (no classes)
+          components/marketing/site-header.tsx:96
+            <ThemeToggle className="… coarse:min-h-11 coarse:min-w-11" />
+Problem:  The marketing header opts the toggle into the touch-size utilities;
+          the auth layout does not, so on /login /signup /kid-login /welcome the
+          same button is 4px short in both axes.
+Evidence: Measured at 390x844 with touch emulation (pointer:coarse active):
+            button 40x40 "Switch to light mode"  -> /login /signup /kid-login /welcome
+            (the marketing header instance does not appear in the sub-44 list)
+          Passes WCAG 2.5.8 (24px) — this is a guideline/consistency miss, not a
+          conformance failure, hence LOW.
+Fix:      Either add the same `coarse:min-h-11 coarse:min-w-11` at the auth call
+          site, or better, bake it into components/theme/theme-toggle.tsx so no
+          call site can forget it.
+Status:   OPEN — VERIFIED IN BROWSER
+```
+
+---
+
+## C2-B15
+
+```
+[CLAUDE-2][LOW][UX] 10px is the marketing site's chrome type size: 80-156 sub-11px text nodes per page at phone width
+File:     components/marketing/site-header.tsx:104,106,109 (`text-[10px]` header CTAs)
+          components/marketing/site-footer.tsx:118 (`text-[11px]`), :122 (`text-[10px]`)
+          components/i18n/language-picker.tsx (`text-[0.68rem]` = 10.88px)
+          decorative product mock-ups: `text-[9px]`, `text-[8px]`, `text-[7px]`, `6px`
+Problem:  The header's primary CTA, the whole footer and the language control
+          render below 11px on a phone. WCAG sets no minimum font size, so this
+          is not a conformance failure on its own — but combined with C2-B07
+          (11px tap targets) and `text-muted` at 4.91:1 in the light theme it is
+          the point where three near-misses stack.
+Evidence: Counted at 390x844, elements with a direct text child under 11px:
+            /            80 nodes      /features   156 nodes
+            /how-it-works 106 nodes    /pricing     30 nodes
+            /faq /security /mobile /contact /privacy  22 nodes each
+            /login /signup /kid-login /welcome         2 nodes each
+          Samples:
+            10px   "Get Started Free"   (the primary CTA, in the header)
+            10px   "Log in"
+            10px   every footer link
+            10.88px "en-US" / "US"      (language control)
+            9px / 8px / 7px / 6px  inside the marketing phone mock-ups
+Impact:   The most important control on the page is set two points smaller than
+          the body copy around it.
+Fix:      Raise the header CTAs and footer links to `text-xs` (12px) minimum.
+          The 6-9px text lives inside decorative product mock-ups; if those are
+          meant to be decoration, they should be `aria-hidden` (they are
+          currently exposed to the accessibility tree as real content).
+Status:   OPEN — VERIFIED IN BROWSER
+```
+
+---
+
+## C2-B16
+
+```
+[CLAUDE-2][MEDIUM][PERF] Marketing pages block server render on SEQUENTIAL data calls: TTFB is exactly 7s, 14s or 21s depending on how many
+File:     app/(marketing)/pricing/page.tsx (3 calls), /faq /features /security
+          /privacy /terms /cookies /acceptable-use /ai /contact /mobile
+          /how-it-works /family-display (2 calls), /reviews /reviews/new (1 call)
+Problem:  Measured with curl against the running production build. The timings
+          are quantised into exact multiples of ~7 seconds, which is the
+          signature of N calls run one after another behind a ~7s timeout, not
+          of N calls run together:
+
+            /pricing                21.21s  21.22s  21.35s   (3 x 7)
+            /faq                    14.07s  14.08s           (2 x 7)
+            /features /security /privacy /terms /cookies
+            /acceptable-use /ai /contact /mobile
+            /how-it-works /family-display   ~14.1s each       (2 x 7)
+            /reviews /reviews/new    7.06s   7.08s            (1 x 7)
+            /login /signup /kid-login /welcome /join /offline  <0.05s (no calls)
+
+          Repeated requests give the same number every time — nothing is cached.
+CAVEAT:   **The absolute numbers are an artefact of the Supabase stub**: with
+          dummy credentials each call runs to its timeout instead of returning
+          in milliseconds, and against a real database these pages would be
+          fast. That part is NOT a finding. What the stub makes visible, and
+          what IS a finding, is the SHAPE: 1 call = 7s, 2 calls = 14s, 3 calls
+          = 21s. If the calls were awaited together (Promise.all) the worst case
+          would be ~7s regardless of count. They are awaited one at a time.
+          With a real database this converts a single round-trip of latency into
+          two or three, on every marketing page, on every request
+          (all of these are `dynamic = 'force-dynamic'` because they read the
+          locale cookie, so there is no ISR to hide it).
+Impact:   Marketing TTFB — the number Core Web Vitals scores and the one a
+          first-time visitor feels — is 2-3x the necessary latency. It also
+          means one slow query serialises behind another rather than beside it.
+Fix:      Hoist the independent reads in each marketing page into a single
+          `await Promise.all([...])`. Overlaps Pass C / Claude-4's territory;
+          recorded here because it was measured in this browser pass and no
+          prior pass could see it. Worth Claude-1 routing to whoever owns
+          delivery.
+Status:   OPEN — MEASURED (numbers stub-inflated; the serialisation is real)
+```
+
+---
+
+## Cross-checking Pass D (Rule 4 — verify, do not re-derive)
+
+| Pass D / session-1 finding | What the browser says |
+|---|---|
+| **F-D02** — 55 labels detached from their control, "includes the *public* survey form at `app/s/[slug]/survey-form.tsx:79`" | **NOT REPRODUCIBLE on any reachable public page.** Every control on /login, /signup, /kid-login and /contact resolves an accessible name. The one public page F-D02 names needs a published survey slug from the database → **BLOCKED**, not cleared. |
+| **F-D03** — 65 `<select>` with no accessible name | **NOT REPRODUCIBLE on the public surface.** The only public `<select>` I could render is /contact's topic picker, and the accessibility tree gives it a name: `combobox "What's this about?"` with eight named options. All 65 counted instances are in `app/(app)` → **BLOCKED**. |
+| **F-D01** — photo lightbox: no role, no Escape, no trap | **BLOCKED** — `components/modules/photos-module.tsx` is authenticated-only. Stays statically derived. |
+| **F-D04** — four hand-rolled `aria-modal` dialogs with no trap and no Escape | **VERIFIED as a class, and EXTENDED.** A fifth instance exists that F-D04 does not list, on the public surface: the cookie preference centre. Measured: focus never enters, Tab escapes after 8 stops, Escape ignored. See C2-B05. |
+| **F-D05** — 19 authenticated pages render no `<h1>` | **Public surface is clean**: /, /pricing, /features, /faq, /security, /privacy, /terms, /cookies, /acceptable-use, /ai, /blog, /contact, /mobile, /how-it-works, /family-display, /login, /signup, /kid-login, /welcome, /join, /offline, /reviews, /reviews/new — axe raised `page-has-heading-one` on none of the 46 runs. The 19 pages themselves are authenticated → BLOCKED. |
+| **F-D06** — clickable rows that are not keyboard reachable | Public equivalent is clean — the homepage "handled" cards are real `<a>` elements and appear in the tab walk at stops 14-19. The seven modules named are authenticated → BLOCKED. |
+| **F-D07** — 92 `window.confirm()` guards | Authenticated → BLOCKED. No `window.confirm` on any public route. |
+| **F-D10** — the lint config enables no `jsx-a11y` rules, so the class grew unseen | **Reinforced by a second, worse instance of the same pattern.** C2-B01 (`.focus-ring` painting permanently) is invisible to `next lint` AND to axe AND to every unit test in the repo — no static rule describes "this class should have been a state variant". F-D10's lesson generalises: the guards here cannot see what they are named for. The regression test proposed in C2-B01 is the kind of guard that *can* go red. |
+| **C2-14 / F-D14** — lint warnings | Not re-run; nothing in this pass touches it. |
+
+---
+
+## Verified clean — measured, not assumed
+
+Recorded so a later pass does not re-derive them. Each was checked in a browser.
+
+1. **Zero WCAG AA colour-contrast violations reported by axe across the whole
+   public surface, in BOTH themes.** 92 runs (23 routes x 2 viewports x 2
+   themes), rule `color-contrast`: **0 violations, 0 pages affected**, in dark
+   and in light. Every one of the 1,859 flagged nodes was the AAA rule
+   `color-contrast-enhanced` (7:1), not AA.
+   *With the limit stated plainly:* axe also returned **4,603 `incomplete`
+   node instances** (≈2,263 per theme) it could not judge — 326 of them
+   "background color could not be determined due to a background gradient",
+   the rest overlap/obscured/too-short. So "0 AA violations" means *0 among the
+   nodes axe could measure*. C2-B02 and C2-B03 are what a hand-rolled,
+   gradient-aware and state-aware check found in that blind spot.
+2. **No horizontal overflow anywhere.** `documentElement.scrollWidth` equals
+   `clientWidth` on **46/46** runs at 1280px and 390px, and on a further 4 spot
+   checks at 360px (/, /pricing, /faq, /features). Zero overflowing elements.
+3. **The skip link is correct — on the `(marketing)` routes, which are the only
+   ones that have it.** `Tab` #0 from a cold load of / and /pricing lands on
+   `a[href="#main-content"]`, it becomes visible on focus (`sr-only` →
+   `focus:not-sr-only`, measured box-shadow and a brand background appearing on
+   focus), and it targets a real `<main id="main-content">`. The implementation
+   in `components/a11y/skip-link.tsx` is sound and needs no change.
+   **It is only mounted in `app/(marketing)/layout.tsx`** — see C2-B17 for the
+   routes that do not get it.
+4. **The mobile navigation drawer is keyboard-correct.** At 390px:
+   `aria-label="Toggle menu"`, `aria-controls="mobile-navigation"`,
+   `aria-expanded` tracks state; Enter opens it; all 8 items are reachable;
+   Escape closes it and returns focus to the button
+   (`expandedAfterEscape: "false"`); and when focus leaves the header the drawer
+   closes itself via the `onBlur` handler (`expandedAfterWalk: "false"`), so
+   there is no stranded overlay. This is the pattern F-D04's dialogs should copy.
+5. **The FAQ tab strip is a correct WAI-ARIA tablist.** `role="tablist"` with an
+   `aria-label`, 6 tabs, roving `tabIndex`, `aria-selected`, `aria-controls` to a
+   real `role="tabpanel"`, and ArrowRight moves focus AND selection
+   (measured: focus → `role=tab` "Roles & Access", `aria-selected="true"` follows).
+   Every tab measures `min-h-[44px]`. `components/marketing/faq-tabs.tsx` is the
+   in-repo reference implementation.
+6. **The FAQ accordion *operates* correctly by keyboard** — Enter toggles,
+   Space toggles. Only its ARIA wiring is short (C2-B12).
+7. **The language picker's Escape handling is correct** — Escape closes the
+   listbox and restores focus to the trigger (measured `afterEsc.focus` =
+   the element carrying `aria-haspopup="listbox"`). Its option names are good:
+   `option "English (United States)" [selected]` and ten more.
+8. **`prefers-reduced-motion` is honoured globally** — `app/globals.css:474-481`
+   collapses every animation and transition to 0.001ms under
+   `@media (prefers-reduced-motion: reduce)`, and individual spinners carry
+   `motion-reduce:animate-none`.
+9. **No keyboard trap anywhere on the public surface.** Tab walks of 60 stops
+   (desktop /), 34 stops (settled re-walk), 30 stops (mobile /), 16 stops inside
+   the consent dialog and 14 inside the open mobile drawer all continued to move
+   and all reached `<body>` or wrapped normally. `<html lang="en-US" dir="ltr">`
+   is set on every route.
+
+---
+
+## Two corrections to my own measurements
+
+Recorded because both would have produced a wrong finding, and the second one
+nearly did.
+
+1. **The first theme sweep measured the light theme twice.** `scan.mjs` reused
+   one browser context per worker and wrote
+   `localStorage['bubaly-theme']='light'` after each page's dark pass — which
+   persisted, so every route *after the first in each worker* loaded light while
+   being recorded as dark. It reported "0 AA contrast failures in dark"; that
+   number was real but the dark coverage behind it was 4 routes, not 23. The
+   pass was redone (`contrast2.mjs`) with one pinned context per theme and an
+   assertion on `<html class>` before every measurement: **0/92 runs reported the
+   wrong theme.** The structural (non-contrast) axe results are unaffected —
+   `heading-order`, `region`, `landmark-one-main` and
+   `scrollable-region-focusable` do not depend on the theme.
+2. **My first tab walk read computed styles mid-transition and invented a
+   catastrophe.** Reading `getComputedStyle` immediately after `Tab` caught the
+   150ms Tailwind `transition` (which animates `box-shadow`) part-way — one stop
+   literally returned `0.0655955px` of ring — so 17 of 34 elements looked like
+   they had **no focus indicator at all**, including the entire main navigation.
+   Re-measured with a 260ms settle after every keypress: elements using
+   `focus-visible:focus-ring` **do** show the ring correctly, and the main nav is
+   fine. **That reading is withdrawn.** What survives is narrower and real: only
+   the **bare** `.focus-ring` class fails, and it fails because the ring is
+   always on rather than never on (C2-B01), which is provable without any timing
+   at all — the ring is present while `document.activeElement === document.body`.
+
+---
+
+## BLOCKED — what a browser still could not see
+
+Listed so "we could not look" never reads as "it is clean".
+
+| Surface | Why | Consequence |
+|---|---|---|
+| `app/(app)` — all 354 authenticated pages | Supabase is stubbed with dummy credentials; no session can be created (no local Supabase: no docker daemon, no CLI) | **Pass D's F-D01, F-D02, F-D03, F-D04, F-D05, F-D06, F-D07, F-D08, F-D09, F-D11 remain statically derived and unverified by execution.** The two HIGH ones (F-D02/F-D03) are counted almost entirely here |
+| `app/s/[slug]` — the public survey form | Needs a published survey row | The **one public instance F-D02 cites** could not be confirmed or contradicted |
+| `/gift/[token]`, `/pay/[handle]`, `/blog/[slug]`, `/customers/[slug]` | Every one needs a token or slug from the database | Detail/route-param templates unaudited in a browser |
+| `--success` / `--warning` chips and toasts in the light theme | The tokens measure 2.70-2.91:1 (C2-B03) but the components that use them are behind the login wall | Token ratios are measured; the rendered components are not |
+| A real screen reader (NVDA / JAWS / VoiceOver) | Not available in this container | "Screen-reader output" was covered via the **accessibility tree** (Playwright `ariaSnapshot`) plus axe's name/role/state checks. That is the computed input a screen reader speaks from, but it is not the same as hearing one |
+| Windows High Contrast / forced-colors | Not emulated | `forced-colors` handling unaudited |
+| Real devices / real touch | `isMobile:true, hasTouch:true` Chromium emulation only (verified `pointer: coarse` matched) | Emulated, not physical |
+
+**Database-backed content rendered empty or fell back throughout this pass.
+None of that is reported as a defect above** — it is the stub, and the one place
+it produced a number worth keeping (C2-B16) is labelled with exactly what the
+stub contributed and what it did not.
+
+---
+
+## Addendum — added after the section above was written
+
+### C2-B17
+
+```
+[CLAUDE-2][MEDIUM][A11Y] The skip link exists but is mounted on ONE layout: 7 of 23 public routes have no way to bypass the header, and 5 of them have a <main> with no id to skip to
+File:     app/(marketing)/layout.tsx:12   <SkipLink />        <- the only mount
+          app/(auth)/layout.tsx:24        <main …>            <- no id, no SkipLink
+          app/reviews/…                   <main …>            <- no id, no SkipLink
+          app/join/page.tsx, app/offline/page.tsx             <- no <main> at all
+          components/a11y/skip-link.tsx                       <- the component is fine
+Problem:  `components/a11y/skip-link.tsx` carries a docstring that says exactly
+          what to do — "Must be the first focusable element in the DOM — render
+          it at the top of each layout, and give the corresponding <main>
+          id='main-content'" — and it is honoured in one layout out of four.
+          WCAG 2.4.1 Bypass Blocks (level A) applies per page, so the routes
+          without it fail a level-A criterion even though the product has a
+          correct implementation sitting in the repo.
+Evidence: Measured per route: presence of <main>, its id, presence of
+          a[href="#main-content"], and what the FIRST Tab press actually lands on:
+
+            route        <main> ids        #main-content  skip link  first Tab stop
+            /            ["main-content"]  yes            yes        A "Skip to content"   OK
+            /pricing     ["main-content"]  yes            yes        A "Skip to content"   OK
+            /login       ["(no id)"]       no             NO         A "Bubaly home"
+            /signup      ["(no id)"]       no             NO         A "Bubaly home"
+            /kid-login   ["(no id)"]       no             NO         INPUT (autofocused)
+            /welcome     ["(no id)"]       no             NO         A "Bubaly home"
+            /reviews     ["(no id)"]       no             NO         A "Write a review"
+            /join        []                no             NO         A "Bubaly home"
+            /offline     []                no             NO         (body — no focusable element on the page)
+
+Impact:   Every sign-in and sign-up route makes a keyboard or screen-reader user
+          walk the header before reaching the form. It is a small header, so the
+          practical cost is low — but it is a level-A criterion, and the fix is
+          two lines per layout against a component that already exists and works.
+          `/offline` having no focusable element at all is a separate small
+          oddity: there is nothing to Tab to, and no retry control.
+Fix:      Add `<SkipLink />` and `id="main-content"` to `app/(auth)/layout.tsx`
+          and to the `reviews` layout; add both plus a `<main>` to /join and
+          /offline (which also closes C2-B10). Then assert it once in a test:
+          every public route's first Tab stop is the skip link.
+Status:   OPEN — VERIFIED IN BROWSER
+```
+
+### Correction 3 — to my own verified-clean item #3
+
+Verified-clean item #3 above originally read "`<main id="main-content">` exists
+on every `(marketing)` and `(auth)` route". **That was wrong**, and it was wrong
+in the direction that matters: it turned an unchecked assumption into a clean
+bill of health, which is the exact failure mode this audit keeps naming. Only
+`app/(marketing)/layout.tsx` mounts `SkipLink`; the `(auth)` layout renders a
+`<main>` with no `id` and no skip link. The sentence has been amended in place
+and the real state is filed as C2-B17. The claim came from reading the
+marketing layout and generalising — the browser check that produced the table
+above took thirty seconds and should have come first.
+
+### Revised counts for this session
+
+| Severity | Count |
+|---|---|
+| HIGH | 2 (C2-B01, C2-B02) |
+| MEDIUM | 10 (C2-B03, B04, B05, B06, B07, B08, B09, B10, B16, B17 — B16 is PERF) |
+| LOW | 5 (C2-B11, B12, B13, B14, B15) |
+| **Total new** | **17** (`C2-B01`–`C2-B17`) |
+
+Plus 9 verified-clean items (one amended), 3 method corrections, and a
+7-row BLOCKED table.
+
+---
+---
+
+# Session 3 (2026-09-15) — the Expo app
+
+## STATUS (session 3, 2026-09-15)
+
+> NOTE: the STATUS block at the top of this file is session 2's. Rule 1 of this
+> file is "append; never delete or rewrite existing content", so it has been
+> left byte-for-byte alone rather than updated in place. **This block supersedes
+> it.** Claude-1: when rebuilding the board, read this one.
+
+CURRENT: **done.**
+SCOPE THIS SESSION: the `mobile/` Expo app — the second application in this
+  repo, which eleven prior passes had essentially not opened. The finalaudit
+  "Mobile/Responsive" section is about the *web* app at phone width; the only
+  two existing findings that touch `mobile/` at all are Claude-1's F-C10 (no
+  tests, thin CI) and the Metro watch-folder note. Nothing had looked at the
+  React Native accessibility API, the shared-token contract as the Expo app
+  actually consumes it, touch targets, font scaling, or mobile i18n.
+HARD LIMIT, STATED UP FRONT: **the app was never run.** No simulator, no
+  device, no Metro bundle, no `expo export`, no VoiceOver, no TalkBack, no
+  screenshot. Everything below is source reading plus arithmetic over
+  `design/tokens.json`. Where a claim needs a device to confirm, it says so in
+  its own Evidence block. "We could not look" is not "it is clean."
+NEW FINDINGS: `C2-M01`–`C2-M16` (2 HIGH, 9 MEDIUM, 5 LOW, 0 CRITICAL).
+  Numbered `M` so they cannot collide with `C2-01`–`C2-18` or `C2-B01`–`C2-B17`.
+  One of them (C2-M03) is mostly a **web** finding that the mobile lens
+  uncovered; it is filed here because it is i18n presentation, which is my
+  scope, and because no other worker has it.
+NOT REACHED: everything requiring a running app — see the BLOCKED table at the
+  end of this section (8 rows).
+FILES TOUCHED: `audit/claude-2.md` only (this append). No source file edited,
+  no `npm install` run in `mobile/`, no commit.
+LAST-UPDATE: 2026-09-15
+
+---
+
+## Is the Expo app a thin shell? No — but it is smaller than its file count suggests
+
+Honesty first, because the brief asked for it. `mobile/` is **21 `.tsx` files**
+(7 screens/layouts, 9 shared components, 5 others) plus 20 `.ts` library files.
+It is a real, working companion app: sign-in, a Today dashboard, calendar,
+chores with a write action, grocery with optimistic toggles, a voice assistant
+with recording and transcription, and a settings modal. It is not a stub.
+
+But its *surface* is narrow. Six of the seven screens are read-mostly; there
+are exactly three write paths (complete a chore, toggle a grocery item, add a
+grocery item) and everything else deep-links to the web app via
+`Linking.openURL(webUrl(...))`. So the defect density below is not the density
+of a 21-screen product — several findings are one line each, and I have marked
+the trivial ones LOW rather than inflating them.
+
+Two things about it are genuinely **good**, and it would be dishonest to bury
+them under sixteen findings:
+
+1. **Every touchable in the app has an accessible name.** I enumerated all 12
+   `<Pressable>` sites (there are no `TouchableOpacity`/`TouchableHighlight`
+   anywhere) and each one either sets `accessibilityLabel` or contains a `Text`
+   child that RN derives a name from. Zero unnamed touchables — *better than the
+   web app*, where C2-11 measured two unnamed icon-only buttons. The RN
+   equivalent of the classic "unnamed `<button>`" defect does not exist here.
+2. **The auth/session layer is a deliberate port of the web's persistent-login
+   work, not a repeat of its bugs.** The brief asked whether
+   `mobile/app/(auth)` repeats the web's session defects. It does not.
+   `mobile/src/lib/auth-session.ts:20-25` explicitly refuses to treat
+   `INITIAL_SESSION` with a null session as proof of sign-out;
+   `auth-core.ts:36-50` re-implements `isRetryableAuthError` with an in-file
+   comment explaining *why* it is duplicated rather than imported (Metro only
+   watches `mobile/` and `design/`, so a runtime import from the web `lib/`
+   would not resolve — that is the same constraint Claude-1 documented for the
+   Metro watch folders, correctly reasoned about here); sessions live chunked in
+   the Keychain/Keystore via `expo-secure-store`; `sign-out.ts` implements a
+   revision-guarded local-scope sign-out so signing out of the phone cannot
+   revoke the web session. It shares `shared/auth/refresh-fetch.ts` with the web.
+   This is the *output* of the session work, arriving on mobile — the opposite
+   of drift. **No finding is filed against it.**
+
+And the shared-token pipeline itself works. `design/tokens.ts:55-58` builds
+`palette(mode)` from `Object.keys(tokensJson.colors.dark)`, so a token added to
+`design/tokens.json` for the web is **automatically present** in the Expo app's
+`useTheme().colors` with no mobile-side change. `borderInput` is already there.
+That makes C2-M01 below a missed *call site*, not a broken contract — which is
+better news than the brief anticipated, and a much cheaper fix.
+
+### Method
+
+```
+$ find mobile -type f \( -name '*.tsx' -o -name '*.ts' \) -not -path '*/node_modules/*' | wc -l
+   41          (21 .tsx + 20 .ts)
+$ cd mobile && npx tsc --noEmit ; echo EXIT=$?
+   app/(tabs)/assistant.tsx(5,105): error TS2307: Cannot find module 'expo-audio'
+   EXIT=2                       <- 1 error, and it is an ARTEFACT OF THIS BOX:
+```
+`mobile/node_modules` here is a partial install (341 packages; `expo-audio`,
+`@expo/ui` and `@expo/metro-runtime` are absent from disk). I verified against
+the lockfile that this is **not** a repo defect before reporting it as noise:
+
+```
+declared deps NOT in lockfile: none
+lock root deps == package.json deps: True True
+declared deps NOT on disk here: ['@expo/metro-runtime', '@expo/ui', 'expo-audio']
+```
+So CI's `npm ci` installs them and this error does not occur there. **With those
+three excluded, the Expo app typechecks clean.** Per the brief I did not run
+`npm install` in `mobile/`.
+
+Contrast figures below are computed from `design/tokens.json` with the WCAG 2.1
+relative-luminance formula, and — where a colour sits on a glass surface — over
+the **composited** background (`glass` colour at its mode's alpha over `bg`),
+not the raw `bg`. That composite step is why several of my numbers are slightly
+worse than C2-B03's raw-token figures for the same tokens.
+
+---
+
+## C2-M01
+
+```
+[CLAUDE-2][HIGH][A11Y] The `borderInput` fix shipped to the web and never reached the Expo app — mobile text inputs are still at 1.28:1 / 1.38:1, with nothing masking it
+File:     mobile/src/components/Field.tsx:21
+Problem:  C2-B04 measured the web's text inputs at 1.28:1 (light) / 1.38:1
+          (dark) border-against-fill and recommended "a dedicated
+          `--border-input` token at >=3:1 against `--surface`". Claude-1 applied
+          exactly that (session 3 board, and `design/tokens.json` now carries
+          `borderInput` in both modes). The Expo app never got the call site:
+
+            mobile/src/components/Field.tsx:21
+              borderColor: error ? colors.danger : colors.border,
+                                                   ^^^^^^^^^^^^^
+
+          `Field` is the app's ONLY text-entry component — both sign-in fields,
+          the grocery "Add an item…" box and the assistant composer.
+Evidence: Computed from design/tokens.json (WCAG 2.1 relative luminance), border
+          against the TextInput's own fill (`backgroundColor: colors.surface`,
+          Field.tsx:22):
+
+                                          DARK        LIGHT
+            colors.border   on surface   1.38 : 1    1.28 : 1   <- shipped
+            colors.borderInput on surface 3.56 : 1   3.52 : 1   <- one word away
+
+          Those dark/light figures are the SAME two numbers C2-B04 measured in a
+          real browser on the web app, and the same two Claude-1's guard test
+          (tests/focus-and-boundary-contract.test.ts) re-derives from the token
+          file. Three independent derivations agree.
+Impact:   Worse than the web's pre-fix state, for a reason specific to RN. On
+          the web, C2-B01's unconditional `.focus-ring` was accidentally
+          outlining every input, which is what kept the fields visible while the
+          border was at 1.28:1 — one defect masking another. **React Native has
+          no such accident.** `Field` defines no focused state at all, and RN
+          gives a `TextInput` no platform focus ring. So on mobile the 1.28:1
+          border is the only boundary a low-vision user has, with nothing
+          compensating. WCAG 1.4.11 Non-text Contrast (AA) requires 3:1.
+Fix:      One word: `colors.border` -> `colors.borderInput` at Field.tsx:21.
+          No token work needed — `palette()` already exposes it
+          (design/tokens.ts:55-58 derives the palette from the JSON's key set,
+          so the token arrived on mobile the moment it was added for the web).
+          Then extend Claude-1's tests/focus-and-boundary-contract.test.ts with
+          one assertion that no RN component styles an input border from
+          `border`, so this cannot silently un-fix itself.
+Status:   OPEN — verified by computation, NOT rendered (no simulator available)
+```
+
+---
+
+## C2-M02
+
+```
+[CLAUDE-2][MEDIUM][A11Y] Nothing in the Expo app defines a focus state — and it ships with `supportsTablet: true`
+File:     mobile/src/components/{Field,Button,ListRow}.tsx, mobile/app/**/*.tsx
+Problem:  Zero components define a focused/focus-visible appearance. `Button`
+          and `ListRow` style only `pressed`; `Field` styles only `error`. There
+          is no `onFocus`/`onBlur` state anywhere in the app.
+Evidence: $ grep -rn "onFocus\|focusVisible\|isFocused" mobile/app mobile/src --include=*.tsx
+            (no output)
+          mobile/app.json: "ios": { "supportsTablet": true }
+Impact:   Touch users are unaffected. The people affected are iPadOS users with
+          a hardware keyboard and Full Keyboard Access on, and Android users
+          driving the app by D-pad or an external keyboard — RN's default
+          focus affordance for a `Pressable` is minimal to none, and this app
+          adds nothing. WCAG 2.4.7 Focus Visible. The web app treats this as
+          important enough that C2-B01 + C2-B04 shipped together as one commit;
+          the phone app has neither half.
+Fix:      Give `Button`, `ListRow` and `Field` a focused style driven by
+          Pressable's `({ focused })` / TextInput's `onFocus`, reusing the same
+          brand ring the web uses. Cheapest correct version: a 2px
+          `colors.brandText` outline at >=3:1 against the component's own fill.
+Status:   OPEN — static read. **Cannot be confirmed without an iPad + Full
+          Keyboard Access**; the source absence is certain, the rendered
+          severity is not.
+```
+
+---
+
+## C2-M03
+
+```
+[CLAUDE-2][HIGH][I18N] Every date and time in BOTH apps is formatted `en-US` — 160 hard-pinned call sites on the web, 1 on mobile, against 11 shipped locales
+File:     mobile/src/lib/format.ts:9  (the mobile instance — one chokepoint)
+          components/**, app/** (the web instance — 160 call sites, 86 files)
+Problem:  The mobile lens found this; it is much larger on the web.
+
+          mobile/src/lib/format.ts:9 — every date and time the Expo app renders
+          goes through this one function:
+            const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, ...options })
+                                                  ^^^^^^^
+          The locale is pinned. `formatTime` therefore always produces
+          "3:00 PM"; `dayLabel` always produces "Sat, Sep 6". The mobile app
+          ships a SEVEN-locale message catalogue
+          (mobile/src/lib/assistant-messages.json: en-US, de-DE, es-ES, fr-FR,
+          it-IT, nl-NL, pt-PT) and resolves the device locale at
+          mobile-i18n.ts:7-9 — so the app already knows the user reads German,
+          and still renders 12-hour US times to them.
+Evidence: $ grep -rnoE "toLocale(Date|Time)?String\('en-US'|Intl\.DateTimeFormat\('en-US'" \
+              components/ app/ --include=*.tsx --include=*.ts | wc -l
+            160
+          $ ... -l | wc -l
+            86            # files
+          $ grep -rnoE "toLocale(Date|Time)?String\(locale|Intl\.DateTimeFormat\(locale" \
+              components/ app/ --include=*.tsx --include=*.ts | wc -l
+            59            # the locale-aware minority
+
+          Worst offenders (call sites per file):
+            components/modules/calendar-module.tsx   14
+            components/modules/school-module.tsx      8
+            components/modules/meals-module.tsx       7
+            components/modules/sports-module.tsx      5
+            components/modules/family-module.tsx      4
+            app/(app)/home/page.tsx                   4
+
+          The calendar module — the single place where date format matters most
+          — is the single worst file.
+
+          Web locale catalogue (lib/i18n/locales.ts:11-18, and 12 JSON
+          catalogues in lib/i18n/messages/): en-US, en-GB, de-DE, es-ES, es-MX,
+          es-US, fr-FR, fr-CA, it-IT, nl-NL, pt-PT. Seven of those eleven
+          (de-DE, es-ES, es-MX, fr-FR, fr-CA, it-IT, nl-NL, pt-PT) use 24-hour
+          time as the everyday convention; en-GB writes "6 Sep", not "Sep 6".
+          The repo has a full, careful locale-resolution module
+          (lib/i18n/resolve.ts, with a documented cookie > geo >
+          accept-language > default precedence) whose answer 160 date call
+          sites never ask for.
+Impact:   Translated UI, untranslated time. A German family reads a fully
+          localised interface and then "Fußball · 4:00 PM". This is the class of
+          defect that reads as "this product was not really built for us" —
+          more damaging to trust than a missing string, because it looks
+          deliberate. It also silently affects en-GB, which otherwise looks
+          perfectly translated.
+Fix:      Mobile is one line and should go first — thread the resolved locale
+          into `partsFor()` (format.ts:7-14) and pass it to
+          `Intl.DateTimeFormat`; `mobileTranslate` already has the locale.
+          Web: introduce one `lib/i18n/format-date.ts` helper taking the
+          resolved locale, migrate the 86 files to it, and add a lint rule or a
+          unit test asserting no `'en-US'` literal appears in a
+          `toLocale*String` / `DateTimeFormat` call under components/ or app/.
+          Exempt the genuinely correct ones deliberately: lib/services/scope.ts
+          uses 'en-CA' to get YYYY-MM-DD keys and 'en-US' with hour12:false for
+          an hour key — those are machine formats, not user-facing, and must be
+          left pinned.
+Status:   OPEN — verified by grep + reading the locale catalogue. Not rendered.
+          Cross-checked against all four audit files and finalaudit.md: **no
+          existing finding covers this.**
+```
+
+---
+
+## C2-M04
+
+```
+[CLAUDE-2][MEDIUM][I18N] The Expo app translates exactly one screen; the other six and the tab bar are hardcoded English — and the seam runs through a single function
+File:     mobile/app/(auth)/sign-in.tsx, (tabs)/{_layout,index,calendar,chores,
+          grocery}.tsx, app/settings.tsx, app/_layout.tsx:37,
+          mobile/src/lib/{auth-core,format,chores-core}.ts
+Problem:  `mobile/src/lib/mobile-i18n.ts` + `assistant-messages.json` are a real,
+          working 7-locale i18n layer. EVERY key in that catalogue is namespaced
+          `mobileAssistant.*` — it was built for the assistant screen and stopped
+          there. 4 of 19 .tsx files import it:
+
+            $ grep -rln "mobile-i18n" mobile/app mobile/src
+              mobile/app/settings.tsx          (3 calls — sign-out strings only)
+              mobile/app/(tabs)/assistant.tsx  (20 calls — fully translated)
+              mobile/src/components/ReconnectingScreen.tsx  (4 calls)
+              mobile/src/lib/{voice-core,api,auth,assistant-core}.ts
+
+          Everything else is English literals. A partial census:
+            sign-in.tsx     "Run your family like a calm, connected team.",
+                            "Sign in with the account you use on the web.",
+                            label="Email", label="Password", title="Sign in",
+                            "Forgot password?", "Create an account", and the
+                            EXPO_PUBLIC_* misconfiguration notice (lines 57-58)
+            (tabs)/_layout  all five tab labels: Today, Calendar, Chores,
+                            Grocery, Assistant  (TABS const, lines 8-12)
+            app/_layout:37  title: 'Settings'   (the modal header)
+            index.tsx       "Chores open", "To buy", "Next 3 days", "Up next",
+                            "Chores due", "All caught up.", "Ask Bubaly",
+                            "Open the assistant", accessibilityLabel="Settings"
+            calendar.tsx    "Calendar", "The next two weeks", "A clear
+                            fortnight", "Nothing scheduled in the next 14 days…"
+            chores.tsx      "Chores", "Done", "Nothing open", "Every chore is
+                            done or waiting on approval."
+            grocery.tsx     "Grocery", "Add an item…", "New grocery item",
+                            "Add", "Your list is empty", "Add items above…"
+            settings.tsx    "Appearance", "Account", "About", "Dark", "Light",
+                            "Match device", "Manage family on the web",
+                            "Members, invites, billing", "Notification
+                            preferences", "Privacy", "Terms"
+            auth-core.ts    all 8 sign-in error + validation strings
+            format.ts       "Today", "Tomorrow", "All day", "No due date",
+                            "Good night/morning/afternoon/evening", "Overdue · ",
+                            "Due today · ", "Due "
+            chores-core.ts  "To do", "In progress", "Waiting for approval",
+                            "Needs another go"
+Evidence: The seam is visible inside a single function —
+          mobile/src/lib/auth.tsx:83-84:
+
+            if (error?.code === 'session_write_blocked')
+              return { error: mobileTranslate(deviceLocale(), 'mobileAssistant.signInRetry') };
+            return { error: error ? friendlyAuthError(error.message) : null };
+                                    ^^^^^^^^^^^^^^^^^ returns English literals
+
+          One branch is localised, the next line is not, in the same return
+          statement of the same function. That is the shape of a migration that
+          stopped rather than a decision that was made.
+Impact:   A non-English user signs in through an English form, navigates an
+          English tab bar, reads English empty states and English chore statuses
+          — and then reaches one screen, the assistant, that speaks their
+          language. The inconsistency is more confusing than uniform English
+          would be, and it makes the shipped 7-locale catalogue look broken.
+Fix:      Rename the namespace (`mobileAssistant.*` -> `mobile.*`, or add a
+          second `mobile.ui.*` block) and lift the ~60 strings above into it.
+          The three pure modules (format.ts, chores-core.ts, auth-core.ts) should
+          return KEYS, not sentences, so the pure/unit-tested layer stays
+          framework- and language-free — that is the same discipline
+          `assistant-core.ts` already follows by taking a `MobileTranslator`.
+          Pair this with C2-M03: they are the same user's experience.
+Status:   OPEN — verified by grep. Not rendered.
+```
+
+---
+
+## C2-M05
+
+```
+[CLAUDE-2][MEDIUM][A11Y] No headings, no live regions, no hints anywhere in the Expo app — and the only two `role="alert"` uses do not announce anything
+File:     all 21 mobile .tsx files; specifically mobile/src/components/Screen.tsx:23,
+          mobile/app/settings.tsx:68, mobile/src/components/ReconnectingScreen.tsx:20
+Problem:  React Native's accessibility API is not the web's, and three of its
+          parts are entirely unused:
+
+            $ for p in accessibilityRole=\"header\" accessibilityLiveRegion \
+                       accessibilityHint accessible= allowFontScaling \
+                       importantForAccessibility accessibilityElementsHidden; do
+                printf '%-34s %s\n' "$p" "$(grep -rno "$p" mobile/app mobile/src --include=*.tsx | wc -l)"
+              done
+              accessibilityRole="header"          0
+              accessibilityLiveRegion             0
+              accessibilityHint                   0
+              accessible=                         0
+              allowFontScaling                    0
+              importantForAccessibility           0
+              accessibilityElementsHidden         0
+
+          (a) **No headings.** `Screen.tsx:23` renders every screen title as
+              `<AppText variant="title">` — a plain `Text`. VoiceOver's rotor
+              and TalkBack's heading navigation find nothing on any of the seven
+              screens. This is the RN equivalent of a page with no `<h1>`.
+              `accessibilityRole="header"` is the one-prop fix and the app uses
+              `accessibilityRole` correctly 15 times elsewhere, so this is an
+              omission rather than an unfamiliarity.
+          (b) **Nothing is ever announced.** The assistant's replies arrive as
+              new `FlatList` rows (assistant.tsx:136 `<Bubble>`); errors arrive
+              as `role: 'error'` bubbles; chore-action failures render at
+              chores.tsx:46; grocery failures at grocery.tsx:76. None of these
+              is a live region and none calls
+              `AccessibilityInfo.announceForAccessibility`. A blind user sends a
+              voice command to a voice assistant and is told nothing came back.
+          (c) **The two `accessibilityRole="alert"` uses do not do what they
+              look like they do.** settings.tsx:68 and ReconnectingScreen.tsx:20
+              set `accessibilityRole="alert"` on a `Text` that appears when
+              sign-out fails. In RN, `alert` is a ROLE, not a live region: it
+              changes how the node is described once focus reaches it, and
+              triggers no announcement on either platform. Announcing requires
+              `accessibilityLiveRegion="assertive"` (Android) or
+              `AccessibilityInfo.announceForAccessibility` (iOS). Both files
+              read as though someone reached for the web's `role="alert"`
+              semantics and got the RN prop that shares its name.
+Evidence: The prop census above. `alert`'s RN behaviour: it is in RN's
+          accessibilityRole enum and is documented as describing the element;
+          Android live-region behaviour is a separate prop
+          (`accessibilityLiveRegion`), which is at 0 occurrences here.
+Impact:   Screen-reader users cannot navigate any screen structurally, get no
+          feedback when an action fails, and get no feedback when the assistant
+          — the app's headline feature — answers.
+Fix:      Three cheap changes, in this order:
+          1. `Screen.tsx:23` — add `accessibilityRole="header"` to the title
+             `AppText` (fixes all seven screens at once).
+          2. Wrap the error/status text in chores.tsx:46, grocery.tsx:76,
+             assistant.tsx:141-142 and the two sign-out failures in a small
+             `<Announce>` component that sets
+             `accessibilityLiveRegion="assertive"` and calls
+             `AccessibilityInfo.announceForAccessibility` on mount.
+          3. Announce assistant replies the same way (or at minimum the phase
+             transitions already rendered at assistant.tsx:138).
+Status:   OPEN — verified by census. **Screen-reader behaviour NOT observed** —
+          no device. The absence of the props is certain.
+```
+
+---
+
+## C2-M06
+
+```
+[CLAUDE-2][MEDIUM][A11Y] Two nested-touchable mistakes: a checkbox whose state lives on the wrong node, and a role+label on a View that is not an accessibility element
+File:     mobile/app/(tabs)/grocery.tsx:81-92
+          mobile/app/(tabs)/assistant.tsx:226-234
+Problem:  (a) grocery.tsx:81-92 — a `ListRow` with `onPress` (which renders a
+              `Pressable` with `accessibilityRole="button"` and
+              `accessibilityLabel={"Check Milk"}`, ListRow.tsx:30) contains, in
+              its `leading` slot, a SECOND `Pressable`:
+
+                <Pressable accessibilityRole="checkbox"
+                           accessibilityState={{ checked: item.is_checked }}
+                           onPress={() => toggle(item)} hitSlop={8}>
+
+              Both call the same `toggle`. The `checked` state — the only thing
+              that says whether this item is already in the cart — is on the
+              INNER node. The outer node, which spans the whole row and is what
+              a screen reader lands on first, announces "Check Milk, button"
+              with no state at all. Nested touchables are also ambiguous for
+              VoiceOver's element grouping: depending on platform the inner
+              checkbox is either swallowed or announced as a duplicate control
+              for the same action.
+          (b) assistant.tsx:226-234 — the assistant's result cards:
+
+                <GlassCard ... accessibilityRole={open ? 'button' : undefined}
+                               accessibilityLabel={section.title}>
+                  <Pressable onPress={open} disabled={!open} style={...}>
+
+              `GlassCard` renders a plain `View` (GlassCard.tsx:9). A `View` is
+              only exposed as a SINGLE accessibility element when
+              `accessible={true}` is set — and `accessible=` is at 0 occurrences
+              app-wide (C2-M05). So the role and label on the card are inert,
+              and the `Pressable` that actually handles the press has neither a
+              role nor a label: it is announced as its concatenated child text
+              with no indication that it is a button or that it opens the web.
+Evidence: The two code blocks above, read against RN's rule that `View` needs
+          `accessible` to become an a11y element, and against the app's own
+          census (`accessible=` : 0 occurrences).
+Impact:   (a) A blind user cannot tell which grocery items are already checked —
+          the list's entire state is invisible to them. (b) The assistant's
+          result cards do not announce as actionable, so the "open this on the
+          web" affordance is undiscoverable.
+Fix:      (a) Collapse to ONE touchable: put `accessibilityRole="checkbox"` and
+              `accessibilityState={{ checked: item.is_checked }}` on the
+              `ListRow` Pressable (add both as `ListRow` props) and make the
+              leading icon a non-interactive `View`/`Ionicons`. One control, one
+              label, one state.
+          (b) Move `accessibilityRole="button"` and `accessibilityLabel` from
+              the `GlassCard` onto the inner `Pressable`, and drop them from the
+              card.
+Status:   OPEN — verified by source reading. Announcement order NOT observed.
+```
+
+---
+
+## C2-M07
+
+```
+[CLAUDE-2][MEDIUM][A11Y] The theme picker's radios report `selected` instead of `checked` — and the same file's sibling pattern gets it right
+File:     mobile/app/settings.tsx:35-43
+Problem:  Three theme options are rendered as:
+
+            <Pressable
+              accessibilityRole="radio"
+              accessibilityState={{ selected: active }}
+              ...
+
+          For `accessibilityRole="radio"` the state key RN maps to the platform
+          is `checked` — on Android it drives
+          `AccessibilityNodeInfo.setChecked()`, which is what TalkBack reads out
+          as "selected"/"not selected" for a radio button. `selected` maps to a
+          different trait and is not what a radio's platform semantics read.
+          There is also no `accessibilityRole="radiogroup"` wrapper (the
+          container at settings.tsx:31 is a bare `View`), so there is no group
+          context and no "2 of 3" position.
+Evidence: The app's OWN sibling usage is correct — mobile/app/(tabs)/grocery.tsx:88
+            <Pressable accessibilityRole="checkbox"
+                       accessibilityState={{ checked: item.is_checked }}
+          Same codebase, same week, correct key. This is a slip, not a
+          misunderstanding, which is why it is cheap to fix.
+Impact:   A TalkBack user opening Settings hears three radio buttons and cannot
+          tell which theme is currently active. Small surface, but it is the
+          only settings control in the app.
+Fix:      `accessibilityState={{ checked: active }}` on each Pressable, and
+          `accessibilityRole="radiogroup"` on the wrapping `View` at line 31.
+Status:   OPEN — verified by source reading. Not heard.
+```
+
+---
+
+## C2-M08
+
+```
+[CLAUDE-2][MEDIUM][UX] A failed refresh is completely silent on three of four list screens — the error renders only where it cannot be seen
+File:     mobile/app/(tabs)/chores.tsx:66-74
+          mobile/app/(tabs)/calendar.tsx:46-54
+          mobile/app/(tabs)/grocery.tsx:94-102
+Problem:  All three screens put the load error inside `ListEmptyComponent`:
+
+            ListEmptyComponent={
+              chores.loading ? null : (
+                <View ...>
+                  {chores.error ? <AppText color={colors.danger}>{chores.error}</AppText>
+                                : <EmptyState ... />}
+                </View>
+              )
+            }
+
+          `ListEmptyComponent` renders ONLY when `data.length === 0`.
+          `useAsyncData` keeps the previous `data` on a failed load
+          (use-async-data.ts:26-33 sets `error` and leaves `data` untouched). So
+          the failure is visible only in the one case where the list was already
+          empty — precisely the case where it matters least. A pull-to-refresh
+          that fails while rows are on screen spins, stops, and changes nothing:
+          the user is looking at stale data believing it is current.
+Evidence: use-async-data.ts:26-33 — `setDataState` is only called in the success
+          branch; the catch branch sets `error` alone. And the same file's
+          `RefreshControl` (chores.tsx:45) resets regardless of outcome.
+Impact:   Same defect class as C2-15 on the web, in three fresh instances. A
+          parent pulls to refresh the chore list on a flaky connection, sees the
+          spinner complete, and acts on yesterday's data. On the chores screen
+          specifically this compounds with the optimistic write at
+          chores.tsx:31 — the local list can diverge from the server with no
+          signal at all.
+Evidence
+ (positive): mobile/app/(tabs)/index.tsx:62 gets this RIGHT —
+            {today.error ? <AppText variant="muted" color={colors.danger}>…</AppText> : null}
+            rendered above the content, unconditionally. So the correct pattern
+            exists in the app and three screens did not adopt it.
+Fix:      Move each `<X>.error` out of `ListEmptyComponent` and into
+            `ListHeaderComponent` (chores.tsx already has one, for `actionError`
+            — merge the two), rendered whenever `error` is non-null regardless
+            of `data.length`. Keep `EmptyState` in `ListEmptyComponent` for the
+            genuinely-empty case. Pair with C2-M05(b) so it is announced too.
+Status:   OPEN — verified by source reading.
+```
+
+---
+
+## C2-M09
+
+```
+[CLAUDE-2][MEDIUM][UX] Raw PostgREST error text is rendered straight to the user — including "permission denied for table …"
+File:     mobile/src/hooks/use-async-data.ts:30
+          mobile/src/lib/queries.ts:19,37,44,53,58,64,72,77 (every query)
+          rendered at chores.tsx:70, calendar.tsx:50, grocery.tsx:98,
+          chores.tsx:33,46, grocery.tsx:35,49,76
+Problem:  Every function in queries.ts ends `if (error) throw error;` — throwing
+          the Supabase `PostgrestError` object itself. `useAsyncData` then does:
+
+            setError(e instanceof Error ? e.message : 'Something went wrong.');
+
+          and the screens render that string into the UI verbatim:
+
+            <AppText color={colors.danger}>{chores.error}</AppText>
+
+          I checked whether `instanceof Error` actually catches it, because the
+          answer decides which defect this is:
+
+            $ grep -rn "class PostgrestError" mobile/node_modules/@supabase/
+              .../postgrest-js/src/PostgrestError.ts:25:
+                export default class PostgrestError extends Error {
+
+          It does. So the database's own message reaches the screen.
+Evidence: The vendored doc comment in that same file, describing what those
+          messages contain:
+            "For permission-denied errors (`42501`), this is the literal SQL to
+             fix the problem, e.g. \"Grant the required privileges to the current
+             role with: GRANT SELECT ON public.users TO anon;\""
+          An RLS policy gap on `chore_assignments` therefore surfaces to a
+          parent as PostgREST's message about roles and grants — and the same
+          path carries JWT-expiry and schema-cache messages.
+Impact:   Two harms. (1) Usability: the strings are meaningless to a family-app
+          user and there is no retry affordance attached. (2) Disclosure: table
+          names, column names and role names leak to anyone who can trigger a
+          query failure. Not a privilege escalation — this is the user's own
+          client — but it is internal schema detail on a consumer screen, and it
+          is the kind of string that ends up in a support screenshot.
+Fix:      The app already has the right pattern next door:
+          `mobile/src/lib/auth-core.ts:4-12` (`friendlyAuthError`) maps provider
+          messages to actionable copy. Add the data-side twin — a
+          `friendlyDataError(error)` in a pure module, mapping PostgREST codes
+          (42501, PGRST116, 23505, network/abort) to catalogue KEYS, and call it
+          from use-async-data.ts:30 and from the three `catch` blocks in
+          chores.tsx:32-34 and grocery.tsx:33-36, 48-51. Log the raw object;
+          show the mapped copy. (Doing this in a pure module also means it gets
+          covered by the existing root-level mobile-core unit tests.)
+Status:   OPEN — verified: PostgrestError's Error inheritance confirmed in the
+          installed package; render path traced. Not observed live.
+```
+
+---
+
+## C2-M10
+
+```
+[CLAUDE-2][MEDIUM][A11Y] Text scales with the OS font-size setting but the line boxes do not — fixed `lineHeight` against a scaling `fontSize`
+File:     mobile/src/components/AppText.tsx:13-14
+          mobile/src/components/ListRow.tsx:22-23
+Problem:  RN's `allowFontScaling` defaults to TRUE, so the app does honour iOS
+          Dynamic Type and the Android font-size setting — that part is right,
+          and `allowFontScaling` / `maxFontSizeMultiplier` are at 0 occurrences
+          precisely because the default is the correct one. The problem is what
+          scales alongside it:
+
+            AppText.tsx:13  body:  { fontSize: font.size.base, ..., lineHeight: 22 }
+            AppText.tsx:14  muted: { fontSize: font.size.sm,   ..., lineHeight: 20 }
+
+          `fontSize` scales with the OS multiplier; the literal `lineHeight`
+          does not. At iOS "Larger Accessibility Sizes" the multiplier reaches
+          roughly 3.1x — a 16pt body glyph rendered into a 22pt line box.
+          Descenders clip and consecutive lines overlap.
+
+          Compounded at ListRow.tsx:22-23, which caps the same text:
+            <AppText ... numberOfLines={2}>{title}</AppText>
+            <AppText variant="muted" numberOfLines={1}>{subtitle}</AppText>
+          so at large sizes a chore title or a grocery item name is truncated
+          rather than wrapped — and `ListRow` is the primitive behind the
+          grocery list, the calendar list, the Today dashboard and every
+          settings row.
+Evidence: The two style objects above; the census showing zero
+          `maxFontSizeMultiplier` anywhere. Note `Button.tsx:38` also overrides
+          to a literal `{ fontSize: 16 }` on a `heading` variant, and
+          settings.tsx:42 to `{ fontSize: 14 }` — both bypass the token scale,
+          which is a smaller instance of the same "literal beats token" habit.
+Impact:   Users who have enlarged system text — the largest single group of
+          users with a visual impairment — get clipped and overlapping text
+          across the whole app, and truncated list items. This is the
+          highest-population accessibility defect in the mobile app.
+Fix:      Express line height as a multiplier of the (scaled) font size rather
+          than a literal: drop the `lineHeight` entries and let RN compute, or
+          derive them in `AppText` from the resolved font size. Where a cap is
+          genuinely needed for layout, use `maxFontSizeMultiplier` explicitly so
+          the ceiling is a decision rather than an accident. Replace
+          `numberOfLines` caps in `ListRow` with wrapping, or make the cap
+          conditional on the current `PixelRatio.getFontScale()`.
+Status:   OPEN — static read. **NOT measured**: confirming the clipping needs a
+          device or simulator with Dynamic Type turned up, which is exactly what
+          this environment does not have.
+```
+
+---
+
+## C2-M11
+
+```
+[CLAUDE-2][MEDIUM][A11Y] Closes the gap C2-B03 named as unreachable: the status-colour consumer IS the mobile Pill, and composited it is worse than the raw tokens
+File:     mobile/src/components/Pill.tsx:12-13 (the consumer)
+          used by (tabs)/chores.tsx:57-58, (tabs)/index.tsx:76,87,
+          (tabs)/calendar.tsx:42, (tabs)/assistant.tsx:206
+Problem:  C2-B03 measured the light theme's `--success` / `--warning` / `--danger`
+          tokens below AA and said, verbatim: "`--success` / `--warning` are used
+          for status chips and toasts, which live behind the login wall, so I
+          could not render them ... The token ratios above are measured, the chip
+          usage is not." The `audit/claude-2.md` BLOCKED table carries the same
+          row. **`mobile/src/components/Pill.tsx` is that chip**, it is
+          statically readable, and its ground is worse than `bg`.
+
+            Pill.tsx:12-13
+              borderColor: color, paddingHorizontal: spacing[2], paddingVertical: 2
+              <AppText variant="caption" color={color}>{label}</AppText>
+                                                   // caption = 12px, weight 500
+
+          Every use sits inside a `GlassCard`, so the real background is the
+          glass composite, not `bg`:
+            light: glass [16,22,40] at alpha 0.03 over bg [245,247,252]
+                   => effective fill [238.1, 240.2, 245.6]
+Evidence: Computed from design/tokens.json, WCAG 2.1 relative luminance, 12px
+          text (needs 4.5:1):
+
+            LIGHT theme        on raw --bg   on GlassCard (real)
+              warning            2.70 : 1      **2.54 : 1**
+              success            2.91 : 1      **2.75 : 1**
+              danger             4.09 : 1      **3.85 : 1**
+              info               4.82 : 1        4.54 : 1   (marginal)
+              muted              4.91 : 1        4.63 : 1   (marginal)
+              brandText          6.36 : 1        5.99 : 1   ok
+            DARK theme: all six between 6.50 and 10.97 : 1 — comfortable.
+
+          So the composite makes B03's already-failing figures worse by
+          0.16-0.24, and pushes `info` and `muted` from "thin pass" to
+          "marginal". The Pill's BORDER is drawn in the same colour, so the
+          chip's outline fails 1.4.11's 3:1 too, for warning and success.
+
+          Which chips these are, concretely:
+            chores.tsx:57  Pill tone="warning"  -> "Waiting for approval"
+            chores.tsx:49  tone="danger"        -> an OVERDUE chore
+            assistant.tsx:206 tone="success"/"danger" -> whether the assistant's
+                           action actually worked
+          The three pieces of status a family most needs to read at a glance.
+
+          Separately, the same `danger` token is used for BODY error text at
+          16px (needs 4.5:1) at chores.tsx:46,70, calendar.tsx:50,
+          grocery.tsx:76,98, assistant.tsx:142, settings.tsx:68 —
+          **4.09:1 on `bg`, 3.85:1 on a GlassCard.** Every error message in the
+          mobile app is below AA in the light theme.
+Impact:   Upgrades C2-B03 from "token ratios measured, usage unverified" to
+          "usage verified, and the usage is worse than the token table implied".
+          It also shows the defect is not web-only: the same JSON file feeds both
+          apps, so re-deriving the light ramp fixes both at once.
+Fix:      As C2-B03 — re-derive light-theme `danger`/`success`/`warning` against
+          BOTH `bg` and the glass composite for >=4.5:1 as text, keeping the
+          current values as separate `*Fill` tokens if the lighter hue is wanted
+          for backgrounds. Add the glass composite to whatever contrast test
+          lands (Claude-1's C1-S3-03 notes the repo has no WCAG formula anywhere
+          outside the new guard) — testing against `bg` alone would pass values
+          that fail in situ.
+Status:   OPEN — computed, not rendered. **This is evidence FOR C2-B03, not a
+          separate defect**; Claude-1 should merge it into B03 rather than
+          count it twice in any severity total.
+```
+
+---
+
+## C2-M12
+
+```
+[CLAUDE-2][LOW][A11Y] All 17 icons are exposed to screen readers as glyph text
+File:     17 `<Ionicons>` sites across mobile/app and mobile/src
+Problem:  `@expo/vector-icons` renders an icon as a `<Text>` containing a
+          private-use-area codepoint, and sets NO accessibility props of its own.
+          Purely decorative icons are therefore accessibility elements that
+          announce an unmapped character (or, on some TalkBack versions, nothing
+          at all, leaving a silent focus stop).
+Evidence: $ head -30 mobile/node_modules/@expo/vector-icons/build/createIconSet.js
+            import { Text, PixelRatio } from 'react-native';
+          $ grep -rln "accessibilityElementsHidden\|importantForAccessibility" \
+              mobile/node_modules/@expo/vector-icons/
+            (no output)
+          And in this app: `accessibilityElementsHidden` 0,
+          `importantForAccessibility` 0, `accessible=` 0.
+          Decorative instances include EmptyState.tsx:20, index.tsx:94,
+          assistant.tsx:122, and every `leading` icon in settings.tsx:52-65 —
+          all of which sit beside text that already carries the meaning.
+Impact:   Extra silent or garbled stops while swiping through a screen. Low
+          severity, wide surface.
+Fix:      Add `accessibilityElementsHidden` + `importantForAccessibility="no"`
+          (or wrap in a `View` with `accessible={false}`) on the decorative
+          instances. The icons that ARE the only content of a control
+          (index.tsx:42, assistant.tsx:104, sign-in.tsx:45, the three at
+          assistant.tsx:164/176 and grocery.tsx:89) must NOT be hidden — their
+          parents already carry the label, so hiding the glyph is correct there
+          too.
+Status:   OPEN — verified in the installed package. Not heard.
+```
+
+---
+
+## C2-M13
+
+```
+[CLAUDE-2][LOW][A11Y] One touch target under 44pt — and the rest are right because they read the shared token
+File:     mobile/app/(tabs)/grocery.tsx:88
+Problem:  The grocery check circle is `Ionicons size={26}` with `hitSlop={8}`:
+          26 + 8 + 8 = **42 x 42**, under the 44pt iOS and 48dp Android floors.
+Evidence: I measured all 12 Pressables:
+            sign-in.tsx:44      icon 22 + hitSlop 12  = 46      ok
+            index.tsx:41        icon 24 + hitSlop 12  = 48      ok
+            assistant.tsx:103   icon 24 + hitSlop 12  = 48      ok
+            assistant.tsx:128   pv 12x2 + lineHeight  ~46      ok
+            assistant.tsx:143   minHeight 44                    ok
+            assistant.tsx:149   48 x 48 explicit                ok
+            assistant.tsx:169   48 x 48 explicit                ok
+            assistant.tsx:227   multi-line card                 ok
+            index.tsx:107       GlassCard, title+caption        ok
+            settings.tsx:40     minHeight layout.touchTarget    ok
+            Button.tsx:26       minHeight layout.touchTarget    ok
+            ListRow.tsx:19      minHeight layout.touchTarget    ok
+            grocery.tsx:88      26 + 8 + 8 = 42                 UNDER
+          Mitigation, stated honestly: that checkbox sits inside a `ListRow`
+          whose content View is `minHeight: layout.touchTarget` (44) and whose
+          Pressable fires the SAME `toggle`, so a near-miss still works. The
+          42x42 element is nonetheless the one a user aims at.
+          Secondary note: `design/tokens.json` `layout.touchTarget` is a single
+          `44` used on both platforms; Android's guidance is 48dp, so every
+          `minHeight: layout.touchTarget` control is 4dp under the Android
+          floor. That is a token decision, not a mobile bug.
+Impact:   Marginal — one control, with a working fallback.
+Fix:      `hitSlop={12}` at grocery.tsx:88 (26+24 = 50). Separately, consider
+          `touchTarget: { ios: 44, android: 48 }` in design/tokens.json, or just
+          raising it to 48 for both.
+Credit:   Worth recording the positive: the mobile app sizes its controls from
+          `layout.touchTarget` in the SHARED token file rather than from
+          literals. That is the pattern this repo keeps failing to use
+          elsewhere, used correctly here.
+Status:   OPEN — computed from source. Not measured on a device.
+```
+
+---
+
+## C2-M14
+
+```
+[CLAUDE-2][LOW][UX] The system keyboard renders light while the app renders dark
+File:     mobile/src/components/Field.tsx (no `keyboardAppearance`),
+          mobile/app.json:"userInterfaceStyle": "automatic"
+Problem:  `keyboardAppearance` is at 0 occurrences app-wide, so on iOS the
+          keyboard always uses the system appearance. The app's product default
+          is DARK regardless of the OS (`design/tokens.json` `theme.default:
+          "dark"`, resolved at theme-core.ts:25-28 — anything other than an
+          explicit 'light' resolves dark). So on a light-mode iPhone, a user who
+          has never opened Settings gets a dark app with a light keyboard, and
+          the same mismatch in any other native surface the OS styles.
+Evidence: `grep -rn keyboardAppearance mobile/` -> no matches.
+          app.json:"userInterfaceStyle": "automatic" (native follows the OS)
+          vs theme-core.ts:13 DEFAULT_THEME = DEFAULT_THEME_MODE = 'dark'.
+          These two defaults disagree by construction on a light-mode device.
+Impact:   Cosmetic, but it is the most-seen native surface in the app and it
+          appears on the sign-in screen — the first screen anyone sees.
+Fix:      `keyboardAppearance={mode === 'dark' ? 'dark' : 'light'}` in
+          `Field.tsx` (it already has `mode` available via `useTheme`). Decide
+          deliberately whether `userInterfaceStyle` should be `"dark"` to match
+          the product default, or whether the product default should become
+          `system` — right now neither was chosen, they just differ.
+Status:   OPEN — static read.
+```
+
+---
+
+## C2-M15
+
+```
+[CLAUDE-2][LOW][BUILD] Three declared mobile dependencies are referenced nowhere; one of them adds a native module to every build
+File:     mobile/package.json
+Problem:  Reference counts across mobile/app, mobile/src, mobile/app.json and
+          mobile/scripts:
+            @expo/ui            0     <- SwiftUI / Jetpack Compose primitives
+            expo-system-ui      0
+            react-dom           0
+            @expo/metro-runtime 0     <- but required indirectly by expo-router
+            react-native-screens 0    <- but required indirectly by react-navigation
+          The last two are legitimate at zero direct references and are NOT part
+          of this finding. `@expo/ui` and `expo-system-ui` are genuinely unused —
+          neither is imported and neither appears in app.json's `plugins`.
+          `react-dom` is only needed for `expo start --web`, and app.json has no
+          `web` block.
+Evidence: $ for d in ...; do grep -rl "$d" mobile/app mobile/src mobile/app.json mobile/scripts | wc -l; done
+          (counts above)
+Impact:   `@expo/ui` in particular ships a native module into every EAS build
+          for nothing — build time, binary size, and a native surface the app
+          does not use. Minor, but this is a two-app repo where `mobile/` has
+          its own lockfile and its own CI job, so unused native deps are easy to
+          leave behind unnoticed.
+Fix:      Remove `@expo/ui`, `expo-system-ui` and `react-dom` from
+          mobile/package.json; re-run `npm install` in `mobile/` to update its
+          lockfile; confirm with `npx expo-doctor` (already wired as
+          `npm run doctor`).
+Status:   OPEN — verified by reference count. Removal not attempted (the brief
+          forbids `npm install` in mobile/ in this environment).
+```
+
+---
+
+## C2-M16
+
+```
+[CLAUDE-2][LOW][UX] An invalid EMAIL reports its error underneath the PASSWORD field
+File:     mobile/app/(auth)/sign-in.tsx:24-30, 60-61
+Problem:  `submit` puts every validation and sign-in failure in one `error`
+          state, and that single state is passed to the second `Field` only:
+
+            sign-in.tsx:60  <Field label="Email"    ... />          <- no error prop
+            sign-in.tsx:61  <Field label="Password" ... error={error} />
+
+          `validateCredentials` (auth-core.ts:14-20) returns "Enter your email."
+          and "That doesn't look like an email address." — both of which render
+          under the password box, in danger red, with the PASSWORD field's border
+          also turned red (Field.tsx:21 `borderColor: error ? colors.danger : …`).
+          So an email typo visually marks the password as the invalid field.
+Evidence: The two lines above plus Field.tsx:21,27.
+Impact:   Small but genuinely misleading — the user retypes the password. It also
+          means the error is not programmatically associated with the field it
+          describes, which is the RN counterpart of a missing
+          `aria-describedby` (and there is no such association for either field
+          — `Field` renders its error as a sibling `AppText`, not as
+          `accessibilityHint` or an `accessibilityLabel` extension, and
+          `accessibilityHint` is at 0 occurrences app-wide per C2-M05).
+Fix:      Split the state into `emailError` / `formError`, route
+          `validateCredentials`' first two messages to the email `Field`, and
+          keep sign-in failures as a form-level message above the button. While
+          there, extend `Field` to fold its `error` into the input's
+          `accessibilityHint` so the association exists for screen readers too.
+Status:   OPEN — verified by source reading.
+```
+
+---
+
+## Verified clean (mobile) — recorded so a later pass does not re-derive
+
+| Checked | Result |
+|---|---|
+| Unnamed touchables (the RN "unnamed `<button>`") | **0 of 12.** Every Pressable has an `accessibilityLabel` or a `Text` child. Better than the web (C2-11 found 2). |
+| `TouchableOpacity` / `TouchableHighlight` | **0 uses.** The app is uniformly on `Pressable`. |
+| Touch target sizes | 11 of 12 meet 44pt, and do so by reading `layout.touchTarget` from `design/tokens.json`. The twelfth is C2-M13. |
+| Shared-token pipeline | **Works.** `design/tokens.ts:55-58` derives `palette()` from the JSON key set, so `borderInput` was available to mobile the moment it was added for the web. The contract did not drift — one call site (C2-M01) was missed. |
+| Auth / session handling in `mobile/app/(auth)` | **No finding.** Deliberate port of the web's persistent-login work: `INITIAL_SESSION`-null is not sign-out (auth-session.ts:20-25), retryable-error parity with `lib/auth/session.ts` with the duplication justified in-file (auth-core.ts:22-35), chunked SecureStore, revision-guarded local-scope sign-out (sign-out.ts), shared `shared/auth/refresh-fetch.ts`. Careful, not careless. |
+| Safe-area handling | Correct as far as source can show. `SafeAreaProvider` at the root (_layout.tsx:52); `Screen` uses `edges={['top','left','right']}` (bottom is the tab bar's / the list's `paddingBottom`), which is the right choice for tab screens and is landscape-correct given `"orientation": "default"` + `supportsTablet: true`. Not verified on a notched device. |
+| Keyboard avoidance | Present and correct-shaped on all three screens with a text input above the fold: sign-in.tsx:35, grocery.tsx:61, assistant.tsx:110 — `behavior="padding"` on iOS, undefined on Android (which relies on `adjustResize`), with `keyboardVerticalOffset={90}` on the two tab screens and `keyboardShouldPersistTaps="handled"` throughout. Not verified with a keyboard up. |
+| Does text scale with OS font size at all? | **Yes** — RN's `allowFontScaling` defaults true and nothing disables it. The defect is the fixed line boxes (C2-M10), not the scaling itself. |
+| Dark-theme contrast, all pairings | Comfortable: 6.50-17.53:1 across fg/muted/brandText/brandFg/info/danger/success/warning on bg, surface and the glass composite. Only the borders fail in dark, which is C2-M01's territory. |
+| Mobile typecheck (CI parity) | Clean. 1 error, entirely from a locally-missing `expo-audio`; lockfile verified consistent with package.json, so `npm ci` in CI does not hit it. |
+
+## BLOCKED — what this session could NOT reach
+
+These are the reasons a later pass with a device would still be worth running.
+**None of the rows below should be read as "clean".**
+
+| Not reached | Why | What it would settle |
+|---|---|---|
+| Any rendered mobile screen | No simulator, no device, no Metro bundle | Every contrast figure above is computed from tokens, not sampled from pixels |
+| VoiceOver / TalkBack output | No device | C2-M05, M06, M07, M12 — the *source* absences are certain, the announced result is inferred |
+| Dynamic Type at Larger Accessibility Sizes | No device | C2-M10's clipping and overlap; currently a source-level inference |
+| Focus behaviour with an iPad hardware keyboard | No device | C2-M02's real severity |
+| Keyboard-up layout on a small phone | No device | Whether the `keyboardVerticalOffset={90}` on grocery/assistant is right for every device height |
+| Safe-area on a notched device and in landscape | No device | Whether `edges={['top','left','right']}` leaves anything under the home indicator on the `scroll={false}` screens |
+| `expo export` / a real Metro bundle | Not run (and CI does not run it either — Claude-1's finding on the Metro watch folders stands unverified for the same reason) | Whether the three-root import graph actually bundles |
+| The three write paths end-to-end | No Supabase locally (Claude-1 session 3: Docker unusable, no Supabase CLI) | Whether C2-M08's silent-failure path and C2-M09's raw-error path produce what the source says they will |
+
+## Severity tally — session 3
+
+| Severity | Count | IDs |
+|---|---|---|
+| CRITICAL | 0 | — |
+| HIGH | 2 | C2-M01, C2-M03 |
+| MEDIUM | 9 | C2-M02, M04, M05, M06, M07, M08, M09, M10, M11 |
+| LOW | 5 | C2-M12, M13, M14, M15, M16 |
+| **Total new** | **16** | `C2-M01`–`C2-M16` |
+
+Note for the merge: **C2-M11 is evidence for the existing C2-B03**, not an
+independent defect — it closes the "could not render the chips" gap B03 itself
+flagged. Count it once. And **C2-M03 is predominantly a WEB finding** (160 call
+sites in 86 files) that the mobile lens surfaced; file it wherever the web
+findings live, not under Mobile.
+
+Running total for this file: 18 (sessions 1-2) + 16 = **34 findings**,
+7 HIGH / 18 MEDIUM / 9 LOW / 0 CRITICAL.

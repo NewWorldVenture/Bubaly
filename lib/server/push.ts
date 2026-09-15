@@ -19,6 +19,9 @@ type DB = SupabaseClient<Database>;
 export type PushPayload = { title: string; body?: string | null; url?: string | null };
 export type PushResult = { sent: number; skipped: number; failed: number; pruned: number };
 
+/** How long a totally-failed push keeps being retried before it is given up on. */
+export const PUSH_RETRY_WINDOW_MS = 24 * 60 * 60 * 1000;
+
 let vapidReady: boolean | null = null;
 function ensureVapid(): boolean {
   if (vapidReady !== null) return vapidReady;
@@ -159,7 +162,7 @@ export async function dispatchPendingPushes(
 ): Promise<{ notifications: number; result: PushResult }> {
   let q = supabase
     .from('notifications')
-    .select('id, family_id, user_id, title, body, related_type, related_id')
+    .select('id, family_id, user_id, title, body, related_type, related_id, created_at')
     .is('pushed_at', null)
     .lte('send_at', (opts.now ?? new Date()).toISOString())
     .order('created_at', { ascending: true })
@@ -214,6 +217,41 @@ export async function dispatchPendingPushes(
     const url = n.related_type === 'social' ? '/dashboard/social' : '/dashboard/notifications';
     const r = await sendPushToUsers(supabase, recipients, { title: n.title, body: n.body, url });
     totals.sent += r.sent; totals.skipped += r.skipped; totals.failed += r.failed; totals.pruned += r.pruned;
+
+    // A failed send is not a delivery. `pushed_at` is the ONLY thing the pending
+    // query filters on, nothing ever clears it, and there is no retry — so
+    // stamping after a failure dropped the notification permanently. The cron
+    // route already answers 502 on `failed > 0`, which made the failure visible
+    // and still left it unrecoverable: the run went red and the row said
+    // delivered, and the row is what the next run reads.
+    //
+    // Retry ONLY when nothing got through at all (`sent` and `pruned` both 0 and
+    // something failed). A partial success must still stamp: those devices have
+    // the notification, and re-sending would buzz them a second time. Telling
+    // partial from total is the most this can do without per-device delivery
+    // state, which is a schema change — see F-001 in finalaudit.md for why a new
+    // migration cannot reach production today.
+    //
+    // Bounded by age so a permanently broken endpoint cannot retry forever: the
+    // scan is two-hourly, so this is roughly a dozen attempts before giving up.
+    const nothingGotThrough = r.failed > 0 && r.sent === 0 && r.pruned === 0;
+    // A row we cannot date is treated as brand new rather than as expired: the
+    // failure mode of the first is one extra attempt, of the second a silently
+    // dropped notification.
+    const createdMs = new Date(n.created_at ?? '').getTime();
+    const ageMs = Number.isNaN(createdMs) ? 0 : (opts.now ?? new Date()).getTime() - createdMs;
+    const retryable = nothingGotThrough && ageMs < PUSH_RETRY_WINDOW_MS;
+    if (retryable) {
+      console.warn('[push] every send failed; leaving pushed_at null to retry', {
+        notificationId: n.id, failed: r.failed, ageMs,
+      });
+      continue;
+    }
+    if (nothingGotThrough) {
+      console.error('[push] giving up after the retry window; notification never delivered', {
+        notificationId: n.id, failed: r.failed, ageMs,
+      });
+    }
     // Stamp pushed_at so this notification isn't pushed again next run. If the
     // stamp is silently lost the same push re-fires every cron — log it.
     const { error: stampError } = await supabase.from('notifications').update({ pushed_at: new Date().toISOString() }).eq('id', n.id);
