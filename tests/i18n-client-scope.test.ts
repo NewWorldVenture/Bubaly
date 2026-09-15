@@ -50,21 +50,66 @@ function clientModulesFrom(entries: string[]): Set<string> {
   return client;
 }
 
-/** The literal keys those modules pass to t(). */
+/**
+ * The literal keys those modules pass to their translator.
+ *
+ * The binding is READ FROM THE FILE rather than assumed to be `t`. That
+ * assumption was a real hole: `components/marketing/contact-form.tsx` writes
+ * `const tr = useTranslations()` and calls `tr('contact.sendMessage')`, so this
+ * scan never saw a single one of its keys, and MARKETING_SCOPE fell behind
+ * without failing here. Nothing noticed, because `translate` used to fall back
+ * to the whole English catalogue — the same fallback that shipped 244 KB gzip
+ * to every visitor. Remove the fallback and the raw key renders at a visitor;
+ * `contact.whatsThisAbout` is one unbreakable token, which is why the overflow
+ * suite went red on eleven public routes at once.
+ *
+ * So: find every `const <name> = useTranslations()` and scan for calls on those
+ * names. A component that renames its translator tomorrow is covered by
+ * construction rather than by someone remembering to extend a list.
+ */
 function translationKeys(modules: Set<string>): Map<string, string> {
   const keys = new Map<string, string>(); // key → the file that asked for it
   for (const file of modules) {
     const source = readFileSync(file, 'utf8');
     if (!/useTranslations/.test(source)) continue;
-    for (const m of source.matchAll(/\bt\(\s*['"]([A-Za-z0-9_.]+)['"]/g)) {
-      if (!keys.has(m[1])) keys.set(m[1], file.replace(`${ROOT}/`, ''));
+    const bindings = [...source.matchAll(/(?:const|let|var)\s+(\w+)\s*=\s*useTranslations\s*\(/g)]
+      .map((m) => m[1]);
+    // A file that calls useTranslations() without binding it (inline, or
+    // destructured in a way this does not model) is still scanned for `t(`,
+    // because that is the convention everywhere else.
+    for (const name of bindings.length ? bindings : ['t']) {
+      const call = new RegExp(`\\b${name}\\(\\s*['"]([A-Za-z0-9_.]+)['"]`, 'g');
+      for (const m of source.matchAll(call)) {
+        if (!keys.has(m[1])) keys.set(m[1], file.replace(`${ROOT}/`, ''));
+      }
     }
   }
   return keys;
 }
 
+/**
+ * The files matching each pattern, with `**` ALSO matching zero directories.
+ *
+ * git's `**` requires at least one path segment, so `app/(marketing)/**​/layout.tsx`
+ * matched NOTHING — `app/(marketing)/layout.tsx` is the only marketing layout
+ * there is. The same held for every route group: each group's ROOT layout and
+ * ROOT page were invisible to this scan, and those are precisely the files that
+ * install `ScopedLocaleProvider` and render the chrome around everything else.
+ * That is how MARKETING_SCOPE came to be missing `skipLink`, `marketing` and
+ * `consentManager` while this test reported the surface clean.
+ *
+ * The aggregate `entries.length > 0` assertion below could not see it either: a
+ * pattern that matches nothing is invisible when a sibling pattern matches 28
+ * files. So each pattern is now required to match on its own.
+ */
 const files = (patterns: string[]): string[] =>
-  patterns.flatMap((p) => execSync(`git ls-files '${p}'`, { encoding: 'utf8' }).split('\n')).filter(Boolean);
+  patterns.flatMap((p) => {
+    const both = [p, p.replace('/**/', '/')];
+    const found = both.flatMap((g) => execSync(`git ls-files '${g}'`, { encoding: 'utf8' }).split('\n'))
+      .filter(Boolean);
+    expect(found.length, `no file matches ${p} — the pattern has gone stale`).toBeGreaterThan(0);
+    return [...new Set(found)];
+  });
 
 const messages = enUS as Record<string, string>;
 
@@ -124,9 +169,19 @@ describe('scopeMessages', () => {
   it('is dramatically smaller than the catalogue it narrows', () => {
     const full = JSON.stringify(messages).length;
     const marketing = JSON.stringify(scopeMessages(messages, MARKETING_SCOPE)).length;
-    // The measured production page was 93% catalogue. Assert the order of
-    // magnitude, not an exact number, so adding marketing strings is allowed.
-    expect(marketing).toBeLessThan(full / 50);
+    // The ratio was /50, against a marketing scope of about 2 KB. That number
+    // was never honest: the scope was missing the entire marketing LAYOUT —
+    // skip link, header, nav, consent manager — because the entry glob matched
+    // no file at all, and the surface rendered correctly only because
+    // `translate` fell back to the whole English catalogue. A complete scope is
+    // ~27 KB, still a 30x reduction on ~814 KB, and it is the size the page
+    // actually needs rather than the size it appeared to need while something
+    // else was quietly paying.
+    //
+    // Assert the order of magnitude, not an exact number, so adding marketing
+    // strings is allowed — but keep it tight enough that pulling in an
+    // authenticated-app namespace by accident still fails here.
+    expect(marketing).toBeLessThan(full / 25);
   });
 
   it('leaves the authenticated app whole', () => {
