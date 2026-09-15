@@ -344,3 +344,13 @@ authz call site neutered → 14/14 still green; `markReferralConverted` deleted 
 in `finalaudit.md`. Full local suite on this branch: **1,207 files / 13,750
 tests, 0 failures**.
 LAST-UPDATE: 2026-09-15
+
+## Round 5 — closed (Claude-1)
+All twelve round-5 findings FIXED: C4-S5-01/02 (plus C4-S5-03 recorded) and
+C3-S5-01..09. Eleven code changes, two migrations (`0303` social token store,
+`0304` TRUNCATE revoke), nine new guard files, every guard proved red before it
+was trusted. Two items left as product/operator decisions and named as such in
+finalaudit.md: retiring the duplicate Google Calendar integration, and removing
+the inbound-email `?key=` form.
+CI: green on `7ccd0551`, full matrix including E2E and the migration replay.
+LAST-UPDATE: 2026-09-15

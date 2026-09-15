@@ -5906,3 +5906,43 @@ The guard for this blanks comments before scanning — the file's own comments
 quote both `redirect: 'manual'` and the path check, and a guard satisfied by the
 prose explaining it is precisely C4-S5-01 one rung up. Caught by mutation, not
 by care: the first draft passed with the real line deleted.
+
+## Round 5, closed
+
+Every finding both workers filed in round 5 is now fixed:
+
+| finding | severity | state |
+|---|---|---|
+| C4-S5-01 spelling-only guards (46 proven) | HIGH | FIXED + meta-guard |
+| C4-S5-02 `indexOf` → `-1` sentinel (8 proven) | HIGH | FIXED + meta-guard |
+| C4-S5-03 what the sweep found healthy | INFO | recorded |
+| C3-S5-01 social token store reopened | HIGH | FIXED (`0303`) |
+| C3-S5-02 plaintext Google refresh token | MEDIUM | FIXED |
+| C3-S5-03 string-only push SSRF guard | MEDIUM | FIXED |
+| C3-S5-04 timeout wrapper named like a guard | LOW | FIXED (renamed) |
+| C3-S5-05 contact form claims "sent" | LOW | FIXED |
+| C3-S5-06 any string accepted as a key | LOW | FIXED |
+| C3-S5-07 CalDAV transport invariant | LOW | FIXED |
+| C3-S5-08 inbound secret compared with `===` | LOW | FIXED (query form kept, now logged) |
+| C3-S5-09 TRUNCATE for the public roles | OBSERVATION | FIXED (`0304`, widened) |
+
+Twelve findings, eleven code changes, two migrations, nine new guard files, and
+**every one of those guards watched to fail before it was trusted** — which is
+the claim this audit makes about other people's tests, applied to its own.
+
+Two things are deliberately *not* done, and neither is an oversight:
+
+1. **Retiring the second Google Calendar integration.** `lib/sync/` already has
+   a Google adapter with encryption, a deny-all credential table, refresh
+   handling and an audit log. Two implementations of one integration is *why*
+   they disagreed about where a refresh token lives. Consolidating them is a
+   product decision; the weaker one now matches the stronger one instead.
+2. **Removing `?key=` from the inbound-email endpoint.** The provider's webhook
+   is configured outside this repository. Breaking a family's inbound mail to
+   close a log-exposure issue is the operator's call, and the log now says so on
+   every request that takes that route.
+
+CI verified green on `7ccd0551` — the full matrix, including the migration
+replay with `0303` and the amended boundary probe, and E2E against live
+Supabase. That verdict had been superseded by rapid pushes five times before it
+finally landed.
