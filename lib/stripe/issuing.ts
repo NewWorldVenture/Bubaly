@@ -135,7 +135,14 @@ export async function updateCardControls(
     { spending_controls },
     { stripeAccount: params.accountId },
   );
-  await supabase
+  // The Stripe update above is what actually constrains the card, and its
+  // failure reaches the caller. This is our MIRROR of it, and its result used to
+  // be discarded — so a refused write left /wallet showing a limit the card no
+  // longer had, with nothing to correct it. It is logged rather than thrown
+  // because the control did take effect and the change is now reconciled by
+  // issuing_card.updated (lib/stripe/webhook.ts): telling the parent this failed
+  // would be the more misleading answer of the two.
+  const { error } = await supabase
     .from('stripe_issuing_cards')
     .update({
       spend_limit_cents: params.spendLimitCents,
@@ -144,6 +151,10 @@ export async function updateCardControls(
     })
     .eq('id', params.cardRowId)
     .eq('family_id', params.familyId);
+  if (error) {
+    console.error('[money] card controls changed at Stripe but the mirror write failed; issuing_card.updated reconciles it',
+      { cardRowId: params.cardRowId, error });
+  }
 }
 
 /** Freeze / unfreeze a card (parent control). Updates Stripe + our mirror. */
@@ -157,9 +168,16 @@ export async function setCardFrozen(
     { status: params.frozen ? 'inactive' : 'active' },
     { stripeAccount: params.accountId },
   );
-  await supabase
+  // Same as updateCardControls: the freeze is real at Stripe by here, so a
+  // failed mirror write is a stale DISPLAY, not a failed freeze, and
+  // issuing_card.updated corrects it.
+  const { error } = await supabase
     .from('stripe_issuing_cards')
     .update({ is_frozen: params.frozen, status: params.frozen ? 'inactive' : 'active' })
     .eq('id', params.cardRowId)
     .eq('family_id', params.familyId);
+  if (error) {
+    console.error('[money] card freeze changed at Stripe but the mirror write failed; issuing_card.updated reconciles it',
+      { cardRowId: params.cardRowId, frozen: params.frozen, error });
+  }
 }
