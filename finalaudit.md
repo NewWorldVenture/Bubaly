@@ -5762,3 +5762,37 @@ is written in the file.
 check and weaker than the push one was. It is currently only a pre-filter —
 `addByUrlAction` passes the URL to `fetchPublicText` regardless — so it is
 harmless today and one refactor away from not being.
+
+**C3-S5-02 — FIXED.** `lib/google-token-storage.ts` AES-256-GCM-encrypts the
+Google Calendar token before it reaches `user_preferences.notification_prefs`,
+using `lib/sync/crypto.ts` — the same key and the same primitives the sync
+platform already uses for the same provider — rather than a second
+implementation of them. What lands in that browser-readable column is now one
+opaque string; the test asserts directly that it contains neither the refresh
+token, the access token, nor the word `refreshToken`.
+
+**The migration is the interesting part.** No SQL migration can convert the
+existing rows, because the key lives in the application, not the database. So
+the read path accepts both shapes and reports which it found, and the sync route
+rewrites a legacy row encrypted on first use — the `|| decoded.legacy` in its
+persist condition is what makes it a migration rather than a permanent
+tolerance, and a test pins that clause specifically.
+
+Three smaller decisions, each with a reason in the file:
+
+- **The callback fails closed with no key.** A connection that silently stores a
+  refresh token in the clear is worse than one that did not connect, and this
+  failure is loud at connect time rather than invisible forever.
+- **"Connected?" is answered without decrypting.** The status endpoint does not
+  need the key, so a key rotation does not make every user look disconnected.
+- **A tampered or undecryptable envelope reads as no connection**, which puts
+  the Connect button back. That is recoverable; guessing is not.
+
+Four of the ten assertions proved red against the plaintext writes.
+
+**Not done, and it is the better fix:** Claude-3's first recommendation was to
+retire this path entirely, since `lib/sync/` already has a Google adapter with
+encryption, a deny-all credential table, refresh handling and an audit log. Two
+implementations of one integration is *why* they disagreed. That is a
+product-level consolidation, not an audit fix, so the weaker one now matches the
+stronger one instead of being deleted by an auditor.

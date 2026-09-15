@@ -9,6 +9,7 @@ import {
   type GoogleToken,
 } from '@/lib/google';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
+import { decodeGoogleToken, encodeGoogleToken, hasStoredGoogleToken } from '@/lib/google-token-storage';
 
 // Fetches the next 3 months of events from Google Calendar primary and
 // upserts them into calendar_events with source='google'.
@@ -26,11 +27,16 @@ export async function POST() {
       .maybeSingle();
 
     const np = (prefs?.notification_prefs as Record<string, unknown>) ?? {};
-    const stored = np.googleCalendarToken as GoogleToken | undefined;
+    // Reads both the encrypted envelope and the plaintext object rows written
+    // before C3-S5-02. There is no SQL migration for those — the key lives in
+    // the application — so a legacy row is re-written encrypted the first time
+    // it is used, below.
+    const decoded = decodeGoogleToken(np.googleCalendarToken);
 
-    if (!stored?.accessToken) {
+    if (!decoded) {
       return NextResponse.json({ error: t('sync.googleCalendarNotConnected') }, { status: 400 });
     }
+    const stored = decoded.token;
 
     const limited = await enforceRequestRateLimit(supabase, `sync:${ctx.active.familyId}:${ctx.user.id}:google-calendar`, { limit: 10 });
     if (!limited.ok) return NextResponse.json(
@@ -68,9 +74,12 @@ export async function POST() {
       );
     }
 
-    // Persist refreshed token if it changed
-    if (refreshedToken.accessToken !== stored.accessToken) {
-      const merged = { ...np, googleCalendarToken: refreshedToken };
+    // Persist the token when it changed, and ALSO when it was found in the old
+    // plaintext form — that second case is the migration: the row converts on
+    // first use, with no separate backfill and no window where the two shapes
+    // disagree.
+    if (refreshedToken.accessToken !== stored.accessToken || decoded.legacy) {
+      const merged = { ...np, googleCalendarToken: encodeGoogleToken(refreshedToken) };
       await supabase
         .from('user_preferences')
         .upsert({ user_id: ctx.user.id, notification_prefs: merged }, { onConflict: 'user_id' });
@@ -129,7 +138,9 @@ export async function GET() {
       .maybeSingle();
 
     const np = (prefs?.notification_prefs as Record<string, unknown>) ?? {};
-    const connected = !!(np.googleCalendarToken as GoogleToken | undefined)?.accessToken;
+    // Answered without decrypting: the status endpoint does not need the key,
+    // and a key rotation should not make every user look disconnected.
+    const connected = hasStoredGoogleToken(np.googleCalendarToken);
 
     return NextResponse.json({ connected });
   } catch {
