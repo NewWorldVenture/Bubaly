@@ -6009,3 +6009,19 @@ pulled apart. Caught by mutation, like the three before it.
 No TTFB measurement is claimed. There is still no authenticated session in this
 environment, so the arithmetic is round trips removed, not milliseconds observed
 — which is what the finding said, and it stays said.
+
+**A lint error I pushed, and one I did not.** My guard named its source
+`module`, which `@next/next/no-assign-module-variable` refuses. I ran `eslint`
+on the four files I had touched *after* committing rather than before, so it
+reached the branch and had to be fixed in a follow-up — the same "commit before
+the check returns" mistake this audit already recorded once against the rate-limit
+placement.
+
+While fixing it, a second instance surfaced at
+`tests/school-sports-desk.test.ts:359`, from commit `fffd99bd` and nothing to do
+with this branch. It is invisible to CI because `npm run lint` is `next lint`,
+which does not cover `tests/` — so `eslint .` and the gate disagree about what
+this repository considers lintable. Recorded rather than fixed: it is not this
+branch's, and widening a diff to tidy someone else's file is how audit branches
+become unreviewable. The gap between the two commands is the more interesting
+half, and belongs to whoever owns the lint configuration.

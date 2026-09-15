@@ -18,10 +18,10 @@ import { at } from './helpers/source-order';
  * the same boundary on the client path, which had drifted from it.
  */
 // Comments blanked: this file's subject is quoted in the source's own comments.
-const module = readFileSync('components/modules/home-module.tsx', 'utf8')
+const source = readFileSync('components/modules/home-module.tsx', 'utf8')
   .replace(/\/\*[\s\S]*?\*\//g, '')
   .replace(/\/\/[^\n]*/g, '');
-const removeFile = module.slice(module.indexOf('async function removeFile'));
+const removeFile = source.slice(source.indexOf('async function removeFile'));
 
 describe('removing a document does not report success for an object that survived', () => {
   it('reads the storage result and stops before the row delete', () => {
@@ -38,8 +38,8 @@ describe('removing a document does not report success for an object that survive
   it('names a failed upload rollback instead of discarding it', () => {
     // Lower stakes — the user is already being told the upload failed — but a
     // leaked object is still a leaked object.
-    expect(module).toContain('const { error: rollbackError } = await removeFamilyDocument(supabase, path)');
-    expect(module).toContain('upload rollback left an object behind');
+    expect(source).toContain('const { error: rollbackError } = await removeFamilyDocument(supabase, path)');
+    expect(source).toContain('upload rollback left an object behind');
   });
 
   it('matches the admin path this component had drifted from', () => {
