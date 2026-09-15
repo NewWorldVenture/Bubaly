@@ -177,10 +177,15 @@ export async function ensureActiveFamily(
     const { data: prior } = await admin
       .from('onboarding_progress').select('user_id').eq('user_id', user.id).maybeSingle();
     if (!prior) {
-      await admin.from('onboarding_progress').insert({
+      // Read, because the bare catch below cannot see a resolved PostgREST
+      // error. Degrading silently is right for a pre-migration table; it is not
+      // right for a refused write, which leaves an auto-provisioned account
+      // invisible to the nudge that exists to finish its onboarding.
+      const { error } = await admin.from('onboarding_progress').insert({
         user_id: user.id, family_id: familyId, source: 'auto_provision',
         status: 'in_progress', steps_completed: ['profile'], completeness: 40,
       } as never);
+      if (error) console.error('[ensure-family] onboarding_progress insert failed', { userId: user.id, error });
     }
   } catch { /* table may be pre-migration — degrade silently */ }
 

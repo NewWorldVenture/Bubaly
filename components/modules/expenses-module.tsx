@@ -100,7 +100,11 @@ export function ExpensesModule() {
       const { error: sErr } = await supabase.from('expense_split_shares').insert(rows);
       if (sErr) {
         // Roll back the orphaned split so we never leave a parent without shares.
-        await supabase.from('expense_splits').delete().eq('id', split.id);
+        // The delete's result is read, because that sentence is a promise this
+        // code could not keep: a refused rollback leaves exactly the split with
+        // no shares it says never happens, and said nothing.
+        const { error: rollbackError } = await supabase.from('expense_splits').delete().eq('id', split.id);
+        if (rollbackError) console.error('[expenses] split rollback failed; a split without shares remains', { splitId: split.id, error: rollbackError });
         toastError(describeDbError(sErr));
         return;
       }
