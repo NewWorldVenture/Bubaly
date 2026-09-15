@@ -7,6 +7,7 @@ import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { tallyVotes, winningOption } from '@/lib/recipes/voting';
 import type { Database } from '@/lib/database.types';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type Json = Database['public']['Tables']['grocery_items']['Insert'];
 type Result = { ok: true; id?: string } | { ok: false; error: string };
@@ -30,14 +31,14 @@ export async function createMealVote(input: {
     meal_date: input.mealDate || null, meal_type: input.mealType || null,
     allow_maybe: input.allowMaybe ?? true,
   }).select('id').single();
-  if (error || !vote) return { ok: false, error: error?.message ?? 'Could not create vote' };
+  if (error || !vote) return { ok: false, error: describeActionError(error, 'Could not create vote') };
 
   const rows = options.map((o) => ({
     vote_id: vote.id, family_id: familyId,
     recipe_id: o.recipeId || null, label: o.label.trim(), photo_url: o.photoUrl || null,
   }));
   const { error: optErr } = await supabase.from('meal_vote_options').insert(rows);
-  if (optErr) return { ok: false, error: optErr.message };
+  if (optErr) return { ok: false, error: describeActionError(optErr) };
 
   revalidatePath('/dashboard/recipes/vote');
   return { ok: true, id: vote.id };
@@ -54,7 +55,7 @@ export async function castBallot(input: { voteId: string; optionId: string; choi
     vote_id: input.voteId, option_id: input.optionId, family_id: ctx.active.familyId,
     member_id: memberId, choice: input.choice,
   }, { onConflict: 'option_id,member_id' });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   revalidatePath('/dashboard/recipes/vote');
   return { ok: true };
 }
@@ -72,7 +73,7 @@ export async function closeMealVote(voteId: string): Promise<Result> {
   const { error } = await supabase.from('meal_votes')
     .update({ status: 'closed', winner_option_id: winner })
     .eq('id', voteId).eq('family_id', ctx.active.familyId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   revalidatePath('/dashboard/recipes/vote');
   return { ok: true };
 }
@@ -82,7 +83,7 @@ export async function reopenMealVote(voteId: string): Promise<Result> {
   const ctx = await requireUserContext();
   const supabase = await createServer();
   const { error } = await supabase.from('meal_votes').update({ status: 'open', winner_option_id: null }).eq('id', voteId).eq('family_id', ctx.active.familyId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   revalidatePath('/dashboard/recipes/vote');
   return { ok: true };
 }
@@ -111,7 +112,7 @@ export async function addWinnerToGrocery(voteId: string): Promise<Result> {
   let listId = list?.id;
   if (!listId) {
     const { data: created, error } = await supabase.from('grocery_lists').insert({ family_id: familyId, name: 'Groceries', created_by: ctx.user.id }).select('id').single();
-    if (error || !created) return { ok: false, error: error?.message ?? 'Could not create a grocery list' };
+    if (error || !created) return { ok: false, error: describeActionError(error, 'Could not create a grocery list') };
     listId = created.id;
   }
 
@@ -120,7 +121,7 @@ export async function addWinnerToGrocery(voteId: string): Promise<Result> {
     name: ing.name, quantity: [ing.quantity, ing.unit].filter(Boolean).join(' ').trim() || null,
   }));
   const { error: insErr } = await supabase.from('grocery_items').insert(items);
-  if (insErr) return { ok: false, error: insErr.message };
+  if (insErr) return { ok: false, error: describeActionError(insErr) };
   revalidatePath('/dashboard/grocery');
   return { ok: true };
 }

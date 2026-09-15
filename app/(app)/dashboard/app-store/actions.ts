@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: true } | { ok: false; error: string };
 const PATH = '/dashboard/app-store';
@@ -19,7 +20,7 @@ export async function installAppAction(appId: string): Promise<Result> {
     family_id: ctx.active.familyId, app_id: appId, installed_by: ctx.active.member.id,
     enabled: true, created_by: ctx.user.id,
   }, { onConflict: 'family_id,app_id' });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   revalidatePath(PATH);
   return { ok: true };
 }
@@ -31,7 +32,7 @@ export async function uninstallAppAction(appId: string): Promise<Result> {
   const sb = await createServer();
   const { error } = await sb.from('family_app_installs').delete()
     .eq('family_id', ctx.active.familyId).eq('app_id', appId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   revalidatePath(PATH);
   return { ok: true };
 }
@@ -43,7 +44,7 @@ export async function toggleAppAction(appId: string, enabled: boolean): Promise<
   const sb = await createServer();
   const { error } = await sb.from('family_app_installs').update({ enabled })
     .eq('family_id', ctx.active.familyId).eq('app_id', appId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   revalidatePath(PATH);
   return { ok: true };
 }

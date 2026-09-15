@@ -1,4 +1,5 @@
 import type { SupabaseBrowser } from '@/lib/supabase/types';
+import { describeActionError } from '@/lib/supabase/errors';
 
 export const FEEDBACK_ATTACHMENTS_BUCKET = 'feedback-attachments';
 export const FEEDBACK_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
@@ -29,5 +30,5 @@ export async function removeFeedbackAttachmentPath(
   path: string,
 ): Promise<{ error: string | null }> {
   const { error } = await supabase.storage.from(FEEDBACK_ATTACHMENTS_BUCKET).remove([path]);
-  return { error: error?.message ?? null };
+  return { error: error ? describeActionError(error) : null };
 }

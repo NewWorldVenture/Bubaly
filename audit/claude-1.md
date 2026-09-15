@@ -2709,3 +2709,68 @@ session's block: **I shipped a regression and CI found it, not me.**
   policy with `l.family_id` written **explicitly**, so the next reader sees what
   actually runs.
 - **Status:** FIXED (as documentation — the behaviour is unchanged by design).
+
+### [CLAUDE-1][MEDIUM][SECURITY] The database was talking straight to the browser
+
+- **Raised by:** Claude-3, who proved the classification gap on the live database
+  and counted 311 `describeDbError` call sites and "14" bare `.message` returns.
+  Verified and fixed. **The real count of raw returns was 78, not 14** — their
+  grep was narrower than the shape.
+- **Files:** `lib/supabase/errors.ts`, 30 server modules,
+  `tests/the-database-does-not-talk-to-the-browser.test.ts`, `tests/db-errors.test.ts`
+- **Problem, in two halves.**
+  1. `describeDbError` classified ten shapes and then `return raw.trim() || fallback`.
+     Anything else — an enum coercion, a numeric overflow, a function-not-found,
+     a provider error re-thrown as an `Error` — went through verbatim.
+     `insert … status='bogus'` answers with the whole grammar of a type:
+     *invalid input value for enum redemption_status: "bogus"*.
+  2. Worse, and entirely outside that function: 78 server sites never called it
+     at all. `if (error) return { ok: false, error: error.message }`, fifty times
+     over, in server actions and `lib/**-server.ts`.
+- **Where I disagreed with the report, and why.** Claude-3 proposed making the
+  fallback non-leaking for everything, or switching all 311 sites to
+  `describeActionError`. Both are wider than the defect:
+  - **340 of the call sites are in `'use client'` modules.** That error came from
+    PostgREST into the browser's own memory. Re-describing it there hides
+    nothing from anybody; it is cosmetics, and 340 files of churn.
+  - **Blanking every unclassified message would swallow the app's own.**
+    `throw new Error('Pick a date first')` is written for a person and is the
+    best thing to show.
+  So the line is not *raw* vs *described* — it is **who wrote the string**. An
+  error carrying a Postgres `code` came from the database; one without a code
+  came from us. Two lines:
+  ```ts
+  if (!code) return raw.trim() || fallback;
+  return fallback;
+  ```
+  Every classified branch is untouched, so the product can still explain itself.
+- **The ratchet found more than my own grep did, which is the argument for
+  having one.** Written as a test rather than a one-off search, it swept 11 more
+  raw returns in `lib/network/aggregate-server.ts`, `lib/planning/prep-server.ts`
+  and `lib/twin/project-server.ts` that my `err|error|e` pattern had missed
+  (`pruneErr`, `edgeErr`, `stepErr`…). It also produced **one false positive**,
+  which is recorded because it shaped the rule: `lib/ai/runs/detail.ts` maps run
+  EVENTS with `events.map((e) => ({ …, message: e.message }))`, where `e` is a
+  row and `message` is its own column. So the key now decides how much the name
+  must look like an error — under `error:` a bare `e` is an error by context
+  (`catch (e)`), under `message:` it is not.
+- **One test was asserting the leak.** `tests/twin-project-read-boundary.test.ts`
+  required `res.error` to *contain* `'row-level security'`. That is the
+  disclosure written down as the expectation. It now asserts the caller gets the
+  written sentence and does **not** get the policy's words — while still
+  asserting the raw string reaches the server log, which is the whole point of
+  describing rather than swallowing.
+- **Status:** FIXED. 78 sites in 30 files. Non-vacuity proven by three mutations:
+  put one raw `.message` back into a server action → the ratchet names the file
+  and line; put the identical line into a **client** component → the ratchet
+  stays silent, so the exemption is deliberate rather than accidental; restore
+  `return raw.trim() || fallback` → `db-errors` fails with *"22P02 leaked its raw
+  message"*.
+- **Verified:** tsc and eslint clean; **13,884 tests green across four shards**.
+
+### [CLAUDE-1][LOW][RLS] `marketplace_orders` WITH CHECK — see the 0311 entry above
+
+- Claude-3 filed this as its own LOW. Closed by 0311, together with the
+  `marketplace_offers` twin their report had missed. Cross-referenced here so
+  the two entries are not read as two open items.
+- **Status:** FIXED (0311).

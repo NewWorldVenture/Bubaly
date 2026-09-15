@@ -11,6 +11,7 @@ import {
 } from '@/lib/twin/simulate';
 import { readAll } from '@/lib/supabase/read-all';
 import { escapeLike } from '@/lib/supabase/escape-like';
+import { describeActionError } from '@/lib/supabase/errors';
 
 // Decision Simulator server action (Digital Twin, pillar #2). Assembles the real
 // household context for the proposed decision and runs the pure simulator. All
@@ -169,7 +170,7 @@ export async function saveSimulationAction(input: ActivityProjectionInput, resul
     dimensions: result.dimensions as never,
     created_by: ctx.user.id,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   revalidatePath('/dashboard/family-digital-twin');
   return { ok: true };
 }
@@ -179,7 +180,7 @@ export async function deleteSimulationAction(id: string): Promise<Result> {
   const ctx = await requireUserContext();
   const supabase = await createServer();
   const { error } = await supabase.from('twin_simulations').delete().eq('id', id).eq('family_id', ctx.active.familyId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   revalidatePath('/dashboard/family-digital-twin');
   return { ok: true };
 }
