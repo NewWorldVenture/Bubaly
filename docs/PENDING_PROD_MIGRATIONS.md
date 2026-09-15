@@ -514,8 +514,8 @@ passed; production application of the atomic `0240-0254` release remains pending
 ## Migrations added since this document's stated baseline (2026-09-12)
 
 The status line at the top of this file is dated **2026-09-05** against main
-`01881fb2`. **Forty-three** migration files have landed since, `0255` through
-`0300`, and none of them appear anywhere above. (This read "thirty-one, `0255`
+`01881fb2`. **Forty-four** migration files have landed since, `0255` through
+`0301`, and none of them appear anywhere above. (This read "thirty-one, `0255`
 through `0285`" until 2026-09-13 and "seventy-one, `0255` through `0295`" until
 2026-09-15; the range keeps growing past the sentence. The count is the number
 of files in that range, which is what `ls supabase/migrations` reports — the
@@ -715,3 +715,53 @@ CI replays it against the fully bootstrapped schema on every pull request.
 
 Until it is applied, a signed-in parent can give their own family Family+ for
 nothing, in one request, in production.
+
+
+### `0301` decides who may address and rewrite a notification — unapplied
+
+Authored 2026-09-15. **Not applied**, same credentialed operator as everything
+above, same order.
+
+`notifications` is not an in-app list. The cron reads it with the service role
+and turns each row into an email from Bubaly's own sender
+(`lib/server/notification-emails.ts`) and a device push (`lib/server/push.ts`).
+Its write policies were written for a list.
+
+`notif_insert` checked only `is_family_member(family_id)`; `user_id` was a plain
+FK to `auth.users` with no family constraint. The email cron selects on
+`sent_at is null`, `user_id is not null` and `send_at <= now()` — **no family
+filter** — so the `family_id` a row claims never reaches the delivery decision.
+Measured as a CHILD of one family, with a control proving a non-member is
+refused the same statement:
+
+| Statement | Result |
+|---|---|
+| `insert into notifications (family_id, user_id, …) values (<my family>, <a user in ANOTHER family>, …)` | 1 row, matching the cron's selection exactly |
+| `update notifications set title='Rent is CANCELLED this month', body='— Bubaly' where user_id is null` | 1 row — any member rewrites a notice the product generated |
+| `update notifications set sent_at=null, pushed_at=null where user_id=<me>` | 1 row — the stamps are the only thing making delivery once-only |
+
+`notif_update` had a `USING` clause and no `WITH CHECK`, so Postgres reused
+`USING` as the new-row test, and its second branch is the family-wide row.
+
+`0301` pins the recipient — `user_id` must be NULL or an **active member of the
+row's own family**, which is exactly what `resolveRecipients` already builds —
+and narrows the table's UPDATE grant to `is_read`, the only column the browser
+writes (`components/modules/notifications-module.tsx`). `sent_at` and
+`pushed_at` are stamped by the cron under the service role. Both rewrite and
+re-delivery close together, without touching who may mark a notice read.
+
+**Not closed, and stated rather than implied.** A member can still file a
+notification with an arbitrary title and body for someone in their **own**
+family, which the cron will email from Bubaly's sender. That cannot be decided
+at the RLS layer: the legitimate paths look identical — the AI notify tool, the
+trip-disruption report and the geofence alert all insert member-authored text
+through the caller's own session. Closing it means routing every `notify()`
+write through the service client, which touches the AI run executor, and that is
+a change to make deliberately rather than as a rider.
+
+**Measured, not argued.** `docs/audit/notification-authorship-check.sql` runs as
+a real `authenticated` child session under RLS. Its three attack assertions fail
+against the previous schema, naming each statement; all pass after `0301`; and
+it asserts the other direction too — marking read, addressing an in-family
+recipient, and filing the family-wide row all still work, so a revoke that broke
+the product would not read as a pass. CI replays it on every pull request.
