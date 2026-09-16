@@ -6308,3 +6308,159 @@ either a running authenticated session (still blocked) or product decisions that
 belong to the owner. Continuing to grind the same method would start
 manufacturing findings rather than discovering them, which is the failure mode
 this document has been most careful about.
+
+# Pass T — the sensitive-table list, measured instead of estimated
+
+`lib/ai/context/policy.ts` names 66 tables, and its header says why: *"§4 says
+a child must not inspect household finances or confidential documents."*
+Migration `0297` reported that **58 of them were readable by any family
+member**, fixed the three that needed no product decision, and left the rest
+as *"needs a product decision"* — a sentence that has sat in this document
+since Pass B with no list behind it.
+
+This pass replaces the estimate with a measurement, taken from a replayed
+schema (317 migrations, 0 failed) rather than from reading migration text.
+
+## What a child can actually read
+
+| reachability | tables |
+|---|---|
+| **any family member, children included** | **54** |
+| self-scoped (`auth.uid()`) | 4 |
+| manager-only | 4 |
+| deny-all, service role only | 2 |
+| member + self/owner narrowing | 1 |
+| `using (false)` | 1 |
+
+54 is the number worth carrying forward: 58 minus the four that `0297` and
+`0303` have since closed.
+
+## The split that makes it actionable
+
+The 54 are not one problem. **29 carry a `member_id`**, so the repository's own
+established pattern applies directly — `0272`'s and `0297`'s
+`is_self_member(member_id) or can_manage_family(family_id)`. A teenager keeps
+their own sleep log and their own medication list and stops reading a
+parent's. Those need review, not a product debate.
+
+| per-member table | what it holds |
+|---|---|
+| `behavior_logs` | behaviour notes about children |
+| `care_log` | care notes |
+| `child_wallets` | child balances |
+| `driving_trips` | driving telemetry |
+| `family_emergency_contacts` | emergency contacts |
+| `family_insurance_policies` | policy numbers |
+| `health_goals` | health targets |
+| `health_metrics` | measurements |
+| `health_providers` | clinicians |
+| `health_visits` | visit notes |
+| `immunizations` | vaccination records |
+| `insurance_policies` | policy numbers |
+| `journal_entries` | private journals |
+| `location_events` | location history |
+| `medical_profiles` | conditions, physicians, emergency contacts |
+| `medication_doses` | prescriptions |
+| `medications` | prescriptions |
+| `member_locations` | live location |
+| `nutrition_logs` | per-person intake |
+| `safety_check_ins` | check-in locations |
+| `sleep_checkins` | sleep tracking |
+| `sleep_logs` | sleep tracking |
+| `stripe_cardholders` | cardholder identity |
+| `symptom_logs` | symptoms |
+| `tax_documents` | tax filings |
+| `vacation_documents` | passport and ticket scans |
+| `vacation_medical_information` | travel medical detail |
+| `wallet_cards` | card details |
+| `wallet_passes` | stored passes |
+
+**The other 25 have no per-member column.** They are family-wide by shape, so
+narrowing them genuinely is a product decision: who in a household may see the
+investment positions, the payout account, the ride history.
+
+| family-wide table | what it holds |
+|---|---|
+| `auto_insurance_policies` | policy numbers |
+| `babysitter_payments` | payment detail |
+| `billing_customers` | billing identity |
+| `checkout_sessions` | payment sessions |
+| `family_emergency_plans` | emergency plans |
+| `family_inbox_messages` | inbound mail bodies |
+| `family_wallets` | wallet balances |
+| `financial_accounts` | account numbers |
+| `gift_payments` | payment detail |
+| `home_warranties` | warranty account numbers |
+| `household_info` | rows flagged is_sensitive (alarm codes, wifi keys) |
+| `invest_holdings` | investment positions |
+| `invest_orders` | investment orders |
+| `medication_schedules` | prescriptions |
+| `paperwork_items` | scanned paperwork bodies |
+| `pay_handles` | payment handles |
+| `rides` | ride locations |
+| `stripe_authorizations` | card authorisations |
+| `stripe_connected_accounts` | payout accounts |
+| `stripe_financial_accounts` | account numbers |
+| `stripe_issuing_cards` | card numbers |
+| `vacation_emergency_contacts` | emergency contacts |
+| `vehicle_registrations` | registration numbers |
+| `wallet_transactions` | per-child card activity |
+| `weather_locations` | stored coordinates |
+
+Neither list is acted on here. Twenty-nine RLS policies is not a change to
+make unreviewed at the end of an audit, and the audit has said since Pass B
+that this needs the owner. What it did not have until now was the list.
+
+## C1-S6-06 [MEDIUM][PRIVACY] — the one in that list that needed no decision at all
+
+`household_info` is the family binder: wifi passwords, alarm codes, gate codes,
+meter numbers. It carries an `is_sensitive boolean`, and the UI honours it —
+`binder-module.tsx` masks such a value behind an eye toggle labelled *"Mask by
+default"*.
+
+**The mask was the only thing honouring it.** The policy was a single
+
+```sql
+"Members manage household_info"  FOR ALL  USING is_family_member(family_id)
+```
+
+so the raw row reached every member through the browser's anon client. The eye
+toggle hides a value the client already holds. Measured against a replayed
+schema by impersonating a child:
+
+```
+CHILD reads 1/1 SENSITIVE household_info row(s)
+  value the child can read: hunter2-alarm-4417
+```
+
+The intent was written down in **two** places — a column the family sets
+themselves, and `policy.ts`'s entry *"rows flagged is_sensitive (alarm codes,
+wifi keys)"* — and enforced in neither. That is what separates this from the
+other 53: no product decision is needed, because the family already made it,
+per row, in the UI.
+
+**`0266` is the precedent and the argument.** That migration moved the document
+vault's sensitivity predicate into the database for exactly this reason, in its
+own words: the modules *"query through the browser anon client and never reach"*
+the service that filtered correctly. `0305` is the same shape, and simpler —
+there is no category list to mirror, because the family sets the flag itself.
+
+Both halves of the update policy are kept, for 0266's stated reason: `using`
+stops a non-manager touching a row that is already sensitive, and `with check`
+stops them clearing the flag, reading the value, and setting it back. The probe
+tests that path specifically.
+
+**An ordinary binder row is untouched.** A child still reads the bin day, still
+adds one, still edits it. The probe asserts that too — *"the fix went too far"*
+is a failure mode as real as the leak, and this audit has already corrected one
+remedy that went too far.
+
+Verified end to end on the harness: before the migration a child read the wifi
+key; after it, zero sensitive rows, one ordinary row, an insert refused, an
+un-flag matching zero rows, and a parent still seeing both.
+`docs/audit/household-binder-boundary-check.sql` is replayed by CI on every pull
+request — **25/25 probes pass** with it added — and was proved red by restoring
+the old blanket policy. The migration-shape guard was proved red twice: once by
+leaving the blanket policy in place beside the new ones (PostgreSQL ORs
+permissive policies together, so the fix would have been inert), and once by
+dropping the `with check` half.
