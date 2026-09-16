@@ -1,4 +1,10 @@
--- Bubaly :: 0302 - a behaviour note belongs to whoever wrote it
+-- Bubaly :: 0314 - a behaviour note belongs to whoever wrote it
+-- ----------------------------------------------------------------------------
+-- Renumbered from 0302. main landed `0302_one_live_system_policy.sql` for a
+-- different finding while this was in flight — the SEVENTH collision between
+-- the two sessions, and the third in a row: every merge since 0300 has brought
+-- one. Only the number changed; this touches `child_logins` and
+-- `behavior_logs`, which nothing between 0303 and 0313 goes near.
 -- ----------------------------------------------------------------------------
 -- `behavior_logs` is filed in the repo's own SENSITIVE_TABLES
 -- (lib/ai/context/policy.ts:68) as "behaviour notes about children", and carried

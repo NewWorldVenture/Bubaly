@@ -12,6 +12,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import {
   recordEvent, markEventProcessed, markEventError,
   handleAuthorizationRequest, handleTransactionCreated, handleAuthorizationUpdated,
+  handleIssuingCardUpdated,
 } from '@/lib/stripe/webhook';
 import { syncConnectedAccount } from '@/lib/stripe/connect';
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body';
@@ -67,6 +68,16 @@ export async function POST(req: NextRequest) {
         break;
       case 'issuing_authorization.updated':
         await handleAuthorizationUpdated(supabase, event.data.object as Stripe.Issuing.Authorization);
+        break;
+      // The card's own state. lib/stripe/issuing.ts writes our mirror after the
+      // Stripe update and used to discard that write's result, and nothing
+      // reconciled the two because this event fell through to `default` — so a
+      // refused mirror write left /wallet showing a limit or a freeze state the
+      // card no longer had, permanently. `.created` is here too: a card issued
+      // while the mirror insert failed is the same divergence on its first day.
+      case 'issuing_card.created':
+      case 'issuing_card.updated':
+        await handleIssuingCardUpdated(supabase, event.data.object as Stripe.Issuing.Card);
         break;
       case 'account.updated': {
         const acct = event.data.object as Stripe.Account;

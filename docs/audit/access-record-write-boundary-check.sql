@@ -1,6 +1,6 @@
--- Behavioural proof for 0302 AND for 0297, run as real `authenticated` sessions
+-- Behavioural proof for 0314 AND for 0297, run as real `authenticated` sessions
 -- under RLS. Two sessions found the child_logins half independently and 0297
--- landed first, keeping the policy's name and re-predicating it; 0302 covers
+-- landed first, keeping the policy's name and re-predicating it; 0314 covers
 -- behavior_logs. This probe asserts both halves whichever migration supplied
 -- them, which is the right shape for a boundary check: it tests the boundary,
 -- not the file that drew it.

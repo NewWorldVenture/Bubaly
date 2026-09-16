@@ -9,6 +9,7 @@ import { sealCalendarPreview, type CalendarPreviewReceipt } from '@/lib/onboardi
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
 import { dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
 import { assertOnboardingCalendarAccess } from './access';
+import { settleAll } from '@/lib/supabase/settle';
 
 const object = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 async function unavailable() { return fail((await getTranslations())('connectedCalendar.unavailable'), { code: SERVICE_CODES.db, retryable: true }); }
@@ -17,7 +18,7 @@ export const connectedEventKey = (accountId: string, calendarId: string, externa
 
 async function ownedAccount(scope: ServiceScope, accountId: string) {
   if (!scope.userId || scope.actorKind === 'ai') throw new Error('Calendar ownership unavailable');
-  const [account, member] = await Promise.all([
+  const [account, member] = await settleAll([
     scope.db.from('sync_accounts').select('id, updated_at, user_id, family_id, provider, metadata, sync_direction').eq('id', accountId).eq('user_id', scope.userId).eq('family_id', scope.familyId).maybeSingle(),
     scope.db.from('family_members').select('id, role').eq('user_id', scope.userId).eq('family_id', scope.familyId).eq('is_active', true).maybeSingle(),
   ]);
@@ -190,7 +191,7 @@ export async function validateConnectedCalendarReceipt(scope: ServiceScope, rece
   try {
     const { account } = await ownedAccount(scope, receipt.accountId);
     if (receipt.familyId !== scope.familyId || receipt.userId !== scope.userId || receipt.provider !== account.provider) throw new Error('Calendar preview ownership changed');
-    const [prefs, progress] = await Promise.all([
+    const [prefs, progress] = await settleAll([
       scope.db.from('user_preferences').select('active_family_id').eq('user_id', scope.userId!).maybeSingle(),
       scope.db.from('onboarding_progress').select('family_id, source, status').eq('user_id', scope.userId!).maybeSingle(),
     ]);

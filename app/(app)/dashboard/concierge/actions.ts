@@ -284,9 +284,19 @@ export async function setConciergeAutopilotAction(level: AutopilotLevel): Promis
   const familyId = ctx.active.familyId;
   const effect = dialEffect(level);
 
-  const { data: existing } = await sb
+  // The read error is checked. It used to be discarded, and that is what made
+  // this self-worsening: with two rows already present the single-row read
+  // fails, `existing?.id` is undefined, and the else-branch below adds a THIRD.
+  // Reporting the failure is the honest outcome — the dial did not move, and
+  // saying so beats writing another row nobody asked for.
+  const { data: existing, error: lookupError } = await sb
     .from('trust_policies').select('id')
-    .eq('family_id', familyId).eq('name', AUTOPILOT_POLICY_NAME).maybeSingle();
+    .eq('family_id', familyId).eq('name', AUTOPILOT_POLICY_NAME)
+    .eq('is_system', true).eq('enabled', true).maybeSingle();
+  if (lookupError) {
+    console.error('[concierge] autopilot policy lookup failed', { familyId, error: lookupError });
+    return { ok: false, error: describeActionError(lookupError, t('actions.couldNotUpdateThatPolicy')) };
+  }
 
   if (existing?.id) {
     const { error } = await sb.from('trust_policies')
@@ -301,7 +311,19 @@ export async function setConciergeAutopilotAction(level: AutopilotLevel): Promis
       subject_kind: 'ai', effect, priority: 10, enabled: true, is_system: true,
       created_by: ctx.user.id,
     });
-    if (error) return { ok: false, error: describeActionError(error) };
+    // 0302 makes a live system policy unique per (family, name), so a racing
+    // second submit loses with 23505 instead of creating a rival row. The
+    // winner already carries a level the parent chose; re-apply ours over it
+    // rather than reporting a failure for a dial that is about to be right.
+    if (error?.code === '23505') {
+      const { error: retryError } = await sb.from('trust_policies')
+        .update({ effect, enabled: true })
+        .eq('family_id', familyId).eq('name', AUTOPILOT_POLICY_NAME)
+        .eq('is_system', true).eq('enabled', true);
+      if (retryError) return { ok: false, error: describeActionError(retryError) };
+    } else if (error) {
+      return { ok: false, error: describeActionError(error) };
+    }
   }
 
   revalidatePath(PATH);

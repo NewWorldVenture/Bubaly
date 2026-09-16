@@ -28,7 +28,7 @@ export default async function FamilyEmergencyPage() {
     settle(supabase.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true)),
     settle(supabase.from('family_emergency_contacts').select('*').eq('family_id', familyId).order('priority')),
     settle(supabase.from('family_emergency_plans').select('*').eq('family_id', familyId).eq('is_active', true).order('created_at')),
-    manager ? supabase.from('medical_profiles').select('member_id, blood_type, allergies, conditions, emergency_contact_name, emergency_contact_phone').eq('family_id', familyId) : Promise.resolve({ data: [], error: null }),
+    manager ? settle(supabase.from('medical_profiles').select('member_id, blood_type, allergies, conditions, emergency_contact_name, emergency_contact_phone').eq('family_id', familyId)) : Promise.resolve({ data: [], error: null }),
   ]);
 
   // This is the crisis surface ("everything a caregiver needs in a crisis"). A

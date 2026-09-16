@@ -16,6 +16,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { requireFeature } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { ErrorState } from '@/components/ui/states';
+import { settleAll } from '@/lib/supabase/settle';
 import {
   FrontDeskModule, type FrontDeskChannel, type FrontDeskVoiceMessage,
 } from '@/components/modules/front-desk-module';
@@ -29,7 +30,7 @@ export default async function FrontDeskPage() {
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 
-  const [voiceResult, channelResult] = await Promise.all([
+  const [voiceResult, channelResult] = await settleAll([
     supabase
       .from('family_inbox_messages')
       .select('id, from_addr, body, ai_summary, ai_intent, ai_handled, status, occurred_at')

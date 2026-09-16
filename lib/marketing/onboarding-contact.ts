@@ -63,9 +63,15 @@ export async function upsertOnboardingContact(admin: DB, p: {
     existingId = data?.[0]?.id ?? null;
   }
 
+  // Both results are read. This function decides who a CRM contact IS — the
+  // same row the identity fix was about — so a write that did not land leaves
+  // the record saying something other than what the caller just established,
+  // with nothing to say so.
   if (existingId) {
-    await admin.from('crm_contacts').update(row).eq('id', existingId);
+    const { error } = await admin.from('crm_contacts').update(row).eq('id', existingId);
+    if (error) console.error('[onboarding-contact] contact update failed', { contactId: existingId, error });
   } else {
-    await admin.from('crm_contacts').insert({ ...row, created_by: p.userId });
+    const { error } = await admin.from('crm_contacts').insert({ ...row, created_by: p.userId });
+    if (error) console.error('[onboarding-contact] contact insert failed', error);
   }
 }

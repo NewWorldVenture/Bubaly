@@ -96,3 +96,50 @@ describe('the identity lookups escape their LIKE pattern', () => {
     expect(escapeLike('victim@bigcorp.test')).toBe('victim@bigcorp.test');
   });
 });
+
+// The same column, one call site further on. `adminCreateFamilyAction` resolved
+// the OWNER of a family a super admin was provisioning by
+// `.from('profiles').eq('email', …)`. profiles.email is self-settable and NOT
+// unique (only `profiles_pkey` on id), so the lookup answered with whoever last
+// claimed the string — and the action then writes that id as the new family's
+// `created_by` and upserts it as a `parent` member. An operator creating a
+// family for a customer could hand a parent seat to the account that claimed
+// the customer's address.
+//
+// Measured on a replayed database: acting as an ordinary user,
+//   update profiles set email = 'ceo@bigcustomer.test' where id = <me>;
+// succeeds, while auth.users still holds the address they actually verified.
+describe('a family owner is resolved from the verified address', () => {
+  const adminActions = read('app/(app)/admin/actions.ts');
+
+  it('adminCreateFamilyAction reads auth.users, not profiles.email', () => {
+    expect(adminActions).toContain('listAllAuthUsers(supabase)');
+    expect(adminActions).toMatch(/matches\s*=\s*authUsers\.filter/);
+  });
+
+  it('an incomplete auth list is reported, never answered as "no account"', () => {
+    // listAllAuthUsers returns an error rather than a short list precisely so a
+    // truncated read cannot become a confident negative. Answering
+    // "no account found with that email" from a failed read would be the same
+    // false statement in a new place.
+    const slice = adminActions.slice(adminActions.indexOf('listAllAuthUsers(supabase)'));
+    const until = slice.slice(0, slice.indexOf('noAccountFoundWithThat'));
+    expect(until, 'the failed-read branch must return before the not-found branch')
+      .toMatch(/if \(ownerLookupError\) return actionFailure/);
+  });
+
+  it('no profiles read anywhere keys an identity on the email column', () => {
+    // The whole class, swept rather than listed: reading profiles BY email is
+    // asking a self-declared field who someone is.
+    for (const [name, src] of [
+      ['app/(app)/admin/actions.ts', adminActions],
+      ['app/onboarding/actions.ts', onboarding],
+      ['lib/marketing/onboarding-contact.ts', contact],
+      ['lib/marketing/identity.ts', identity],
+      ['app/(app)/dashboard/settings/profile-actions.ts', profileActions],
+    ] as [string, string][]) {
+      expect(src, `${name} looks a user up by profiles.email`)
+        .not.toMatch(/from\('profiles'\)[\s\S]{0,120}?\.eq\('email'/);
+    }
+  });
+});

@@ -10,6 +10,8 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { settleAll } from '@/lib/supabase/settle';
+import { readAll } from '@/lib/supabase/read-all';
+import { readAllInChunks } from '@/lib/supabase/chunked-in';
 import type { Database } from '@/lib/database.types';
 import {
   contributionFeatures, bedtimeToMinutes, typicalWeeklySpend, type ContributionInput,
@@ -63,15 +65,32 @@ async function buildContributionsBatch(sb: DB, familyIds: string[], now: Date): 
   const weekEndKey = new Date(now.getTime() + 7 * 86_400_000).toISOString().slice(0, 10);
   const spendStartKey = new Date(now.getTime() - SPEND_WINDOW_DAYS * 86_400_000).toISOString().slice(0, 10);
   const weekEndIso = new Date(now.getTime() + 7 * 86_400_000).toISOString();
+  // Eight reads, each chunked by family AND paged inside the chunk.
+  //
+  // One `.in()` over every opted-in family is short on both counts. The URL
+  // outgrows the gateway's request line, and — the one that bites first — the
+  // ROW count outgrows PostgREST's db-max-rows: these tables hold many rows per
+  // family, so a few hundred households is already more than a thousand
+  // members, chores or transactions. A short answer arrives with no error.
+  //
+  // And here a short answer cannot be noticed downstream, by construction: the
+  // docstring above promises a family with no rows still gets a valid
+  // empty-household contribution, so truncated data and a genuinely empty
+  // household are the same input. The family is published into the network
+  // aggregates with a childCount of zero, no bedtimes and no spend — wrong
+  // bands, in the benchmarks every other family reads.
+  //
+  // Each read orders by `id` rather than `family_id`: paging needs a unique
+  // order, and the column being filtered on is the least unique one there is.
   const [members, dinners, teams, classes, chores, bedtimes, spend, reminders] = await settleAll([
-    sb.from('family_members').select('id, family_id, birthday, role').in('family_id', familyIds).eq('is_active', true),
-    sb.from('meal_plans').select('family_id, plan_date').in('family_id', familyIds).eq('meal_type', 'dinner').gte('plan_date', todayKey).lte('plan_date', weekEndKey),
-    sb.from('teams').select('family_id').in('family_id', familyIds).eq('is_active', true),
-    sb.from('school_classes').select('family_id').in('family_id', familyIds),
-    sb.from('chore_assignments').select('family_id, member_id').in('family_id', familyIds).in('status', [...OPEN_CHORE_STATUSES]),
-    sb.from('bedtime_routines').select('family_id, member_id, target_bedtime').in('family_id', familyIds).eq('is_active', true),
-    sb.from('transactions').select('family_id, amount').in('family_id', familyIds).eq('type', 'expense').gte('date', spendStartKey).lte('date', todayKey),
-    sb.from('reminders').select('family_id').in('family_id', familyIds).gte('remind_at', now.toISOString()).lte('remind_at', weekEndIso),
+    readAllInChunks(familyIds, (chunk, from, to) => sb.from('family_members').select('id, family_id, birthday, role').in('family_id', chunk).eq('is_active', true).order('id').range(from, to)),
+    readAllInChunks(familyIds, (chunk, from, to) => sb.from('meal_plans').select('family_id, plan_date').in('family_id', chunk).eq('meal_type', 'dinner').gte('plan_date', todayKey).lte('plan_date', weekEndKey).order('id').range(from, to)),
+    readAllInChunks(familyIds, (chunk, from, to) => sb.from('teams').select('family_id').in('family_id', chunk).eq('is_active', true).order('id').range(from, to)),
+    readAllInChunks(familyIds, (chunk, from, to) => sb.from('school_classes').select('family_id').in('family_id', chunk).order('id').range(from, to)),
+    readAllInChunks(familyIds, (chunk, from, to) => sb.from('chore_assignments').select('family_id, member_id').in('family_id', chunk).in('status', [...OPEN_CHORE_STATUSES]).order('id').range(from, to)),
+    readAllInChunks(familyIds, (chunk, from, to) => sb.from('bedtime_routines').select('family_id, member_id, target_bedtime').in('family_id', chunk).eq('is_active', true).order('id').range(from, to)),
+    readAllInChunks(familyIds, (chunk, from, to) => sb.from('transactions').select('family_id, amount').in('family_id', chunk).eq('type', 'expense').gte('date', spendStartKey).lte('date', todayKey).order('id').range(from, to)),
+    readAllInChunks(familyIds, (chunk, from, to) => sb.from('reminders').select('family_id').in('family_id', chunk).gte('remind_at', now.toISOString()).lte('remind_at', weekEndIso).order('id').range(from, to)),
   ]);
   const readError = [members, dinners, teams, classes, chores, bedtimes, spend, reminders].map((r) => r.error).find(Boolean);
   if (readError) {
@@ -141,11 +160,18 @@ async function buildContributionsBatch(sb: DB, familyIds: string[], now: Date): 
 
 export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Promise<AggregateResult> {
   // 1. Which families are opted in (master toggle on)?
-  const { data: consents, error: cErr } = await sb.from('network_consent')
-    .select('family_id, enabled, scopes').eq('enabled', true);
+  // Read whole, by paging. A short read here is not just a smaller
+  // aggregation: `keepIds` below is built from this list and drives a
+  // `not in` DELETE, so an opted-in family beyond PostgREST's db-max-rows
+  // would have its contribution DELETED as if it had opted out — and then be
+  // missing from the aggregates it consented to feed.
+  const { rows: consents, error: cErr } = await readAll<{
+    family_id: string; enabled: boolean; scopes: Database['public']['Tables']['network_consent']['Row']['scopes'];
+  }>((from, to) => sb.from('network_consent')
+    .select('family_id, enabled, scopes').eq('enabled', true).order('family_id').range(from, to));
   if (cErr) return { ok: false, error: describeActionError(cErr), contributors: 0, aggregates: 0 };
 
-  const optedIn = consents ?? [];
+  const optedIn = consents;
 
   // 2. CONTRIBUTE — refresh each opted-in family's coarse row; drop everyone else's.
   // Granular consent is enforced HERE: only metrics whose scope the family

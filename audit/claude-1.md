@@ -3186,3 +3186,29 @@ session's block: **I shipped a regression and CI found it, not me.**
   `TZ=America/Los_Angeles` and 10/10 under `TZ=UTC`**, and the whole suite
   **13,907 green under LA across four shards** — the run I had not done locally
   and should have, given what the commit changed.
+
+### [CLAUDE-1][MERGE] Eighth merge, seventh number collision — one on every merge since 0300
+
+- main landed **eight PRs** (#561–#568) in one stretch. Three conflicts, all
+  resolved by union.
+- **Seventh migration-number collision**: their `0302_one_live_system_policy`
+  against my `0302_a_behaviour_note_belongs_to_whoever_wrote_it`. Mine is now
+  **0314**. Every merge since 0300 has brought one — 0300, 0301, 0302 on three
+  consecutive merges. Two references meant my 0302 and are updated; the rest
+  meant theirs.
+- **Both source conflicts were main adding real logic where I had only changed
+  the error reporting**, so both sides survive:
+  - `concierge/actions.ts` — their 23505 retry for a racing second submit
+    (0302 makes a live system policy unique per family+name) is kept whole, with
+    its two raw `.message` returns routed through `describeActionError`. My own
+    ratchet would have failed the build otherwise, which is the ratchet doing
+    its job on an incoming change rather than on mine.
+  - `lib/network/aggregate-server.ts` — their conversion to `readAll` paging is
+    kept whole, same treatment. Their reason is worth repeating because it is
+    sharper than a short read usually is: `keepIds` is built from that list and
+    drives a `not in` DELETE, so an opted-in family past PostgREST's cap would
+    have had its contribution **deleted as if it had opted out**.
+- **Verified:** 327 migrations replayed from scratch (0 failed), 324 re-applied
+  onto the populated schema, **35/35 probes run twice**, and the full suite
+  **13,965 green under BOTH `TZ=UTC` and `TZ=America/Los_Angeles`** — running
+  both is now the habit, after the dual-TZ run caught the last regression.

@@ -514,8 +514,8 @@ passed; production application of the atomic `0240-0254` release remains pending
 ## Migrations added since this document's stated baseline (2026-09-12)
 
 The status line at the top of this file is dated **2026-09-05** against main
-`01881fb2`. **Forty-four** migration files have landed since, `0255` through
-`0301`, and none of them appear anywhere above. (This read "thirty-one, `0255`
+`01881fb2`. **Forty-five** migration files have landed since, `0255` through
+`0302`, and none of them appear anywhere above. (This read "thirty-one, `0255`
 through `0285`" until 2026-09-13 and "seventy-one, `0255` through `0295`" until
 2026-09-15; the range keeps growing past the sentence. The count is the number
 of files in that range, which is what `ls supabase/migrations` reports — the
@@ -765,3 +765,55 @@ against the previous schema, naming each statement; all pass after `0301`; and
 it asserts the other direction too — marking read, addressing an in-family
 recipient, and filing the family-wide row all still work, so a revoke that broke
 the product would not read as a pass. CI replays it on every pull request.
+
+
+### `0302` keeps one live system policy per family, per name — unapplied
+
+Authored 2026-09-15. **Not applied**, same credentialed operator as everything
+above, same order.
+
+`trust_policies` had exactly one unique index: the primary key on `id`.
+`setConciergeAutopilotAction` is a check-then-insert over
+`(family_id, name='Concierge autopilot')`, and it did not destructure the read
+error. That is what made this self-worsening rather than merely racy. Measured
+on a replayed database:
+
+| Step | Result |
+|---|---|
+| insert two rows, same name, effects `allow` and `deny`, both priority 10 | accepted — no constraint objects |
+| the single-row read the action performs | matches 2 rows, which PostgREST rejects |
+
+With the error discarded, `existing?.id` is undefined and the action takes its
+INSERT branch — adding a **third** row. Every later change to the dial adds
+another. `components/concierge/autopilot-panel.tsx` read the same row the same
+way, checked only the run feed's error, and rendered `dialLevel(undefined)`:
+the default. A parent's control over whether Bubaly executes accepted plans on
+its own silently stopped taking effect and stopped reporting its own state.
+
+**What is not claimed.** Which duplicate governs is undefined by contract —
+`lib/trust/engine.ts` sorts by `priority` alone and `loadTrustInputs` issued no
+`ORDER BY` — but the order was **not observed to flip** in this harness (an
+index scan served both reads), so no such claim is made. The ordering is fixed
+anyway, because which policy governs should not depend on a query plan.
+
+`0302` adds a partial unique index on `(family_id, name) where is_system and
+enabled`, scoped to `is_system` so a family's own hand-written policies may
+still share a name across domains. The repair **disables** superseded rows
+rather than deleting them: `loadTrustInputs` filters `enabled = true`, so a
+disabled row leaves the engine at once, and no household loses a row to make an
+index fit. The survivor in each group is the most recently updated — the
+parent's latest intent. A replay disables nothing.
+
+The action now checks its read error and treats a racing `23505` as "someone
+else created it, apply my level over it". The panel's read is narrowed to the
+one live row the index permits, which is what stops the wrong level rendering;
+its error is logged rather than swallowed, and it still falls back to the
+default rather than saying "unknown", because saying so needs copy in eleven
+languages and inventing those is worse than the gap it closes.
+
+**Measured, not argued.** `docs/audit/system-policy-uniqueness-check.sql`
+asserts the refusal, that a superseded row can still be kept alongside the live
+one, that the engine sees exactly one, that the index does **not** reach a
+family's own policies, and that the repair keeps the latest intent. Its first
+assertion fails against the previous schema, naming the count. CI replays it on
+every pull request.
