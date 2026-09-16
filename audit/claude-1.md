@@ -1970,3 +1970,41 @@ Fix:      No change. NOT added as a probe: it depends on the seed, the seed is
           find. Recorded as a measurement taken once, with the numbers.
 Status:   VERIFIED
 ```
+
+```
+[CLAUDE-1][OBSERVATION][SECURITY] the AI deny-list was checked one hop short
+File:     tests/context-policy.test.ts          (the existing ratchet)
+          lib/ai/context/policy.ts:28-34        (the claim nothing checked)
+          lib/services/trips/index.ts:114-115   (what sits one import away)
+Problem:  The ratchet asserts no file under lib/ai/context/slices selects from a
+          SENSITIVE_TABLES table. That is the FIRST hop. The policy's docstring
+          says slices "call services, never these tables" and names two narrow
+          projections as exceptions — and nothing checked the services.
+Evidence: lib/services/trips getTrip reads vacation_documents ("passport and
+          ticket scans") and vacation_emergency_contacts, both select('*'), and
+          returns them on its snapshot. travel.ts imports listTrips, which reads
+          only `vacations`. Changing that ONE import to getTrip is a natural edit
+          for a slice about trips and would put passport scans in a prompt while
+          the existing ratchet stayed green.
+          Measured across every slice: 3 reaches, all documented
+          (documents.listDocuments, documents.expiringBefore -> documents;
+          meals.foodProfile -> medical_profiles), 0 undocumented. No live leak.
+Impact:   The guard is the defect, not the code. §4/§27 are the boundary this
+          repository cares most about and the check stopped one hop short of
+          where it is decided.
+Fix:      tests/context-policy-holds-one-hop-out.test.ts resolves each slice's
+          service imports and computes reach to a fixpoint over same-module
+          calls. Denied list and exceptions are READ FROM policy.ts, not
+          restated, so the guard cannot drift from what it enforces.
+          Writing it produced two parser bugs IN A ROW, each of which made the
+          answer zero — the parameter default `= {}` taken as the body, then the
+          return type `Promise<ServiceResult<{ link: X }>>` taken as the body.
+          Both were caught by a blind-spot assertion (every denied table a module
+          reads must be attributed to some function) rather than by suspecting a
+          clean result. A ratchet for vacuous guards that was itself vacuous
+          twice is the best evidence this audit has that the class is easy.
+          Three assertions, each proved red alone: travel.ts importing getTrip
+          (undocumented reach), the return-type bug reintroduced (blind spots),
+          and the resolver pointed at a non-matching path (positive control).
+Status:   FIXED
+```

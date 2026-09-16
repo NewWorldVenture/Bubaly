@@ -207,6 +207,15 @@ PRIOR SESSIONS (unchanged, see history below): F-020 migration idempotency;
     Deliberately not added as a probe — it depends on a best-effort seed, and a
     guard that passes vacuously when its data is missing is the defect class this
     audit exists to find.
+  - C1-S7-01: the AI context deny-list's ratchet checked only the first hop —
+    slices — while the policy's own docstring makes a claim about the second,
+    the services. lib/services/trips getTrip reads vacation_documents (passport
+    scans) with select('*') and travel.ts sits one import away from it. Measured:
+    0 undocumented reaches today, so no live leak; the guard was the defect. New
+    one-hop ratchet reads the deny-list from policy.ts rather than restating it.
+    Writing it produced two parser bugs in a row that each made the answer zero,
+    both caught by its own blind-spot assertion — the strongest evidence this
+    audit has that the vacuous-guard class is easy to fall into.
 NEXT: C2-M03 is the largest open finding — ~251 en-US-pinned date/time call
   sites across ~135 files against an 11-locale catalogue. The trap is recorded
   in Pass P: dayKey() uses 'en-US' as a PARSE locale and must not be switched.

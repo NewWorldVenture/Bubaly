@@ -7031,3 +7031,77 @@ vacuously when its data is missing is precisely the defect class this audit
 exists to find, and adding one in the course of verifying fixes for that class
 would be the worst possible place to introduce it. Recorded as a measurement
 taken once, with the numbers, so a later pass can repeat it rather than trust it.
+
+
+## C1-S7-01 [OBSERVATION][SECURITY] — the AI deny-list was checked one hop short of where it matters
+
+**File:** `tests/context-policy.test.ts` (the existing ratchet) ·
+`lib/ai/context/policy.ts:28-34` (the claim it does not check) ·
+`lib/services/trips/index.ts:114-115` (what sits one import away)
+**Status:** FIXED — `tests/context-policy-holds-one-hop-out.test.ts`
+
+### Problem
+
+`SENSITIVE_TABLES` is the deny-list deciding what a prompt may know about a
+family: credentials, passports, prescriptions, live location, account numbers.
+Its ratchet asserts that no file under `lib/ai/context/slices` selects from one.
+That is the **first** hop, and the policy's own design puts the interesting part
+on the second — its docstring says slices "call services, never these tables",
+and names two narrow projections as exceptions (allergies from a medical
+profile, a document's title). **Nothing checked the services.**
+
+That is not hypothetical. `lib/services/trips`'s `getTrip` reads
+`vacation_documents` — "passport and ticket scans", in the deny-list's own
+words — and `vacation_emergency_contacts`, both with `select('*')`, and returns
+them on its snapshot. `lib/ai/context/slices/travel.ts` imports `listTrips`,
+which reads only `vacations`.
+
+**Changing that one import to `getTrip` is a natural edit** for a slice about
+trips, and it would put passport scans into a prompt while the existing ratchet
+stayed green — because `travel.ts` would still contain no
+`.from('vacation_documents')`.
+
+### Measured
+
+Resolving every slice's `@/lib/services/*` imports and computing which denied
+tables each imported function reaches — its own body plus any same-module
+function it calls, to a fixpoint:
+
+```
+documents.ts   documents.expiringBefore  -> [documents]          documented
+documents.ts   documents.listDocuments   -> [documents]          documented
+food.ts        meals.foodProfile         -> [medical_profiles]   documented
+
+slices reaching an UNDOCUMENTED denied table: 0
+```
+
+**No live leak.** The two reaches that exist are precisely the two the policy
+documents. The defect is the guard, not the code it guards.
+
+### Getting to that zero took two parser bugs, and that is the point
+
+Both made the answer zero, and both were caught by a **blind-spot check** — every
+denied table a module reads must be attributed to some function, or the parser
+cannot see — rather than by noticing that a clean result was suspicious:
+
+- `export async function f(scope, input = {})` — taking the first `{` after the
+  function name finds the **parameter default**, so every body was `{}`.
+- `): Promise<ServiceResult<{ link: X }>> {` — taking the first `{` after the
+  parameter list finds the **return type**.
+
+A ratchet for vacuous guards that was itself vacuous twice before it worked is
+the most direct evidence this audit has produced that the class is easy to fall
+into. The finished test therefore carries three assertions, and each was proved
+red on its own:
+
+| mutation | which assertion fires |
+| --- | --- |
+| `travel.ts` imports `getTrip` — the real hazard | no undocumented reach |
+| the return-type brace bug, reintroduced | no parser blind spots |
+| the import resolver pointed at a path that matches nothing | the documented reaches are still found |
+
+The third is the positive control: without it, a future refactor that breaks the
+resolver makes the suite go quietly green on an empty result set.
+
+`SENSITIVE_TABLES` and its `except` fields are read from `policy.ts` at runtime
+rather than restated, so the guard cannot drift from the list it enforces.
