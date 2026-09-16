@@ -1,6 +1,6 @@
--- Bubaly :: 0307 A review belongs to whoever wrote it
+-- Bubaly :: 0310 A review belongs to whoever wrote it
 -- ----------------------------------------------------------------------------
--- 0306 fixed the marketplace's order and offer UPDATE policies. Censusing for
+-- 0309 fixed the marketplace's order and offer UPDATE policies. Censusing for
 -- the same shape — an authorship column pinned on INSERT and left editable on
 -- UPDATE — turned up three more tables, and on these the UPDATE policy does not
 -- even restrict to the row's owner:
@@ -35,12 +35,12 @@
 -- to say that already, and a policy that matches its evident intent is easier to
 -- reason about later than an absence someone has to reconstruct.
 --
--- ── Why 0306's trigger function is replaced ────────────────────────────────
--- 0306 wrote `marketplace_parties_are_immutable()`, which branches on
+-- ── Why 0309's trigger function is replaced ────────────────────────────────
+-- 0309 wrote `marketplace_parties_are_immutable()`, which branches on
 -- `tg_table_name` with an `else`. Adding a third, fourth and fifth table to that
 -- shape means editing the function every time and an `else` that silently
 -- handles the wrong table. This migration replaces it with a generic helper that
--- takes its column list from the trigger definition, and re-points 0306's two
+-- takes its column list from the trigger definition, and re-points 0309's two
 -- triggers at it — same behaviour, stated per table at the point of attachment.
 --
 -- The helper refuses to run against a column that does not exist. A typo'd
@@ -81,7 +81,7 @@ end $$;
 comment on function public.columns_are_immutable() is
   'BEFORE UPDATE guard: the columns named in the trigger definition may not change for a caller subject to RLS. Keeps 0154''s object-level authorization from being undone by an UPDATE. Asserted by docs/audit/marketplace-ownership-update-check.sql.';
 
--- ── 0306's two triggers, re-pointed ────────────────────────────────────────
+-- ── 0309's two triggers, re-pointed ────────────────────────────────────────
 drop trigger if exists trg_marketplace_orders_parties on public.marketplace_orders;
 create trigger trg_marketplace_orders_parties
   before update on public.marketplace_orders

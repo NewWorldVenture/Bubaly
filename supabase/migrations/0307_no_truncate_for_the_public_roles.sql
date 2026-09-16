@@ -1,5 +1,5 @@
 -- ============================================================
--- Migration 0304: TRUNCATE is not part of the public surface
+-- Migration 0307: TRUNCATE is not part of the public surface
 --
 -- RLS is authorization; table privilege is a separate layer, and 0237 already
 -- says so in its own comment ("RLS is authorization, not table privilege. Keep

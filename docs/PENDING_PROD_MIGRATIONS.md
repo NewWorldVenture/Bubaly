@@ -514,10 +514,11 @@ passed; production application of the atomic `0240-0254` release remains pending
 ## Migrations added since this document's stated baseline (2026-09-12)
 
 The status line at the top of this file is dated **2026-09-05** against main
-`01881fb2`. **Forty-five** migration files have landed since, `0255` through
-`0302`, and none of them appear anywhere above. (This read "thirty-one, `0255`
-through `0285`" until 2026-09-13 and "seventy-one, `0255` through `0295`" until
-2026-09-15; the range keeps growing past the sentence. The count is the number
+`01881fb2`. **48** migration files have landed since, `0255` through
+`0305`, and none of them appear anywhere above. (This read "thirty-one, `0255`
+through `0285`" until 2026-09-13, "seventy-one, `0255` through `0295`" until
+2026-09-15, and "forty-five, `0255` through `0302`" and "46, `0255` through `0303`" until 2026-09-16; the range
+keeps growing past the sentence. The count is the number
 of files in that range, which is what `ls supabase/migrations` reports — the
 earlier "seventy-one" did not match its own stated range.)
 Nothing here authorizes applying any of them; this section exists so the gap is
@@ -818,17 +819,158 @@ family's own policies, and that the repair keeps the latest intent. Its first
 assertion fails against the previous schema, naming the count. CI replays it on
 every pull request.
 
+
+### `0303` closes the document vault's second half — unapplied
+
+`0266` closed the vault in two places. The ROW half works: a child cannot see a
+sensitive document, so they cannot learn its `storage_path`. The BYTES half was
+meant to hold the line anyway — its own comment says "a path learned before
+today (or guessed) still does not open the file" — and it did not.
+
+All three of its `storage.objects` policies guard with
+`not exists (select 1 from public.documents d where d.storage_path = ...)`.
+A policy expression is evaluated as the CALLING user, so that read of
+`public.documents` is itself subject to `documents_select`, the very policy that
+hides sensitive rows from a child. The child cannot see the row, the subquery
+finds nothing, `not exists` is TRUE, and the guard admits exactly the object it
+exists to refuse. The two halves are the same predicate pointed in opposite
+directions: the stricter the row half gets, the wider this opens.
+
+**Measured, not argued.** `docs/audit/document-bytes-boundary-check.sql` runs
+against a replayed database with every migration applied, acting as a child of
+the family, and judges on ROW COUNTS rather than on whether an error was raised
+— an UPDATE or DELETE matching no visible row changes nothing and raises
+nothing, so an exception-only assertion would pass while the bytes walked out.
+Both controls pass first: the child cannot see the document row, and CAN see an
+ordinary object, so the bucket is not simply shut. Against the current
+production schema the child then **read**, **renamed** and **deleted** the
+storage object for a sensitive document — one row each time. A family's passport
+scan, downloadable and destroyable by someone who was never allowed to know it
+existed.
+
+`0303` asks the question with the row visible: a SECURITY DEFINER
+`public.document_object_is_restricted(text)` reads `public.documents` as its
+owner, so the lookup no longer depends on the caller being allowed to see what
+it is looking up. It still answers about the CALLER — `can_manage_family`
+resolves `auth.uid()` inside, which SECURITY DEFINER does not change — and it
+returns a boolean and nothing else, so it cannot become a way to read the vault
+it protects. The UPDATE policy gains the explicit `with check` its row-level
+sibling already documents.
+
+Until this is applied, production carries the breach as measured above.
+
+### `0304` guards the fourth and fifth decision surfaces — unapplied
+
+`0295` closed `reward_redemptions` and called itself "the last of the three
+decision surfaces to be guarded" (after `0222`'s chore submissions and `0223`'s
+chore assignments). It was not the last. Two tables carry the same shape — a
+`status` defaulting to pending, a `decided_by`, a `decided_at`, and an INSERT
+policy open to any family member — and neither was guarded:
+
+    public.economy_redemptions   insert policy: is_family_member(family_id)
+    public.invest_orders         insert policy: is_family_member(family_id)
+
+Their siblings constrain the same insert to the undecided state
+(`parent_approvals_insert` requires `status = 'pending'` and `decided_by is
+null`; `approval_requests_insert` likewise). These two constrain nothing.
+
+**Measured, not argued.** `docs/audit/economy-invest-decision-check.sql` runs
+on a replayed database with every migration applied, acting as a child of the
+family, and judges on row counts as well as refusals — an insert blocked by
+nothing simply lands, and an exception-only assertion would report a boundary
+that is not there. It asserts membership and non-management before measuring,
+so a probe acting as a stranger cannot pass vacuously. Against the current
+production schema the child inserted **an approved `economy_redemptions` row**
+and **a filled `invest_orders` row**, one each, with `decided_by` naming a
+parent who never saw them.
+
+What it costs differs between the two, and the difference is worth stating:
+
+* `economy_redemptions` — the debit lives in `economy_decide_redemption`, whose
+  own comment is "Approval debits the ledger". A row inserted already-approved
+  never goes through it, so the reward is recorded as granted and the tokens
+  are never taken. The points economy is separate from the wallet (`0217` keeps
+  that manager-only), so no money is minted — but a reward is taken for free.
+* `invest_orders` — `invest_decide_order` is what moves the wallet and writes
+  the holding, so a forged `filled` creates neither. It is an accountability
+  forgery rather than a transfer.
+
+In BOTH cases the forgery cannot be corrected through the product: each RPC
+begins by refusing a row it did not find pending (`if v_redemption.status <>
+'pending' then return 'already_decided'`, and the same line in
+`invest_decide_order`), so a parent who notices can neither approve nor reject
+it. The row is stuck in the state the child chose.
+
+`0304` mirrors `0295` exactly — the trusted server and family managers pass, a
+plain member setting a decision status is refused with `42501` — as a shared
+`public.decision_status_guard()` taking its guarded statuses as a trigger
+argument, so the three tables share one implementation. Asking (`requested`,
+`pending`) stays open, which the probe asserts as a positive control alongside
+a manager still being able to decide.
+
+Until this is applied, production carries both forgeries as measured above.
+
+### `0305` prices a chore the way it decides one — unapplied
+
+`0223` guards the chore-assignment STATUS: a child cannot move their own
+assignment into `approved` or `rejected`, and that holds. It says nothing about
+the two columns that record what the approval was WORTH:
+
+    chore_assignments.points_awarded
+    chore_assignments.cash_awarded_cents
+
+A child may legitimately tick their own chore `done` — a chore needing no
+approval is theirs to close — and `done` is not a guarded status, so both
+amounts could be written in that same statement.
+
+**Measured, not argued.** `docs/audit/chore-award-amount-check.sql`, acting as
+a child on a replayed database with every migration applied, with the positive
+control passing first (ticking the chore `done` still works):
+
+    update … set points_awarded = 9999                        -> 1 row
+    update … set cash_awarded_cents = 500000                  -> 1 row
+    update … set status='done', both amounts                  -> 1 row
+    insert … carrying its own amounts                         -> 1 row
+    displayed points total afterwards                         -> 19,998
+
+The two columns differ in what they reach, and the difference is the point:
+
+* `points_awarded` — the SPENDABLE balance counts only `approved` rows
+  (`lib/rewards/points.ts` skips anything else) and a real approval overwrites
+  the column server-side, so this mints nothing spendable. It inflates every
+  DISPLAY that counts `done`: the kids page, the per-member standings in
+  `lib/chores/dashboard.ts`, the 30-day figure on the profile, and the chore
+  numbers fed to a model in `lib/ai/insights.ts`.
+* `cash_awarded_cents` — read by a PAYOUT. `payChoreRewardAction` credits a
+  child's wallet with `assignment.cash_awarded_cents ?? chore.cash_cents`. That
+  action is manager-gated and idempotent per assignment, and the chores board
+  hides its Pay button while the column is truthy
+  (`canPay = … && !a.cash_awarded_cents`), so the ordinary click path does not
+  currently pay a forged amount. **That is an accident of a condition written
+  for idempotency, not a boundary.** A number a child wrote is trusted by a
+  money path, and a server action is directly invocable; the day that display
+  rule changes, the mitigation is gone.
+
+`0305` extends `0223`'s own trigger in place rather than adding a second one, so
+there is one guard on this table and one place to read what it allows: the
+trusted server and family managers may set the amounts, a plain member may not.
+Ticking a chore `done` without touching them passes exactly as before, which the
+probe asserts as a positive control alongside a manager still being able to
+approve and award.
+
+Until this is applied, production carries the forgery as measured above.
+
 ## Security-relevant migrations awaiting production
 
 Added after this document's inventory stopped being complete, and listed here
 because their value is zero until they are applied:
 
-- **`0303_social_tokens_service_role_only.sql`** (renumbered from `0300`, which
+- **`0306_social_tokens_service_role_only.sql`** (renumbered from `0300`, which
   `main` took for the entitlement fix above) — drops the four
   `can_manage_family` policies `0297` added to `public.social_account_tokens`.
   `0034` created that table with no policy and a comment saying never to add
   one; `0297` added them on the stated premise that "every policy was
-  is_family_member", when there were none. Until `0303` is applied, any family
+  is_family_member", when there were none. Until `0306` is applied, any family
   manager can `select` the OAuth token rows through PostgREST. The columns hold
   ciphertext and no code writes the table yet, which bounds the exposure; it
   does not remove it. Verified locally against a full replay (313 migrations
@@ -836,7 +978,7 @@ because their value is zero until they are applied:
   which was amended in the same change — it previously asserted the opened
   state as a requirement. Audit C3-S5-01.
 
-- **`0304_no_truncate_for_the_public_roles.sql`** — revokes `truncate` on every
+- **`0307_no_truncate_for_the_public_roles.sql`** — revokes `truncate` on every
   table in `public` from `anon` and `authenticated`, and sets the matching
   default privilege so a future table does not arrive with it. `truncate` is not
   filtered by row-level security: a policy that correctly limits which rows a
@@ -847,7 +989,7 @@ because their value is zero until they are applied:
   migration outside a privilege list, which is exactly the rule that makes this
   one safe to read. Audit C1-S5-04.
 
-- **`0305_household_secrets_are_not_child_readable.sql`** — replaces the single
+- **`0308_household_secrets_are_not_child_readable.sql`** — replaces the single
   `"Members manage household_info"` policy (`for all using
   is_family_member(family_id)`) with four that add
   `and (not is_sensitive or can_manage_family(family_id))` on select, insert,
@@ -860,7 +1002,7 @@ because their value is zero until they are applied:
   back. `docs/audit/household-binder-boundary-check.sql` asserts both, and that a
   parent still sees the whole binder. Audit C1-S6-06.
 
-- **`0306_marketplace_parties_are_not_editable.sql`** — makes `family_id`,
+- **`0309_marketplace_parties_are_not_editable.sql`** — makes `family_id`,
   `listing_id` and the party columns of `marketplace_orders` /
   `marketplace_offers` immutable after insert, via a `BEFORE UPDATE` trigger that
   fires only when `row_security_active()`, and tightens the two `with check`
@@ -877,7 +1019,7 @@ because their value is zero until they are applied:
   `docs/audit/marketplace-ownership-update-check.sql` asserts both refusals and
   both permitted writes. Audit C1-S6-08.
 
-- **`0307_a_review_belongs_to_whoever_wrote_it.sql`** — scopes the
+- **`0310_a_review_belongs_to_whoever_wrote_it.sql`** — scopes the
   `marketplace_reviews` / `marketplace_saves` / `marketplace_follows` UPDATE
   policies to the row's owner, and makes the columns around the authorship
   column immutable. `0154` pinned `reviewer_member` (resp. `member_id`) on INSERT
@@ -887,15 +1029,15 @@ because their value is zero until they are applied:
   is aggregated by `reviewee_member` on four screens. Nothing in the tree updates
   any of the three tables, so no behaviour is lost; the policies are scoped
   rather than dropped because "edit your own review" is what they evidently meant
-  to say. Also replaces `0306`'s table-branching trigger function with
+  to say. Also replaces `0309`'s table-branching trigger function with
   `columns_are_immutable()`, which takes its column list from the trigger
   definition and raises on a column that does not exist rather than silently
   guarding nothing. `docs/audit/marketplace-review-authorship-check.sql` asserts
   all of it, including that typo guard. Audit C1-S6-09.
 
-- **`0308_deleting_a_review_is_rewriting_it.sql`** — scopes the DELETE policies
+- **`0311_deleting_a_review_is_rewriting_it.sql`** — scopes the DELETE policies
   on `marketplace_reviews` / `marketplace_offers` / `marketplace_saves` /
-  `marketplace_follows`, which `0154` left family-wide. `0307` stopped a member
+  `marketplace_follows`, which `0154` left family-wide. `0310` stopped a member
   rewriting another member's review; deleting it achieves the same thing, and on
   offers it is worse in kind — any member could remove a competing offer on a
   listing they have nothing to do with. Offers go to the two parties their UPDATE
@@ -906,7 +1048,7 @@ because their value is zero until they are applied:
   `docs/audit/marketplace-delete-authorship-check.sql` asserts both the refusals
   and the four things that must still work. Audit C1-S6-10.
 
-- **`0309_a_social_restriction_is_not_self_service.sql`** — gives
+- **`0312_a_social_restriction_is_not_self_service.sql`** — gives
   `social_access_permissions_delete` the predicate its INSERT and UPDATE policies
   already carry. `social_role_for()` falls back to a default derived from the
   family role when no explicit row exists, so a row restricting someone *below*

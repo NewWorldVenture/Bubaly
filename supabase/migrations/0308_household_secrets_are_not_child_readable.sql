@@ -1,5 +1,5 @@
 -- ============================================================
--- Migration 0305: the household binder's "sensitive" flag reaches the database
+-- Migration 0308: the household binder's "sensitive" flag reaches the database
 --
 -- `household_info` is the family binder — wifi passwords, alarm codes, gate
 -- codes, meter numbers. The table carries `is_sensitive boolean` and the UI

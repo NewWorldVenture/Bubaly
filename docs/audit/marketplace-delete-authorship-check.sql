@@ -1,12 +1,12 @@
--- ── 0308: deleting a review is rewriting it ─────────────────────────────────
+-- ── 0311: deleting a review is rewriting it ─────────────────────────────────
 --
--- 0307 stopped a member rewriting another member's review; the DELETE policies
+-- 0310 stopped a member rewriting another member's review; the DELETE policies
 -- beside it were still family-wide, and for a one-star review about yourself
 -- deleting it and rewriting it are the same act with the same result on the same
 -- four screens. Same for offers: any member could remove a competing offer on a
 -- listing they have nothing to do with.
 --
--- Measured before 0308:
+-- Measured before 0311:
 --   the SUBJECT of a review deleted it (1 row)
 --   a stranger to a listing deleted a competing offer on it (1 row)
 --
@@ -17,16 +17,16 @@
 -- Audit C1-S6-10.
 do $$
 declare
-  fam uuid := 'f0308000-0000-4000-8000-00000000fa01';
-  ua  uuid := 'f0308000-0000-4000-8000-00000000c001';  -- author / seller, parent
-  uc  uuid := 'f0308000-0000-4000-8000-00000000c003';  -- review subject, parent
-  uk  uuid := 'f0308000-0000-4000-8000-00000000c005';  -- an uninvolved child
+  fam uuid := 'f0311000-0000-4000-8000-00000000fa01';
+  ua  uuid := 'f0311000-0000-4000-8000-00000000c001';  -- author / seller, parent
+  uc  uuid := 'f0311000-0000-4000-8000-00000000c003';  -- review subject, parent
+  uk  uuid := 'f0311000-0000-4000-8000-00000000c005';  -- an uninvolved child
   ma uuid; mc uuid; mk uuid; lst uuid; str uuid; rev uuid; off uuid; sav uuid; fol uuid;
   n int;
 begin
-  insert into public.families (id, name) values (fam, '0308 delete authorship') on conflict do nothing;
+  insert into public.families (id, name) values (fam, '0311 delete authorship') on conflict do nothing;
   insert into auth.users (id, email) values
-    (ua, 'a0308@example.test'), (uc, 'c0308@example.test'), (uk, 'k0308@example.test')
+    (ua, 'a0311@example.test'), (uc, 'c0311@example.test'), (uk, 'k0311@example.test')
     on conflict do nothing;
   delete from public.marketplace_reviews  where family_id = fam;
   delete from public.marketplace_offers   where family_id = fam;
@@ -60,25 +60,25 @@ begin
   set local role authenticated;
   perform set_config('request.jwt.claim.sub', uc::text, true);
   if auth.uid() is distinct from uc then
-    raise exception '0308: impersonation failed — auth.uid() is %, expected the review''s subject', auth.uid();
+    raise exception '0311: impersonation failed — auth.uid() is %, expected the review''s subject', auth.uid();
   end if;
 
   delete from public.marketplace_reviews where id = rev;
   get diagnostics n = row_count;
   if n <> 0 then
-    raise exception '0308: the SUBJECT of a review deleted it (% row(s)) — and they are a MANAGER, which is the loophole the predicate names', n;
+    raise exception '0311: the SUBJECT of a review deleted it (% row(s)) — and they are a MANAGER, which is the loophole the predicate names', n;
   end if;
 
   -- Nor another member's saves and follows.
   delete from public.marketplace_saves where id = sav;
   get diagnostics n = row_count;
   if n <> 0 then
-    raise exception '0308: a member deleted another member''s save (% row(s))', n;
+    raise exception '0311: a member deleted another member''s save (% row(s))', n;
   end if;
   delete from public.marketplace_follows where id = fol;
   get diagnostics n = row_count;
   if n <> 0 then
-    raise exception '0308: a member deleted another member''s follow (% row(s))', n;
+    raise exception '0311: a member deleted another member''s follow (% row(s))', n;
   end if;
 
   -- ── A member with no stake in a listing may not remove an offer on it ─────
@@ -86,7 +86,7 @@ begin
   delete from public.marketplace_offers where id = off;
   get diagnostics n = row_count;
   if n <> 0 then
-    raise exception '0308: a member with no stake in the listing deleted a competing offer (% row(s))', n;
+    raise exception '0311: a member with no stake in the listing deleted a competing offer (% row(s))', n;
   end if;
 
   -- ── What must still work ──────────────────────────────────────────────────
@@ -95,7 +95,7 @@ begin
   delete from public.marketplace_offers where id = off;
   get diagnostics n = row_count;
   if n <> 1 then
-    raise exception '0308: the LISTING OWNER could not remove an offer on their own listing (% row(s)) — the fix went too far', n;
+    raise exception '0311: the LISTING OWNER could not remove an offer on their own listing (% row(s)) — the fix went too far', n;
   end if;
 
   -- toggleSaveAction / toggleFollowAction delete their own row.
@@ -103,19 +103,19 @@ begin
   delete from public.marketplace_saves where id = sav;
   get diagnostics n = row_count;
   if n <> 1 then
-    raise exception '0308: a member could not un-save their own listing (% row(s)) — toggleSaveAction is broken', n;
+    raise exception '0311: a member could not un-save their own listing (% row(s)) — toggleSaveAction is broken', n;
   end if;
   delete from public.marketplace_follows where id = fol;
   get diagnostics n = row_count;
   if n <> 1 then
-    raise exception '0308: a member could not unfollow their own store (% row(s)) — toggleFollowAction is broken', n;
+    raise exception '0311: a member could not unfollow their own store (% row(s)) — toggleFollowAction is broken', n;
   end if;
 
   -- The author may withdraw their own review.
   delete from public.marketplace_reviews where id = rev;
   get diagnostics n = row_count;
   if n <> 1 then
-    raise exception '0308: the AUTHOR could not delete their own review (% row(s)) — the fix went too far', n;
+    raise exception '0311: the AUTHOR could not delete their own review (% row(s)) — the fix went too far', n;
   end if;
 
   -- ── And a manager may still moderate a review that is not about them ──────
@@ -130,9 +130,9 @@ begin
   delete from public.marketplace_reviews where id = rev;
   get diagnostics n = row_count;
   if n <> 1 then
-    raise exception '0308: a MANAGER could not moderate a review that is not about them (% row(s)) — the fix went too far', n;
+    raise exception '0311: a MANAGER could not moderate a review that is not about them (% row(s)) — the fix went too far', n;
   end if;
 
   reset role;
-  raise notice '0308 OK: an author may withdraw their review, a manager may moderate one that is not about them, and the subject may do neither';
+  raise notice '0311 OK: an author may withdraw their review, a manager may moderate one that is not about them, and the subject may do neither';
 end $$;
