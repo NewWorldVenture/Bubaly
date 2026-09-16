@@ -3664,3 +3664,83 @@ Recorded with the evidence rather than guessed at, and explicitly NOT fixed.
 - **Verified:** 331 migrations replayed from scratch (0 failed), 328 re-applied
   onto the populated schema, **39/39 probes run twice**, 13,987 tests green under
   both `TZ=UTC` and `TZ=America/Los_Angeles`, tsc clean, eslint at the ratchet.
+
+### [CLAUDE-1][HIGH][A11Y] C2-01 — the photo lightbox was a modal dialog that said so nowhere
+
+- **Raised by:** Claude-2 (C2-01). Verified still open, and deliberately paused
+  until CI confirmed the Modal caret fix it builds on.
+- **Files:** `lib/hooks/use-dialog-behavior.ts` (new), `lib/ui/gallery.ts` (new),
+  `components/ui/modal.tsx`, `components/modules/photos-module.tsx`,
+  `tests/a-photo-you-can-open-is-a-photo-you-can-leave.test.ts` (new),
+  `tests/modal-a11y-contract.test.ts`, `tests/mobile-overlay-safe-area.test.ts`,
+  `tests/consent-preference-centre-focus.test.ts`,
+  `tests/a-dialog-does-not-steal-the-caret.test.ts`, `package.json`
+- **Problem:** `photos-module.tsx`'s lightbox is a full-screen overlay over the
+  gallery with **no `role`, no `aria-modal`, no Escape, no focus moved in, no
+  focus trap and no scroll lock**. Its only dismissal was a backdrop click. A
+  keyboard user could open a photo and had no way out of it and no way to reach
+  the download / favourite / delete controls inside it; a screen-reader user was
+  never told a dialog had opened and could walk straight out into the gallery
+  behind.
+- **NOT fixed by swapping in `<Modal>`.** The lightbox is full-bleed black chrome
+  around a photo; `<Modal>` is a titled panel on a blurred scrim. That swap is a
+  design change wearing an audit fix's clothes. The fix is for both surfaces to
+  get the same BEHAVIOUR from the same definition:
+  `useDialogBehavior(open, onClose)` returns the ref to hang on the element
+  carrying `role="dialog"`, and owns focus-in, Escape, the Tab trap, focus
+  restore and the scroll lock. The caller owns role, labelling and chrome.
+- **The extraction improved one thing rather than merely moving it.** The hook
+  composes the existing `useLockBodyScroll` instead of Modal's inline
+  `body.style.overflow = ''`, and that version restores the **previous**
+  overflow — so a dialog opened on top of the app-lock or paywall gate no longer
+  unlocks the page underneath when it closes.
+- **Named without a new string in eleven locales.** `aria-labelledby` points at
+  the counter already on screen ("3 / 20") plus the caption when there is one,
+  so the accessible name is translated by construction. This is the same
+  constraint that keeps the removed-member interstitial filed; here the content
+  was already there.
+- **ArrowLeft/ArrowRight walk the gallery**, which C2-01 asks for. The two
+  chevrons are the only way to move between photos and they **unmount at each
+  end**, so a keyboard user who reached the first photo had to close and reopen
+  to see the second. Clamped rather than wrapped, because the chevrons do not
+  wrap either. The decision lives in a pure `galleryStep(index, key, count)` so
+  the ends, the empty gallery and the "not a step key" case are testable
+  directly rather than through an effect.
+- **Four existing guards had to follow the code, and none was weakened.**
+  `modal-a11y-contract`, `mobile-overlay-safe-area` and
+  `consent-preference-centre-focus` each read `modal.tsx`'s source for the
+  contract; every one of those assertions is now made against whichever file
+  carries it, plus a NEW assertion in each that `Modal` actually calls the hook —
+  without which they would be reading code the component no longer runs.
+- **One guard got strictly stronger.** `consent-preference-centre-focus`
+  licensed `aria-modal` by NAME (`f !== 'components/ui/modal.tsx'`), with nothing
+  checking that file still did the work. The licence is now a property:
+  `hasDialogContract(src)` requires the file to take a ref from
+  `useDialogBehavior` **and attach that same ref** — a hook whose ref never
+  reaches the DOM traps nothing. The eleven-file HAND_ROLLED list is untouched
+  and may still only shrink.
+- **`tests/a-dialog-does-not-steal-the-caret.test.ts` had a latent fragility the
+  extraction exposed.** It drove `mocks.effects[0]`, assuming the trap was the
+  component's first effect. The hook runs `useLockBodyScroll` first, so index 0
+  became the scroll lock — the test would have kept passing while asserting
+  about the wrong effect if the trap had happened to be harmless. It now runs
+  **every** effect and asserts that **no** effect depends on the handler
+  identity, which is both more faithful to React and a stronger statement.
+- **Status:** FIXED. Non-vacuity, six mutations: drop `ref={lightboxRef}` →
+  two lightbox assertions fail **and** the aria-modal licence flags
+  `photos-module.tsx`; drop `role="dialog"` → the dialog assertion fails; make
+  `galleryStep` wrap → the ends and the single-photo case fail; remove Escape
+  from the hook → the contract test fails; make `Modal` stop using the hook →
+  the new wiring assertion fails; remove the scroll lock → the focus/lock test
+  fails.
+- **Lint ratchet 86 → 85.** Measured, not assumed: the overlay's
+  `no-static-element-interactions` warning is cleared by `role="dialog"`; its
+  `click-events-have-key-events` remains, because the rule cannot see a listener
+  attached in an effect, and adding an `onKeyDown` to satisfy it when Escape is
+  already handled would be decoration. The two warnings left in this file are
+  the grid and list rows, both of which contain a nested favourite `<button>` —
+  the category `lib/ui/a11y.ts` documents `activatable()` as wrong for.
+- **Verified:** **13,994 tests green under both `TZ=UTC` and
+  `TZ=America/Los_Angeles`**, tsc clean, eslint at the new 85 cap, `npm run build`
+  exits 0. No E2E test touches the photo gallery, so the E2E surface of this
+  change is the shared `Modal` — which CI has already run green on the caret fix.

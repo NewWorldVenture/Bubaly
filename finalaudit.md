@@ -4961,3 +4961,69 @@ have shipped a condition that can never fire — an eleventh-instance guard that
 cannot fail, added by the commit fixing one. `current_setting('role', true)`
 stands in for that half instead. Twice in this pass now, an idiom lifted from a
 neighbouring migration has not been right: 0315's forging hole was the first.
+
+## Q9 — HIGH: the photo lightbox was a modal dialog that said so nowhere
+
+**C2-01**, raised by Claude-2, verified still open, and deliberately held until CI
+confirmed the Modal caret fix it builds on.
+
+`components/modules/photos-module.tsx` renders a full-screen overlay over the
+gallery with **no `role`, no `aria-modal`, no Escape, no focus moved in, no focus
+trap and no scroll lock**. Its only dismissal was a backdrop click. A keyboard
+user could open a photo and had no way out of it and no way to reach the
+download, favourite or delete controls inside it; a screen-reader user was never
+told a dialog had opened and could walk straight out into the gallery behind.
+
+**The fix is not `<Modal>`.** The lightbox is full-bleed black chrome around a
+photo; `<Modal>` is a titled panel on a blurred scrim, and that swap would be a
+design change wearing an audit fix's clothes. Instead the contract itself moved:
+`useDialogBehavior(open, onClose)` returns the ref to hang on whatever carries
+`role="dialog"`, and owns focus-in, Escape, the Tab trap, focus restore and the
+scroll lock. Two surfaces, one definition.
+
+The extraction improved one thing rather than merely relocating it: the hook
+composes the existing `useLockBodyScroll`, which restores the **previous**
+overflow instead of clearing it, so a dialog opened on top of the app-lock or
+paywall gate no longer unlocks the page underneath when it closes.
+
+**Named without a new string in eleven locales.** `aria-labelledby` points at the
+counter already on screen ("3 / 20") plus the caption when there is one, so the
+accessible name is translated by construction. Arrow keys now walk the gallery,
+which C2-01 asks for: the two chevrons are the only way between photos and they
+**unmount at each end**, so a keyboard user reaching the first photo had to close
+and reopen to see the second. Clamped, not wrapped, because the chevrons do not
+wrap either — and the decision lives in a pure `galleryStep(index, key, count)`
+so the ends, the empty gallery and the "not a step key" case are tested directly.
+
+**Four existing guards had to follow the code, and the interesting part is that
+one of them got stronger rather than looser.**
+`consent-preference-centre-focus` licensed `aria-modal` by NAME
+(`f !== 'components/ui/modal.tsx'`), with nothing checking that file still did
+the work. The licence is now a property: a file may declare `aria-modal` only if
+it takes a ref from `useDialogBehavior` **and attaches that same ref** — a hook
+whose ref never reaches the DOM traps nothing. The eleven-file HAND_ROLLED list
+is untouched and may still only shrink. The other three guards assert every
+property they asserted before, against whichever file now carries it, plus a new
+assertion in each that `Modal` actually calls the hook — without which they would
+be reading code the component no longer runs.
+
+**And the extraction exposed a latent fragility in a test written three commits
+earlier.** `a-dialog-does-not-steal-the-caret` drove `mocks.effects[0]`, assuming
+the trap was the component's first effect. The hook runs `useLockBodyScroll`
+first, so index 0 became the scroll lock: the test would have gone on passing
+while asserting about the wrong effect. It now runs **every** effect and asserts
+that **no** effect depends on the handler identity — more faithful to React, and
+a stronger claim than the one it replaced.
+
+Lint ratchet **86 → 85**, measured rather than assumed: `role="dialog"` clears
+the overlay's `no-static-element-interactions`; its `click-events-have-key-events`
+remains because the rule cannot see a listener attached in an effect, and adding
+an `onKeyDown` to satisfy it when Escape is already handled would be decoration.
+
+Non-vacuity, six mutations, each naming its own defect: drop the ref → two
+lightbox assertions fail **and** the aria-modal licence flags the file; drop
+`role="dialog"`; make `galleryStep` wrap; remove Escape from the hook; make
+`Modal` stop using the hook; remove the scroll lock.
+
+**Verified:** 13,994 tests green under both `TZ=UTC` and `TZ=America/Los_Angeles`,
+`tsc` clean, `eslint` at the new 85 cap, `npm run build` exits 0.

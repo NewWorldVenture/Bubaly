@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { formatDistanceToNow, isToday, isTomorrow, parseISO } from 'date-fns';
 import { de, enUS, es, fr, it, nl, pt } from 'date-fns/locale';
 import {
@@ -24,6 +24,8 @@ import { Badge } from '@/components/ui/badge';
 import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import { progressBarA11y } from '@/lib/ui/a11y';
+import { galleryStep } from '@/lib/ui/gallery';
+import { useDialogBehavior } from '@/lib/hooks/use-dialog-behavior';
 import type { Tables } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
 
@@ -64,6 +66,17 @@ export function PhotosModule() {
 
   const [activeAlbum, setActiveAlbum] = useState<Album | null>(null);
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
+  const lightboxOpen = lightboxIdx !== null;
+  // C2-01: this overlay is a modal dialog in every respect except that it said
+  // so nowhere. It had no role, no `aria-modal`, no Escape, no focus move-in, no
+  // focus trap and no scroll lock — its only dismissal was a backdrop click, so
+  // a keyboard or screen-reader user could open a photo and had no way out and
+  // no way to reach the controls. Same contract as `<Modal>`, from the same
+  // hook; the chrome stays full-bleed black rather than becoming a titled panel,
+  // which is why this is not simply swapped for `<Modal>`.
+  const lightboxRef = useDialogBehavior<HTMLDivElement>(lightboxOpen, useCallback(() => setLightboxIdx(null), []));
+  const lightboxLabelId = useId();
+  const lightboxCaptionId = useId();
   const [newAlbumOpen, setNewAlbumOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
@@ -92,6 +105,22 @@ export function PhotosModule() {
     !search || p.caption?.toLowerCase().includes(search.toLowerCase()) ||
     p.tags?.some((t) => t.toLowerCase().includes(search.toLowerCase()))
   );
+
+  // Left/Right walk the gallery while the lightbox is open. The two chevrons
+  // are the only way to move between photos and they unmount at each end, so
+  // without this a keyboard user could reach the first photo and then had to
+  // close and reopen to see the next one. Clamped rather than wrapped: the
+  // buttons do not wrap either, and the counter ("3 / 20") says where you are.
+  useEffect(() => {
+    if (lightboxIdx === null) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (galleryStep(0, e.key, 1) === null) return;
+      setLightboxIdx((i) => (i === null ? i : galleryStep(i, e.key, photos.length) ?? i));
+      e.preventDefault();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [lightboxIdx, photos.length]);
 
   // ── Upload handler ────────────────────────────────────────
   async function uploadFiles(files: FileList | null) {
@@ -400,7 +429,17 @@ export function PhotosModule() {
 
       {/* ── Lightbox ──────────────────────────────────────────── */}
       {lightboxIdx !== null && photos[lightboxIdx] && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 pt-[var(--safe-top)] pb-[var(--safe-bottom)]"
+        <div
+          ref={lightboxRef}
+          role="dialog"
+          aria-modal="true"
+          // Named by what is already on screen — the "3 / 20" counter plus the
+          // caption when there is one — rather than by a new string in eleven
+          // locales. Numbers and the caption are the photo's own words, so the
+          // name is translated by construction.
+          aria-labelledby={photos[lightboxIdx].caption ? `${lightboxLabelId} ${lightboxCaptionId}` : lightboxLabelId}
+          tabIndex={-1}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 pt-[var(--safe-top)] pb-[var(--safe-bottom)] outline-none"
           onClick={() => setLightboxIdx(null)}>
           {/* Nav */}
           {lightboxIdx > 0 && (
@@ -435,8 +474,8 @@ export function PhotosModule() {
             )}
             {/* Controls */}
             <div className="mt-4 flex items-center gap-3 text-white">
-              <span className="text-sm text-white/70">{lightboxIdx + 1} / {photos.length}</span>
-              {photos[lightboxIdx].caption && <p className="text-sm">{photos[lightboxIdx].caption}</p>}
+              <span id={lightboxLabelId} className="text-sm text-white/70">{lightboxIdx + 1} / {photos.length}</span>
+              {photos[lightboxIdx].caption && <p id={lightboxCaptionId} className="text-sm">{photos[lightboxIdx].caption}</p>}
               <div className="ml-auto flex gap-2">
                 <a href={photos[lightboxIdx].url ?? '#'} download target="_blank" rel="noreferrer" aria-label={tr('photosModule.download')}
                   onClick={(e) => e.stopPropagation()}

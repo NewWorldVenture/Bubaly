@@ -70,6 +70,12 @@ function mountOpenDialog() {
     body: { style: {} as Record<string, string> },
   };
 
+  // Every effect the render produced, not a chosen one. `Modal` delegates to
+  // `useDialogBehavior`, which runs the shared `useLockBodyScroll` before the
+  // focus trap, so "the effect at index 0" stopped being the trap the moment
+  // that extraction landed — and picking by index would have made this test
+  // assert about the scroll lock while still passing. Running them all is also
+  // what React does.
   const render = (onClose: () => void) => {
     mocks.cursor = 0;
     mocks.effects.length = 0;
@@ -82,9 +88,16 @@ function mountOpenDialog() {
       focus: () => mocks.focused.push('panel'),
       contains: () => true,
     };
-    return mocks.effects[0];
+    return [...mocks.effects];
   };
   return render;
+}
+
+type Effect = { run: () => undefined | (() => void); deps: readonly unknown[] };
+
+/** Run every effect, and hand back the cleanups in React's unmount order. */
+function runAll(effects: Effect[]): (() => void)[] {
+  return effects.map((e) => e.run()).filter((c): c is () => void => typeof c === 'function').reverse();
 }
 
 describe('a dialog does not steal the caret while you type in it', () => {
@@ -92,7 +105,7 @@ describe('a dialog does not steal the caret while you type in it', () => {
     const render = mountOpenDialog();
 
     const first = render(() => {});
-    const cleanup = first.run();
+    const cleanups = runAll(first);
     expect(mocks.focused, 'opening should focus the first control').toEqual(['field1']);
 
     // The user clicks into the third field and types one character. That
@@ -102,18 +115,21 @@ describe('a dialog does not steal the caret while you type in it', () => {
     mocks.focused.length = 0;
     const second = render(() => {});
 
-    expect(second.deps, 'the effect must not depend on the handler identity').toEqual(first.deps);
+    // NO effect in the component may depend on the handler's identity — not the
+    // trap, not the scroll lock, not one added later.
+    expect(second.map((e) => e.deps), 'no effect may depend on the handler identity')
+      .toEqual(first.map((e) => e.deps));
 
     // React only re-runs when the deps compare unequal. They do not, so nothing
     // below should happen — but run it the way React would if they had, so the
     // assertion is about the deps AND about what a re-run would cost.
-    const depsChanged = first.deps.some((d, i) => !Object.is(d, second.deps[i]))
-      || first.deps.length !== second.deps.length;
+    const depsChanged = first.some((e, n) => e.deps.length !== second[n].deps.length
+      || e.deps.some((d, i) => !Object.is(d, second[n].deps[i])));
     expect(depsChanged).toBe(false);
     expect(mocks.focused, 'nothing should have moved focus').toEqual([]);
 
     // And the trap still works: closing restores focus to the trigger.
-    cleanup?.();
+    cleanups.forEach((c) => c());
     expect(mocks.focused).toEqual(['trigger']);
   });
 
@@ -128,8 +144,7 @@ describe('a dialog does not steal the caret while you type in it', () => {
     };
 
     const stale = vi.fn();
-    const effect = render(stale);
-    effect.run();
+    runAll(render(stale));
 
     // A later render swaps in a different handler. The effect does NOT re-run,
     // so a handler captured in the closure would be the stale one — which is
