@@ -514,8 +514,8 @@ passed; production application of the atomic `0240-0254` release remains pending
 ## Migrations added since this document's stated baseline (2026-09-12)
 
 The status line at the top of this file is dated **2026-09-05** against main
-`01881fb2`. **51** migration files have landed since, `0255` through
-`0308`, and none of them appear anywhere above. (This read "thirty-one, `0255`
+`01881fb2`. **52** migration files have landed since, `0255` through
+`0309`, and none of them appear anywhere above. (This read "thirty-one, `0255`
 through `0285`" until 2026-09-13, "seventy-one, `0255` through `0295`" until
 2026-09-15, and "forty-five, `0255` through `0302`", "46, `0255` through `0303`"
 and "49, `0255` through `0306`" until 2026-09-16; the range
@@ -1078,3 +1078,61 @@ both numbers are the spendable balance the whole chores economy settles in — t
 ledger `0222`, `0223`, `0295` and `0305` exist to keep honest.
 
 Until this is applied, production carries all five as measured above.
+
+### `0309` puts the prescription back in a manager's hands — unapplied
+
+`components/modules/medications-module.tsx` declares `canEdit = isManager(role)`
+and then writes `medications` and `medication_schedules` **straight from the
+browser** with the viewer's own JWT (lines 205, 216, 223, 236, 251). There is no
+server action in between; `canEdit` only decides whether a button renders (284,
+368, 399, 419).
+
+Its neighbours in the same area *are* enforced — `medical_profiles`,
+`health_providers` and `insurance_policies` each carry three manager-checked
+write policies. The three medication tables carry none.
+
+What these columns reach is not a display. `lib/server/notifications.ts` reads
+`medications.{name,dosage,member_id,is_active}` and
+`medication_schedules.{time_of_day,days_of_week,starts_on,ends_on}` to raise the
+family's "dose due today" reminder, so these rows decide **what a parent is told
+to administer and when** — and `is_active = false` drops the medication from
+that read entirely, so nobody is told at all.
+`app/api/ai/health/coach/route.ts` feeds `dosage` and `instructions` to a model
+as fact.
+
+Measured, acting as a child with both controls passing: the child **changed
+their own prescribed dosage from 10 mg to 40 mg**, **rewrote the instructions**,
+**deactivated the medication so the reminder stops**, **moved the dosing
+schedule to 23:59 one day a week**, and **deleted a schedule and a medication
+outright**. Eight breaches,
+`docs/audit/medication-record-boundary-check.sql`.
+
+`medication_doses` — the "I took it" tick — is deliberately left writable by any
+member, and the probe asserts that as a positive control: the module leaves dose
+logging ungated for everyone (lines 166-172), exactly as a child may tick their
+own chore done.
+
+Until this is applied, production carries all six as measured above.
+
+### The same mismatch, measured and NOT yet guarded
+
+Four more modules declare `canEdit = isManager(role)` and write their tables
+directly from the browser, and those tables carry no manager-checked or
+restrictive write policy:
+
+| module | tables |
+| --- | --- |
+| `rides-module.tsx` | `rides` |
+| `renewals-module.tsx` | `renewals` |
+| `signups-module.tsx` | `opportunities` |
+| `trips-module.tsx` | `trips`, `trip_items` |
+
+These are the same defect in form — the application states a manager rule the
+database does not enforce — but none of them reaches money, a payout, a
+prescription or a credential; the worst case is a member editing a trip or a
+ride the UI would not have offered them. They are recorded here rather than
+folded into `0309` so the guarded set stays the set that was measured against a
+real consequence. Closing them is low-risk for the same reason `0306`'s
+`allowance_rules` guard was — the UI already refuses a non-manager, so making
+the database agree cannot close anything the product offers — and is the
+obvious next migration if wanted.
