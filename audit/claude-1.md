@@ -4518,3 +4518,73 @@ bug with a contained fix, and **nothing is skipped or disabled**: the check now
 tests strictly more than it did.
 
 **Status:** FIXED.
+
+---
+
+### [CLAUDE-1][INSTRUMENT] A third spelling of "the host's day", which both guards were blind to — and the guard for it was wrong on its first run
+
+**Files:** `tests/a-zone-aware-helper-called-without-the-zone.test.ts` (new),
+`tests/server-midnight-is-not-the-familys-midnight.test.ts`
+
+**The gap.** The two existing guards look for a host-day **expression written
+out in the file**: `setHours(0, 0, 0, 0)` and
+`new Date().toISOString().slice(0, 10)`. Q21 had no such expression to find. Its
+spelling is a call to a helper that **already knows how to do the right thing**,
+made without the argument that tells it whose day to use:
+
+```ts
+parseEvent(q, now)             // resolves against LOCAL_OPS — the host
+classifyVoiceCommand(q, now)   // its `timezone` parameter left empty
+```
+
+Q21 was found **by reading code, not by an instrument** — and a defect class two
+guards are blind to will come back. The new guard walks `app/` and `lib/` with
+the **TypeScript parser** (counting call arguments with a regex is how an
+earlier pass got 128 where the truth was 70) and reports any server-reachable
+call to a zone-aware helper missing its zone argument.
+
+**It found a second instance on its first run — and that instance was a FALSE
+ACCUSATION, which is the part worth recording.** It flagged
+`lib/command-bar/route.ts:112`. That file is **not a Next route handler**; it is
+a library file that happens to be named `route.ts`, imported only by two client
+components, where `classifyVoiceCommand` with no zone is **correct**. My
+`isServerReachable` heuristic matched `route.ts` anywhere instead of only under
+`app/`.
+
+**A guard whose first finding is a false accusation is worse than no guard**,
+because the next person "fixes" working code. The anchor is now `app/`-relative,
+and the three heuristic cases are asserted directly rather than left implicit.
+
+**Non-vacuity, against the real tree rather than a synthetic string.** Reverting
+`lib/ai/context/intents.ts` to the two-argument calls makes the guard name both
+lines, with the file, the line number and the remedy:
+
+```
+lib/ai/context/intents.ts:265 — classifyVoiceCommand() got 2 args; pass the family timezone as the third argument
+lib/ai/context/intents.ts:266 — parseEvent() got 2 args; pass `{ utc: true }` with a UTC-anchored clock
+```
+
+**And the `setHours` list was lying again, in the same words as its sibling.**
+Its header read *"Every entry is a defect waiting for the family-zone decision
+its call site needs — never a site that is fine as it is."* True of fifteen of
+the original seventeen and of **neither survivor**:
+
+- `lib/capture/parse.ts` — the `setHours` is in `LOCAL_OPS`, one half of a
+  deliberate, documented LOCAL/UTC pair; the browser path is correct as it
+  stands. Its one server-reachable leak was `intents.ts`, now fixed — and
+  `parseEvent` still **defaults** to `LOCAL_OPS`, so the new guard, not a
+  conversion, is what prevents the next one.
+- `lib/routines/detect.ts` — `materializeRoutine` builds events from a
+  device-local Monday, and the whole calendar grid it feeds is device-local too
+  (`weekStart(weekOffset)`). Converting only this helper would make routine
+  events disagree with the grid the user just clicked in — **worse than what is
+  there now.** A whole-module decision, filed.
+
+The list is now split by reason and marked **a record, not a queue**. This is
+the *second* list in this audit to carry that exact false header; I caught the
+first one two passes ago and wrote down the lesson, and then shipped the same
+sentence again on a different list.
+
+**Status:** FIXED (instrument). **Verified:** **14,065 tests green under both
+`TZ=UTC` and `TZ=America/Los_Angeles`**, tsc clean, eslint at 85, `npm run
+build` exits 0.

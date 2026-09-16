@@ -70,8 +70,42 @@ import { describe, expect, it } from 'vitest';
 
 const ROOTS = ['app', 'lib', 'components'];
 
-// Known, tracked, and not yet converted. Every entry is a defect waiting for the
-// family-zone decision its call site needs — never a site that is fine as it is.
+// Tracked, and NOT all for the same reason — which this list used to claim, in
+// the words "Every entry is a defect waiting for the family-zone decision its
+// call site needs — never a site that is fine as it is."
+//
+// That was true of fifteen of the original seventeen and is true of NEITHER
+// survivor. The sibling list below had exactly this header and exactly this
+// problem, and it was split by reason two passes ago; leaving this one
+// unsplit would hand the next person a list that says "go convert these" about
+// two sites where converting is the wrong move.
+//
+// EXAMINED AND DELIBERATE — do not convert without a decision to go with it:
+//
+//   • lib/capture/parse.ts — the `setHours` lives in LOCAL_OPS, one half of a
+//     deliberate LOCAL/UTC pair whose own header explains the split at length:
+//     a wall clock carried in LOCAL date fields is normalised by the runtime's
+//     DST rules, so the server bridge anchors it in UTC, while the BROWSER
+//     keeps local because a person typing "tomorrow at 6pm" means 6pm where
+//     they are standing. The browser path is correct as it stands.
+//     Its one server-reachable leak WAS real and is fixed:
+//     lib/ai/context/intents.ts called `parseEvent(q, now)` with no options and
+//     serialised the resolved instant onto the calendar. Note that `parseEvent`
+//     still DEFAULTS to LOCAL_OPS, so a future server caller can reintroduce
+//     that leak silently — the defect was never in this file, and converting it
+//     would not have prevented it.
+//
+//   • lib/routines/detect.ts — `materializeRoutine` builds calendar events from
+//     a device-local Monday, and the entire calendar grid it feeds is ALSO
+//     device-local (`weekStart(weekOffset)` in components/modules/
+//     calendar-module.tsx). Converting only this helper would make a routine's
+//     events land at times that disagree with the grid the user just clicked
+//     in — worse than what is there now. Whether that whole module should
+//     render in the family's zone is a real product decision, and not one to
+//     make under cover of a one-line timezone fix.
+//
+// So this list is now a RECORD, not a queue. A new entry appearing here is
+// still a regression to look at; these two are not work waiting to be done.
 const TRACKED = new Set([
   'lib/capture/parse.ts',
   'lib/routines/detect.ts',
