@@ -514,8 +514,8 @@ passed; production application of the atomic `0240-0254` release remains pending
 ## Migrations added since this document's stated baseline (2026-09-12)
 
 The status line at the top of this file is dated **2026-09-05** against main
-`01881fb2`. **48** migration files have landed since, `0255` through
-`0305`, and none of them appear anywhere above. (This read "thirty-one, `0255`
+`01881fb2`. **49** migration files have landed since, `0255` through
+`0306`, and none of them appear anywhere above. (This read "thirty-one, `0255`
 through `0285`" until 2026-09-13, "seventy-one, `0255` through `0295`" until
 2026-09-15, and "forty-five, `0255` through `0302`" and "46, `0255` through `0303`" until 2026-09-16; the range
 keeps growing past the sentence. The count is the number
@@ -959,3 +959,40 @@ probe asserts as a positive control alongside a manager still being able to
 approve and award.
 
 Until this is applied, production carries the forgery as measured above.
+
+### `0306` guards two money instructions the sweeps' lists missed — unapplied
+
+`0254` added restrictive manager guards to the money tables and `0275` swept
+the stray permissive policies off them "by shape rather than by name", because
+"the previous three attempts each fixed the instance and left the class open".
+Both enumerate the tables they cover, and a hardcoded list is the very thing
+`0275`'s header warns about. Two tables that move real money are not on it.
+
+**`allowance_rules`** has one policy — `Members manage allowance_rules FOR ALL …
+is_family_member` — no role check, no restrictive guard. The nightly cron reads
+it and calls `creditChildWallet(…, amountCents: rule.amount_cents)`. The row is
+not a record of a payment; it is the reason one happens, on a schedule, with
+nobody in the loop.
+
+Measured, acting as a child with both controls passing: the child **created an
+allowance rule of 100,000 cents a week pointing at their own wallet**, and
+**raised an existing one**. The next cron run pays it. Nothing legitimate
+breaks — both writers in the product (`saveAllowanceRuleAction`,
+`toggleAllowanceRuleAction`) already refuse a non-manager in application code;
+this only makes the database agree with the rule the application states, which
+is what matters for anyone calling PostgREST directly.
+
+**`invest_orders`** — `invest_decide_order` debits the wallet with the order's
+stored `amount_cents` and credits its stored `shares`, checking neither against
+the other nor against the asset. Measured: the child **priced their own order
+below the asset** and **bought 1,000 shares for one cent**.
+
+The invest guard is CONSISTENCY, not authorship, because authorship is not the
+problem: `placeInvestOrderAction` legitimately inserts as the child and already
+derives both numbers server-side (`price_cents: asset.price_cents`,
+`amount = orderAmountCents(shares, asset.price_cents)`). Requiring the stored
+economics to match the asset refuses the forged insert and lets the real one
+through — asserted as a positive control, alongside a manager still being able
+to set an allowance.
+
+Until this is applied, production carries both as measured above.
