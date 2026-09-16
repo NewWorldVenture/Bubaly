@@ -51,6 +51,27 @@ export type InMemoryOptions = {
   maxRows?: number;
 };
 
+/**
+ * Functions the real schema carries, served from the backing tables so a test
+ * does not have to know they exist.
+ *
+ * `family_allergies` (0316) is the narrow door onto `medical_profiles`: after
+ * that migration the table reads manager-or-self, and the meal planner and
+ * grocery substituter — which need the WHOLE household's allergies, on the
+ * caller's own client — go through this instead. Modelling it here rather than
+ * in each test keeps the fake honest about the schema: a select on
+ * `medical_profiles` and a call to this used to be interchangeable, and since
+ * 0316 they are not.
+ *
+ * An explicit `rpc` option still wins, which is how a test says "this call
+ * fails" or supplies rows the backing table does not hold.
+ */
+const BUILT_IN_RPC: Record<string, (args: Record<string, unknown>, db: InMemorySupabase) => unknown> = {
+  family_allergies: (args, db) => db.table('medical_profiles')
+    .filter((row) => row.family_id === args.p_family_id)
+    .map((row) => ({ member_id: row.member_id, allergies: row.allergies ?? null })),
+};
+
 function pgError(code: string, message: string): PostgrestError {
   return { code, message, details: null, hint: null };
 }
@@ -424,7 +445,7 @@ export class InMemorySupabase {
   }
 
   async rpc(name: string, args: Record<string, unknown> = {}): Promise<Reply> {
-    const handler = this.options.rpc?.[name];
+    const handler = this.options.rpc?.[name] ?? BUILT_IN_RPC[name];
     if (!handler) return { data: null, error: pgError('42883', `function ${name} does not exist`), count: null, status: 404, statusText: 'Not Found' };
     try {
       const data = await handler(args, this);

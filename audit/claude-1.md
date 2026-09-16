@@ -3420,3 +3420,106 @@ session's block: **I shipped a regression and CI found it, not me.**
 - **Verified:** 328 migrations replayed from scratch (0 failed), 325 re-applied
   onto the populated schema, **36/36 probes run twice**, 13,982 tests green, tsc
   and eslint clean.
+
+### [CLAUDE-1][MEDIUM][RLS/PRIVACY] Every member of the house read every member's diagnoses — and the obvious fix would have made a child's meal plan allergy-blind
+
+- **Raised by:** Claude-3 (`audit/claude-3.md:1330`). Verified still open, and
+  closed by **0316** — but **not by the fix as recommended**, which is the
+  substance of this entry.
+- **Files:** `supabase/migrations/0316_a_diagnosis_is_not_the_familys_to_browse.sql`,
+  `docs/audit/medical-profile-read-boundary-check.sql`,
+  `tests/an-allergy-a-child-cannot-see-is-still-an-allergy.test.ts`,
+  `lib/services/groceries/index.ts`, `lib/services/meals/index.ts`
+- **Problem:** `medical_profiles` held blood type, allergies, conditions,
+  current medications, physician, pharmacy and emergency contacts, one row per
+  member, under `Members can read medical_profiles → is_family_member(family_id)`.
+  Any member — teen, child, caregiver, guest — selected every row.
+- **The shape again, and this time it is in the migration itself.** 0009 wrote,
+  directly above the policy loop: *"RLS — everyone in the family can READ; only
+  parents/adults can WRITE. This is what enforces 'children view their own info
+  read-only' at the database boundary."* Two different rules in two consecutive
+  sentences. The second is the product's boundary; the first is what reached the
+  database. Three more surfaces state the manager gate —
+  `family-health/page.tsx:32` and `family-emergency/page.tsx:31` read only
+  `if (manager)`, and `pantry-chef/route.ts:129` gives *"medical_profiles is
+  manager-gated to clients"* as its **reason for reaching for the service
+  client**. A server component that declines to read is not a boundary; a child
+  is a real Supabase auth user and reaches PostgREST directly. And they did not
+  need to: `medical-records-module.tsx:78` selects `*` for the family and renders
+  a card per member, gating only the edit pencil.
+- **Claude-3's recommended fix was not safe as written, and the reason is worth
+  keeping.** Their note says the allergy projections "already go through the
+  service client (pantry-chef) or a services-layer projection … so nothing else
+  breaks". Two readers it glosses: `lib/services/groceries/index.ts:458` and
+  `lib/services/meals/index.ts:660` both read **family-wide allergies through
+  `scope.db`**, and `scopeFromUserContext` fills that with the **caller's own
+  client**. The groceries read is explicitly fail-closed and says why — *"putting
+  peanut butter on the list because `medical_profiles` was unreachable is exactly
+  the failure this rule exists to prevent"* — and it checks `profilesRes.error`.
+  **But RLS does not error; it returns fewer rows.** A narrowed policy hands a
+  child `{ data: [], error: null }`: the guard passes, and the planner concludes
+  the household has no allergies. The privacy fix would have shipped the exact
+  failure that comment exists to describe, by the one route it did not cover.
+- **What shipped instead.** SELECT narrows to
+  `is_family_member(family_id) and (can_manage_family(family_id) or is_self_member(member_id))`,
+  and `allergies` gets a door of its own: `family_allergies(p_family_id uuid)`,
+  security definer, returning `(member_id, allergies)` and nothing else to any
+  member of that family. `is_family_member` is re-checked **inside** the
+  function, because a definer function carries the owner's rights. Both services
+  now call it.
+- **The function RAISES for a non-member rather than returning zero rows**, and
+  that makes the new path *stricter than the one it replaces*: the direct select
+  answered a non-member with `{ data: [], error: null }`, so the fail-closed
+  guard had nothing to catch. Now it does.
+- **`is_family_member(family_id)` is kept as the outer term** even though
+  `can_manage_family` implies it: `is_self_member(member_id)` says the member row
+  is mine and says nothing about the profile row's `family_id`, a separate
+  column.
+- **Deliberately not in scope, and said so in the migration rather than left to
+  be discovered:** `health_providers` and `insurance_policies` (0009's other two
+  tables) are shared administrative artifacts; `medications` and `symptom_logs`
+  carry the same per-member shape and the same family-wide SELECT, but have
+  server-side readers (`lib/server/notifications.ts`, `lib/autopilot/scan.ts`) —
+  a separate change with its own probe. A **caregiver** is a member and is not a
+  manager, so this moves them to their own row plus the allergy list; recorded as
+  an assertion in the probe rather than left silent, because whether a babysitter
+  should see blood types is a household policy question.
+- **Status:** FIXED. Non-vacuity, five mutations each naming its own defect:
+  restore the family-wide policy → *"a child sees 4 profiles, expected exactly
+  their own"*; add a second permissive SELECT policy → same, **and the
+  migration's own sweep refuses to land**: *"medical_profiles still carries a
+  second SELECT policy, which ORs the narrowing away"*; make the function return
+  empty instead of raising → *"a non-member read another household's allergy
+  list"*; give the function a third column → *"family_allergies no longer returns
+  exactly (member_id, allergies)"*; grant `anon` EXECUTE → *"an unauthenticated
+  caller reaches medical data"*. The vitest side was mutated too: reverting
+  `lib/services/meals/index.ts` to a direct select fails 4 of its 5 assertions.
+- **Three bespoke test fakes had to learn about the RPC**, which is how the suite
+  earned its keep here — `tests/ai-eval/runner.test.ts`,
+  `tests/ai-prompt-injection.test.ts` and `tests/context-builder.test.ts` each
+  went red with *"Could not read the family food preferences"*, i.e. exactly the
+  allergy-blind path, from a fake that had no `family_allergies`. The shared
+  `tests/helpers/in-memory-supabase.ts` now serves it from the backing table, so
+  the fake stays honest about a schema where a select and this call are no longer
+  interchangeable.
+- **Verified:** 329 migrations replayed from scratch (0 failed), 326 re-applied
+  onto the populated schema, **37/37 probes run twice**, **13,987 tests green
+  under both `TZ=UTC` and `TZ=America/Los_Angeles`**, tsc clean, eslint at the
+  86-warning ratchet.
+
+#### Filed, not fixed (owner decisions from this finding)
+
+- **`medical-records-module.tsx:385`** now tells a non-manager *"No profile on
+  file."* for a member whose row they can no longer read. The record exists; it
+  is private. Honest copy needs a new key across 11 locales, so it is filed
+  rather than invented here. LOW.
+- **`family-module.tsx:146`** counts `medical_profiles` for the family hub tile;
+  a child now sees their own count rather than the household's. Arguably more
+  correct — a count of rows you cannot open is itself a signal — but it is a
+  visible number changing, so it is recorded.
+- **`app/api/ai/health/coach/route.ts:53-58`** is the sharpest remaining case of
+  the deferred tables: with 0316 in place the coach no longer hands a child a
+  sibling's *profile*, but `.eq('member_id', memberId)` on `medications` and
+  `symptom_logs` still reaches any member of the family, because both tables keep
+  the family-wide SELECT. The route has no family check of its own — RLS is the
+  only boundary — so closing those two policies closes this route with them.

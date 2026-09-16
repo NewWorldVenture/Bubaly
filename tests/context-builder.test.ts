@@ -45,7 +45,16 @@ function makeDb(tables: Record<string, TableSpec>) {
     });
     return proxy;
   };
-  return { db: { from } as unknown as SupabaseClient<Database>, calls };
+  // The food slice reads allergies through `family_allergies()` (0316) rather
+  // than selecting `medical_profiles`, whose SELECT policy is now
+  // manager-or-self. Served from the same spec, and — like `from()` above —
+  // recording the argument rather than filtering on it.
+  const rpc = async (name: string) => {
+    if (name !== 'family_allergies') return { data: null, error: { code: '42883', message: `function ${name} does not exist` } };
+    const rows = tables.medical_profiles?.rows ?? [];
+    return { data: rows.map((row) => ({ member_id: row.member_id, allergies: row.allergies ?? null })), error: null };
+  };
+  return { db: { from, rpc } as unknown as SupabaseClient<Database>, calls };
 }
 
 const NOW = new Date('2026-09-05T03:00:00Z'); // 11 PM Friday Sep 4 in New York / 8 PM in Los Angeles

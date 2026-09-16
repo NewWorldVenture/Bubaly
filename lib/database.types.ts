@@ -2767,6 +2767,10 @@ export interface Database {
       bump_landing_metric: { Args: { p_slug: string; p_metric: string }; Returns: undefined };
       grocery_from_meal_plan: { Args: { p_family_id: string; p_from: string; p_to: string; p_list_id?: string }; Returns: string };
       is_family_member: { Args: { p_family_id: string }; Returns: boolean };
+      // 0316: the one door onto medical_profiles that is NOT manager-or-self.
+      // Returns (member_id, allergies) and nothing else, and RAISES rather than
+      // returning zero rows to a non-member, so the callers' fail-closed guards fire.
+      family_allergies: { Args: { p_family_id: string }; Returns: { member_id: string; allergies: string | null }[] };
       // Executor lease (0250): returns the ids it just leased. service_role only.
       claim_ai_runs: { Args: { p_limit?: number; p_lease_seconds?: number }; Returns: string[] };
       can_manage_family: { Args: { p_family_id: string }; Returns: boolean };

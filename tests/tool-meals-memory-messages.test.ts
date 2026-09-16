@@ -42,7 +42,15 @@ function makeDb(respond: (call: Call) => Reply) {
     });
     return b;
   };
-  return { db: { from } as unknown as SupabaseClient<Database>, calls };
+  // Allergies reach the grocery and meal services through `family_allergies()`
+  // (0316) rather than a select, so the fake answers RPCs too. Logged as
+  // `rpc:<name>` with its arguments in `filters`.
+  const rpc = (name: string, args: Record<string, unknown> = {}) => {
+    const call: Call = { table: `rpc:${name}`, kind: 'select', filters: { ...args } };
+    calls.push(call);
+    return Promise.resolve(respond(call));
+  };
+  return { db: { from, rpc } as unknown as SupabaseClient<Database>, calls };
 }
 
 const NOW = new Date('2026-09-05T12:00:00Z');

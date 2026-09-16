@@ -4703,3 +4703,150 @@ Recorded rather than dressed up as a seventh caught mutation.
   isolation.
 - **13,901 tests green across four shards**; `tsc` and `eslint` clean.
 - CI green on `cde0fa24`, which carries every commit in this pass but the last.
+
+---
+
+# Pass Q — the keyboard, the caret, and two tables that answered everyone
+
+Six commits since Pass P, in two groups: the accessibility backlog the earlier
+passes had counted but never worked, and two more instances of this audit's
+recurring shape — a boundary stated where a reader can see it and absent from
+the layer that enforces it.
+
+## Q1 — MEDIUM: a lint rule that had never been switched on
+
+`4fee904e` turns on the `jsx-a11y` rules and pins them with a ratchet
+(`next lint --max-warnings=86`, down from an initial 100 as the tranches
+landed). **One rule was rejected on evidence rather than adopted wholesale:**
+`label-has-associated-control` cannot see this repository's `Field` wrapper, so
+enabling it would have produced 55 warnings that no correct change could clear —
+a ratchet that can only be satisfied by ignoring it teaches people to ignore it.
+
+## Q2 — MEDIUM: rows you could click and could not reach
+
+`fd9d4ac2` adds `lib/ui/a11y.ts`'s `activatable()` — role, tabIndex, click and a
+keydown honouring Enter and Space — and applies it to the first tranche. The
+helper's doc states **what it is not for**, because the remaining flagged
+elements are exactly those cases: an element already containing a button, a link
+or an input (nesting them is invalid ARIA), and a click-outside scrim (a scrim is
+a mouse affordance, not a control).
+
+**The scrims turned out to be the real finding.** `aria-hidden` + `tabIndex={-1}`
+is an honest description of a mouse-only dismiss — and it also silences the two
+lint rules that were pointing at the gap. Five menus were reachable by keyboard
+with **no keyboard way out**: a user could open one and had to pick something.
+Each now handles Escape on the menu itself.
+
+## Q3 — a sixth prose-as-code instance, and it was mine
+
+The calendar scrim comment I wrote in Q2 said *"the keyboard equivalent is
+Escape, handled on the menu itself"*. No Escape handler existed. Making the
+comment true then surfaced four more pre-existing scrims in the same state,
+plus one the lint ratchet found that **my own grep had misread**. Six instances
+of this shape are now on record in this audit; two of them are mine.
+
+**One guard was abandoned rather than shipped.** A scanner meant to prove "no
+nested interactive element" read a 25-line window and reported
+`notes-module:310` clean; its nested buttons were 34 lines down. A guard
+demonstrated unsound is worse than none, because it is cited.
+
+## Q4 — HIGH: typing in a dialog moved the caret to the first field
+
+`10a2615a`. `components/ui/modal.tsx`'s focus-trap effect depended on
+`[open, onClose]`, and **92 of 226 call sites pass an inline
+`onClose={() => setOpen(false)}`** — a new function identity on every render of
+the component holding the dialog's form state. Every keystroke tore the effect
+down and set it up again, and both halves move focus: cleanup calls
+`previouslyFocused.focus()` (by then the trigger *behind* the dialog) and setup
+focuses the first control. Measured with the caret in the third field: focus went
+trigger → field one, per character.
+
+`onClose` now lives in a ref and the effect depends on `open` alone. Nothing
+about the trap needs rebuilding when a handler's identity changes; it needs the
+*current* handler only when Escape is pressed.
+
+**One existing assertion changed, and it is not a weakening.**
+`modal-a11y-contract.test.ts` matched the source against `/onClose\(\)/` — a call
+spelling, not a behaviour. It now accepts either spelling and defers to the new
+test, which *exercises* Escape reaching the current handler.
+
+## Q5 — MEDIUM: a journal anyone in the house could rewrite, delete or forge
+
+`cff4e2eb` / **0315**. Raised by Claude-3, verified still open.
+`journal_entries` had one policy — `FOR ALL using/with check
+(is_family_member(family_id))` — and the module is a client component talking to
+PostgREST with the anon key, so RLS was the only boundary. **Two places already
+called this data private and neither was the database:** the module header
+("Personal Journal … scoped to the signed-in member") and
+`lib/ai/context/policy.ts`, which excludes the table from AI context with the
+reason "private journals". Reads stay family-wide and are **asserted so**, since
+both readers already scope to self and narrowing is an owner's call.
+
+**The first draft shipped a forging hole and the probe caught it on its first
+run.** Reusing 0308's `is_self_member(member_id) or created_by = auth.uid()`: on
+INSERT a child sets `member_id` to the parent and `created_by` to themselves, and
+the second branch is true. **`created_by` says who typed it; `member_id` says
+whose journal it is**, and only the second is the question. The general lesson:
+an idiom lifted from a neighbouring migration is not automatically right.
+
+## Q6 — MEDIUM: every member read every member's diagnoses, and the obvious fix would have shipped an allergy
+
+**0316.** Raised by Claude-3, verified still open — and closed **differently from
+the recommendation**, which is the substance of this entry.
+
+`medical_profiles` (blood type, allergies, conditions, current medications,
+physician, pharmacy, emergency contacts, one row per member) read
+`is_family_member(family_id)`. Any member selected every row. **0009 stated the
+intended rule and the actual rule in two consecutive sentences:** *"everyone in
+the family can READ … This is what enforces 'children view their own info
+read-only' at the database boundary."* Three surfaces state the manager gate —
+`family-health` and `family-emergency` read only `if (manager)`, and
+`pantry-chef/route.ts:129` gives *"medical_profiles is manager-gated to clients"*
+as its reason for using the service client. A server component that declines to
+read is not a boundary, and a child did not need one anyway:
+`medical-records-module.tsx:78` selects `*` for the family and renders a card per
+member, gating only the pencil.
+
+**Why the recommended fix was not safe.** Two readers it glossed —
+`lib/services/groceries/index.ts` and `lib/services/meals/index.ts` — read
+**family-wide allergies through the caller's own client**. The groceries read is
+fail-closed and says why: *"putting peanut butter on the list because
+`medical_profiles` was unreachable is exactly the failure this rule exists to
+prevent."* It checks `error`. **RLS does not error — it returns fewer rows.** A
+narrowing alone would hand a child `{ data: [], error: null }`, the guard would
+pass, and the planner would call the household allergy-free. **The privacy fix
+would have shipped the exact failure that comment exists to describe, by the one
+route it did not cover.**
+
+What shipped: SELECT narrows to
+`is_family_member and (can_manage_family or is_self_member(member_id))`, and
+`allergies` gets its own door — `family_allergies(p_family_id)`, security
+definer, returning `(member_id, allergies)` and nothing else to any member of
+that family, re-checking membership **inside** the function. It **raises** for a
+non-member rather than returning zero rows, which makes the new path *stricter
+than the one it replaces*: the direct select answered a non-member with
+`{ data: [], error: null }` and the fail-closed guard had nothing to catch.
+
+Left for a separate change, and said so in the migration rather than left to be
+discovered: `medications` and `symptom_logs` carry the same per-member shape and
+the same family-wide SELECT, and `app/api/ai/health/coach/route.ts` — which has
+no family check of its own — still reaches any member's meds and symptoms
+through them.
+
+## What the test suite earned this pass
+
+Three bespoke test fakes went red on the 0316 repoint with *"Could not read the
+family food preferences"* — **the allergy-blind path itself**, surfaced by fakes
+that had no `family_allergies`. The shared `tests/helpers/in-memory-supabase.ts`
+now serves it from the backing table, so the fake stays honest about a schema
+where a select and that call are no longer interchangeable.
+
+## Verification
+
+- **329 migrations replayed from scratch, 0 failed**; 326 re-applied onto the
+  populated schema (idempotent); **37/37 boundary probes, run twice** for
+  isolation.
+- **13,987 tests green across four shards under both `TZ=UTC` and
+  `TZ=America/Los_Angeles`**; `tsc` clean; `eslint` at the 86-warning ratchet.
+- Every migration and every service change in Q5 and Q6 was mutation-tested;
+  nine mutations across the two, each naming its own defect.
