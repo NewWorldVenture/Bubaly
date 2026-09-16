@@ -24,7 +24,22 @@ describe('cron wallet allowance persistence boundaries', () => {
 
   it('restores the schedule when the wallet credit fails', () => {
     expect(source).toContain(".update({ next_run_on: rule.next_run_on, last_run_on: rule.last_run_on })");
-    expect(source).toContain("throw new Error(`Allowance credit failed: ${res.error}`);");
+  });
+
+  // This used to assert `throw new Error(...)` as its proxy for "the failure is
+  // not swallowed". The throw was the defect: the outer catch turned it into a
+  // 500, and since the rollback above leaves the rule due and the rules are read
+  // `.order('id')`, one unpayable rule stopped every rule after it, that night
+  // and every night after. The intent is kept and made explicit — the failure
+  // must still be recorded and surfaced, it just must not end the run. The
+  // behaviour itself is covered by
+  // tests/allowance-cron-isolates-one-bad-rule.test.ts.
+  it('records the failure and surfaces it, without ending the run', () => {
+    expect(source).toContain('failed++;');
+    expect(source).toContain("console.error('Allowance credit failed; leaving it retryable.'");
+    expect(source).toContain('const ok = failed === 0;');
+    expect(source).toContain('{ status: ok ? 200 : 502 }');
+    expect(source).not.toContain('throw new Error(`Allowance credit failed');
   });
 
   it('counts only successful credits', () => {
