@@ -14,20 +14,30 @@ import { describe, expect, it } from 'vitest';
 // than a proof"; this is what was under the floor.
 //
 // This is a RATCHET, not a proof. Seventeen server-side sites were listed here;
-// eleven are now closed and six remain, each needing its own decision about
+// twelve are now closed and five remain, each needing its own decision about
 // which family's day it means. Listing them stops the next one being added
 // silently while they are worked down, and shrinking the list is the only edit
 // that should ever be made to it.
 //
 // What is left is deliberately the harder half: every remaining entry is a PURE
-// helper that takes a `now` and is called from BOTH server and client code
-// (`lib/pantry/logic.ts` has six server callers and two client ones). In a
+// helper that takes a `now` and is called from BOTH server and client code. In a
 // client component `new Date()` is the user's own device clock and is already
 // right, so these cannot simply be converted — the zone has to be threaded from
 // each server caller, or the helper has to take a day key the way
 // `weekStrip` now does. `lib/chores/dashboard.ts:dueLabel` is the clearest
 // case: its only caller is a client module, so it is listed but may well be
 // correct as it stands.
+//
+// `lib/pantry/logic.ts` was the worked example of the harder half, and the
+// answer turned out NOT to be "the device clock is fine on the client". It had
+// six server callers and two client ones, and leaving the client pair on the
+// device clock would have given a family two different answers to "does this
+// expire today" — the server-rendered kitchen page and the client-rendered
+// pantry module disagreeing about the same jar. So it takes a required
+// `todayKey: string` and has no default at all, and BOTH sides answer it from
+// `families.timezone`: the server via `todayKeyFor(ctx)`, the client via
+// `dayKeyIn(new Date(), family.timezone)`. `lib/food/leftovers.ts` went with it,
+// since it subtracts days through the same helper.
 //
 // To close one: route it through `dayKeyInTz` / `zonedDayBoundsMs`
 // (lib/services/scope.ts), as app/(app)/display/page.tsx and
@@ -41,7 +51,6 @@ const TRACKED = new Set([
   'lib/capture/parse.ts',
   'lib/chores/dashboard.ts',
   'lib/marketplace/returns.ts',
-  'lib/pantry/logic.ts',
   'lib/relationship/dates.ts',
   'lib/routines/detect.ts',
 ]);

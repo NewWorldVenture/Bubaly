@@ -5182,3 +5182,136 @@ again. Only the shape that needs no dataflow is tracked.
 - 338 migrations replayed from scratch (0 failed), 335 re-applied, **46/46 probes
   run twice**, **14,024 tests green under both `TZ=UTC` and
   `TZ=America/Los_Angeles`**, tsc clean, eslint at 85, `npm run build` exits 0.
+
+---
+
+## Q15 — HIGH: a child who did chores two evenings running was told to start again
+
+`applyCompletionRewards` (`lib/chores/server.ts`) derived "today" from
+`new Date().toISOString().slice(0, 10)` — the **UTC** day — and wrote it to
+`kid_progress.last_activity`. That column is the only thing `nextStreak`
+compares, so **the zone it is read in IS the streak rule**. `nextStreak` itself
+is pure, correct and tested; the entire defect is in what it was handed.
+
+Measured at 6pm on the 23rd in Los Angeles, which is already the 24th in UTC:
+
+| last activity | correct | what shipped |
+|---|---|---|
+| the 22nd (chores two evenings running) | streak 3 → 4 | sees a two-day gap, **resets to 1** |
+| the 23rd (earlier the same family day) | unchanged at 3 | **counts it twice**, 3 → 4 |
+
+Wrong in both directions, with `streak_3`, `streak_7` and `longest_streak` all
+inheriting it. Evenings are when chores get done, so this is the common case,
+not the edge.
+
+Fixed with `dayKeyInTz(new Date(), opts.tz)`, `tz` required and threaded from
+`ctx.active.family.timezone` at both `finalizeApproval` call sites, which
+already had it.
+
+**My first test proved nothing, and the mutation is what said so.** The headline
+case was written at 10am Los Angeles — where the UTC day and the family day
+**agree** — so it passed against the defect as happily as against the fix; only
+one of three assertions caught the mutation. Every instant is now an LA evening,
+the only time the two answers differ, and all three fail when reverted. *A test
+whose scenario cannot distinguish the two implementations is a test of nothing,
+and its name will still read correctly.*
+
+The mutation also **corrected the finding**. I had written it up as "the streak
+does not increment"; the failure message read `expected 1 to be 4` — it
+**resets**. The code comment now says what was measured, not what I assumed.
+
+## Q16 — MEDIUM: six date columns defaulted to the host's day, and the list tracking them was lying
+
+Six `insert`s defaulted a DATE column from the host's day, so a record logged in
+a Californian evening was stamped **tomorrow**. The sharpest is
+`moment_activations.as_of_date`, whose caller's own comment reads *"Hide a moment
+for the rest of today"* and which wrote tomorrow's row — the moment stayed on
+screen all evening and arrived already dismissed the next morning. A rule stated
+in a comment where a reader can see it and absent from the line below it: this
+audit's recurring shape, in miniature, for the **eighth** time.
+`family_food_scores.snapshot_date` is upserted, so an evening score landed on
+tomorrow and collided with tomorrow's real one.
+
+`todayKeyFor(ctx)` is now the single place the `|| DEFAULT_TZ` fallback is
+written; six copies of a defaulting rule is how the seventh gets it wrong.
+
+**My own instrument was lying, two commits after I built it.** The tracked list
+for this spelling inherited the header *"never a site that is fine as it is"*
+while three of its ten entries were exactly that — an allowance cron
+**documented as deliberate in its own source**, a site-admin export with no
+family in scope, and a helper that takes an injected `today`. Leaving them
+unmarked would have had the next person "fix" the allowance cron and change when
+money is paid. The list is now split by reason. **A ratchet that does not
+distinguish "not yet done" from "decided" manufactures regressions.**
+
+A regression I introduced and the suite caught: computing the zone inside auto
+and home's shared `ctx()` ran it for every action there, and two write-boundary
+tests whose mocks carry no `active.family` went red. `todayKeyFor` is now
+**total** — it supplies a default for a date column, and an action that would
+otherwise succeed must not die because the zone could not be read.
+
+## Q17 — HIGH: "expires today" meant the host's today, so the whole kitchen was a day out every evening
+
+Every expiry judgement in the kitchen — `daysUntil`, `expiryStatus`,
+`expiringSoon`, `pantrySummary`, `leftoverUrgency`, `activeLeftovers`,
+`leftoverNudge`, `urgentLeftoverCount` — took `now: number = Date.now()` and
+found midnight with `setHours(0, 0, 0, 0)`: the **host's** midnight. On a UTC
+server that is 5pm in California, so for the last seven hours of every day:
+
+- food expiring **tomorrow** read **"Expires today"**;
+- food expiring **today** read **"Expired yesterday"** — `expired: true`, red
+  tone, and counted in `pantrySummary.expired`;
+- a leftover due tomorrow said **"Eat today"**, and tonight's dinner said
+  **"Past use-by"**;
+- `expiringSoon` handed the **AI chef** and the **meal planner** a 7-day window
+  shifted a day, so both urged cooking what was not urgent and wrote off what was
+  still good.
+
+Food waste is the feature's entire purpose — the Food Score scores the family on
+it — so this defeated the thing it was built for, at dinner time, every day.
+
+Both modules now take a **required `todayKey: string`** with no default. Both
+dates are parsed as UTC midnights, which is not a claim that anyone is in UTC —
+it is how two calendar days are subtracted with no zone entering into it at all.
+**`= Date.now()` is what made this invisible**: all eleven call sites read as
+though they were already correct.
+
+**The client callers are the part worth stating.** The tracked list's standing
+note said the remaining entries were hard *because* they are called from both
+server and client, and that on a client `new Date()` is the device clock and "is
+already right". That is wrong here, and this is the worked example: leaving the
+two client sites on the device clock would give one family **two different
+answers about the same jar** — the server-rendered kitchen page and the
+client-rendered pantry module disagreeing — and would be wrong outright for a
+parent travelling. Both sides now answer from `families.timezone`: the server via
+`todayKeyFor(ctx)`, the client via `dayKeyIn(new Date(), family.timezone)`.
+`KitchenDashboard` does not even recompute it — the server passes `todayKey` down
+in `KitchenData`, so the card and the counts beside it cannot drift apart.
+
+`dayKeyIn` was added to `lib/time/zoned.ts` because `lib/services/scope.ts` is
+`server-only` and a client component cannot import it; `dayKeyInTz` delegates, so
+there is still one implementation.
+
+Both existing suites passed **unchanged** against the defect, because every
+instant in them was one where the host's day and the family's day agree. The new
+blocks name 7pm and 8pm in Los Angeles — dinner, precisely when a leftovers
+module is consulted — and all 8 of their assertions fail against the mutation
+while the other 21 stay green. The failure messages are the defect stated
+plainly: `expected 'expired' to be 'eat_now'`, `'Toss or check lasagne — it's
+past it…'`, and the chef's window reaching `flour` a day early.
+
+`lib/pantry/logic.ts` comes off the `setHours` ratchet: **five entries left of
+the original seventeen.** The stale `lib/services/scope.ts` header, which still
+described `lib/ai/weekly.ts` as correctly UTC-anchored — untrue since Q14 fixed
+that window — is corrected in the same commit.
+
+## Verification (Q15–Q17)
+
+- **14,045 tests green under both `TZ=UTC` and `TZ=America/Los_Angeles`**, four
+  shards each, tsc clean, eslint at 85 (no new warnings), `npm run build` exits 0.
+- Non-vacuity by mutation in all three: revert the streak to the UTC day → three
+  assertions fail, naming the reset, the double count and the two-household
+  divergence; make `todayKeyFor` ignore the zone → the Los Angeles and Auckland
+  assertions fail, and the widened ratchet names each reverted file; revert
+  `dayKeyIn` to the UTC day → all 8 new kitchen assertions fail and the other 21
+  stay green.

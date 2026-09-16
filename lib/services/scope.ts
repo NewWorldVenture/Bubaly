@@ -3,17 +3,25 @@
 //
 // Why the timezone helpers live here rather than in a shared date module: the
 // only reason a service knows about time zones at all is that `scope.tz` says
-// which one the family lives in. `lib/ai/weekly.ts dayKey` formats day keys in
-// UTC, which is right for its UTC-anchored windows but wrong for "what is
-// today for this family" — a household in America/Los_Angeles sees tomorrow's
-// day key for the last seven hours of every day. These helpers keep the same
-// `YYYY-MM-DD` shape as `dayKey` so the two can be compared, but resolve it in
-// the family's zone.
+// which one the family lives in.
+//
+// They all resolve a `YYYY-MM-DD` day key in the family's zone, because the
+// UTC-anchored answer is wrong for "what is today for this family" — a
+// household in America/Los_Angeles gets tomorrow's day key for the last seven
+// hours of every day. `lib/ai/weekly.ts` used to be the counter-example named
+// here, its windows genuinely UTC-anchored; that was the defect, not the
+// design, and `weekWindow`/`bucketByDay` now take a `tz` too.
+//
+// The arithmetic itself lives in `lib/time/zoned.ts` and is re-exported from
+// here. This module is `server-only`, and a client component asking "does this
+// expire today" has to reach the same answer as the server-rendered page beside
+// it, so it imports `dayKeyIn` from there directly.
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import type { requireUserContext } from '@/lib/supabase/auth';
 import type { ServiceScope } from './types';
+import { dayKeyIn } from '@/lib/time/zoned';
 
 /** Fallback when a family row somehow carries no timezone (0002 defaults it to 'UTC'). */
 const DEFAULT_TZ = 'UTC';
@@ -103,12 +111,11 @@ export function scopeNow(scope: Pick<ServiceScope, 'now'>): Date {
  * compares an event's local day against a requested date.
  */
 export function dayKeyInTz(date: Date, tz: string): string {
-  try {
-    return new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
-  } catch {
-    // An invalid IANA name must not take a household write down with it.
-    return date.toISOString().slice(0, 10);
-  }
+  // One implementation, in `lib/time/zoned.ts`, because a CLIENT component needs
+  // the same answer and this module is `server-only`. "Does this expire today?"
+  // has to mean the same day on a server-rendered page and a browser-rendered
+  // one, and it only does if both ask about the family's zone.
+  return dayKeyIn(date, tz);
 }
 
 /**

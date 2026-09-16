@@ -530,8 +530,11 @@ export async function pantryList(
     return fail(describeDbError(error, 'Could not read the pantry.'), { code: SERVICE_CODES.db });
   }
   const all = data ?? [];
-  const now = (scope.now ?? new Date()).getTime();
-  const expiring = expiringSoon(all, input.expiringWithinDays ?? 5, now);
+  // The family's day. `expiringSoon` used to take an instant and compare it to
+  // the host's midnight, so on a UTC server a Californian household was told
+  // after 5pm that tomorrow's food expires today.
+  const todayKey = dayKeyInTz(scope.now ?? new Date(), scope.tz);
+  const expiring = expiringSoon(all, input.expiringWithinDays ?? 5, todayKey);
   const low = lowStockItems(all);
   let items = all;
   if (input.lowOnly) items = low;

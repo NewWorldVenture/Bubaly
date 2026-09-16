@@ -4147,3 +4147,89 @@ Recorded with the evidence rather than guessed at, and explicitly NOT fixed.
   the widened ratchet names the file.
 - **Verified:** **14,037 tests green under both `TZ=UTC` and
   `TZ=America/Los_Angeles`**, tsc clean, eslint at 85, `npm run build` exits 0.
+
+---
+
+### [CLAUDE-1][HIGH][CORRECTNESS/TIME] "Expires today" meant the host's today, so the pantry and the leftovers card were a day out every evening
+
+**Files:** `lib/pantry/logic.ts`, `lib/food/leftovers.ts`,
+`app/(app)/dashboard/kitchen/page.tsx`, `app/api/ai/chef/route.ts`,
+`app/api/ai/meals/plan/route.ts`, `components/modules/kitchen-dashboard.tsx`,
+`components/modules/pantry-module.tsx`, `lib/services/groceries/index.ts`
+
+**Problem.** Every expiry judgement in the kitchen — `daysUntil`,
+`expiryStatus`, `expiringSoon`, `pantrySummary`, `leftoverUrgency`,
+`activeLeftovers`, `leftoverNudge`, `urgentLeftoverCount` — took
+`now: number = Date.now()` and found midnight with `setHours(0, 0, 0, 0)`: the
+**host's** midnight. On a UTC server that is 5pm in California, so for the last
+seven hours of every day (29% of it):
+
+- food expiring **tomorrow** was labelled **"Expires today"**;
+- food expiring **today** was labelled **"Expired yesterday"** — `expired: true`,
+  the red tone, and `pantrySummary.expired` counting it;
+- a leftover due tomorrow said **"Eat today"**, and tonight's dinner said
+  **"Past use-by"**;
+- `expiringSoon` handed the **AI chef** and the **meal planner** a 7-day window
+  shifted a day, so both urged cooking things that were not urgent and wrote off
+  food that was still good.
+
+**Evidence.** The mutation reproduces it exactly. Reverting `dayKeyIn` to the
+UTC day, at 7pm in Los Angeles on the 27th:
+
+```
+expected 'eat_now' to be 'eat_soon'      ← tomorrow's food, "eat it tonight"
+expected 'expired' to be 'eat_now'       ← tonight's dinner, written off
+expected 'Toss or check lasagne — it's past it…' to be 'Eat lasagne today before it goes bad.'
+expected 'Expires today' to be 'Expires tomorrow'
+expected [ 'yoghurt', 'spinach', 'flour' ] to deeply equal [ 'yoghurt', 'spinach' ]
+```
+
+That last one is the chef's window reaching a day too far.
+
+**Impact.** Food waste, which is the feature's entire purpose — the Food Score
+literally scores the family on it. A family told at dinner that tonight's
+leftovers are already past their use-by throws away good food; one told nothing
+about tomorrow's yoghurt until it is gone loses it.
+
+**Fix.** Both modules now take a **required `todayKey: string`** and no default.
+Both dates are parsed as UTC midnights, which is not a claim that anyone is in
+UTC — it is how two calendar days are subtracted with no zone entering into it
+at all. The zone leaves the modules entirely and each caller answers "which day
+is it" where it has the family's zone to answer with.
+
+**`= Date.now()` is exactly what made this invisible**: every one of the eleven
+call sites read as though it were already correct.
+
+**The client callers are the part worth stating.** The tracked list's own
+standing note said the remaining entries were hard *because* they are called
+from both server and client, and that on a client `new Date()` is the user's own
+device clock and "is already right". That is wrong here, and this is the worked
+example of why: leaving the two client call sites on the device clock would give
+one family **two different answers about the same jar** — the server-rendered
+kitchen page and the client-rendered pantry module disagreeing — and would be
+wrong outright for a parent travelling. So both sides answer from
+`families.timezone`: server via `todayKeyFor(ctx)`, client via
+`dayKeyIn(new Date(), family.timezone)`. `KitchenDashboard` does not even
+recompute it; the server passes `todayKey` down in `KitchenData`, so the card
+and the counts beside it cannot drift apart.
+
+`dayKeyIn` was added to `lib/time/zoned.ts` for this: `lib/services/scope.ts` is
+`server-only`, and a client component needing the same answer cannot import it.
+`dayKeyInTz` now delegates, so there is still one implementation.
+
+**A test whose scenario cannot distinguish the two implementations is a test of
+nothing.** Both existing suites passed unchanged against the defect, because
+every instant in them was one where the host's day and the family's day
+**agree**. The new blocks name an instant where they differ — 7pm and 8pm in Los
+Angeles, i.e. dinner, which is precisely when a leftovers module is consulted —
+and all 8 of their assertions fail against the mutation while the other 21 stay
+green.
+
+**Status:** FIXED. `lib/pantry/logic.ts` removed from the `setHours` ratchet
+(five entries left of the original seventeen). The stale `lib/services/scope.ts`
+header, which still described `lib/ai/weekly.ts` as correctly UTC-anchored —
+untrue since that window was fixed — is corrected in the same commit.
+
+**Verified:** **14,045 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles`** (four shards each), tsc clean, eslint at 85 (no new
+warnings), `npm run build` exits 0.
