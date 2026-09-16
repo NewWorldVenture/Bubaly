@@ -6464,3 +6464,71 @@ the old blanket policy. The migration-shape guard was proved red twice: once by
 leaving the blanket policy in place beside the new ones (PostgreSQL ORs
 permissive policies together, so the fix would have been inert), and once by
 dropping the `with check` half.
+
+## Pass T, corrected — those 29 tables are a tracked milestone, not an oversight
+
+The table above lists 29 per-member tables as narrowable with the repository's
+own pattern, which is true and materially incomplete. Reading further found
+that most of them are **M23's declared scope**, and that the repository has
+already reckoned with their absence rather than overlooking it.
+
+`lib/trust/sharing-presets.ts` carries a section headed **"HONESTY BOUNDARY —
+read this before wording anything on top of it"**:
+
+> a delegation grants AUTHORITY TO ACT (and to have Bubaly act) in the named
+> domains. It does not scope what the person can READ: RLS is role-based
+> (`is_family_member` vs `can_manage_family`, 0003/0266), so a caregiver or
+> guest still sees the ordinary shared pages of the family they belong to.
+> Per-member read scoping is M23's RLS migration (documents/notes/journal on
+> member_id + a `has_active_delegation()` helper for sensitive tables) … 
+> **Neither is shipped, so nothing built on this module may say "they can only
+> SEE …".**
+
+That is the same class of disclosure as the environment registry's "partial
+static inventory" and `docs/i18n.md`'s 7,402 — a document that states its own
+limit, and against which "this is incomplete" is not a finding. It also
+constrains the product's *wording*, which is a stronger response than a TODO:
+the gap is not merely known, it is fenced.
+
+**So the honest reading of Pass T is:** the measurement stands — 54 sensitive
+tables are child-readable, 29 of them per-member — but the per-member 29 are
+a designed, partially-shipped milestone with a `has_active_delegation()` helper
+in its plan, not 29 independent oversights. Shipping my own member-scoping RLS
+for them would pre-empt a design I cannot see. The list is worth having as a
+scope check for whoever finishes M23; it is not a defect queue.
+
+This correction is to my own work of fifteen minutes earlier, and it is the
+reason the measurement was worth taking: the numbers were right and the
+conclusion drawn from them was not.
+
+### One observation M23 does not obviously cover
+
+`journal_entries.is_private` is `boolean NOT NULL DEFAULT true`, and **no code
+anywhere reads it** — not RLS, not the journal module, not the AI journal
+route. M23 is about *member* scoping (owner versus family); a per-entry
+privacy flag that is on by default and honoured by nothing is a different
+question, and one the family can already see in their data.
+
+Not acted on, deliberately. Giving it meaning is a product decision about
+whether a manager may read a teenager's entry marked private, which is exactly
+the kind of call `has_active_delegation()` exists to express. Flagged so it is
+decided rather than inherited.
+
+### Where the privacy-column sweep landed
+
+Seven columns in the schema express privacy or sharing intent. Checked each
+against its table's policy:
+
+| column | policy consults it? |
+|---|---|
+| `documents.is_secure` | yes — `0266` |
+| `household_info.is_sensitive` | yes — `0305`, this pass |
+| `family_credentials.secret` | n/a — the column is the secret; the table is manager-only |
+| `journal_entries.is_private` | **no** — and nothing else reads it either |
+| `family_albums.is_shared` | no — but these are opt-IN sharing flags, |
+| `family_recipes.is_public` | no —  not secrecy flags; family-wide visibility |
+| `todo_lists.is_shared` | no —  is the plausible product intent |
+
+The last three are grouped deliberately: a flag that widens visibility failing
+open inside the family it belongs to is not the same defect as a flag that
+narrows it failing open. Only the narrowing kind was pursued.
