@@ -1,6 +1,7 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
+import { labelledGroup } from '@/lib/ui/a11y';
 import { Sparkles, Clock, CalendarCheck, Loader2 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -43,6 +44,13 @@ export function FindTimeModal({
   const [selectedMembers, setSelectedMembers] = useState<string[]>(
     selfMemberId ? [selfMemberId] : [],
   );
+  // Each caption below sits over a ROW OF BUTTONS, not a single control, so it
+  // is a <span> named by `labelledGroup` rather than a <label>: a label is for
+  // one control, and one that wraps nothing labels nothing.
+  const uid = useId();
+  const whoId = `${uid}who`;
+  const howLongId = `${uid}howlong`;
+  const withinId = `${uid}within`;
   const [durationMin, setDurationMin] = useState(60);
   const [windowDays, setWindowDays] = useState(7);
   const [workdayOnly, setWorkdayOnly] = useState(true);
@@ -139,8 +147,8 @@ export function FindTimeModal({
 
         {/* Who */}
         <div>
-          <label className="mb-1.5 block text-xs font-semibold text-muted">{tr('findTimeModal.whoNeedsToBeFree')}</label>
-          <div className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto">
+          <span id={whoId} className="mb-1.5 block text-xs font-semibold text-muted">{tr('findTimeModal.whoNeedsToBeFree')}</span>
+          <div {...labelledGroup(whoId)} className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto">
             {members.map((m) => {
               const on = selectedMembers.includes(m.id);
               return (
@@ -160,8 +168,8 @@ export function FindTimeModal({
 
         {/* Duration */}
         <div>
-          <label className="mb-1.5 block text-xs font-semibold text-muted">{tr('findTimeModal.howLong')}</label>
-          <div className="flex flex-wrap gap-1.5">
+          <span id={howLongId} className="mb-1.5 block text-xs font-semibold text-muted">{tr('findTimeModal.howLong')}</span>
+          <div {...labelledGroup(howLongId)} className="flex flex-wrap gap-1.5">
             {DURATIONS.map((d) => (
               <button key={d.min} type="button" onClick={() => { setDurationMin(d.min); setSearched(false); }}
                 className={cn('rounded-full border px-3 py-1 text-xs font-medium transition',
@@ -174,8 +182,8 @@ export function FindTimeModal({
 
         {/* Window */}
         <div>
-          <label className="mb-1.5 block text-xs font-semibold text-muted">{tr('findTimeModal.within')}</label>
-          <div className="flex flex-wrap gap-1.5">
+          <span id={withinId} className="mb-1.5 block text-xs font-semibold text-muted">{tr('findTimeModal.within')}</span>
+          <div {...labelledGroup(withinId)} className="flex flex-wrap gap-1.5">
             {WINDOWS.map((w) => (
               <button key={w.days} type="button" onClick={() => { setWindowDays(w.days); setSearched(false); }}
                 className={cn('rounded-full border px-2.5 py-1 text-xs font-medium transition',

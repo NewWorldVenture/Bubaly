@@ -129,6 +129,18 @@ describe('the counts are bounded, and shrink', () => {
     // scanner was right to keep flagging them, and the arithmetic is what
     // exposed it: eight sites wired, six flags cleared.
     //
+    // 17 after guardian/routing-settings, find-time-modal, habits-module and
+    // recipes-module — twelve more, and this time all twelve cleared, because
+    // the <span>-not-<label> rule was applied from the start rather than
+    // discovered afterwards.
+    //
+    // What is LEFT is a different kind of work, and the drop-off is the point:
+    // every cluster converted so far had its name already on screen, in the
+    // catalogue, translated. The remainder mostly do not. A control with no
+    // visible caption needs a NAME, and a name is copy in eleven locales — so
+    // those are owner decisions, not wiring, and the same trap applies as for
+    // the selects: a placeholder is a VALUE, not a name.
+    //
     // The bound is TIGHTENED with each conversion, deliberately: this assertion
     // is `toBeLessThanOrEqual`, so leaving it high would let the ones just
     // fixed be undone without a single test going red. A ratchet that is not
@@ -136,7 +148,7 @@ describe('the counts are bounded, and shrink', () => {
     expect(
       found.length,
       `captions that name nothing:\n${found.map((f) => `${f.file}:${f.line}`).join('\n')}`,
-    ).toBeLessThanOrEqual(29);
+    ).toBeLessThanOrEqual(17);
   });
 
   it('selects with no accessible name', () => {

@@ -4748,3 +4748,52 @@ none, so nothing to claim there.
 **Status:** FIXED. **Verified:** **14,065 tests green under both `TZ=UTC` and
 `TZ=America/Los_Angeles`** (four shards each), tsc clean, eslint at 85, `npm run
 build` exits 0.
+
+---
+
+### [CLAUDE-1][MEDIUM][A11Y] Twelve more captions, and the point where the cheap half runs out
+
+**Files:** `components/guardian/routing-settings.tsx`,
+`components/modules/find-time-modal.tsx`,
+`components/modules/habits-module.tsx`,
+`components/modules/recipes-module.tsx`,
+`tests/a-group-of-controls-needs-a-name.test.ts`
+
+**Done.** Twelve more, **29 → 17**, and this time **all twelve cleared** —
+because the `<span>`-not-`<label>` rule learned in the previous commit was
+applied from the start rather than discovered by the arithmetic afterwards.
+
+- **3 onto `htmlFor`/`id`** — the AI assistant name, custom greeting and
+  voicemail greeting in `routing-settings.tsx`, each a caption over one control.
+- **9 onto `labelledGroup`** — every one a caption over something that is *not*
+  a single control: three button rows in `find-time-modal.tsx` (who / how long /
+  within), three in `habits-module.tsx` (colour / cadence / days), the dietary
+  flag row in `recipes-module.tsx`, and the two **repeating list regions** there
+  (ingredients, instructions), where the caption names a region of many inputs
+  rather than any one of them.
+
+Zero new copy anywhere: every name was already on screen and in the catalogue.
+
+**A mistake I made and caught before it shipped.** The `useId` block for
+`find-time-modal.tsx` was inserted by a single-line regex into the middle of a
+**multi-line** `useState<string[]>(…)` call, splitting it. `tsc` named it
+immediately (`TS1135: Argument expression expected`). Repaired by anchoring to
+the call's closing `);` instead. Worth recording because the same one-line
+assumption would silently corrupt any multi-line call it happened to match.
+
+**Where this stops being cheap, which is the useful part.** Every cluster
+converted so far — feedback board, studio form, social settings, and these four
+— had its name **already on screen, in the catalogue, translated**, so the work
+was wiring. The remaining 17 mostly do not. A control with no visible caption
+needs a **NAME**, and a name is copy in eleven locales; those are owner
+decisions, not wiring. The same trap applies as for the 67 selects: **a
+placeholder is a VALUE, not a name** — labelling a filter "Whole family" is
+worse than leaving it unnamed.
+
+**Bound re-tightened 29 → 17.** Selects unchanged at 67 — none of these clusters
+contained one, so there is nothing to claim.
+
+**Status:** FIXED, and the tracked list is now near the boundary between wiring
+and copy. **Verified:** **14,065 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles`** (four shards each), tsc clean, eslint at 85, `npm run
+build` exits 0.

@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
+import { labelledGroup } from '@/lib/ui/a11y';
 import {
   ChefHat, Plus, Star, StarOff, Trash2, Edit2, Clock, Users,
   Search, Filter, Sparkles, ShoppingCart, Heart, ExternalLink, Vote,
@@ -575,6 +576,13 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
   const [ingredients, setIngredients] = useState<Ingredient[]>(
     recipe ? (recipe.ingredients as unknown as Ingredient[]) : [{ name: '', quantity: '', unit: '' }]
   );
+  // Section headings over a repeating list of controls, and one over a row of
+  // buttons. All three are <span> named by `labelledGroup`: a <label> is for a
+  // single control, and these name regions.
+  const uid = useId();
+  const ingredientsId = `${uid}ingredients`;
+  const instructionsId = `${uid}instructions`;
+  const flagsId = `${uid}flags`;
   const [instructions, setInstructions] = useState<InstructionStep[]>(
     recipe ? (recipe.instructions as unknown as InstructionStep[]) : [{ step: 1, text: '' }]
   );
@@ -677,10 +685,10 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
         {/* Ingredients */}
         <div>
           <div className="mb-2 flex items-center justify-between">
-            <label className="text-sm font-medium">{tr('recipes.ingredients')}</label>
+            <span id={ingredientsId} className="text-sm font-medium">{tr('recipes.ingredients')}</span>
             <button type="button" onClick={addIngredient} className="text-xs text-brand-text hover:underline">{tr('recipes.addIngredient')}</button>
           </div>
-          <div className="space-y-2">
+          <div {...labelledGroup(ingredientsId)} className="space-y-2">
             {ingredients.map((ing, i) => (
               <div key={i} className="flex gap-2">
                 <Input value={ing.quantity} onChange={(e) => updateIngredient(i, 'quantity', e.target.value)} placeholder="2" className="w-16 flex-shrink-0" />
@@ -695,10 +703,10 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
         {/* Instructions */}
         <div>
           <div className="mb-2 flex items-center justify-between">
-            <label className="text-sm font-medium">{tr('recipes.instructions')}</label>
+            <span id={instructionsId} className="text-sm font-medium">{tr('recipes.instructions')}</span>
             <button type="button" onClick={addStep} className="text-xs text-brand-text hover:underline">{tr('recipes.addStep')}</button>
           </div>
-          <div className="space-y-2">
+          <div {...labelledGroup(instructionsId)} className="space-y-2">
             {instructions.map((step, i) => (
               <div key={i} className="flex gap-3">
                 <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-brand text-xs font-bold text-brand-fg">
@@ -714,8 +722,8 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
 
         {/* Allergy flags */}
         <div>
-          <label className="mb-2 block text-sm font-medium">{tr('recipes.dietaryFlags')}</label>
-          <div className="flex flex-wrap gap-2">
+          <span id={flagsId} className="mb-2 block text-sm font-medium">{tr('recipes.dietaryFlags')}</span>
+          <div {...labelledGroup(flagsId)} className="flex flex-wrap gap-2">
             {ALLERGY_FLAGS.map((f) => (
               <button key={f} type="button" onClick={() => toggleFlag(f)}
                 className={cn('rounded-lg border px-2.5 py-1 text-xs font-medium transition',
