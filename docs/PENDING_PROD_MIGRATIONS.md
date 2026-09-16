@@ -1231,6 +1231,17 @@ when the ledger is healthy, not a boundary fix. The shared
 trigger arguments, so the next reference costs one line — which is what `0275`'s
 header asks for, "by shape rather than by name".
 
+Each wired reference is **validated where it is wired**, because the failure mode
+of a mis-wired one is quiet in exactly the place it matters. The helper
+early-returns for the trusted server, so a parent table with no `family_id`
+column installs happily during a migration replay — which runs with no JWT, so
+`auth.uid()` is null and the guard never reaches its query — and then raises
+`42703` on **every authenticated write** to that table in production. Measured
+both ways: as `postgres` the mis-wired insert succeeds silently, as an
+authenticated user it fails `42703`. The wiring loop now asserts that the child
+has `family_id` and the named column and that the parent has `family_id`, so the
+mistake fails during replay, where CI catches it.
+
 Until this is applied, production carries the cross-family writes as measured
 above. The allowance-run outage is fixed in the route and takes effect on merge.
 
