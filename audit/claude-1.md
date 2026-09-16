@@ -3158,3 +3158,31 @@ session's block: **I shipped a regression and CI found it, not me.**
   onto the populated schema, **34/34 probes run twice** (main's new
   `notification-authorship-check.sql` included), **13,907 tests green across four
   shards**, tsc clean, lint at its 100-warning cap.
+
+### [CLAUDE-1][CI] My timezone fix made a test host-dependent, and the dual-TZ run caught it
+
+- **The only red in the run:** `tests/calendar-scheduling.test.ts > findFreeSlots >
+  finds a 60-min slot everyone shares` — *"expected 1 to be 10"*. 13,906 of 13,907
+  passed. **It is mine, and it is in the test rather than the source.**
+- **What I did wrong.** The fixture was built from `new Date(2030, 0, 7, 0, 0, 0, 0)`
+  — the HOST's midnight — and read back with `getHours()`, also the host's. That
+  was self-consistent while `findFreeSlots` used `setHours`. It stopped being
+  self-consistent the moment I gave the function a `tz` and passed `'UTC'`: the
+  two halves of the test then meant different days. Under `TZ=UTC` they agree,
+  which is why it passed locally and in my four shards.
+- **CI runs the suite a second time under `TZ=America/Los_Angeles`, and that is
+  the run that failed** — the job's own log says `Start at 10:02` for a 17:02 UTC
+  job. That second run exists for precisely this class of defect, and it earned
+  its keep against the change that was supposed to be about exactly this.
+  There is something worth sitting with in that: a commit whose entire subject is
+  "stop reading the host clock" shipped a test that read the host clock.
+- **Fix:** pin both ends to one named zone. `base` is now
+  `Date.parse('2030-01-07T00:00:00Z')` and the assertion uses a `hourIn(ms, tz)`
+  helper instead of `getHours()` — the same shape the three tests I added
+  alongside it already used, which is why those three passed under both zones.
+  Nothing in the file consults the host clock now.
+- **Verified by reproducing the failure first:** restore `getHours()` and run
+  under LA → *"expected 2 to be 10"*. With the fix, **10/10 under
+  `TZ=America/Los_Angeles` and 10/10 under `TZ=UTC`**, and the whole suite
+  **13,907 green under LA across four shards** — the run I had not done locally
+  and should have, given what the commit changed.

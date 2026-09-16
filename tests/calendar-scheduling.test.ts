@@ -4,9 +4,26 @@ import {
 } from '@/lib/calendar/scheduling';
 
 const H = (n: number) => n * 60 * 60 * 1000;
-// A fixed base day at local midnight for deterministic math.
-const base = new Date(2030, 0, 7, 0, 0, 0, 0).getTime(); // Mon Jan 7 2030
+
+// A fixed base day, anchored to an EXPLICIT zone rather than the host's.
+//
+// This was `new Date(2030, 0, 7, 0, 0, 0, 0)` — the host's midnight — and the
+// assertions read the result back with `getHours()`, also the host's. That was
+// self-consistent while `findFreeSlots` used `setHours`, and it stopped being
+// self-consistent the moment the function took a `tz`: passing 'UTC' to a
+// fixture built in the host's zone makes the two halves of the test mean
+// different days. Under TZ=UTC they agree and it passes; CI's second run under
+// TZ=America/Los_Angeles is what caught it, which is exactly why that run
+// exists.
+//
+// So both ends are pinned to one named zone now, and nothing here consults the
+// host clock at all.
+const ZONE = 'UTC';
+const base = Date.parse('2030-01-07T00:00:00Z'); // Mon Jan 7 2030, 00:00 UTC
 const at = (hour: number, min = 0) => new Date(base + H(hour) + min * 60 * 1000).toISOString();
+/** The wall-clock hour of an instant in a named zone — never `getHours()`. */
+const hourIn = (ms: number, tz: string) =>
+  Number(new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: '2-digit', hour12: false }).format(new Date(ms))) % 24;
 
 describe('isCalendarContext / CONTEXTS', () => {
   it('validates the three contexts', () => {
@@ -29,16 +46,16 @@ describe('busyIntervals', () => {
       { starts_at: at(9), ends_at: at(10), context: 'work' as const },
       { starts_at: at(11), context: 'personal' as const },
     ];
-    const workOnly = busyIntervals(events, ['work'], 'UTC');
+    const workOnly = busyIntervals(events, ['work'], ZONE);
     expect(workOnly).toHaveLength(1);
     expect(workOnly[0].end - workOnly[0].start).toBe(H(1));
 
-    const personalOnly = busyIntervals(events, ['personal'], 'UTC');
+    const personalOnly = busyIntervals(events, ['personal'], ZONE);
     expect(personalOnly[0].end - personalOnly[0].start).toBe(30 * 60 * 1000);
   });
 
   it('all-day events block the whole day', () => {
-    const [iv] = busyIntervals([{ starts_at: at(0), all_day: true, context: 'family' }], undefined, 'UTC');
+    const [iv] = busyIntervals([{ starts_at: at(0), all_day: true, context: 'family' }], undefined, ZONE);
     expect(iv.end - iv.start).toBe(H(24));
   });
 });
@@ -61,21 +78,22 @@ describe('findFreeSlots', () => {
       { starts_at: at(11), ends_at: at(12), context: 'work' as const, assignee_id: 'b' },
     ];
     const slots = findFreeSlots(events, {
-      tz: 'UTC',
+      tz: ZONE,
       windowStart: base, windowEnd: base + H(24),
       durationMin: 60, workingHours: { startHour: 9, endHour: 17 },
       maxSuggestions: 3, granularityMin: 30,
     });
     expect(slots.length).toBeGreaterThan(0);
-    // First slot should be at 10:00 (after the 9–10 block, before 11).
-    expect(new Date(slots[0].start).getHours()).toBe(10);
+    // First slot should be at 10:00 (after the 9–10 block, before 11) — in the
+    // zone the search was told to use, not in whichever one the runner is set to.
+    expect(hourIn(slots[0].start, ZONE)).toBe(10);
     expect(slots[0].end - slots[0].start).toBe(H(1));
   });
 
   it('respects context filtering — a personal block does not occupy a work search', () => {
     const events = [{ starts_at: at(10), ends_at: at(16), context: 'personal' as const }];
     const slots = findFreeSlots(events, {
-      tz: 'UTC',
+      tz: ZONE,
       windowStart: base, windowEnd: base + H(24),
       durationMin: 60, workingHours: { startHour: 9, endHour: 17 },
       contexts: ['work'], maxSuggestions: 1, granularityMin: 60,
@@ -99,9 +117,6 @@ describe('findFreeSlots', () => {
 // answer no longer depends on the host.
 describe('a working day belongs to the family, not the host', () => {
   const LA = 'America/Los_Angeles';
-  const hourIn = (ms: number, tz: string) =>
-    Number(new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: '2-digit', hour12: false }).format(new Date(ms))) % 24;
-
   // 2030-01-07 is a Monday; PST is UTC-8 in January.
   const windowStart = Date.parse('2030-01-07T00:00:00Z');
   const windowEnd = Date.parse('2030-01-10T00:00:00Z');
