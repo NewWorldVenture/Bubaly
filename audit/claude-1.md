@@ -1877,3 +1877,43 @@ Fix:      0308_deleting_a_review_is_rewriting_it.sql. Offers scoped to the two
 Status:   FIXED — inert until an operator applies 0308
           (docs/PENDING_PROD_MIGRATIONS.md).
 ```
+
+```
+[CLAUDE-1][HIGH][SECURITY] a member can delete the row that restricts their social access
+File:     supabase/migrations/0034_social_command_center.sql
+          (social_access_permissions_delete)
+Problem:  0034 gated INSERT and UPDATE on
+            is_family_admin(family_id) or social_has_permission(family_id,'manage_access')
+          and left DELETE as is_family_member(family_id). That is the way around
+          both, because social_role_for() COALESCEs an explicit active row over a
+          default derived from the FAMILY role (parent→admin,
+          adult→marketing_manager, teen→content_creator, else read_only). A row
+          that restricts someone BELOW their family default is deletable by the
+          person it restricts, and they fall back UP.
+Evidence: Replayed schema, as an `adult` deliberately set to read_only:
+            D's social role while restricted: read_only
+              can D publish? f   can D manage settings? f
+            D deleted their own restriction: 1 row(s)
+            D's social role now: marketing_manager
+              can D publish? t   can D manage settings? t
+Impact:   publish_posts on a CONNECTED account writes to the family's real
+          audience under their name; manage_settings and connect_accounts come
+          with the same role. The demotion the adults performed was undone by the
+          demoted party, from the browser, with the anon key.
+Fix:      0309_a_social_restriction_is_not_self_service.sql — DELETE carries the
+          same predicate as INSERT and UPDATE, so the three verbs agree about who
+          decides. Nothing in the tree deletes from this table: grantAccessAction
+          upserts behind requireSocialPermission(fid,'manage_access'), and
+          revocation is a `status` change the UPDATE policy already guards.
+          The probe asserts the PREMISE first (a read_only role really cannot
+          publish, else the fixture restricts nobody), then the refusal, then the
+          CONSEQUENCE separately (social_role_for still resolves to read_only),
+          then that a family admin can still revoke. Proved red by restoring the
+          family-wide policy. 30/30 probes pass against a 322-migration replay.
+Found by: one query — tables whose INSERT policy requires can_manage_family or
+          is_family_admin while some write verb does not. It returned exactly one
+          row, which is the argument for censuses over reading policies one at a
+          time.
+Status:   FIXED — inert until an operator applies 0309
+          (docs/PENDING_PROD_MIGRATIONS.md).
+```

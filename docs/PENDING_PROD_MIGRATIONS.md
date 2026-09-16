@@ -905,3 +905,18 @@ because their value is zero until they are applied:
   an abusive review without any adult being able to erase one about themselves.
   `docs/audit/marketplace-delete-authorship-check.sql` asserts both the refusals
   and the four things that must still work. Audit C1-S6-10.
+
+- **`0309_a_social_restriction_is_not_self_service.sql`** — gives
+  `social_access_permissions_delete` the predicate its INSERT and UPDATE policies
+  already carry. `social_role_for()` falls back to a default derived from the
+  family role when no explicit row exists, so a row restricting someone *below*
+  that default could be deleted by the person it restricted, who then fell back
+  **up**: measured, an `adult` set to `read_only` deleted their own restriction
+  and became `marketing_manager`, gaining `publish_posts`, `manage_settings` and
+  `connect_accounts` on the family's connected social accounts. Nothing in the
+  tree deletes from this table — `grantAccessAction` upserts behind
+  `requireSocialPermission`, and revocation is a `status` change the UPDATE
+  policy guards — so no behaviour is lost.
+  `docs/audit/social-access-self-service-check.sql` asserts the refusal, the
+  fallback that would have followed it, and that a family admin can still revoke.
+  Audit C1-S6-11.

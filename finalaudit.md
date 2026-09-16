@@ -6872,3 +6872,75 @@ Four mutations proved it red independently: each of the three policies loosened
 back to `is_family_member`, and the manager-moderation half removed (which fails
 the other way — "the fix went too far"). **29/29 probes pass** against a full
 321-migration replay.
+
+
+## C1-S6-11 [HIGH][SECURITY] — a member can delete the row that restricts them, and fall back up
+
+**File:** `supabase/migrations/0034_social_command_center.sql`
+(`social_access_permissions_delete`)
+**Status:** FIXED — `supabase/migrations/0309_a_social_restriction_is_not_self_service.sql`
+
+### Problem
+
+`social_access_permissions` decides who may post to the family's **connected
+social accounts**. `0034` guarded it on the way in and on the way through:
+
+```
+_insert  with check (is_family_admin(family_id) or social_has_permission(family_id,'manage_access'))
+_update  using/with check (same)
+_delete  using (is_family_member(family_id))
+```
+
+The third is the way around the first two, because of how the role resolves.
+`social_role_for()` COALESCEs: an explicit active row wins, and **with no row it
+falls back** to a default derived from the family role — parent → `admin`,
+adult → `marketing_manager`, teen → `content_creator`, everyone else →
+`read_only`.
+
+So an explicit row that restricts someone *below* their family default is
+deletable by the very person it restricts, and they fall back **up**.
+
+### Evidence
+
+Measured on the replayed schema, as an `adult` the family had deliberately set to
+`read_only`:
+
+```
+D's social role while restricted: read_only
+  can D publish? f       can D manage settings? f
+D deleted their own restriction: 1 row(s)
+D's social role now: marketing_manager
+  can D publish? t       can D manage settings? t
+```
+
+### Impact
+
+`publish_posts` on a connected account is not an in-app permission — it writes to
+the family's real audience under their name. `manage_settings` and
+`connect_accounts` come with the same role. The demotion the adults performed was
+undone by the demoted party, from the browser, with the anon key. The same delete
+also removes *other* people's grants, but the escalation is the sharp end.
+
+Nothing in the tree deletes from this table. `grantAccessAction`
+(`app/(app)/dashboard/social/actions.ts:307`) upserts behind
+`requireSocialPermission(fid,'manage_access')`, and revocation is a `status`
+change the UPDATE policy already guards. The DELETE policy granted a capability
+no feature uses and every other policy on the table exists to prevent.
+
+`0309` writes the same predicate the other two carry, so the three verbs agree
+about who decides.
+
+### How it was found
+
+One query, from the shape C1-S6-08 through C1-S6-10 established: a census of
+tables whose INSERT policy requires `can_manage_family` or `is_family_admin`
+while some write verb does not. It returned exactly one row. That is the whole
+value of running a census rather than reading policies one at a time — **the
+same query that returns thirty false leads on a bad day returned one true one.**
+
+The probe asserts the premise before the boundary (a `read_only` role really
+cannot publish, or the fixture is restricting nobody), the refusal, the
+*consequence* separately (`social_role_for` still resolves to `read_only` — the
+delete being refused only matters because of what the fallback would have
+granted), and that a family admin can still revoke. Proved red by restoring the
+family-wide policy. **30/30 probes pass** against a full 322-migration replay.
