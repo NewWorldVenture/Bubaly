@@ -47,9 +47,9 @@ describe('Supabase migration filename safety', () => {
     // EIGHT real collisions between two sessions running at once — 0297, 0298
     // (twice, on the same finding), 0299, then 0300, 0301, 0302 and 0303 on
     // four consecutive merges. EVERY merge since 0300 has brought one. Those
-    // four are now 0312, 0313, 0314 and 0317, which is why this reads 0318:
-    // main holds 0001-0303 and this branch 0304-0317.
-    expect(audit.nextVersion).toBe('0318');
+    // four are now 0312, 0313, 0314 and 0317, which is why this reads 0319:
+    // main holds 0001-0303 and this branch 0304-0318.
+    expect(audit.nextVersion).toBe('0319');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

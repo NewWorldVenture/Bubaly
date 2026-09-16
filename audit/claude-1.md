@@ -3523,3 +3523,93 @@ session's block: **I shipped a regression and CI found it, not me.**
   `symptom_logs` still reaches any member of the family, because both tables keep
   the family-wide SELECT. The route has no family check of its own — RLS is the
   only boundary — so closing those two policies closes this route with them.
+
+### [CLAUDE-1][MEDIUM][RLS] Eleven tables were held shut by a policy on a twelfth
+
+- **Found by shape, not by report.** Sweeping `pg_policy` for tables carrying
+  more than one permissive SELECT-capable policy turned up a set whose
+  predicates disagree; chasing that produced fifteen policies across eleven
+  tables that decide membership with an inline subquery rather than
+  `is_family_member(family_id)`:
+  `family_id in (select family_id from family_members where user_id = auth.uid())`.
+  No `is_active`. Removal in this product is exactly `update({ is_active: false })`
+  — three call sites (`family-module.tsx:483`, `settings-module.tsx:181`,
+  `admin/actions.ts:200`), the auth user survives, the session survives.
+- **Read as written, that is a removed member keeping read AND write on the
+  family's messages, conversations, photos, albums, contacts, recipes,
+  reminders, to-do lists and family tree.** I wrote the demonstration expecting
+  to confirm it.
+- **It did not reproduce.** As a removed member on a full replay:
+  `family_messages` 0 rows, `family_conversations` 0, `family_contacts` 0,
+  `todo_lists` 0, and the insert refused outright. **The finding I thought I had
+  was not there, and the one that was is more interesting.**
+- **Why it is closed:** the inline subquery reads `public.family_members`, and a
+  policy expression is evaluated as the CALLING user — so that read is itself
+  subject to `fm_select`, which IS `is_family_member(family_id)`. A removed
+  member cannot see their own membership row (measured: 0 of 0), the subquery
+  returns nothing, the predicate is false. **Eleven tables are held shut by a
+  policy on a twelfth, for a reason none of the eleven states.** It is the same
+  mechanism main's 0303 fixed on the document vault, pointed the other way:
+  there a policy's nested read being filtered by the caller's own RLS opened the
+  boundary; here it happens to close it.
+- **The failure is concrete, not hypothetical, and it is already proposed.**
+  `audit/claude-4.md:1596` recommends — correctly — showing a removed member
+  "you are no longer part of <family>" instead of silently handing them a fresh
+  empty family, and the read that screen needs is *their inactive membership
+  row*. Claude-4 specifies the service client, and with the service client
+  nothing moves. Built on the session client instead, it needs `fm_select`
+  widened to `user_id = auth.uid() or is_family_member(family_id)` — and the
+  moment that lands, all eleven tables open to every removed member, silently,
+  in a commit about an onboarding screen.
+- **Files:** `supabase/migrations/0318_a_policy_should_say_what_it_checks.sql`,
+  `docs/audit/removed-member-read-boundary-check.sql`
+- **Status:** FIXED, as hardening with **no behaviour change today** — which is
+  stated plainly rather than dressed up. Each policy now checks the thing it
+  depends on; `profiles_select_self` gets the two `is_active` terms its two
+  joins never had; `network_aggregates_select` gets it one level in.
+- **The probe asserts the boundary TWICE** — once as the schema stands, and once
+  with `fm_select` deliberately widened to the shape that interstitial would
+  need. The second is the assertion 0318 exists for, and it carries a control
+  for the control: it first checks the widening actually took (the removed
+  member can now see their own row), because otherwise it would pass by doing
+  nothing. `alter policy` keeps command and roles, the original expression is
+  captured and restored, and an exception anywhere rolls the whole DO block
+  back, so the widening cannot escape the file.
+- **Non-vacuity, two mutations:** restore the inline predicates → *"with
+  fm_select widened, a removed member reads 1 rows of family_albums — the policy
+  is delegating its is_active check to another table"*, while the plain boundary
+  still passes, which is exactly right and is why this probe needed two halves;
+  and give any table a fresh inline predicate → the migration's own by-shape
+  sweep refuses to land, naming `family_reminders.zz_probe_stray`.
+- **Verified:** 331 migrations replayed from scratch (0 failed), 328 re-applied
+  onto the populated schema, **39/39 probes run twice**, 13,987 tests green under
+  both `TZ=UTC` and `TZ=America/Los_Angeles`, tsc clean, eslint at the ratchet.
+
+### [CLAUDE-1][FILED] The rest of the health tables read family-wide, and that stays an owner decision
+
+Recorded with the evidence rather than guessed at, and explicitly NOT fixed.
+
+- **Eleven tables keep `is_family_member(family_id)` on SELECT:** `medications`,
+  `medication_schedules`, `symptom_logs`, `health_visits`, `health_metrics`,
+  `health_goals`, `immunizations`, `care_log`, `sleep_logs`, `nutrition_logs`,
+  plus `health_providers` and `insurance_policies` from 0009's loop.
+- **Why 0316 is not the precedent for narrowing them.** `medical_profiles` had
+  three product surfaces stating a manager gate, so the database was *drifting
+  from the product*. These have no such statement — and **0312's own closing
+  section says "INSERT and reads are untouched — 0300 filed those as owner
+  decisions and this answers neither."** Narrowing them now would be reversing a
+  decision this audit already filed, on my own initiative. `lib/ai/context/policy.ts`
+  listing them as SENSITIVE is a statement about AI context, not about
+  member-to-member reads.
+- **The sharpest consequence, so the filing has a concrete cost attached:**
+  `app/api/ai/health/coach/route.ts:53-58` takes `memberId` from the request
+  body and reads `medications` and `symptom_logs` with `.eq('member_id', …)` and
+  **no family check of its own** — RLS is the only scope. After 0316 the coach no
+  longer hands a child a sibling's *profile*; it still summarises their
+  medications and symptoms. Closing these policies closes that route with them.
+- **One latent hazard found alongside:** `nutrition_logs` carries **two**
+  permissive SELECT policies with identical predicates (`nutrition_logs_read`
+  and `nutrition_logs_select`). Harmless today. It is precisely the shape that
+  makes a future narrowing a no-op — narrow one and the other restores the wide
+  read — which is the sweep 0311, 0315 and 0316 each end with. Worth folding
+  into whichever migration answers the question above.

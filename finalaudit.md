@@ -4850,3 +4850,81 @@ where a select and that call are no longer interchangeable.
   `TZ=America/Los_Angeles`**; `tsc` clean; `eslint` at the 86-warning ratchet.
 - Every migration and every service change in Q5 and Q6 was mutation-tested;
   nine mutations across the two, each naming its own defect.
+
+## Q7 — MEDIUM: eleven tables held shut by a policy on a twelfth
+
+**0318.** Found by sweeping `pg_policy` rather than by any report: fifteen
+policies across eleven tables decide family membership with an inline subquery
+instead of `is_family_member(family_id)` —
+`family_id in (select family_id from family_members where user_id = auth.uid())`
+— with no `is_active`. Removal in this product is exactly
+`update({ is_active: false })`, the auth user survives and the session survives.
+Read as written, that is a removed member keeping read **and write** on the
+family's messages, conversations, photos, albums, contacts, recipes, reminders,
+to-do lists and family tree.
+
+**The demonstration was written to confirm it and refuted it instead.** As a
+removed member on a full replay: every one of those tables returned 0 rows and
+the write was refused. The inline subquery reads `public.family_members`, and a
+policy expression is evaluated as the **calling** user — so that read is itself
+filtered by `fm_select`, which *does* check `is_active`. The member cannot see
+their own membership row, the subquery is empty, the predicate is false.
+
+So the boundary is correct, for a reason none of the eleven policies states.
+This is main's 0303 mechanism — a policy's nested read being subject to the
+caller's own RLS — pointed the other way: there it opened the document vault,
+here it happens to close eleven tables.
+
+**The way it breaks is already on the table.** `audit/claude-4.md:1596` proposes,
+correctly, that a removed member should see "you are no longer part of
+<family>" rather than being handed a fresh empty family — and that screen needs
+to read *their inactive membership row*. Claude-4 specifies the service client,
+where nothing moves. Written on the session client it needs `fm_select` widened,
+and the moment that lands all eleven tables open to every removed member, in a
+commit about an onboarding screen.
+
+0318 changes no behaviour today, and says so. Each policy now checks what it
+depends on; `profiles_select_self` gets the two `is_active` terms its two joins
+never had. **The probe asserts the boundary twice** — as the schema stands, and
+with `fm_select` deliberately widened to that exact shape — and the second
+assertion carries a control for the control, checking the widening actually took
+before concluding anything from it. Reverting the predicates fails only the
+second half, which is the correct result and the reason the probe has two.
+
+This is the mirror of the pattern this audit keeps naming. Eleven instances are
+on record of **a guard that cannot fail**; this is **a guard that holds for a
+reason it does not state**, which survives every test until someone changes the
+unrelated thing it was quietly leaning on.
+
+## Filed, not fixed, from Pass Q
+
+- **The rest of the health tables read family-wide** — `medications`,
+  `medication_schedules`, `symptom_logs`, `health_visits`, `health_metrics`,
+  `health_goals`, `immunizations`, `care_log`, `sleep_logs`, `nutrition_logs`,
+  and 0009's `health_providers` / `insurance_policies`. 0316 is **not** the
+  precedent for narrowing them: `medical_profiles` had three product surfaces
+  stating a manager gate, so the database was drifting from the product. These
+  have none, and **0312 already filed their reads as an owner decision in as many
+  words.** The concrete cost of leaving them open is named rather than left
+  implicit: `app/api/ai/health/coach/route.ts` takes `memberId` from the request
+  body with no family check of its own, so after 0316 it no longer hands a child
+  a sibling's *profile* but still summarises their medications and symptoms.
+- **`nutrition_logs` carries two permissive SELECT policies with identical
+  predicates.** Harmless today; it is exactly the shape that makes a future
+  narrowing a no-op, which is why 0311, 0315 and 0316 each end with a sweep for
+  it. Fold it into whichever migration answers the question above.
+- **`medical-records-module.tsx:385`** tells a non-manager "No profile on file."
+  for a record that exists and is private. Honest copy needs a key in eleven
+  locales, so it is filed rather than invented.
+
+## Verification (Q6–Q7)
+
+- **331 migrations replayed from scratch, 0 failed**; 328 re-applied onto the
+  populated schema; **39/39 boundary probes, run twice**.
+- **13,987 tests green across four shards under both `TZ=UTC` and
+  `TZ=America/Los_Angeles`**; `tsc` clean; `eslint` at the 86-warning ratchet.
+- An **eighth** migration-number collision arrived mid-pass — main's
+  `0303_document_bytes_boundary.sql` — and this branch's 0303 was renumbered to
+  0317, with the full replay re-run because moving a migration to the end of the
+  chain is an ordering change rather than a rename. Every merge since 0300 has
+  now brought one.
