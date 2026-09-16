@@ -107,10 +107,23 @@ describe('the counts are bounded, and shrink', () => {
     // 52 when measured; 45 after components/guardian/rules-editor.tsx was
     // converted as the worked example — four button rows onto `labelledGroup`,
     // three real inputs onto htmlFor/id, no new copy in either case.
+    //
+    // 39 after app/(app)/feedback/feedback-board.tsx, the largest single
+    // cluster at 8. Same shape and the same rule: EVERY name already existed on
+    // screen as a styled `<label>` pointing at nothing, so each one was read
+    // aloud on its own and then met with silence when focus reached the control
+    // it named. Five went onto htmlFor/id, and the two rows that are not a
+    // single control — the idea/bug buttons and the attachment uploader — onto
+    // `labelledGroup`, which points a group at the caption already above it.
+    //
+    // The bound is TIGHTENED with each conversion, deliberately: this assertion
+    // is `toBeLessThanOrEqual`, so leaving it at 45 would let the six just
+    // fixed be undone without a single test going red. A ratchet that is not
+    // re-tightened is a ceiling, not a ratchet.
     expect(
       found.length,
       `captions that name nothing:\n${found.map((f) => `${f.file}:${f.line}`).join('\n')}`,
-    ).toBeLessThanOrEqual(45);
+    ).toBeLessThanOrEqual(39);
   });
 
   it('selects with no accessible name', () => {
@@ -124,9 +137,15 @@ describe('the counts are bounded, and shrink', () => {
     // locales. The obvious shortcut is wrong and worth writing down: the
     // placeholder option is a VALUE, not a name — labelling a control "Whole
     // family" or "All customers" is worse than leaving it unnamed.
+    //
+    // 67 after the feedback board: three of its selects (category, impact,
+    // audience) carried a visible caption all along and simply were not wired
+    // to it, so they cost no copy at all. That is the whole of the overlap —
+    // the remaining 67 are the toolbar filters this note is about, and they
+    // still need names somebody decides on.
     expect(
       found.length,
       `selects with no accessible name:\n${found.map((f) => `${f.file}:${f.line}`).join('\n')}`,
-    ).toBeLessThanOrEqual(70);
+    ).toBeLessThanOrEqual(67);
   });
 });

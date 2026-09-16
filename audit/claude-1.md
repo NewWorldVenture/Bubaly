@@ -4663,3 +4663,45 @@ timezone as the fourth argument (it defaults to 'UTC')`.
 **Status:** guard extended; **no product defect found or introduced**.
 **Verified:** **14,065 tests green under both zones**, tsc clean, eslint at 85,
 `npm run build` exits 0.
+
+---
+
+### [CLAUDE-1][MEDIUM][A11Y] Eight captions on the feedback form named nothing — and every name was already on screen
+
+**Files:** `app/(app)/feedback/feedback-board.tsx`,
+`tests/a-group-of-controls-needs-a-name.test.ts`
+
+**Problem.** `ShareIdeaForm` rendered eight styled `<label>` elements with no
+`htmlFor` and nothing pointing at them. A screen reader reads such a caption
+aloud on its own and then goes **silent when focus reaches the control it
+names** — so the person hears "Title", tabs, and lands on an unlabelled text
+box. The largest single cluster on the tracked list, at 8 of 45.
+
+**Why this one was safe to fix in bulk when the other 37 are not.** The standing
+note on the selects ratchet is right that most of those need a NAME, and a name
+is copy in eleven locales. **None of these did.** Every caption already exists
+on screen, in the catalogue, translated. This was wiring, not copy:
+
+- five onto `htmlFor`/`id` — title, problem, body, and the category / impact /
+  audience selects;
+- two onto **`labelledGroup`**, for the rows that are not a single control: the
+  idea-vs-bug button pair and the attachment uploader. That helper points a
+  `role="group"` at the caption already above it, so the group's name is the
+  existing text rather than something invented.
+
+`FeedbackAttachmentUpload` takes no `id` prop, so the uploader is wrapped rather
+than modified — its API is untouched.
+
+**A bonus that is worth being precise about:** three of those five were
+`<select>`s, so the OTHER ratchet drops 70 → 67. That is the whole of the
+overlap. The remaining 67 are the toolbar filters with no visible caption, and
+they still need names somebody decides on — this does not shorten that work.
+
+**Both bounds re-tightened: 45 → 39 and 70 → 67.** The assertions are
+`toBeLessThanOrEqual`, so leaving them where they were would have let the six
+just fixed be undone without a single test going red. **A ratchet that is not
+re-tightened after each conversion is a ceiling, not a ratchet.**
+
+**Status:** FIXED. **Verified:** **14,065 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles`** (four shards each), tsc clean, eslint at 85, `npm run
+build` exits 0.
