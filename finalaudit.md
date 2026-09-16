@@ -6153,3 +6153,58 @@ asserted `toContain('toastError')` — the bare-identifier form the meta-guard
 exists to forbid — and the full suite failed on my own new file. It is the
 cheapest possible demonstration that the guard from round 5 is load-bearing:
 it fired on the person who installed it, within an hour.
+
+## Pass S (continued) — every bare-awaited write in the tree
+
+Having censused storage removals, the same question applied to database writes:
+**where is a write's result discarded, and does anything depend on it?** About
+thirty bare-awaited Supabase writes exist in `app/`, `lib/` and `components/`.
+Most are best-effort telemetry (`*_ai_logs`, `social_usage_events`,
+`dashboard_layout_events`) and are correctly discarded. Two are not.
+
+**A hypothesis that died, recorded because it deserves the same note as one that
+survived.** `app/api/cron/family-routines/route.ts` discards three
+`routine_runs` status writes, and I was ready to call that a finding until I
+read the comment above them. It is a careful argument: nothing outside the file
+reads `routine_runs.status`; the one internal reader looks at `request_id` and
+`created_at`; and the `request_id` case is reasoned through to the conclusion
+that a refusal produces the same outcome as the reschedule. It holds. Left
+exactly as written.
+
+**C1-S6-02 [LOW][INTEGRATIONS] — two Google Calendar token writes whose
+refusal defeats the thing they exist for.**
+
+The clear-on-revocation upsert had its result discarded. The comment directly
+above it explains that clearing is *what puts the "Connect Google" button back*,
+because `GET` answers `connected` from that same value — so a refused write
+leaves the Sync button in front of a calendar that can never sync, while the
+same response tells the user to reconnect. The grant is dead either way, so the
+route still answers 409; the contradiction is now named in a log instead of
+being invisible.
+
+The refresh-persist upsert is the more interesting half, and it is **my own
+code's assumption from C3-S5-02**. A lost refresh self-corrects — the next sync
+refreshes again. A lost *migration* does not: the plaintext token stays in a
+browser-readable column and everything looks fine. The two cases are now logged
+differently, and the guard asserts that distinction rather than the mere
+presence of a check.
+
+**C1-S6-03 [LOW][EDGE CASE] — the routines tick counted work that did not
+happen.**
+
+```ts
+const run = await createRun(…);
+await db.from('routine_runs').update({ status: 'filed', … });
+if (run.ok) kickRun(run.data.id, …);
+filed += 1;                      // ← unconditional
+```
+
+A refused `createRun` leaves a request with no run to execute it. Nothing is
+kicked, nothing runs, the rule is absent from `problems`, and the tick reports
+it as **filed**. Two hundred lines below, the same file holds `armed` to exactly
+the opposite standard, in its own words: *"it may only count writes that landed,
+so a quiet tick reads differently from a broken one."* `filed` now holds that
+line too, and the guard asserts the `armed` model is still there to match it —
+so if the reference drifts, this notices.
+
+Both proved red by restoring the discarded forms.

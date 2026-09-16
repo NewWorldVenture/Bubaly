@@ -63,9 +63,18 @@ export async function POST() {
       // so null already answers `connected: false`, and it keeps the same shape
       // the refresh path writes a line below instead of two ways to say "gone".
       const cleared = { ...np, googleCalendarToken: null };
-      await supabase
+      // Read: a refused clear defeats the very purpose the comment above gives
+      // for clearing. GET answers `connected` from this same value, so a failed
+      // write leaves the "Sync" button in front of a calendar that can never
+      // sync, while this response tells the user to reconnect. The grant is
+      // dead either way, so this still answers 409 — but the contradiction is
+      // named rather than invisible. Audit C1-S6-02.
+      const { error: clearError } = await supabase
         .from('user_preferences')
         .upsert({ user_id: ctx.user.id, notification_prefs: cleared }, { onConflict: 'user_id' });
+      if (clearError) {
+        console.error('[google-calendar] dead grant could not be cleared; the UI will still offer Sync', clearError);
+      }
       // 409, not 500: nothing is broken on our side and retrying will not help.
       // `reconnect` is the machine-readable half the client keys off.
       return NextResponse.json(
@@ -80,9 +89,21 @@ export async function POST() {
     // disagree.
     if (refreshedToken.accessToken !== stored.accessToken || decoded.legacy) {
       const merged = { ...np, googleCalendarToken: encodeGoogleToken(refreshedToken) };
-      await supabase
+      const { error: persistError } = await supabase
         .from('user_preferences')
         .upsert({ user_id: ctx.user.id, notification_prefs: merged }, { onConflict: 'user_id' });
+      if (persistError) {
+        // A lost refresh is self-correcting — the next sync refreshes again.
+        // A lost MIGRATION is not: the plaintext token stays in a column the
+        // browser can read, and everything looks fine. C3-S5-02 depends on
+        // this write landing, so the two cases are logged differently.
+        // Audit C1-S6-02.
+        if (decoded.legacy) {
+          console.error('[google-calendar] plaintext token was NOT migrated to ciphertext; it remains readable', persistError);
+        } else {
+          console.warn('[google-calendar] refreshed token not persisted; the next sync will refresh again', persistError);
+        }
+      }
     }
 
     const events = await fetchGoogleCalendarEvents(accessToken, timeMin, timeMax);

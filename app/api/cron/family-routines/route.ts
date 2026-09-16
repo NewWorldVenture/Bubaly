@@ -165,8 +165,20 @@ export async function GET(req: NextRequest) {
     } else {
       const run = await createRun(scope, { requestId: request.data.id, runType: 'routine', summary: prompt, state: 'queued' }, { db });
       await db.from('routine_runs').update({ status: 'filed', request_id: request.data.id }).eq('rule_id', rule.id).eq('due_at', dueAt);
-      if (run.ok) kickRun(run.data.id, { budgetMs: 20_000 });
-      filed += 1;
+      // `filed` is held to the standard this file already sets for `armed`
+      // ("it may only count writes that landed, so a quiet tick reads
+      // differently from a broken one"). A refused createRun leaves a request
+      // with no run to execute it: nothing is kicked, nothing runs, and the
+      // routine did not file any work. Counting that as filed while it is
+      // absent from `problems` makes a broken tick read as a clean one.
+      // Audit C1-S6-03.
+      if (!run.ok) {
+        console.error('[cron:family-routines] request created but no run to execute it', rule.id, run.error);
+        problems.push(rule.id);
+      } else {
+        kickRun(run.data.id, { budgetMs: 20_000 });
+        filed += 1;
+      }
     }
 
     // Schedule the next occurrence. A cron's is arithmetic; a relative
