@@ -3212,3 +3212,79 @@ session's block: **I shipped a regression and CI found it, not me.**
   onto the populated schema, **35/35 probes run twice**, and the full suite
   **13,965 green under BOTH `TZ=UTC` and `TZ=America/Los_Angeles`** — running
   both is now the habit, after the dual-TZ run caught the last regression.
+
+### [CLAUDE-1][MEDIUM][A11Y] A row you can click is a row you can reach — and the exemption that was hiding five menus
+
+- **Raised by:** Claude-2 as C2-06, made countable by the lint ratchet. First
+  tranche closed; **and the work turned up a second, worse finding that nobody
+  had reported.**
+- **Files:** `lib/ui/a11y.ts`, `components/modules/calendar-module.tsx`, and the
+  five modules below; `tests/a-row-you-can-click-is-a-row-you-can-reach.test.ts`
+- **The reported half.** Clickable `<div>` rows respond to a mouse and to nothing
+  else — no tab stop, no Enter, no Space. `calendar-module.tsx` had five (the
+  agenda row, the day row, the month chip, the week block, the sidebar row).
+  Fixed with one shared `activatable()` in the repo's existing
+  `lib/ui/a11y.ts` — whose own header already says these helpers exist "so
+  accessibility is consistent and testable rather than hand-rolled per
+  component". One definition rather than 94 copies, for the same reason
+  `escapeLike` is one definition: the hand-rolled copies are how a fix reaches
+  four call sites with two still wrong.
+- **`role`+`tabIndex`+`onKeyDown` rather than a real `<button>`**, deliberately.
+  A button is better where the markup allows it, but these rows are
+  absolutely-positioned day-grid blocks and multi-line flex layouts that would
+  have to be rebuilt around a button's defaults. The rule's own message names
+  this alternative. Zero visual change was the point: none of these rows had
+  their styling touched.
+- **The finding nobody reported, and I nearly added a fifth case of it.** A
+  click-outside scrim (`<div className="fixed inset-0" onClick={close} />`) has
+  nothing to activate, so `aria-hidden` is the honest description — and it is
+  ALSO what silences the two lint rules pointing at the menu's missing keyboard
+  dismissal. **Four scrims already carried `aria-hidden tabIndex={-1}` and not
+  one of their files handled Escape**: `family-module`, `documents-module`,
+  `passwords-module`, `messages-module`. A keyboard user could open those menus
+  and had no way out but to pick something. The exemption was doing the hiding.
+- **I wrote the fifth case myself and caught it one step later.** I marked the
+  calendar scrims `aria-hidden` with a comment reading *"the keyboard equivalent
+  is Escape, handled on the menu itself"* — and **no Escape handler existed**.
+  The only occurrence of the word in that file was the sentence I had just
+  written. Sixth prose-as-code instance of this sweep, and the first where the
+  prose was mine and would have justified an exemption over a real dead end.
+  Fixed by making the comment true.
+- **A sixth file the guard found that my own grep had misclassified:**
+  `components/wallet/wallet-hub.tsx`, two `aria-hidden` scrims, no Escape. It was
+  in my "no Escape" list and I read past the `aria-hidden`. The guard did not.
+- **Scrims WITHOUT `aria-hidden` are deliberately not covered.** Thirteen remain;
+  they are still flagged by both rules and counted against
+  `next lint --max-warnings`, so they are visible backlog rather than a hole.
+  The rule guarded is narrow and exact: *if you silence the rules that way, the
+  keyboard path has to be real.*
+- **Status:** FIXED (first tranche). Warning cap **tightened 100 → 86** — the
+  ratchet doing the thing a ratchet is for. Non-vacuity, four mutations each
+  caught by the assertion naming it: stop consuming the key → *"Enter was not
+  consumed"*; drop the tab stop → *"expected -1 to be 0"*; answer any key →
+  *"Tab was consumed"*; remove an Escape path behind an `aria-hidden` scrim →
+  the file is named.
+- **Verified:** tsc and eslint clean, **13,971 tests green under both `TZ=UTC`
+  and `TZ=America/Los_Angeles`**.
+
+### [CLAUDE-1][CI] The one red was the Postgres container, not the diff — and the re-run confirmed it
+
+- `finance-operation-sql` failed on `c56f87a0` with
+  `FATAL: the database system is shutting down`, in the step that applies the
+  bootstrap — **before any SQL of the fixture ran**.
+- **Not this PR's, established rather than assumed:** the job had succeeded on
+  **seven consecutive prior runs** of this branch including the immediately
+  preceding head, and the diff touches neither the workflow, the fixture, nor
+  0274.
+- **Root cause, which is more specific than "flake":** the official `postgres`
+  image runs a TEMPORARY server during initdb on the same Unix socket, then
+  shuts it down and starts the real one. The workflow's readiness loop uses
+  `pg_isready` against that socket, so it can succeed against the temporary
+  server and let the next step connect into the shutdown window. This run had to
+  `Downloaded newer image for postgres:17` — a cold pull changes initdb timing,
+  which is consistent with seven cached-image runs passing.
+- **One re-run, which is the sanctioned action for a job that died before any
+  test body ran — and it passed.** A workflow fix (require the readiness probe to
+  succeed repeatedly, or run a real query rather than `pg_isready`) would be the
+  durable answer, but it widens this PR into CI infrastructure for a failure that
+  is not its own, so it is recorded here rather than taken.
