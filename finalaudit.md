@@ -5027,3 +5027,44 @@ lightbox assertions fail **and** the aria-modal licence flags the file; drop
 
 **Verified:** 13,994 tests green under both `TZ=UTC` and `TZ=America/Los_Angeles`,
 `tsc` clean, `eslint` at the new 85 cap, `npm run build` exits 0.
+
+## Q10 — MEDIUM: a teen could grade their own driving
+
+**0319.** Raised by Claude-3, verified still open. `driving_trips` and
+`driver_licenses` are the two tables of one feature, added together by 0114, and
+they do not carry the same rule: the licence has
+`can_manage_family or is_self_member` on all four commands, while the telemetry —
+hard brakes, max mph, phone-use seconds and the 0-100 score a parent reads before
+deciding about car keys — has plain membership. The view writes with the anon key
+and has no role gate at all, so RLS is the whole boundary.
+
+**Reading the component changed the fix.** Claude-3 suggested copying
+`driver_licenses`' clause onto UPDATE — but `is_self_member` IS the hole here,
+since that is the driver's own member_id on the row. A licence is a record you
+keep about yourself; a trip is a record OF you. They also suggested narrowing
+DELETE to managers, and the view renders Delete for **every** member, which would
+leave a UI whose primary control fails — the trap 0312 recorded for immunizations.
+
+So UPDATE goes manager-only, which costs nothing because **nothing in the product
+updates a trip**: the view selects, inserts and deletes, and that policy was
+reachable only by a hand-made PostgREST call, which is exactly the threat. DELETE
+goes to `can_manage_family or created_by = auth.uid()` — a trip you logged is an
+entry you may withdraw; a trip your parent logged about you is their record, and
+erasing it is the same act as regrading it.
+
+INSERT stays open, and that was checked rather than assumed: the 0315 instinct is
+to pin `member_id` to self, but the log-trip form picks the driver from a
+dropdown of the whole roster, so one member logging for another is the designed
+behaviour. That a member can log a FAKE trip for someone else is real and is
+filed — it needs a product answer about who may log for whom.
+
+Four mutations, and the third is the one worth noting: narrowing DELETE to
+managers fails the probe with *"a teen can no longer delete the trip they logged
+themselves"*. The positive controls are doing as much work as the refusals.
+
+**Verified:** 332 migrations replayed from scratch (0 failed), 329 re-applied,
+40/40 probes run twice, 13,994 tests green under both zones, tsc clean, eslint at
+the 85 ratchet. One non-reproducing failure of `ai-prompt-injection` in the first
+sweep is recorded in `audit/claude-1.md` rather than smoothed over: 23 subsequent
+clean runs, and ruled out on the diff's contents — 0319 touches only SQL and a
+migration-number comment, neither of which that test imports.

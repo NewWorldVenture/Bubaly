@@ -3744,3 +3744,65 @@ Recorded with the evidence rather than guessed at, and explicitly NOT fixed.
   `TZ=America/Los_Angeles`**, tsc clean, eslint at the new 85 cap, `npm run build`
   exits 0. No E2E test touches the photo gallery, so the E2E surface of this
   change is the shared `Modal` — which CI has already run green on the caret fix.
+
+### [CLAUDE-1][MEDIUM][RLS/SAFETY] A teen could grade their own driving
+
+- **Raised by:** Claude-3 (`audit/claude-3.md:1369`), VERIFIED on their live
+  replay. Re-verified still open here, policy for policy.
+- **Files:** `supabase/migrations/0319_a_driving_score_is_not_the_drivers_to_grade.sql`,
+  `docs/audit/driving-score-write-boundary-check.sql`
+- **Problem:** `driving_trips` and `driver_licenses` are the two tables of one
+  feature, added together by 0114, and they do not carry the same rule. The
+  licence has `is_family_member and (can_manage_family or is_self_member)` on all
+  four commands. The telemetry — hard brakes, rapid accelerations, max mph,
+  phone-use seconds and the 0-100 `score` a parent reads before deciding about
+  car keys or an insurance discount — has plain `is_family_member` on all four.
+  `driving-safety-view.tsx` writes with the anon key from the browser and has **no
+  role gate of any kind**, so RLS is the whole boundary.
+- **Two of Claude-3's three suggested fixes were wrong for this table, and
+  reading the component is what settled it.**
+  - They offer `can_manage_family or is_self_member` on UPDATE, copied from
+    `driver_licenses`. **`is_self_member` is exactly the hole**: it is the
+    driver's own member_id on the row, so that clause hands the teenager back
+    the score. A licence is a record you KEEP about yourself; a trip is a record
+    OF you. 0307 drew the same line across the health tables.
+  - They offer narrowing DELETE to managers. **The view renders Delete for every
+    member**, so that leaves a UI whose primary control fails — the trap 0312
+    recorded when it left immunizations alone.
+- **What shipped.** UPDATE → managers only, which costs nothing because **nothing
+  in the product updates a trip at all**: the view selects (:30), inserts (:115)
+  and deletes (:40), so that policy was reachable only by a hand-made PostgREST
+  call, which is precisely the threat. DELETE → `can_manage_family or created_by
+  = auth.uid()`: a trip you logged is an entry you may withdraw; a trip your
+  parent logged about you is their record, and erasing it is the same act as
+  regrading it. `driving-safety-view.tsx:115` already writes `created_by: userId`
+  on every insert, and legacy nulls fall to managers only — the safe direction.
+- **INSERT deliberately untouched, and I checked before assuming.** The 0315
+  instinct was to pin `member_id` to self. The log-trip form picks the DRIVER
+  from a dropdown of the whole roster (:132), so one member logging a trip for
+  another is the designed behaviour — a parent logs the teen's drive. Pinning it
+  would break the feature. That a member can log a FAKE trip for someone else is
+  real, and is filed rather than guessed at: it needs a product answer about who
+  may log for whom.
+- **SELECT untouched**, and the asymmetry with `driver_licenses` (self-or-manager)
+  looks deliberate rather than forgotten: a licence number is PII, a trip score
+  is the artifact the household discusses.
+- **Status:** FIXED. Non-vacuity, four mutations: restore 0114's membership-only
+  UPDATE → *"a teen rewrote the driving score their parent recorded"*; restore
+  its DELETE → *"a teen deleted the trip their parent recorded"*; **narrow DELETE
+  to managers only → "a teen can no longer delete the trip they logged
+  themselves"**, which is the positive control proving the rule is deliberately
+  not manager-only; add any stray write policy → the migration's own sweep
+  refuses to land.
+- **One CI-relevant note, recorded rather than smoothed over.**
+  `tests/ai-prompt-injection.test.ts` failed once in the first UTC sweep after
+  this change and then passed **23 consecutive times** (20 isolated runs plus
+  three full shard-1 runs). Ruled out as caused by this diff on contents rather
+  than on repetition: 0319 touches only `supabase/migrations/` and a comment and
+  number in `tests/migration-version-safety.test.ts`, neither of which that test
+  imports. The one non-deterministic input in its path is the 6-character fence
+  nonce, and 62^6 makes a collision implausible. Not chased further, and not
+  claimed as fixed.
+- **Verified:** 332 migrations replayed from scratch (0 failed), 329 re-applied
+  onto the populated schema, **40/40 probes run twice**, 13,994 tests green under
+  both `TZ=UTC` and `TZ=America/Los_Angeles`, tsc clean, eslint at the 85 ratchet.
