@@ -4420,3 +4420,101 @@ left of the original seventeen** (`lib/capture/parse.ts`,
 build` exits 0. Non-vacuity: revert `dueLabel` to the device zone → `expected
 'soon' to be 'today'` and `expected 'Fri, Jul 3' to be 'Thu, Jul 2'`; the other
 16 stay green.
+
+---
+
+### [CLAUDE-1][HIGH][CORRECTNESS/TIME] "Dinner tomorrow at 6" went on the calendar for the server's tomorrow — and the machinery to get it right was built, documented, and not reached
+
+**Files:** `lib/ai/context/intents.ts`, `tests/intent-classify.test.ts`
+
+**Problem.** `classifyIntentFast` called `classifyVoiceCommand(q, now)` and
+`parseEvent(q, now)` — both with no zone. The second resolves against
+`LOCAL_OPS`, the host's day. And the fast path does **not merely classify** on
+the result: line ~250 serialises `event.startsAt.toISOString()` into the
+capture's entities, which is what goes on the calendar. So "dentist tomorrow at
+3pm" said to the assistant from California after 5pm was booked **a day late**.
+
+**The sharp part.** `classifyVoiceCommand` has taken an optional `timezone`
+**all along**, and `lib/voice/command-router.ts` carries a long header
+explaining exactly how to use it — why a wall clock must be UTC-anchored so the
+runtime's DST rules cannot normalise it, and why `instantForLocalTime` rather
+than `zonedLocalToInstant` (on the spring-forward morning a named time that does
+not exist should move to the first minute that does, not vanish). **The
+machinery was built, documented, and then not reached by the path that needed
+it.** The recurring shape, tenth instance.
+
+**And the type said so.** `classifyIntent`'s signature was
+`scope: Pick<ServiceScope, 'familyId' | 'requestId' | 'now'>` — `tz` was
+**excluded from the Pick**. The scope has carried the family's zone the whole
+time; the fast path was handed everything except the one field that says whose
+tomorrow. Both real callers (`assistant-engine.ts`, `runs/intake.ts`) pass a
+full `ServiceScope`, so widening it cost nothing.
+
+**A test I wrote and then fixed.** My first control assertion checked the
+no-zone path against the **host's** answer — which makes the test an assertion
+about whichever machine runs it, the exact flaw this sweep exists to remove, and
+it would have gone red under CI's `TZ=America/Los_Angeles` leg. Replaced with a
+contrast between **two named zones**: the same instant is the 6th at 22:00Z for
+Los Angeles and the 7th at 15:00Z for UTC. Both correct; which you get is what
+the zone decides.
+
+**Status:** FIXED. Non-vacuity: drop the zone → 3 assertions fail under
+`TZ=UTC` and 1 under `TZ=America/Los_Angeles` (the zone-contrast one fails under
+both, in opposite directions).
+
+**Verified:** **14,062 tests green under both zones**, tsc clean, eslint at 85,
+`npm run build` exits 0.
+
+---
+
+### [CLAUDE-1][MEDIUM][CI] The readiness probe named the database and never checked it
+
+**File:** `.github/workflows/finance-transaction-operation-runtime.yml`
+
+**Problem.** `finance-operation-sql` failed on **three of four** pushes this
+session (`7a82cb6a`, `d962e558`, `583fdc4d`; passed on `a4f121d2`), always in
+~20s with:
+
+```
+FATAL:  database "bubaly_finance_operation_ci" does not exist
+```
+
+The job's readiness gate was:
+
+```bash
+pg_isready --host=/var/run/postgresql --username=postgres --dbname=bubaly_finance_operation_ci
+```
+
+**`pg_isready` does not validate `--dbname`.** It reports whether the SERVER is
+accepting connections. Measured on the local PG16 harness rather than asserted:
+
+| probe | database that does not exist |
+|---|---|
+| `pg_isready --dbname=…` | **exit 0**, `accepting connections` |
+| `psql --dbname=…` | exit 2, `database … does not exist` |
+
+— the same exit 2 the job dies with. The postgres entrypoint runs `initdb`,
+brings up a **temporary** server on that same socket, and only then creates
+`POSTGRES_DB`. The gate went green against the temporary server, before the
+database existed. Whether the next step won the race depended on how warm the
+image layers were, which is why it failed intermittently and why the log shows
+the pull finishing at `19:46:31` and psql dying at `19:46:33`.
+
+**The probe named the database and did not check it** — the same shape as every
+finding in this pass, in CI rather than in product code.
+
+**Fix.** Poll with an actual `select 1` **against that database**, which is the
+only thing that proves it is there. **Three consecutive successes**, because the
+entrypoint stops the temporary server once initialisation finishes: a single
+success can land in the window where the database exists but the server is about
+to be replaced. Validated locally by simulating the race — the loop reports "not
+yet" for six attempts, then three successes; the old gate would have passed on
+attempt one.
+
+**This is not my PR's defect** — my diff touches no finance SQL, migration 0274,
+or this workflow; the job runs on every push because the PR's *cumulative* diff
+matches its path filters. It is fixed rather than reported because it is a real
+bug with a contained fix, and **nothing is skipped or disabled**: the check now
+tests strictly more than it did.
+
+**Status:** FIXED.

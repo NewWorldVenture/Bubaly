@@ -5464,3 +5464,83 @@ Non-vacuity: revert `dueLabel` to the device zone → `expected 'soon' to be
 
 **Two entries left on the `setHours` ratchet, of the original seventeen:**
 `lib/capture/parse.ts` and `lib/routines/detect.ts`.
+
+---
+
+## Q21 — HIGH: "dinner tomorrow at 6" went on the calendar for the server's tomorrow
+
+`classifyIntentFast` called `classifyVoiceCommand(q, now)` and `parseEvent(q,
+now)` with no zone, so the second resolved against `LOCAL_OPS` — the host's day.
+And the fast path does **not merely classify** on the result: it serialises
+`event.startsAt.toISOString()` into the capture's entities, which is what goes
+on the calendar. "Dentist tomorrow at 3pm" said to the assistant from California
+after 5pm was booked **a day late**.
+
+**The machinery to get this right was built, documented, and not reached.**
+`classifyVoiceCommand` has taken an optional `timezone` all along, and
+`lib/voice/command-router.ts` carries a long header explaining exactly how to
+use it — why the wall clock must be UTC-anchored so the runtime's own DST rules
+cannot normalise it before anyone resolves it, and why `instantForLocalTime`
+rather than `zonedLocalToInstant` (on the spring-forward morning a named time
+that does not exist should move to the first minute that does, not vanish). The
+call site passed none of it. **Tenth instance of the recurring shape.**
+
+**And the type said so out loud.** `classifyIntent`'s signature was
+`Pick<ServiceScope, 'familyId' | 'requestId' | 'now'>` — `tz` was *excluded from
+the Pick*. The scope carried the family's zone the whole time; the fast path was
+handed everything except the one field that says whose tomorrow it is. Both real
+callers pass a full `ServiceScope`, so widening it cost nothing.
+
+**A test I wrote and then had to fix.** My first control assertion checked the
+no-zone path against the **host's** answer — an assertion about whichever
+machine runs it, the exact flaw this whole sweep exists to remove, and it would
+have gone red on CI's `TZ=America/Los_Angeles` leg. It is now a contrast between
+two *named* zones: the same instant is the 6th at 22:00Z for Los Angeles and the
+7th at 15:00Z for UTC. Both correct; which one you get is precisely what the
+zone decides.
+
+## Q22 — MEDIUM: the CI readiness probe named the database and never checked it
+
+`finance-operation-sql` failed on **three of four** pushes this session, always
+in about twenty seconds, with `FATAL: database "bubaly_finance_operation_ci"
+does not exist`. Its readiness gate was `pg_isready --dbname=…`.
+
+**`pg_isready` does not validate `--dbname`** — it reports whether the *server*
+is accepting connections. Measured on the local PG16 harness rather than assumed:
+
+| probe | database that does not exist |
+|---|---|
+| `pg_isready --dbname=…` | **exit 0**, `accepting connections` |
+| `psql --dbname=…` | exit 2, `database … does not exist` |
+
+— the same exit 2 the job dies with. The postgres entrypoint runs `initdb`,
+brings up a **temporary** server on that same socket, and only then creates
+`POSTGRES_DB`. The gate went green against the temporary server, before the
+database existed; whether the next step won the race depended on how warm the
+image layers were. The failing log shows the image pull finishing at `19:46:31`
+and psql dying at `19:46:33`.
+
+**The probe named the database and did not check it** — this pass's recurring
+shape, in CI rather than in product code.
+
+Fixed by polling with an actual `select 1` against that database, requiring
+three consecutive successes (the entrypoint stops the temporary server once init
+finishes, so one success can land in the window where the database exists but
+the server is about to be replaced). Validated by simulating the race locally:
+the new loop reports "not yet" six times and then succeeds; the old gate would
+have passed on attempt one.
+
+Not this PR's defect — the diff touches no finance SQL, migration 0274, or this
+workflow, and the job runs on every push only because the PR's *cumulative* diff
+matches its path filters. Fixed rather than reported because the fix is
+contained and **nothing is skipped or disabled**: the check now tests strictly
+more than it did.
+
+## Verification (Q18–Q22)
+
+- **14,062 tests green under both `TZ=UTC` and `TZ=America/Los_Angeles`** (four
+  shards each), tsc clean, eslint at 85 (no new warnings), `npm run build` exits 0.
+- **CI green on every completed head this pass** — `d962e558`, `a4f121d2`,
+  `5ee3609b` — on the main workflow including E2E.
+- Non-vacuity by mutation on all five findings; each revert names the defect in
+  its failure message rather than merely going red.
