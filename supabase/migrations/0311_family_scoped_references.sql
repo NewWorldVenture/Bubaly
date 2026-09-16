@@ -98,25 +98,56 @@ $guard$;
 comment on function public.reference_shares_family() is
   'A family-scoped row may not reference a row belonging to a different family. Every INSERT policy here checks only the row''s own family_id, and the foreign keys name parent(id) alone, so without this a member could write their family_id beside somebody else''s reference. Takes (column, parent table) as trigger arguments.';
 
+-- ── wiring ──────────────────────────────────────────────────────────────────
+--
+-- One row per guarded reference. Each is VALIDATED before its trigger is
+-- created, because the failure mode of a mis-wired one is nasty and quiet: the
+-- helper early-returns for the trusted server, so a migration replay (no JWT,
+-- `auth.uid()` null) installs it happily and every AUTHENTICATED write to that
+-- table then fails with 42703 in production. Measured — that is exactly what a
+-- parent table without a `family_id` column does. Validating here turns a
+-- production-time error into a replay-time one, and keeps "the next reference
+-- costs one line" honest.
 do $$
+declare
+  w record;
 begin
-  if to_regclass('public.allowance_rules') is not null then
-    drop trigger if exists trg_allowance_rules_wallet_family on public.allowance_rules;
-    create trigger trg_allowance_rules_wallet_family
-      before insert or update of child_wallet_id, family_id on public.allowance_rules
-      for each row execute function public.reference_shares_family('child_wallet_id', 'child_wallets');
-  end if;
+  for w in
+    select *
+    from (values
+      ('allowance_rules',   'child_wallet_id', 'child_wallets'),
+      ('chore_assignments', 'chore_id',        'chores'),
+      ('chore_assignments', 'member_id',       'family_members')
+    ) as v(child, col, parent)
+  loop
+    -- A table this database has not reached yet is not an error; skip it, the
+    -- way the rest of this series does.
+    if to_regclass('public.' || w.child) is null or to_regclass('public.' || w.parent) is null then
+      continue;
+    end if;
 
-  if to_regclass('public.chore_assignments') is not null then
-    drop trigger if exists trg_chore_assignments_chore_family on public.chore_assignments;
-    create trigger trg_chore_assignments_chore_family
-      before insert or update of chore_id, family_id on public.chore_assignments
-      for each row execute function public.reference_shares_family('chore_id', 'chores');
+    if not exists (select 1 from information_schema.columns
+                    where table_schema = 'public' and table_name = w.child and column_name = 'family_id') then
+      raise exception 'reference_shares_family: %.family_id does not exist', w.child;
+    end if;
+    if not exists (select 1 from information_schema.columns
+                    where table_schema = 'public' and table_name = w.child and column_name = w.col) then
+      raise exception 'reference_shares_family: %.% does not exist', w.child, w.col;
+    end if;
+    -- The one that fails silently at replay and loudly in production.
+    if not exists (select 1 from information_schema.columns
+                    where table_schema = 'public' and table_name = w.parent and column_name = 'family_id') then
+      raise exception
+        'reference_shares_family: parent %.family_id does not exist, so the guard on %.% would raise 42703 on every authenticated write',
+        w.parent, w.child, w.col;
+    end if;
 
-    drop trigger if exists trg_chore_assignments_member_family on public.chore_assignments;
-    create trigger trg_chore_assignments_member_family
-      before insert or update of member_id, family_id on public.chore_assignments
-      for each row execute function public.reference_shares_family('member_id', 'family_members');
-  end if;
+    execute format('drop trigger if exists %I on public.%I',
+                   'trg_' || w.child || '_' || w.col || '_family', w.child);
+    execute format(
+      'create trigger %I before insert or update of %I, family_id on public.%I '
+      || 'for each row execute function public.reference_shares_family(%L, %L)',
+      'trg_' || w.child || '_' || w.col || '_family', w.col, w.child, w.col, w.parent);
+  end loop;
 end
 $$;
