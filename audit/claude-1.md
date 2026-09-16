@@ -3325,3 +3325,51 @@ session's block: **I shipped a regression and CI found it, not me.**
   86-warning cap is what keeps it honest in the meantime.
 - **Status:** OPEN (26 of 86 classified in detail; the rest are the same three
   shapes). Not a sweep. `lib/ui/a11y.ts` now says so.
+
+### [CLAUDE-1][HIGH][A11Y/UX] Typing in a dialog moved the caret to the first field, on every character
+
+- **Found while verifying Claude-2's C2-01 (the photo lightbox).** Nobody
+  reported this one. C2-04 audited four hand-rolled dialogs for missing focus
+  traps and this is the opposite: the **correct** `Modal`, the one all 226 call
+  sites use, had the defect.
+- **File:** `components/ui/modal.tsx`
+- **Problem:** the focus-trap effect depended on `[open, onClose]`. **92 of the
+  226 call sites pass an inline `onClose={() => setOpen(false)}`** — a new
+  function identity on every render of the component that owns the dialog's form
+  state. A keystroke re-renders that component, the deps compare unequal, and
+  React tears the effect down and sets it up again. **Both halves move focus:**
+  - cleanup runs `previouslyFocused?.focus()` — which by then is the trigger
+    **behind** the dialog;
+  - setup runs `(focusables()[0] ?? dialog)?.focus()` — the first control.
+- **71 call sites pair an inline `onClose` with a controlled input**, which is
+  the combination that bites: announcements, behavior, binder, care,
+  celebrations, devices, quick-capture, the four `auto/*` clients, warranties…
+  Anything but the first field was untypeable.
+- **Demonstrated, not deduced.** Driving the real effect the way React drives it
+  — render, run, re-render with a fresh arrow, cleanup, run — with the caret in
+  the third field:
+  ```
+  deps changed on re-render: true
+  focus moved to: [ 'trigger', 'field1' ]
+  ```
+  **Honest about the method:** that is a harness modelling React's
+  cleanup-then-setup ordering and the DOM calls the effect makes. It is not a
+  browser. What it cannot rule out is some higher-level behaviour that masks the
+  symptom in practice; what it does establish is that the effect is torn down and
+  rebuilt per keystroke and that both halves call `focus()`.
+- **Fix:** hold `onClose` in a ref and depend on `[open]` alone. Nothing about
+  the trap needs rebuilding when the handler's identity changes — it only needs
+  the CURRENT handler when Escape is actually pressed, which is what a ref is
+  for. No call site changes.
+- **Status:** FIXED. `tests/a-dialog-does-not-steal-the-caret.test.ts`.
+  Non-vacuity, two mutations: put `onClose` back in the deps → *"the effect must
+  not depend on the handler identity"*; capture `onClose` in the closure instead
+  of reading the ref → *"Escape used a stale handler"* — the second being the
+  trap the ref exists to avoid, so the fix cannot be half-applied.
+- **One existing assertion had to change, and it is worth saying why it is not a
+  weakening.** `modal-a11y-contract.test.ts` matched the source against
+  `/onClose\(\)/` — a literal call spelling, not a behaviour. It now accepts
+  either spelling and points at the new test, which *exercises* Escape reaching
+  the current handler. A source match cannot make that statement at all.
+- **Verified:** tsc and eslint clean; **13,982 tests green under both `TZ=UTC`
+  and `TZ=America/Los_Angeles`**.

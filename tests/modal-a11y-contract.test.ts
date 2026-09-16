@@ -22,7 +22,14 @@ describe('A-19 shared Modal keeps its a11y + mobile contract', () => {
 
   it('closes on Escape and traps Tab focus within the dialog', () => {
     expect(SRC).toMatch(/e\.key === 'Escape'/);
-    expect(SRC).toMatch(/onClose\(\)/);
+    // Either spelling of "call the close handler". It reads `onCloseRef.current()`
+    // because the effect deliberately does NOT depend on `onClose`'s identity —
+    // 92 call sites pass an inline arrow, and depending on it rebuilt the focus
+    // trap on every keystroke and moved the caret to the first field. That the
+    // CURRENT handler is the one Escape reaches is exercised for real in
+    // tests/a-dialog-does-not-steal-the-caret.test.ts, which is a stronger
+    // statement than this line can make by matching source.
+    expect(SRC).toMatch(/onClose\(\)|onCloseRef\.current\(\)/);
     expect(SRC).toMatch(/e\.key !== 'Tab'/);
     expect(SRC).toMatch(/preventDefault\(\)/);
     // a defined focusable set is what makes the trap real

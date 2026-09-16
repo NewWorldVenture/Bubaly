@@ -33,6 +33,23 @@ export function Modal({
   const titleId = useId();
   const descId = useId();
 
+  // `onClose` is held in a ref, and the effect below depends on `open` ALONE.
+  //
+  // It used to depend on `[open, onClose]`, and 92 of the 226 call sites pass an
+  // inline `onClose={() => setOpen(false)}` — a new function identity on every
+  // render of the component that owns the dialog's form state. So every
+  // keystroke in such a dialog tore the effect down and set it up again, and
+  // both halves move focus: cleanup calls `previouslyFocused.focus()`, which by
+  // then is the trigger BEHIND the dialog, and setup then focuses the first
+  // control. Measured with the caret in the third field: focus went
+  // trigger → field one, per character typed.
+  //
+  // Nothing about the trap needs to be rebuilt when the close handler's identity
+  // changes; it only needs the CURRENT handler when Escape is actually pressed.
+  // That is what a ref is for.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (!open) return;
     const dialog = dialogRef.current;
@@ -46,7 +63,7 @@ export function Modal({
     (focusables()[0] ?? dialog)?.focus();
 
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { onClose(); return; }
+      if (e.key === 'Escape') { onCloseRef.current(); return; }
       if (e.key !== 'Tab' || !dialog) return;
       // Trap Tab within the dialog.
       const items = focusables();
@@ -68,7 +85,7 @@ export function Modal({
       document.body.style.overflow = '';
       previouslyFocused?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open || typeof document === 'undefined') return null;
 
