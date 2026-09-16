@@ -10,7 +10,16 @@ describe('wallet allowance persistence boundaries', () => {
   });
 
   it('checks the schedule advance and rolls it back when crediting fails', () => {
-    expect(source).toContain(".update({ next_run_on: next, last_run_on: today }).eq('id', rule.id).eq('family_id', familyId).select('id').single()");
+    // This pinned the advance as a single blind statement ending `.single()`.
+    // That WAS the bug: with no `.lte('next_run_on', today)` predicate the
+    // update always matched, so two overlapping runs both advanced the rule and
+    // both credited it. The intent — the advance is checked before the credit
+    // and rolled back if the credit fails — is kept and strengthened: it is now
+    // a CLAIM, matching the cron. See
+    // tests/manual-allowance-run-claims-like-the-cron.test.ts.
+    expect(source).toContain(".update({ next_run_on: next, last_run_on: today })");
+    expect(source).toContain(".lte('next_run_on', today)");
+    expect(source).toContain(".select('id').maybeSingle()");
     expect(source).toContain("const { error: rollbackError } = await supabase.from('allowance_rules').update({ next_run_on: rule.next_run_on, last_run_on: rule.last_run_on })");
     expect(source).toContain("return { ok: false, error: res.error, ranCount, paidCents };");
   });

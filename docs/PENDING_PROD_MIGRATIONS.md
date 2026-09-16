@@ -1233,3 +1233,34 @@ header asks for, "by shape rather than by name".
 
 Until this is applied, production carries the cross-family writes as measured
 above. The allowance-run outage is fixed in the route and takes effect on merge.
+
+### The manual allowance run could pay twice — fixed in the app, live on merge
+
+`tests/allowance-cron-idempotency.test.ts` locks the nightly cron's schedule
+claim so it *"can't regress to a blind (double-crediting) update"*. The manual
+**Run due allowances** button — `runDueAllowancesAction` in
+`app/(app)/wallet/actions.ts` — is the sibling path that test does not cover, and
+it was exactly that blind update:
+
+```ts
+.update({ next_run_on: next, last_run_on: today })
+.eq('id', rule.id).eq('family_id', familyId).select('id').single()
+```
+
+No `.lte('next_run_on', today)` predicate, so the update always matched. Both
+paths select due rules the same way, so two overlapping runs — a double-click, or
+a click racing the cron, whose own claim *is* predicated — both read the rule as
+due, both advanced it, and **both credited the child's wallet**.
+
+The claim now carries the predicate and reads with `.maybeSingle()`, and a rule
+that matched no row is skipped rather than treated as an error — the cron's
+pattern exactly. `tests/manual-allowance-run-claims-like-the-cron.test.ts`
+asserts it and was calibrated against the old code, where three of its four cases
+fail.
+
+`tests/wallet-allowance-persistence.test.ts` pinned the old statement verbatim,
+including `.single()`. Its intent — the advance is checked before the credit and
+rolled back if the credit fails — is kept and strengthened rather than deleted:
+it is now a claim.
+
+This needs no migration and takes effect on merge.
