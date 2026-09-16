@@ -55,8 +55,9 @@ const SERVER_MIDNIGHT = /setHours\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\)/;
 // in it: `weekWindow` built its window from getUTCFullYear/Month/Date and
 // `bucketByDay` took `starts_at.slice(0, 10)`, so a family in Los Angeles
 // asking for the week ahead at 6pm was told "today" is tomorrow, and every
-// evening event in the Americas was filed on the wrong day. Ten server-side
-// sites remain in this spelling and are tracked below.
+// evening event in the Americas was filed on the wrong day. Nine server-side
+// sites remain in this spelling and are tracked below; `lib/chores/server.ts`
+// was the tenth, and closing it is what this list is for.
 //
 // A guard that checks ONE spelling of a defect with two is the shape this audit
 // keeps finding: it passes, and the thing it is named for goes on happening.
@@ -80,7 +81,6 @@ const TRACKED_TODAY_KEY = new Set([
   'app/(app)/wallet/hub-actions.ts',
   'app/api/admin/benchmarks/export/route.ts',
   'app/api/cron/wallet-allowance/route.ts',
-  'lib/chores/server.ts',
   'lib/home/asset-detail.ts',
 ]);
 
@@ -96,9 +96,9 @@ const TRACKED_TODAY_KEY = new Set([
 // Both want a STABLE INDEX that every member of the household agrees on, and
 // its own comment says so ("fixed epoch so it's stable across the year").
 // Making those zone-aware would be a regression, not a fix. Others in the same
-// shape — `lib/chores/server.ts`'s `todayISO`, which keys a child's streak — are
-// real. Putting correct code on a defect list is how a list stops being read, so
-// this shape needs a per-site decision rather than a ratchet.
+// shape are real — `lib/chores/server.ts` was one, and its streak is now counted
+// in the family's day. Putting correct code on a defect list is how a list stops
+// being read, so this shape needs a per-site decision rather than a ratchet.
 
 
 // A comment explaining the defect is not the defect. Both files fixed so far

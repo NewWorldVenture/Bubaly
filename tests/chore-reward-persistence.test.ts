@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { applyCompletionRewards, awardBadges, ensureProgress } from '@/lib/chores/server';
 
 type Result = { data: unknown; error: unknown; count?: number | null };
@@ -30,7 +30,7 @@ function fakeClient(resolveResult: (table: string, operation: string, calls: Cal
   return { client, calls };
 }
 
-const rewardOptions = { familyId: 'family-1', memberId: 'member-1', difficulty: 'medium' as const, qualityScore: 100 };
+const rewardOptions = { familyId: 'family-1', memberId: 'member-1', difficulty: 'medium' as const, qualityScore: 100, tz: 'UTC' };
 
 describe('chore reward persistence boundaries', () => {
   it('fails closed when the progress lookup fails', async () => {
@@ -93,6 +93,67 @@ describe('chore reward persistence boundaries', () => {
     await expect(awardBadges(client as never, 'family-1', 'member-1', ['first_chore', 'first_chore']))
       .resolves.toEqual(['first_chore']);
     expect(calls).toEqual([{ table: 'member_badges', operation: 'upsert' }]);
+  });
+
+  // ── The streak is counted in the FAMILY's day ─────────────────────────────
+  //
+  // `kid_progress.last_activity` is the only thing `nextStreak` compares, so
+  // whichever zone this is read in IS the streak rule. It used to be
+  // `new Date().toISOString().slice(0, 10)` — UTC — and the failure is not a
+  // cosmetic off-by-one, it is a lost streak: a child who finishes a chore at
+  // 6pm Monday in Los Angeles has TUESDAY written down, so when they finish
+  // another at 10am Tuesday `nextStreak` sees lastActivity === today and does
+  // not increment. Two days running, and the streak does not move. Evening then
+  // next morning is the ordinary rhythm for a school-age child.
+  describe('the streak counts the family\u2019s day, not the host\u2019s', () => {
+    /** Run the engine at `at`, in `tz`, against a member whose last activity was `lastActivity`. */
+    async function streakAfter(at: string, tz: string, lastActivity: string): Promise<number> {
+      // `applyCompletionRewards` reads the clock itself, so the clock is what
+      // has to move. Vitest's fake timers do it properly — an earlier draft
+      // hand-rolled a Date subclass and TypeScript was right to reject it.
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(at));
+      try {
+        const { client } = fakeClient((table, operation) => {
+          if (table === 'kid_progress' && operation === 'read') {
+            return { data: { ...progress, current_streak: 3, last_activity: lastActivity }, error: null };
+          }
+          if (table === 'kid_progress' && operation === 'update') return { data: { id: 'progress-1' }, error: null };
+          if (table === 'chore_assignments') return { data: null, error: null, count: 1 };
+          if (table === 'member_badges') return { data: [], error: null };
+          return { data: null, error: null };
+        });
+        const result = await applyCompletionRewards(client as never, { ...rewardOptions, tz });
+        return result.streak;
+      } finally {
+        vi.useRealTimers();
+      }
+    }
+
+    // Every instant below is a Los Angeles EVENING, because that is the only
+    // time the two answers differ — 2026-06-24T01:00Z is 6pm on the 23rd in Los
+    // Angeles and already the 24th in UTC. A morning instant would pass under
+    // the bug as easily as under the fix, which is worth saying out loud: the
+    // first draft of this test used 10am and proved nothing.
+    const TUESDAY_EVENING = '2026-06-24T01:00:00Z';
+
+    it('extends a streak across consecutive family days', async () => {
+      // Family day 23rd, last activity the 22nd: consecutive, so 3 -> 4. Read in
+      // UTC the day is the 24th, a two-day gap, and the streak RESETS to 1 —
+      // a child who did chores two evenings running is told they start again.
+      expect(await streakAfter(TUESDAY_EVENING, 'America/Los_Angeles', '2026-06-22')).toBe(4);
+    });
+
+    it('does not increment twice on the same family day', async () => {
+      // Family day 23rd, last activity the 23rd: unchanged at 3. Read in UTC the
+      // day is the 24th, so it would count a second time and inflate the streak.
+      expect(await streakAfter(TUESDAY_EVENING, 'America/Los_Angeles', '2026-06-23')).toBe(3);
+    });
+
+    it('gives two households two different — and both correct — answers', async () => {
+      expect(await streakAfter(TUESDAY_EVENING, 'America/Los_Angeles', '2026-06-23')).toBe(3);
+      expect(await streakAfter(TUESDAY_EVENING, 'UTC', '2026-06-23')).toBe(4);
+    });
   });
 
   it('rolls an approved assignment back when reward application fails', () => {

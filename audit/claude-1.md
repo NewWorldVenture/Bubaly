@@ -4053,3 +4053,44 @@ Recorded with the evidence rather than guessed at, and explicitly NOT fixed.
   tracked shape → the widened ratchet names it.
 - **Verified:** **14,024 tests green under both `TZ=UTC` and
   `TZ=America/Los_Angeles`**, tsc clean, eslint at 85, `npm run build` exits 0.
+
+### [CLAUDE-1][HIGH][TIMEZONE] A child who did chores two evenings running was told to start again
+
+- **Second site from the widened ratchet**, and the sharpest of the ten.
+- **Files:** `lib/chores/server.ts`, `app/(app)/missions/actions.ts`,
+  `tests/chore-reward-persistence.test.ts`,
+  `tests/server-midnight-is-not-the-familys-midnight.test.ts`
+- **Problem:** `applyCompletionRewards` derived "today" from
+  `new Date().toISOString().slice(0, 10)` — the **UTC** day — and wrote it to
+  `kid_progress.last_activity`. That column is the ONLY thing `nextStreak`
+  compares, so **the zone it is read in IS the streak rule**. `nextStreak` itself
+  is correct, pure and tested; the defect is entirely in what it was handed.
+- **Measured at 6pm on the 23rd in Los Angeles — already the 24th in UTC:**
+  - last activity the 22nd (two evenings running) → UTC sees a **two-day gap and
+    resets the streak to 1**. Correct answer: 3 → 4.
+  - last activity the 23rd (same family day) → UTC **counts it a second time**,
+    3 → 4. Correct answer: unchanged at 3.
+  Wrong in **both directions**, and `streak_3`, `streak_7` and `longest_streak`
+  all inherit it. Evenings are when chores get done, so this is the common case.
+- **Fixed** with `dayKeyInTz(new Date(), opts.tz)`; `tz` required, threaded from
+  `ctx.active.family.timezone` at both `finalizeApproval` call sites, which
+  already had it. `lib/chores/server.ts` comes off the tracked list — 10 → 9.
+- **My first test proved nothing, and the mutation is what said so.** The
+  headline case was written at **10am** Los Angeles — where the UTC day and the
+  family day AGREE — so it passed under the reverted code as happily as under the
+  fix. Only one of three assertions caught the mutation. Every instant is now a
+  Los Angeles evening, which is the only time the two answers differ, and all
+  three fail when reverted. **A test whose scenario cannot distinguish the two
+  implementations is a test of nothing, and its name will still read correctly.**
+- **And the mutation sharpened the finding itself.** I had written the defect up
+  as "the streak does not increment"; the failure message was
+  `expected 1 to be 4` — it **resets**. The code comment now says what was
+  measured rather than what I first assumed.
+- **A third thing I got wrong and fixed:** the harness hand-rolled a `Date`
+  subclass to move the clock. TypeScript rejected it (`TS2556`), correctly —
+  vitest's `useFakeTimers`/`setSystemTime` is the tool, and the re-run confirms
+  all three assertions still catch the mutation through it.
+- **Status:** FIXED. Non-vacuity: revert to the UTC day → all three assertions
+  fail, naming the reset, the double count and the two-household divergence.
+- **Verified:** **14,027 tests green under both `TZ=UTC` and
+  `TZ=America/Los_Angeles`**, tsc clean, eslint at 85, `npm run build` exits 0.

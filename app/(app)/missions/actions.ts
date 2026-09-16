@@ -216,7 +216,7 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
       // session (the submitter). Route the reward finalization through the service
       // role so it credits the immutable ledger under the manager-only wallet RLS
       // (0217) — the child's session must never be the authority for a money credit.
-      await finalizeApproval(service, { familyId, assignment, chore, submissionId: submission.id, score: verdict.quality_score, actorId: assignment.member_id, auto: true });
+      await finalizeApproval(service, { familyId, tz: scopeFromUserContext(ctx, supabase).tz, assignment, chore, submissionId: submission.id, score: verdict.quality_score, actorId: assignment.member_id, auto: true });
     } catch {
       await setSubmissionStatus(service, familyId, submission.id, 'parent_review');
       const { error: fallbackAssignmentError } = await supabase.from('chore_assignments').update({ status: 'submitted' })
@@ -248,7 +248,7 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
 /** Shared approval finalizer: sets reward, flips status, applies gamification. */
 async function finalizeApproval(
   supabase: Awaited<ReturnType<typeof createServer>>,
-  args: { familyId: string; assignment: Record<string, unknown>; chore: Record<string, unknown>; submissionId: string; score: number; actorId: string | null; auto: boolean; pointsOverride?: number | null; cashOverride?: number | null },
+  args: { familyId: string; tz: string; assignment: Record<string, unknown>; chore: Record<string, unknown>; submissionId: string; score: number; actorId: string | null; auto: boolean; pointsOverride?: number | null; cashOverride?: number | null },
 ) {
   const reward = computeReward(rewardConfig(args.chore), args.score);
   const points = args.pointsOverride ?? reward.points;
@@ -264,6 +264,8 @@ async function finalizeApproval(
     await applyCompletionRewards(supabase, {
       familyId: args.familyId, memberId: args.assignment.member_id as string,
       difficulty: ((args.chore.difficulty as Difficulty) ?? 'medium'), qualityScore: args.score,
+      // The streak is counted in the family's day; see lib/chores/server.ts.
+      tz: args.tz,
     });
   } catch (error) {
     const { error: rollbackError } = await supabase.from('chore_assignments').update({
@@ -330,7 +332,8 @@ export async function approveSubmissionAction(formData: FormData): Promise<{ ok:
   }
   try {
     await finalizeApproval(supabase, {
-      familyId, assignment, chore, submissionId, score, actorId: ctx.active.member.id, auto: false,
+      familyId, tz: scopeFromUserContext(ctx, supabase).tz,
+      assignment, chore, submissionId, score, actorId: ctx.active.member.id, auto: false,
       pointsOverride: intVal(formData, 'points'), cashOverride: intVal(formData, 'cash_cents'),
     });
   } catch (err) {
