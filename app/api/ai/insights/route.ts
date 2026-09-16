@@ -12,6 +12,8 @@ import { isExpiredFact, isSensitiveMemory } from '@/lib/services/memory';
 import { fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
+import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
+import { INSIGHT_FEATURE_HREFS } from '@/lib/ai/insight-features';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 
 export const runtime = 'nodejs';
@@ -54,6 +56,19 @@ export async function POST(req: Request) {
   const params = { ...(body.params ?? {}), ...(question ? { question } : {}) };
 
   const supabase = await createServer();
+
+  // Role was checked above; PLAN was not. Each kind is reached from an AI
+  // Assist button on one `requireFeature`-gated module page, and twenty-five of
+  // them belong to a paid feature — so POSTing the kind name was the bypass,
+  // on the surface that costs money per request. Gated per kind rather than on
+  // the whole set, because `refuseUnlessEntitled` admits a caller entitled to
+  // ANY href it is handed and every family is entitled to something.
+  const gatedHrefs = INSIGHT_FEATURE_HREFS[kind];
+  if (gatedHrefs) {
+    const refused = await refuseUnlessEntitled(supabase, ctx.active.familyId, gatedHrefs);
+    if (refused) return refused;
+  }
+
   const limited = await enforceAIRateLimit(supabase, `ai-insights:${ctx.user.id}`, { limit: 20 });
   if (!limited.ok) return NextResponse.json(
     { error: t('insights.tooManyAiInsightRequests') },
