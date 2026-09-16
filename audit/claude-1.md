@@ -4094,3 +4094,56 @@ Recorded with the evidence rather than guessed at, and explicitly NOT fixed.
   fail, naming the reset, the double count and the two-household divergence.
 - **Verified:** **14,027 tests green under both `TZ=UTC` and
   `TZ=America/Los_Angeles`**, tsc clean, eslint at 85, `npm run build` exits 0.
+
+### [CLAUDE-1][MEDIUM][TIMEZONE] Six date columns defaulted to the host's day, and the list that tracked them was not telling the truth
+
+- **Files:** `lib/services/scope.ts`,
+  `app/(app)/dashboard/{auto,home,kitchen,moments}/actions.ts`,
+  `app/(app)/dashboard/contacts/[id]/actions.ts`,
+  `app/(app)/wallet/hub-actions.ts`,
+  `tests/a-record-logged-tonight-is-dated-tonight.test.ts` (new),
+  `tests/server-midnight-is-not-the-familys-midnight.test.ts`
+- **Problem:** six server actions defaulted a date column with
+  `new Date().toISOString().slice(0, 10)` — the HOST's day, which on a UTC server
+  is tomorrow from 5pm in California and 4pm in New York. A car service, a home
+  service record, a contact interaction and a wallet transaction logged after
+  dinner were all dated **tomorrow**. `family_food_scores.snapshot_date` is
+  upserted, so an evening score landed on tomorrow and collided with tomorrow's
+  real one.
+- **The sharpest is `moment_activations.as_of_date`.** Its caller's own comment
+  reads *"Hide a moment for the rest of today"*, and it wrote **tomorrow's** row —
+  so the moment stayed on screen for the rest of the evening and arrived
+  already dismissed the next morning. The rule stated in a comment where a
+  reader can see it, absent from the line below it: this audit's recurring shape,
+  in miniature, for the eighth time.
+- **`todayKeyFor(ctx)`** is now the one place the `|| DEFAULT_TZ` fallback is
+  written. Six copies of a defaulting rule is how the seventh gets it wrong.
+- **MY OWN INSTRUMENT WAS LYING, two commits after I built it.** The tracked list
+  I added for this spelling inherited the header *"Every entry is a defect
+  waiting for the family-zone decision its call site needs — never a site that is
+  fine as it is."* Three of its ten entries are nothing of the kind:
+  - `app/api/cron/wallet-allowance/route.ts` — **documented as deliberate in its
+    own source**, with the trade stated: resolving every rule's family zone
+    against a cost bounded at one day early west of UTC.
+  - `app/api/admin/benchmarks/export/route.ts` — a day stamp on a site-admin
+    export; there is no family in scope.
+  - `lib/home/asset-detail.ts` — takes an injected `today` and falls back; if a
+    caller passes nothing, the defect is at that caller.
+  Leaving those unmarked would have had the next person "fix" an allowance cron
+  and change when money is paid. The list is now split by REASON, each of the
+  three carrying its own paragraph. **A ratchet that does not distinguish "not
+  yet done" from "decided" is a ratchet that manufactures regressions.**
+- **A regression I introduced and the suite caught.** Threading the zone through
+  auto and home meant computing it inside their shared `ctx()` helper, so it ran
+  for every action in those files — and two write-boundary tests whose mock
+  contexts carry no `active.family` went red with
+  `Cannot read properties of undefined (reading 'timezone')`. `todayKeyFor` is now
+  TOTAL: it supplies a DEFAULT for a date column, and an action that would
+  otherwise have succeeded must not die because the zone could not be read. Same
+  reasoning `dayKeyInTz` already gives for swallowing an invalid IANA name.
+- **Status:** FIXED. Non-vacuity, two mutations, each caught by two independent
+  guards: make `todayKeyFor` ignore the zone → the Los Angeles and Auckland
+  assertions fail; revert one of the six → that site's assertion fails **and**
+  the widened ratchet names the file.
+- **Verified:** **14,037 tests green under both `TZ=UTC` and
+  `TZ=America/Los_Angeles`**, tsc clean, eslint at 85, `npm run build` exits 0.

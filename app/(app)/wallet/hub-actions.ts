@@ -13,6 +13,7 @@
 // answers with a sentence instead, and says out loud what the file header used
 // to get wrong.
 import { requireUserContext } from '@/lib/supabase/auth';
+import { todayKeyFor } from '@/lib/services/scope';
 import { getTranslations } from '@/lib/i18n/server';
 import { isManager } from '@/lib/constants/roles';
 import { createServer } from '@/lib/supabase/server';
@@ -137,7 +138,7 @@ export async function addTransactionAction(input: Record<string, unknown>): Prom
     status: TXN_STATUS.includes(String(input.status)) ? String(input.status) : 'posted',
     category: str(input.category, 40) || null,
     account_id: typeof input.account_id === 'string' && input.account_id ? input.account_id : null,
-    date: typeof input.date === 'string' && input.date ? input.date : new Date().toISOString().slice(0, 10),
+    date: typeof input.date === 'string' && input.date ? input.date : todayKeyFor(ctx),
     created_by: ctx.user.id,
   });
   return error ? actionFailure('add the transaction', t('hubActions.couldNotAddTheTransaction'), error) : { ok: true };

@@ -111,6 +111,34 @@ export function dayKeyInTz(date: Date, tz: string): string {
   }
 }
 
+/**
+ * Today, as THIS FAMILY's calendar day, for a server action holding a user
+ * context.
+ *
+ * Six server actions defaulted a date column with
+ * `new Date().toISOString().slice(0, 10)` — the host's day, which on a UTC
+ * server is tomorrow from 5pm in California. A service record logged in the
+ * evening was dated tomorrow; `moment_activations.as_of_date` was written for
+ * tomorrow by a function whose own comment says "hide a moment for the rest of
+ * TODAY", so the moment stayed on screen and was pre-dismissed the next day.
+ *
+ * It exists so the `|| DEFAULT_TZ` fallback is written once. Six copies of a
+ * defaulting rule is how the seventh gets it wrong.
+ *
+ * TOTAL on purpose. `active.family` is always present on a real context, but
+ * this only supplies a DEFAULT for a date column, and an action that would
+ * otherwise have succeeded must not die because the zone could not be read —
+ * the same reason `dayKeyInTz` swallows an invalid IANA name rather than taking
+ * a household write down with it. Two write-boundary tests caught this: their
+ * contexts carry no `family`, and the first version threw.
+ */
+export function todayKeyFor(
+  ctx: { active?: { family?: { timezone?: string | null } | null } | null },
+  now: Date = new Date(),
+): string {
+  return dayKeyInTz(now, ctx?.active?.family?.timezone || DEFAULT_TZ);
+}
+
 /** Wall-clock hour (0–23) in the family's zone — the unit quiet-hour prefs use. */
 export function hourInTz(date: Date, tz: string): number {
   try {

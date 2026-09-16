@@ -55,9 +55,9 @@ const SERVER_MIDNIGHT = /setHours\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\)/;
 // in it: `weekWindow` built its window from getUTCFullYear/Month/Date and
 // `bucketByDay` took `starts_at.slice(0, 10)`, so a family in Los Angeles
 // asking for the week ahead at 6pm was told "today" is tomorrow, and every
-// evening event in the Americas was filed on the wrong day. Nine server-side
-// sites remain in this spelling and are tracked below; `lib/chores/server.ts`
-// was the tenth, and closing it is what this list is for.
+// evening event in the Americas was filed on the wrong day. Ten server-side
+// sites were found in this spelling; seven are closed and the three that remain
+// are examined and deliberate, which the list below says one by one.
 //
 // A guard that checks ONE spelling of a defect with two is the shape this audit
 // keeps finding: it passes, and the thing it is named for goes on happening.
@@ -71,14 +71,35 @@ const SERVER_MIDNIGHT = /setHours\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\)/;
 // named `at`, and two line numbers that did not point at the code at all).
 const HOST_TODAY_KEY = /new Date\(\)\s*\.toISOString\(\)\s*\.\s*slice\(\s*0\s*,\s*10\s*\)/;
 
-// Known, tracked, and not yet converted — the same rule as TRACKED above.
+// Still on the list, and NOT all for the same reason — which the `setHours`
+// list above gets to claim ("never a site that is fine as it is") and this one
+// cannot. Reading the six defects out of it and leaving three behind without
+// saying why would leave the next person to work this list "fixing" an
+// allowance cron and changing when money is paid.
+//
+// EXAMINED AND DELIBERATE — do not convert without a decision to go with it:
+//
+//   app/api/cron/wallet-allowance/route.ts
+//     Platform-wide. Its own comment states the trade: resolving every rule's
+//     family zone to decide whether its day has arrived, against a cost bounded
+//     at one day early for families west of UTC. A per-family run date is the
+//     fix if allowance timing ever has to be exact.
+//
+//   app/api/admin/benchmarks/export/route.ts
+//     A day stamp on a site-admin export. There is no family in scope, so the
+//     host's day is the only day there is.
+//
+//   lib/home/asset-detail.ts
+//     Takes an injected `today` and falls back. It is a pure function whose
+//     doc says "no client, no I/O"; if a caller is passing nothing, the defect
+//     is at that caller, not here.
+//
+// The six that WERE defects — a date column defaulted to the host's day in a
+// server action holding a user context — are closed: auto and home service
+// records, a contact interaction, a wallet transaction, the kitchen food-score
+// snapshot, and `moment_activations.as_of_date`, whose own caller says "hide a
+// moment for the rest of TODAY" and wrote tomorrow's row.
 const TRACKED_TODAY_KEY = new Set([
-  'app/(app)/dashboard/auto/actions.ts',
-  'app/(app)/dashboard/contacts/[id]/actions.ts',
-  'app/(app)/dashboard/home/actions.ts',
-  'app/(app)/dashboard/kitchen/actions.ts',
-  'app/(app)/dashboard/moments/actions.ts',
-  'app/(app)/wallet/hub-actions.ts',
   'app/api/admin/benchmarks/export/route.ts',
   'app/api/cron/wallet-allowance/route.ts',
   'lib/home/asset-detail.ts',
