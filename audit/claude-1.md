@@ -3806,3 +3806,61 @@ Recorded with the evidence rather than guessed at, and explicitly NOT fixed.
 - **Verified:** 332 migrations replayed from scratch (0 failed), 329 re-applied
   onto the populated schema, **40/40 probes run twice**, 13,994 tests green under
   both `TZ=UTC` and `TZ=America/Los_Angeles`, tsc clean, eslint at the 85 ratchet.
+
+### [CLAUDE-1][MEDIUM][A11Y] C2-03 — "fully accessible" was in the doc comment and in none of the markup
+
+- **Raised by:** Claude-2 (C2-03, the `Field` wrapper across 1,066 call sites).
+  Verified still open.
+- **Files:** `components/ui/input.tsx`,
+  `tests/a-hint-nobody-hears-is-not-a-hint.test.ts` (new)
+- **Problem:** `Field`'s own doc comment read *"Labelled field wrapper with
+  optional error + hint, fully accessible."* Three of its four affordances were
+  pictures only:
+  - `hint` — a `<p>` with no id and nothing pointing at it. Never read aloud.
+  - `error` — a `<p role="alert">` with no id, and **no `aria-invalid` on the
+    control**. The message is announced once as it appears; tab back to the field
+    afterwards and you are told nothing is wrong.
+  - `required` — a red asterisk, announced as "star" or skipped entirely.
+  Only `htmlFor`/`id` actually worked. **The seventh prose-as-code instance this
+  sweep, and the widest.**
+- **One change, not a thousand.** `Field` now computes `hintId`/`errorId`, hands
+  the a11y props to the render prop as a typed second argument, **and wires them
+  onto the returned control directly** — so the 1,066 existing call sites are
+  fixed without being edited. Measured coverage: **1,041 of 1,066 (97.7%)**.
+- **The allowlist is the point, not an implementation detail.** `wire()` clones
+  only `Input`/`Select`/`Textarea` and native `input`/`select`/`textarea`.
+  Twenty-five sites hand back a `<div>` wrapping chips or radios;
+  `aria-describedby` on a div announces nothing, so landing it there would make
+  the fix LOOK universal while doing nothing — the exact failure this audit has
+  eleven instances of. Those 25 are enumerated by a test whose bound may only go
+  down, and their honest fix is a fieldset or a radiogroup, per component.
+- **`aria-required`, not the native `required`, and deliberately so.** Native
+  `required` changes form SUBMISSION. Switching it on across a thousand fields
+  that were only ever marked with an asterisk would start blocking submits that
+  work today — a behaviour change smuggled in as an a11y fix. Announcing the
+  requirement is the a11y fix; enforcing it is a product decision per form.
+- **A detail worth keeping:** the hint is hidden while an error shows (it always
+  was, visually), so it must not be *described* either. A description pointing at
+  an element that is not in the document is worse than none — the reader is told
+  there is more and finds nothing. The test asserts every id in
+  `aria-describedby` resolves to a rendered element.
+- **The tests render the real component through `react-dom/server`** and read the
+  HTML back, so what is asserted is what a browser receives rather than what the
+  source says. Written with `createElement` because the suite collects
+  `tests/**/*.test.ts`; `tests/display-render.test.ts` is the same shape.
+- **Status:** FIXED. Non-vacuity, five mutations: drop the `wire()` call → five
+  assertions fail; clone any element → *"does not put a description on a wrapper
+  that cannot carry one"*; describe by the hint while the error shows → *"never
+  describes the control by a hint it is not rendering"*; drop `aria-invalid` →
+  two fail; let the wrapper overwrite the call site's own props → *"never
+  overwrites what the call site set for itself"*.
+- **Found alongside, and NOT a defect:** there are **two** `Field` components.
+  `components/home/field.tsx` (11 files) wraps its child in a `<label>`, so
+  association is implicit and correct; it takes element children rather than a
+  render prop, which is why a scan for `<Field><Input/></Field>` turns up call
+  sites that would look broken against the UI-kit signature and are not. The new
+  test excludes it by import path rather than by name.
+- **Verified:** **14,004 tests green under both `TZ=UTC` and
+  `TZ=America/Los_Angeles`**, tsc clean, eslint still at 85, `npm run build`
+  exits 0 — which matters here more than usual, since this touches every form in
+  the app.
