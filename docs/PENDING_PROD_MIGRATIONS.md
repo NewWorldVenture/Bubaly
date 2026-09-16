@@ -514,8 +514,8 @@ passed; production application of the atomic `0240-0254` release remains pending
 ## Migrations added since this document's stated baseline (2026-09-12)
 
 The status line at the top of this file is dated **2026-09-05** against main
-`01881fb2`. **47** migration files have landed since, `0255` through
-`0304`, and none of them appear anywhere above. (This read "thirty-one, `0255`
+`01881fb2`. **48** migration files have landed since, `0255` through
+`0305`, and none of them appear anywhere above. (This read "thirty-one, `0255`
 through `0285`" until 2026-09-13, "seventy-one, `0255` through `0295`" until
 2026-09-15, and "forty-five, `0255` through `0302`" and "46, `0255` through `0303`" until 2026-09-16; the range
 keeps growing past the sentence. The count is the number
@@ -909,3 +909,53 @@ argument, so the three tables share one implementation. Asking (`requested`,
 a manager still being able to decide.
 
 Until this is applied, production carries both forgeries as measured above.
+
+### `0305` prices a chore the way it decides one — unapplied
+
+`0223` guards the chore-assignment STATUS: a child cannot move their own
+assignment into `approved` or `rejected`, and that holds. It says nothing about
+the two columns that record what the approval was WORTH:
+
+    chore_assignments.points_awarded
+    chore_assignments.cash_awarded_cents
+
+A child may legitimately tick their own chore `done` — a chore needing no
+approval is theirs to close — and `done` is not a guarded status, so both
+amounts could be written in that same statement.
+
+**Measured, not argued.** `docs/audit/chore-award-amount-check.sql`, acting as
+a child on a replayed database with every migration applied, with the positive
+control passing first (ticking the chore `done` still works):
+
+    update … set points_awarded = 9999                        -> 1 row
+    update … set cash_awarded_cents = 500000                  -> 1 row
+    update … set status='done', both amounts                  -> 1 row
+    insert … carrying its own amounts                         -> 1 row
+    displayed points total afterwards                         -> 19,998
+
+The two columns differ in what they reach, and the difference is the point:
+
+* `points_awarded` — the SPENDABLE balance counts only `approved` rows
+  (`lib/rewards/points.ts` skips anything else) and a real approval overwrites
+  the column server-side, so this mints nothing spendable. It inflates every
+  DISPLAY that counts `done`: the kids page, the per-member standings in
+  `lib/chores/dashboard.ts`, the 30-day figure on the profile, and the chore
+  numbers fed to a model in `lib/ai/insights.ts`.
+* `cash_awarded_cents` — read by a PAYOUT. `payChoreRewardAction` credits a
+  child's wallet with `assignment.cash_awarded_cents ?? chore.cash_cents`. That
+  action is manager-gated and idempotent per assignment, and the chores board
+  hides its Pay button while the column is truthy
+  (`canPay = … && !a.cash_awarded_cents`), so the ordinary click path does not
+  currently pay a forged amount. **That is an accident of a condition written
+  for idempotency, not a boundary.** A number a child wrote is trusted by a
+  money path, and a server action is directly invocable; the day that display
+  rule changes, the mitigation is gone.
+
+`0305` extends `0223`'s own trigger in place rather than adding a second one, so
+there is one guard on this table and one place to read what it allows: the
+trusted server and family managers may set the amounts, a plain member may not.
+Ticking a chore `done` without touching them passes exactly as before, which the
+probe asserts as a positive control alongside a manager still being able to
+approve and award.
+
+Until this is applied, production carries the forgery as measured above.
