@@ -116,14 +116,27 @@ describe('the counts are bounded, and shrink', () => {
     // single control — the idea/bug buttons and the attachment uploader — onto
     // `labelledGroup`, which points a group at the caption already above it.
     //
+    // 29 after components/social/studio-form.tsx and
+    // app/(app)/dashboard/social/settings/page.tsx — same rule again, every name
+    // already in the catalogue.
+    //
+    // That pass also corrected the two group captions from the feedback board.
+    // A caption that names a SET of controls must not be a `<label>`: a label is
+    // for one control, and one with neither `htmlFor` nor a control inside it
+    // labels nothing at all. `aria-labelledby` accepts any element, so they are
+    // `<span>` now — which is what the worked example in
+    // components/guardian/rules-editor.tsx had been doing all along. The
+    // scanner was right to keep flagging them, and the arithmetic is what
+    // exposed it: eight sites wired, six flags cleared.
+    //
     // The bound is TIGHTENED with each conversion, deliberately: this assertion
-    // is `toBeLessThanOrEqual`, so leaving it at 45 would let the six just
+    // is `toBeLessThanOrEqual`, so leaving it high would let the ones just
     // fixed be undone without a single test going red. A ratchet that is not
     // re-tightened is a ceiling, not a ratchet.
     expect(
       found.length,
       `captions that name nothing:\n${found.map((f) => `${f.file}:${f.line}`).join('\n')}`,
-    ).toBeLessThanOrEqual(39);
+    ).toBeLessThanOrEqual(29);
   });
 
   it('selects with no accessible name', () => {

@@ -4705,3 +4705,46 @@ re-tightened after each conversion is a ceiling, not a ratchet.**
 **Status:** FIXED. **Verified:** **14,065 tests green under both `TZ=UTC` and
 `TZ=America/Los_Angeles`** (four shards each), tsc clean, eslint at 85, `npm run
 build` exits 0.
+
+---
+
+### [CLAUDE-1][MEDIUM][A11Y] Eight more captions wired — and the arithmetic caught a mistake in my own previous fix
+
+**Files:** `components/social/studio-form.tsx`,
+`app/(app)/dashboard/social/settings/page.tsx`,
+`app/(app)/feedback/feedback-board.tsx`,
+`tests/a-group-of-controls-needs-a-name.test.ts`
+
+**Done.** The same rule as the feedback board, applied to the next two clusters —
+every caption already exists in the catalogue, translated, so this is wiring and
+not copy. Seven onto `htmlFor`/`id` (draft title, caption body, link, schedule;
+default timezone, AI tone, signature) and one onto `labelledGroup` (the default
+platforms checkbox row).
+
+`app/(app)/dashboard/social/settings/page.tsx` is a **server** component, so it
+uses literal ids rather than `useId`. That is safe here and worth stating: the
+form renders once per page, so the ids are stable and unique.
+
+**The part worth recording is the arithmetic.** I wired 8 sites and the count
+moved 45 → 39 — **six**. Two did not clear, and the scanner was right both
+times: the two group captions I had written as `<label id={…}>`.
+
+**A `<label>` that labels nothing is not a label.** It is for exactly one form
+control; one with neither `htmlFor` nor a control inside it names nothing, and
+a caption over a SET of controls is not a label at all — `aria-labelledby`
+accepts any element. The worked example, `components/guardian/rules-editor.tsx`,
+had been using `<span>` for precisely this all along and I did not follow it.
+All three (two in the feedback board, one here) are `<span>` now.
+
+**So my previous commit's claim was one better than the truth, and the ratchet
+is what said so.** Had I trusted "8 wired = 8 fixed" and tightened the bound to
+37 by arithmetic rather than by measuring, the bound would have been wrong AND
+the two bad labels would have stayed. **Measure the count; do not compute it
+from what you think you changed.**
+
+**Bound re-tightened 39 → 29.** Selects unchanged at 67 — these clusters had
+none, so nothing to claim there.
+
+**Status:** FIXED. **Verified:** **14,065 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles`** (four shards each), tsc clean, eslint at 85, `npm run
+build` exits 0.

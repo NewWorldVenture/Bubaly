@@ -85,7 +85,9 @@ function ShareIdeaForm({ userId, onCreated }: { userId: string; onCreated: (idea
     <form onSubmit={submit} className="space-y-4">
       {/* Idea vs Bug — routes to the right list on the tracker + tunes the copy */}
       <div>
-        <label id={kindId} className={label}>{t('feedbackFeedbackBoard.whatAreYouSharing')}</label>
+        {/* A <span>, not a <label>: this names a PAIR of buttons, and a label
+            is for one control. `labelledGroup` points the group at it. */}
+        <span id={kindId} className={label}>{t('feedbackFeedbackBoard.whatAreYouSharing')}</span>
         <div {...labelledGroup(kindId)} className="grid grid-cols-2 gap-2">
           {(['idea', 'bug'] as FeedbackKind[]).map((k) => {
             const active = kind === k;
@@ -140,7 +142,7 @@ function ShareIdeaForm({ userId, onCreated }: { userId: string; onCreated: (idea
         </div>
       </div>
       <div>
-        <label id={attachmentId} className={label}>{t('feedbackFeedbackBoard.addAnImageOrFile')}</label>
+        <span id={attachmentId} className={label}>{t('feedbackFeedbackBoard.addAnImageOrFile')}</span>
         <div {...labelledGroup(attachmentId)}>
           <FeedbackAttachmentUpload value={imageUrl} onChange={setImageUrl} userId={userId} />
         </div>
