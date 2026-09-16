@@ -5068,3 +5068,117 @@ the 85 ratchet. One non-reproducing failure of `ai-prompt-injection` in the firs
 sweep is recorded in `audit/claude-1.md` rather than smoothed over: 23 subsequent
 clean runs, and ruled out on the diff's contents — 0319 touches only SQL and a
 migration-number comment, neither of which that test imports.
+
+## Q11 — MEDIUM: "fully accessible" was in the doc comment and in none of the markup
+
+**C2-03.** `components/ui/input.tsx`'s `Field` — the wrapper behind **1,066 call
+sites** — described itself as "fully accessible" and rendered three of its four
+affordances as pictures only. `hint` was a `<p>` nothing pointed at. `error` was a
+`<p role="alert">` with no `aria-invalid` on the control, so the message is
+announced once as it appears and tabbing back to the field tells you nothing is
+wrong. `required` was a red asterisk. Only `htmlFor`/`id` worked. **The seventh
+prose-as-code instance this sweep, and the widest.**
+
+One change rather than a thousand: `Field` hands the a11y props to the render
+prop as a typed second argument **and** wires them onto the returned control, so
+existing call sites are fixed without being edited — **1,041 of 1,066, 97.7%**.
+
+The allowlist is the point rather than an implementation detail: `wire()` clones
+only real controls, because 25 sites hand back a `<div>` of chips where
+`aria-describedby` announces nothing. Landing it there would make the fix *look*
+universal while doing nothing — this repository's characteristic defect. Those 25
+are enumerated by a test whose bound may only go down.
+
+`aria-required`, not the native `required`, deliberately: native `required`
+changes form SUBMISSION, and switching it on across a thousand fields that were
+only ever marked with an asterisk would start blocking submits that work today.
+Announcing the requirement is the a11y fix; enforcing it is a product decision
+per form.
+
+## Q12 — MEDIUM: a caption over a row of buttons names nothing, and the count was wrong first
+
+**C2-02.** Fifty-odd labels naming nothing and seventy unnamed selects, with one
+shape behind most of them: a caption over a ROW OF BUTTONS. `<label>` names a
+form control, by `htmlFor` or by containing it, and a group of buttons is
+neither. It is **also** the shape of the 25 `Field` sites Q11 cannot wire — one
+pattern behind three separately reported findings. `labelledGroup()` is the fix
+and needs **no new copy**: the caption already exists and is already translated.
+
+**The instrument is the finding here.** A first count with a regex returned 128
+unnamed selects against the parser's 70 — a 45% overcount — and flagged a file
+where the select is wrapped in a label and is correct. "Is this control named?"
+is a question about ANCESTRY. So the scanner is built on the TypeScript parser,
+and **the scanner is tested against fixtures before either count is asserted**.
+`guardian/rules-editor.tsx` is converted end to end as the worked example, 52 → 45.
+
+The 70 selects are not fixed in bulk, and the obvious shortcut is written down
+because it is wrong: a placeholder option is a VALUE, not a name, and labelling a
+control "Whole family" or "All customers" is worse than leaving it unnamed.
+
+## Q13 — the ninth collision was not a number
+
+main landed **seven migrations at once** (0304–0310), colliding with this
+branch's entire block. Renumbering to 0320–0326 was the easy half. Two findings
+came out of the rest:
+
+**A SYMBOL collision, invisible to the migration ledger.** This branch's chores
+migration and main's 0305 both created `chore_assignment_decision_guard()` and
+its trigger; whichever ran last silently replaced the other. The ledger tracks
+FILE NAMES, so renumbering resolves the filename clash and leaves the function
+clash untouched. **Renumbering is not reconciling**, and nothing in the harness
+was looking for it — the probes were, which is how it surfaced.
+
+**A product disagreement, and main was right.** This branch made chore writes
+manager-only outright; main's 0307 guards the PRICE COLUMNS and asserts as a
+positive control that a member may still add a chore. The module offers Add to
+every member — this branch had narrowed past what the screen renders, **the exact
+rule it had applied to `driving_trips` a day earlier**. Withdrawn. What survives
+is the shape of the refusal: main's guard arrived as a bare `return;`.
+
+The opposite case appeared too: main's economy probe asserted as a positive
+control the very thing 0320 forbids (a child naming their own price). That guard
+stays; the fixture now names a real reward and says why.
+
+Reading main's approach also exposed a latent defect here: **0316 and 0319's
+sweeps did not filter `polpermissive`**, so a restrictive guard from main would
+have made them refuse to apply over somebody else's tightening. Earlier
+migrations filter correctly — the rule was known and then stopped being applied.
+
+## Q14 — HIGH: the weekly briefing's "today" was UTC's today
+
+Found by sweeping the tracked host-midnight sites, and it is the guard for that
+class that could not see it. `lib/ai/weekly.ts` built its window from
+`Date.UTC(now.getUTCFullYear(), …)` and bucketed events by
+`starts_at.slice(0, 10)`. So a family in Los Angeles asking for the week ahead
+**at 6pm was told today is tomorrow** — the look-ahead opened a day late on
+exactly the evening somebody plans — and **every evening commitment in the
+Americas appeared on the wrong day**.
+
+`tests/server-midnight-is-not-the-familys-midnight.test.ts` matches
+`setHours(0,0,0,0)`. This is the same defect spelled `toISOString().slice(0,10)`,
+and the module's own header said "all dates are handled in UTC day-keys". **A
+guard that checks one spelling of a defect with two passes while the thing it is
+named for goes on happening.** The ratchet now sees both, with ten tracked sites.
+
+`tz` is required rather than defaulted, because a default is how it was invisible.
+A third shape — `Date.UTC(d.getUTCFullYear(), …)`, sixteen sites — was examined
+and deliberately NOT tracked: `journal/prompts.ts` and `school/timetable.ts` want
+a stable index every member agrees on and are correct, so a ratchet there would
+put correct code on a defect list.
+
+**And the measurement was wrong first, in the way this pass had just written up.**
+A regex over the named form returned 28 sites; the first three checked were false
+positives — a Zod field named `at`, and two line numbers computed against
+comment-stripped source and reported against the original. Having argued two
+commits earlier that an unsound scan is worse than none, the same reach happened
+again. Only the shape that needs no dataflow is tracked.
+
+## Verification (Q9–Q14)
+
+- **CI green on `1c50fa73`, all four jobs including E2E** — which is what
+  validates the lightbox across 226 dialog call sites, the `Field` change across
+  1,066 forms, and the reconciled 338-migration chain with main's restrictive
+  guards interleaved.
+- 338 migrations replayed from scratch (0 failed), 335 re-applied, **46/46 probes
+  run twice**, **14,024 tests green under both `TZ=UTC` and
+  `TZ=America/Los_Angeles`**, tsc clean, eslint at 85, `npm run build` exits 0.
