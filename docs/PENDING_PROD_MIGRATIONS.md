@@ -514,10 +514,11 @@ passed; production application of the atomic `0240-0254` release remains pending
 ## Migrations added since this document's stated baseline (2026-09-12)
 
 The status line at the top of this file is dated **2026-09-05** against main
-`01881fb2`. **49** migration files have landed since, `0255` through
-`0306`, and none of them appear anywhere above. (This read "thirty-one, `0255`
+`01881fb2`. **50** migration files have landed since, `0255` through
+`0307`, and none of them appear anywhere above. (This read "thirty-one, `0255`
 through `0285`" until 2026-09-13, "seventy-one, `0255` through `0295`" until
-2026-09-15, and "forty-five, `0255` through `0302`" and "46, `0255` through `0303`" until 2026-09-16; the range
+2026-09-15, and "forty-five, `0255` through `0302`", "46, `0255` through `0303`"
+and "49, `0255` through `0306`" until 2026-09-16; the range
 keeps growing past the sentence. The count is the number
 of files in that range, which is what `ls supabase/migrations` reports — the
 earlier "seventy-one" did not match its own stated range.)
@@ -996,3 +997,47 @@ through — asserted as a positive control, alongside a manager still being able
 to set an allowance.
 
 Until this is applied, production carries both as measured above.
+
+### `0307` guards the chore's own price, which `0305` did not reach — unapplied
+
+`0305` closed `chore_assignments.cash_awarded_cents`, the override a manager
+writes at approval. The payout reads that column with a fallback:
+
+```
+app/(app)/wallet/actions.ts:206
+  const amount = assignment.cash_awarded_cents ?? chore?.cash_cents ?? 0;
+```
+
+An ordinary chore carries no override, so the number a parent's Pay click
+credits is `chores.cash_cents` — and `chores` has four permissive policies whose
+entire condition is `is_family_member(family_id)`.
+
+This is worse than the column `0305` fixed, not the same. There, the chores
+board's `canPay = … && !a.cash_awarded_cents` happened to hide the Pay button
+once the column was set, so the ordinary click path did not pay a forged amount.
+Here the button's condition is
+`manager && done && (a.chore?.cash_cents ?? 0) > 0 && !a.cash_awarded_cents`
+(`components/modules/chores-module.tsx:554`) — exactly the state a child can
+manufacture: create the chore, price it, assign it to yourself, tick it done.
+The parent is then shown "Pay $5,000.00" on a chore their child wrote and
+priced. No accident stands in the way this time; this is the happy path.
+
+Measured, acting as a child with both positive controls passing: the child
+**created a chore paying 500,000 cents**, **raised a manager's chore from 500 to
+500,000**, set its cash range, and **re-priced it in points**. Five breaches,
+`docs/audit/chore-price-check.sql`.
+
+Cash is manager-only to set or change; points are guarded on CHANGE only, so a
+member may still create a chore carrying points — that is the assistant path
+(`lib/services/tasks/index.ts` inserts `points: input.points ?? 10` through the
+calling user's client), and a guard on INSERT would have closed a working
+feature rather than a hole. Points reach a balance only through an approval a
+manager makes with the number in front of them, and `0305` already owns
+`points_awarded`.
+
+Shipped alongside it, and live independently of the ledger: `createChoreAction`
+— whose own comment reads "Parent creates a chore" — carried no manager check,
+unlike the two actions beside it in the same file. It now refuses a submission
+that carries pricing from a non-manager.
+
+Until this is applied, production carries the forgery as measured above.
