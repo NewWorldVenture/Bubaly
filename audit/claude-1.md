@@ -4588,3 +4588,78 @@ sentence again on a different list.
 **Status:** FIXED (instrument). **Verified:** **14,065 tests green under both
 `TZ=UTC` and `TZ=America/Los_Angeles`**, tsc clean, eslint at 85, `npm run
 build` exits 0.
+
+---
+
+### [CLAUDE-1][INSTRUMENT] Generalising Q21: a systematic sweep that found nothing, and a refactor I started and backed out
+
+**Files:** `tests/a-zone-aware-helper-called-without-the-zone.test.ts`,
+`lib/home/home-brief.ts`, `lib/marketing/handled-sample.ts`
+
+**The sweep.** Q21's guard named three helpers because those are the three I had
+read. That is not a basis. I swept **every exported function in `app/` and
+`lib/`** with the TypeScript parser for a parameter named `tz`/`timezone`/`zone`
+that is optional or defaulted. **Six** came back:
+
+| helper | zone parameter |
+|---|---|
+| `classifyVoiceCommand` | optional (already guarded) |
+| `classifyAssistantUtterance` | optional |
+| `buildFirstBrief` | `= 'UTC'` |
+| `captureSpeech` | `= 'UTC'` |
+| `demoBriefEvents` | `= 'UTC'` |
+| `parseIcsDate` | `floatingTimezone`, a different concept (ICS floating time) |
+
+**Every current caller of every one of them passes the zone.** Checked
+individually, including the indirect ones — `buildHomeBrief` → `buildFirstBrief`
+(the home dashboard passes `timezone: tz`), and all seven `buildFirstBrief`
+sites. **Q21 was the only instance of its class.** A negative result from a
+systematic sweep is worth recording precisely because it bounds the problem.
+
+**Worth naming:** defaulting to `'UTC'` is in one way **worse** than defaulting
+to the host. The host is at least sometimes the family; a hardcoded `'UTC'` is
+wrong for every household outside it, silently and permanently.
+
+**What I started, and backed out.** I made those three zone parameters
+**required** and let `tsc` enumerate the fallout — one production caller
+(`lib/marketing/handled-sample.ts`, marketing fiction with no family, where UTC
+is genuinely right) and twelve test files. Then I read the tests, and two of
+them exist **specifically to pin the default**:
+
+- `tests/first-brief-week-window.test.ts` — *"retains explicit UTC default"*
+- `tests/onboarding-ics.test.ts` — *"keeps the original UTC schedule and payload
+  exactly when timezone is omitted"*
+- `tests/first-brief-callers-timezone.test.ts` — `const { timezone, ...legacy }`
+
+**Deleting a deliberate, tested contract in order to fix zero defects is not a
+trade worth making.** All three reverted. I had also changed
+`home-brief.ts`'s `timezone?` to required on the reasoning that its comment
+("legacy callers default to UTC") described callers that do not exist — true of
+*production* callers, and still wrong, because the same file's test pins the
+omitted case. Reverted too, for consistency with the three I had just backed
+out.
+
+**What survives, because it was the actually-true part:**
+
+1. `home-brief.ts`'s comment, corrected to say what is so — the optionality is a
+   deliberate tested contract, **no production caller omits it**, and the risk is
+   the *next* server-side caller, which the guard covers.
+2. `lib/marketing/handled-sample.ts` now passes `'UTC'` **explicitly**, with the
+   reason. Same value, but a decision instead of an accident.
+3. The guard covers all six, so a future server-reachable caller that drops the
+   zone fails.
+
+**A limit of the guard, stated rather than hidden:** it checks call **arity**,
+not whether the argument is defined. `buildHomeBrief({ timezone: input.timezone })`
+where that property is optional satisfies it and can still be `undefined` at
+runtime. Arity is what a parser can settle; the rest needs types, and
+`home-brief.ts` now says so at the field.
+
+**Non-vacuity of the extension**, against the real tree: dropping the zone at
+`app/onboarding/actions.ts:160` makes the guard print
+`app/onboarding/actions.ts:160 — buildFirstBrief() got 3 args; pass the family
+timezone as the fourth argument (it defaults to 'UTC')`.
+
+**Status:** guard extended; **no product defect found or introduced**.
+**Verified:** **14,065 tests green under both zones**, tsc clean, eslint at 85,
+`npm run build` exits 0.

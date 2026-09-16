@@ -24,6 +24,13 @@ import { describe, expect, it } from 'vitest';
  * It was found by reading code, not by a guard — which is the point of adding
  * this one. A defect class that two instruments are blind to will come back.
  *
+ * What this guard CANNOT see, stated so nobody mistakes it for proof: it
+ * checks call ARITY, not whether the value passed is defined. A call site that
+ * passes `input.timezone` where that property is optional satisfies this guard
+ * and can still be `undefined` at runtime. Arity is the part a parser can
+ * settle; the rest needs types, and `lib/home/home-brief.ts` says so at the
+ * field itself.
+ *
  * Scope is deliberately narrow: SERVER-reachable modules only. In a browser
  * these same helpers are correct with no zone, because there `new Date()` is
  * the person's own clock and "tomorrow at 6pm" means 6pm where they are
@@ -36,6 +43,29 @@ const ZONE_AWARE: { name: string; zoneArgIndex: number; how: string }[] = [
   { name: 'parseEvent', zoneArgIndex: 2, how: "pass `{ utc: true }` with a UTC-anchored clock (see withDates in lib/voice/command-router.ts)" },
   { name: 'parseDueDate', zoneArgIndex: 2, how: "pass `{ utc: true }` with a UTC-anchored clock" },
   { name: 'classifyVoiceCommand', zoneArgIndex: 2, how: 'pass the family timezone as the third argument' },
+  // ── The ones that DEFAULT to 'UTC' rather than to the host ────────────────
+  //
+  // Found by sweeping every exported function in app/ and lib/ for a parameter
+  // named tz/timezone/zone that is optional or defaulted. Six came back, and
+  // every current caller of every one of them passes the zone — so this half of
+  // the list fixes nothing today and exists only to keep it that way.
+  //
+  // Their defaults are NOT removed, and that is deliberate. Each is a contract
+  // someone wrote on purpose and pinned with a test — "retains explicit UTC
+  // default" (tests/first-brief-week-window.test.ts), "keeps the original UTC
+  // schedule and payload exactly when timezone is omitted"
+  // (tests/onboarding-ics.test.ts), and the `const { timezone, ...legacy }`
+  // assertion in tests/first-brief-callers-timezone.test.ts. Deleting a
+  // deliberate, tested contract in order to fix zero defects is not a trade
+  // worth making; guarding the call sites is.
+  //
+  // Defaulting to 'UTC' is in one way WORSE than defaulting to the host: the
+  // host is at least sometimes the family, whereas a hardcoded UTC is wrong for
+  // every household outside it, silently and permanently.
+  { name: 'buildFirstBrief', zoneArgIndex: 3, how: "pass the family timezone as the fourth argument (it defaults to 'UTC')" },
+  { name: 'captureSpeech', zoneArgIndex: 1, how: "pass the family timezone as the second argument (it defaults to 'UTC')" },
+  { name: 'demoBriefEvents', zoneArgIndex: 1, how: "pass the family timezone as the second argument (it defaults to 'UTC')" },
+  { name: 'classifyAssistantUtterance', zoneArgIndex: 2, how: 'pass the family timezone as the third argument' },
 ];
 
 const ROOTS = ['app', 'lib'];
