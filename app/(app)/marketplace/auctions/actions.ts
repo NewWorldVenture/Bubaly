@@ -12,15 +12,15 @@ import { createServer } from '@/lib/supabase/server';
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
 const BID_REASON: Record<string, string> = {
-  unauthorized: 'You can’t place a bid for this account.',
+  unauthorized: 'actions.youCanTPlaceA',
   invalid_amount: 'actions.enterAValidBidAmount',
-  not_found: 'That listing no longer exists.',
-  not_auction: 'This listing isn’t an auction.',
-  not_available: 'Bidding has closed on this listing.',
+  not_found: 'actions.thatListingNoLongerExists',
+  not_auction: 'actions.thisListingIsnTAn',
+  not_available: 'actions.biddingHasClosedOnThis',
   ended: 'actions.thisAuctionHasEnded',
   not_started: 'actions.thisAuctionHasnTStarted',
-  own_listing: 'You can’t bid on your own family’s listing.',
-  too_low: 'Your bid is below the minimum — raise it and try again.',
+  own_listing: 'actions.youCanTBidOn',
+  too_low: 'actions.yourBidIsBelowThe',
 };
 
 /**

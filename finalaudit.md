@@ -6058,3 +6058,36 @@ the billing schema.
 Two scarier readings were checked and dropped when the audit filed this, and
 they stay dropped: the secret fallback is **documented** in three places, not an
 oversight, and the endpoints do **not** collide in the intended configuration.
+
+**C1-S4-03 — FIXED, and three times larger than it was filed.** `COMPLETE_REASON`
+mapped refusal reasons to a mix of catalogue keys and literal English, and every
+value was passed through `t()`. `translate()` falls back to the key when it
+resolves nothing, so an English sentence used as a key renders *as itself* —
+correct-looking in en-US and untranslated in the other ten locales. That is the
+failure mode that hides: a key rendering as readable English is far harder to
+notice than one rendering as `siteFooter.acceptableUse`.
+
+The finding named one file. The guard it asked for — *"assert every value in a
+table consumed by `t()` resolves in en-US… that guard generalises past this
+file"* — found **three**: `COMPLETE_REASON` (8), `BID_REASON` (6) and
+`OFFER_REASON`/`RESPOND_REASON` (19). Twenty-eight English sentences reaching
+families in France, Germany, Italy, the Netherlands, Portugal, Spain and Mexico
+through the key path, on the marketplace's money-adjacent refusals.
+
+All 28 are lifted into the catalogue and translated into the six base languages
+(the four regional variants are empty by design and fall back). Keys were
+generated with the repository's own convention — first five word-tokens,
+camelCased, apostrophes splitting words — verified by regenerating existing keys
+and checking they matched, rather than invented. One collision
+(`actions.thisListingIsNoLonger` already holds *"no longer open"*, not *"no
+longer available"*) took a six-token key; one string already existed under
+`actions.thatListingNoLongerExists` and was reused rather than duplicated.
+
+**Two things the tooling did that needed watching.** `scripts/i18n-apply.mjs`
+re-sorts with `localeCompare`, while the catalogues are stored in codepoint
+order — so a run churns ~1,000 lines per file that have nothing to do with the
+change. Re-sorted back, leaving a diff of exactly +28 lines per catalogue and
+nothing else. Verified key-by-key across all six languages: **28 added, 0
+changed, 0 removed**. The disagreement between the script and the stored order
+belongs to whoever owns the tool; silently shipping a thousand-line reformat
+inside a translation fix does not.

@@ -19,15 +19,26 @@ function actionFailure<T = undefined>(operation: string, message: string, error:
   return { ok: false, error: describeActionError(error, message) };
 }
 
+/**
+ * Refusal reasons → catalogue KEYS. Every value here is passed to `t()`.
+ *
+ * Eight of these were English sentences, and `translate()` falls back to the
+ * key when it resolves nothing — so a sentence passed as a key renders as
+ * itself. It looked correct in en-US and was untranslated in the other ten
+ * locales, which is the failure mode that hides: a key that renders as readable
+ * English is far harder to notice than one that renders as
+ * `siteFooter.acceptableUse`. Nine refusal messages on a money-adjacent flow,
+ * in English, inside an otherwise fully localised screen. Audit C1-S4-03.
+ */
 const COMPLETE_REASON: Record<string, string> = {
-  unauthenticated: 'Please sign in to complete the pickup.',
-  invalid_request: 'Enter a valid hand-off code.',
+  unauthenticated: 'actions.pleaseSignInToComplete',
+  invalid_request: 'actions.enterAValidHandOff',
   order_not_found: 'actions.orderNotFound',
-  forbidden: 'You are not part of this marketplace exchange.',
-  order_not_open: 'This order is already closed.',
-  handoff_not_found: 'This pickup could not be found.',
-  handoff_not_ready: 'This pickup is not ready to complete.',
-  code_mismatch: 'That code doesn’t match. Check with the other person.',
+  forbidden: 'actions.youAreNotPartOf',
+  order_not_open: 'actions.thisOrderIsAlreadyClosed',
+  handoff_not_found: 'actions.thisPickupCouldNotBe',
+  handoff_not_ready: 'actions.thisPickupIsNotReady',
+  code_mismatch: 'actions.thatCodeDoesnTMatch',
 };
 
 async function loadOrderRole(orderId: string) {
