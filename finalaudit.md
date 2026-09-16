@@ -6730,3 +6730,84 @@ UPDATE/ALL policy outside `service_role` may write `with check (true)`, because
 "filling in the blank" with the permissive identity is a real way to switch
 twenty tables' implicit checks off. The two `service_role` policies that do
 (`support_tickets`, `admin_users`) are exempt — that role bypasses RLS regardless.
+
+
+## C1-S6-09 [HIGH][SECURITY] — anyone in the family can rewrite anyone's review
+
+**File:** `supabase/migrations/0154_marketplace_ownership.sql` (the three UPDATE
+policies) · `app/(app)/marketplace/item/[id]/page.tsx:82`,
+`creators/[id]/page.tsx:54`, `creators/page.tsx:29`, `store/page.tsx:35` (what
+reads the rating)
+**Status:** FIXED — `supabase/migrations/0307_a_review_belongs_to_whoever_wrote_it.sql`
+
+### Problem
+
+Fixing C1-S6-08 raised the obvious question — is that the only pair? — and a
+census of tables whose INSERT policy pins an authorship column while their UPDATE
+policy does not answered no. Three more, and on these the UPDATE policy does not
+restrict to the row's owner **at all**:
+
+```
+marketplace_reviews_update   using/with check (is_family_member(family_id))
+marketplace_saves_update     using/with check (is_family_member(family_id))
+marketplace_follows_update   using/with check (is_family_member(family_id))
+```
+
+against INSERT policies the same migration wrote as
+`reviewer_member = marketplace_member_id(family_id)` and
+`member_id = marketplace_member_id(family_id)`. The identity `0154` refuses to
+let you forge on the way in is rewritable the moment the row exists.
+
+### Evidence
+
+Measured on the replayed schema, as the member a review was **about**:
+
+```
+ERROR:  0307: the SUBJECT of a review rewrote its rating (1 row(s))
+```
+
+### Impact
+
+`rating` is aggregated by `reviewee_member` on four screens — the seller's
+average beside a listing, the reviews on a creator profile, every rating on the
+creators index, and your own on the store page. Any member of the family could
+turn another member's one-star review of them into five stars, or point
+`reviewee_member` at somebody else so the bad rating lands on a different person.
+That is C1-S6-08's forgery one table over, and worse: there the attacker had to
+be a party to the row.
+
+### Nothing in the tree updates any of the three
+
+Not a client, not a server action, not an RPC, not the crons. The only write to
+`marketplace_reviews` is `leaveReviewAction`'s insert
+(`app/(app)/marketplace/actions.ts:175`); saves and follows are inserted and
+deleted only. These policies granted a capability no feature uses.
+
+They are **scoped to the owner rather than dropped**. "Edit your own review" is a
+plausible thing this product will want, the policies were evidently meant to say
+that already, and a policy that matches its intent is easier to reason about
+later than an absence someone has to reconstruct. `0307` adds
+`reviewer_member = marketplace_member_id(family_id)` (resp. `member_id`) to both
+clauses and makes the surrounding columns immutable, so the author may revise
+their rating and comment and may not move the review to a different subject.
+
+### The helper that guards the guard
+
+`0306` wrote a trigger function branching on `tg_table_name` with an `else`.
+Adding a third, fourth and fifth table to that shape means editing the function
+each time and an `else` that silently handles the wrong table, so `0307` replaces
+it with `columns_are_immutable()`, which takes its column list from the trigger
+definition, and re-points `0306`'s two triggers at it — same behaviour, stated
+per table where the trigger is attached.
+
+That generality introduces its own failure mode, and it is the one this audit
+exists to find: a **typo'd column name** would compare `NULL` to `NULL` on every
+row and report the boundary as held while guarding nothing. The helper raises
+instead, and the probe measures it by attaching a trigger on `'sellar_member'`
+and requiring the update to fail with that message — a guard planted inside the
+fix for guards that cannot fail.
+
+Three assertions proved red independently: restoring the family-wide policy (the
+subject rewrites the rating), dropping only the reviews trigger (the author
+re-points their own review), and loosening only follows. **28/28 probes pass**
+against a full 320-migration replay, and CI replays them.

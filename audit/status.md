@@ -167,6 +167,16 @@ PRIOR SESSIONS (unchanged, see history below): F-020 migration idempotency;
     Also added the 0304/0305/0306 rows docs/PENDING_PROD_MIGRATIONS.md was
     missing — those migrations are worth nothing until an operator applies them
     and the document is the operator's list.
+    Censusing for C1-S6-08's shape found three more tables (C1-S6-09):
+    marketplace_reviews/saves/follows pin authorship on INSERT and left an UPDATE
+    policy of `is_family_member(family_id)` on both clauses — not scoped to the
+    author at all, so the member a review was ABOUT could rewrite its rating, and
+    `rating` is aggregated by `reviewee_member` on four screens. 0307 scopes them
+    to the owner (nothing in the tree updates any of the three, so nothing is
+    lost) and replaces 0306's table-branching trigger with a generic
+    columns_are_immutable() that raises on a column that does not exist — the
+    probe measures that typo guard, because a misspelled column would compare
+    NULL to NULL and guard nothing.
 NEXT: C2-M03 is the largest open finding — ~251 en-US-pinned date/time call
   sites across ~135 files against an 11-locale catalogue. The trap is recorded
   in Pass P: dayKey() uses 'en-US' as a PARSE locale and must not be switched.

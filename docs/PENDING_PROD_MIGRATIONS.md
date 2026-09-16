@@ -876,3 +876,19 @@ because their value is zero until they are applied:
   alone or runs as `SECURITY DEFINER` / the service role.
   `docs/audit/marketplace-ownership-update-check.sql` asserts both refusals and
   both permitted writes. Audit C1-S6-08.
+
+- **`0307_a_review_belongs_to_whoever_wrote_it.sql`** — scopes the
+  `marketplace_reviews` / `marketplace_saves` / `marketplace_follows` UPDATE
+  policies to the row's owner, and makes the columns around the authorship
+  column immutable. `0154` pinned `reviewer_member` (resp. `member_id`) on INSERT
+  so a trust score could not be forged, and left an UPDATE policy of
+  `is_family_member(family_id)` on both clauses — not scoped to the author at
+  all. Measured: the member a review was *about* rewrote its rating, and `rating`
+  is aggregated by `reviewee_member` on four screens. Nothing in the tree updates
+  any of the three tables, so no behaviour is lost; the policies are scoped
+  rather than dropped because "edit your own review" is what they evidently meant
+  to say. Also replaces `0306`'s table-branching trigger function with
+  `columns_are_immutable()`, which takes its column list from the trigger
+  definition and raises on a column that does not exist rather than silently
+  guarding nothing. `docs/audit/marketplace-review-authorship-check.sql` asserts
+  all of it, including that typo guard. Audit C1-S6-09.

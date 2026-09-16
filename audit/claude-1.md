@@ -1790,3 +1790,47 @@ Fix:      No change. A ratchet instead: no permissive UPDATE/ALL policy outside
 Status:   VERIFIED — no defect; the ratchet is in
           docs/audit/marketplace-ownership-update-check.sql.
 ```
+
+```
+[CLAUDE-1][HIGH][SECURITY] anyone in the family can rewrite anyone's marketplace review
+File:     supabase/migrations/0154_marketplace_ownership.sql (3 UPDATE policies)
+          app/(app)/marketplace/item/[id]/page.tsx:82   (avg rating for a seller)
+          app/(app)/marketplace/creators/[id]/page.tsx:54
+          app/(app)/marketplace/creators/page.tsx:29
+          app/(app)/marketplace/store/page.tsx:35
+Problem:  Censusing for C1-S6-08's shape — authorship pinned on INSERT, editable
+          on UPDATE — found three more tables, and on these the UPDATE policy is
+          not scoped to the row's owner at all:
+            marketplace_reviews_update  using/with check is_family_member(family_id)
+            marketplace_saves_update    "
+            marketplace_follows_update  "
+          against INSERT policies 0154 wrote as
+          `reviewer_member = marketplace_member_id(family_id)` and
+          `member_id = marketplace_member_id(family_id)`.
+Evidence: Replayed schema, as the member the review was ABOUT:
+            ERROR: 0307: the SUBJECT of a review rewrote its rating (1 row(s))
+Impact:   `rating` is aggregated by `reviewee_member` on four screens. Any member
+          could turn another member's one-star review of them into five stars, or
+          re-point `reviewee_member` so the bad rating lands on someone else.
+          C1-S6-08 needed the attacker to be a party to the row; this does not.
+Fix:      0307_a_review_belongs_to_whoever_wrote_it.sql. Scoped to the owner
+          rather than dropped — nothing in the tree updates any of the three
+          (leaveReviewAction only inserts; saves and follows are insert/delete
+          only), but "edit your own review" is plausible product behaviour and
+          the policies evidently meant to say it. The surrounding columns are
+          made immutable so an author may revise their rating and comment and may
+          not move the review to a different subject.
+          0306's table-branching trigger function is replaced by
+          columns_are_immutable(), which takes its column list from the trigger
+          definition; 0306's two triggers are re-pointed at it. That generality
+          has its own failure mode — a typo'd column name compares NULL to NULL
+          and guards nothing — so the helper raises on a column that does not
+          exist, and the probe measures THAT by attaching a trigger on
+          'sellar_member'. A guard planted inside the fix for guards that cannot
+          fail.
+          Three assertions proved red independently: the family-wide policy
+          restored, the reviews trigger dropped alone, follows loosened alone.
+          28/28 probes pass against a full 320-migration replay.
+Status:   FIXED — inert until an operator applies 0307
+          (docs/PENDING_PROD_MIGRATIONS.md).
+```
