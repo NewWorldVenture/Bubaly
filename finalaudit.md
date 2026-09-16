@@ -6091,3 +6091,65 @@ nothing else. Verified key-by-key across all six languages: **28 added, 0
 changed, 0 removed**. The disagreement between the script and the stored order
 belongs to whoever owns the tool; silently shipping a thousand-line reformat
 inside a translation fix does not.
+
+# Pass S — the deleted file that wasn't, five more times
+
+`C4-S4-09` was filed against one file. Fixing it raised the obvious question —
+*is this the only one?* — and the answer was no. A census of every storage
+removal in `app/`, `lib/` and `components/` found **five family-facing delete
+paths with the same defect** and **two admin paths that already did it right**.
+
+## C1-S6-01 [MEDIUM][PRIVACY] — five delete paths discarded the storage result and said "deleted"
+
+| path | what it deletes |
+|---|---|
+| `components/modules/files-hub-module.tsx` | family documents |
+| `components/modules/documents-module.tsx` | family documents |
+| `components/modules/tax-vault-module.tsx` | **tax documents** |
+| `components/modules/trip-memories-module.tsx` | trip photos |
+| `components/modules/photos-module.tsx` | family photos |
+
+Each awaited the removal bare, deleted the row regardless, and reported success.
+The ordering is what makes this a privacy defect rather than an accounting one:
+with the row gone, a surviving object is **invisible** — nothing in the product
+references it, so the family cannot see it, open it, or try again — while the
+screen says it is gone. A tax document, a warranty, a passport scan is
+plausibly being deleted *because* of what it contains.
+
+**The repository already knew the answer, twice, on the admin side.**
+`adminDeleteDocumentAction` removes the object first and refuses the row delete
+when that fails. The marketing-asset action takes the other sound route: it
+soft-deletes the row first and **rolls it back** when storage refuses. Both are
+correct; the family-facing modules had simply drifted from them. The four
+document-like modules now match the first model.
+
+**`photos-module.tsx` is the interesting one, and its ordering is left alone.**
+It deletes the row first *on purpose*, with a comment explaining that a failed
+row delete must not orphan a library row pointing at a removed image. That
+reasoning is sound, and reversing a documented decision unasked is not an
+auditor's call. What it could not justify is discarding the result and saying
+"Photo deleted" either way. Its row really is gone by then, so it cannot refuse
+— it now stops claiming, and says what is actually true.
+
+For the record, since it is a real trade-off rather than a bug: object-first
+risks a row without its object (a broken tile — visible, retryable), row-first
+risks an object without its row (invisible, unretryable). The second is worse,
+and a soft delete with a rollback avoids both. That is a recommendation for
+whoever owns the photo library, not a change made here.
+
+Two genuine rollbacks — `home-module`'s upload and `messages-module`'s — now
+name a failed cleanup in a log instead of swallowing it. Lower stakes (the row
+never landed, and the user is already being told it failed), same one-line
+treatment.
+
+`tests/a-deleted-file-is-really-deleted.test.ts` covers all seven paths,
+**including the two admin models**, so it notices if the reference
+implementations themselves drift. Four of its thirteen assertions were proved
+red by restoring the bare await in the tax vault, re-discarding the photos
+error, and deleting the marketing rollback.
+
+**The C4-S5-01 ratchet caught me while I was writing it.** My first draft
+asserted `toContain('toastError')` — the bare-identifier form the meta-guard
+exists to forbid — and the full suite failed on my own new file. It is the
+cheapest possible demonstration that the guard from round 5 is load-bearing:
+it fired on the person who installed it, within an hour.

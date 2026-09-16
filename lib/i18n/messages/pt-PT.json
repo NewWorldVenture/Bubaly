@@ -9140,6 +9140,7 @@
   "photosModule.skippedFile": "{count} ficheiro ignorado — excede o limite de {limit}.",
   "photosModule.skippedFiles": "{count} ficheiros ignorados — excedem o limite de {limit}.",
   "photosModule.summer2025EmmaSBirthday": "Verão de 2025, o aniversário da Emma…",
+  "photosModule.theFileCouldNotBe": "Não foi possível remover o ficheiro do armazenamento. A fotografia já não está na sua biblioteca — tente eliminá-la novamente.",
   "photosModule.theFileUploadedButIts": "O ficheiro foi carregado, mas o seu registo na biblioteca não pôde ser guardado.",
   "photosModule.theUploadedFileCouldNot": "Não foi possível limpar o ficheiro carregado.",
   "photosModule.todayAt": "Hoje, {time}",

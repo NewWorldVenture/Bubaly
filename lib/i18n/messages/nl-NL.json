@@ -9140,6 +9140,7 @@
   "photosModule.skippedFile": "{count} bestand overgeslagen — groter dan de limiet van {limit}.",
   "photosModule.skippedFiles": "{count} bestanden overgeslagen — groter dan de limiet van {limit}.",
   "photosModule.summer2025EmmaSBirthday": "Zomer 2025, Emma’s verjaardag…",
+  "photosModule.theFileCouldNotBe": "Het bestand kon niet uit de opslag worden verwijderd. De foto is uit je bibliotheek verdwenen — probeer hem opnieuw te verwijderen.",
   "photosModule.theFileUploadedButIts": "Het bestand is geüpload, maar het bibliotheekrecord kon niet worden opgeslagen.",
   "photosModule.theUploadedFileCouldNot": "Het geüploade bestand kon niet worden opgeruimd.",
   "photosModule.todayAt": "Vandaag, {time}",

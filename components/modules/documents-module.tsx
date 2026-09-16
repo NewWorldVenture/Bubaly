@@ -249,7 +249,14 @@ export function DocumentsModule() {
   async function remove(doc: Document) {
     setConfirmDoc(null);
     const sb = createClient();
-    if (doc.storage_path) await removeFamilyDocument(sb, doc.storage_path);
+    // The object goes first and its result is READ: deleting the row first
+    // makes a surviving file INVISIBLE — nothing references it, so nobody can
+    // see it, open it or try again — while the screen says it is gone. Audit
+    // C1-S6-01; the same shape adminDeleteDocumentAction already uses.
+    if (doc.storage_path) {
+      const { error: storageError } = await removeFamilyDocument(sb, doc.storage_path);
+      if (storageError) return toastError(storageError);
+    }
     const { error: err } = await sb.from('documents').delete().eq('id', doc.id);
     if (err) { toastError(describeDbError(err)); return; }
     success(tr('documentsModule.fileDeleted')); refresh();

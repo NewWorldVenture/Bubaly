@@ -99,7 +99,14 @@ export function TripMemoriesModule() {
   async function remove(m: Memory) {
     if (!confirm(t('tripMemoriesModule.deleteThisMemory'))) return;
     const supabase = createClient();
-    if (m.photo_path) await removeFamilyDocument(supabase, m.photo_path);
+    // The object goes first and its result is READ: deleting the row first
+    // makes a surviving file INVISIBLE — nothing references it, so nobody can
+    // see it, open it or try again — while the screen says it is gone. Audit
+    // C1-S6-01; the same shape adminDeleteDocumentAction already uses.
+    if (m.photo_path) {
+      const { error: storageError } = await removeFamilyDocument(supabase, m.photo_path);
+      if (storageError) return toastError(storageError);
+    }
     const { error } = await supabase.from('trip_memories').delete().eq('id', m.id);
     if (error) toastError(describeDbError(error)); else success(t('tripMemoriesModule.deleted'));
   }

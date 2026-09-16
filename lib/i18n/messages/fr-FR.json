@@ -9140,6 +9140,7 @@
   "photosModule.skippedFile": "{count} fichier ignoré — dépasse la limite de {limit}.",
   "photosModule.skippedFiles": "{count} fichiers ignorés — dépassent la limite de {limit}.",
   "photosModule.summer2025EmmaSBirthday": "Été 2025, l’anniversaire d’Emma…",
+  "photosModule.theFileCouldNotBe": "Le fichier n’a pas pu être supprimé du stockage. La photo a disparu de votre bibliothèque — essayez de la supprimer à nouveau.",
   "photosModule.theFileUploadedButIts": "Le fichier a été envoyé, mais son enregistrement dans la bibliothèque n’a pas pu être sauvegardé.",
   "photosModule.theUploadedFileCouldNot": "Le fichier envoyé n’a pas pu être nettoyé.",
   "photosModule.todayAt": "Aujourd’hui, {time}",

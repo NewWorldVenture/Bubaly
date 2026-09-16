@@ -9140,6 +9140,7 @@
   "photosModule.skippedFile": "{count} file saltato — supera il limite di {limit}.",
   "photosModule.skippedFiles": "{count} file saltati — superano il limite di {limit}.",
   "photosModule.summer2025EmmaSBirthday": "Estate 2025, il compleanno di Emma…",
+  "photosModule.theFileCouldNotBe": "Non è stato possibile rimuovere il file dall’archivio. La foto non è più nella tua libreria: prova a eliminarla di nuovo.",
   "photosModule.theFileUploadedButIts": "Il file è stato caricato, ma non è stato possibile salvare la sua voce in libreria.",
   "photosModule.theUploadedFileCouldNot": "Non è stato possibile ripulire il file caricato.",
   "photosModule.todayAt": "Oggi, {time}",

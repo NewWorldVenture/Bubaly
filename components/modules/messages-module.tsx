@@ -405,7 +405,11 @@ export function MessagesModule() {
       });
       if (insErr) {
         // Roll back the orphaned upload if the message row failed to insert.
-        await supabase.storage.from('family-media').remove([stored.path]);
+        // Genuine rollback — the row never landed, so a surviving object is
+        // referenced by nothing and the user is already being told this failed.
+        // Named in a log rather than swallowed. Audit C1-S6-01.
+        const { error: rollbackError } = await supabase.storage.from('family-media').remove([stored.path]);
+        if (rollbackError) console.error('[messages] upload rollback left an object behind', { path: stored.path }, rollbackError);
         toastError(describeDbError(insErr));
       }
     } catch (err) {

@@ -9140,6 +9140,7 @@
   "photosModule.skippedFile": "{count} Datei übersprungen — größer als {limit}.",
   "photosModule.skippedFiles": "{count} Dateien übersprungen — größer als {limit}.",
   "photosModule.summer2025EmmaSBirthday": "Sommer 2025, Emmas Geburtstag …",
+  "photosModule.theFileCouldNotBe": "Die Datei konnte nicht aus dem Speicher entfernt werden. Das Foto ist aus Ihrer Bibliothek verschwunden – versuchen Sie erneut, es zu löschen.",
   "photosModule.theFileUploadedButIts": "Die Datei wurde hochgeladen, aber ihr Bibliothekseintrag konnte nicht gespeichert werden.",
   "photosModule.theUploadedFileCouldNot": "Die hochgeladene Datei konnte nicht bereinigt werden.",
   "photosModule.todayAt": "Heute, {time}",
