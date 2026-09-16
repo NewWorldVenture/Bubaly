@@ -94,7 +94,29 @@ begin
   -- to arrive as an error for their fail-closed guards to fire at all. That
   -- makes this strictly safer than the direct select it replaces, which
   -- answered a non-member with `{ data: [], error: null }`.
-  if not public.is_family_member(p_family_id) then
+  --
+  -- THE SERVICE ROLE IS EXEMPT, and it is not a loophole. The AI executor runs
+  -- every tool with the SERVICE client — lib/ai/runs/executor.ts builds its
+  -- `ServiceScope` from `createServiceClient()` — so on that path `auth.uid()`
+  -- is null and there is no membership to find. The service role bypasses RLS
+  -- on `medical_profiles` itself and on every other table these services read;
+  -- refusing it HERE would be the anomaly rather than the safeguard. Learned
+  -- the hard way: without this branch, `groceries.addFromMealPlan` inside the
+  -- concierge loop answered "You don't have permission to do that", and the
+  -- probe that was supposed to cover this function only ever exercised
+  -- `authenticated` sessions.
+  --
+  -- Seven migrations in this repo detect the service role with
+  -- `current_user = 'service_role' or coalesce(auth.role(),'') = 'service_role'`.
+  -- The first half of that pair is NOT copied here: those are trigger
+  -- functions, where `current_user` is the caller, and this is SECURITY
+  -- DEFINER, where `current_user` is the OWNER and the test can never be true.
+  -- An idiom lifted from a neighbouring migration is not automatically right.
+  -- `current_setting('role')` is what SET ROLE leaves behind and survives
+  -- SECURITY DEFINER, so it stands in for that half.
+  if coalesce(auth.role(), '') <> 'service_role'
+     and coalesce(current_setting('role', true), '') <> 'service_role'
+     and not public.is_family_member(p_family_id) then
     raise exception 'not a member of this family' using errcode = '42501';
   end if;
 

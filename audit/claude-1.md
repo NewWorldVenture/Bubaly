@@ -3613,3 +3613,54 @@ Recorded with the evidence rather than guessed at, and explicitly NOT fixed.
   makes a future narrowing a no-op — narrow one and the other restores the wide
   read — which is the sweep 0311, 0315 and 0316 each end with. Worth folding
   into whichever migration answers the question above.
+
+### [CLAUDE-1][REGRESSION, MINE] 0316 refused the one caller my probe never tested
+
+- **Shipped red.** CI on `51ef995e` failed one E2E test —
+  `tests/e2e/concierge.spec.ts`, "Plan our week" — with step 6,
+  `groceries.addFromMealPlan`, reporting *"You don't have permission to do that.
+  Ask a family admin if you think this is a mistake."* 431 other E2E tests
+  passed; every other CI job was green.
+- **Cause, and it is the mirror of the bug 0316 fixed.** `family_allergies()`
+  raised `42501` unless `is_family_member(p_family_id)`. **Every AI tool runs on
+  the SERVICE client** — `lib/ai/runs/executor.ts:1325` is
+  `opts?.db ?? createServiceClient()`, and `scopeFor` puts that same `db` into
+  the `ServiceScope` it hands every tool. On that path `auth.uid()` is null,
+  there is no membership row, and my function refused. The direct select it
+  replaced worked there because the service role bypasses RLS.
+- **What I got wrong is not the function; it is the probe.**
+  `medical-profile-read-boundary-check.sql` exercised a manager, a child, a
+  caregiver, a non-member and `anon` — five `authenticated`-shaped callers and
+  a grants check — and never the service role. The whole point of that probe was
+  to catch an allergy-path regression, and it was blind to the caller the
+  services are actually invoked by half the time. **Writing every case I thought
+  of is not the same as writing every case there is.**
+- **Fix:** 0316's function exempts the service role, and the migration says why
+  at length — the service role bypasses RLS on `medical_profiles` itself, so
+  refusing it there is the anomaly rather than the safeguard. **0316 is amended
+  in place rather than patched forward**: the branch is unmerged, the migration
+  has only ever been applied to throwaway databases, and a second migration
+  whose entire content is "the function three commits ago was wrong" is worse
+  for whoever reads this next.
+- **A second idiom that was not automatically right.** Seven migrations here
+  detect the service role with
+  `current_user = 'service_role' or coalesce(auth.role(),'') = 'service_role'`.
+  The first half is deliberately NOT copied: those are trigger functions, where
+  `current_user` is the caller; this is SECURITY DEFINER, where `current_user`
+  is the OWNER and that test can never be true. Copying the pair would have
+  shipped a condition that cannot fire — the exact shape this audit has eleven
+  instances of. `current_setting('role', true)` survives SECURITY DEFINER and
+  stands in for that half.
+- **Status:** FIXED. The probe now runs the function as `service_role` with no
+  `sub`, and non-vacuity is the regression itself: restore the function exactly
+  as it shipped in `2ebc5ae0` and the probe says *"family_allergies refused the
+  SERVICE role, which is the client every AI tool runs on — this is
+  groceries.addFromMealPlan failing inside the concierge loop"*.
+- **Stated plainly: the E2E test itself was not re-run locally.** This container
+  has no Docker, so the isolated Supabase that job stands up cannot start here.
+  What was reproduced is the refusal at the layer it happens in — the probe
+  fails against the old function and passes against the new one — and CI is the
+  thing that confirms the E2E.
+- **Verified:** 331 migrations replayed from scratch (0 failed), 328 re-applied
+  onto the populated schema, **39/39 probes run twice**, 13,987 tests green under
+  both `TZ=UTC` and `TZ=America/Los_Angeles`, tsc clean, eslint at the ratchet.

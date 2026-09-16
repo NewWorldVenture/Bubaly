@@ -141,6 +141,29 @@ begin
   end if;
   reset role;
 
+  -- 6b. THE CALLER THAT IS NOT A SESSION AT ALL. Every AI tool runs on the
+  --     SERVICE client (lib/ai/runs/executor.ts builds its ServiceScope from
+  --     createServiceClient()), so `auth.uid()` is null and there is no
+  --     membership row to find. The first version of this function raised at
+  --     that caller and `groceries.addFromMealPlan` inside the concierge loop
+  --     started answering "You don't have permission to do that" — a failure
+  --     this probe could not see, because it only ever tested `authenticated`.
+  --     It tests both now.
+  perform set_config('request.jwt.claim.sub', '', true);
+  perform set_config('request.jwt.claim.role', 'service_role', true);
+  set local role service_role;
+  begin
+    select count(*) into n from public.family_allergies(fam);
+  exception when insufficient_privilege then
+    raise exception
+      'family_allergies refused the SERVICE role, which is the client every AI tool runs on — this is groceries.addFromMealPlan failing inside the concierge loop';
+  end;
+  if n <> 4 then
+    raise exception 'the service role reads % allergy rows, expected 4 — every AI tool runs on this client', n;
+  end if;
+  reset role;
+  perform set_config('request.jwt.claim.role', '', true);
+
   -- 7. A caregiver is a member and is NOT a manager, so this migration moves
   --    them too: their own row only, and the allergy list still reaches them.
   --    Recorded as an assertion rather than left to be discovered, because a

@@ -4928,3 +4928,36 @@ unrelated thing it was quietly leaning on.
   0317, with the full replay re-run because moving a migration to the end of the
   chain is an ordering change rather than a rename. Every merge since 0300 has
   now brought one.
+
+## Q8 — what Pass Q got wrong, and how it was caught
+
+**0316 shipped red, and the defect was in its probe.** CI on `51ef995e` failed
+one E2E test out of 432 — the concierge loop's "Plan our week" — at step 6,
+`groceries.addFromMealPlan`, with *"You don't have permission to do that."*
+
+`family_allergies()` raised unless the caller was a family member. **Every AI
+tool runs on the service client**: `lib/ai/runs/executor.ts` builds its
+`ServiceScope` from `createServiceClient()` and hands that same `db` to every
+tool, so `auth.uid()` is null on that path and there is no membership to find.
+The direct select the RPC replaced worked there because the service role
+bypasses RLS. The function now exempts it, and says why — the service role
+bypasses RLS on `medical_profiles` itself, so refusing it in a function *over*
+that table is the anomaly, not the safeguard.
+
+The thing worth recording is not the missing branch. It is that the probe
+written specifically to protect the allergy path exercised a manager, a child, a
+caregiver, a non-member and `anon` — five session-shaped callers — and never the
+service role, which is the client half of those services' traffic arrives on.
+**Writing every case you think of is not the same as writing every case there
+is**, and the discipline this audit recommends above all others — break what a
+guard protects and confirm it goes red — only covers the cases the guard knows
+about.
+
+A second near-miss inside the fix: seven migrations here detect the service role
+with `current_user = 'service_role' or coalesce(auth.role(),'') = 'service_role'`.
+The first half is a trigger-function idiom, where `current_user` is the caller.
+Inside SECURITY DEFINER `current_user` is the *owner*, so copying the pair would
+have shipped a condition that can never fire — an eleventh-instance guard that
+cannot fail, added by the commit fixing one. `current_setting('role', true)`
+stands in for that half instead. Twice in this pass now, an idiom lifted from a
+neighbouring migration has not been right: 0315's forging hole was the first.
