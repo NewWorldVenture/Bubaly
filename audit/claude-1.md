@@ -3864,3 +3864,70 @@ Recorded with the evidence rather than guessed at, and explicitly NOT fixed.
   `TZ=America/Los_Angeles`**, tsc clean, eslint still at 85, `npm run build`
   exits 0 — which matters here more than usual, since this touches every form in
   the app.
+
+### [CLAUDE-1][MEDIUM][A11Y] C2-02 — a caption over a row of buttons names nothing
+
+- **Raised by:** Claude-2 (C2-02: 55 unattached labels, 65 unnamed selects).
+  Counted here with a parser rather than a grep, and **the parser agrees**: 52
+  and 70.
+- **Files:** `tests/helpers/jsx-a11y-scan.ts` (new),
+  `tests/a-group-of-controls-needs-a-name.test.ts` (new), `lib/ui/a11y.ts`,
+  `components/guardian/rules-editor.tsx`
+- **The shape behind most of them is one thing.** A caption over a ROW OF
+  BUTTONS — trust levels, days of the week, member pills, emoji chips:
+  `<label>Trust levels</label>` followed by `<div>{LEVELS.map(…<button/>…)}</div>`.
+  `<label>` names a form control, by `htmlFor` or by containing it, and a group
+  of buttons is neither. A screen reader reads the caption as a stray sentence
+  and then reads seven unexplained buttons. **It is also the same shape as the 25
+  `Field` call sites C2-03's fix cannot wire** — they hand back a `<div>` of
+  chips — so one pattern accounts for three separate reported findings.
+- **`labelledGroup(labelId)` in `lib/ui/a11y.ts` is the fix, and it needs no new
+  copy.** The caption already exists and is already translated; it stops being a
+  `<label>`, keeps an id, and the container becomes a group that points at it.
+  `role="group"`, not `radiogroup`: these are multi-select toggles, and claiming
+  `radiogroup` would promise single-selection and roving arrow keys the buttons
+  do not implement — a promise the markup does not keep is the failure this audit
+  keeps finding.
+- **THE INSTRUMENT IS THE FINDING HERE.** My first count used a regex and
+  returned **128** unnamed selects against the parser's **70** — a 45% overcount
+  — and it flagged `components/social/studio-form.tsx`, where the select is
+  wrapped in a `<label>` and is perfectly correct. "Is this control named?" is a
+  question about ANCESTRY, and a regex cannot see a `<label>` wrapper or a
+  `<Field>` render prop three levels up. This audit already abandoned one guard
+  for exactly that reason — a 25-line scan window that reported
+  `notes-module:310` clean while its nested buttons sat 34 lines below. So the
+  scanner is built on the TypeScript parser, and **the scanner itself is tested
+  against fixtures before either count is asserted**: a number that is believed
+  and wrong is worse than no number.
+- **The count is deliberately a LOWER bound.** A select carrying an `id` counts
+  as named even though resolving the matching `htmlFor` would need type
+  information, and a `{...spread}` counts as possibly named. Smaller than the
+  truth, never larger, which is what a ratchet needs — and it keeps correct code
+  off the list, which is how a list stays read.
+- **Worked example, not a sweep.** `components/guardian/rules-editor.tsx` is
+  converted end to end: four button rows onto `labelledGroup`, three real inputs
+  onto `htmlFor`/`id`. **52 → 45**, with no new copy in either case.
+- **The 70 selects are NOT fixed in bulk, and the obvious shortcut is recorded
+  because it is wrong.** Most are toolbar filters with no visible caption, so
+  each needs a NAME, and a name is copy in eleven locales. The tempting move is
+  to reuse the placeholder option — but a placeholder is a VALUE, not a name:
+  labelling a control "Whole family" or "All customers" or "No contact" is worse
+  than leaving it unnamed. Only about seven have a placeholder that names the
+  field itself ("Intent", "Target page", "Pattern").
+- **Status:** FIXED for the pattern and the worked example; the remainder is a
+  bounded, measured backlog at 45 labels and 70 selects, which may only go down.
+- **Non-vacuity, three mutations, and the two scanner ones matter most:** revert
+  one group caption to a `<label>` → the label ratchet fails and names the file;
+  make the scanner forget that a `<label>` ancestor names its subtree → the
+  fixture test fails **and** the select count blows past 70; make it treat a
+  spread as unnamed → the same pair. The fixtures catch a scanner regression
+  before the counts do, which is the whole reason they are there.
+- **One thing I got wrong, again, and it is the same thing.** My mutation harness
+  restored with `git checkout --` on a file that was still UNTRACKED, so two
+  scanner mutations accumulated instead of being undone and the "restored" run
+  was red. Repaired by hand and re-verified. This is the second harness bug this
+  audit has recorded (the first clobbered a file because two backups shared a
+  basename): **a mutation harness that cannot restore is a mutation harness that
+  corrupts the thing it is testing.**
+- **Verified:** **14,014 tests green under both `TZ=UTC` and
+  `TZ=America/Los_Angeles`**, tsc clean, eslint at 85, `npm run build` exits 0.

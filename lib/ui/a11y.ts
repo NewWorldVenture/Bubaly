@@ -84,3 +84,34 @@ export function activatable(onActivate: () => void): {
     },
   };
 }
+
+/**
+ * A caption and the group of controls it names.
+ *
+ * The shape this is for is everywhere in this app: a `<label>` over a row of
+ * toggle chips, trust levels, member pills or emoji buttons.
+ *
+ *     <label className="…">Trust levels</label>
+ *     <div className="flex gap-1.5">{LEVELS.map(…<button/>…)}</div>
+ *
+ * That label names NOTHING. `<label>` names a form control, by `htmlFor` or by
+ * containing it, and a group of buttons is neither — so a screen reader reads
+ * "Trust levels" as a stray sentence and then reads seven unexplained buttons.
+ * Fifty-two of these are on record (tests/a-group-of-controls-needs-a-name.test.ts).
+ *
+ * The fix needs no new copy, which is the point: the caption text already
+ * exists and is already translated. It stops being a `<label>`, keeps its id,
+ * and the container becomes a group that points at it.
+ *
+ *     const group = useId();
+ *     <span id={group} className="…">Trust levels</span>
+ *     <div {...labelledGroup(group)} className="flex gap-1.5">…</div>
+ *
+ * `role="group"` rather than `radiogroup`: these are multi-select toggles, and
+ * claiming `radiogroup` would promise single-selection and arrow-key roving
+ * that the buttons do not implement. A promise the markup does not keep is the
+ * failure this audit keeps finding; `group` is the honest role.
+ */
+export function labelledGroup(labelId: string): { role: 'group'; 'aria-labelledby': string } {
+  return { role: 'group', 'aria-labelledby': labelId };
+}

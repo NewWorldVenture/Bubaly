@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Plus, Trash2, ToggleLeft, ToggleRight, ChevronDown, ChevronUp, GripVertical } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
+import { labelledGroup } from '@/lib/ui/a11y';
 import { TRUST_LABELS, TRUST_LEVELS, TRUST_ICONS, type TrustLevel } from '@/lib/guardian/trust';
 import { ROUTING_MODE_LABELS, type RoutingMode } from '@/lib/guardian/pipeline';
 import { createRuleAction, toggleRuleAction, deleteRuleAction } from '@/app/(app)/guardian/actions';
@@ -225,6 +226,17 @@ type NewRuleForm = {
 };
 
 function NewRuleModal({ onSave, onClose }: { onSave: (f: NewRuleForm) => void; onClose: () => void }) {
+  // Every caption in this form named nothing. The four over button rows were
+  // `<label>`s pointing at no control at all; the three over real inputs had no
+  // `htmlFor`. Both are fixed with ids and references — the caption text is
+  // already written and already translated, so this costs no new copy.
+  const trustId = useId();
+  const daysId = useId();
+  const contextId = useId();
+  const actionId = useId();
+  const startId = useId();
+  const endId = useId();
+  const priorityId = useId();
   const tr = useTranslations();
   const [form, setForm] = useState<NewRuleForm>({
     name: '', description: '', priority: '100',
@@ -274,8 +286,8 @@ function NewRuleModal({ onSave, onClose }: { onSave: (f: NewRuleForm) => void; o
             className="w-full rounded-lg border border-border bg-elevated px-3 py-2 text-sm min-h-[50px]"
           />
           <div>
-            <label className="mb-2 block text-xs font-semibold text-muted uppercase tracking-wide">{tr('rulesEditor.trustLevelsAnyOfThese')}</label>
-            <div className="flex flex-wrap gap-1.5">
+            <span id={trustId} className="mb-2 block text-xs font-semibold text-muted uppercase tracking-wide">{tr('rulesEditor.trustLevelsAnyOfThese')}</span>
+            <div {...labelledGroup(trustId)} className="flex flex-wrap gap-1.5">
               {TRUST_LEVELS.map((t) => (
                 <button key={t} type="button" onClick={() => toggleTrust(t)}
                   className={cn('rounded-full border px-2.5 py-1 text-xs font-medium transition',
@@ -288,19 +300,19 @@ function NewRuleModal({ onSave, onClose }: { onSave: (f: NewRuleForm) => void; o
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted">{tr('rulesEditor.timeStart')}</label>
-              <input type="time" value={form.time_start} onChange={e => setForm(p => ({ ...p, time_start: e.target.value }))}
+              <label htmlFor={startId} className="mb-1 block text-xs font-medium text-muted">{tr('rulesEditor.timeStart')}</label>
+              <input id={startId} type="time" value={form.time_start} onChange={e => setForm(p => ({ ...p, time_start: e.target.value }))}
                 className="h-10 w-full rounded-lg border border-border bg-elevated px-3 text-sm" />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted">{tr('rulesEditor.timeEnd')}</label>
-              <input type="time" value={form.time_end} onChange={e => setForm(p => ({ ...p, time_end: e.target.value }))}
+              <label htmlFor={endId} className="mb-1 block text-xs font-medium text-muted">{tr('rulesEditor.timeEnd')}</label>
+              <input id={endId} type="time" value={form.time_end} onChange={e => setForm(p => ({ ...p, time_end: e.target.value }))}
                 className="h-10 w-full rounded-lg border border-border bg-elevated px-3 text-sm" />
             </div>
           </div>
           <div>
-            <label className="mb-2 block text-xs font-semibold text-muted uppercase tracking-wide">{tr('rulesEditor.daysOfWeek')}</label>
-            <div className="flex gap-1.5">
+            <span id={daysId} className="mb-2 block text-xs font-semibold text-muted uppercase tracking-wide">{tr('rulesEditor.daysOfWeek')}</span>
+            <div {...labelledGroup(daysId)} className="flex gap-1.5">
               {DAYS.map((d, i) => (
                 <button key={d} type="button" onClick={() => toggleDay(i)}
                   className={cn('flex-1 rounded-lg border py-2 text-xs font-medium transition',
@@ -310,8 +322,8 @@ function NewRuleModal({ onSave, onClose }: { onSave: (f: NewRuleForm) => void; o
             </div>
           </div>
           <div>
-            <label className="mb-2 block text-xs font-semibold text-muted uppercase tracking-wide">{tr('rulesEditor.context')}</label>
-            <div className="flex flex-wrap gap-1.5">
+            <span id={contextId} className="mb-2 block text-xs font-semibold text-muted uppercase tracking-wide">{tr('rulesEditor.context')}</span>
+            <div {...labelledGroup(contextId)} className="flex flex-wrap gap-1.5">
               {CONTEXTS.map((c) => (
                 <button key={c.value} type="button" onClick={() => toggleCtx(c.value)}
                   className={cn('rounded-full border px-2.5 py-1 text-xs font-medium transition',
@@ -327,8 +339,8 @@ function NewRuleModal({ onSave, onClose }: { onSave: (f: NewRuleForm) => void; o
             className="h-10 w-full rounded-lg border border-border bg-elevated px-3 text-sm font-mono"
           />
           <div>
-            <label className="mb-2 block text-xs font-semibold text-muted uppercase tracking-wide">{tr('rulesEditor.action')}</label>
-            <div className="grid grid-cols-2 gap-1.5">
+            <span id={actionId} className="mb-2 block text-xs font-semibold text-muted uppercase tracking-wide">{tr('rulesEditor.action')}</span>
+            <div {...labelledGroup(actionId)} className="grid grid-cols-2 gap-1.5">
               {ROUTING_MODES.map((mode) => (
                 <button key={mode} type="button" onClick={() => setForm(p => ({ ...p, routing_mode: mode }))}
                   className={cn('rounded-xl border px-3 py-2 text-xs font-medium text-left transition',
@@ -340,8 +352,8 @@ function NewRuleModal({ onSave, onClose }: { onSave: (f: NewRuleForm) => void; o
             </div>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-muted">{tr('rulesEditor.priorityLowerHigherPriority')}</label>
-            <input type="number" min="1" max="999" value={form.priority} onChange={e => setForm(p => ({ ...p, priority: e.target.value }))}
+            <label htmlFor={priorityId} className="mb-1 block text-xs font-medium text-muted">{tr('rulesEditor.priorityLowerHigherPriority')}</label>
+            <input id={priorityId} type="number" min="1" max="999" value={form.priority} onChange={e => setForm(p => ({ ...p, priority: e.target.value }))}
               className="h-10 w-32 rounded-lg border border-border bg-elevated px-3 text-sm" />
           </div>
         </div>
