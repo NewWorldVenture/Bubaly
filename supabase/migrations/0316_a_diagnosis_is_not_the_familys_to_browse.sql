@@ -157,10 +157,17 @@ create policy "Members read their own medical_profiles"
 -- another household's family_id would still be refused.
 
 -- ── Sweep by shape ───────────────────────────────────────────────────────────
--- Permissive policies are OR'd. A single leftover SELECT policy on this table
--- restores the family-wide read and nothing would say so, which is how the
--- rule above could be true and the boundary still open. Assert there is exactly
--- one, by shape rather than by remembering the names 0009 used.
+-- Permissive policies are OR'd. A single leftover PERMISSIVE SELECT policy on
+-- this table restores the family-wide read and nothing would say so, which is
+-- how the rule above could be true and the boundary still open. Assert there is
+-- exactly one, by shape rather than by remembering the names 0009 used.
+--
+-- `polpermissive` is the whole point of the filter. A RESTRICTIVE policy ANDs
+-- with the permissive union and can only ever narrow, so one appearing here is
+-- defence in depth rather than a hole — and main is adding exactly those
+-- (`*_manager_*_guard`, 0310's idiom) across the schema. A sweep that counted
+-- them would refuse to apply over somebody else's tightening, which is a
+-- guard failing on the safe direction.
 do $$
 declare
   stray text;
@@ -170,6 +177,7 @@ begin
   from pg_policy
   where polrelid = 'public.medical_profiles'::regclass
     and polcmd = 'r'
+    and polpermissive
     and polname <> 'Members read their own medical_profiles';
 
   if stray is not null then

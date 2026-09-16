@@ -33,7 +33,7 @@
 -- Manager-only rather than `driver_licenses`' self-or-manager clause, and the
 -- difference is the point: a licence is a record you KEEP about yourself — its
 -- number, its expiry — and maintaining it is your job. A trip is a record OF
--- you. 0307 drew the same line across the health tables: a log you keep about
+-- you. 0323 drew the same line across the health tables: a log you keep about
 -- yourself may be corrected by its subject; a record of fact about someone may
 -- not be rewritten by that someone.
 drop policy if exists driving_trips_update on public.driving_trips;
@@ -61,7 +61,7 @@ create policy driving_trips_update on public.driving_trips
 -- `created_by` is what separates the two cases. A trip you logged is an entry
 -- you made and may withdraw — a mistyped distance, the wrong driver picked from
 -- the dropdown. A trip a PARENT logged about you is their record, and erasing it
--- is the same act as regrading it. That distinction is the one 0308 and 0315
+-- is the same act as regrading it. That distinction is the one 0324 and 0315
 -- landed on for authorship, and `driving-safety-view.tsx:115` already writes
 -- `created_by: userId` on every insert.
 --
@@ -94,9 +94,15 @@ create policy driving_trips_delete on public.driving_trips
 --            household discusses. Narrowing it is a household policy question.
 
 -- ── Sweep by shape ───────────────────────────────────────────────────────────
--- Permissive policies are OR'd, so one leftover write policy on this table puts
--- the score back within the driver's reach. Checked by shape rather than by the
--- names 0114 used.
+-- Permissive policies are OR'd, so one leftover PERMISSIVE write policy on this
+-- table puts the score back within the driver's reach. Checked by shape rather
+-- than by the names 0114 used.
+--
+-- Restrictive policies are deliberately excluded: they AND with the permissive
+-- union and can only narrow, so one here is somebody else's tightening rather
+-- than a hole. main is adding exactly those across the schema (0310's
+-- `*_manager_*_guard` idiom), and a sweep that counted them would refuse to
+-- apply over a change that makes this table stricter.
 do $$
 declare
   stray text;
@@ -106,6 +112,7 @@ begin
   from pg_policy
   where polrelid = 'public.driving_trips'::regclass
     and polcmd in ('w', 'd', '*')
+    and polpermissive
     and polname not in ('driving_trips_update', 'driving_trips_delete');
 
   if stray is not null then

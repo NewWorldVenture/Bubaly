@@ -1,4 +1,4 @@
--- Behavioural proof for 0306, run as a real `authenticated` session under RLS.
+-- Behavioural proof for 0322, run as a real `authenticated` session under RLS.
 --
 -- `subscriptions` is the paywall: lib/server/plan.ts reads it with the SERVICE
 -- ROLE, deliberately, so whatever is in the row IS the entitlement. 0004's
@@ -81,7 +81,7 @@ begin
     raise exception 'RLS is not live: another family''s billing row is visible';
   end if;
 
-  -- ── 1. Cannot self-grant a paid plan. Before 0306 this was UPDATE 1. ─────
+  -- ── 1. Cannot self-grant a paid plan. Before 0322 this was UPDATE 1. ─────
   blocked := false;
   begin
     update public.subscriptions

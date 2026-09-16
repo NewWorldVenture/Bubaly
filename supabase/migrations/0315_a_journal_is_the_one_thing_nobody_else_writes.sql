@@ -28,7 +28,7 @@
 --
 --   * DELETE. `journal-module.tsx:47` deletes by id alone —
 --     `.delete().eq('id', id)` — with no author check of any kind, exactly like
---     the locator check-in `remove(id)` that 0308 closed. The policy is the only
+--     the locator check-in `remove(id)` that 0324 closed. The policy is the only
 --     gate and it says any member may delete any entry.
 --   * INSERT. `with check (is_family_member(family_id))` does not pin
 --     `member_id`, so a child can write an entry INTO a parent's journal.
@@ -47,7 +47,7 @@
 --
 -- Both columns are nullable, and `is_self_member(null)` is false, so keying on
 -- `member_id` alone would strand a legacy row that has none — un-editable and
--- un-deletable by anybody. 0308 solved that for `safety_check_ins` with
+-- un-deletable by anybody. 0324 solved that for `safety_check_ins` with
 -- `is_self_member(member_id) or created_by = auth.uid()`.
 --
 -- That disjunction is WRONG here, and the probe caught it on the first run: on

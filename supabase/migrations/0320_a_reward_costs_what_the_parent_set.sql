@@ -1,6 +1,24 @@
--- Bubaly :: 0304 - a reward costs what the parent set
+-- Bubaly :: 0320 - a reward costs what the parent set
 -- ----------------------------------------------------------------------------
--- The same defect 0317 closed on the chores board, in the economy module.
+-- Renumbered from 0304. main landed seven migrations at once — 0304 economy
+-- invest decision guard, 0305 chore award amounts, 0306 money instructions,
+-- 0307 chore prices, 0308 reward catalogue, 0309 prescriptions, 0310 UI-only
+-- manager gates — colliding with this branch's whole 0304-0310 block. The NINTH
+-- collision event between the two sessions and by far the largest; every merge
+-- since 0300 has brought one. Only the numbers changed: this branch's seven
+-- moved together to 0320-0326, keeping their order relative to each other.
+--
+-- Main's seven are RESTRICTIVE guards (`as restrictive`, 0254's mechanism), so
+-- they AND with everything here and nothing in this block can loosen them by
+-- running later. The two sets are defence in depth over the same tables rather
+-- than one overwriting the other, and the probes are run against the combined
+-- chain to say so rather than to assume it.
+-- ----------------------------------------------------------------------------
+-- ----------------------------------------------------------------------------
+-- The same defect main's 0305 and 0307 close on the chores board, in the
+-- economy module. (This branch had its own chores migration for it; main landed
+-- first with a narrower, column-scoped rule and this branch's was withdrawn —
+-- see the note in tests/chore-price-is-a-managers-to-write.test.ts.)
 --
 -- `economy_redemptions_insert` constrains ONE column:
 --     with check (is_family_member(family_id))

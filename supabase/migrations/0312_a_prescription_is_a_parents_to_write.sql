@@ -4,8 +4,10 @@
 -- `0300_entitlement_is_not_client_writable.sql` on main for a different
 -- finding while this was in flight — the FIFTH migration-number collision
 -- between the two sessions, after 0297, 0298 (twice) and 0299. The number is
--- all that changed; nothing here depends on running before 0301-0304, which
--- touch different tables.
+-- all that changed; nothing here depends on running before the migrations
+-- around it, which touch different tables. (The numbers this sentence used to
+-- name have since moved: main landed 0304-0310 of its own and this branch's
+-- seven were renumbered to 0320-0326.)
 -- ----------------------------------------------------------------------------
 -- `medications` and `medication_schedules` resolve to membership-only policies:
 -- SELECT/UPDATE/DELETE `using (is_family_member(family_id))`, INSERT

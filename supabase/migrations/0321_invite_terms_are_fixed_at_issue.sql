@@ -1,4 +1,19 @@
--- Bubaly :: 0305 - an invite's terms are fixed at issue
+-- Bubaly :: 0321 - an invite's terms are fixed at issue
+-- ----------------------------------------------------------------------------
+-- Renumbered from 0305. main landed seven migrations at once — 0304 economy
+-- invest decision guard, 0305 chore award amounts, 0306 money instructions,
+-- 0307 chore prices, 0308 reward catalogue, 0309 prescriptions, 0310 UI-only
+-- manager gates — colliding with this branch's whole 0304-0310 block. The NINTH
+-- collision event between the two sessions and by far the largest; every merge
+-- since 0300 has brought one. Only the numbers changed: this branch's seven
+-- moved together to 0320-0326, keeping their order relative to each other.
+--
+-- Main's seven are RESTRICTIVE guards (`as restrictive`, 0254's mechanism), so
+-- they AND with everything here and nothing in this block can loosen them by
+-- running later. The two sets are defence in depth over the same tables rather
+-- than one overwriting the other, and the probes are run against the combined
+-- chain to say so rather than to assume it.
+-- ----------------------------------------------------------------------------
 -- ----------------------------------------------------------------------------
 -- COMPANION TO 0298, NOT A REPLACEMENT FOR IT.
 --

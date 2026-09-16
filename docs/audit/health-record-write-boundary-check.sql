@@ -1,11 +1,11 @@
--- Behavioural proof for 0307, run as real `authenticated` sessions under RLS.
+-- Behavioural proof for 0323, run as real `authenticated` sessions under RLS.
 --
 -- Nine health tables were `for all using (is_family_member(family_id))`: any
 -- member could rewrite or delete any other member's health record. All nine are
 -- written directly from the browser and NONE of the six modules that write them
 -- contains a role check, so RLS was the only boundary there was.
 --
--- 0307 applies TWO rules, and this probe asserts the difference between them
+-- 0323 applies TWO rules, and this probe asserts the difference between them
 -- rather than treating the nine as one list:
 --
 --   RULE A (a log you keep about yourself: symptom_logs, health_metrics,
@@ -78,7 +78,7 @@ begin
   perform set_config('request.jwt.claim.sub', kidB_uid::text, true);
   set local role authenticated;
 
-  -- 1. RULE A: cannot rewrite a sibling's symptom log. Before 0307: UPDATE 1.
+  -- 1. RULE A: cannot rewrite a sibling's symptom log. Before 0323: UPDATE 1.
   update public.symptom_logs set status = 'resolved' where id = sym;
   get diagnostics n = row_count;
   if n <> 0 then

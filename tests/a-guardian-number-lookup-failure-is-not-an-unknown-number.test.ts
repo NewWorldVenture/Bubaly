@@ -1,12 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-// 0310 is the real boundary: one Guardian number, one family, enforced by a
+// 0326 is the real boundary: one Guardian number, one family, enforced by a
 // unique index — the only thing that can see both families at once, because the
 // write side is RLS-bound and scoped to one family by construction.
 //
 // This pins the code half, which matters for two reasons. F5 means migrations
-// are not applied on merge here, so the routes reach production first. And 0310
+// are not applied on merge here, so the routes reach production first. And 0326
 // deliberately REPORTS duplicates rather than choosing which household loses
 // its number, so a database that already holds a pair stays that way until a
 // person decides — and until then these routes are the only thing standing
@@ -80,7 +80,7 @@ describe('a failed Guardian lookup is not an unknown number', () => {
 
   it('the assign action surfaces the global clash as a correctable mistake', () => {
     // The action's own check is scoped to one family and runs RLS-bound, so it
-    // cannot see another household's claim. 23505 from 0310's index is the only
+    // cannot see another household's claim. 23505 from 0326's index is the only
     // signal it gets, and a generic failure would leave the parent re-typing a
     // number that can never work.
     const source = readFileSync('app/(app)/guardian/actions.ts', 'utf8');
@@ -90,9 +90,9 @@ describe('a failed Guardian lookup is not an unknown number', () => {
     expect(upsert).toContain("t('actions.thatNumberIsAlreadyAssigned')");
   });
 
-  it('0310 reports duplicates rather than choosing which household loses its number', () => {
+  it('0326 reports duplicates rather than choosing which household loses its number', () => {
     const migration = readFileSync(
-      'supabase/migrations/0310_a_guardian_number_belongs_to_one_family.sql', 'utf8');
+      'supabase/migrations/0326_a_guardian_number_belongs_to_one_family.sql', 'utf8');
     // Attempted, not forced: no delete, and the index is only created when the
     // data already satisfies it.
     expect(migration).toContain('raise warning');

@@ -514,10 +514,11 @@ passed; production application of the atomic `0240-0254` release remains pending
 ## Migrations added since this document's stated baseline (2026-09-12)
 
 The status line at the top of this file is dated **2026-09-05** against main
-`01881fb2`. **46** migration files have landed since, `0255` through
-`0303`, and none of them appear anywhere above. (This read "thirty-one, `0255`
+`01881fb2`. **53** migration files have landed since, `0255` through
+`0310`, and none of them appear anywhere above. (This read "thirty-one, `0255`
 through `0285`" until 2026-09-13, "seventy-one, `0255` through `0295`" until
-2026-09-15, and "forty-five, `0255` through `0302`" until 2026-09-16; the range
+2026-09-15, and "forty-five, `0255` through `0302`", "46, `0255` through `0303`"
+and "49, `0255` through `0306`" until 2026-09-16; the range
 keeps growing past the sentence. The count is the number
 of files in that range, which is what `ls supabase/migrations` reports — the
 earlier "seventy-one" did not match its own stated range.)
@@ -858,3 +859,298 @@ it protects. The UPDATE policy gains the explicit `with check` its row-level
 sibling already documents.
 
 Until this is applied, production carries the breach as measured above.
+
+### `0304` guards the fourth and fifth decision surfaces — unapplied
+
+`0295` closed `reward_redemptions` and called itself "the last of the three
+decision surfaces to be guarded" (after `0222`'s chore submissions and `0223`'s
+chore assignments). It was not the last. Two tables carry the same shape — a
+`status` defaulting to pending, a `decided_by`, a `decided_at`, and an INSERT
+policy open to any family member — and neither was guarded:
+
+    public.economy_redemptions   insert policy: is_family_member(family_id)
+    public.invest_orders         insert policy: is_family_member(family_id)
+
+Their siblings constrain the same insert to the undecided state
+(`parent_approvals_insert` requires `status = 'pending'` and `decided_by is
+null`; `approval_requests_insert` likewise). These two constrain nothing.
+
+**Measured, not argued.** `docs/audit/economy-invest-decision-check.sql` runs
+on a replayed database with every migration applied, acting as a child of the
+family, and judges on row counts as well as refusals — an insert blocked by
+nothing simply lands, and an exception-only assertion would report a boundary
+that is not there. It asserts membership and non-management before measuring,
+so a probe acting as a stranger cannot pass vacuously. Against the current
+production schema the child inserted **an approved `economy_redemptions` row**
+and **a filled `invest_orders` row**, one each, with `decided_by` naming a
+parent who never saw them.
+
+What it costs differs between the two, and the difference is worth stating:
+
+* `economy_redemptions` — the debit lives in `economy_decide_redemption`, whose
+  own comment is "Approval debits the ledger". A row inserted already-approved
+  never goes through it, so the reward is recorded as granted and the tokens
+  are never taken. The points economy is separate from the wallet (`0217` keeps
+  that manager-only), so no money is minted — but a reward is taken for free.
+* `invest_orders` — `invest_decide_order` is what moves the wallet and writes
+  the holding, so a forged `filled` creates neither. It is an accountability
+  forgery rather than a transfer.
+
+In BOTH cases the forgery cannot be corrected through the product: each RPC
+begins by refusing a row it did not find pending (`if v_redemption.status <>
+'pending' then return 'already_decided'`, and the same line in
+`invest_decide_order`), so a parent who notices can neither approve nor reject
+it. The row is stuck in the state the child chose.
+
+`0304` mirrors `0295` exactly — the trusted server and family managers pass, a
+plain member setting a decision status is refused with `42501` — as a shared
+`public.decision_status_guard()` taking its guarded statuses as a trigger
+argument, so the three tables share one implementation. Asking (`requested`,
+`pending`) stays open, which the probe asserts as a positive control alongside
+a manager still being able to decide.
+
+Until this is applied, production carries both forgeries as measured above.
+
+### `0305` prices a chore the way it decides one — unapplied
+
+`0223` guards the chore-assignment STATUS: a child cannot move their own
+assignment into `approved` or `rejected`, and that holds. It says nothing about
+the two columns that record what the approval was WORTH:
+
+    chore_assignments.points_awarded
+    chore_assignments.cash_awarded_cents
+
+A child may legitimately tick their own chore `done` — a chore needing no
+approval is theirs to close — and `done` is not a guarded status, so both
+amounts could be written in that same statement.
+
+**Measured, not argued.** `docs/audit/chore-award-amount-check.sql`, acting as
+a child on a replayed database with every migration applied, with the positive
+control passing first (ticking the chore `done` still works):
+
+    update … set points_awarded = 9999                        -> 1 row
+    update … set cash_awarded_cents = 500000                  -> 1 row
+    update … set status='done', both amounts                  -> 1 row
+    insert … carrying its own amounts                         -> 1 row
+    displayed points total afterwards                         -> 19,998
+
+The two columns differ in what they reach, and the difference is the point:
+
+* `points_awarded` — the SPENDABLE balance counts only `approved` rows
+  (`lib/rewards/points.ts` skips anything else) and a real approval overwrites
+  the column server-side, so this mints nothing spendable. It inflates every
+  DISPLAY that counts `done`: the kids page, the per-member standings in
+  `lib/chores/dashboard.ts`, the 30-day figure on the profile, and the chore
+  numbers fed to a model in `lib/ai/insights.ts`.
+* `cash_awarded_cents` — read by a PAYOUT. `payChoreRewardAction` credits a
+  child's wallet with `assignment.cash_awarded_cents ?? chore.cash_cents`. That
+  action is manager-gated and idempotent per assignment, and the chores board
+  hides its Pay button while the column is truthy
+  (`canPay = … && !a.cash_awarded_cents`), so the ordinary click path does not
+  currently pay a forged amount. **That is an accident of a condition written
+  for idempotency, not a boundary.** A number a child wrote is trusted by a
+  money path, and a server action is directly invocable; the day that display
+  rule changes, the mitigation is gone.
+
+`0305` extends `0223`'s own trigger in place rather than adding a second one, so
+there is one guard on this table and one place to read what it allows: the
+trusted server and family managers may set the amounts, a plain member may not.
+Ticking a chore `done` without touching them passes exactly as before, which the
+probe asserts as a positive control alongside a manager still being able to
+approve and award.
+
+Until this is applied, production carries the forgery as measured above.
+
+### `0306` guards two money instructions the sweeps' lists missed — unapplied
+
+`0254` added restrictive manager guards to the money tables and `0275` swept
+the stray permissive policies off them "by shape rather than by name", because
+"the previous three attempts each fixed the instance and left the class open".
+Both enumerate the tables they cover, and a hardcoded list is the very thing
+`0275`'s header warns about. Two tables that move real money are not on it.
+
+**`allowance_rules`** has one policy — `Members manage allowance_rules FOR ALL …
+is_family_member` — no role check, no restrictive guard. The nightly cron reads
+it and calls `creditChildWallet(…, amountCents: rule.amount_cents)`. The row is
+not a record of a payment; it is the reason one happens, on a schedule, with
+nobody in the loop.
+
+Measured, acting as a child with both controls passing: the child **created an
+allowance rule of 100,000 cents a week pointing at their own wallet**, and
+**raised an existing one**. The next cron run pays it. Nothing legitimate
+breaks — both writers in the product (`saveAllowanceRuleAction`,
+`toggleAllowanceRuleAction`) already refuse a non-manager in application code;
+this only makes the database agree with the rule the application states, which
+is what matters for anyone calling PostgREST directly.
+
+**`invest_orders`** — `invest_decide_order` debits the wallet with the order's
+stored `amount_cents` and credits its stored `shares`, checking neither against
+the other nor against the asset. Measured: the child **priced their own order
+below the asset** and **bought 1,000 shares for one cent**.
+
+The invest guard is CONSISTENCY, not authorship, because authorship is not the
+problem: `placeInvestOrderAction` legitimately inserts as the child and already
+derives both numbers server-side (`price_cents: asset.price_cents`,
+`amount = orderAmountCents(shares, asset.price_cents)`). Requiring the stored
+economics to match the asset refuses the forged insert and lets the real one
+through — asserted as a positive control, alongside a manager still being able
+to set an allowance.
+
+Until this is applied, production carries both as measured above.
+
+### `0307` guards the chore's own price, which `0305` did not reach — unapplied
+
+`0305` closed `chore_assignments.cash_awarded_cents`, the override a manager
+writes at approval. The payout reads that column with a fallback:
+
+```
+app/(app)/wallet/actions.ts:206
+  const amount = assignment.cash_awarded_cents ?? chore?.cash_cents ?? 0;
+```
+
+An ordinary chore carries no override, so the number a parent's Pay click
+credits is `chores.cash_cents` — and `chores` has four permissive policies whose
+entire condition is `is_family_member(family_id)`.
+
+This is worse than the column `0305` fixed, not the same. There, the chores
+board's `canPay = … && !a.cash_awarded_cents` happened to hide the Pay button
+once the column was set, so the ordinary click path did not pay a forged amount.
+Here the button's condition is
+`manager && done && (a.chore?.cash_cents ?? 0) > 0 && !a.cash_awarded_cents`
+(`components/modules/chores-module.tsx:554`) — exactly the state a child can
+manufacture: create the chore, price it, assign it to yourself, tick it done.
+The parent is then shown "Pay $5,000.00" on a chore their child wrote and
+priced. No accident stands in the way this time; this is the happy path.
+
+Measured, acting as a child with both positive controls passing: the child
+**created a chore paying 500,000 cents**, **raised a manager's chore from 500 to
+500,000**, set its cash range, and **re-priced it in points**. Five breaches,
+`docs/audit/chore-price-check.sql`.
+
+Cash is manager-only to set or change; points are guarded on CHANGE only, so a
+member may still create a chore carrying points — that is the assistant path
+(`lib/services/tasks/index.ts` inserts `points: input.points ?? 10` through the
+calling user's client), and a guard on INSERT would have closed a working
+feature rather than a hole. Points reach a balance only through an approval a
+manager makes with the number in front of them, and `0305` already owns
+`points_awarded`.
+
+Shipped alongside it, and live independently of the ledger: `createChoreAction`
+— whose own comment reads "Parent creates a chore" — carried no manager check,
+unlike the two actions beside it in the same file. It now refuses a submission
+that carries pricing from a non-manager.
+
+Until this is applied, production carries the forgery as measured above.
+
+### `0308` puts the reward catalogue back in a manager's hands — unapplied
+
+`rewards` is written **straight from the browser**:
+`components/modules/rewards-module.tsx` calls
+`sb.from('rewards').insert/update/delete` with the viewer's own JWT, with no
+server action in between. The only thing standing between a child and the
+family's reward catalogue is `canManage = isManager(role)` deciding whether a
+button renders (lines 146, 233, 251). A hidden button is not a boundary; the
+table's policies are `is_family_member(family_id)` and nothing else.
+
+Measured, acting as a child with the positive control passing: the child
+**re-priced "New bike" from 5000 points to 5**, **added a reward costing
+nothing**, **deleted a reward the parent had set up**, and **requested a
+5000-point reward for 1 point**. Five breaches,
+`docs/audit/reward-catalogue-price-check.sql`.
+
+`requestRedemptionAction` copies `rewards.cost_points` into the redemption
+server-side, so re-pricing the shelf re-prices the ticket a parent is asked to
+approve — the queue shows a 5-point request for the bike. Restrictive manager
+guards close that.
+
+The second half is `reward_redemptions.cost_points`. That table has one policy
+(`Members can manage … FOR ALL … is_family_member`) and `0295`'s trigger guards
+the **decision** on it, not the amount — so a direct insert could name its own
+price without touching the shelf at all, exactly as `invest_orders` could before
+`0306`. As there, the guard is consistency rather than authorship: a child
+legitimately requests a reward and the action already derives the cost
+server-side, so requiring the ticket to carry the shelf's price refuses the
+forged insert and leaves the real one untouched. A manager-only rule there would
+stop a child asking for a reward at all.
+
+`lib/rewards/points.ts` deducts `cost_points` at `approved` and `fulfilled`, so
+both numbers are the spendable balance the whole chores economy settles in — the
+ledger `0222`, `0223`, `0295` and `0305` exist to keep honest.
+
+Until this is applied, production carries all five as measured above.
+
+### `0309` puts the prescription back in a manager's hands — unapplied
+
+`components/modules/medications-module.tsx` declares `canEdit = isManager(role)`
+and then writes `medications` and `medication_schedules` **straight from the
+browser** with the viewer's own JWT (lines 205, 216, 223, 236, 251). There is no
+server action in between; `canEdit` only decides whether a button renders (284,
+368, 399, 419).
+
+Its neighbours in the same area *are* enforced — `medical_profiles`,
+`health_providers` and `insurance_policies` each carry three manager-checked
+write policies. The three medication tables carry none.
+
+What these columns reach is not a display. `lib/server/notifications.ts` reads
+`medications.{name,dosage,member_id,is_active}` and
+`medication_schedules.{time_of_day,days_of_week,starts_on,ends_on}` to raise the
+family's "dose due today" reminder, so these rows decide **what a parent is told
+to administer and when** — and `is_active = false` drops the medication from
+that read entirely, so nobody is told at all.
+`app/api/ai/health/coach/route.ts` feeds `dosage` and `instructions` to a model
+as fact.
+
+Measured, acting as a child with both controls passing: the child **changed
+their own prescribed dosage from 10 mg to 40 mg**, **rewrote the instructions**,
+**deactivated the medication so the reminder stops**, **moved the dosing
+schedule to 23:59 one day a week**, and **deleted a schedule and a medication
+outright**. Eight breaches,
+`docs/audit/medication-record-boundary-check.sql`.
+
+`medication_doses` — the "I took it" tick — is deliberately left writable by any
+member, and the probe asserts that as a positive control: the module leaves dose
+logging ungated for everyone (lines 166-172), exactly as a child may tick their
+own chore done.
+
+Until this is applied, production carries all six as measured above.
+
+### `0310` enforces four more UI-only manager gates — unapplied
+
+`0308` and `0309` each closed one instance of a shape found by sweeping every
+`'use client'` component that writes a table and cross-checking the table's
+policies against the gate the component claims. This closes the rest of that
+set. Each module declares `canEdit = isManager(role)` and then writes its table
+**straight from the browser** with the viewer's own JWT:
+
+| module | table | where the gate is |
+| --- | --- | --- |
+| `rides-module.tsx` | `rides` | add/edit/delete/mark-completed, all inside `canEdit` (247) |
+| `renewals-module.tsx` | `renewals` | add/edit/delete/mark-renewed (210) |
+| `signups-module.tsx` | `opportunities` | add/edit/delete/mark-registered (235) |
+| `trips-module.tsx` | `trips` | add/edit/delete (223) |
+| | `trip_items` | add (255), remove (277) |
+
+None carried a manager-checked or restrictive write policy. Measured, acting as
+a child with both controls passing: the child **rescheduled and cancelled a
+ride**, **deleted a renewal reminder**, **registered the family for a signup**,
+**changed the family trip's destination and dates**, and **rewrote, added and
+deleted trip items**. Nine breaches,
+`docs/audit/ui-only-manager-gate-check.sql`.
+
+These reach no money, payout, prescription or credential — which is why they are
+one migration behind `0307`-`0309` rather than folded in with them. What they
+reach is a family coordinating: a cancelled ride nobody drives to, a renewal
+reminder that never fires again.
+
+**`trip_items` is not a straight manager table.** Its done-tick, `toggleItem` at
+line 267, sits *outside* `canEdit`: any member may check a packing item off, and
+a blanket guard would have closed that. So INSERT and DELETE are manager-only and
+UPDATE is guarded **by column** — `is_done` is anyone's, the item's content is a
+manager's. The probe asserts the tick as a positive control for exactly this
+reason.
+
+Nothing legitimate breaks: the modules already refuse a non-manager everything
+guarded here, so this only makes the database agree with the rule the application
+states — which is what matters for anyone calling PostgREST directly.
+
+Until this is applied, production carries all nine as measured above.

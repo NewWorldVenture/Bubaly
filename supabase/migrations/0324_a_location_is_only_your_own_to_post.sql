@@ -1,4 +1,19 @@
--- Bubaly :: 0308 - a location is only your own to post
+-- Bubaly :: 0324 - a location is only your own to post
+-- ----------------------------------------------------------------------------
+-- Renumbered from 0308. main landed seven migrations at once — 0304 economy
+-- invest decision guard, 0305 chore award amounts, 0306 money instructions,
+-- 0307 chore prices, 0308 reward catalogue, 0309 prescriptions, 0310 UI-only
+-- manager gates — colliding with this branch's whole 0304-0310 block. The NINTH
+-- collision event between the two sessions and by far the largest; every merge
+-- since 0300 has brought one. Only the numbers changed: this branch's seven
+-- moved together to 0320-0326, keeping their order relative to each other.
+--
+-- Main's seven are RESTRICTIVE guards (`as restrictive`, 0254's mechanism), so
+-- they AND with everything here and nothing in this block can loosen them by
+-- running later. The two sets are defence in depth over the same tables rather
+-- than one overwriting the other, and the probes are run against the combined
+-- chain to say so rather than to assume it.
+-- ----------------------------------------------------------------------------
 -- ----------------------------------------------------------------------------
 -- `app/(app)/dashboard/locator/actions.ts:30` states the rule in as many words:
 --
@@ -91,7 +106,7 @@ begin
     loop
       execute format('drop policy if exists %I on public.%I', pol.polname, tbl);
       swept := swept + 1;
-      raise notice '0308: dropped stray permissive write policy %.%', tbl, pol.polname;
+      raise notice '0324: dropped stray permissive write policy %.%', tbl, pol.polname;
     end loop;
   end if;
 
@@ -122,7 +137,7 @@ begin
     loop
       execute format('drop policy if exists %I on public.%I', pol.polname, tbl);
       swept := swept + 1;
-      raise notice '0308: dropped stray permissive write policy %.%', tbl, pol.polname;
+      raise notice '0324: dropped stray permissive write policy %.%', tbl, pol.polname;
     end loop;
   end if;
 
@@ -162,7 +177,7 @@ begin
     loop
       execute format('drop policy if exists %I on public.%I', pol.polname, tbl);
       swept := swept + 1;
-      raise notice '0308: dropped stray permissive write policy %.%', tbl, pol.polname;
+      raise notice '0324: dropped stray permissive write policy %.%', tbl, pol.polname;
     end loop;
   end if;
 
@@ -176,8 +191,8 @@ begin
       'location_events_self_append','location_events_manager_delete',
       'safety_check_ins_self_insert','safety_check_ins_owner_update','safety_check_ins_owner_delete');
   if remaining <> 0 then
-    raise exception '0308 FAILED: % permissive write policy(ies) still on the locator tables after the sweep', remaining;
+    raise exception '0324 FAILED: % permissive write policy(ies) still on the locator tables after the sweep', remaining;
   end if;
 
-  raise notice '0308 OK: % stray write policy(ies) swept; a location is only your own to post', swept;
+  raise notice '0324 OK: % stray write policy(ies) swept; a location is only your own to post', swept;
 end $$;

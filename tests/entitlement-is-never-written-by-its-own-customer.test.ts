@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 
-// 0306 is the real boundary: `subscriptions` and `billing_customers` take no
+// 0322 is the real boundary: `subscriptions` and `billing_customers` take no
 // client write at all, proven behaviourally by
 // docs/audit/paywall-write-boundary-check.sql. This pins the SECOND lock on the
 // same door — the code side, which reaches production FIRST.
@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 // That ordering is the whole reason this file exists. F5 means migrations are
 // not applied on merge in this repo, so a route that starts writing one of
 // these tables with the caller's own session ships before any policy could
-// refuse it. And once 0306 IS applied, such a write does not merely leak — it
+// refuse it. And once 0322 IS applied, such a write does not merely leak — it
 // fails, at a point where the family has already been charged by Stripe.
 //
 // The rule is not "these tables are untouchable". It is that the WRITE is the
@@ -128,9 +128,9 @@ describe('the row that decides what a family paid for is never written by that f
 
       expect(
         offenders,
-        `${table} is written from the caller's own session. 0306 revokes that write, `
+        `${table} is written from the caller's own session. 0322 revokes that write, `
           + 'so this fails at runtime after the customer has already been charged — and '
-          + 'before 0306 reaches a database, it is the paywall (and, on billing_customers, '
+          + 'before 0322 reaches a database, it is the paywall (and, on billing_customers, '
           + "another family's Stripe portal) written by the person it is meant to bill. "
           + 'Use createServiceClient().',
       ).toEqual([]);
@@ -156,7 +156,7 @@ describe('the row that decides what a family paid for is never written by that f
   it('keeps trial_ends_at and closed_at off the caller session too', () => {
     // These two columns are entitlement wearing a profile table's clothes:
     // `lib/server/plan.ts` reads them with the service role and treats them as
-    // authority, so 0306 pins them with a trigger. Both writers already use the
+    // authority, so 0322 pins them with a trigger. Both writers already use the
     // service role; this says so out loud.
     const account = readFileSync('app/(app)/account/actions.ts', 'utf8');
     expect(account).toContain('createServiceClient');

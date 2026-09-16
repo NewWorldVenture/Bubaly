@@ -1,4 +1,4 @@
--- Behavioural proof for 0308, run as real `authenticated` sessions under RLS.
+-- Behavioural proof for 0324, run as real `authenticated` sessions under RLS.
 --
 -- `app/(app)/dashboard/locator/actions.ts:30` says "Strictly self-only — a
 -- member can only post their own location", and the server action keeps that
@@ -75,7 +75,7 @@ begin
     raise exception 'a child can no longer see the family map';
   end if;
 
-  -- 1. Cannot move a parent's dot. Before 0308 this was INSERT/UPDATE 1.
+  -- 1. Cannot move a parent's dot. Before 0324 this was INSERT/UPDATE 1.
   update public.member_locations set latitude = 0, longitude = 0 where member_id = parent_mid;
   get diagnostics n = row_count;
   if n <> 0 then

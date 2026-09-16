@@ -52,7 +52,7 @@
 --
 -- plus the return-reminder cron, which stamps `due_reminder_sent_at` and
 -- `overdue_notified_at` through the service client. Neither column is frozen
--- here, and the service role is let through regardless, in 0306's idiom.
+-- here, and the service role is let through regardless, in 0322's idiom.
 --
 -- Not changed: reads, inserts, and every other column. `status`, `notes`,
 -- `starts_on`, `ends_on` and `message` stay editable — advancing a deal is the
@@ -94,7 +94,7 @@ end $$;
 
 -- ── Rule 2: the terms themselves ────────────────────────────────────────────
 --
--- Column-wise, in the idiom 0317 used for chore_assignments and 0306 for the
+-- Column-wise, in the idiom main's 0305 uses for chore_assignments and 0322 for the
 -- family's entitlement: name the columns that carry the deal and refuse an
 -- untrusted writer touching them, leaving the rest of the row alone. The frozen
 -- list travels as a trigger argument so both tables share one function and the

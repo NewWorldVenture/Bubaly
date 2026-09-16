@@ -1,4 +1,19 @@
--- Bubaly :: 0309 - the rest of 0088's loop, given 0217's boundary
+-- Bubaly :: 0325 - the rest of 0088's loop, given 0217's boundary
+-- ----------------------------------------------------------------------------
+-- Renumbered from 0309. main landed seven migrations at once — 0304 economy
+-- invest decision guard, 0305 chore award amounts, 0306 money instructions,
+-- 0307 chore prices, 0308 reward catalogue, 0309 prescriptions, 0310 UI-only
+-- manager gates — colliding with this branch's whole 0304-0310 block. The NINTH
+-- collision event between the two sessions and by far the largest; every merge
+-- since 0300 has brought one. Only the numbers changed: this branch's seven
+-- moved together to 0320-0326, keeping their order relative to each other.
+--
+-- Main's seven are RESTRICTIVE guards (`as restrictive`, 0254's mechanism), so
+-- they AND with everything here and nothing in this block can loosen them by
+-- running later. The two sets are defence in depth over the same tables rather
+-- than one overwriting the other, and the probes are run against the combined
+-- chain to say so rather than to assume it.
+-- ----------------------------------------------------------------------------
 -- ----------------------------------------------------------------------------
 -- 0217 narrowed writes to can_manage_family on FIVE wallet tables —
 -- family_wallets, child_wallets, wallet_buckets, wallet_transactions,
@@ -94,7 +109,7 @@ begin
     loop
       execute format('drop policy if exists %I on public.%I', pol.polname, t);
       swept := swept + 1;
-      raise notice '0309: dropped stray permissive write policy %.%', t, pol.polname;
+      raise notice '0325: dropped stray permissive write policy %.%', t, pol.polname;
     end loop;
   end loop;
 
@@ -109,8 +124,8 @@ begin
     and p.polname not in (c.relname || '_mng_insert', c.relname || '_mng_update', c.relname || '_mng_delete');
 
   if remaining <> 0 then
-    raise exception '0309 FAILED: % permissive write policy(ies) still on the allowance/gift tables after the sweep', remaining;
+    raise exception '0325 FAILED: % permissive write policy(ies) still on the allowance/gift tables after the sweep', remaining;
   end if;
 
-  raise notice '0309 OK: % stray write policy(ies) swept; writes on % table(s) are managers-only', swept, array_length(money_adjacent, 1);
+  raise notice '0325 OK: % stray write policy(ies) swept; writes on % table(s) are managers-only', swept, array_length(money_adjacent, 1);
 end $$;

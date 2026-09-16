@@ -3931,3 +3931,61 @@ Recorded with the evidence rather than guessed at, and explicitly NOT fixed.
   corrupts the thing it is testing.**
 - **Verified:** **14,014 tests green under both `TZ=UTC` and
   `TZ=America/Los_Angeles`**, tsc clean, eslint at 85, `npm run build` exits 0.
+
+### [CLAUDE-1][MERGE] The ninth collision was not a number — it was a symbol, and a disagreement
+
+- main landed **seven migrations at once** (0304–0310), colliding with this
+  branch's entire 0304–0310 block. Ninth collision event, fifteen numbers, and
+  every merge since 0300 has brought one. This branch's seven moved together to
+  **0320–0326**, keeping their order.
+- **The number was the least of it.** Two findings came out of reconciling them:
+
+  1. **A SYMBOL collision, invisible to the migration ledger.** This branch's
+     chores migration and main's 0305 both created
+     `public.chore_assignment_decision_guard()` and
+     `trg_chore_assignment_decision_guard`. Whichever ran last silently replaced
+     the other's trigger. The ledger tracks FILE NAMES; renumbering resolves the
+     filename clash and leaves the function clash untouched. **Renumbering is
+     not reconciling**, and nothing in the harness was looking for this — the
+     probes are, which is how it surfaced: two of main's went red on the merged
+     chain.
+  2. **A genuine product disagreement, and main was right.** This branch made
+     chore writes manager-only outright; main's 0307 guards the PRICE COLUMNS
+     and asserts, as a positive control, that a member may still add a chore and
+     edit its text. `chores-module.tsx:233` offers Add to every member and only
+     the empty state at :301 gates it — so the branch had narrowed past what the
+     screen renders, **the exact rule it had applied to `driving_trips` a day
+     earlier**. The migration, its probe and the blanket app-layer gate were
+     withdrawn; main's narrower rule stands.
+- **What survived from this branch on that finding** is the shape of the
+  refusal: main's pricing guard arrived as a bare `return;`, and a silent refusal
+  is the defect this branch fixed across those four actions. It now returns
+  `{ ok, error }` reusing an existing key, so no new copy in eleven locales.
+- **The other red probe was the opposite case and this branch was right.**
+  `economy-invest-decision-check.sql` inserted a redemption with a self-chosen
+  title and cost and no `reward_id` — as a POSITIVE control. That is precisely
+  what 0320's `economy_redemption_request_guard` refuses: a child naming their
+  own price. main's 0304 guards only the decision, not the cost. The control's
+  intent (a child may queue a redemption) is preserved by giving it a real
+  catalogue reward to name, and the probe now says why.
+- **A latent defect in my own recent work, found by reading main's approach.**
+  main's guards are RESTRICTIVE (`as restrictive`, 0254's mechanism): they AND
+  with the permissive union and can only narrow. My by-shape sweeps in **0316 and
+  0319 did not filter on `polpermissive`**, so a restrictive guard landing on
+  `medical_profiles` or `driving_trips` would make my migration REFUSE TO APPLY
+  over somebody else's tightening — a guard failing in the safe direction.
+  Earlier migrations (0311, 0315, 0322–0325) filter correctly; I knew the rule
+  and stopped applying it. Both fixed. **0318's sweep deliberately does NOT
+  filter**, and now says so: it asks whether a policy delegates its `is_active`
+  check to another table, and a restrictive policy with that predicate leans on
+  `fm_select` exactly as hard.
+- **One mechanical miss worth recording:** the renumber rewrote `\b0310\b` but
+  not `0310_a_guardian_number_belongs_to_one_family.sql`, because `_` is a word
+  character so there is no boundary after the digits. One test read a path that
+  no longer existed. Now verified by walking every
+  `supabase/migrations/NNNN_*.sql` string in the repo and checking the file is
+  there.
+- **Verified on the merged chain:** 338 migrations replayed from scratch (0
+  failed), 335 re-applied onto the populated schema, **46/46 probes run twice**
+  — including all seven of main's new ones — **14,017 tests green under both
+  `TZ=UTC` and `TZ=America/Los_Angeles`**, tsc clean, eslint at 85, build exits 0.

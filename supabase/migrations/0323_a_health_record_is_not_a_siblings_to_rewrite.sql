@@ -1,4 +1,19 @@
--- Bubaly :: 0307 - a health record is not a sibling's to rewrite
+-- Bubaly :: 0323 - a health record is not a sibling's to rewrite
+-- ----------------------------------------------------------------------------
+-- Renumbered from 0307. main landed seven migrations at once — 0304 economy
+-- invest decision guard, 0305 chore award amounts, 0306 money instructions,
+-- 0307 chore prices, 0308 reward catalogue, 0309 prescriptions, 0310 UI-only
+-- manager gates — colliding with this branch's whole 0304-0310 block. The NINTH
+-- collision event between the two sessions and by far the largest; every merge
+-- since 0300 has brought one. Only the numbers changed: this branch's seven
+-- moved together to 0320-0326, keeping their order relative to each other.
+--
+-- Main's seven are RESTRICTIVE guards (`as restrictive`, 0254's mechanism), so
+-- they AND with everything here and nothing in this block can loosen them by
+-- running later. The two sets are defence in depth over the same tables rather
+-- than one overwriting the other, and the probes are run against the combined
+-- chain to say so rather than to assume it.
+-- ----------------------------------------------------------------------------
 -- ----------------------------------------------------------------------------
 -- Nine health tables still carry the shape 0300 narrowed on `medications`:
 --
@@ -121,7 +136,7 @@ begin
 
     -- Sweep stray permissive WRITE policies BY SHAPE, not by name — 0217
     -- narrowed five wallet tables by name and left six behind, which is how
-    -- 0309 came to exist. `*` (FOR ALL) is included: that is the shape being
+    -- 0325 came to exist. `*` (FOR ALL) is included: that is the shape being
     -- replaced here, and its read half has been restated above.
     for pol in
       select p.polname from pg_policy p
@@ -133,7 +148,7 @@ begin
     loop
       execute format('drop policy if exists %I on public.%I', pol.polname, spec.tbl);
       swept := swept + 1;
-      raise notice '0307: dropped stray permissive write policy %.%', spec.tbl, pol.polname;
+      raise notice '0323: dropped stray permissive write policy %.%', spec.tbl, pol.polname;
     end loop;
 
     select count(*) into remaining
@@ -144,9 +159,9 @@ begin
       and p.polpermissive and p.polcmd in ('a','w','d','*')
       and not (p.polname = any(keep));
     if remaining <> 0 then
-      raise exception '0307 FAILED: % permissive write policy(ies) still on % after the sweep', remaining, spec.tbl;
+      raise exception '0323 FAILED: % permissive write policy(ies) still on % after the sweep', remaining, spec.tbl;
     end if;
   end loop;
 
-  raise notice '0307 OK: % stray write policy(ies) swept across 9 health tables; a health record is the subject''s, the author''s or a manager''s', swept;
+  raise notice '0323 OK: % stray write policy(ies) swept across 9 health tables; a health record is the subject''s, the author''s or a manager''s', swept;
 end $$;

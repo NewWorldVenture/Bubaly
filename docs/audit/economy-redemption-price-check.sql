@@ -1,4 +1,4 @@
--- Behavioural proof for 0304, run as real `authenticated` sessions under RLS.
+-- Behavioural proof for 0320, run as real `authenticated` sessions under RLS.
 --
 -- `economy_redemptions_insert` constrained ONE column — `family_id` — so `cost`,
 -- `member_id`, `status`, `decided_by`, `decided_at` and `txn_id` were all the
@@ -65,7 +65,7 @@ begin
   perform set_config('request.jwt.claim.sub', child_uid::text, true);
   set local role authenticated;
 
-  -- 1. The headline: cannot name their own price. Before 0304 this inserted,
+  -- 1. The headline: cannot name their own price. Before 0320 this inserted,
   --    and the parent's approval then debited ONE star for a 5000-star reward.
   blocked := false;
   begin

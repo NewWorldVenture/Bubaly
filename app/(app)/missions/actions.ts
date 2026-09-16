@@ -427,19 +427,37 @@ export async function disputeSubmissionAction(formData: FormData): Promise<{ ok:
 export async function createChoreAction(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const t = await getTranslations();
   const ctx = await requireUserContext();
-  // "Parent creates a chore" is what the line above has always said, and until
-  // now nothing checked it. The sibling action in dashboard/chores/actions.ts
-  // opens with refuseUnlessManager and is pinned by a test; this one — reached
-  // from /missions, which gates on PLAN and never on role — did not. A chore is
-  // the price list for the chores economy (points, cash_cents,
-  // auto_approve_score), so authoring one is a manager's act. 0317 is the real
-  // boundary; this is the same rule where the screen's claim lives, so the
-  // control fails here rather than as an RLS error the form cannot explain.
-  if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentGuardianCan') };
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
   const title = str(formData, 'title');
   if (!title) return { ok: false, error: t('actions.giveTheChoreATitle') };
+
+  // What a chore PAYS is a manager's number, not the submitter's.
+  // payChoreRewardAction credits a wallet with `chores.cash_cents` whenever the
+  // assignment carries no override, and the board copies `chores.points` into
+  // points_awarded on approval — so a member pricing their own chore writes the
+  // figure a parent's Pay click hands over. 0307 is the database boundary; this
+  // refuses the same submission here rather than letting it fail silently.
+  //
+  // This branch briefly went further and refused a non-manager ANY chore here.
+  // That was wrong, and main's probe is what said so: docs/audit/chore-price-check.sql
+  // asserts, as a positive control, that a member may still add a chore and edit
+  // its text. The rule main landed is the narrower and better one — the PRICE is
+  // a manager's, the chore is anyone's — and it is the same distinction this
+  // branch applied to driving_trips a day earlier: do not narrow past what the
+  // screen renders. (The chores module offers Add to every member at
+  // chores-module.tsx:233, and gates it only in the empty state at :301.)
+  //
+  // What survives from this branch is the SHAPE of the refusal. It arrived as a
+  // bare `return;`, which is the exact defect fixed across these four actions:
+  // the parent is told nothing and the form stays as it was. Reusing
+  // `onlyAParentGuardianCan` means no new copy in eleven locales.
+  const pricing = ['points', 'points_min', 'points_max', 'cash_cents', 'cash_min_cents', 'cash_max_cents'];
+  const priced = pricing.some((field) => intVal(formData, field) != null);
+  if (priced && !isManager(ctx.active.role)) {
+    return { ok: false, error: t('actions.onlyAParentGuardianCan') };
+  }
+
   const memberIds = formData.getAll('member_ids').map((v) => String(v)).filter(Boolean);
 
   const { data: chore, error: choreError } = await supabase.from('chores').insert({

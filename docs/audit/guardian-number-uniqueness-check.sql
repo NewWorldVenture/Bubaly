@@ -1,4 +1,4 @@
--- Behavioural proof for 0310, run against the replayed schema.
+-- Behavioural proof for 0326, run against the replayed schema.
 --
 -- `guardian_member_profiles.guardian_phone` is the only key the three inbound
 -- Twilio webhooks have, and they resolve it ACROSS all families under the

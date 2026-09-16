@@ -134,7 +134,15 @@ create policy profiles_select_self on public.profiles
 -- ── Sweep by shape ───────────────────────────────────────────────────────────
 -- The list above was found by shape rather than by memory, and is re-derived
 -- the same way so a table that acquires this predicate tomorrow is caught here
--- rather than in the next audit. `profiles_select_self` is the one policy that
+-- rather than in the next audit.
+--
+-- This sweep does NOT filter on `polpermissive`, unlike the ones in 0316 and
+-- 0319, and the difference is deliberate. Those ask "can something OR my
+-- narrowing away", which only a permissive policy can do. This one asks "does
+-- this policy delegate its `is_active` check to another table", and a
+-- RESTRICTIVE policy written with the same inline subquery leans on `fm_select`
+-- exactly as hard: widen that policy and the restrictive term becomes true more
+-- often too. Both shapes are the defect here. `profiles_select_self` is the one policy that
 -- legitimately names `family_members` twice with its own `is_active` terms, so
 -- the test is for the inline membership subquery, not for the table name.
 do $$

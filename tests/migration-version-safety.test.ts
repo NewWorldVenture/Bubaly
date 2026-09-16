@@ -44,12 +44,15 @@ describe('Supabase migration filename safety', () => {
     // the point: the number is how a new migration announces itself, so a file
     // that quietly reuses one, or a rebase that drops one, fails here.
     //
-    // EIGHT real collisions between two sessions running at once — 0297, 0298
-    // (twice, on the same finding), 0299, then 0300, 0301, 0302 and 0303 on
-    // four consecutive merges. EVERY merge since 0300 has brought one. Those
-    // four are now 0312, 0313, 0314 and 0317, which is why this reads 0320:
-    // main holds 0001-0303 and this branch 0304-0319.
-    expect(audit.nextVersion).toBe('0320');
+    // NINE collision EVENTS between two sessions running at once, and fifteen
+    // numbers: 0297, 0298 (twice, on the same finding), 0299, then 0300, 0301,
+    // 0302, 0303 on four consecutive merges — and then all of 0304-0310 in one
+    // go, when main landed seven migrations at once. EVERY merge since 0300 has
+    // brought one. The renumbered files are 0312, 0313, 0314 and 0320-0326;
+    // the chores one was withdrawn outright, since main's 0305 and 0307 close
+    // the same finding. This reads 0327: main holds 0001-0310 and this branch
+    // 0311-0316 and 0318-0326.
+    expect(audit.nextVersion).toBe('0327');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

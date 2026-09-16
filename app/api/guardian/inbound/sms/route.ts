@@ -61,8 +61,8 @@ export async function POST(req: NextRequest) {
 
   // A FAILED lookup is not an unknown number. `maybeSingle()` answers
   // `data: null` plus PGRST116 when MORE THAN ONE profile holds this number —
-  // which is exactly the state 0310's unique index exists to prevent, and which
-  // a production database may already be in, because 0310 reports duplicates
+  // which is exactly the state 0326's unique index exists to prevent, and which
+  // a production database may already be in, because 0326 reports duplicates
   // rather than choosing which household loses its number. Dropping the error
   // turned that into "we do not know this number", and marked the message handled and answered 200, so nothing was ever retried. Answering 5xx
   // instead leaves the event unconsumed so Twilio retries it, and puts the
