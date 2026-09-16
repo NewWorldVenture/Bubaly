@@ -41,10 +41,25 @@ export function progressBarA11y(value: number, label: string): {
  * copies, because the hand-rolled copies are how the ILIKE escape came to reach
  * four call sites with two of them still wrong.
  *
- * Only for elements that genuinely ACTIVATE something. A click-outside scrim is
- * not one: it has nothing to activate, and giving it a tab stop puts an
- * invisible full-screen layer into the tab order. Those close on Escape
- * instead.
+ * NOT for an element that CONTAINS a button, link or input. `role="button"`
+ * around nested interactive content is invalid ARIA and actively worse than the
+ * warning it silences: the row is announced as a single button, and the pin,
+ * duplicate and delete buttons inside it become confusing or unreachable. Those
+ * rows need the primary action moved onto a child — the title as a real button
+ * or link — which is a refactor per component, not a helper.
+ *
+ * That is the common case, not the rare one. Of the flagged elements left in
+ * photos, notes, meals and locator, EVERY one either contains a nested button,
+ * is a `stopPropagation` guard, or is a modal backdrop. `calendar-module` was
+ * the exception. Spreading this everywhere would drop the warning count and
+ * leave eighty invalid-ARIA rows behind, which is the kind of progress that is
+ * really a regression.
+ *
+ * Also not for a click-outside scrim: it has nothing to activate, and giving it
+ * a tab stop puts an invisible full-screen layer into the tab order. Those close
+ * on Escape instead — and see
+ * tests/a-row-you-can-click-is-a-row-you-can-reach.test.ts for why marking one
+ * `aria-hidden` is a promise about the keyboard rather than a way out.
  *
  *     <div {...activatable(() => setSelected(event))} className="…">
  */

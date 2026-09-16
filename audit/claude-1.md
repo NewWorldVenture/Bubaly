@@ -3288,3 +3288,40 @@ session's block: **I shipped a regression and CI found it, not me.**
   succeed repeatedly, or run a real query rather than `pg_isready`) would be the
   durable answer, but it widens this PR into CI infrastructure for a failure that
   is not its own, so it is recorded here rather than taken.
+
+### [CLAUDE-1][MEDIUM][A11Y] The rest of the a11y backlog is NOT the same job, and treating it as one would have made things worse
+
+- **What I set out to do:** apply `activatable()` to the next four modules
+  (photos 8, notes 8, meals 6, locator 6) and lower the cap again.
+- **What the code actually says.** Of those 26 flagged elements, **every single
+  one** is unsuitable:
+  - a **row containing its own buttons** — a note card with pin / duplicate /
+    delete inside a `stopPropagation` wrapper, a photo tile, a meal slot;
+  - a **`stopPropagation` guard** — `onClick={(e) => e.stopPropagation()}`,
+    which is a bubbling boundary and not a control at all;
+  - a **modal backdrop** — the photo lightbox, which is Claude-2's C2-01 HIGH
+    ("a modal that traps sighted mouse users and strands keyboard users") and
+    needs a focus trap and Escape, not a role.
+- **Why this matters more than the count.** `activatable` sets `role="button"`.
+  Around nested interactive content that is **invalid ARIA and worse than the
+  warning it silences**: the row is announced as one button and the buttons
+  inside it become confusing or unreachable. Sweeping the helper across these
+  would have taken the cap from 86 to single digits while leaving ~80
+  invalid-ARIA rows — a number that looks like progress and is a regression.
+  `calendar-module` was the exception, not the template, and the only reason I
+  know that is that I looked instead of pattern-matching on the first success.
+- **A guard I deliberately did NOT write.** I started to add a test asserting
+  that nothing spread with `activatable` contains a nested `<button>`. Sound JSX
+  nesting analysis is not something a regex does — and I had just proved that on
+  myself: my own 25-line scan window reported `notes-module:310` as clean, and
+  the nested buttons were 34 lines down. Shipping a guard whose unsoundness I had
+  just demonstrated would be the exact failure this audit keeps finding. The
+  prohibition is documented at the top of `activatable` instead, where the next
+  person reaching for it will read it.
+- **Recommended shape for the remaining backlog**, so the next pass does not
+  re-derive this: move the primary action onto a CHILD — the note's title as a
+  real `<button>` or `<a>`, the photo tile's image — leaving the secondary
+  buttons as siblings. That is a refactor per component, not a sweep, and the
+  86-warning cap is what keeps it honest in the meantime.
+- **Status:** OPEN (26 of 86 classified in detail; the rest are the same three
+  shapes). Not a sweep. `lib/ui/a11y.ts` now says so.
