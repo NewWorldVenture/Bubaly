@@ -6944,3 +6944,53 @@ cannot publish, or the fixture is restricting nobody), the refusal, the
 delete being refused only matters because of what the fallback would have
 granted), and that a family admin can still revoke. Proved red by restoring the
 family-wide policy. **30/30 probes pass** against a full 322-migration replay.
+
+
+## Pass V — five classes swept, nothing found, recorded so they are not re-derived
+
+C1-S6-08 through C1-S6-11 all came from one new census family: **an authority
+that some verbs enforce and others do not.** Having mined it out, five adjacent
+hypotheses were put and answered. None produced a finding, and each is written
+down at the strength the measurement supports, because an unrecorded negative
+gets re-derived by the next pass.
+
+1. **Other permission resolvers with a missing-row fallback.** C1-S6-11 turned on
+   `social_role_for()` COALESCEing to a family-role default, which made deleting
+   a restriction an escalation. Every `public` function whose body mentions
+   `coalesce` and whose name touches role/permission/access/tier/entitlement/quota
+   was listed: three exist, and only `social_role_for` is a permission resolver.
+   The other two (`grocery_from_meal_plan`, `wallet_decide_allowance`) do not
+   resolve authority. **The shape does not recur.**
+
+2. **Restrictive write guards with a verb missing.** Twelve tables carry
+   restrictive policies. If one covered only INSERT and UPDATE, the permissive
+   policy alone would govern DELETE — the same asymmetry, one layer down. All
+   twelve cover the three write verbs (`home_briefs` with a single `ALL`,
+   `allowance_rules` — `main`'s brand-new `0306` — with all three). **No gap.**
+
+3. **Public buckets whose RLS claims a scoping the delivery path ignores.**
+   `family-media` is `public = true` while its SELECT policy reads
+   `is_family_member(...)`, which is decorative for public-URL delivery. This is
+   **already found, already fixed and already tracked**: `lib/storage/object-name.ts`
+   carries the whole argument, the path entropy is 122 random bits rather than a
+   clock, and hardening reads to signed URLs is the LB-009 follow-up because it
+   needs a data migration. Re-filing it would have been this audit's most-warned-
+   against failure mode.
+
+4. **Remaining clock-built names in a public bucket.**
+   `tests/public-bucket-objects-are-unguessable.test.ts` already ratchets it. The
+   one surviving `Date.now()` path builder, `lib/storage/documents.ts:19`, is for
+   the **private** `documents` bucket, where RLS is the boundary and
+   unguessability was never the claim. **Correct by design, not an exemption.**
+
+5. **Migrations that claim idempotency without anything checking.** Seven
+   migrations on this branch say "idempotent" in their headers. CI's last
+   database step, `rehearse-ledger-repair.sh`, re-applies every migration onto
+   the schema it just built — the only step that distinguishes idempotent from
+   merely correct — and run 3144 went green with all seven present. **The claim
+   is verified, and not by me asserting it.**
+
+The first two are the honest end of the census family that produced four
+findings; the last three are guards that already existed and held. Recorded
+together because the useful signal is not "nothing found" but **which questions
+were asked**.

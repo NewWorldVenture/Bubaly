@@ -190,6 +190,13 @@ PRIOR SESSIONS (unchanged, see history below): F-020 migration idempotency;
     deleted their own restriction and became marketing_manager — publish_posts
     and manage_settings on the family's CONNECTED social accounts. 0313 gives
     DELETE the predicate INSERT and UPDATE already carry.
+  - Pass V: five adjacent classes swept, none a finding, all recorded rather than
+    dropped — other COALESCE-fallback permission resolvers (shape does not
+    recur), restrictive write guards missing a verb (all 12 tables complete),
+    the public family-media bucket (already found, fixed and tracked as LB-009 —
+    re-filing it would have been the failure mode this audit warns about most),
+    remaining clock-built public-bucket names (already ratcheted), and migration
+    idempotency (proved by CI's rehearse-ledger-repair step, green on run 3144).
 NEXT: C2-M03 is the largest open finding — ~251 en-US-pinned date/time call
   sites across ~135 files against an 11-locale catalogue. The trap is recorded
   in Pass P: dayKey() uses 'en-US' as a PARSE locale and must not be switched.

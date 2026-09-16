@@ -1917,3 +1917,32 @@ Found by: one query — tables whose INSERT policy requires can_manage_family or
 Status:   FIXED — inert until an operator applies 0313
           (docs/PENDING_PROD_MIGRATIONS.md).
 ```
+
+```
+[CLAUDE-1][INFO][SECURITY] Pass V: five classes swept clean after C1-S6-08..11
+Problem:  Not a defect. The four findings above came from one census family — an
+          authority some verbs enforce and others do not. Five adjacent
+          hypotheses were put and answered; recording the negatives so the next
+          pass does not re-derive them.
+Evidence: 1. Permission resolvers with a missing-row fallback (C1-S6-11's
+             mechanism): every public function mentioning `coalesce` whose name
+             touches role/permission/access/tier/entitlement/quota — 3 exist,
+             only social_role_for resolves authority. Shape does not recur.
+          2. Restrictive write guards with a verb missing: 12 tables carry
+             restrictive policies, all 12 cover INSERT+UPDATE+DELETE (home_briefs
+             via a single ALL; allowance_rules, main's new 0306, with all three).
+          3. family-media is public=true while its SELECT policy says
+             is_family_member — ALREADY found, fixed and tracked. object-name.ts
+             carries the argument, entropy is 122 random bits not a clock, signed
+             URLs are the LB-009 follow-up. Re-filing it would be this audit's
+             most-warned-against failure mode.
+          4. Remaining clock-built public-bucket names: ratcheted by
+             tests/public-bucket-objects-are-unguessable.test.ts. The surviving
+             Date.now() builder (lib/storage/documents.ts:19) is the PRIVATE
+             documents bucket, where RLS is the boundary.
+          5. Migration idempotency: CI's rehearse-ledger-repair.sh re-applies
+             every migration onto the schema it just built, and run 3144 went
+             green with all seven of this branch's present.
+Impact:   None. The value is the record of which questions were asked.
+Status:   VERIFIED
+```
