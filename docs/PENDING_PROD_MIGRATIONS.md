@@ -514,10 +514,11 @@ passed; production application of the atomic `0240-0254` release remains pending
 ## Migrations added since this document's stated baseline (2026-09-12)
 
 The status line at the top of this file is dated **2026-09-05** against main
-`01881fb2`. **49** migration files have landed since, `0255` through
-`0306`, and none of them appear anywhere above. (This read "thirty-one, `0255`
+`01881fb2`. **53** migration files have landed since, `0255` through
+`0310`, and none of them appear anywhere above. (This read "thirty-one, `0255`
 through `0285`" until 2026-09-13, "seventy-one, `0255` through `0295`" until
-2026-09-15, and "forty-five, `0255` through `0302`" and "46, `0255` through `0303`" until 2026-09-16; the range
+2026-09-15, and "forty-five, `0255` through `0302`", "46, `0255` through `0303`"
+and "49, `0255` through `0306`" until 2026-09-16; the range
 keeps growing past the sentence. The count is the number
 of files in that range, which is what `ls supabase/migrations` reports — the
 earlier "seventy-one" did not match its own stated range.)
@@ -997,17 +998,174 @@ to set an allowance.
 
 Until this is applied, production carries both as measured above.
 
+### `0307` guards the chore's own price, which `0305` did not reach — unapplied
+
+`0305` closed `chore_assignments.cash_awarded_cents`, the override a manager
+writes at approval. The payout reads that column with a fallback:
+
+```
+app/(app)/wallet/actions.ts:206
+  const amount = assignment.cash_awarded_cents ?? chore?.cash_cents ?? 0;
+```
+
+An ordinary chore carries no override, so the number a parent's Pay click
+credits is `chores.cash_cents` — and `chores` has four permissive policies whose
+entire condition is `is_family_member(family_id)`.
+
+This is worse than the column `0305` fixed, not the same. There, the chores
+board's `canPay = … && !a.cash_awarded_cents` happened to hide the Pay button
+once the column was set, so the ordinary click path did not pay a forged amount.
+Here the button's condition is
+`manager && done && (a.chore?.cash_cents ?? 0) > 0 && !a.cash_awarded_cents`
+(`components/modules/chores-module.tsx:554`) — exactly the state a child can
+manufacture: create the chore, price it, assign it to yourself, tick it done.
+The parent is then shown "Pay $5,000.00" on a chore their child wrote and
+priced. No accident stands in the way this time; this is the happy path.
+
+Measured, acting as a child with both positive controls passing: the child
+**created a chore paying 500,000 cents**, **raised a manager's chore from 500 to
+500,000**, set its cash range, and **re-priced it in points**. Five breaches,
+`docs/audit/chore-price-check.sql`.
+
+Cash is manager-only to set or change; points are guarded on CHANGE only, so a
+member may still create a chore carrying points — that is the assistant path
+(`lib/services/tasks/index.ts` inserts `points: input.points ?? 10` through the
+calling user's client), and a guard on INSERT would have closed a working
+feature rather than a hole. Points reach a balance only through an approval a
+manager makes with the number in front of them, and `0305` already owns
+`points_awarded`.
+
+Shipped alongside it, and live independently of the ledger: `createChoreAction`
+— whose own comment reads "Parent creates a chore" — carried no manager check,
+unlike the two actions beside it in the same file. It now refuses a submission
+that carries pricing from a non-manager.
+
+Until this is applied, production carries the forgery as measured above.
+
+### `0308` puts the reward catalogue back in a manager's hands — unapplied
+
+`rewards` is written **straight from the browser**:
+`components/modules/rewards-module.tsx` calls
+`sb.from('rewards').insert/update/delete` with the viewer's own JWT, with no
+server action in between. The only thing standing between a child and the
+family's reward catalogue is `canManage = isManager(role)` deciding whether a
+button renders (lines 146, 233, 251). A hidden button is not a boundary; the
+table's policies are `is_family_member(family_id)` and nothing else.
+
+Measured, acting as a child with the positive control passing: the child
+**re-priced "New bike" from 5000 points to 5**, **added a reward costing
+nothing**, **deleted a reward the parent had set up**, and **requested a
+5000-point reward for 1 point**. Five breaches,
+`docs/audit/reward-catalogue-price-check.sql`.
+
+`requestRedemptionAction` copies `rewards.cost_points` into the redemption
+server-side, so re-pricing the shelf re-prices the ticket a parent is asked to
+approve — the queue shows a 5-point request for the bike. Restrictive manager
+guards close that.
+
+The second half is `reward_redemptions.cost_points`. That table has one policy
+(`Members can manage … FOR ALL … is_family_member`) and `0295`'s trigger guards
+the **decision** on it, not the amount — so a direct insert could name its own
+price without touching the shelf at all, exactly as `invest_orders` could before
+`0306`. As there, the guard is consistency rather than authorship: a child
+legitimately requests a reward and the action already derives the cost
+server-side, so requiring the ticket to carry the shelf's price refuses the
+forged insert and leaves the real one untouched. A manager-only rule there would
+stop a child asking for a reward at all.
+
+`lib/rewards/points.ts` deducts `cost_points` at `approved` and `fulfilled`, so
+both numbers are the spendable balance the whole chores economy settles in — the
+ledger `0222`, `0223`, `0295` and `0305` exist to keep honest.
+
+Until this is applied, production carries all five as measured above.
+
+### `0309` puts the prescription back in a manager's hands — unapplied
+
+`components/modules/medications-module.tsx` declares `canEdit = isManager(role)`
+and then writes `medications` and `medication_schedules` **straight from the
+browser** with the viewer's own JWT (lines 205, 216, 223, 236, 251). There is no
+server action in between; `canEdit` only decides whether a button renders (284,
+368, 399, 419).
+
+Its neighbours in the same area *are* enforced — `medical_profiles`,
+`health_providers` and `insurance_policies` each carry three manager-checked
+write policies. The three medication tables carry none.
+
+What these columns reach is not a display. `lib/server/notifications.ts` reads
+`medications.{name,dosage,member_id,is_active}` and
+`medication_schedules.{time_of_day,days_of_week,starts_on,ends_on}` to raise the
+family's "dose due today" reminder, so these rows decide **what a parent is told
+to administer and when** — and `is_active = false` drops the medication from
+that read entirely, so nobody is told at all.
+`app/api/ai/health/coach/route.ts` feeds `dosage` and `instructions` to a model
+as fact.
+
+Measured, acting as a child with both controls passing: the child **changed
+their own prescribed dosage from 10 mg to 40 mg**, **rewrote the instructions**,
+**deactivated the medication so the reminder stops**, **moved the dosing
+schedule to 23:59 one day a week**, and **deleted a schedule and a medication
+outright**. Eight breaches,
+`docs/audit/medication-record-boundary-check.sql`.
+
+`medication_doses` — the "I took it" tick — is deliberately left writable by any
+member, and the probe asserts that as a positive control: the module leaves dose
+logging ungated for everyone (lines 166-172), exactly as a child may tick their
+own chore done.
+
+Until this is applied, production carries all six as measured above.
+
+### `0310` enforces four more UI-only manager gates — unapplied
+
+`0308` and `0309` each closed one instance of a shape found by sweeping every
+`'use client'` component that writes a table and cross-checking the table's
+policies against the gate the component claims. This closes the rest of that
+set. Each module declares `canEdit = isManager(role)` and then writes its table
+**straight from the browser** with the viewer's own JWT:
+
+| module | table | where the gate is |
+| --- | --- | --- |
+| `rides-module.tsx` | `rides` | add/edit/delete/mark-completed, all inside `canEdit` (247) |
+| `renewals-module.tsx` | `renewals` | add/edit/delete/mark-renewed (210) |
+| `signups-module.tsx` | `opportunities` | add/edit/delete/mark-registered (235) |
+| `trips-module.tsx` | `trips` | add/edit/delete (223) |
+| | `trip_items` | add (255), remove (277) |
+
+None carried a manager-checked or restrictive write policy. Measured, acting as
+a child with both controls passing: the child **rescheduled and cancelled a
+ride**, **deleted a renewal reminder**, **registered the family for a signup**,
+**changed the family trip's destination and dates**, and **rewrote, added and
+deleted trip items**. Nine breaches,
+`docs/audit/ui-only-manager-gate-check.sql`.
+
+These reach no money, payout, prescription or credential — which is why they are
+one migration behind `0307`-`0309` rather than folded in with them. What they
+reach is a family coordinating: a cancelled ride nobody drives to, a renewal
+reminder that never fires again.
+
+**`trip_items` is not a straight manager table.** Its done-tick, `toggleItem` at
+line 267, sits *outside* `canEdit`: any member may check a packing item off, and
+a blanket guard would have closed that. So INSERT and DELETE are manager-only and
+UPDATE is guarded **by column** — `is_done` is anyone's, the item's content is a
+manager's. The probe asserts the tick as a positive control for exactly this
+reason.
+
+Nothing legitimate breaks: the modules already refuse a non-manager everything
+guarded here, so this only makes the database agree with the rule the application
+states — which is what matters for anyone calling PostgREST directly.
+
+Until this is applied, production carries all nine as measured above.
+
 ## Security-relevant migrations awaiting production
 
 Added after this document's inventory stopped being complete, and listed here
 because their value is zero until they are applied:
 
-- **`0307_social_tokens_service_role_only.sql`** (renumbered from `0300`, which
+- **`0311_social_tokens_service_role_only.sql`** (renumbered from `0300`, which
   `main` took for the entitlement fix above) — drops the four
   `can_manage_family` policies `0297` added to `public.social_account_tokens`.
   `0034` created that table with no policy and a comment saying never to add
   one; `0297` added them on the stated premise that "every policy was
-  is_family_member", when there were none. Until `0307` is applied, any family
+  is_family_member", when there were none. Until `0311` is applied, any family
   manager can `select` the OAuth token rows through PostgREST. The columns hold
   ciphertext and no code writes the table yet, which bounds the exposure; it
   does not remove it. Verified locally against a full replay (313 migrations
@@ -1015,7 +1173,7 @@ because their value is zero until they are applied:
   which was amended in the same change — it previously asserted the opened
   state as a requirement. Audit C3-S5-01.
 
-- **`0308_no_truncate_for_the_public_roles.sql`** — revokes `truncate` on every
+- **`0312_no_truncate_for_the_public_roles.sql`** — revokes `truncate` on every
   table in `public` from `anon` and `authenticated`, and sets the matching
   default privilege so a future table does not arrive with it. `truncate` is not
   filtered by row-level security: a policy that correctly limits which rows a
@@ -1026,7 +1184,7 @@ because their value is zero until they are applied:
   migration outside a privilege list, which is exactly the rule that makes this
   one safe to read. Audit C1-S5-04.
 
-- **`0309_household_secrets_are_not_child_readable.sql`** — replaces the single
+- **`0313_household_secrets_are_not_child_readable.sql`** — replaces the single
   `"Members manage household_info"` policy (`for all using
   is_family_member(family_id)`) with four that add
   `and (not is_sensitive or can_manage_family(family_id))` on select, insert,
@@ -1039,7 +1197,7 @@ because their value is zero until they are applied:
   back. `docs/audit/household-binder-boundary-check.sql` asserts both, and that a
   parent still sees the whole binder. Audit C1-S6-06.
 
-- **`0310_marketplace_parties_are_not_editable.sql`** — makes `family_id`,
+- **`0314_marketplace_parties_are_not_editable.sql`** — makes `family_id`,
   `listing_id` and the party columns of `marketplace_orders` /
   `marketplace_offers` immutable after insert, via a `BEFORE UPDATE` trigger that
   fires only when `row_security_active()`, and tightens the two `with check`
@@ -1056,7 +1214,7 @@ because their value is zero until they are applied:
   `docs/audit/marketplace-ownership-update-check.sql` asserts both refusals and
   both permitted writes. Audit C1-S6-08.
 
-- **`0311_a_review_belongs_to_whoever_wrote_it.sql`** — scopes the
+- **`0315_a_review_belongs_to_whoever_wrote_it.sql`** — scopes the
   `marketplace_reviews` / `marketplace_saves` / `marketplace_follows` UPDATE
   policies to the row's owner, and makes the columns around the authorship
   column immutable. `0154` pinned `reviewer_member` (resp. `member_id`) on INSERT
@@ -1066,15 +1224,15 @@ because their value is zero until they are applied:
   is aggregated by `reviewee_member` on four screens. Nothing in the tree updates
   any of the three tables, so no behaviour is lost; the policies are scoped
   rather than dropped because "edit your own review" is what they evidently meant
-  to say. Also replaces `0310`'s table-branching trigger function with
+  to say. Also replaces `0314`'s table-branching trigger function with
   `columns_are_immutable()`, which takes its column list from the trigger
   definition and raises on a column that does not exist rather than silently
   guarding nothing. `docs/audit/marketplace-review-authorship-check.sql` asserts
   all of it, including that typo guard. Audit C1-S6-09.
 
-- **`0312_deleting_a_review_is_rewriting_it.sql`** — scopes the DELETE policies
+- **`0316_deleting_a_review_is_rewriting_it.sql`** — scopes the DELETE policies
   on `marketplace_reviews` / `marketplace_offers` / `marketplace_saves` /
-  `marketplace_follows`, which `0154` left family-wide. `0311` stopped a member
+  `marketplace_follows`, which `0154` left family-wide. `0315` stopped a member
   rewriting another member's review; deleting it achieves the same thing, and on
   offers it is worse in kind — any member could remove a competing offer on a
   listing they have nothing to do with. Offers go to the two parties their UPDATE
@@ -1085,7 +1243,7 @@ because their value is zero until they are applied:
   `docs/audit/marketplace-delete-authorship-check.sql` asserts both the refusals
   and the four things that must still work. Audit C1-S6-10.
 
-- **`0313_a_social_restriction_is_not_self_service.sql`** — gives
+- **`0317_a_social_restriction_is_not_self_service.sql`** — gives
   `social_access_permissions_delete` the predicate its INSERT and UPDATE policies
   already carry. `social_role_for()` falls back to a default derived from the
   family role when no explicit row exists, so a row restricting someone *below*

@@ -1736,11 +1736,11 @@ Impact:   Both pages above count
           over rows they are legitimately a party to. Same forgery 0154 closed on
           INSERT, reopened on UPDATE. The offers policy has the same shape, and
           there the listing owner may touch every offer on their listing.
-Fix:      0310_marketplace_parties_are_not_editable.sql. The obvious repair —
+Fix:      0314_marketplace_parties_are_not_editable.sql. The obvious repair —
           `with check` = `using` — was tried FIRST and stayed red: the predicate
           is symmetric, so C setting `seller_member = C` produces a row on which
           C is a party. RLS cannot see the old row, so no `with check` can say
-          "you may not change who the parties are". 0310 makes the four identity
+          "you may not change who the parties are". 0314 makes the four identity
           columns immutable with a BEFORE UPDATE trigger gated on
           `row_security_active()`, leaving the definer RPCs and the service role
           — the paths that legitimately create and close these rows — untouched.
@@ -1753,8 +1753,8 @@ Fix:      0310_marketplace_parties_are_not_editable.sql. The obvious repair —
           docs/audit/marketplace-ownership-update-check.sql asserts both refusals
           AND both permitted writes — a party may still advance their own order,
           an author may still withdraw their own offer. 27/27 probes pass.
-Status:   FIXED — inert until an operator applies 0310
-          (docs/PENDING_PROD_MIGRATIONS.md, which also gained the 0308 and 0309
+Status:   FIXED — inert until an operator applies 0314
+          (docs/PENDING_PROD_MIGRATIONS.md, which also gained the 0312 and 0313
           rows it was missing).
 ```
 
@@ -1808,21 +1808,21 @@ Problem:  Censusing for C1-S6-08's shape — authorship pinned on INSERT, editab
           `reviewer_member = marketplace_member_id(family_id)` and
           `member_id = marketplace_member_id(family_id)`.
 Evidence: Replayed schema, as the member the review was ABOUT:
-            ERROR: 0311: the SUBJECT of a review rewrote its rating (1 row(s))
+            ERROR: 0315: the SUBJECT of a review rewrote its rating (1 row(s))
 Impact:   `rating` is aggregated by `reviewee_member` on four screens. Any member
           could turn another member's one-star review of them into five stars, or
           re-point `reviewee_member` so the bad rating lands on someone else.
           C1-S6-08 needed the attacker to be a party to the row; this does not.
-Fix:      0311_a_review_belongs_to_whoever_wrote_it.sql. Scoped to the owner
+Fix:      0315_a_review_belongs_to_whoever_wrote_it.sql. Scoped to the owner
           rather than dropped — nothing in the tree updates any of the three
           (leaveReviewAction only inserts; saves and follows are insert/delete
           only), but "edit your own review" is plausible product behaviour and
           the policies evidently meant to say it. The surrounding columns are
           made immutable so an author may revise their rating and comment and may
           not move the review to a different subject.
-          0310's table-branching trigger function is replaced by
+          0314's table-branching trigger function is replaced by
           columns_are_immutable(), which takes its column list from the trigger
-          definition; 0310's two triggers are re-pointed at it. That generality
+          definition; 0314's two triggers are re-pointed at it. That generality
           has its own failure mode — a typo'd column name compares NULL to NULL
           and guards nothing — so the helper raises on a column that does not
           exist, and the probe measures THAT by attaching a trigger on
@@ -1831,14 +1831,14 @@ Fix:      0311_a_review_belongs_to_whoever_wrote_it.sql. Scoped to the owner
           Three assertions proved red independently: the family-wide policy
           restored, the reviews trigger dropped alone, follows loosened alone.
           28/28 probes pass against a full 320-migration replay.
-Status:   FIXED — inert until an operator applies 0311
+Status:   FIXED — inert until an operator applies 0315
           (docs/PENDING_PROD_MIGRATIONS.md).
 ```
 
 ```
 [CLAUDE-1][HIGH][SECURITY] and deleting a marketplace review does the same thing
 File:     supabase/migrations/0154_marketplace_ownership.sql (4 DELETE policies)
-Problem:  0311 stopped a member REWRITING another member's review. The DELETE
+Problem:  0315 stopped a member REWRITING another member's review. The DELETE
           policies beside it were still family-wide:
             marketplace_reviews_delete   using (is_family_member(family_id))
             marketplace_offers_delete    "
@@ -1848,7 +1848,7 @@ Problem:  0311 stopped a member REWRITING another member's review. The DELETE
           same act with the same result. I fixed one verb and did not check the
           next in the same pass; the identical census over INSERT-vs-DELETE took
           one query.
-Evidence: Replayed schema, before 0312:
+Evidence: Replayed schema, before 0316:
             the SUBJECT of a review deleted it (1 row)
             a member with no stake in a listing deleted a competing offer (1 row)
 Impact:   The reviews half is C1-S6-09's impact by another route. The offers half
@@ -1858,7 +1858,7 @@ Impact:   The reviews half is C1-S6-09's impact by another route. The offers hal
           family_communications, family_automation_runs) and are NOT findings —
           each is gated on can_manage_family or is_family_admin, a deliberate
           adults-delete boundary rather than a missing one.
-Fix:      0312_deleting_a_review_is_rewriting_it.sql. Offers scoped to the two
+Fix:      0316_deleting_a_review_is_rewriting_it.sql. Offers scoped to the two
           parties its UPDATE policy already names; saves and follows to the owner
           (a no-op for toggleSaveAction/toggleFollowAction, which delete the row
           they read back by their own member_id); reviews to the author OR a
@@ -1874,7 +1874,7 @@ Fix:      0312_deleting_a_review_is_rewriting_it.sql. Offers scoped to the two
           loosened back, and the moderation half removed (which fails the other
           way, "the fix went too far"). 29/29 probes pass against a full
           321-migration replay.
-Status:   FIXED — inert until an operator applies 0312
+Status:   FIXED — inert until an operator applies 0316
           (docs/PENDING_PROD_MIGRATIONS.md).
 ```
 
@@ -1900,7 +1900,7 @@ Impact:   publish_posts on a CONNECTED account writes to the family's real
           audience under their name; manage_settings and connect_accounts come
           with the same role. The demotion the adults performed was undone by the
           demoted party, from the browser, with the anon key.
-Fix:      0313_a_social_restriction_is_not_self_service.sql — DELETE carries the
+Fix:      0317_a_social_restriction_is_not_self_service.sql — DELETE carries the
           same predicate as INSERT and UPDATE, so the three verbs agree about who
           decides. Nothing in the tree deletes from this table: grantAccessAction
           upserts behind requireSocialPermission(fid,'manage_access'), and
@@ -1914,7 +1914,7 @@ Found by: one query — tables whose INSERT policy requires can_manage_family or
           is_family_admin while some write verb does not. It returned exactly one
           row, which is the argument for censuses over reading policies one at a
           time.
-Status:   FIXED — inert until an operator applies 0313
+Status:   FIXED — inert until an operator applies 0317
           (docs/PENDING_PROD_MIGRATIONS.md).
 ```
 

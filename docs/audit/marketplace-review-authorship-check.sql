@@ -1,4 +1,4 @@
--- ── 0311: a review belongs to whoever wrote it ──────────────────────────────
+-- ── 0315: a review belongs to whoever wrote it ──────────────────────────────
 --
 -- 0154 pins `reviewer_member` on INSERT so a trust score cannot be forged. The
 -- UPDATE policy beside it was `using/with check (is_family_member(family_id))`
@@ -8,7 +8,7 @@
 -- is. Same for marketplace_saves and marketplace_follows, whose INSERT policies
 -- pin `member_id` for the same reason.
 --
--- Measured before 0311: a member rewrote another member's one-star review of
+-- Measured before 0315: a member rewrote another member's one-star review of
 -- them into five stars, and reassigned it to a third member.
 --
 --   PGHOST=… PGPORT=… PGUSER=… PGDATABASE=bubaly \
@@ -18,15 +18,15 @@
 -- Audit C1-S6-09.
 do $$
 declare
-  fam uuid := 'f0311000-0000-4000-8000-00000000fa01';
-  ua  uuid := 'f0311000-0000-4000-8000-00000000c001';
-  uc  uuid := 'f0311000-0000-4000-8000-00000000c003';
+  fam uuid := 'f0315000-0000-4000-8000-00000000fa01';
+  ua  uuid := 'f0315000-0000-4000-8000-00000000c001';
+  uc  uuid := 'f0315000-0000-4000-8000-00000000c003';
   ma uuid; mc uuid; lst uuid; str uuid; rev uuid; fol uuid; sav uuid;
   n int; refused boolean; got int;
 begin
-  insert into public.families (id, name) values (fam, '0311 review authorship') on conflict do nothing;
+  insert into public.families (id, name) values (fam, '0315 review authorship') on conflict do nothing;
   insert into auth.users (id, email) values
-    (ua, 'a0311@example.test'), (uc, 'c0311@example.test') on conflict do nothing;
+    (ua, 'a0315@example.test'), (uc, 'c0315@example.test') on conflict do nothing;
   delete from public.marketplace_reviews  where family_id = fam;
   delete from public.marketplace_follows  where family_id = fam;
   delete from public.marketplace_saves    where family_id = fam;
@@ -53,42 +53,42 @@ begin
   set local role authenticated;
   perform set_config('request.jwt.claim.sub', uc::text, true);
   if auth.uid() is distinct from uc then
-    raise exception '0311: impersonation failed — auth.uid() is %, expected the review''s subject', auth.uid();
+    raise exception '0315: impersonation failed — auth.uid() is %, expected the review''s subject', auth.uid();
   end if;
 
   -- ── The subject of a review is not its author ─────────────────────────────
   update public.marketplace_reviews set rating = 5, comment = 'Delightful' where id = rev;
   get diagnostics n = row_count;
   if n <> 0 then
-    raise exception '0311: the SUBJECT of a review rewrote its rating (% row(s))', n;
+    raise exception '0315: the SUBJECT of a review rewrote its rating (% row(s))', n;
   end if;
   select rating into got from public.marketplace_reviews where id = rev;
   if got is distinct from 1 then
-    raise exception '0311: the one-star review now reads % stars', got;
+    raise exception '0315: the one-star review now reads % stars', got;
   end if;
 
   -- Nor may they take someone else's rows.
   update public.marketplace_follows set member_id = mc where id = fol;
   get diagnostics n = row_count;
   if n <> 0 then
-    raise exception '0311: a member rewrote another member''s follow (% row(s))', n;
+    raise exception '0315: a member rewrote another member''s follow (% row(s))', n;
   end if;
   update public.marketplace_saves set member_id = mc where id = sav;
   get diagnostics n = row_count;
   if n <> 0 then
-    raise exception '0311: a member rewrote another member''s save (% row(s))', n;
+    raise exception '0315: a member rewrote another member''s save (% row(s))', n;
   end if;
 
   -- ── The author may revise their own, and may not move it ──────────────────
   perform set_config('request.jwt.claim.sub', ua::text, true);
   if auth.uid() is distinct from ua then
-    raise exception '0311: impersonation failed — auth.uid() is %, expected the author', auth.uid();
+    raise exception '0315: impersonation failed — auth.uid() is %, expected the author', auth.uid();
   end if;
 
   update public.marketplace_reviews set rating = 3, comment = 'Sorted it out' where id = rev;
   get diagnostics n = row_count;
   if n <> 1 then
-    raise exception '0311: the AUTHOR could not revise their own review (% row(s)) — the fix went too far', n;
+    raise exception '0315: the AUTHOR could not revise their own review (% row(s)) — the fix went too far', n;
   end if;
 
   refused := false;
@@ -99,11 +99,11 @@ begin
   exception when insufficient_privilege then refused := true;
   end;
   if not refused then
-    raise exception '0311: an author re-pointed their review at a different member';
+    raise exception '0315: an author re-pointed their review at a different member';
   end if;
 
   reset role;
-  raise notice '0311 OK: the author may revise a review, the subject may not, and nobody may move one';
+  raise notice '0315 OK: the author may revise a review, the subject may not, and nobody may move one';
 end $$;
 
 -- ── The immutability helper refuses to guard a column that does not exist ───
@@ -115,12 +115,12 @@ end $$;
 -- that rather than trusting the branch is reachable.
 do $$
 declare
-  fam uuid := 'f0311100-0000-4000-8000-00000000fa01';
-  usr uuid := 'f0311100-0000-4000-8000-00000000c001';
+  fam uuid := 'f0315100-0000-4000-8000-00000000fa01';
+  usr uuid := 'f0315100-0000-4000-8000-00000000c001';
   lst uuid; caught text;
 begin
-  insert into public.families (id, name) values (fam, '0311 typo guard') on conflict do nothing;
-  insert into auth.users (id, email) values (usr, 'u0311b@example.test') on conflict do nothing;
+  insert into public.families (id, name) values (fam, '0315 typo guard') on conflict do nothing;
+  insert into auth.users (id, email) values (usr, 'u0315b@example.test') on conflict do nothing;
   delete from public.marketplace_listings where family_id = fam;
   delete from public.family_members       where family_id = fam;
   insert into public.family_members (family_id, user_id, display_name, role, is_active)
@@ -129,7 +129,7 @@ begin
     select fam, id, 'Probe', 'sell', 'other', 100, 'available'
       from public.family_members where family_id = fam returning id into lst;
 
-  create trigger zz_0311_typo
+  create trigger zz_0315_typo
     before update on public.marketplace_listings
     for each row execute function public.columns_are_immutable('sellar_member');
   begin
@@ -140,11 +140,11 @@ begin
   exception when others then caught := sqlerrm;
   end;
   reset role;
-  drop trigger zz_0311_typo on public.marketplace_listings;
+  drop trigger zz_0315_typo on public.marketplace_listings;
   delete from public.marketplace_listings where family_id = fam;
 
   if caught is null or caught not like '%names a column that does not exist%' then
-    raise exception '0311: a misspelled immutable column passed silently (%) — the guard cannot fail', coalesce(caught, 'no error');
+    raise exception '0315: a misspelled immutable column passed silently (%) — the guard cannot fail', coalesce(caught, 'no error');
   end if;
-  raise notice '0311 OK: a misspelled immutable column raises instead of guarding nothing';
+  raise notice '0315 OK: a misspelled immutable column raises instead of guarding nothing';
 end $$;

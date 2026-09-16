@@ -1,4 +1,4 @@
--- Bubaly :: 0310 An order records who the deal was with, and that is not a field
+-- Bubaly :: 0314 An order records who the deal was with, and that is not a field
 -- ----------------------------------------------------------------------------
 -- 0154 exists to stop exactly this. Its own header says prior policies gated
 -- the marketplace "by family membership ALONE, so any member could edit another

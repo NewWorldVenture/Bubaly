@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
  * policy and says, at the point of creation, "never add a permissive policy
  * here". `0297_sensitive_tables_respect_role.sql` added four anyway, on the
  * stated premise that "every policy was is_family_member" — there were none.
- * `0307_social_tokens_service_role_only.sql` drops them again.
+ * `0311_social_tokens_service_role_only.sql` drops them again.
  *
  * A comment is what failed the first time. This is the mechanical version of
  * it: any later migration that creates a policy on the token store fails here,
@@ -16,10 +16,10 @@ import { describe, expect, it } from 'vitest';
  * service-role path.
  */
 const MIGRATIONS = 'supabase/migrations';
-const RESTORED_AT = '0307';
+const RESTORED_AT = '0311';
 
 describe('the social OAuth token store is reachable only by the service role', () => {
-  it('no migration after 0307 creates a policy on it', () => {
+  it('no migration after 0311 creates a policy on it', () => {
     const offenders: string[] = [];
     for (const file of readdirSync(MIGRATIONS).filter((f) => f.endsWith('.sql')).sort()) {
       if (file.slice(0, 4) <= RESTORED_AT) continue;
@@ -30,11 +30,11 @@ describe('the social OAuth token store is reachable only by the service role', (
         offenders.push(file);
       }
     }
-    expect(offenders, 'this table is service-role only — see migration 0034 and 0307').toEqual([]);
+    expect(offenders, 'this table is service-role only — see migration 0034 and 0311').toEqual([]);
   });
 
-  it('0307 drops all four policies 0297 added', () => {
-    const sql = readFileSync(`${MIGRATIONS}/0307_social_tokens_service_role_only.sql`, 'utf8');
+  it('0311 drops all four policies 0297 added', () => {
+    const sql = readFileSync(`${MIGRATIONS}/0311_social_tokens_service_role_only.sql`, 'utf8');
     for (const verb of ['select', 'insert', 'update', 'delete']) {
       expect(sql).toContain(`drop policy if exists social_account_tokens_${verb} on public.social_account_tokens;`);
     }

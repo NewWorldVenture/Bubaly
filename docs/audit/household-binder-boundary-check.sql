@@ -1,4 +1,4 @@
--- ── 0309: the binder's sensitive rows are not child-readable ────────────────
+-- ── 0313: the binder's sensitive rows are not child-readable ────────────────
 --
 -- household_info carries `is_sensitive`, the UI masks such a value behind an
 -- eye toggle, and the policy was one `FOR ALL USING is_family_member` — so the
@@ -12,14 +12,14 @@
 -- Audit C1-S6-06.
 do $$
 declare
-  fam uuid := 'f0309000-0000-4000-8000-00000000fa01';
-  par uuid := 'f0309000-0000-4000-8000-00000000c001';
-  kid uuid := 'f0309000-0000-4000-8000-00000000c003';
+  fam uuid := 'f0313000-0000-4000-8000-00000000fa01';
+  par uuid := 'f0313000-0000-4000-8000-00000000c001';
+  kid uuid := 'f0313000-0000-4000-8000-00000000c003';
   n int; refused boolean;
 begin
-  insert into public.families (id, name) values (fam, '0309 binder boundary') on conflict do nothing;
+  insert into public.families (id, name) values (fam, '0313 binder boundary') on conflict do nothing;
   insert into auth.users (id, email) values
-    (par, 'p0309@example.test'), (kid, 'k0309@example.test') on conflict do nothing;
+    (par, 'p0313@example.test'), (kid, 'k0313@example.test') on conflict do nothing;
   delete from public.household_info where family_id = fam;
   delete from public.family_members where family_id = fam;
   insert into public.family_members (family_id, user_id, display_name, role, is_active) values
@@ -35,25 +35,25 @@ begin
   set local role authenticated;
   perform set_config('request.jwt.claim.sub', kid::text, true);
   if auth.uid() is distinct from kid then
-    raise exception '0309: impersonation failed — auth.uid() is %, expected the child; this probe is not testing what it claims', auth.uid();
+    raise exception '0313: impersonation failed — auth.uid() is %, expected the child; this probe is not testing what it claims', auth.uid();
   end if;
 
   select count(*) into n from public.household_info where family_id = fam and is_sensitive;
   if n <> 0 then
-    raise exception '0309: a child reads % sensitive binder row(s) — alarm codes and wifi keys', n;
+    raise exception '0313: a child reads % sensitive binder row(s) — alarm codes and wifi keys', n;
   end if;
 
   -- The binder must still BE a binder for everyone else.
   select count(*) into n from public.household_info where family_id = fam and not is_sensitive;
   if n <> 1 then
-    raise exception '0309: a child reads %/1 ordinary binder row(s) — the fix went too far', n;
+    raise exception '0313: a child reads %/1 ordinary binder row(s) — the fix went too far', n;
   end if;
 
   -- `with check`: without it a child clears the flag, reads the value, sets it back.
   update public.household_info set is_sensitive = false where family_id = fam and is_sensitive;
   get diagnostics n = row_count;
   if n <> 0 then
-    raise exception '0309: a child un-flagged % sensitive row(s) to read them', n;
+    raise exception '0313: a child un-flagged % sensitive row(s) to read them', n;
   end if;
 
   refused := false;
@@ -65,18 +65,18 @@ begin
   exception when insufficient_privilege then refused := true;
   end;
   if not refused then
-    raise exception '0309: a child inserted a sensitive binder row';
+    raise exception '0313: a child inserted a sensitive binder row';
   end if;
 
   perform set_config('request.jwt.claim.sub', par::text, true);
   if auth.uid() is distinct from par then
-    raise exception '0309: impersonation failed — auth.uid() is %, expected the parent', auth.uid();
+    raise exception '0313: impersonation failed — auth.uid() is %, expected the parent', auth.uid();
   end if;
   select count(*) into n from public.household_info where family_id = fam;
   if n <> 2 then
-    raise exception '0309: a PARENT sees %/2 binder rows — the grown-ups were locked out', n;
+    raise exception '0313: a PARENT sees %/2 binder rows — the grown-ups were locked out', n;
   end if;
 
   reset role;
-  raise notice '0309 OK: a child keeps the bin day and never sees the wifi key; a parent keeps both';
+  raise notice '0313 OK: a child keeps the bin day and never sees the wifi key; a parent keeps both';
 end $$;

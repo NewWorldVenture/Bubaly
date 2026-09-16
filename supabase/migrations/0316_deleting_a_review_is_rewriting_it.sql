@@ -1,6 +1,6 @@
--- Bubaly :: 0312 Deleting a review is rewriting it
+-- Bubaly :: 0316 Deleting a review is rewriting it
 -- ----------------------------------------------------------------------------
--- 0311 stopped a member rewriting another member's review. It did not stop them
+-- 0315 stopped a member rewriting another member's review. It did not stop them
 -- deleting it, and for a one-star review about yourself those are the same act
 -- with the same result on the same four screens. I fixed one verb and did not
 -- check the next one in the same pass; this is that check.

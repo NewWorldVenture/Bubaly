@@ -17,7 +17,7 @@ import { at } from './helpers/source-order';
  * modules "query through the browser anon client and never reach" the service
  * that filtered correctly.
  */
-const sql = readFileSync('supabase/migrations/0309_household_secrets_are_not_child_readable.sql', 'utf8')
+const sql = readFileSync('supabase/migrations/0313_household_secrets_are_not_child_readable.sql', 'utf8')
   .replace(/--[^\n]*/g, '');
 
 describe('the binder’s sensitive flag is enforced where it cannot be bypassed', () => {
