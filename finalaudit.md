@@ -6532,3 +6532,64 @@ against its table's policy:
 The last three are grouped deliberately: a flag that widens visibility failing
 open inside the family it belongs to is not the same defect as a flag that
 narrows it failing open. Only the narrowing kind was pursued.
+
+## C1-S6-07 [OBSERVATION][SECURITY] — thirteen policies that are safe for a reason none of them states
+
+Sweeping for the hazard `0305` had to avoid — a tight policy sitting beside a
+looser one, which PostgreSQL ORs together — turned up **13 policies across 11
+tables** still using the legacy inline form:
+
+```sql
+family_id in (select family_id from family_members where user_id = auth.uid())
+```
+
+`family_albums`, `family_contacts`, `family_conversations`, `family_messages`,
+`family_photos`, `family_recipes`, `family_reminders`, `family_tree_nodes`,
+`network_aggregates`, `todo_items`, `todo_lists`.
+
+Unlike `is_family_member()`, that subquery contains **no `is_active` check**. Read
+on its own it says a removed family member — an ex-partner, a departed caregiver
+— keeps access to the family's photos, messages and contacts.
+
+**They do not, and the reason is in none of those thirteen policies.** The
+subquery runs as the caller, so it is itself subject to `family_members`' RLS —
+and `fm_select` is `is_family_member(family_id)`, which is `SECURITY DEFINER`
+and *does* check `is_active`. A deactivated member cannot see their own
+membership row, so the subquery returns empty and all thirteen evaluate false.
+Measured: a removed member reads 0 rows, while `is_family_member()` independently
+returns false.
+
+**So this is not a defect. It is a single point of coupling that nothing
+records**, and the blast radius was measured rather than asserted. Adding one
+plausible policy to `family_members` — `for select using (user_id = auth.uid())`,
+"let a member see their own row", a line any developer might write — produces:
+
+```
+with the self-row policy present, a REMOVED member reads:
+  todo_lists      : 1 row(s)
+  family_recipes  : 1 row(s)
+  family_contacts : 1 row(s)
+  is_family_member() still says: f   <- the helper was never fooled
+```
+
+Thirteen policies across eleven tables, re-opened by an edit to a different
+table, with every other guard in the system still reporting correctly.
+
+**The proportionate response is a tripwire, not a rewrite.** Those thirteen
+policies work; rewriting them unreviewed at the end of an audit is how a remedy
+becomes the next finding.
+`docs/audit/deactivated-member-sees-nothing-check.sql` asserts the load-bearing
+fact **first** — that a deactivated member cannot see their own membership row —
+so a failure names the cause and its consequence rather than a downstream
+symptom, and then checks three of the eleven tables. It also asserts an *active*
+parent still reads the seeded row, because a tripwire that passes on a database
+where nobody can read anything is not a tripwire.
+
+Proved red by planting that self-row policy; **26/26 probes pass** with it added,
+and CI replays it on every pull request.
+
+One aside worth keeping for whoever touches `family_members`: the first mutation
+I tried — rewriting `fm_select` itself as an inline subquery over its own table —
+produced `infinite recursion detected in policy for relation "family_members"`.
+That is why `fm_select` uses a `SECURITY DEFINER` helper in the first place, and
+it is a second, independent reason not to "simplify" it.
