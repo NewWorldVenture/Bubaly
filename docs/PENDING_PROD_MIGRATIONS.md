@@ -1201,7 +1201,17 @@ any wallet missing a bucket does it, no cross-family reference required.
 The route now counts the failure, logs it, leaves the rule retryable and returns
 502 — the contract the repo's other four batch crons already follow, and which
 `tests/cron-batch-failure-status.test.ts` already pinned for them. The money one
-simply was not on its list. `wallet-allowance` is now on it, and
+simply was not on its list.
+
+The **schedule-claim** error in the same loop (`if (scheduleError) throw
+scheduleError;`) was the other half of the identical defect and was missed by the
+first pass of this fix. A scan of all 24 cron routes for a `throw` inside a
+per-item loop found it — `wallet-allowance` was the only route in the repo with
+one, and it had two. Nothing is written when the claim fails, so that rule stays
+due and retries on its own; it now takes the same isolated path instead of ending
+the run. `if (subscriptionsError) throw subscriptionsError;` is deliberately left
+alone: it sits *before* the loop, and if plan gating cannot be read then every
+rule would be mis-gated, so failing the run is correct there. `wallet-allowance` is now on it, and
 `tests/allowance-cron-isolates-one-bad-rule.test.ts` asserts the behaviour
 itself: the rule ordered *after* the failing one is paid. That test was
 calibrated against the old route — three of its four cases fail there.

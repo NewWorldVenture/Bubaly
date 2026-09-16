@@ -26,6 +26,9 @@ const state = vi.hoisted(() => ({
   // Which wallet ids the ledger refuses, the way an unprovisioned or
   // foreign-family wallet is refused.
   unpayable: new Set<string>(),
+  // Which rule ids fail to CLAIM the schedule, the way a transient or
+  // recurring write error on that one row does.
+  claimFails: new Set<string>(),
 }));
 
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (k: string) => k }));
@@ -62,6 +65,9 @@ vi.mock('@/lib/supabase/server', () => ({
         // The claim: records the write and reports one matched row.
         maybeSingle() {
           state.updates.push({ patch, filters: { ...filters } });
+          if (state.claimFails.has(String(filters.id))) {
+            return Promise.resolve({ data: null, error: { message: 'claim write failed' } });
+          }
           return Promise.resolve({ data: { id: filters.id }, error: null });
         },
         // The rollback is awaited directly.
@@ -85,6 +91,7 @@ beforeEach(() => {
   state.updates = [];
   state.credited = [];
   state.unpayable = new Set();
+  state.claimFails = new Set();
   vi.resetModules();
 });
 afterEach(() => { vi.clearAllMocks(); });
@@ -127,6 +134,22 @@ describe('one unpayable allowance rule does not end the run', () => {
       (u) => u.filters.id === 'rule-a' && u.patch.next_run_on === yesterday,
     );
     expect(restored).toHaveLength(1);
+  });
+
+  it('pays the next rule when an earlier rule fails to CLAIM its schedule', async () => {
+    // The other half of the same defect. Nothing is written when the claim
+    // fails, so the rule stays due and retries on its own — but it must not
+    // take the rest of the platform's run down with it.
+    state.unpayable = new Set();
+    state.claimFails.add('rule-a');
+
+    const res = await run();
+    const body = await res.json();
+
+    expect(state.credited.map((c) => c.childWalletId)).toEqual(['wallet-ok']);
+    expect(body.paid).toBe(1);
+    expect(body.failed).toBe(1);
+    expect(res.status).toBe(502);
   });
 
   it('still returns 200 when every rule pays', async () => {

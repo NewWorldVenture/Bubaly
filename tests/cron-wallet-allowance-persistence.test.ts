@@ -19,7 +19,10 @@ describe('cron wallet allowance persistence boundaries', () => {
     expect(scheduleIndex).toBeGreaterThan(-1);
     expect(scheduleIndex).toBeLessThan(creditIndex);
     expect(source).toContain(".eq('family_id', rule.family_id)");
-    expect(source).toContain('if (scheduleError) throw scheduleError;');
+    // The claim error is handled, not ignored — and, like the credit failure,
+    // it is this rule's problem rather than the whole run's. It used to throw.
+    expect(source).toContain("console.error('Allowance schedule claim failed; leaving it retryable.'");
+    expect(source).not.toContain('if (scheduleError) throw scheduleError;');
   });
 
   it('restores the schedule when the wallet credit fails', () => {

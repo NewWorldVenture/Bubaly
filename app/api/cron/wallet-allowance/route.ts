@@ -98,7 +98,18 @@ export async function GET(req: NextRequest) {
         .lte('next_run_on', today)
         .select('id')
         .maybeSingle();
-      if (scheduleError) throw scheduleError;
+      if (scheduleError) {
+        // Same isolation as the credit failure below: one rule's claim error is
+        // that rule's problem. Throwing here ended the platform's run for every
+        // rule ordered after it, and a claim error that recurs (a constraint or
+        // a poisoned row rather than a blip) would do so every night. Nothing
+        // was written, so the rule stays due and retries on its own.
+        failed++;
+        console.error('Allowance schedule claim failed; leaving it retryable.', {
+          ruleId: rule.id, familyId: rule.family_id, error: scheduleError,
+        });
+        continue;
+      }
       if (!claimed) continue; // another concurrent run already claimed this rule — do not double-pay
 
       const res = await creditChildWallet(supabase, {
