@@ -6266,3 +6266,45 @@ re-derive it:
   `feedback-github-sync` even carries the reasoning in a comment: *"a hardcoded
   200 is indistinguishable from a clean run"*. This class has been swept before
   and held.
+
+## Pass S — three hypotheses that died, and where the yield ran out
+
+This audit has recorded refutations alongside findings since Pass N, on the
+principle that a hypothesis killed by measurement is worth the same note as one
+that survived. This sweep produced three, and they are the honest part of it.
+
+**1. "The mobile app's copy is untranslated."** Measured: 25 user-facing
+literals across five screens, against a 66-key catalogue that covers only the
+assistant. Then read the tooling. `scripts/i18n-scan.mjs` excludes `mobile/`
+**deliberately and by path**, with its reason written down — *"sibling PROJECTS
+at the repo root: the Expo app and the native shells, which have their own copy
+and their own translation story"* — and `docs/i18n.md` states plainly that
+**7,402 hardcoded strings remain in `app/` + `components/`** and that this is *"a
+real multi-week migration, not a switch."* Twenty-five strings in a sibling
+project is not a defect against a document that discloses exactly this. It is
+the same mistake the environment-registry hypotheses made in Pass P, and it dies
+the same way.
+
+Recorded as an observation for whoever owns the Expo app, with no action taken:
+the assistant screen is localised into seven languages while five sibling
+screens are English, so the app's own translation story is one screen old.
+
+**2. "The routines cron discards three writes that matter."** Covered above: the
+comment above them is a careful argument that holds.
+
+**3. "`Promise.all` over database calls should be `settleAll`."** 160 versus 163
+across the tree — the two idioms are used about equally, and they mean different
+things. `Promise.all` rejecting a page render is *fail-closed*, which is often
+the correct choice; `settleAll` exists for when partial rendering is wanted.
+Without a sharper hypothesis than "these look similar", there is no finding
+here, and inventing one would put a permanent false positive into a guard.
+
+**Where the yield ran out.** Pass S found six real defects in three censuses
+(storage removals, bare-awaited writes, the native push branch). The next three
+censuses produced zero. That is the signal worth reporting: the mechanical
+classes this audit knows how to hunt — discarded results, counters that
+overclaim, guards that cannot fail — have been swept, and what remains needs
+either a running authenticated session (still blocked) or product decisions that
+belong to the owner. Continuing to grind the same method would start
+manufacturing findings rather than discovering them, which is the failure mode
+this document has been most careful about.
