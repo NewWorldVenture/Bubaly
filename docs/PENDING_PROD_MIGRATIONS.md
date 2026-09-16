@@ -514,8 +514,8 @@ passed; production application of the atomic `0240-0254` release remains pending
 ## Migrations added since this document's stated baseline (2026-09-12)
 
 The status line at the top of this file is dated **2026-09-05** against main
-`01881fb2`. **52** migration files have landed since, `0255` through
-`0309`, and none of them appear anywhere above. (This read "thirty-one, `0255`
+`01881fb2`. **53** migration files have landed since, `0255` through
+`0310`, and none of them appear anywhere above. (This read "thirty-one, `0255`
 through `0285`" until 2026-09-13, "seventy-one, `0255` through `0295`" until
 2026-09-15, and "forty-five, `0255` through `0302`", "46, `0255` through `0303`"
 and "49, `0255` through `0306`" until 2026-09-16; the range
@@ -1114,25 +1114,43 @@ own chore done.
 
 Until this is applied, production carries all six as measured above.
 
-### The same mismatch, measured and NOT yet guarded
+### `0310` enforces four more UI-only manager gates — unapplied
 
-Four more modules declare `canEdit = isManager(role)` and write their tables
-directly from the browser, and those tables carry no manager-checked or
-restrictive write policy:
+`0308` and `0309` each closed one instance of a shape found by sweeping every
+`'use client'` component that writes a table and cross-checking the table's
+policies against the gate the component claims. This closes the rest of that
+set. Each module declares `canEdit = isManager(role)` and then writes its table
+**straight from the browser** with the viewer's own JWT:
 
-| module | tables |
-| --- | --- |
-| `rides-module.tsx` | `rides` |
-| `renewals-module.tsx` | `renewals` |
-| `signups-module.tsx` | `opportunities` |
-| `trips-module.tsx` | `trips`, `trip_items` |
+| module | table | where the gate is |
+| --- | --- | --- |
+| `rides-module.tsx` | `rides` | add/edit/delete/mark-completed, all inside `canEdit` (247) |
+| `renewals-module.tsx` | `renewals` | add/edit/delete/mark-renewed (210) |
+| `signups-module.tsx` | `opportunities` | add/edit/delete/mark-registered (235) |
+| `trips-module.tsx` | `trips` | add/edit/delete (223) |
+| | `trip_items` | add (255), remove (277) |
 
-These are the same defect in form — the application states a manager rule the
-database does not enforce — but none of them reaches money, a payout, a
-prescription or a credential; the worst case is a member editing a trip or a
-ride the UI would not have offered them. They are recorded here rather than
-folded into `0309` so the guarded set stays the set that was measured against a
-real consequence. Closing them is low-risk for the same reason `0306`'s
-`allowance_rules` guard was — the UI already refuses a non-manager, so making
-the database agree cannot close anything the product offers — and is the
-obvious next migration if wanted.
+None carried a manager-checked or restrictive write policy. Measured, acting as
+a child with both controls passing: the child **rescheduled and cancelled a
+ride**, **deleted a renewal reminder**, **registered the family for a signup**,
+**changed the family trip's destination and dates**, and **rewrote, added and
+deleted trip items**. Nine breaches,
+`docs/audit/ui-only-manager-gate-check.sql`.
+
+These reach no money, payout, prescription or credential — which is why they are
+one migration behind `0307`-`0309` rather than folded in with them. What they
+reach is a family coordinating: a cancelled ride nobody drives to, a renewal
+reminder that never fires again.
+
+**`trip_items` is not a straight manager table.** Its done-tick, `toggleItem` at
+line 267, sits *outside* `canEdit`: any member may check a packing item off, and
+a blanket guard would have closed that. So INSERT and DELETE are manager-only and
+UPDATE is guarded **by column** — `is_done` is anyone's, the item's content is a
+manager's. The probe asserts the tick as a positive control for exactly this
+reason.
+
+Nothing legitimate breaks: the modules already refuse a non-manager everything
+guarded here, so this only makes the database agree with the rule the application
+states — which is what matters for anyone calling PostgREST directly.
+
+Until this is applied, production carries all nine as measured above.
