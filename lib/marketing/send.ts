@@ -4,6 +4,7 @@ import type { Database } from '@/lib/database.types';
 import { FROM_EMAIL, emailEnabled, APP_URL } from '@/lib/email';
 import { getMarketingCustomersWithError, evaluateSegment, type SegmentRules } from '@/lib/marketing/customers';
 import { unsubUrl } from '@/lib/marketing/unsubscribe';
+import { readInChunks } from '@/lib/supabase/chunked-in';
 import { readBoundedResponseText } from '@/lib/server/bounded-response-body';
 import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
 
@@ -37,13 +38,24 @@ export async function resolveRecipients(
   }
 
   // Remove suppressed addresses (unsubscribes, bounces, complaints).
+  //
+  // Batched, because this lookup is the opt-out: an address leaves the set only
+  // when its row comes BACK. What truncates is the RESPONSE, so the failure
+  // needs more than db-max-rows worth of MATCHES — i.e. an audience in which
+  // over a thousand people have unsubscribed, which is where a list arrives
+  // after enough campaigns. At that point the read answers 1,000 rows and no
+  // error, the suppressions past the cap read as consent, and the campaign
+  // mails people who asked it not to. A hundred addresses per request can match
+  // at most a hundred rows, so it cannot reach the cap — and it keeps the URL
+  // inside the gateway's request-line limit, which is the other way this read
+  // fails silently once the list is large.
   if (emails.size > 0) {
-    const { data: suppressed, error: suppressionError } = await supabase
-      .from('marketing_suppressions')
-      .select('email')
-      .in('email', [...emails]);
+    const { data: suppressed, error: suppressionError } = await readInChunks<{ email: string }, { message: string }>(
+      [...emails],
+      (chunk) => supabase.from('marketing_suppressions').select('email').in('email', chunk),
+    );
     if (suppressionError) throw new Error('Could not load marketing suppression preferences.');
-    for (const s of suppressed ?? []) emails.delete(s.email);
+    for (const s of suppressed) emails.delete(s.email);
   }
 
   return [...emails].slice(0, MAX_RECIPIENTS);

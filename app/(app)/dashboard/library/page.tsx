@@ -8,6 +8,7 @@ import { EmptyState, ErrorState } from '@/components/ui/states';
 import { isMissingRelationError } from '@/lib/supabase/errors';
 import { fmtDate } from '@/lib/utils/format';
 import { AddBookForm, FeedControls, ItemRow, SubscribeForm, type PlayableItem } from './player';
+import { settleAll } from '@/lib/supabase/settle';
 
 export const metadata: Metadata = { title: 'Library' };
 export const dynamic = 'force-dynamic';
@@ -30,7 +31,7 @@ export default async function LibraryPage() {
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
-  const [feedsResult, itemsResult, progressResult] = await Promise.all([
+  const [feedsResult, itemsResult, progressResult] = await settleAll([
     supabase.from('library_feeds')
       .select('id, kind, title, feed_url, author, last_fetched_at, last_error')
       .eq('family_id', ctx.active.familyId).order('title'),

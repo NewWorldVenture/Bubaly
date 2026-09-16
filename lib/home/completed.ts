@@ -19,6 +19,7 @@ import { loadRunEvidence } from '@/lib/ai/runs/evidence';
 import { describeDbError } from '@/lib/supabase/errors';
 import { fail, ok, SERVICE_CODES, type ServiceResult } from '@/lib/services/types';
 import { mergeCompletedByBubaly, type AiActivityRow, type CompletedItem, type CompletedRunRow } from './today';
+import { settleAll } from '@/lib/supabase/settle';
 
 type DB = SupabaseClient<Database>;
 
@@ -35,7 +36,7 @@ export async function loadCompletedByBubaly(db: DB, familyId: string, opts: Load
   const since = new Date(opts.now.getTime() - (opts.activityWindowMs ?? 2 * 86_400_000)).toISOString();
 
   try {
-    const [runsRes, agentRes, autoRes] = await Promise.all([
+    const [runsRes, agentRes, autoRes] = await settleAll([
       db.from('family_automation_runs').select('id, summary, state, progress, completed_at, updated_at, plan_id')
         .eq('family_id', familyId).in('state', ['completed', 'partially_completed'])
         .order('completed_at', { ascending: false, nullsFirst: false }).limit(limit),

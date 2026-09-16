@@ -9,6 +9,7 @@ import { isMissingRelationError } from '@/lib/supabase/errors';
 import type { Split } from '@/lib/wallet/ledger';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
 import { readAll } from '@/lib/supabase/read-all';
+import { readInChunks } from '@/lib/supabase/chunked-in';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -52,13 +53,24 @@ export async function GET(req: NextRequest) {
     const families = Array.from(new Set((rules ?? []).map((r) => r.family_id)));
     const planByFamily = new Map<string, string | null>();
     if (families.length > 0) {
-      const { data: subs, error: subscriptionsError } = await supabase
-        .from('subscriptions')
-        .select('family_id, plan, status')
-        .in('family_id', families)
-        .in('status', ['active', 'trialing']);
+      // Batched for the same reason the read above pages. The rules read is
+      // bounded at 2,000, so this `.in()` can carry more families than one
+      // response may return — and a plan that does not come back is not read as
+      // "unknown", it is read as free, which SKIPS the child's allowance and
+      // reports the run clean. It also keeps the URL inside the gateway's
+      // request-line limit, the other way an `.in()` of that size fails.
+      const { data: subs, error: subscriptionsError } = await readInChunks<
+        { family_id: string; plan: string | null; status: string }, { message: string }
+      >(
+        families,
+        (chunk) => supabase
+          .from('subscriptions')
+          .select('family_id, plan, status')
+          .in('family_id', chunk)
+          .in('status', ['active', 'trialing']),
+      );
       if (subscriptionsError) throw subscriptionsError;
-      for (const s of subs ?? []) planByFamily.set(s.family_id, s.plan);
+      for (const s of subs) planByFamily.set(s.family_id, s.plan);
     }
 
     let paid = 0;

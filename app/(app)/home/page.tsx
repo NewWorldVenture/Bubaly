@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
-import { settleAll } from '@/lib/supabase/settle';
+import { settle, settleAll } from '@/lib/supabase/settle';
 import { getOnboardingProgress, resolveCompleteness } from '@/lib/server/onboarding-progress';
 import { isManager } from '@/lib/constants/roles';
 import { Avatar } from '@/components/ui/avatar';
@@ -451,8 +451,8 @@ export default async function HomePage() {
   if (manager) {
     try {
       const [invitesRes, prefsRes, referralConfig] = await Promise.all([
-        supabase.from('invites').select('id', { count: 'exact', head: true }).eq('family_id', familyId),
-        supabase.from('user_preferences').select('notification_prefs').eq('user_id', ctx.user.id).maybeSingle(),
+        settle(supabase.from('invites').select('id', { count: 'exact', head: true }).eq('family_id', familyId)),
+        settle(supabase.from('user_preferences').select('notification_prefs').eq('user_id', ctx.user.id).maybeSingle()),
         getReferralConfigResult(createServiceClient()),
       ]);
       if (invitesRes.error || prefsRes.error || referralConfig.error) {

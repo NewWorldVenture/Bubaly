@@ -16,6 +16,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
+import { settleAll } from '@/lib/supabase/settle';
 import {
   countNeedsYou, unifyInbox,
   type CommunicationRow, type InboxMessageRow, type PaperworkRow, type UnifiedInboxItem,
@@ -40,7 +41,7 @@ export async function loadInboxQueue(
   familyId: string,
   opts: { now?: Date } = {},
 ): Promise<InboxQueueRead> {
-  const [messagesResult, paperworkResult, commsResult] = await Promise.all([
+  const [messagesResult, paperworkResult, commsResult] = await settleAll([
     db
       .from('family_inbox_messages')
       .select('id, channel, direction, from_addr, subject, body, ai_summary, ai_intent, ai_handled, status, occurred_at')

@@ -29,7 +29,7 @@ export default async function FamilyHealthPage() {
     settle(supabase.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true)),
     settle(supabase.from('appointments').select('*').eq('family_id', familyId).gte('starts_at', now).lte('starts_at', in30).order('starts_at').limit(8)),
     settle(supabase.from('medications').select('*').eq('family_id', familyId).eq('is_active', true).limit(12)),
-    manager ? supabase.from('medical_profiles').select('member_id, allergies, blood_type, conditions').eq('family_id', familyId) : Promise.resolve({ data: [], error: null }),
+    manager ? settle(supabase.from('medical_profiles').select('member_id, allergies, blood_type, conditions').eq('family_id', familyId)) : Promise.resolve({ data: [], error: null }),
     settle(supabase.from('health_providers').select('id, name, specialty, phone').eq('family_id', familyId).limit(8)),
   ]);
 

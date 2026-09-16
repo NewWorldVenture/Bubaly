@@ -12,6 +12,7 @@ import { bandFamilyLabel } from '@/lib/network/contribution';
 import { K_ANONYMITY_FLOOR } from '@/lib/network/insights';
 import { fmtDate } from '@/lib/utils/format';
 import { setBenchmarksPublicationAction } from './actions';
+import { settle } from '@/lib/supabase/settle';
 
 export const metadata: Metadata = { title: 'Household Benchmarks', robots: { index: false } };
 export const dynamic = 'force-dynamic';
@@ -28,8 +29,8 @@ export default async function AdminBenchmarksPage() {
   const [publication, aggregates, contributorsResult, optedInResult] = await Promise.all([
     readBenchmarksPublication(supabase),
     readBenchmarkAggregates(supabase),
-    supabase.from('network_contributions').select('family_id', { count: 'exact', head: true }),
-    supabase.from('network_consent').select('family_id', { count: 'exact', head: true }).eq('enabled', true),
+    settle(supabase.from('network_contributions').select('family_id', { count: 'exact', head: true })),
+    settle(supabase.from('network_consent').select('family_id', { count: 'exact', head: true }).eq('enabled', true)),
   ]);
   if (contributorsResult.error) console.error('[admin-benchmarks] contributor count read failed', contributorsResult.error);
   if (optedInResult.error) console.error('[admin-benchmarks] consent count read failed', optedInResult.error);

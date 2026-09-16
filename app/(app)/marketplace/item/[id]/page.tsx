@@ -86,7 +86,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
     settle(sb.from('marketplace_listings').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('member_id', sellerId)),
     settle(sb.from('marketplace_orders').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('seller_member', sellerId).eq('status', 'completed')),
     listing.member_id
-      ? sb.from('marketplace_stores').select('id, name, emoji').eq('family_id', familyId).eq('member_id', listing.member_id).eq('is_active', true).maybeSingle()
+      ? settle(sb.from('marketplace_stores').select('id, name, emoji').eq('family_id', familyId).eq('member_id', listing.member_id).eq('is_active', true).maybeSingle())
       : Promise.resolve({ data: null, error: null }),
   ]);
 
