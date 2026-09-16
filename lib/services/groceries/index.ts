@@ -454,7 +454,7 @@ export async function addFromMealPlan(scope: ServiceScope, input: MealPlanGrocer
   // FAIL CLOSED. A read that errors here is not "no allergies"; putting peanut
   // butter on the list because `medical_profiles` was unreachable is exactly
   // the failure this rule exists to prevent.
-  const [profilesRes, factsRes] = await Promise.all([
+  const [profilesRes, factsRes] = await settleAll([
     scope.db.from('medical_profiles').select('allergies').eq('family_id', scope.familyId),
     scope.db.from('family_facts').select('category, label, value').eq('family_id', scope.familyId)
       .in('category', ['medical', 'preference', 'important']),

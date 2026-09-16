@@ -2,13 +2,14 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { onboardingOwnerSchema, type OnboardingOwner } from './owner';
+import { settleAll } from '@/lib/supabase/settle';
 
 /** Check before any onboarding write, using freshly authenticated server data. */
 export async function verifyOnboardingOwner(db: SupabaseClient<Database>, userId: string, expected?: OnboardingOwner): Promise<boolean> {
   if (expected === undefined) return true; // Existing non-wizard callers keep their established action contract.
   const parsed = onboardingOwnerSchema.safeParse(expected);
   if (!parsed.success || parsed.data.userId !== userId) return false;
-  const [members, preferences] = await Promise.all([
+  const [members, preferences] = await settleAll([
     db.from('family_members').select('family_id, role').eq('user_id', userId).eq('is_active', true),
     db.from('user_preferences').select('active_family_id').eq('user_id', userId).maybeSingle(),
   ]);
@@ -22,7 +23,7 @@ export async function verifyOnboardingOwner(db: SupabaseClient<Database>, userId
   // A partial Finish or explicit Connect may have claimed this same user's
   // family since the initial no-family render. Its existing wizard marker and
   // creator identity make that retry safe without changing the business keys.
-  const [progress, family] = await Promise.all([
+  const [progress, family] = await settleAll([
     db.from('onboarding_progress').select('family_id, source').eq('user_id', userId).maybeSingle(),
     db.from('families').select('created_by').eq('id', activeId!).maybeSingle(),
   ]);

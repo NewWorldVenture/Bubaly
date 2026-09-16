@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Activity, Bot, FileText, Layers3, Plus, RefreshCw, Sparkles, WandSparkles } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
-import { settle } from '@/lib/supabase/settle';
+import { settle, settleAll } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
@@ -33,12 +33,12 @@ export default async function MarketingPlatformPage() {
   const [jobCountResults, staleJobsResult, latestSuccessResult, observationStats, embeddingCountResults] = await Promise.all([
     Promise.all(jobStatuses.map(async (status) => ({
       status,
-      result: await supabase.from('marketing_generation_jobs').select('id', { count: 'exact', head: true }).eq('status', status),
+      result: await settle(supabase.from('marketing_generation_jobs').select('id', { count: 'exact', head: true }).eq('status', status)),
     }))),
     settle(supabase.from('marketing_generation_jobs').select('id', { count: 'exact', head: true }).eq('status', 'running').lt('locked_at', staleWorkerCutoff)),
     settle(supabase.from('marketing_generation_jobs').select('job_type, target_path, completed_at').eq('status', 'succeeded').order('completed_at', { ascending: false }).limit(1).maybeSingle()),
     Promise.all(providerNames.map(async (provider) => {
-      const [countResult, latestResult] = await Promise.all([
+      const [countResult, latestResult] = await settleAll([
         supabase.from('marketing_provider_observations').select('id', { count: 'exact', head: true }).eq('provider', provider),
         supabase.from('marketing_provider_observations').select('observed_for, source_status').eq('provider', provider).order('observed_for', { ascending: false }).limit(1).maybeSingle(),
       ]);
@@ -46,7 +46,7 @@ export default async function MarketingPlatformPage() {
     })),
     Promise.all(embeddingStatuses.map(async (status) => ({
       status,
-      result: await supabase.from('marketing_embeddings').select('id', { count: 'exact', head: true }).eq('status', status),
+      result: await settle(supabase.from('marketing_embeddings').select('id', { count: 'exact', head: true }).eq('status', status)),
     }))),
   ]);
   const error = pagesResult.error ?? templatesResult.error ?? rulesResult.error ?? jobsResult.error ?? syncResult.error;

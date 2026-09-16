@@ -32,6 +32,7 @@ import { describeDbError } from '@/lib/supabase/errors';
 import { recordActivitySafely } from '../activity';
 import { dayKeyInTz, scopeNow } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
+import { settleAll } from '@/lib/supabase/settle';
 
 export type MoveRow = Tables<'moves'>;
 export type MoveTaskRow = Tables<'move_tasks'>;
@@ -131,7 +132,7 @@ export type CreateMoveInput = {
 
 /** What the household looks like, read live so a template is filtered by facts rather than defaults. */
 async function inferHousehold(scope: ServiceScope): Promise<ServiceResult<{ hasKids: boolean; hasPets: boolean }>> {
-  const [members, pets] = await Promise.all([
+  const [members, pets] = await settleAll([
     scope.db.from('family_members').select('id, role').eq('family_id', scope.familyId).eq('is_active', true).in('role', ['child', 'teen']).limit(1),
     scope.db.from('pets').select('id').eq('family_id', scope.familyId).eq('is_active', true).limit(1),
   ]);
@@ -415,7 +416,7 @@ const MAX_SOURCE_ROWS = 25;
  * timetable, each pet with a vet. Names only — no amounts, no phone numbers.
  */
 export async function listMoveSources(scope: ServiceScope): Promise<ServiceResult<MoveContextSources>> {
-  const [subs, bills, classes, pets] = await Promise.all([
+  const [subs, bills, classes, pets] = await settleAll([
     scope.db.from('subscriptions_tracked').select('id, name, status').eq('family_id', scope.familyId).order('name').limit(MAX_SOURCE_ROWS * 2),
     scope.db.from('bills').select('id, name, category, is_recurring').eq('family_id', scope.familyId).eq('is_recurring', true).order('name').limit(MAX_SOURCE_ROWS * 2),
     scope.db.from('school_classes').select('member_id, school_name').eq('family_id', scope.familyId).limit(200),
