@@ -514,10 +514,10 @@ passed; production application of the atomic `0240-0254` release remains pending
 ## Migrations added since this document's stated baseline (2026-09-12)
 
 The status line at the top of this file is dated **2026-09-05** against main
-`01881fb2`. **46** migration files have landed since, `0255` through
-`0303`, and none of them appear anywhere above. (This read "thirty-one, `0255`
+`01881fb2`. **47** migration files have landed since, `0255` through
+`0304`, and none of them appear anywhere above. (This read "thirty-one, `0255`
 through `0285`" until 2026-09-13, "seventy-one, `0255` through `0295`" until
-2026-09-15, and "forty-five, `0255` through `0302`" until 2026-09-16; the range
+2026-09-15, and "forty-five, `0255` through `0302`" and "46, `0255` through `0303`" until 2026-09-16; the range
 keeps growing past the sentence. The count is the number
 of files in that range, which is what `ls supabase/migrations` reports — the
 earlier "seventy-one" did not match its own stated range.)
@@ -858,3 +858,54 @@ it protects. The UPDATE policy gains the explicit `with check` its row-level
 sibling already documents.
 
 Until this is applied, production carries the breach as measured above.
+
+### `0304` guards the fourth and fifth decision surfaces — unapplied
+
+`0295` closed `reward_redemptions` and called itself "the last of the three
+decision surfaces to be guarded" (after `0222`'s chore submissions and `0223`'s
+chore assignments). It was not the last. Two tables carry the same shape — a
+`status` defaulting to pending, a `decided_by`, a `decided_at`, and an INSERT
+policy open to any family member — and neither was guarded:
+
+    public.economy_redemptions   insert policy: is_family_member(family_id)
+    public.invest_orders         insert policy: is_family_member(family_id)
+
+Their siblings constrain the same insert to the undecided state
+(`parent_approvals_insert` requires `status = 'pending'` and `decided_by is
+null`; `approval_requests_insert` likewise). These two constrain nothing.
+
+**Measured, not argued.** `docs/audit/economy-invest-decision-check.sql` runs
+on a replayed database with every migration applied, acting as a child of the
+family, and judges on row counts as well as refusals — an insert blocked by
+nothing simply lands, and an exception-only assertion would report a boundary
+that is not there. It asserts membership and non-management before measuring,
+so a probe acting as a stranger cannot pass vacuously. Against the current
+production schema the child inserted **an approved `economy_redemptions` row**
+and **a filled `invest_orders` row**, one each, with `decided_by` naming a
+parent who never saw them.
+
+What it costs differs between the two, and the difference is worth stating:
+
+* `economy_redemptions` — the debit lives in `economy_decide_redemption`, whose
+  own comment is "Approval debits the ledger". A row inserted already-approved
+  never goes through it, so the reward is recorded as granted and the tokens
+  are never taken. The points economy is separate from the wallet (`0217` keeps
+  that manager-only), so no money is minted — but a reward is taken for free.
+* `invest_orders` — `invest_decide_order` is what moves the wallet and writes
+  the holding, so a forged `filled` creates neither. It is an accountability
+  forgery rather than a transfer.
+
+In BOTH cases the forgery cannot be corrected through the product: each RPC
+begins by refusing a row it did not find pending (`if v_redemption.status <>
+'pending' then return 'already_decided'`, and the same line in
+`invest_decide_order`), so a parent who notices can neither approve nor reject
+it. The row is stuck in the state the child chose.
+
+`0304` mirrors `0295` exactly — the trusted server and family managers pass, a
+plain member setting a decision status is refused with `42501` — as a shared
+`public.decision_status_guard()` taking its guarded statuses as a trigger
+argument, so the three tables share one implementation. Asking (`requested`,
+`pending`) stays open, which the probe asserts as a positive control alongside
+a manager still being able to decide.
+
+Until this is applied, production carries both forgeries as measured above.
