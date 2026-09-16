@@ -509,3 +509,97 @@ FILES-TOUCHED (this continuation):
   - components/modules/health-module.tsx, scripts/i18n-scan.mjs
   - tests/helpers/render-translated.ts (new) + the render tests it repairs
 LAST-UPDATE: 2026-09-14, after 0308 and the catalogue fix.
+
+# Board from the fourth audit session (appended 2026-09-16)
+
+Only the Claude-1 block below is written here. Claude-2/3/4 did not run in this
+session — their files are unchanged since 2026-09-14 — so their sections above
+stand as they were rather than being restated, which would imply work that did
+not happen.
+
+## Claude-1 (fourth session)
+
+SCOPE: architecture/integration, plus the coordinator's own fixes.
+
+DONE: one theme, worked to the end — **the family's day vs the host's day.**
+Findings Q17-Q22 in `finalaudit.md`, all proven by reverting them and watching a
+guard name the exact defect:
+
+  - Q17 the kitchen ("Expires today" was the host's today; the AI chef's window
+    shifted a day) — `lib/pantry/logic.ts`, `lib/food/leftovers.ts`
+  - Q18 marketplace returns (and its cron's ONE-SHOT dedupe stamps, so a
+    wrong-day nudge spends the only nudge that order will ever get)
+  - Q19 relationship dates (on the morning of their anniversary the family was
+    told it was in twelve months)
+  - Q20 chore due labels (one row, "Tomorrow" on one page and "Today" on another)
+  - Q21 the assistant fast path ("dentist tomorrow at 3pm" booked a day late)
+  - Q22 a CI readiness probe that named a database and never checked it
+
+THE SETHOURS RATCHET: **17 -> 2**, and the two survivors are **decided, not
+pending**. The list is now split by reason and marked *a record, not a queue*:
+`lib/capture/parse.ts` (LOCAL_OPS is a deliberate documented half of a LOCAL/UTC
+pair; the browser path is correct) and `lib/routines/detect.ts` (a device-local
+Monday feeding a device-local calendar grid — converting the helper alone would
+desync it from the grid the user clicked in). **Do not "fix" either.**
+
+NEW INSTRUMENT: `tests/a-zone-aware-helper-called-without-the-zone.test.ts` —
+a THIRD spelling of the host's day that neither existing guard could see, since
+it has no host-day expression to find: a call to a zone-aware helper made
+without the zone. Covers six helpers, found by parser sweep rather than by
+reading. Its limit is stated in the file: it checks call ARITY, not whether the
+argument is defined.
+
+THINGS THIS SESSION GOT WRONG AND FIXED (recorded because they are the failure
+modes this work is prone to):
+  - A test written at 10am, where the host day and family day AGREE, proved
+    nothing. Every instant moved to an evening in the Americas.
+  - A control assertion written against the HOST's answer — an assertion about
+    whichever machine runs it, which would have gone red on CI's LA leg.
+    Replaced with a contrast between two NAMED zones.
+  - The new guard's FIRST finding was a false accusation
+    (`lib/command-bar/route.ts` is not a Next route handler). Heuristic anchored
+    to `app/`.
+  - The `setHours` list carried the same false header its sibling did — "never a
+    site that is fine as it is" — which I had already caught once and then
+    shipped again on a different list.
+  - A refactor making three zone parameters required: started, then backed out
+    in full after reading the tests, two of which exist specifically to pin the
+    default. Deleting a deliberate tested contract to fix zero defects is not a
+    trade worth making.
+
+NEXT: nothing in this theme. The remaining open items are older and unrelated:
+45 unattached labels and 70 unnamed selects (ratcheted; `labelledGroup` is the
+pattern), the 25 `Field` call sites `cloneElement` cannot reach, and 85 a11y
+lint warnings needing per-component refactors.
+
+FILED, NOT FIXED (owner decisions, each with a proposed shape):
+  - FOUR incompatible spellings of "day key in a zone": `dayKeyIn`
+    (`lib/time/zoned.ts`), `dayKeyInTz` (`scope.ts`, delegates), and three
+    different `dayKeyInZone` taking a `Date`, an ISO string and milliseconds.
+  - Whether `lib/routines/detect.ts` and the calendar grid should render in the
+    family's zone at all.
+  - Feb 29 in a non-leap year resolving to Mar 1 in `lib/relationship/dates.ts` —
+    left exactly as it was rather than changed under cover of a timezone fix.
+
+BLOCKERS: unchanged — F5/F-001 (no path to apply migrations to prod) is
+owner-blocked, and the two medical owner-decisions are filed, not mine.
+
+FILES-TOUCHED (this session):
+  - lib/{pantry/logic,food/leftovers,marketplace/returns,relationship/dates}.ts
+  - lib/{chores/dashboard,ai/context/intents,services/scope,time/zoned}.ts
+  - lib/{server/notifications,services/groceries/index,home/home-brief}.ts
+  - lib/marketing/handled-sample.ts
+  - app/(app)/dashboard/kitchen/page.tsx, app/(app)/marketplace/orders/page.tsx
+  - app/api/ai/{chef,meals/plan,relationship}/route.ts
+  - app/api/cron/return-reminders/route.ts
+  - components/modules/{kitchen-dashboard,pantry-module,chores-module,relationship-module}.tsx
+  - components/dashboard/ai-home-dashboard.tsx
+  - .github/workflows/finance-transaction-operation-runtime.yml
+  - tests/a-zone-aware-helper-called-without-the-zone.test.ts (new) + the
+    suites for each finding above
+
+CI: green on every completed head this session (d962e558, a4f121d2, 5ee3609b,
+583fdc4d, 95ce2611, 6c4e38d0). PR #548 remains a DRAFT; nothing merged or
+approved.
+
+LAST-UPDATE: 2026-09-16, after the zone-guard generalisation.
