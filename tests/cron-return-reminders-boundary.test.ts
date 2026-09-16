@@ -22,6 +22,34 @@ describe('scheduled recovery persistence boundaries', () => {
     expect(returnReminders).toContain('{ status: ok ? 200 : 502 }');
   });
 
+  /**
+   * The family's zone has to be resolved BEFORE the due-date decision, not just
+   * before the send. This job is cross-family — one query, no family filter — so
+   * a host-day answer decided for every household at once, and the dedupe stamps
+   * are one-shot: a nudge sent against the wrong day does not arrive late, it
+   * spends the only nudge that order will ever get.
+   *
+   * Pinned by ORDER, because the version this replaced already resolved the
+   * scope — just one step too late to be the thing that answered "is this due
+   * today".
+   */
+  it('return reminders decide the due date in the family\u2019s zone, before notifying', () => {
+    expect(returnReminders).toContain("dayKeyInTz");
+    expect(returnReminders).toMatch(/const todayKey = dayKeyInTz\(now, scope\.tz\)/);
+    // Every due-date judgement takes the day key; none takes a raw instant.
+    expect(returnReminders).toMatch(/needsOverdueAlert\(order, todayKey\)/);
+    expect(returnReminders).toMatch(/needsDueReminder\(order, todayKey\)/);
+    expect(returnReminders).not.toMatch(/needs(OverdueAlert|DueReminder)\(order, now\)/);
+    expect(returnReminders).not.toMatch(/daysUntilDue\(o\.ends_on, now\)/);
+    // And the resolve precedes the first decision in the file.
+    const resolved = returnReminders.indexOf('const todayKey = dayKeyInTz');
+    const firstDecision = returnReminders.indexOf('needsOverdueAlert(order,');
+    expect(resolved).toBeGreaterThan(-1);
+    expect(resolved).toBeLessThan(firstDecision);
+    // A family whose zone cannot be read is a FAILURE, not a guess against UTC.
+    expect(returnReminders).toMatch(/if \(!scope\) \{[\s\S]*?failed\+\+;[\s\S]*?continue;/);
+  });
+
   it('model refresh fails when dirty-state reads or writes fail', () => {
     expect(modelRefresh).toContain('dirtyRowsError');
     expect(modelRefresh).toContain('dirtyWriteError');

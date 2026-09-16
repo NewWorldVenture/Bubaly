@@ -14,7 +14,7 @@ import { describe, expect, it } from 'vitest';
 // than a proof"; this is what was under the floor.
 //
 // This is a RATCHET, not a proof. Seventeen server-side sites were listed here;
-// twelve are now closed and five remain, each needing its own decision about
+// thirteen are now closed and four remain, each needing its own decision about
 // which family's day it means. Listing them stops the next one being added
 // silently while they are worked down, and shrinking the list is the only edit
 // that should ever be made to it.
@@ -39,6 +39,14 @@ import { describe, expect, it } from 'vitest';
 // `dayKeyIn(new Date(), family.timezone)`. `lib/food/leftovers.ts` went with it,
 // since it subtracts days through the same helper.
 //
+// `lib/marketplace/returns.ts` followed, and it is the one where the cost of
+// being a day out is not cosmetic: its cron is CROSS-FAMILY, and its dedupe
+// stamps are one-shot, so a reminder keyed to the host's day does not arrive
+// late — it spends the only reminder that order will ever get. Its ordering is
+// pinned in tests/cron-return-reminders-boundary.test.ts, because the version
+// that shipped already resolved each family's scope, just one step too late to
+// be the thing that answered "is this due today".
+//
 // To close one: route it through `dayKeyInTz` / `zonedDayBoundsMs`
 // (lib/services/scope.ts), as app/(app)/display/page.tsx and
 // app/(app)/kids/page.tsx now do, then DELETE its line here.
@@ -50,7 +58,6 @@ const ROOTS = ['app', 'lib', 'components'];
 const TRACKED = new Set([
   'lib/capture/parse.ts',
   'lib/chores/dashboard.ts',
-  'lib/marketplace/returns.ts',
   'lib/relationship/dates.ts',
   'lib/routines/detect.ts',
 ]);

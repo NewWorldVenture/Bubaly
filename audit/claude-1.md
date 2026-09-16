@@ -4233,3 +4233,70 @@ untrue since that window was fixed — is corrected in the same commit.
 **Verified:** **14,045 tests green under both `TZ=UTC` and
 `TZ=America/Los_Angeles`** (four shards each), tsc clean, eslint at 85 (no new
 warnings), `npm run build` exits 0.
+
+---
+
+### [CLAUDE-1][HIGH][CORRECTNESS/TIME] The return reminder was sent against the server's day — and its dedupe stamp is one-shot, so the wrong day spent the notification
+
+**Files:** `lib/marketplace/returns.ts`,
+`app/api/cron/return-reminders/route.ts`,
+`app/(app)/marketplace/orders/page.tsx`, `tests/marketplace-returns.test.ts`,
+`tests/cron-return-reminders-boundary.test.ts`
+
+**Problem.** `daysUntilDue` took `now: Date = new Date()` and found midnight with
+`setHours(0, 0, 0, 0)` — the **host's** midnight — and every return judgement
+(`returnStatus`, `isOverdue`, `returnLabel`, `needsDueReminder`,
+`needsOverdueAlert`) is built on it. Two surfaces, with **different exposure**,
+and separating them is the point:
+
+- **The Orders page** is server-rendered on demand from a UTC host, so it spent
+  the last seven hours of every Californian day — 29% of it — telling a family
+  an item due **today** was **"Overdue by 1 day"**, and one due tomorrow **"Due
+  today"**.
+- **The cron** runs at `0 8 * * *`. That hour is actually well chosen: at 08:00
+  UTC every zone from **UTC-8 through UTC+13 shares the UTC date**, so most
+  households were unaffected. It is **UTC-9 and west** that were not — Alaska
+  and Hawaii are a full day behind at that instant.
+
+**Why the cron case is worse than "a day early", and this is the part worth
+stating.** `due_reminder_sent_at` and `overdue_notified_at` are **one-shot** —
+set once, never cleared — and the overdue branch `continue`s past the due-soon
+nudge. So a reminder computed against the wrong day does not arrive late; it
+**spends** the only notification that order will ever get. A family told
+"Overdue by 1 day" on the morning the item is actually due never receives the
+"Due today" nudge at all, because the order is now stamped. And the job is
+**cross-family** — one query, no family filter, every household in one batch —
+so a single host day was deciding for all of them at once.
+
+**Evidence.** Reverting `dayKeyIn` to the UTC day, at 6pm in Los Angeles:
+
+```
+expected 'overdue' to be 'due_today'
+expected { text: 'Due in 0 days', … } to deeply equal { text: 'Due in 1 day', … }
+expected true to be false          ← needsOverdueAlert on an item due TODAY
+expected '2026-07-13' to be '2026-07-12'   ← Honolulu at cron time
+```
+
+`expected true to be false` is the stamp being spent.
+
+**Fix.** Same shape as the pantry conversion: a **required `todayKey: string`**,
+no default, both dates parsed as UTC midnights so no zone enters the module.
+
+The cron now resolves each family's scope **before the due-date decision**
+rather than before the send. It already built `systemScopeForFamily` per family
+— the timezone was right there, one step too late to be the thing that answered
+"is this due today". A family whose zone cannot be read is now counted
+`failed++` rather than guessed against UTC; the send would have failed on the
+same missing scope anyway, so this only moves the failure to where the reason is
+legible.
+
+**Status:** FIXED. `lib/marketplace/returns.ts` off the ratchet — **four entries
+left of the original seventeen**. The cron's ordering is pinned by position in
+`tests/cron-return-reminders-boundary.test.ts`, because a guard that merely
+checked the zone was *mentioned* would have passed against the version that
+shipped.
+
+**Verified:** **14,051 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles`** (four shards each), tsc clean, eslint at 85 (no new
+warnings), `npm run build` exits 0. Non-vacuity: revert `dayKeyIn` to the UTC
+day → all 5 new assertions fail, the other 8 stay green.

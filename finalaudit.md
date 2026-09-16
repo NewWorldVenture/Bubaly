@@ -5315,3 +5315,50 @@ that window — is corrected in the same commit.
   assertions fail, and the widened ratchet names each reverted file; revert
   `dayKeyIn` to the UTC day → all 8 new kitchen assertions fail and the other 21
   stay green.
+
+---
+
+## Q18 — HIGH: the return reminder was sent against the server's day, and its dedupe stamp is one-shot
+
+Same root as Q17 — `setHours(0, 0, 0, 0)` deciding a calendar-day question — but
+the cost here is not cosmetic. `daysUntilDue` underpins every return judgement
+(`returnStatus`, `isOverdue`, `returnLabel`, `needsDueReminder`,
+`needsOverdueAlert`), across two surfaces with **different exposure**:
+
+- **The Orders page** is server-rendered on demand from a UTC host, so for the
+  last seven hours of every Californian day it told a family an item due **today**
+  was **"Overdue by 1 day"**, and one due tomorrow **"Due today"**.
+- **The cron** runs at `0 8 * * *`, and that hour turns out to be well chosen: at
+  08:00 UTC every zone from **UTC-8 through UTC+13 shares the UTC date**. It is
+  **UTC-9 and west** that do not — Alaska and Hawaii are a full day behind at
+  that instant. Narrow, and worth saying plainly rather than inflating.
+
+**Why the cron case is worse than "a day early."** `due_reminder_sent_at` and
+`overdue_notified_at` are **one-shot** — set once, never cleared — and the
+overdue branch `continue`s past the due-soon nudge. A reminder computed against
+the wrong day therefore does not arrive late; it **spends** the only
+notification that order will ever get. A family told "Overdue by 1 day" on the
+morning the item is actually due never receives the "Due today" nudge, because
+the order is now stamped. And the job is **cross-family** — one query, no family
+filter — so one host day decided for every household at once.
+
+Fixed with a required `todayKey: string` and no default, both dates parsed as
+UTC midnights. The cron now resolves each family's scope **before the due-date
+decision** rather than before the send: it already built `systemScopeForFamily`
+per family, so the timezone was right there, one step too late to be the thing
+that answered "is this due today". A family whose zone cannot be read is counted
+as a failure rather than guessed against UTC — the send would have failed on the
+same missing scope anyway, so this only moves the failure to where the reason is
+legible.
+
+The ordering is pinned **by position** in the cron's boundary test, not by
+whether the zone is mentioned: a guard of the weaker kind would have passed
+against the version that shipped, which resolved the scope and then ignored it.
+
+**Verified:** 14,051 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles`, tsc clean, eslint at 85, `npm run build` exits 0.
+Non-vacuity: revert `dayKeyIn` to the UTC day → all 5 new assertions fail
+(`expected 'overdue' to be 'due_today'`, and `expected true to be false` for the
+overdue stamp being spent on an item due today), the other 8 stay green.
+
+**Four entries left on the `setHours` ratchet, of the original seventeen.**
