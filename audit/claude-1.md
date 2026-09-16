@@ -3373,3 +3373,50 @@ session's block: **I shipped a regression and CI found it, not me.**
   the current handler. A source match cannot make that statement at all.
 - **Verified:** tsc and eslint clean; **13,982 tests green under both `TZ=UTC`
   and `TZ=America/Los_Angeles`**.
+
+### [CLAUDE-1][MEDIUM][RLS/PRIVACY] A journal anyone in the house could rewrite, delete or forge
+
+- **Raised by:** Claude-3. Verified still open and closed by **0315**, with the
+  read half filed rather than guessed.
+- **Files:** `supabase/migrations/0315_a_journal_is_the_one_thing_nobody_else_writes.sql`,
+  `docs/audit/journal-write-boundary-check.sql`
+- **Problem:** one policy — `FOR ALL using/with check (is_family_member(family_id))`.
+  The module is a `'use client'` component talking to PostgREST with the anon
+  key, so RLS is the only boundary there is.
+- **TWO places in the codebase already called this data private, and neither was
+  the database.** `journal-module.tsx:3` — *"Personal Journal … scoped to the
+  signed-in member"* — and `lib/ai/context/policy.ts:69`, which excludes the
+  table from AI context with the reason *"private journals"*. The shape this
+  whole sweep keeps finding, stated twice over.
+- **The two writes needing no product decision:** the module **deletes by id
+  alone** (`.delete().eq('id', id)`, no author check — the locator `remove(id)`
+  shape 0308 closed), and INSERT never pinned `member_id`, so a child could
+  write an entry **into** a parent's journal.
+- **Reads deliberately untouched**, and filed with something the earlier filing
+  did not have: **both readers in the product already scope to self**
+  (`journal-module.tsx:52` and `app/api/ai/journal/route.ts:30`), so narrowing
+  SELECT would be a no-op for every code path that exists. The only question left
+  for an owner is whether a manager keeps oversight — which is a one-line
+  decision rather than an open-ended one.
+- **I shipped a forging hole in the first draft and my own probe caught it on
+  its first run.** I reused 0308's `is_self_member(member_id) or created_by =
+  auth.uid()` — written there to reach rows with a null `member_id`. On INSERT
+  that disjunction IS the hole: a child sets `member_id` to the parent and
+  `created_by` to themselves, the second branch is true, and the forged entry
+  lands. **`created_by` describes who typed it; `member_id` describes whose
+  journal it is, and only the second is the question being asked.** INSERT now
+  demands both; UPDATE/DELETE keep the disjunction narrowed to
+  `member_id is null and created_by = auth.uid()`, where it can only reach a row
+  the caller created.
+  Worth recording as a general lesson: **an idiom lifted from a neighbouring
+  migration is not automatically right** — 0308's table had no notion of "whose
+  journal", so the same expression means something else here.
+- **Status:** FIXED. Non-vacuity, four mutations each naming its own defect:
+  restore the single FOR ALL policy → *"a child rewrote a parent's journal
+  entry"*; revert the delete rule alone → *"a child deleted a parent's journal
+  entry"*; restore my own `created_by` OR on insert → *"a child wrote an entry
+  into a parent's journal"*; drop the WITH CHECK from update (the 0311 shape) →
+  *"a child moved their own entry into a parent's journal"*.
+- **Verified:** 328 migrations replayed from scratch (0 failed), 325 re-applied
+  onto the populated schema, **36/36 probes run twice**, 13,982 tests green, tsc
+  and eslint clean.

@@ -48,8 +48,8 @@ describe('Supabase migration filename safety', () => {
     // (twice, on the same finding), 0299, then 0300, 0301 and 0302 on three
     // consecutive merges. Every merge since 0300 has brought one. Those last
     // three are now 0312, 0313 and 0314, which is why this reads 0315: main
-    // holds 0001-0302 and this branch 0303-0314.
-    expect(audit.nextVersion).toBe('0315');
+    // holds 0001-0302 and this branch 0303-0315.
+    expect(audit.nextVersion).toBe('0316');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {
