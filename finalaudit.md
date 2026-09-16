@@ -5416,3 +5416,51 @@ Non-vacuity: revert `dayKeyIn` to the UTC day → all 5 new assertions fail, the
 other 13 stay green.
 
 **Three entries left on the `setHours` ratchet, of the original seventeen.**
+
+---
+
+## Q20 — MEDIUM: one chore row said "Tomorrow" on one page and "Today" on another
+
+`dueLabel` floored `now: Date = new Date()` with `setHours(0, 0, 0, 0)`, and its
+one caller is a **client** component — so that is the **viewer's device** zone.
+`chore_assignments.due_at` is a `timestamptz`, an instant, so the zone it is
+read in decides which day it lands on.
+
+The rest of the app reads that same column in the **family's** zone:
+`lib/home/today.ts:142` buckets it with `dayKeyInZone(c.due_at, tz)`, and the
+chore notification renders it with `timeLabel(c.due_at, tz)`. So one chore row
+was **"Tomorrow" on the chores page and "Today" on the home page and in the
+notification** for any viewer whose device zone differs from the household's —
+a parent travelling, a phone left on UTC, a split household. One row, two
+answers.
+
+A second half nobody would have caught: the `normal` branch formatted its
+fallback with `toLocaleDateString` and no `timeZone`, so even with the tone
+fixed the printed date would still have been the device's — a chore due late on
+the 2nd rendering "Fri, Jul 3" while its tone came from the 2nd, the row
+disagreeing with itself. Both halves now take `tz`.
+
+**The ratchet was wrong about this file, in its own words**, and that is the
+part worth keeping. It named `dueLabel` as *"the clearest case: its only caller
+is a client module, so it is listed but may well be correct as it stands."* The
+reasoning — **"a client's own clock is already right"** — is the same premise
+that was wrong for the pantry module (Q17) and for `lib/relationship/dates.ts`
+(Q19). Three times. A client component's clock is right about the *viewer*; the
+question these modules ask is about the *household*. The note is corrected in
+place rather than deleted, because a list that quietly drops its own mistakes
+teaches nothing to whoever works it next.
+
+**Filed, not fixed:** there are now **four** spellings of "the day key in a
+zone" — `dayKeyIn`, `dayKeyInTz` (which delegates to it), and three
+**incompatible** `dayKeyInZone`s taking a `Date` (`lib/briefing/build.ts`), an
+ISO string (`lib/home/today.ts`) and milliseconds (`lib/schedule/zoned.ts`).
+Converging them is real work and not something to do under cover of a timezone
+fix, for the same reason Q19 left Feb 29 alone.
+
+**Verified:** 14,058 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles`, tsc clean, eslint at 85, `npm run build` exits 0.
+Non-vacuity: revert `dueLabel` to the device zone → `expected 'soon' to be
+'today'` and `expected 'Fri, Jul 3' to be 'Thu, Jul 2'`; the other 16 stay green.
+
+**Two entries left on the `setHours` ratchet, of the original seventeen:**
+`lib/capture/parse.ts` and `lib/routines/detect.ts`.

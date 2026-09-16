@@ -14,7 +14,7 @@ import { describe, expect, it } from 'vitest';
 // than a proof"; this is what was under the floor.
 //
 // This is a RATCHET, not a proof. Seventeen server-side sites were listed here;
-// fourteen are now closed and three remain, each needing its own decision about
+// fifteen are now closed and two remain, each needing its own decision about
 // which family's day it means. Listing them stops the next one being added
 // silently while they are worked down, and shrinking the list is the only edit
 // that should ever be made to it.
@@ -24,9 +24,17 @@ import { describe, expect, it } from 'vitest';
 // client component `new Date()` is the user's own device clock and is already
 // right, so these cannot simply be converted — the zone has to be threaded from
 // each server caller, or the helper has to take a day key the way
-// `weekStrip` now does. `lib/chores/dashboard.ts:dueLabel` is the clearest
+// `weekStrip` now does.
+//
+// This list used to name `lib/chores/dashboard.ts:dueLabel` as "the clearest
 // case: its only caller is a client module, so it is listed but may well be
-// correct as it stands.
+// correct as it stands". That note was WRONG, and it is worth leaving the
+// correction here rather than quietly deleting it, because the reasoning it
+// encodes — "a client's own clock is already right" — is what kept three of
+// these entries on the list unexamined. `due_at` is a timestamptz, and the
+// rest of the app reads it in the FAMILY's zone; a client that reads it in the
+// device's is not correct, it is a second opinion. The test for it now asserts
+// two zones giving two different answers about the same instant.
 //
 // `lib/pantry/logic.ts` was the worked example of the harder half, and the
 // answer turned out NOT to be "the device clock is fine on the client". It had
@@ -66,7 +74,6 @@ const ROOTS = ['app', 'lib', 'components'];
 // family-zone decision its call site needs — never a site that is fine as it is.
 const TRACKED = new Set([
   'lib/capture/parse.ts',
-  'lib/chores/dashboard.ts',
   'lib/routines/detect.ts',
 ]);
 

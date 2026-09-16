@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useApp } from '@/components/app/app-context';
+import { dayKeyIn } from '@/lib/time/zoned';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { createChoreAction, deleteChoreAssignmentAction, setChoreStatusAction } from '@/app/(app)/dashboard/chores/actions';
@@ -546,8 +547,15 @@ function ChoreTable({ title, rows, ...p }: { title: string; rows: AssignmentLike
 
 function ChoreRow({ a, memberById, manager, busy, paying, menuFor, setMenuFor, onStatus, onApprove, onPay, onDelete }: { a: Assignment } & RowProps) {
   const tr = useTranslations();
+  // The FAMILY's zone, read here rather than threaded through RowProps because
+  // ChoreRow is the only thing that needs it. `due_at` is a timestamptz, and
+  // the home page buckets the same instant with the family's zone — labelling
+  // it against this device's instead made one chore "Tomorrow" here and
+  // "Today" there for anyone whose phone is not set to the household's zone.
+  const { family } = useApp();
+  const tz = family?.timezone || 'UTC';
   const member = memberById.get(a.member_id);
-  const due = dueLabel(a.due_at);
+  const due = dueLabel(a.due_at, dayKeyIn(new Date(), tz), tz);
   const status = STATUS_META[a.status] ?? STATUS_META.todo;
   const StatusIcon = status.icon;
   const done = isCompleted(a.status);

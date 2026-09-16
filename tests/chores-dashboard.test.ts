@@ -128,12 +128,45 @@ describe('rewardsProgress', () => {
 });
 
 describe('dueLabel', () => {
-  const now = new Date('2026-06-30T12:00:00');
+  // A day KEY plus the family's zone. `due_at` is a timestamptz, so both are
+  // needed: one to say which day the instant falls on, one to say which day
+  // "today" is. The old fixture used a zoneless `new Date('2026-06-30T12:00:00')`
+  // and bare instants, so what it asserted depended on the suite's TZ.
+  const TODAY = '2026-06-30';
+  const TZ = 'America/Los_Angeles';
   it('labels today, tomorrow, overdue and none', () => {
-    expect(dueLabel('2026-06-30T09:00:00', now).tone).toBe('today');
-    expect(dueLabel('2026-07-01T09:00:00', now).tone).toBe('soon');
-    expect(dueLabel('2026-06-28T09:00:00', now).tone).toBe('overdue');
-    expect(dueLabel(null, now).tone).toBe('none');
+    expect(dueLabel('2026-06-30T16:00:00Z', TODAY, TZ).tone).toBe('today');
+    expect(dueLabel('2026-07-01T16:00:00Z', TODAY, TZ).tone).toBe('soon');
+    expect(dueLabel('2026-06-28T16:00:00Z', TODAY, TZ).tone).toBe('overdue');
+    expect(dueLabel(null, TODAY, TZ).tone).toBe('none');
+  });
+
+  /**
+   * The divergence this was changed for. `due_at` is an INSTANT, so the zone it
+   * is read in decides which day it lands on — and the rest of the app reads it
+   * in the family's: `lib/home/today.ts` buckets the same column with
+   * `dayKeyInZone(c.due_at, tz)` and the chore notification renders it with
+   * `timeLabel(c.due_at, tz)`.
+   *
+   * 2026-06-30T21:00 in Los Angeles is 2026-07-01T04:00Z, so a chore due that
+   * evening is the 30th at home and the 1st anywhere east of it. Labelled
+   * against a device left on UTC it read "Tomorrow" on the chores page while
+   * the home page and the notification both said "Today" — one row, two
+   * answers, and no way for the family to tell which was meant.
+   */
+  it('reads the due instant in the family\u2019s zone, not the viewer\u2019s device', () => {
+    const lateOnTheThirtieth = '2026-07-01T04:00:00Z';
+    expect(dueLabel(lateOnTheThirtieth, TODAY, TZ).tone).toBe('today');
+    // The same instant for a household actually in UTC is genuinely tomorrow.
+    expect(dueLabel(lateOnTheThirtieth, TODAY, 'UTC').tone).toBe('soon');
+  });
+
+  it('formats the fallback date in the family\u2019s zone too', () => {
+    // 2026-07-03T04:00Z is still Thu Jul 2 in Los Angeles. A label formatted in
+    // the device's zone would print "Fri, Jul 3" while the tone was computed
+    // from the 2nd — the row disagreeing with itself.
+    expect(dueLabel('2026-07-03T04:00:00Z', TODAY, TZ).label).toBe('Thu, Jul 2');
+    expect(dueLabel('2026-07-03T04:00:00Z', TODAY, 'UTC').label).toBe('Fri, Jul 3');
   });
 });
 
