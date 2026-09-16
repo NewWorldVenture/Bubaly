@@ -432,7 +432,7 @@ export async function createChoreAction(formData: FormData): Promise<{ ok: boole
   // opens with refuseUnlessManager and is pinned by a test; this one — reached
   // from /missions, which gates on PLAN and never on role — did not. A chore is
   // the price list for the chores economy (points, cash_cents,
-  // auto_approve_score), so authoring one is a manager's act. 0303 is the real
+  // auto_approve_score), so authoring one is a manager's act. 0317 is the real
   // boundary; this is the same rule where the screen's claim lives, so the
   // control fails here rather than as an RLS error the form cannot explain.
   if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentGuardianCan') };

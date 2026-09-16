@@ -1,4 +1,4 @@
--- Behavioural proof for 0303, run as real `authenticated` sessions under RLS.
+-- Behavioural proof for 0317, run as real `authenticated` sessions under RLS.
 --
 -- The chores economy's PRICE LIST is `public.chores` (points, cash_cents,
 -- auto_approve_score, the min/max bounds) and the amount actually paid is
@@ -72,7 +72,7 @@ begin
   perform set_config('request.jwt.claim.sub', child_uid::text, true);
   set local role authenticated;
 
-  -- 1. Cannot rewrite the price list. Before 0303 this was UPDATE 1.
+  -- 1. Cannot rewrite the price list. Before 0317 this was UPDATE 1.
   update public.chores set cash_cents = 5000000, points = 99999, auto_approve_score = 0 where id = ch;
   get diagnostics n = row_count;
   if n <> 0 then
@@ -113,7 +113,7 @@ begin
     raise exception 'a child can no longer submit their own chore (%)', n;
   end if;
 
-  -- 4. Cannot approve it (0223's guard, re-asserted here so 0303 cannot
+  -- 4. Cannot approve it (0223's guard, re-asserted here so 0317 cannot
   --    accidentally drop what it replaced).
   blocked := false;
   begin

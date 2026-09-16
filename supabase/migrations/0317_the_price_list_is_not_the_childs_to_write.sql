@@ -1,4 +1,11 @@
--- Bubaly :: 0303 - the price list is not the child's to write
+-- Bubaly :: 0317 - the price list is not the child's to write
+-- ----------------------------------------------------------------------------
+-- Renumbered from 0303. main landed `0303_document_bytes_boundary.sql` for a
+-- different finding while this was in flight — the EIGHTH migration-number
+-- collision between the two sessions, and the fourth in a row: every merge
+-- since 0300 has brought one. Only the number changed; this touches `chores`
+-- and `chore_assignments`, which nothing between 0303 and 0316 goes near, and
+-- it depends on nothing those migrations add.
 -- ----------------------------------------------------------------------------
 -- The chores economy's PRICE LIST lives in `public.chores` — points, cash_cents,
 -- cash_min_cents, cash_max_cents, points_min, points_max, reward_mode,
@@ -105,7 +112,7 @@ begin
   loop
     execute format('drop policy if exists %I on public.chores', pol.polname);
     swept := swept + 1;
-    raise notice '0303: dropped stray permissive write policy chores.%', pol.polname;
+    raise notice '0317: dropped stray permissive write policy chores.%', pol.polname;
   end loop;
 
   select count(*) into remaining
@@ -116,10 +123,10 @@ begin
     and p.polpermissive and p.polcmd in ('a','w','d','*')
     and p.polname not in ('chores_mng_insert','chores_mng_update','chores_mng_delete');
   if remaining <> 0 then
-    raise exception '0303 FAILED: % permissive write policy(ies) still on chores after the sweep', remaining;
+    raise exception '0317 FAILED: % permissive write policy(ies) still on chores after the sweep', remaining;
   end if;
 
-  raise notice '0303 OK: % stray write policy(ies) swept; the chore price list is a manager''s to write', swept;
+  raise notice '0317 OK: % stray write policy(ies) swept; the chore price list is a manager''s to write', swept;
 end $$;
 
 -- ── chore_assignments: the four columns that decide what gets paid ──────────

@@ -514,10 +514,11 @@ passed; production application of the atomic `0240-0254` release remains pending
 ## Migrations added since this document's stated baseline (2026-09-12)
 
 The status line at the top of this file is dated **2026-09-05** against main
-`01881fb2`. **Forty-five** migration files have landed since, `0255` through
-`0302`, and none of them appear anywhere above. (This read "thirty-one, `0255`
-through `0285`" until 2026-09-13 and "seventy-one, `0255` through `0295`" until
-2026-09-15; the range keeps growing past the sentence. The count is the number
+`01881fb2`. **46** migration files have landed since, `0255` through
+`0303`, and none of them appear anywhere above. (This read "thirty-one, `0255`
+through `0285`" until 2026-09-13, "seventy-one, `0255` through `0295`" until
+2026-09-15, and "forty-five, `0255` through `0302`" until 2026-09-16; the range
+keeps growing past the sentence. The count is the number
 of files in that range, which is what `ls supabase/migrations` reports — the
 earlier "seventy-one" did not match its own stated range.)
 Nothing here authorizes applying any of them; this section exists so the gap is
@@ -817,3 +818,43 @@ one, that the engine sees exactly one, that the index does **not** reach a
 family's own policies, and that the repair keeps the latest intent. Its first
 assertion fails against the previous schema, naming the count. CI replays it on
 every pull request.
+
+
+### `0303` closes the document vault's second half — unapplied
+
+`0266` closed the vault in two places. The ROW half works: a child cannot see a
+sensitive document, so they cannot learn its `storage_path`. The BYTES half was
+meant to hold the line anyway — its own comment says "a path learned before
+today (or guessed) still does not open the file" — and it did not.
+
+All three of its `storage.objects` policies guard with
+`not exists (select 1 from public.documents d where d.storage_path = ...)`.
+A policy expression is evaluated as the CALLING user, so that read of
+`public.documents` is itself subject to `documents_select`, the very policy that
+hides sensitive rows from a child. The child cannot see the row, the subquery
+finds nothing, `not exists` is TRUE, and the guard admits exactly the object it
+exists to refuse. The two halves are the same predicate pointed in opposite
+directions: the stricter the row half gets, the wider this opens.
+
+**Measured, not argued.** `docs/audit/document-bytes-boundary-check.sql` runs
+against a replayed database with every migration applied, acting as a child of
+the family, and judges on ROW COUNTS rather than on whether an error was raised
+— an UPDATE or DELETE matching no visible row changes nothing and raises
+nothing, so an exception-only assertion would pass while the bytes walked out.
+Both controls pass first: the child cannot see the document row, and CAN see an
+ordinary object, so the bucket is not simply shut. Against the current
+production schema the child then **read**, **renamed** and **deleted** the
+storage object for a sensitive document — one row each time. A family's passport
+scan, downloadable and destroyable by someone who was never allowed to know it
+existed.
+
+`0303` asks the question with the row visible: a SECURITY DEFINER
+`public.document_object_is_restricted(text)` reads `public.documents` as its
+owner, so the lookup no longer depends on the caller being allowed to see what
+it is looking up. It still answers about the CALLER — `can_manage_family`
+resolves `auth.uid()` inside, which SECURITY DEFINER does not change — and it
+returns a boolean and nothing else, so it cannot become a way to read the vault
+it protects. The UPDATE policy gains the explicit `with check` its row-level
+sibling already documents.
+
+Until this is applied, production carries the breach as measured above.

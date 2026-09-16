@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-// 0303 is the real boundary — the browser talks to PostgREST with the anon key,
+// 0317 is the real boundary — the browser talks to PostgREST with the anon key,
 // so a server action is never the thing that stops a child, and
 // docs/audit/chore-price-write-boundary-check.sql proves the policies and the
 // trigger behaviourally. This pins the app-layer half.
@@ -44,7 +44,7 @@ describe('both createChoreActions check the role they claim to', () => {
   it('the migration and its probe are present and name the payout columns', () => {
     // A guard on the app layer alone is what this whole finding is about, so
     // the test asserts the database half exists rather than standing in for it.
-    const migration = readFileSync('supabase/migrations/0303_the_price_list_is_not_the_childs_to_write.sql', 'utf8');
+    const migration = readFileSync('supabase/migrations/0317_the_price_list_is_not_the_childs_to_write.sql', 'utf8');
     expect(migration).toContain('chores_mng_update');
     for (const column of ['points_awarded', 'cash_awarded_cents', 'approved_by', 'approved_at']) {
       expect(migration, `the guard does not mention ${column}`).toContain(column);

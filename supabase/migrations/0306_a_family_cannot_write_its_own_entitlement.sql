@@ -169,7 +169,7 @@ end $$;
 -- ── families: the two columns that are entitlement, not profile ─────────────
 -- `families` cannot simply be revoked — a manager legitimately renames the
 -- family, sets its timezone, address, avatar and family_code. The restriction
--- is BY COLUMN, in the idiom 0303 used for chore_assignments: a trigger that
+-- is BY COLUMN, in the idiom 0317 used for chore_assignments: a trigger that
 -- refuses an untrusted writer touching the two columns `plan.ts` treats as
 -- authority, and leaves the rest of the row alone.
 create or replace function public.family_entitlement_is_not_self_written()

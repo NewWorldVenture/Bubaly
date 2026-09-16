@@ -1,6 +1,6 @@
 -- Bubaly :: 0304 - a reward costs what the parent set
 -- ----------------------------------------------------------------------------
--- The same defect 0303 closed on the chores board, in the economy module.
+-- The same defect 0317 closed on the chores board, in the economy module.
 --
 -- `economy_redemptions_insert` constrains ONE column:
 --     with check (is_family_member(family_id))

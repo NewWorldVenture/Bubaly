@@ -94,7 +94,7 @@ end $$;
 
 -- ── Rule 2: the terms themselves ────────────────────────────────────────────
 --
--- Column-wise, in the idiom 0303 used for chore_assignments and 0306 for the
+-- Column-wise, in the idiom 0317 used for chore_assignments and 0306 for the
 -- family's entitlement: name the columns that carry the deal and refuse an
 -- untrusted writer touching them, leaving the rest of the row alone. The frozen
 -- list travels as a trigger argument so both tables share one function and the
