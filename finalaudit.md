@@ -6208,3 +6208,61 @@ line too, and the guard asserts the `armed` model is still there to match it —
 so if the reference drifts, this notices.
 
 Both proved red by restoring the discarded forms.
+
+## Pass S (continued) — the native push branch, which nobody had audited
+
+Claude-3's session 5 named two gaps in its own coverage: *"`lib/server/push.ts`'s
+FCM/APNs branches and VAPID storage were not audited"*. That is a specific
+invitation, and it was worth taking.
+
+**C1-S6-04 [MEDIUM][INTEGRATIONS] — the native branch never pruned a dead
+device, and counted it as delivered.**
+
+The web branch prunes a 404/410 endpoint with careful accounting, and its
+comment states the hazard in its own words: *"a permanently dead endpoint that
+never gets pruned is retried on every notification from here on, spending a send
+each time and reporting itself cleaned up each time."* The native branch beside
+it was:
+
+```ts
+const ok = await sendFcm(d.token, payload);
+ok ? result.sent++ : result.failed++;
+```
+
+and `sendFcm` returned `res.ok`. **FCM's legacy endpoint reports a dead token in
+the response BODY with HTTP 200** —
+`{"failure":1,"results":[{"error":"NotRegistered"}]}` — so an uninstalled app's
+token was not merely un-pruned. It was counted as **sent**, on every
+notification, for as long as the row existed. That is the `sent` counter making
+the same claim `pruned` was fixed for making: work that did not happen.
+
+`sendFcm` now returns an outcome, not a boolean, and the native branch prunes
+what FCM calls permanently dead (`NotRegistered`, `InvalidRegistration`,
+`MismatchSenderId`) with the same accounting as the web branch — `pruned` still
+counts only a delete that landed.
+
+The distinction the guard pins hardest: **a non-2xx never prunes.** An HTTP 401
+from FCM is *our* server key being wrong, not the family's device being dead,
+and pruning every device in the estate because a credential expired would be a
+far worse defect than the one being fixed.
+
+**C1-S6-05 [LOW][OBSERVABILITY] — `catch { result.failed++; }`.** The loop's
+outer catch swallowed the cause and incremented a counter. An operator reading
+`failed: 3` with no log line cannot act on it, and this same file argues the
+opposite case elsewhere ("the handler failure is the one an operator needs, so
+log it even when recording the error state fails"). It logs now.
+
+**Verified clean in the same sweep,** recorded so the next pass does not
+re-derive it:
+
+- **Empty `catch {}` blocks: zero** in `app/`, `lib/` and `components/`. The one
+  grep hit is a *comment* in `app/api/behavior/insight/route.ts` describing a
+  bare catch that was already removed.
+- **Cron failure reporting: clean across all 24 routes.** Every one answers 401
+  unauthorised and 502/500 on failure; none hardcodes a 200. `wallet-allowance`
+  is the strongest — it claims the schedule atomically before the ledger write,
+  rolls the claim back when crediting fails, and its `.lte('next_run_on', today)`
+  predicate makes a double-credit impossible under overlapping invocations.
+  `feedback-github-sync` even carries the reasoning in a comment: *"a hardcoded
+  200 is indistinguishable from a clean run"*. This class has been swept before
+  and held.

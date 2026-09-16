@@ -13,6 +13,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
 import { childrenBlockedOn } from '@/lib/notifications/child-channels';
+import { readBoundedResponseText } from '@/lib/server/bounded-response-body';
 import { isDeliverablePushEndpoint } from '@/lib/server/push-endpoint';
 
 type DB = SupabaseClient<Database>;
@@ -47,9 +48,27 @@ function fcmConfigured(): boolean {
   return Boolean(process.env.FCM_SERVER_KEY);
 }
 
-async function sendFcm(token: string, payload: PushPayload): Promise<boolean> {
+/**
+ * The outcome of one FCM send.
+ *
+ * `res.ok` is NOT the answer. FCM's legacy endpoint reports a dead token in the
+ * response BODY with HTTP 200:
+ *
+ *     { "failure": 1, "results": [{ "error": "NotRegistered" }] }
+ *
+ * so reading the status alone counted an uninstalled app's token as **sent**,
+ * forever, on every notification. `unregistered` is the half that lets the
+ * caller prune, exactly as the web branch already does for a 404/410.
+ * Audit C1-S6-04.
+ */
+type FcmOutcome = { ok: true } | { ok: false; unregistered: boolean; reason: string };
+
+/** FCM's names for "this token will never work again". */
+const FCM_DEAD_TOKEN = new Set(['NotRegistered', 'InvalidRegistration', 'MismatchSenderId']);
+
+async function sendFcm(token: string, payload: PushPayload): Promise<FcmOutcome> {
   const key = process.env.FCM_SERVER_KEY;
-  if (!key) return false;
+  if (!key) return { ok: false, unregistered: false, reason: 'not_configured' };
   // FCM legacy HTTP send. Swap for HTTP v1 (service-account OAuth) in production.
   const res = await fetchWithDeadline('https://fcm.googleapis.com/fcm/send', {
     method: 'POST',
@@ -60,7 +79,22 @@ async function sendFcm(token: string, payload: PushPayload): Promise<boolean> {
       data: { url: payload.url ?? '/dashboard' },
     }),
   }, 15_000);
-  return res.ok;
+  // A 401 here is the server key, not the token: never prune a device because
+  // our own credential is wrong.
+  if (!res.ok) return { ok: false, unregistered: false, reason: `http_${res.status}` };
+
+  const bounded = await readBoundedResponseText(res, 64 * 1024);
+  if (!bounded.ok) return { ok: false, unregistered: false, reason: 'oversized_response' };
+  let parsed: { failure?: number; results?: { error?: string }[] };
+  try {
+    parsed = JSON.parse(bounded.text) as typeof parsed;
+  } catch {
+    // A 200 we cannot read is not evidence of a dead token either way.
+    return { ok: false, unregistered: false, reason: 'unparsable_response' };
+  }
+  const error = parsed.results?.[0]?.error;
+  if (!parsed.failure && !error) return { ok: true };
+  return { ok: false, unregistered: !!error && FCM_DEAD_TOKEN.has(error), reason: error ?? 'unknown' };
 }
 
 /**
@@ -121,12 +155,32 @@ export async function sendPushToUser(supabase: DB, userId: string, payload: Push
           }
         }
       } else {
-        // Native FCM/APNs.
+        // Native FCM/APNs. Held to the same standard as the web branch above:
+        // a token FCM calls dead is pruned, and `pruned` still only counts a
+        // delete that landed. Without this, an uninstalled app was retried on
+        // every notification forever — and, because FCM reports a dead token
+        // with HTTP 200, counted as SENT each time. Audit C1-S6-04.
         if (!fcmConfigured() || !d.token) { result.skipped++; continue; }
-        const ok = await sendFcm(d.token, payload);
-        ok ? result.sent++ : result.failed++;
+        const outcome = await sendFcm(d.token, payload);
+        if (outcome.ok) {
+          result.sent++;
+        } else if (outcome.unregistered) {
+          const { error: pruneError } = await supabase.from('push_devices').delete().eq('id', d.id);
+          if (pruneError) {
+            console.error('[push] dead native device could not be pruned', { deviceId: d.id, reason: outcome.reason }, pruneError);
+            result.failed++;
+          } else {
+            result.pruned++;
+          }
+        } else {
+          console.error('[push] native send failed', { deviceId: d.id, reason: outcome.reason });
+          result.failed++;
+        }
       }
-    } catch {
+    } catch (err) {
+      // A counted failure with no cause is an operator staring at a number.
+      // Audit C1-S6-05.
+      console.error('[push] device send threw', { deviceId: d.id, provider: d.provider }, err);
       result.failed++;
     }
   }
