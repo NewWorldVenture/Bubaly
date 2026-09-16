@@ -514,8 +514,8 @@ passed; production application of the atomic `0240-0254` release remains pending
 ## Migrations added since this document's stated baseline (2026-09-12)
 
 The status line at the top of this file is dated **2026-09-05** against main
-`01881fb2`. **50** migration files have landed since, `0255` through
-`0307`, and none of them appear anywhere above. (This read "thirty-one, `0255`
+`01881fb2`. **51** migration files have landed since, `0255` through
+`0308`, and none of them appear anywhere above. (This read "thirty-one, `0255`
 through `0285`" until 2026-09-13, "seventy-one, `0255` through `0295`" until
 2026-09-15, and "forty-five, `0255` through `0302`", "46, `0255` through `0303`"
 and "49, `0255` through `0306`" until 2026-09-16; the range
@@ -1041,3 +1041,40 @@ unlike the two actions beside it in the same file. It now refuses a submission
 that carries pricing from a non-manager.
 
 Until this is applied, production carries the forgery as measured above.
+
+### `0308` puts the reward catalogue back in a manager's hands — unapplied
+
+`rewards` is written **straight from the browser**:
+`components/modules/rewards-module.tsx` calls
+`sb.from('rewards').insert/update/delete` with the viewer's own JWT, with no
+server action in between. The only thing standing between a child and the
+family's reward catalogue is `canManage = isManager(role)` deciding whether a
+button renders (lines 146, 233, 251). A hidden button is not a boundary; the
+table's policies are `is_family_member(family_id)` and nothing else.
+
+Measured, acting as a child with the positive control passing: the child
+**re-priced "New bike" from 5000 points to 5**, **added a reward costing
+nothing**, **deleted a reward the parent had set up**, and **requested a
+5000-point reward for 1 point**. Five breaches,
+`docs/audit/reward-catalogue-price-check.sql`.
+
+`requestRedemptionAction` copies `rewards.cost_points` into the redemption
+server-side, so re-pricing the shelf re-prices the ticket a parent is asked to
+approve — the queue shows a 5-point request for the bike. Restrictive manager
+guards close that.
+
+The second half is `reward_redemptions.cost_points`. That table has one policy
+(`Members can manage … FOR ALL … is_family_member`) and `0295`'s trigger guards
+the **decision** on it, not the amount — so a direct insert could name its own
+price without touching the shelf at all, exactly as `invest_orders` could before
+`0306`. As there, the guard is consistency rather than authorship: a child
+legitimately requests a reward and the action already derives the cost
+server-side, so requiring the ticket to carry the shelf's price refuses the
+forged insert and leaves the real one untouched. A manager-only rule there would
+stop a child asking for a reward at all.
+
+`lib/rewards/points.ts` deducts `cost_points` at `approved` and `fulfilled`, so
+both numbers are the spendable balance the whole chores economy settles in — the
+ledger `0222`, `0223`, `0295` and `0305` exist to keep honest.
+
+Until this is applied, production carries all five as measured above.
