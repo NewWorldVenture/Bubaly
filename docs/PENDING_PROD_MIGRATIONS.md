@@ -514,8 +514,8 @@ passed; production application of the atomic `0240-0254` release remains pending
 ## Migrations added since this document's stated baseline (2026-09-12)
 
 The status line at the top of this file is dated **2026-09-05** against main
-`01881fb2`. **48** migration files have landed since, `0255` through
-`0305`, and none of them appear anywhere above. (This read "thirty-one, `0255`
+`01881fb2`. **49** migration files have landed since, `0255` through
+`0306`, and none of them appear anywhere above. (This read "thirty-one, `0255`
 through `0285`" until 2026-09-13, "seventy-one, `0255` through `0295`" until
 2026-09-15, and "forty-five, `0255` through `0302`" and "46, `0255` through `0303`" until 2026-09-16; the range
 keeps growing past the sentence. The count is the number
@@ -960,17 +960,54 @@ approve and award.
 
 Until this is applied, production carries the forgery as measured above.
 
+### `0306` guards two money instructions the sweeps' lists missed — unapplied
+
+`0254` added restrictive manager guards to the money tables and `0275` swept
+the stray permissive policies off them "by shape rather than by name", because
+"the previous three attempts each fixed the instance and left the class open".
+Both enumerate the tables they cover, and a hardcoded list is the very thing
+`0275`'s header warns about. Two tables that move real money are not on it.
+
+**`allowance_rules`** has one policy — `Members manage allowance_rules FOR ALL …
+is_family_member` — no role check, no restrictive guard. The nightly cron reads
+it and calls `creditChildWallet(…, amountCents: rule.amount_cents)`. The row is
+not a record of a payment; it is the reason one happens, on a schedule, with
+nobody in the loop.
+
+Measured, acting as a child with both controls passing: the child **created an
+allowance rule of 100,000 cents a week pointing at their own wallet**, and
+**raised an existing one**. The next cron run pays it. Nothing legitimate
+breaks — both writers in the product (`saveAllowanceRuleAction`,
+`toggleAllowanceRuleAction`) already refuse a non-manager in application code;
+this only makes the database agree with the rule the application states, which
+is what matters for anyone calling PostgREST directly.
+
+**`invest_orders`** — `invest_decide_order` debits the wallet with the order's
+stored `amount_cents` and credits its stored `shares`, checking neither against
+the other nor against the asset. Measured: the child **priced their own order
+below the asset** and **bought 1,000 shares for one cent**.
+
+The invest guard is CONSISTENCY, not authorship, because authorship is not the
+problem: `placeInvestOrderAction` legitimately inserts as the child and already
+derives both numbers server-side (`price_cents: asset.price_cents`,
+`amount = orderAmountCents(shares, asset.price_cents)`). Requiring the stored
+economics to match the asset refuses the forged insert and lets the real one
+through — asserted as a positive control, alongside a manager still being able
+to set an allowance.
+
+Until this is applied, production carries both as measured above.
+
 ## Security-relevant migrations awaiting production
 
 Added after this document's inventory stopped being complete, and listed here
 because their value is zero until they are applied:
 
-- **`0306_social_tokens_service_role_only.sql`** (renumbered from `0300`, which
+- **`0307_social_tokens_service_role_only.sql`** (renumbered from `0300`, which
   `main` took for the entitlement fix above) — drops the four
   `can_manage_family` policies `0297` added to `public.social_account_tokens`.
   `0034` created that table with no policy and a comment saying never to add
   one; `0297` added them on the stated premise that "every policy was
-  is_family_member", when there were none. Until `0306` is applied, any family
+  is_family_member", when there were none. Until `0307` is applied, any family
   manager can `select` the OAuth token rows through PostgREST. The columns hold
   ciphertext and no code writes the table yet, which bounds the exposure; it
   does not remove it. Verified locally against a full replay (313 migrations
@@ -978,7 +1015,7 @@ because their value is zero until they are applied:
   which was amended in the same change — it previously asserted the opened
   state as a requirement. Audit C3-S5-01.
 
-- **`0307_no_truncate_for_the_public_roles.sql`** — revokes `truncate` on every
+- **`0308_no_truncate_for_the_public_roles.sql`** — revokes `truncate` on every
   table in `public` from `anon` and `authenticated`, and sets the matching
   default privilege so a future table does not arrive with it. `truncate` is not
   filtered by row-level security: a policy that correctly limits which rows a
@@ -989,7 +1026,7 @@ because their value is zero until they are applied:
   migration outside a privilege list, which is exactly the rule that makes this
   one safe to read. Audit C1-S5-04.
 
-- **`0308_household_secrets_are_not_child_readable.sql`** — replaces the single
+- **`0309_household_secrets_are_not_child_readable.sql`** — replaces the single
   `"Members manage household_info"` policy (`for all using
   is_family_member(family_id)`) with four that add
   `and (not is_sensitive or can_manage_family(family_id))` on select, insert,
@@ -1002,7 +1039,7 @@ because their value is zero until they are applied:
   back. `docs/audit/household-binder-boundary-check.sql` asserts both, and that a
   parent still sees the whole binder. Audit C1-S6-06.
 
-- **`0309_marketplace_parties_are_not_editable.sql`** — makes `family_id`,
+- **`0310_marketplace_parties_are_not_editable.sql`** — makes `family_id`,
   `listing_id` and the party columns of `marketplace_orders` /
   `marketplace_offers` immutable after insert, via a `BEFORE UPDATE` trigger that
   fires only when `row_security_active()`, and tightens the two `with check`
@@ -1019,7 +1056,7 @@ because their value is zero until they are applied:
   `docs/audit/marketplace-ownership-update-check.sql` asserts both refusals and
   both permitted writes. Audit C1-S6-08.
 
-- **`0310_a_review_belongs_to_whoever_wrote_it.sql`** — scopes the
+- **`0311_a_review_belongs_to_whoever_wrote_it.sql`** — scopes the
   `marketplace_reviews` / `marketplace_saves` / `marketplace_follows` UPDATE
   policies to the row's owner, and makes the columns around the authorship
   column immutable. `0154` pinned `reviewer_member` (resp. `member_id`) on INSERT
@@ -1029,15 +1066,15 @@ because their value is zero until they are applied:
   is aggregated by `reviewee_member` on four screens. Nothing in the tree updates
   any of the three tables, so no behaviour is lost; the policies are scoped
   rather than dropped because "edit your own review" is what they evidently meant
-  to say. Also replaces `0309`'s table-branching trigger function with
+  to say. Also replaces `0310`'s table-branching trigger function with
   `columns_are_immutable()`, which takes its column list from the trigger
   definition and raises on a column that does not exist rather than silently
   guarding nothing. `docs/audit/marketplace-review-authorship-check.sql` asserts
   all of it, including that typo guard. Audit C1-S6-09.
 
-- **`0311_deleting_a_review_is_rewriting_it.sql`** — scopes the DELETE policies
+- **`0312_deleting_a_review_is_rewriting_it.sql`** — scopes the DELETE policies
   on `marketplace_reviews` / `marketplace_offers` / `marketplace_saves` /
-  `marketplace_follows`, which `0154` left family-wide. `0310` stopped a member
+  `marketplace_follows`, which `0154` left family-wide. `0311` stopped a member
   rewriting another member's review; deleting it achieves the same thing, and on
   offers it is worse in kind — any member could remove a competing offer on a
   listing they have nothing to do with. Offers go to the two parties their UPDATE
@@ -1048,7 +1085,7 @@ because their value is zero until they are applied:
   `docs/audit/marketplace-delete-authorship-check.sql` asserts both the refusals
   and the four things that must still work. Audit C1-S6-10.
 
-- **`0312_a_social_restriction_is_not_self_service.sql`** — gives
+- **`0313_a_social_restriction_is_not_self_service.sql`** — gives
   `social_access_permissions_delete` the predicate its INSERT and UPDATE policies
   already carry. `social_role_for()` falls back to a default derived from the
   family role when no explicit row exists, so a row restricting someone *below*

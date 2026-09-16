@@ -157,30 +157,30 @@ PRIOR SESSIONS (unchanged, see history below): F-020 migration idempotency;
     `seller_member` to themselves and inherit the completed-sales count two
     pages display as a seller's track record (C1-S6-08). The obvious repair —
     `with check` = `using` — was tried first and STAYED RED, because the
-    predicate is symmetric and RLS cannot see the old row; 0309 makes the four
+    predicate is symmetric and RLS cannot see the old row; 0310 makes the four
     identity columns immutable with a trigger gated on `row_security_active()`.
     Recorded alongside it, the audit's FOURTH refuted hypothesis: the 20
     UPDATE/ALL policies with `using` and no `with check` are safe, because
     PostgreSQL reuses `using` as the check — measured, not cited, and the
     ratchet's premise (`with check (true)` switches that off) measured too,
     after the first mutation turned out over-determined on `todo_lists`.
-    Also added the 0307/0308/0309 rows docs/PENDING_PROD_MIGRATIONS.md was
+    Also added the 0308/0309/0310 rows docs/PENDING_PROD_MIGRATIONS.md was
     missing — those migrations are worth nothing until an operator applies them
     and the document is the operator's list.
     Censusing for C1-S6-08's shape found three more tables (C1-S6-09):
     marketplace_reviews/saves/follows pin authorship on INSERT and left an UPDATE
     policy of `is_family_member(family_id)` on both clauses — not scoped to the
     author at all, so the member a review was ABOUT could rewrite its rating, and
-    `rating` is aggregated by `reviewee_member` on four screens. 0310 scopes them
+    `rating` is aggregated by `reviewee_member` on four screens. 0311 scopes them
     to the owner (nothing in the tree updates any of the three, so nothing is
-    lost) and replaces 0309's table-branching trigger with a generic
+    lost) and replaces 0310's table-branching trigger with a generic
     columns_are_immutable() that raises on a column that does not exist — the
     probe measures that typo guard, because a misspelled column would compare
     NULL to NULL and guard nothing.
     Then ran the identical census one verb over and found C1-S6-10: the DELETE
     policies on the same four tables are family-wide too, so the subject of a
     review could erase it and a member with no stake in a listing could delete a
-    competing offer. 0311 scopes all four. Recorded plainly in finalaudit.md that
+    competing offer. 0312 scopes all four. Recorded plainly in finalaudit.md that
     I fixed UPDATE without checking DELETE in the same pass — the second census
     was one query.
     C1-S6-11 came out of a third census (INSERT requires a manager, some write
@@ -188,7 +188,7 @@ PRIOR SESSIONS (unchanged, see history below): F-020 migration idempotency;
     DELETE policy was family-wide, and because social_role_for() falls back to a
     family-role default when no row exists, an adult restricted to read_only
     deleted their own restriction and became marketing_manager — publish_posts
-    and manage_settings on the family's CONNECTED social accounts. 0312 gives
+    and manage_settings on the family's CONNECTED social accounts. 0313 gives
     DELETE the predicate INSERT and UPDATE already carry.
 NEXT: C2-M03 is the largest open finding — ~251 en-US-pinned date/time call
   sites across ~135 files against an 11-locale catalogue. The trap is recorded
@@ -198,7 +198,7 @@ NEXT: C2-M03 is the largest open finding — ~251 en-US-pinned date/time call
   this as a deliberate follow-up and it is the coordinator's job.
 FILES-TOUCHED (session 3):
   - audit/status.md (this section only), audit/claude-1.md, finalaudit.md
-  - session 6 additions: supabase/migrations/0306-0309,
+  - session 6 additions: supabase/migrations/0307-0310,
     docs/audit/{household-binder-boundary,deactivated-member-sees-nothing,
     marketplace-ownership-update,no-truncate-for-public-roles}-check.sql,
     docs/PENDING_PROD_MIGRATIONS.md, tests/migration-version-safety.test.ts
@@ -390,8 +390,8 @@ LAST-UPDATE: 2026-09-15
 
 ## Round 5 — closed (Claude-1)
 All twelve round-5 findings FIXED: C4-S5-01/02 (plus C4-S5-03 recorded) and
-C3-S5-01..09. Eleven code changes, two migrations (`0306` social token store,
-`0307` TRUNCATE revoke), nine new guard files, every guard proved red before it
+C3-S5-01..09. Eleven code changes, two migrations (`0307` social token store,
+`0308` TRUNCATE revoke), nine new guard files, every guard proved red before it
 was trusted. Two items left as product/operator decisions and named as such in
 finalaudit.md: retiring the duplicate Google Calendar integration, and removing
 the inbound-email `?key=` form.

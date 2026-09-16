@@ -5692,7 +5692,7 @@ tree contains the string `"export function "` — true of any repository, and th
 very defect one rung up; it now matches each helper's definition, and both its
 assertions are proved red.
 
-**C3-S5-01 — FIXED.** `supabase/migrations/0306_social_tokens_service_role_only.sql`
+**C3-S5-01 — FIXED.** `supabase/migrations/0307_social_tokens_service_role_only.sql`
 drops the four policies and restores 0034's invariant. Verified on a full local
 replay: **313 migrations applied, 0 failed**, and `pg_policies` now lists
 `social_account_tokens` with none, alongside `sync_tokens`' single deny-all.
@@ -5708,7 +5708,7 @@ built for has not been written. So 0297 published an empty store — and would
 have published a full one the day it was filled.
 
 `tests/social-tokens-stay-service-role-only.test.ts` makes the comment
-mechanical: no migration after 0306 may create a policy on the table, 0306 must
+mechanical: no migration after 0307 may create a policy on the table, 0307 must
 drop all four and leave RLS enabled (with RLS off, "no policy" means
 unrestricted, not denied), and no application code may reach the table outside
 the service-role path. All three assertions proved red.
@@ -5843,7 +5843,7 @@ Both mechanisms proved red by mutation: `===` restored, the length check
 removed, the refusal deleted, and the error read dropped.
 
 **C3-S5-09 — FIXED, widened past its own finding.**
-`supabase/migrations/0307_no_truncate_for_the_public_roles.sql` revokes TRUNCATE
+`supabase/migrations/0308_no_truncate_for_the_public_roles.sql` revokes TRUNCATE
 from `anon` and `authenticated` on **every** table in `public`, not just the two
 credential stores, and revokes it from the schema's default privileges so later
 tables do not arrive with it. RLS does not constrain TRUNCATE at all — the
@@ -5916,7 +5916,7 @@ Every finding both workers filed in round 5 is now fixed:
 | C4-S5-01 spelling-only guards (46 proven) | HIGH | FIXED + meta-guard |
 | C4-S5-02 `indexOf` → `-1` sentinel (8 proven) | HIGH | FIXED + meta-guard |
 | C4-S5-03 what the sweep found healthy | INFO | recorded |
-| C3-S5-01 social token store reopened | HIGH | FIXED (`0306`) |
+| C3-S5-01 social token store reopened | HIGH | FIXED (`0307`) |
 | C3-S5-02 plaintext Google refresh token | MEDIUM | FIXED |
 | C3-S5-03 string-only push SSRF guard | MEDIUM | FIXED |
 | C3-S5-04 timeout wrapper named like a guard | LOW | FIXED (renamed) |
@@ -5924,7 +5924,7 @@ Every finding both workers filed in round 5 is now fixed:
 | C3-S5-06 any string accepted as a key | LOW | FIXED |
 | C3-S5-07 CalDAV transport invariant | LOW | FIXED |
 | C3-S5-08 inbound secret compared with `===` | LOW | FIXED (query form kept, now logged) |
-| C3-S5-09 TRUNCATE for the public roles | OBSERVATION | FIXED (`0307`, widened) |
+| C3-S5-09 TRUNCATE for the public roles | OBSERVATION | FIXED (`0308`, widened) |
 
 Twelve findings, eleven code changes, two migrations, nine new guard files, and
 **every one of those guards watched to fail before it was trusted** — which is
@@ -5943,7 +5943,7 @@ Two things are deliberately *not* done, and neither is an oversight:
    every request that takes that route.
 
 CI verified green on `7ccd0551` — the full matrix, including the migration
-replay with `0306` and the amended boundary probe, and E2E against live
+replay with `0307` and the amended boundary probe, and E2E against live
 Supabase. That verdict had been superseded by rapid pushes five times before it
 finally landed.
 
@@ -6333,7 +6333,7 @@ schema (317 migrations, 0 failed) rather than from reading migration text.
 | `using (false)` | 1 |
 
 54 is the number worth carrying forward: 58 minus the four that `0297` and
-`0306` have since closed.
+`0307` have since closed.
 
 ## The split that makes it actionable
 
@@ -6442,7 +6442,7 @@ per row, in the UI.
 **`0266` is the precedent and the argument.** That migration moved the document
 vault's sensitivity predicate into the database for exactly this reason, in its
 own words: the modules *"query through the browser anon client and never reach"*
-the service that filtered correctly. `0308` is the same shape, and simpler —
+the service that filtered correctly. `0309` is the same shape, and simpler —
 there is no category list to mirror, because the family sets the flag itself.
 
 Both halves of the update policy are kept, for 0266's stated reason: `using`
@@ -6522,7 +6522,7 @@ against its table's policy:
 | column | policy consults it? |
 |---|---|
 | `documents.is_secure` | yes — `0266` |
-| `household_info.is_sensitive` | yes — `0308`, this pass |
+| `household_info.is_sensitive` | yes — `0309`, this pass |
 | `family_credentials.secret` | n/a — the column is the secret; the table is manager-only |
 | `journal_entries.is_private` | **no** — and nothing else reads it either |
 | `family_albums.is_shared` | no — but these are opt-IN sharing flags, |
@@ -6535,7 +6535,7 @@ narrows it failing open. Only the narrowing kind was pursued.
 
 ## C1-S6-07 [OBSERVATION][SECURITY] — thirteen policies that are safe for a reason none of them states
 
-Sweeping for the hazard `0308` had to avoid — a tight policy sitting beside a
+Sweeping for the hazard `0309` had to avoid — a tight policy sitting beside a
 looser one, which PostgreSQL ORs together — turned up **13 policies across 11
 tables** still using the legacy inline form:
 
@@ -6600,7 +6600,7 @@ it is a second, independent reason not to "simplify" it.
 **File:** `supabase/migrations/0154_marketplace_ownership.sql:215-235` (the two
 policies) · `app/(app)/marketplace/item/[id]/page.tsx:87` and
 `app/(app)/marketplace/creators/[id]/page.tsx:58` (what reads the forged value)
-**Status:** FIXED — `supabase/migrations/0309_marketplace_parties_are_not_editable.sql`
+**Status:** FIXED — `supabase/migrations/0310_marketplace_parties_are_not_editable.sql`
 
 ### Problem
 
@@ -6661,7 +6661,7 @@ reading "the caller is the buyer or the seller" passes the very write it is mean
 to stop. **RLS cannot see the old row**, so no `with check` can express "you may
 not change who the parties are".
 
-So `0309` makes the identity columns immutable with a `BEFORE UPDATE` trigger,
+So `0310` makes the identity columns immutable with a `BEFORE UPDATE` trigger,
 which is the actual shape of the invariant: after insert, `family_id`,
 `listing_id` and the party columns are facts about a deal that happened, not
 fields. It fires only when `row_security_active()` — the `SECURITY DEFINER` RPCs
@@ -6738,7 +6738,7 @@ twenty tables' implicit checks off. The two `service_role` policies that do
 policies) · `app/(app)/marketplace/item/[id]/page.tsx:82`,
 `creators/[id]/page.tsx:54`, `creators/page.tsx:29`, `store/page.tsx:35` (what
 reads the rating)
-**Status:** FIXED — `supabase/migrations/0310_a_review_belongs_to_whoever_wrote_it.sql`
+**Status:** FIXED — `supabase/migrations/0311_a_review_belongs_to_whoever_wrote_it.sql`
 
 ### Problem
 
@@ -6763,7 +6763,7 @@ let you forge on the way in is rewritable the moment the row exists.
 Measured on the replayed schema, as the member a review was **about**:
 
 ```
-ERROR:  0310: the SUBJECT of a review rewrote its rating (1 row(s))
+ERROR:  0311: the SUBJECT of a review rewrote its rating (1 row(s))
 ```
 
 ### Impact
@@ -6786,18 +6786,18 @@ deleted only. These policies granted a capability no feature uses.
 They are **scoped to the owner rather than dropped**. "Edit your own review" is a
 plausible thing this product will want, the policies were evidently meant to say
 that already, and a policy that matches its intent is easier to reason about
-later than an absence someone has to reconstruct. `0310` adds
+later than an absence someone has to reconstruct. `0311` adds
 `reviewer_member = marketplace_member_id(family_id)` (resp. `member_id`) to both
 clauses and makes the surrounding columns immutable, so the author may revise
 their rating and comment and may not move the review to a different subject.
 
 ### The helper that guards the guard
 
-`0309` wrote a trigger function branching on `tg_table_name` with an `else`.
+`0310` wrote a trigger function branching on `tg_table_name` with an `else`.
 Adding a third, fourth and fifth table to that shape means editing the function
-each time and an `else` that silently handles the wrong table, so `0310` replaces
+each time and an `else` that silently handles the wrong table, so `0311` replaces
 it with `columns_are_immutable()`, which takes its column list from the trigger
-definition, and re-points `0309`'s two triggers at it — same behaviour, stated
+definition, and re-points `0310`'s two triggers at it — same behaviour, stated
 per table where the trigger is attached.
 
 That generality introduces its own failure mode, and it is the one this audit
@@ -6817,9 +6817,9 @@ against a full 320-migration replay, and CI replays them.
 
 **File:** `supabase/migrations/0154_marketplace_ownership.sql` (four DELETE
 policies)
-**Status:** FIXED — `supabase/migrations/0311_deleting_a_review_is_rewriting_it.sql`
+**Status:** FIXED — `supabase/migrations/0312_deleting_a_review_is_rewriting_it.sql`
 
-`0310` stopped a member **rewriting** another member's review. It did not stop
+`0311` stopped a member **rewriting** another member's review. It did not stop
 them **deleting** it, and for a one-star review about yourself those are the same
 act with the same result on the same four screens. I fixed one verb and did not
 check the next one in the same pass. This is that check, and it is worth stating
@@ -6833,7 +6833,7 @@ marketplace_saves_delete     using (is_family_member(family_id))
 marketplace_follows_delete   using (is_family_member(family_id))
 ```
 
-Measured before `0311`: the member a review was **about** deleted it, and a
+Measured before `0312`: the member a review was **about** deleted it, and a
 member with no connection to a listing deleted a **competing offer** on it —
 which is not reputation, it is winning an auction by removing the other bidder.
 
@@ -6878,7 +6878,7 @@ the other way — "the fix went too far"). **29/29 probes pass** against a full
 
 **File:** `supabase/migrations/0034_social_command_center.sql`
 (`social_access_permissions_delete`)
-**Status:** FIXED — `supabase/migrations/0312_a_social_restriction_is_not_self_service.sql`
+**Status:** FIXED — `supabase/migrations/0313_a_social_restriction_is_not_self_service.sql`
 
 ### Problem
 
@@ -6927,7 +6927,7 @@ Nothing in the tree deletes from this table. `grantAccessAction`
 change the UPDATE policy already guards. The DELETE policy granted a capability
 no feature uses and every other policy on the table exists to prevent.
 
-`0312` writes the same predicate the other two carry, so the three verbs agree
+`0313` writes the same predicate the other two carry, so the three verbs agree
 about who decides.
 
 ### How it was found

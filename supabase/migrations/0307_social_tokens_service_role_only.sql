@@ -1,5 +1,5 @@
 -- ============================================================
--- Migration 0306: put the OAuth token store back behind the service role
+-- Migration 0307: put the OAuth token store back behind the service role
 --
 -- 0034_social_command_center.sql creates public.social_account_tokens with no
 -- policy at all, and says why, in the file, at the point of creation:
@@ -55,6 +55,6 @@ begin
   select count(*) into n from pg_policies
     where schemaname = 'public' and tablename = 'social_account_tokens';
   if n <> 0 then
-    raise exception '0306: social_account_tokens still carries % policy(ies) — the token store is reachable from PostgREST', n;
+    raise exception '0307: social_account_tokens still carries % policy(ies) — the token store is reachable from PostgREST', n;
   end if;
 end $$;
