@@ -3989,3 +3989,67 @@ Recorded with the evidence rather than guessed at, and explicitly NOT fixed.
   failed), 335 re-applied onto the populated schema, **46/46 probes run twice**
   — including all seven of main's new ones — **14,017 tests green under both
   `TZ=UTC` and `TZ=America/Los_Angeles`**, tsc clean, eslint at 85, build exits 0.
+
+### [CLAUDE-1][HIGH][TIMEZONE] The weekly briefing's "today" was UTC's today — and the guard for exactly this could not see it
+
+- **Found by sweep, not from the backlog.** Looking at the six tracked
+  host-midnight sites turned up something the tracker itself is blind to.
+- **Files:** `lib/ai/weekly.ts`, `app/api/ai/weekly-briefing/route.ts`,
+  `tests/ai-weekly.test.ts`,
+  `tests/server-midnight-is-not-the-familys-midnight.test.ts`
+- **Two defects in one module, both meaning "the host's day":**
+  - `weekWindow(now)` built its window from
+    `Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())`. A
+    family in Los Angeles asking for the week ahead **at 6pm was told today is
+    tomorrow** — the look-ahead opened a day late and the recap closed a day
+    late, on exactly the evening somebody sits down to plan. For Auckland it is
+    wrong every morning.
+  - `bucketByDay` filed each event by `starts_at.slice(0, 10)` — the **UTC**
+    day. An event at 7pm Pacific on Monday is `T02:00Z` on Tuesday, so **every
+    evening commitment in the Americas appeared on the wrong day** of the
+    briefing.
+- **The guard written for this class could not see it.**
+  `tests/server-midnight-is-not-the-familys-midnight.test.ts` matches
+  `setHours(0,0,0,0)`. This is the same defect spelled
+  `toISOString().slice(0,10)`, and the module's own header cheerfully said "all
+  dates are handled in UTC day-keys". **A guard that checks one spelling of a
+  defect with two passes while the thing it is named for goes on happening** —
+  and this is the second time in this audit that a guard's own header described
+  the gap in it.
+- **Fixed** by routing through `dayKeyInTz` / `zonedDayBoundsMs` /
+  `addDaysToDayKey` from `lib/services/scope.ts` rather than re-implementing zone
+  arithmetic. `tz` is **required, not defaulted** — a default is how this was
+  invisible: every call site looked correct. The route already had
+  `ctx.active.family.timezone` in hand, so it costs no extra read. Boundaries are
+  re-resolved per local midnight rather than adding 86,400,000 ms, so a DST
+  transition inside the window moves the boundary instead of sliding the window;
+  the test pins a spring-forward week.
+- **`bucketByDay` handles both column types**, which the naive fix would not: a
+  `date` column is ALREADY a calendar day and pushing it through a zone shifts it
+  backwards — the same defect pointed the other way. Asserted.
+- **The ratchet now sees the second spelling**, with ten tracked sites.
+  Deliberately only the ANONYMOUS form `new Date().toISOString().slice(0,10)`,
+  which needs no dataflow to judge.
+- **I got the measurement wrong first, in the way I had just written up.** A
+  regex over the named form (`now.toISOString()…`) returned 28 sites; the first
+  three I checked were false positives — a Zod field named `at` caught by a loose
+  alternation, and two line numbers that pointed at nothing because I computed
+  them against comment-STRIPPED source and reported them against the original.
+  Having argued two commits earlier that an unsound scan is worse than none, I
+  reached for a regex again. The tracked list is only the shape I can stand
+  behind, and the mask-don't-strip fix is in the test.
+- **A third shape examined and deliberately NOT tracked**, recorded so nobody
+  re-derives it as a bug: `Date.UTC(d.getUTCFullYear(), …)` appears at 16
+  server-side sites, and `lib/journal/prompts.ts:dayOfYear` and
+  `lib/school/timetable.ts:weekParity` are **correct** — they want a stable index
+  every member of the household agrees on, and `weekParity`'s own comment says
+  so. Making those zone-aware would be a regression. Others in the same shape
+  (`lib/chores/server.ts:todayISO`, keying a child's streak) are real. Per-site
+  decision, not a ratchet.
+- **Status:** FIXED. Non-vacuity, three mutations: revert `weekWindow` to a UTC
+  day → *"is still Saturday for a family in Los Angeles"* and *"opens the
+  look-ahead at the family's midnight"*; revert `bucketByDay` → *"puts an evening
+  event on the evening's day, not the next UTC one"*; add a new file with the
+  tracked shape → the widened ratchet names it.
+- **Verified:** **14,024 tests green under both `TZ=UTC` and
+  `TZ=America/Los_Angeles`**, tsc clean, eslint at 85, `npm run build` exits 0.

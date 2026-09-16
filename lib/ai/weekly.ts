@@ -1,15 +1,31 @@
 // lib/ai/weekly.ts — pure helpers for the Plus "Weekly AI Briefing".
 //
 // Kept free of Supabase / network so the windowing and aggregation can be unit
-// tested deterministically. All dates are handled in UTC day-keys (YYYY-MM-DD),
-// matching the convention used by the daily-briefing route.
-
-const MS_DAY = 24 * 60 * 60 * 1000;
-
-/** ISO YYYY-MM-DD for a Date (UTC). */
-export function dayKey(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
+// tested deterministically.
+//
+// ── Every day here is the FAMILY's day ──────────────────────────────────────
+//
+// This module used to say "all dates are handled in UTC day-keys", and it meant
+// it: `weekWindow` built its window from `getUTCFullYear/Month/Date` and
+// `bucketByDay` took `starts_at.slice(0, 10)`. Both are the host's day wearing a
+// day-key's clothes, and the briefing is where that shows worst:
+//
+//   * A family in Los Angeles asking for the week ahead at 6pm was told "today"
+//     is tomorrow — the look-ahead started a day late and the recap ended a day
+//     late, on exactly the evening somebody sits down to plan.
+//   * An event at 7pm Pacific on Monday is `2026-09-15T02:00Z`, so it bucketed
+//     into Tuesday. Every evening commitment in the Americas appeared on the
+//     wrong day of the briefing, and for Auckland every morning one did.
+//
+// `tests/server-midnight-is-not-the-familys-midnight.test.ts` exists to catch
+// exactly this and could not see it: it matches `setHours(0,0,0,0)`, and this is
+// the same defect spelled `toISOString().slice(0,10)`. That test now looks for
+// both, and this module is why.
+//
+// The zone arithmetic is NOT re-implemented here. `lib/services/scope.ts` owns
+// it, re-resolving each local midnight rather than adding 86,400,000 ms, which
+// is what keeps a 23- or 25-hour DST day from sliding the whole window.
+import { addDaysToDayKey, dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
 
 export type WeekWindow = {
   /** Today's day-key (UTC). */
@@ -27,24 +43,29 @@ export type WeekWindow = {
 };
 
 /**
- * Computes the look-ahead (next 7 days, today inclusive) and recap (previous 7
- * days, ending yesterday) windows around `now`.
+ * The look-ahead (next 7 days, today inclusive) and recap (previous 7 days,
+ * ending yesterday) windows around `now`, in the FAMILY's zone.
+ *
+ * `tz` is required rather than defaulted. A default is how this was wrong in the
+ * first place: the previous version silently meant UTC, and every caller looked
+ * correct.
  */
-export function weekWindow(now: Date): WeekWindow {
-  const startOfToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  const aheadStart = startOfToday;
-  const aheadEnd = new Date(startOfToday.getTime() + 7 * MS_DAY - 1); // end of today+6
-  const recapStart = new Date(startOfToday.getTime() - 7 * MS_DAY);
-  const recapEnd = new Date(startOfToday.getTime() - 1); // end of yesterday
+export function weekWindow(now: Date, tz: string): WeekWindow {
+  const todayKey = dayKeyInTz(now, tz);
+  const days = Array.from({ length: 7 }, (_, i) => addDaysToDayKey(todayKey, i));
 
-  const days = Array.from({ length: 7 }, (_, i) => dayKey(new Date(startOfToday.getTime() + i * MS_DAY)));
+  // Each boundary is a real local midnight, resolved on its own day, so a DST
+  // transition inside the window moves the boundary rather than the window.
+  const today = zonedDayBoundsMs(todayKey, tz);
+  const lastAhead = zonedDayBoundsMs(days[days.length - 1], tz);
+  const firstRecap = zonedDayBoundsMs(addDaysToDayKey(todayKey, -7), tz);
 
   return {
-    todayKey: dayKey(startOfToday),
-    aheadStart: aheadStart.toISOString(),
-    aheadEnd: aheadEnd.toISOString(),
-    recapStart: recapStart.toISOString(),
-    recapEnd: recapEnd.toISOString(),
+    todayKey,
+    aheadStart: new Date(today.start).toISOString(),
+    aheadEnd: new Date(lastAhead.end - 1).toISOString(),
+    recapStart: new Date(firstRecap.start).toISOString(),
+    recapEnd: new Date(today.start - 1).toISOString(),
     days,
   };
 }
@@ -67,13 +88,22 @@ export function choreCompletionRate(assignments: { status: string }[]): number {
  * falls outside `days` are dropped. Every day in `days` is present in the result
  * (empty array when nothing lands there), so callers can render a full week.
  */
-export function bucketByDay<T>(items: T[], getKey: (item: T) => string | null | undefined, days: string[]): Record<string, T[]> {
+export function bucketByDay<T>(
+  items: T[],
+  getKey: (item: T) => string | null | undefined,
+  days: string[],
+  tz: string,
+): Record<string, T[]> {
   const buckets: Record<string, T[]> = {};
   for (const d of days) buckets[d] = [];
   for (const item of items) {
     const raw = getKey(item);
     if (!raw) continue;
-    const key = raw.slice(0, 10);
+    // A `date` column arrives as 'YYYY-MM-DD' and is ALREADY a calendar day —
+    // pushing it through a zone would shift it by one. A `timestamptz` arrives
+    // as a full instant and has to be asked which local day it fell on;
+    // `.slice(0, 10)` answers "which UTC day", which is the defect.
+    const key = raw.length <= 10 ? raw : dayKeyInTz(new Date(raw), tz);
     if (key in buckets) buckets[key].push(item);
   }
   return buckets;

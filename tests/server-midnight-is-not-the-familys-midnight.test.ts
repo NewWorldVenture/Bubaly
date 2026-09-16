@@ -48,6 +48,59 @@ const TRACKED = new Set([
 
 const SERVER_MIDNIGHT = /setHours\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\)/;
 
+// ── A SECOND SPELLING, which this guard could not see ───────────────────────
+//
+// `setHours(0,0,0,0)` is one way to say "the host's day". `new Date()
+// .toISOString().slice(0, 10)` is another, and the briefing module was written
+// in it: `weekWindow` built its window from getUTCFullYear/Month/Date and
+// `bucketByDay` took `starts_at.slice(0, 10)`, so a family in Los Angeles
+// asking for the week ahead at 6pm was told "today" is tomorrow, and every
+// evening event in the Americas was filed on the wrong day. Ten server-side
+// sites remain in this spelling and are tracked below.
+//
+// A guard that checks ONE spelling of a defect with two is the shape this audit
+// keeps finding: it passes, and the thing it is named for goes on happening.
+//
+// Only the anonymous form is matched — `new Date().toISOString().slice(0,10)`,
+// the current instant formatted as a day key — because it needs no dataflow to
+// judge. A NAMED date (`now.toISOString().slice(0, 10)`) may already have been
+// shifted into the family's zone by its caller, and flagging those put correct
+// code on the list when it was tried: a regex pass over that shape returned 28
+// sites, of which the first three checked were false positives (a Zod field
+// named `at`, and two line numbers that did not point at the code at all).
+const HOST_TODAY_KEY = /new Date\(\)\s*\.toISOString\(\)\s*\.\s*slice\(\s*0\s*,\s*10\s*\)/;
+
+// Known, tracked, and not yet converted — the same rule as TRACKED above.
+const TRACKED_TODAY_KEY = new Set([
+  'app/(app)/dashboard/auto/actions.ts',
+  'app/(app)/dashboard/contacts/[id]/actions.ts',
+  'app/(app)/dashboard/home/actions.ts',
+  'app/(app)/dashboard/kitchen/actions.ts',
+  'app/(app)/dashboard/moments/actions.ts',
+  'app/(app)/wallet/hub-actions.ts',
+  'app/api/admin/benchmarks/export/route.ts',
+  'app/api/cron/wallet-allowance/route.ts',
+  'lib/chores/server.ts',
+  'lib/home/asset-detail.ts',
+]);
+
+// ── A third shape, EXAMINED and deliberately not tracked ────────────────────
+//
+// `Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())` appears at
+// sixteen server-side sites and is NOT uniformly a defect, which is why it is
+// written down here rather than added to a list:
+//
+//   lib/journal/prompts.ts:dayOfYear   rotates the prompt of the day
+//   lib/school/timetable.ts:weekParity picks the A or B week
+//
+// Both want a STABLE INDEX that every member of the household agrees on, and
+// its own comment says so ("fixed epoch so it's stable across the year").
+// Making those zone-aware would be a regression, not a fix. Others in the same
+// shape — `lib/chores/server.ts`'s `todayISO`, which keys a child's streak — are
+// real. Putting correct code on a defect list is how a list stops being read, so
+// this shape needs a per-site decision rather than a ratchet.
+
+
 // A comment explaining the defect is not the defect. Both files fixed so far
 // describe `setHours(0,0,0,0)` in prose immediately above the correct code.
 function withoutComments(source: string): string {
@@ -81,6 +134,20 @@ describe('a family day does not turn over at the server\'s midnight', () => {
 
   it('adds no new server-rendered surface that means the host\'s day', () => {
     expect(offenders.filter((path) => !TRACKED.has(path)).sort()).toEqual([]);
+  });
+
+  const todayKeyOffenders = ROOTS.flatMap((root) => walk(root)).filter((path) => {
+    const source = readFileSync(path, 'utf8');
+    return !isClientComponent(source) && HOST_TODAY_KEY.test(withoutComments(source));
+  });
+
+  it('adds no new server-rendered surface that formats the host instant as a day key', () => {
+    expect(todayKeyOffenders.filter((path) => !TRACKED_TODAY_KEY.has(path)).sort()).toEqual([]);
+  });
+
+  it('keeps the second list honest too', () => {
+    const stale = [...TRACKED_TODAY_KEY].filter((path) => !todayKeyOffenders.includes(path)).sort();
+    expect(stale, 'these no longer offend; delete them from TRACKED_TODAY_KEY').toEqual([]);
   });
 
   it('keeps the tracked list honest — an entry that no longer offends must be deleted', () => {
