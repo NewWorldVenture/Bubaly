@@ -40,11 +40,11 @@ describe('Supabase migration filename safety', () => {
   // generation (00100 and 00101 both live in 0010). nextVersion reads the first
   // four digits, so those do not drag the next free number up to 1422.
   it('points new migrations at the next unused version', () => {
-    // Bumped whenever a migration lands — 0307 stops a member rewriting another
-    // member's review of them. Stating it rather than deriving it is
+    // Bumped whenever a migration lands — 0308 stops a member DELETING another
+    // member's review of them, which 0307 only stopped them rewriting. Stating it rather than deriving it is
     // the point: the number is how a new migration announces itself, so a file
     // that quietly reuses one, or a rebase that drops one, fails here.
-    expect(audit.nextVersion).toBe('0308');
+    expect(audit.nextVersion).toBe('0309');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

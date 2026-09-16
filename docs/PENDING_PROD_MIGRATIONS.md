@@ -892,3 +892,16 @@ because their value is zero until they are applied:
   definition and raises on a column that does not exist rather than silently
   guarding nothing. `docs/audit/marketplace-review-authorship-check.sql` asserts
   all of it, including that typo guard. Audit C1-S6-09.
+
+- **`0308_deleting_a_review_is_rewriting_it.sql`** — scopes the DELETE policies
+  on `marketplace_reviews` / `marketplace_offers` / `marketplace_saves` /
+  `marketplace_follows`, which `0154` left family-wide. `0307` stopped a member
+  rewriting another member's review; deleting it achieves the same thing, and on
+  offers it is worse in kind — any member could remove a competing offer on a
+  listing they have nothing to do with. Offers go to the two parties their UPDATE
+  policy already names; saves and follows to the owner, which is a no-op for the
+  two toggle actions that are the only deletes in the tree; reviews to the author
+  **or** a family manager who is not the reviewee, so a parent can still moderate
+  an abusive review without any adult being able to erase one about themselves.
+  `docs/audit/marketplace-delete-authorship-check.sql` asserts both the refusals
+  and the four things that must still work. Audit C1-S6-10.

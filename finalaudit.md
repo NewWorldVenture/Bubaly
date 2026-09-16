@@ -6811,3 +6811,64 @@ Three assertions proved red independently: restoring the family-wide policy (the
 subject rewrites the rating), dropping only the reviews trigger (the author
 re-points their own review), and loosening only follows. **28/28 probes pass**
 against a full 320-migration replay, and CI replays them.
+
+
+## C1-S6-10 [HIGH][SECURITY] — and deleting a review does the same thing
+
+**File:** `supabase/migrations/0154_marketplace_ownership.sql` (four DELETE
+policies)
+**Status:** FIXED — `supabase/migrations/0308_deleting_a_review_is_rewriting_it.sql`
+
+`0307` stopped a member **rewriting** another member's review. It did not stop
+them **deleting** it, and for a one-star review about yourself those are the same
+act with the same result on the same four screens. I fixed one verb and did not
+check the next one in the same pass. This is that check, and it is worth stating
+plainly: the census that found C1-S6-09 was run over INSERT-versus-UPDATE, and
+running the identical census over INSERT-versus-DELETE took one query.
+
+```
+marketplace_reviews_delete   using (is_family_member(family_id))
+marketplace_offers_delete    using (is_family_member(family_id))
+marketplace_saves_delete     using (is_family_member(family_id))
+marketplace_follows_delete   using (is_family_member(family_id))
+```
+
+Measured before `0308`: the member a review was **about** deleted it, and a
+member with no connection to a listing deleted a **competing offer** on it —
+which is not reputation, it is winning an auction by removing the other bidder.
+
+Four other tables came up in the same census (`call_logs`, `families`,
+`family_communications`, `family_automation_runs`) and are **not** findings:
+each is gated on `can_manage_family` or `is_family_admin`, which is a deliberate
+adults-delete boundary rather than a missing one.
+
+### What the application actually deletes, all of it
+
+`toggleSaveAction` and `toggleFollowAction`
+(`app/(app)/marketplace/actions.ts:55`, `:85`) delete the row they just read back
+by `member_id = <themselves>`, so scoping the policy to the owner is a no-op for
+both. **Nothing deletes a review or an offer anywhere** — decline and withdraw
+are status updates through the definer RPCs.
+
+### One judgement call, made explicitly
+
+Scoping reviews to the author alone would mean a parent cannot remove an abusive
+review written by a child — a real thing to lose in a product whose reviewers all
+live in one house. So a family manager may moderate, and the predicate names the
+one case that would otherwise reopen the defect:
+
+```sql
+reviewer_member = marketplace_member_id(family_id)
+or (can_manage_family(family_id)
+    and reviewee_member is distinct from marketplace_member_id(family_id))
+```
+
+Without that second clause, "the adults can moderate" would hand every adult the
+exact erasure this migration exists to stop — and in the probe's fixture the
+review's subject **is** a parent, so the loophole is what the first assertion
+tests.
+
+Four mutations proved it red independently: each of the three policies loosened
+back to `is_family_member`, and the manager-moderation half removed (which fails
+the other way — "the fix went too far"). **29/29 probes pass** against a full
+321-migration replay.

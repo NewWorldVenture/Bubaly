@@ -177,6 +177,12 @@ PRIOR SESSIONS (unchanged, see history below): F-020 migration idempotency;
     columns_are_immutable() that raises on a column that does not exist — the
     probe measures that typo guard, because a misspelled column would compare
     NULL to NULL and guard nothing.
+    Then ran the identical census one verb over and found C1-S6-10: the DELETE
+    policies on the same four tables are family-wide too, so the subject of a
+    review could erase it and a member with no stake in a listing could delete a
+    competing offer. 0308 scopes all four. Recorded plainly in finalaudit.md that
+    I fixed UPDATE without checking DELETE in the same pass — the second census
+    was one query.
 NEXT: C2-M03 is the largest open finding — ~251 en-US-pinned date/time call
   sites across ~135 files against an 11-locale catalogue. The trap is recorded
   in Pass P: dayKey() uses 'en-US' as a PARSE locale and must not be switched.

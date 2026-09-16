@@ -1834,3 +1834,46 @@ Fix:      0307_a_review_belongs_to_whoever_wrote_it.sql. Scoped to the owner
 Status:   FIXED — inert until an operator applies 0307
           (docs/PENDING_PROD_MIGRATIONS.md).
 ```
+
+```
+[CLAUDE-1][HIGH][SECURITY] and deleting a marketplace review does the same thing
+File:     supabase/migrations/0154_marketplace_ownership.sql (4 DELETE policies)
+Problem:  0307 stopped a member REWRITING another member's review. The DELETE
+          policies beside it were still family-wide:
+            marketplace_reviews_delete   using (is_family_member(family_id))
+            marketplace_offers_delete    "
+            marketplace_saves_delete     "
+            marketplace_follows_delete   "
+          For a one-star review about yourself, deleting and rewriting are the
+          same act with the same result. I fixed one verb and did not check the
+          next in the same pass; the identical census over INSERT-vs-DELETE took
+          one query.
+Evidence: Replayed schema, before 0308:
+            the SUBJECT of a review deleted it (1 row)
+            a member with no stake in a listing deleted a competing offer (1 row)
+Impact:   The reviews half is C1-S6-09's impact by another route. The offers half
+          is worse in kind: removing a competing offer on someone else's listing
+          is not reputation, it is winning by deleting the other bidder.
+          Four other tables surfaced in the same census (call_logs, families,
+          family_communications, family_automation_runs) and are NOT findings —
+          each is gated on can_manage_family or is_family_admin, a deliberate
+          adults-delete boundary rather than a missing one.
+Fix:      0308_deleting_a_review_is_rewriting_it.sql. Offers scoped to the two
+          parties its UPDATE policy already names; saves and follows to the owner
+          (a no-op for toggleSaveAction/toggleFollowAction, which delete the row
+          they read back by their own member_id); reviews to the author OR a
+          manager who is not the reviewee.
+          That last clause is the judgement call and it is stated in the
+          migration: author-only would mean a parent cannot remove an abusive
+          review written by a child, but "the adults can moderate" without the
+          `reviewee_member is distinct from` half would hand every adult the exact
+          erasure the migration exists to stop. In the probe's fixture the
+          review's subject IS a parent, so the loophole is what the first
+          assertion tests.
+          Four mutations proved it red independently: each of three policies
+          loosened back, and the moderation half removed (which fails the other
+          way, "the fix went too far"). 29/29 probes pass against a full
+          321-migration replay.
+Status:   FIXED — inert until an operator applies 0308
+          (docs/PENDING_PROD_MIGRATIONS.md).
+```
