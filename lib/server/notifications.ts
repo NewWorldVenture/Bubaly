@@ -210,16 +210,23 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   // Relationship dates entering their reminder window (anniversaries, birthdays,
   // date nights). The related_id is keyed by occurrence year so the permanent
   // dedup sends one advance reminder per occurrence, then again next year.
+  //
+  // `todayKey` — the family's day, computed above and used by every other
+  // reminder in this function via `timeLabel(..., tz)`. This one block passed
+  // the raw instant instead, so it resolved against the HOST's day: a birthday
+  // reminder fired a day early for the last seven hours of every Californian
+  // day. And because the dedup is PERMANENT and keyed by occurrence year, the
+  // early one is the only one — the real day arrives with nothing sent.
   const { data: relDates } = await supabase.from('relationship_dates')
     .select('id, kind, title, event_date, recurs_annually, reminder_days_before, status')
     .eq('family_id', familyId).neq('status', 'cancelled').limit(100);
   for (const d of upcomingRelationship((relDates ?? []).map((r): RelDate => ({
     id: r.id, kind: r.kind, title: r.title, eventDate: r.event_date,
     recursAnnually: r.recurs_annually, reminderDaysBefore: r.reminder_days_before, status: r.status,
-  })), now)) {
+  })), todayKey)) {
     const ms = milestoneLabel(d);
     candidates.push({
-      type: 'system', related_type: 'relationship_dates', related_id: `${d.id}:${d.next.getFullYear()}`, user_id: null,
+      type: 'system', related_type: 'relationship_dates', related_id: `${d.id}:${d.nextKey.slice(0, 4)}`, user_id: null,
       title: `💞 ${d.title} ${formatCountdown(d.days).toLowerCase()}`,
       body: ms ? `${ms} · plan something special` : 'Open the Relationship Helper for gift ideas',
     });

@@ -1,6 +1,26 @@
 // lib/relationship/dates.ts — pure date math for the Relationship Helper.
-// Deterministic (inject `from`) so it's fully unit-testable. Handles recurring
-// annual dates (anniversaries, birthdays) and one-off date nights/milestones.
+// Handles recurring annual dates (anniversaries, birthdays) and one-off date
+// nights/milestones.
+//
+// ── The anchor is a DAY KEY, not an instant ─────────────────────────────────
+//
+// This took `from: Date = new Date()` and floored it with
+// `setHours(0, 0, 0, 0)` — the HOST's midnight. On a UTC server that is 5pm in
+// California, so for the last seven hours of every day the whole module was a
+// day ahead of the family: a birthday still a day away already read "Today",
+// and today's already read "Passed" and was dropped from the list entirely
+// (`upcomingDates` filters `days < 0`).
+//
+// "Deterministic (inject `from`) so it's fully unit-testable" is what the header
+// used to say, and it was true and beside the point: every caller took the
+// default, and the default was the server's clock. A parameter that is only
+// ever injected by tests is not a seam, it is a comment.
+//
+// So there is no default now, and the unit is a `YYYY-MM-DD` day key. Both
+// sides of every subtraction are parsed as UTC midnight — not a claim that
+// anyone is in UTC, but how two calendar days are subtracted with no zone
+// entering into it. A birthday is a date on a calendar, not an instant, and
+// this module now says so in its types.
 
 export type RelKind =
   | 'anniversary'
@@ -22,22 +42,37 @@ export type RelDate = {
 };
 
 export type UpcomingDate = RelDate & {
-  /** The next future (or today) occurrence. */
-  next: Date;
-  /** Whole days from `from` to `next` (0 = today). */
+  /**
+   * The next future (or today) occurrence, as a `YYYY-MM-DD` day key.
+   *
+   * A key rather than a `Date`, because the only thing any caller ever read off
+   * the old `Date` was `getFullYear()` — and a UTC-midnight `Date` read with
+   * `getFullYear()` on a host west of UTC gives the PREVIOUS year for January
+   * 1st, which is exactly the kind of quiet wrongness this module is being
+   * cleaned of. `nextKey.slice(0, 4)` cannot do that.
+   */
+  nextKey: string;
+  /** Whole days from `todayKey` to `nextKey` (0 = today). */
   days: number;
   /** For recurring dates, the ordinal this occurrence marks (e.g. 5th anniversary,
    *  the age turned). null for one-offs. */
   years: number | null;
 };
 
-function startOfDay(d: Date): Date {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
+const DAY = 86_400_000;
+
+/** A `YYYY-MM-DD` key as the UTC-midnight instant that stands for that day. */
+function keyMs(key: string): number {
+  return Date.parse(`${key.slice(0, 10)}T00:00:00Z`);
 }
 
-/** Parse a 'YYYY-MM-DD' string into local date parts. */
+/** Build a `YYYY-MM-DD` key from calendar parts. */
+function toKey(y: number, m: number, d: number): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${String(y).padStart(4, '0')}-${pad(m)}-${pad(d)}`;
+}
+
+/** Parse a 'YYYY-MM-DD' string into calendar parts. */
 export function parseYMD(s: string): { y: number; m: number; d: number } | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
   if (!m) return null;
@@ -45,25 +80,31 @@ export function parseYMD(s: string): { y: number; m: number; d: number } | null 
 }
 
 /**
- * The next occurrence of an event at or after the start of `from`'s day.
- * For one-off dates, returns the date itself (which may be in the past — callers
- * can filter). For recurring dates, returns this year's month/day, or next
+ * The next occurrence of an event on or after `todayKey`, as a day key.
+ * For one-off dates, returns the date itself (which may be in the past —
+ * callers filter). For recurring dates, returns this year's month/day, or next
  * year's if it has already passed.
  */
-export function nextOccurrence(eventDate: string, recursAnnually: boolean, from: Date = new Date()): Date | null {
+export function nextOccurrence(eventDate: string, recursAnnually: boolean, todayKey: string): string | null {
   const p = parseYMD(eventDate);
   if (!p) return null;
-  if (!recursAnnually) return new Date(p.y, p.m - 1, p.d);
+  if (!recursAnnually) return toKey(p.y, p.m, p.d);
 
-  const today = startOfDay(from);
-  let occ = new Date(today.getFullYear(), p.m - 1, p.d);
-  if (occ.getTime() < today.getTime()) occ = new Date(today.getFullYear() + 1, p.m - 1, p.d);
-  return occ;
+  const today = parseYMD(todayKey);
+  if (!today) return null;
+  // Feb 29 in a non-leap year resolves the way `Date` has always resolved it
+  // here (to Mar 1), which is a product decision nobody has made; it is left
+  // exactly as it was rather than changed under cover of a timezone fix.
+  const occ = new Date(Date.UTC(today.y, p.m - 1, p.d));
+  const thisYear = toKey(occ.getUTCFullYear(), occ.getUTCMonth() + 1, occ.getUTCDate());
+  if (keyMs(thisYear) >= keyMs(todayKey)) return thisYear;
+  const nextOcc = new Date(Date.UTC(today.y + 1, p.m - 1, p.d));
+  return toKey(nextOcc.getUTCFullYear(), nextOcc.getUTCMonth() + 1, nextOcc.getUTCDate());
 }
 
-/** Whole days from `from` to `target` (both floored to local midnight). */
-export function daysUntil(target: Date, from: Date = new Date()): number {
-  return Math.round((startOfDay(target).getTime() - startOfDay(from).getTime()) / 86_400_000);
+/** Whole days from `todayKey` to `targetKey` (negative = already passed). */
+export function daysUntil(targetKey: string, todayKey: string): number {
+  return Math.round((keyMs(targetKey) - keyMs(todayKey)) / DAY);
 }
 
 /** Ordinal suffix: 1 → "1st", 2 → "2nd", 11 → "11th", 23 → "23rd". */
@@ -96,28 +137,28 @@ export function formatCountdown(days: number): string {
  */
 export function upcomingDates(
   dates: RelDate[],
-  opts: { from?: Date; withinDays?: number } = {},
+  todayKey: string,
+  opts: { withinDays?: number } = {},
 ): UpcomingDate[] {
-  const from = opts.from ?? new Date();
   const out: UpcomingDate[] = [];
   for (const d of dates) {
-    const next = nextOccurrence(d.eventDate, d.recursAnnually, from);
-    if (!next) continue;
-    const days = daysUntil(next, from);
+    const nextKey = nextOccurrence(d.eventDate, d.recursAnnually, todayKey);
+    if (!nextKey) continue;
+    const days = daysUntil(nextKey, todayKey);
     if (days < 0) continue; // a one-off that has already passed
     if (opts.withinDays != null && days > opts.withinDays) continue;
     const p = parseYMD(d.eventDate);
-    const years = d.recursAnnually && p ? next.getFullYear() - p.y : null;
-    out.push({ ...d, next, days, years: years != null && years >= 0 ? years : null });
+    const years = d.recursAnnually && p ? Number(nextKey.slice(0, 4)) - p.y : null;
+    out.push({ ...d, nextKey, days, years: years != null && years >= 0 ? years : null });
   }
   return out.sort((a, b) => a.days - b.days);
 }
 
 /** True when a date is within its reminder window (and not already passed). */
-export function isReminderDue(d: RelDate, from: Date = new Date()): boolean {
-  const next = nextOccurrence(d.eventDate, d.recursAnnually, from);
-  if (!next) return false;
-  const days = daysUntil(next, from);
+export function isReminderDue(d: RelDate, todayKey: string): boolean {
+  const nextKey = nextOccurrence(d.eventDate, d.recursAnnually, todayKey);
+  if (!nextKey) return false;
+  const days = daysUntil(nextKey, todayKey);
   return days >= 0 && days <= Math.max(0, d.reminderDaysBefore);
 }
 
@@ -126,8 +167,8 @@ export function isReminderDue(d: RelDate, from: Date = new Date()): boolean {
  * fires when the date is ≤14 days out), soonest first. Used for proactive nudges
  * like the home-dashboard reminder.
  */
-export function upcomingRelationship(dates: RelDate[], from: Date = new Date()): UpcomingDate[] {
-  return upcomingDates(dates, { from, withinDays: 60 }).filter((d) => d.days <= d.reminderDaysBefore);
+export function upcomingRelationship(dates: RelDate[], todayKey: string): UpcomingDate[] {
+  return upcomingDates(dates, todayKey, { withinDays: 60 }).filter((d) => d.days <= d.reminderDaysBefore);
 }
 
 /** A short label for a recurring milestone, e.g. "5th anniversary", "turns 34". */

@@ -4300,3 +4300,69 @@ shipped.
 `TZ=America/Los_Angeles`** (four shards each), tsc clean, eslint at 85 (no new
 warnings), `npm run build` exits 0. Non-vacuity: revert `dayKeyIn` to the UTC
 day → all 5 new assertions fail, the other 8 stay green.
+
+---
+
+### [CLAUDE-1][HIGH][CORRECTNESS/TIME] On the morning of their anniversary, the family was told it was in twelve months
+
+**Files:** `lib/relationship/dates.ts`, `lib/server/notifications.ts`,
+`components/dashboard/ai-home-dashboard.tsx`,
+`app/api/ai/relationship/route.ts`,
+`components/modules/relationship-module.tsx`,
+`tests/relationship-dates.test.ts`
+
+**Problem.** `startOfDay` floored `from: Date = new Date()` with
+`setHours(0, 0, 0, 0)` — the host's midnight — and every function in the module
+is built on it. On a UTC server that is 5pm in California.
+
+**The measured failure is worse than the one I wrote down first.** I had it as
+"today's anniversary is dropped from the list", since `upcomingDates` filters
+`days < 0`. The revert actually prints **`expected 364 to be +0`**: for a
+**recurring** date, the host having rolled over makes this year's occurrence
+read as already passed, so `nextOccurrence` rolls it forward **a full year**. On
+the morning of their anniversary the family is told it is **in 12 months**.
+Dropping is what happens to a one-off. The write-up now says what was measured.
+
+**The ratchet's own premise was wrong about this file.** Its header read
+*"Deterministic (inject `from`) so it's fully unit-testable"* — true, and beside
+the point. **All four call sites took the default, and the default was the
+server's clock.** A parameter only ever injected by tests is not a seam; it is a
+comment.
+
+**And the recurring shape, for the ninth time.** Two of the four callers compute
+the family's day *in the same function* and use it for everything else:
+
+- `components/dashboard/ai-home-dashboard.tsx:73` has
+  `const todayKey = dayKeyInTz(now, tz)` under a comment reading **"The family's
+  own day, not the server's (§16 Today)"** — and 200 lines later called
+  `upcomingRelationship(...)` with **no anchor at all**.
+- `lib/server/notifications.ts:72` computes the same `todayKey`, and every other
+  reminder in that function renders through `timeLabel(..., tz)`. The
+  relationship block alone passed the raw instant.
+
+The boundary stated where a reader can see it, absent from the line that needed
+it.
+
+**The notification case is sticky.** The dedup `related_id` is
+`${d.id}:${occurrence year}` and is **permanent**, so a reminder sent against
+the wrong day is the only one that occurrence will ever get — the real day
+arrives with nothing sent. Same shape as the returns cron.
+
+**Fix.** Required `todayKey: string`, no default, all arithmetic on day keys
+parsed as UTC midnights. `UpcomingDate.next: Date` became `nextKey: string`,
+because the only thing any caller read off it was `getFullYear()` — and a
+UTC-midnight `Date` read with `getFullYear()` on a host west of UTC gives the
+**previous year for January 1st**, which is the same class of bug one layer
+down. The New Year's Eve case is now asserted.
+
+Feb 29 in a non-leap year resolves exactly as it always did (to Mar 1). That is
+a product decision nobody has made, and I did not change it under cover of a
+timezone fix; it is noted in the source.
+
+**Status:** FIXED. `lib/relationship/dates.ts` off the ratchet — **three entries
+left of the original seventeen.**
+
+**Verified:** **14,056 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles`** (four shards each), tsc clean, eslint at 85, `npm run
+build` exits 0. Non-vacuity: revert `dayKeyIn` to the UTC day → all 5 new
+assertions fail, the other 13 stay green.

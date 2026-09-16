@@ -5,7 +5,7 @@ import { settleAll } from '@/lib/supabase/settle';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
-import { scopeFromUserContext, dayKeyInTz, zonedDayBoundsMs } from '@/lib/services/scope';
+import { scopeFromUserContext, dayKeyInTz, todayKeyFor, zonedDayBoundsMs } from '@/lib/services/scope';
 import { isMissingRelationError } from '@/lib/supabase/errors';
 import { logAudit } from '@/lib/server/audit';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
@@ -72,7 +72,10 @@ export async function POST() {
       id: d.id, kind: d.kind, title: d.title, eventDate: d.event_date,
       recursAnnually: d.recurs_annually, reminderDaysBefore: d.reminder_days_before, status: d.status,
     }));
-    const upcoming = upcomingDates(dates, { withinDays: 90 }).slice(0, 8).map((u) => ({
+    // The family's day. This passed no anchor at all, so it fell through to the
+    // server's clock and told the AI an anniversary was "Today" the evening
+    // before — which it then wrote gift and date-night suggestions around.
+    const upcoming = upcomingDates(dates, todayKeyFor(ctx), { withinDays: 90 }).slice(0, 8).map((u) => ({
       title: u.title, kind: u.kind, countdown: formatCountdown(u.days), milestone: milestoneLabel(u),
     }));
 

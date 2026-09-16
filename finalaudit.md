@@ -5362,3 +5362,57 @@ Non-vacuity: revert `dayKeyIn` to the UTC day → all 5 new assertions fail
 overdue stamp being spent on an item due today), the other 8 stay green.
 
 **Four entries left on the `setHours` ratchet, of the original seventeen.**
+
+---
+
+## Q19 — HIGH: on the morning of their anniversary, the family was told it was in twelve months
+
+`lib/relationship/dates.ts` floored `from: Date = new Date()` with
+`setHours(0, 0, 0, 0)` — the host's midnight — and every function in the module
+is built on it.
+
+**The measured failure is worse than the one I wrote down first.** I had it as
+"today's anniversary is dropped from the list", since `upcomingDates` filters
+`days < 0`. The revert prints **`expected 364 to be +0`**: for a **recurring**
+date, the host having rolled over makes this year's occurrence read as passed,
+so `nextOccurrence` rolls it forward **a full year**. On the morning of their
+anniversary the family is told it is **in 12 months**. Dropping is what happens
+to a one-off. *This is the second time in three passes that the mutation
+corrected the finding rather than merely confirming it.*
+
+**The ratchet's own premise was wrong about this file.** Its header read
+*"Deterministic (inject `from`) so it's fully unit-testable"* — true, and beside
+the point. All four call sites took the **default**, and the default was the
+server's clock. A parameter only ever injected by tests is not a seam; it is a
+comment.
+
+**And the recurring shape, for the ninth time.** Two of the four callers compute
+the family's day *in the same function* and use it for everything else:
+`ai-home-dashboard.tsx:73` has `const todayKey = dayKeyInTz(now, tz)` under a
+comment reading **"The family's own day, not the server's (§16 Today)"**, and
+200 lines later called `upcomingRelationship(...)` with **no anchor at all**;
+`lib/server/notifications.ts:72` computes the same key, and every other reminder
+in that function renders through `timeLabel(..., tz)` while the relationship
+block passed the raw instant. The boundary stated where a reader can see it,
+absent from the line that needed it.
+
+The notification case is sticky in the same way Q18's cron is: the dedup
+`related_id` is `${id}:${occurrence year}` and **permanent**, so a reminder sent
+against the wrong day is the only one that occurrence will ever get.
+
+Fixed with a required `todayKey: string` and no default. `UpcomingDate.next:
+Date` became `nextKey: string`, because the only thing any caller read off it
+was `getFullYear()` — and a UTC-midnight `Date` read with `getFullYear()` on a
+host west of UTC gives the **previous year for January 1st**, the same class of
+bug one layer down. That case is now asserted directly.
+
+Feb 29 in a non-leap year resolves exactly as it always did (to Mar 1) — a
+product decision nobody has made, and not one to change under cover of a
+timezone fix. Noted in the source rather than silently altered.
+
+**Verified:** 14,056 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles`, tsc clean, eslint at 85, `npm run build` exits 0.
+Non-vacuity: revert `dayKeyIn` to the UTC day → all 5 new assertions fail, the
+other 13 stay green.
+
+**Three entries left on the `setHours` ratchet, of the original seventeen.**

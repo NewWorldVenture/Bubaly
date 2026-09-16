@@ -14,7 +14,7 @@ import { describe, expect, it } from 'vitest';
 // than a proof"; this is what was under the floor.
 //
 // This is a RATCHET, not a proof. Seventeen server-side sites were listed here;
-// thirteen are now closed and four remain, each needing its own decision about
+// fourteen are now closed and three remain, each needing its own decision about
 // which family's day it means. Listing them stops the next one being added
 // silently while they are worked down, and shrinking the list is the only edit
 // that should ever be made to it.
@@ -47,6 +47,15 @@ import { describe, expect, it } from 'vitest';
 // that shipped already resolved each family's scope, just one step too late to
 // be the thing that answered "is this due today".
 //
+// `lib/relationship/dates.ts` is the one where the ratchet's own premise was
+// wrong. Its header read "Deterministic (inject `from`) so it's fully
+// unit-testable", which was true and beside the point: every one of its four
+// call sites took the DEFAULT, and the default was the server's clock. A
+// parameter only ever injected by tests is not a seam, it is a comment. All
+// four sites already held the family's zone — two of them compute `todayKey`
+// in the same function and use it for everything else — so the fix was to
+// delete the default and pass what was already there.
+//
 // To close one: route it through `dayKeyInTz` / `zonedDayBoundsMs`
 // (lib/services/scope.ts), as app/(app)/display/page.tsx and
 // app/(app)/kids/page.tsx now do, then DELETE its line here.
@@ -58,7 +67,6 @@ const ROOTS = ['app', 'lib', 'components'];
 const TRACKED = new Set([
   'lib/capture/parse.ts',
   'lib/chores/dashboard.ts',
-  'lib/relationship/dates.ts',
   'lib/routines/detect.ts',
 ]);
 
