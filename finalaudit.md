@@ -6994,3 +6994,40 @@ The first two are the honest end of the census family that produced four
 findings; the last three are guards that already existed and held. Recorded
 together because the useful signal is not "nothing found" but **which questions
 were asked**.
+
+
+## Round 6's fixes, verified against the seeded corpus rather than a fixture
+
+Every probe in `docs/audit/` seeds two or three rows and asserts against them.
+That is the right shape for a boundary test, and it leaves one question open: a
+policy or trigger that behaves correctly on a fixture can still refuse something
+the product does routinely at volume. So the seven migrations were re-checked
+against the harness's **seeded corpus** — 320 marketplace orders, 500 offers, 380
+reviews, 300 saves and a 10-row household binder — acting as the seeded family's
+parent:
+
+```
+binder rows a PARENT reads: 10/10        (a manager sees the sensitive two)
+orders visible: 320/320    offers: 500/500    reviews: 380/380    saves: 300/300
+
+orders advanced by status alone:            60     (setOrderStatusAction's shape)
+reviews the author revised:                380/380
+saves the owner removed:                   300/300
+seller_member still immutable across 320 seeded orders: refused
+```
+
+The first three lines are the ones worth having. `0314`'s trigger makes four
+columns immutable, and the only client write to `marketplace_orders` updates
+`status` alone — that reasoning is in the migration header, and this is the
+measurement behind it: sixty seeded orders advanced without the trigger
+objecting. Likewise all 380 reviews stayed revisable by their author and all 300
+saves removable by their owner, so `0315` and `0316` did not quietly close the
+two toggle actions.
+
+**This is deliberately not added as a probe.** It depends on the seed, and the
+seed is best-effort — two marketplace seed blocks already fail on this harness
+because the anchor family has one member. A probe whose assertions pass
+vacuously when its data is missing is precisely the defect class this audit
+exists to find, and adding one in the course of verifying fixes for that class
+would be the worst possible place to introduce it. Recorded as a measurement
+taken once, with the numbers, so a later pass can repeat it rather than trust it.

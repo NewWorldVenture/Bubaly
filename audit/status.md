@@ -197,6 +197,16 @@ PRIOR SESSIONS (unchanged, see history below): F-020 migration idempotency;
     re-filing it would have been the failure mode this audit warns about most),
     remaining clock-built public-bucket names (already ratcheted), and migration
     idempotency (proved by CI's rehearse-ledger-repair step, green on run 3144).
+  - Also swept clean: all 24 cron routes gate on hasCronAuthorization (fail-closed,
+    never "Bearer undefined"), every one returns 401, and the named-helper ratchet
+    already covers it.
+  - Round 6's fixes re-verified against the SEEDED CORPUS rather than fixtures
+    (320 orders / 500 offers / 380 reviews / 300 saves / 10 binder rows): 60
+    orders advanced by status alone, 380 reviews revised by their author, 300
+    saves removed by their owner, seller_member still immutable across all 320.
+    Deliberately not added as a probe — it depends on a best-effort seed, and a
+    guard that passes vacuously when its data is missing is the defect class this
+    audit exists to find.
 NEXT: C2-M03 is the largest open finding — ~251 en-US-pinned date/time call
   sites across ~135 files against an 11-locale catalogue. The trap is recorded
   in Pass P: dayKey() uses 'en-US' as a PARSE locale and must not be switched.

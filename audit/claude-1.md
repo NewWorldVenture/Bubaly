@@ -1946,3 +1946,27 @@ Evidence: 1. Permission resolvers with a missing-row fallback (C1-S6-11's
 Impact:   None. The value is the record of which questions were asked.
 Status:   VERIFIED
 ```
+
+```
+[CLAUDE-1][INFO][SECURITY] Round 6's fixes verified against the seeded corpus
+Problem:  Not a defect. Every docs/audit probe seeds two or three rows; a policy
+          that is correct on a fixture can still refuse something the product
+          does routinely at volume. Re-checked the seven migrations against the
+          harness's seeded corpus as the seeded family's parent.
+Evidence: 320 orders / 500 offers / 380 reviews / 300 saves / 10 binder rows.
+            binder rows a PARENT reads: 10/10 (manager sees the sensitive two)
+            orders visible 320/320, offers 500/500, reviews 380/380, saves 300/300
+            orders advanced by status alone:  60   (setOrderStatusAction's shape)
+            reviews the author revised:      380/380
+            saves the owner removed:         300/300
+            seller_member immutable across 320 seeded orders: refused
+Impact:   None — confirms the fixes permit every legitimate write at volume and
+          still refuse the forgery. 0314's trigger does not block the one client
+          update path; 0315/0316 did not close the two toggle actions.
+Fix:      No change. NOT added as a probe: it depends on the seed, the seed is
+          best-effort (two marketplace blocks already fail here because the
+          anchor family has one member), and a probe that passes vacuously when
+          its data is missing is the exact defect class this audit exists to
+          find. Recorded as a measurement taken once, with the numbers.
+Status:   VERIFIED
+```
