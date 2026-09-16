@@ -1713,3 +1713,80 @@ Status:   OPEN — observed once, cause identified by elimination rather than by
           reproducing it deliberately. Stated at that strength on purpose: the
           three eliminations are solid, a forced reproduction is not attempted.
 ```
+
+```
+[CLAUDE-1][HIGH][SECURITY] a marketplace buyer can make themselves the seller of record
+File:     supabase/migrations/0154_marketplace_ownership.sql:215-235
+          app/(app)/marketplace/item/[id]/page.tsx:87      (reads the forged value)
+          app/(app)/marketplace/creators/[id]/page.tsx:58  (reads the forged value)
+Problem:  0154 exists to stop forged member ids "inflating trust scores" — its
+          own words — and tied every marketplace UPDATE to the row owner. It put
+          that test in `using` and left `with check (is_family_member(family_id))`.
+          `using` decides which rows you may touch; `with check` decides what a
+          row may BECOME. So the ownership rule governed the row you start from
+          and said nothing about the row you end with.
+Evidence: Replayed schema, as the BUYER on a completed order sold by A:
+            NOTICE: orders: buyer rewrote seller_member on 1 row(s)
+            NOTICE: offers: owner reassigned member_id on 1 row(s)
+            NOTICE: reputation read: C now shows 1 completed sale(s)
+Impact:   Both pages above count
+          `marketplace_orders where seller_member = <them> and status='completed'`
+          and render it as a seller's track record. A member who BUYS twenty
+          things can claim twenty SALES, from the browser, with the anon key,
+          over rows they are legitimately a party to. Same forgery 0154 closed on
+          INSERT, reopened on UPDATE. The offers policy has the same shape, and
+          there the listing owner may touch every offer on their listing.
+Fix:      0306_marketplace_parties_are_not_editable.sql. The obvious repair —
+          `with check` = `using` — was tried FIRST and stayed red: the predicate
+          is symmetric, so C setting `seller_member = C` produces a row on which
+          C is a party. RLS cannot see the old row, so no `with check` can say
+          "you may not change who the parties are". 0306 makes the four identity
+          columns immutable with a BEFORE UPDATE trigger gated on
+          `row_security_active()`, leaving the definer RPCs and the service role
+          — the paths that legitimately create and close these rows — untouched.
+          The `with check` clauses are tightened anyway, because 0154's comments
+          already claim they say this.
+          Every write to either table was read first: setOrderStatusAction and
+          marketplace_complete_handoff update `status` alone, the cron writes two
+          timestamps as service role, accept-offer and auction-close INSERT, and
+          no client updates marketplace_offers at all.
+          docs/audit/marketplace-ownership-update-check.sql asserts both refusals
+          AND both permitted writes — a party may still advance their own order,
+          an author may still withdraw their own offer. 27/27 probes pass.
+Status:   FIXED — inert until an operator applies 0306
+          (docs/PENDING_PROD_MIGRATIONS.md, which also gained the 0304 and 0305
+          rows it was missing).
+```
+
+```
+[CLAUDE-1][INFO][SECURITY] refuted: 20 UPDATE/ALL policies with `using` and no `with check`
+File:     assistant_links, call_logs, daily_insights, families,
+          family_communications, family_contacts, family_conversations,
+          family_messages, family_recipes, family_reminders, family_signals,
+          family_tree_nodes, front_desk_settings, home_briefs,
+          moment_activations, notifications, profiles, reasoning_snapshots,
+          todo_items, todo_lists
+Problem:  Hypothesised as the same defect as the finding above. It is not:
+          PostgreSQL reuses `using` as the check when `with check` is omitted.
+Evidence: update todo_lists set family_id = <other family> where id = <own row>;
+          ERROR:  new row violates row-level security policy for table "todo_lists"
+          Documented behaviour, measured rather than cited — the finding above
+          exists because a `with check` clause was READ instead of EXERCISED,
+          and its first fix was wrong for the same reason.
+Impact:   None. Fourth hypothesis this audit has killed by measurement, recorded
+          on the same principle as the other three.
+Fix:      No change. A ratchet instead: no permissive UPDATE/ALL policy outside
+          service_role may write `with check (true)`, which is the one edit that
+          would switch those twenty implicit checks off.
+          Proving that premise took a detour worth recording. My first mutation
+          planted `with check (true)` on todo_lists_update and the cross-family
+          move was STILL refused — todo_lists carries an older FOR ALL policy
+          whose implicit check blocks it independently, so the two guards are
+          over-determined there and the mutation proved nothing about the class.
+          The probe therefore builds a table with exactly one applicable UPDATE
+          policy and measures both directions:
+            using(owner = current_user) alone  -> ERROR: new row violates RLS
+            with check (true) added            -> UPDATE 1, owner rewritten
+Status:   VERIFIED — no defect; the ratchet is in
+          docs/audit/marketplace-ownership-update-check.sql.
+```

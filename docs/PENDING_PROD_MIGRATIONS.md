@@ -835,3 +835,44 @@ because their value is zero until they are applied:
   applied, 0 failed) and by `docs/audit/sensitive-role-boundary-check.sql`,
   which was amended in the same change — it previously asserted the opened
   state as a requirement. Audit C3-S5-01.
+
+- **`0304_no_truncate_for_the_public_roles.sql`** — revokes `truncate` on every
+  table in `public` from `anon` and `authenticated`, and sets the matching
+  default privilege so a future table does not arrive with it. `truncate` is not
+  filtered by row-level security: a policy that correctly limits which rows a
+  member may `delete` says nothing about a `truncate`, which empties the table
+  for every family at once. No application path uses it. Its assertion lives in
+  `docs/audit/no-truncate-for-public-roles-check.sql` rather than a Vitest file
+  because `tests/migrations-are-additive.test.ts` forbids the bare word in a
+  migration outside a privilege list, which is exactly the rule that makes this
+  one safe to read. Audit C1-S5-04.
+
+- **`0305_household_secrets_are_not_child_readable.sql`** — replaces the single
+  `"Members manage household_info"` policy (`for all using
+  is_family_member(family_id)`) with four that add
+  `and (not is_sensitive or can_manage_family(family_id))` on select, insert,
+  update-using, update-with-check and delete. The binder carries alarm codes and
+  wifi keys behind an `is_sensitive` flag, and `components/modules/binder-module.tsx`
+  masks such a value behind an eye toggle — but the row reached the browser in
+  full, so the mask hid a value the client already held. Measured before the fix:
+  a child read `hunter2-alarm-4417` in the clear. The `with check` half matters
+  independently: without it a child clears the flag, reads the value and sets it
+  back. `docs/audit/household-binder-boundary-check.sql` asserts both, and that a
+  parent still sees the whole binder. Audit C1-S6-06.
+
+- **`0306_marketplace_parties_are_not_editable.sql`** — makes `family_id`,
+  `listing_id` and the party columns of `marketplace_orders` /
+  `marketplace_offers` immutable after insert, via a `BEFORE UPDATE` trigger that
+  fires only when `row_security_active()`, and tightens the two `with check`
+  clauses `0154` left as a bare family test. `0154` tied every marketplace UPDATE
+  to the row owner in its `using` clause only, so the ownership rule governed the
+  row you started from and not the row you produced: measured, the **buyer** on a
+  completed order could set `seller_member` to themselves, and the count that
+  `marketplace/item/[id]/page.tsx:87` and `marketplace/creators/[id]/page.tsx:58`
+  display as a seller's completed-sales record moved with it. Tightening
+  `with check` to match `using` is **not** sufficient and was tried first — the
+  predicate is symmetric, and RLS cannot see the old row. Nothing legitimate
+  loses access: every write to either table in the tree either updates `status`
+  alone or runs as `SECURITY DEFINER` / the service role.
+  `docs/audit/marketplace-ownership-update-check.sql` asserts both refusals and
+  both permitted writes. Audit C1-S6-08.

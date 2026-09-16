@@ -151,6 +151,22 @@ PRIOR SESSIONS (unchanged, see history below): F-020 migration idempotency;
         distinct ids the document actually names, and says plainly that the
         passes' totals are larger, rather than quoting a number nobody can
         reproduce from the document.
+  - Pass U (session 6, continued). Censused the marketplace's UPDATE policies
+    and found the object-level authorization 0154 shipped was written into the
+    wrong clause: the ownership test was in `using` only, so a BUYER could set
+    `seller_member` to themselves and inherit the completed-sales count two
+    pages display as a seller's track record (C1-S6-08). The obvious repair —
+    `with check` = `using` — was tried first and STAYED RED, because the
+    predicate is symmetric and RLS cannot see the old row; 0306 makes the four
+    identity columns immutable with a trigger gated on `row_security_active()`.
+    Recorded alongside it, the audit's FOURTH refuted hypothesis: the 20
+    UPDATE/ALL policies with `using` and no `with check` are safe, because
+    PostgreSQL reuses `using` as the check — measured, not cited, and the
+    ratchet's premise (`with check (true)` switches that off) measured too,
+    after the first mutation turned out over-determined on `todo_lists`.
+    Also added the 0304/0305/0306 rows docs/PENDING_PROD_MIGRATIONS.md was
+    missing — those migrations are worth nothing until an operator applies them
+    and the document is the operator's list.
 NEXT: C2-M03 is the largest open finding — ~251 en-US-pinned date/time call
   sites across ~135 files against an 11-locale catalogue. The trap is recorded
   in Pass P: dayKey() uses 'en-US' as a PARSE locale and must not be switched.
@@ -159,6 +175,10 @@ NEXT: C2-M03 is the largest open finding — ~251 en-US-pinned date/time call
   this as a deliberate follow-up and it is the coordinator's job.
 FILES-TOUCHED (session 3):
   - audit/status.md (this section only), audit/claude-1.md, finalaudit.md
+  - session 6 additions: supabase/migrations/0303-0306,
+    docs/audit/{household-binder-boundary,deactivated-member-sees-nothing,
+    marketplace-ownership-update,no-truncate-for-public-roles}-check.sql,
+    docs/PENDING_PROD_MIGRATIONS.md, tests/migration-version-safety.test.ts
   - source: lib/server/push.ts (M1), the calendar-feed route (M2),
     scripts/i18n-scan.mjs, app/globals.css, tailwind.config.ts,
     components/ui/input.tsx, design/tokens.json, and the 7 .tsx files carrying
@@ -175,7 +195,7 @@ NOTE FOR OTHER WORKERS:
     see audit/claude-1.md). Break what a guard protects and confirm it goes red.
   - A Next folder starting with `_` is excluded from routing; a probe page placed
     there is never compiled and the build passes for the wrong reason.
-LAST-UPDATE: 2026-09-14
+LAST-UPDATE: 2026-09-16
 
 ## Claude-2
 CURRENT: COMPLETE — browser pass over the public marketing/auth surface.

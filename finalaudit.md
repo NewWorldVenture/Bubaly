@@ -6593,3 +6593,140 @@ I tried — rewriting `fm_select` itself as an inline subquery over its own tabl
 produced `infinite recursion detected in policy for relation "family_members"`.
 That is why `fm_select` uses a `SECURITY DEFINER` helper in the first place, and
 it is a second, independent reason not to "simplify" it.
+
+
+## C1-S6-08 [HIGH][SECURITY] — a marketplace buyer can make themselves the seller of record
+
+**File:** `supabase/migrations/0154_marketplace_ownership.sql:215-235` (the two
+policies) · `app/(app)/marketplace/item/[id]/page.tsx:87` and
+`app/(app)/marketplace/creators/[id]/page.tsx:58` (what reads the forged value)
+**Status:** FIXED — `supabase/migrations/0306_marketplace_parties_are_not_editable.sql`
+
+### Problem
+
+`0154` exists to close exactly this class. Its own header says the prior policies
+gated the marketplace *"by family membership ALONE, so any member could edit
+another member's listing/store, accept offers they don't own, or forge
+saves/offers/reviews with a spoofed member id (inflating trust scores)"*, and it
+fixed that by tying every INSERT to the acting member and every UPDATE to the row
+owner.
+
+The UPDATE half was written into the wrong clause. Both policies end:
+
+```sql
+using (public.is_family_member(family_id) and (
+         buyer_member  = public.marketplace_member_id(family_id)
+      or seller_member = public.marketplace_member_id(family_id)))
+with check (public.is_family_member(family_id))
+```
+
+`using` decides which rows you may touch. `with check` decides what a row is
+allowed to **become**. Putting the ownership test in the first slot and the bare
+family test in the second means the ownership rule governs the row you start
+from and says nothing whatsoever about the row you end with.
+
+### Evidence
+
+Measured against the replayed schema, as member C who was the **buyer** on a
+completed order sold by A:
+
+```
+NOTICE:  orders: buyer rewrote seller_member on 1 row(s)
+NOTICE:  offers: owner reassigned member_id on 1 row(s)
+NOTICE:  reputation read: C now shows 1 completed sale(s)
+```
+
+### Impact
+
+That last line is not a hypothetical. Two pages read
+`marketplace_orders where seller_member = <them> and status = 'completed'` and
+render it as the seller's track record —
+`marketplace/item/[id]/page.tsx:87` beside the listing, and
+`marketplace/creators/[id]/page.tsx:58` on the creator profile. A member who
+**buys** twenty things can claim twenty **sales**, from the browser, with the anon
+key, over rows they are legitimately a party to. That is the trust-score forgery
+`0154` named and closed on the INSERT path, reopened on the UPDATE path.
+
+The offers policy has the same shape, and there the listing owner may touch every
+offer on their listing — so an offer could be reassigned to a member who never
+made it, re-planting the spoofed `member_id` that `marketplace_offers_insert`
+refuses outright.
+
+### The first fix was wrong, and the guard is why I know
+
+The obvious repair is to write `with check` as the same predicate as `using`. I
+did that, re-ran the probe, and it stayed **red**. The predicate is symmetric: C
+setting `seller_member = C` produces a row on which C *is* a party, so a check
+reading "the caller is the buyer or the seller" passes the very write it is meant
+to stop. **RLS cannot see the old row**, so no `with check` can express "you may
+not change who the parties are".
+
+So `0306` makes the identity columns immutable with a `BEFORE UPDATE` trigger,
+which is the actual shape of the invariant: after insert, `family_id`,
+`listing_id` and the party columns are facts about a deal that happened, not
+fields. It fires only when `row_security_active()` — the `SECURITY DEFINER` RPCs
+and the service role, which legitimately create and close these rows, are
+untouched. The `with check` clauses are tightened anyway: they are no longer
+load-bearing, but `0154`'s comments already claim the policies say this, and a
+policy whose comment overstates it is how this survived.
+
+Every write to either table in the tree was read before the trigger was added:
+`setOrderStatusAction` updates `status` alone; `marketplace_complete_handoff`
+(0199) updates `status` alone; the return-reminder cron writes two timestamps
+through the service client; accept-offer and auction-close INSERT orders and
+never re-point an existing one; and **no client anywhere updates
+`marketplace_offers` at all**. Not one touches a party column after the row
+exists.
+
+`docs/audit/marketplace-ownership-update-check.sql` asserts both refusals and
+both permitted writes — a party may still advance their own order, an author may
+still withdraw their own offer — because a boundary test that also locks out the
+product is not a fix. **27/27 probes pass**, and CI replays them.
+
+---
+
+## Refuted: the twenty policies with `using` and no `with check`
+
+Censusing the fix above turned up **20 permissive UPDATE/ALL policies** in
+`public` with a `using` clause and no `with check` — `assistant_links`,
+`call_logs`, `daily_insights`, `families`, `family_communications`,
+`family_contacts`, `family_conversations`, `family_messages`, `family_recipes`,
+`family_reminders`, `family_signals`, `family_tree_nodes`, `front_desk_settings`,
+`home_briefs`, `moment_activations`, `notifications`, `profiles`,
+`reasoning_snapshots`, `todo_items`, `todo_lists`.
+
+It looks like the same defect and is not: PostgreSQL reuses `using` as the check
+when `with check` is omitted. **This is the fourth hypothesis this audit has
+killed by measurement, and it is recorded for the same reason as the other
+three.** It is also documented behaviour — which is precisely why it was measured
+rather than cited. C1-S6-08 above exists because a `with check` clause was *read*
+instead of *exercised*, and the first fix for it was wrong for the same reason.
+
+```
+update todo_lists set family_id = <another family> where id = <own row>;
+ERROR:  new row violates row-level security policy for table "todo_lists"
+```
+
+Two things are now asserted in the probe, because the second is the premise of
+the ratchet: **(a)** in the real schema a `using`-only policy refuses a row that
+leaves the caller's family, and **(b)** in isolation, writing `with check (true)`
+on such a policy switches that refusal **off**.
+
+**(a) alone would not establish (b)**, and finding that out was worth the detour.
+My first mutation planted `with check (true)` on `todo_lists_update` and the
+cross-family move was *still* refused — because `todo_lists` also carries an
+older `FOR ALL` policy whose implicit check blocks it independently. On that
+table the two guards are over-determined, so the mutation proved nothing about
+the class. (b) therefore gets its own table with exactly one applicable UPDATE
+policy, created and dropped inside the probe, where the same edit does breach:
+
+```
+with `using (owner = current_user)` alone:   ERROR: new row violates row-level security policy
+with `with check (true)` added:              UPDATE 1, owner = 'someone_else'
+```
+
+The standing ratchet is the catalogue query that follows: no permissive
+UPDATE/ALL policy outside `service_role` may write `with check (true)`, because
+"filling in the blank" with the permissive identity is a real way to switch
+twenty tables' implicit checks off. The two `service_role` policies that do
+(`support_tickets`, `admin_users`) are exempt — that role bypasses RLS regardless.
