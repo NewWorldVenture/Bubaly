@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
+import { useDismissOnEscape } from '@/lib/hooks/use-dismiss-on-escape';
 import { ChevronDown, Home, LayoutDashboard, LogOut, Search, ShieldCheck } from 'lucide-react';
 import { Logo, LogoMark } from '@/components/brand/logo';
 import { ThemeToggle } from '@/components/theme/theme-toggle';
@@ -61,6 +62,7 @@ export function AdminShell({
   const t = useTranslations();
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
+  useDismissOnEscape(menuOpen, () => setMenuOpen(false));
 
   return (
     <div className="min-h-dvh lg:flex">
@@ -133,7 +135,10 @@ export function AdminShell({
             </button>
             {menuOpen && (
               <>
-                <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+                {/* Presentational: no content, no name, nothing to focus. A click anywhere
+              dismisses the menu; the keyboard path is Escape, bound above. */}
+          {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+          <div aria-hidden="true" className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
                 <div className="absolute right-0 top-full z-20 mt-2 w-56 rounded-xl popover-surface p-1 shadow-glass animate-fade-in">
                   <Link href="/dashboard/briefing" onClick={() => setMenuOpen(false)} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-elevated">
                     <LayoutDashboard className="h-4 w-4" /> {t('adminShell.goToParentDashboard')}

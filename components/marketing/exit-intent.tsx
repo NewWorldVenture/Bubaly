@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useDialogBehavior } from '@/lib/hooks/use-dialog-behavior';
 import { X } from 'lucide-react';
 import { useLockBodyScroll } from '@/lib/hooks/use-lock-body-scroll';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -108,16 +109,32 @@ export function ExitIntent() {
     };
   }, [offer]);
 
+  // The REAL open condition, not a constant `true`.
+  //
+  // The other dialogs on this hook (NewRuleModal, ContactEditor, the photo
+  // lightbox) are conditionally MOUNTED by their parent, so `true` is honest
+  // there. This one is always mounted and returns null below, so passing `true`
+  // would lock body scroll, bind Escape and try to move focus into a ref that
+  // holds null — the whole time the banner is not showing. Hooks cannot go
+  // after the early return, so the condition has to be in the argument.
+  const dialogRef = useDialogBehavior<HTMLDivElement>(Boolean(offer) && open, () => setOpen(false));
+
   if (!offer || !open) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4" onClick={() => setOpen(false)}>
+    // The overlay only closes on its OWN click now, which retires the panel's
+    // `onClick={(e) => e.stopPropagation()}` — a handler whose whole purpose was
+    // to undo this one. Escape and the focus trap come from `useDialogBehavior`.
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4"
+      onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}>
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="exit-intent-title"
-        className="relative w-full max-w-md rounded-2xl bg-bg p-8 text-center shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
+        tabIndex={-1}
+        className="relative w-full max-w-md rounded-2xl bg-bg p-8 text-center shadow-2xl outline-none"
       >
         <button onClick={() => setOpen(false)} aria-label={t('exitIntent.close')} className="absolute right-3 top-3 text-muted hover:text-fg">
           <X className="h-5 w-5" />

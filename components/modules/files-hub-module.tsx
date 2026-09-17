@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
+import { useDismissOnEscape } from '@/lib/hooks/use-dismiss-on-escape';
 import { parseISO } from 'date-fns';
 import {
   Upload, Search, Download, Trash2, Star, Lock, LockOpen, Cloud, Share2,
@@ -71,6 +72,7 @@ export function FilesHubModule({ view }: { view: FileView }) {
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<SortKey>('recent');
   const [sortOpen, setSortOpen] = useState(false);
+  useDismissOnEscape(sortOpen, () => setSortOpen(false));
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('');
@@ -228,7 +230,9 @@ export function FilesHubModule({ view }: { view: FileView }) {
           <Button variant="outline" onClick={() => setSortOpen((o) => !o)}>{t('filesHub.sort')} <ChevronDown className="h-3.5 w-3.5" /></Button>
           {sortOpen && (
             <>
-              <div className="fixed inset-0 z-10" onClick={() => setSortOpen(false)} />
+              {/* Presentational; the keyboard path is Escape, bound above. */}
+                  {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+                  <div aria-hidden="true" className="fixed inset-0 z-10" onClick={() => setSortOpen(false)} />
               <div className="absolute right-0 z-20 mt-1 w-36 overflow-hidden rounded-xl border border-border bg-elevated shadow-lg">
                 {([['recent', 'filesHubModule.sortRecent'], ['name', 'filesHubModule.sortName'], ['size', 'filesHubModule.sortLargest']] as const).map(([k, labelKey]) => (
                   <button key={k} onClick={() => { setSort(k); setSortOpen(false); }}

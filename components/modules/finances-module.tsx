@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
+import { useDismissOnEscape } from '@/lib/hooks/use-dismiss-on-escape';
 import {
   Plus, Link2, MoreHorizontal, Wallet, PiggyBank, CreditCard, TrendingUp, Landmark,
   ArrowDownToLine, ArrowUpRight, Check, ChevronLeft, ChevronRight, Lightbulb,
@@ -79,6 +80,7 @@ export function FinancesModule() {
   const [addOpen, setAddOpen] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  useDismissOnEscape(moreOpen, () => setMoreOpen(false));
   const [calMonth, setCalMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
 
   const { data: accounts, loading: la, error: accountsError, refresh: refreshAccounts } = useRealtimeQuery<Account>({
@@ -190,7 +192,9 @@ export function FinancesModule() {
                 <Button variant="outline" size="sm" onClick={() => setMoreOpen((v) => !v)} aria-label={tr('finances.more')}><MoreHorizontal className="h-4 w-4" /> {tr('finances.more')}</Button>
                 {moreOpen && (
                   <>
-                    <div className="fixed inset-0 z-10" onClick={() => setMoreOpen(false)} />
+                    {/* Presentational; the keyboard path is Escape, bound above. */}
+                    {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+                    <div aria-hidden="true" className="fixed inset-0 z-10" onClick={() => setMoreOpen(false)} />
                     <div className="absolute right-0 z-20 mt-1 w-56 rounded-xl border border-border bg-elevated p-1 shadow-lg">
                       <Link href={MANAGE} className="block rounded-lg px-3 py-2 text-sm hover:bg-surface">{tr('finances.manageBudgetsBillsAmpReports')}</Link>
                       <Link href={MANAGE} className="block rounded-lg px-3 py-2 text-sm hover:bg-surface">{tr('finances.planAmpSubscription')}</Link>

@@ -94,11 +94,13 @@ describe('the preference centre is operable by keyboard', () => {
     'components/app/blog-launcher.tsx',
     'components/app/command-bar.tsx',
     'components/app/trial-paywall-gate.tsx',
-    'components/guardian/rules-editor.tsx',
-    'components/marketing/exit-intent.tsx',
     'components/ui/camera-capture.tsx',
   ];
 
+  // Three have come OFF this list now — contact-list.tsx, rules-editor.tsx and
+  // exit-intent.tsx — each for the same reason, and the ratchet forced each
+  // removal by failing until it was made.
+  //
   // contact-list.tsx came OFF this list: its editor declared
   // `role="dialog" aria-modal="true"` and provided none of what that promises —
   // no Escape, no focus move-in, no trap, no restore. It now uses

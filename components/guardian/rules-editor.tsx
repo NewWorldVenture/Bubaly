@@ -4,6 +4,7 @@ import { useId, useState } from 'react';
 import { Plus, Trash2, ToggleLeft, ToggleRight, ChevronDown, ChevronUp, GripVertical } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { labelledGroup } from '@/lib/ui/a11y';
+import { useDialogBehavior } from '@/lib/hooks/use-dialog-behavior';
 import { TRUST_LABELS, TRUST_LEVELS, TRUST_ICONS, type TrustLevel } from '@/lib/guardian/trust';
 import { ROUTING_MODE_LABELS, type RoutingMode } from '@/lib/guardian/pipeline';
 import { createRuleAction, toggleRuleAction, deleteRuleAction } from '@/app/(app)/guardian/actions';
@@ -226,6 +227,10 @@ type NewRuleForm = {
 };
 
 function NewRuleModal({ onSave, onClose }: { onSave: (f: NewRuleForm) => void; onClose: () => void }) {
+  // Declared `role="dialog" aria-modal="true"` and provided none of what that
+  // promises. The hook supplies Escape, focus move-in, the Tab trap and focus
+  // restore — the same one the photo lightbox and the contact editor use.
+  const dialogRef = useDialogBehavior<HTMLDivElement>(true, onClose);
   // Every caption in this form named nothing. The four over button rows were
   // `<label>`s pointing at no control at all; the three over real inputs had no
   // `htmlFor`. Both are fixed with ids and references — the caption text is
@@ -261,12 +266,18 @@ function NewRuleModal({ onSave, onClose }: { onSave: (f: NewRuleForm) => void; o
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      {/* Presentational backdrop; Escape, the focus trap and focus restore come
+          from `useDialogBehavior` on the panel below — which this dialog claimed
+          entitlement to via aria-modal while providing none of it. */}
+      {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+      <div aria-hidden="true" className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="rules-editor-title"
-        className="relative z-10 w-full max-w-lg max-h-[85dvh] overflow-y-auto rounded-2xl border border-border bg-bg shadow-2xl"
+        tabIndex={-1}
+        className="relative z-10 w-full max-w-lg max-h-[85dvh] overflow-y-auto rounded-2xl border border-border bg-bg shadow-2xl outline-none"
       >
         <div className="sticky top-0 z-10 border-b border-border bg-bg px-5 py-4">
           <h2 id="rules-editor-title" className="text-lg font-bold">{tr('rulesEditor.newRule')}</h2>

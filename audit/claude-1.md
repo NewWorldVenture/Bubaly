@@ -5116,3 +5116,58 @@ groups four modules into one commit rather than four.
 **Status:** FIXED. **Verified:** **14,071 tests green under both `TZ=UTC` and
 `TZ=America/Los_Angeles`**, tsc clean, `npm run lint` exits 0 at 43, `npm run
 build` exits 0, **CI run 3177 green including E2E**.
+
+---
+
+### [CLAUDE-1][HIGH][A11Y] Ten admin menus, three more popovers, two more fake modals — and the guard caught a gap in itself
+
+**Files:** five `components/admin/*.tsx`,
+`components/modules/{assistant,files-hub,finances}-module.tsx`,
+`components/guardian/rules-editor.tsx`, `components/marketing/exit-intent.tsx`,
+`tests/a-row-you-can-click-is-a-row-you-can-reach.test.ts`,
+`tests/consent-preference-centre-focus.test.ts`, `package.json`
+
+**The admin console was the same bug five times.** `admin-row-actions`,
+`member-row-actions`, `ticket-row-actions`, `user-security-actions` and
+`admin-shell` each had the identical unescapable scrim. Ten warnings, one
+treatment.
+
+**Two more components claimed to be modals and were not.**
+`rules-editor.tsx`'s new-rule dialog and `exit-intent.tsx`'s offer both declared
+`role="dialog" aria-modal="true"` with no Escape, no focus move-in, no trap and
+no restore — the same shape as `contact-list.tsx` earlier. Both now use
+`useDialogBehavior`. `exit-intent` also loses its panel's
+`onClick={(e) => e.stopPropagation()}`, because the overlay now only closes on
+its **own** click.
+
+**A bug I introduced and caught before it shipped.** I first passed
+`useDialogBehavior(true, …)` to `exit-intent`, copying the other dialogs. That
+is right for them — `NewRuleModal` and `ContactEditor` are conditionally
+**mounted** by their parents, so while they exist they are open. `exit-intent`
+is **always mounted** and returns `null` below, so a constant `true` would lock
+body scroll, bind Escape and try to move focus into a ref holding `null` **the
+entire time the banner is not showing**. Hooks cannot sit after an early return,
+so the condition belongs in the argument: `Boolean(offer) && open`.
+
+**The guard found a gap in ITSELF, one commit after I widened it.** I had taught
+it that a named hook counts as an Escape path, matching `` `${hook}(` ``. Every
+dialog call site writes `useDialogBehavior<HTMLDivElement>(…)` — a generic
+argument sits between the name and the paren — so the match failed and
+`rules-editor.tsx` was flagged **moments after being fixed**. Now
+`\b${hook}\s*[<(]`.
+
+That is twice in two commits that this guard has been right while its mechanism
+was wrong, which is worth stating plainly: **the question it asks has never been
+the problem; how it looks for the answer has been, twice.**
+
+**The `aria-modal` ratchet forced three removals.** `contact-list`,
+`rules-editor` and `exit-intent` have all come off `HAND_ROLLED`, each because
+the assertion *"the list shrinks as they are converted, and never lies"* failed
+until I removed it. Three for three, entirely mechanical.
+
+**Warnings 43 → 22**, cap tightened. Twenty-one in one batch.
+
+**Status:** FIXED. **Verified:** **14,071 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles`**, tsc clean, `npm run lint` exits 0 at 22, `npm run
+build` exits 0. Previous batch confirmed by **CI run 3178 on `2f28e20f`, green
+including E2E**.

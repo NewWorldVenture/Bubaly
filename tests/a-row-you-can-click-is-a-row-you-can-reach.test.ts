@@ -96,8 +96,13 @@ describe('an aria-hidden scrim does not hide a menu with no way out', () => {
    * a deliberate act, and the compiler will not do it for you.
    */
   const ESCAPE_HOOKS = ['useDismissOnEscape', 'useDialogBehavior'];
+  // `\s*[<(]` and not just `(`: these hooks are generic, and every dialog call
+  // site writes `useDialogBehavior<HTMLDivElement>(…)`. Matching the bare paren
+  // missed all of them, and the guard caught that gap in ITSELF — it flagged
+  // rules-editor.tsx moments after the hook was added to it.
   const hasEscapePath = (source: string): boolean =>
-    /['"]Escape['"]/.test(source) || ESCAPE_HOOKS.some((hook) => source.includes(`${hook}(`));
+    /['"]Escape['"]/.test(source)
+    || ESCAPE_HOOKS.some((hook) => new RegExp(`\\b${hook}\\s*[<(]`).test(source));
 
   const files = execSync("git ls-files 'components/*.tsx' 'app/*.tsx'", { encoding: 'utf8' })
     .split('\n').filter(Boolean);

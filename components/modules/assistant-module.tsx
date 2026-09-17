@@ -11,6 +11,7 @@
 // `run` for the outcomes worth a card, then `done`. Reopening a conversation
 // rehydrates its cards from `ai_messages.structured_content`.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useDismissOnEscape } from '@/lib/hooks/use-dismiss-on-escape';
 import {
   CalendarDays, CheckCircle2, Bell, Pill, ListChecks,
   Plus, School, Send, ShoppingCart, Sparkles, UtensilsCrossed,
@@ -109,6 +110,7 @@ export function AssistantModule() {
   const voice = useVoice({ onError: setVoiceError });
   const [micStatus, setMicStatus] = useState<MicStatus>('idle');
   const [showVoiceMenu, setShowVoiceMenu] = useState(false);
+  useDismissOnEscape(showVoiceMenu, () => setShowVoiceMenu(false));
 
   const greeting = () => {
     const h = new Date().getHours();
@@ -568,7 +570,9 @@ export function AssistantModule() {
             </button>
             {showVoiceMenu && (
               <>
-                <div className="fixed inset-0 z-10" onClick={() => setShowVoiceMenu(false)} />
+                {/* Presentational; the keyboard path is Escape, bound above. */}
+                {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+                <div aria-hidden="true" className="fixed inset-0 z-10" onClick={() => setShowVoiceMenu(false)} />
                 <div className="popover-surface absolute right-0 z-20 mt-2 w-60 p-2">
                   <p className="px-2 py-1.5 text-xs font-semibold text-muted">{t('assistant.assistantVoiceThisDevice')}</p>
                   {VOICE_MODES.map((m) => (
