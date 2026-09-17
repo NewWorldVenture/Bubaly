@@ -2,7 +2,7 @@
   "extends": "next/core-web-vitals",
   "ignorePatterns": ["mobile/**", "supabase/**", "node_modules/**", ".next/**"],
   "rules": {
-    "jsx-a11y/label-has-associated-control": "warn",
+    "jsx-a11y/label-has-associated-control": ["warn", { "depth": 3 }],
     "jsx-a11y/click-events-have-key-events": "warn",
     "jsx-a11y/no-static-element-interactions": "warn"
   }

@@ -4835,3 +4835,61 @@ subject is not the control's name either.*
 **Status:** FIXED (one), FILED (one). **Verified:** **14,065 tests green under
 both `TZ=UTC` and `TZ=America/Los_Angeles`**, tsc clean, eslint at 85, `npm run
 build` exits 0.
+
+---
+
+### [CLAUDE-1][LOW][A11Y/TOOLING] Three of the 85 lint warnings were the linter reporting correct markup
+
+**Files:** `.eslintrc.json`, `package.json`
+
+**This is NOT an accessibility improvement, and the count dropping is not a
+win.** Stating that first because the number moved 85 → 82 and it would be easy
+to read as progress. Nothing about the product changed.
+
+`jsx-a11y/label-has-associated-control` was enabled with no options, so it used
+its default `depth: 2`. Three call sites use the **label-wrapping** technique —
+a `<label>` that contains both its control and its text, which is the canonical
+accessible pattern and needs no `htmlFor` at all:
+
+```jsx
+<label>
+  <input type="checkbox" name="is_emergency" … />
+  <div><p>Emergency contact</p><p>Appears in the emergency contacts strip</p></div>
+</label>
+```
+
+The text sits at depth 3, so the rule could not see it and reported a correct
+label as nameless. The three are
+`app/(app)/dashboard/assistants/controls.tsx:64`,
+`components/marketplace/report-button.tsx:50` and
+`components/modules/contacts-module.tsx:526` — a checkbox, a radio in a proper
+`role="radiogroup"`, and a checkbox, each wrapping its control with visible text.
+
+**Verified before changing anything**, rather than assumed: setting `depth: 3`
+removes exactly those three warnings and changes nothing else (the
+`click-events-have-key-events` 37 and `no-static-element-interactions` 42 counts
+are untouched).
+
+**Why fix it rather than leave it.** This audit has twice now caught a guard
+accusing correct code — my own zone guard on its first run, and the two ratchet
+headers — and written down why that is worse than no guard: **the next person
+"fixes" working code.** Here the victim would be three correct labels, and the
+"fix" would be to add a redundant `htmlFor` or, worse, split the text out of the
+label. Warnings that cannot be acted on also train people to stop reading the
+list.
+
+**`--max-warnings` tightened 85 → 82** in the same commit, for the reason the
+label bounds get re-tightened: a cap left at 85 lets three real warnings appear
+later without CI noticing.
+
+The remaining **82 are real** and are the actual work: 42
+`no-static-element-interactions` and 37 `click-events-have-key-events`, mostly
+co-occurring on the same element — a `<div onClick>` that a keyboard cannot
+reach. Largest clusters: `notes-module` (8), `photos-module` (7),
+`meals-module` (6), `locator-module` (6). Each needs a per-component decision
+(native `<button>`, or `role` + `tabIndex` + `onKeyDown`), and nesting rules
+mean a card containing its own buttons cannot simply become one.
+
+**Status:** FIXED (tooling). **Verified:** **14,065 tests green under both
+`TZ=UTC` and `TZ=America/Los_Angeles`**, tsc clean, `npm run lint` exits 0 at
+the new cap of 82, `npm run build` exits 0.
