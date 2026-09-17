@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { openOnKey } from '@/lib/ui/a11y';
 import { Target, Plus, Trash2, CheckCircle2, Loader2 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -131,7 +132,8 @@ function GoalCard({ goal, pending, onEdit, onDelete, onProgress }: {
   return (
     <Card className={cn('flex flex-col gap-3', goal.is_complete && 'opacity-70')}>
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1 cursor-pointer" onClick={onEdit}>
+        <div className="min-w-0 flex-1 cursor-pointer focus-ring" role="button" tabIndex={0}
+          onClick={onEdit} onKeyDown={(e) => openOnKey(e, onEdit)}>
           <div className="flex items-center gap-2">
             {goal.is_complete
               ? <CheckCircle2 className="h-5 w-5 shrink-0 text-success" />

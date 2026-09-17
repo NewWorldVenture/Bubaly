@@ -5171,3 +5171,53 @@ until I removed it. Three for three, entirely mechanical.
 `TZ=America/Los_Angeles`**, tsc clean, `npm run lint` exits 0 at 22, `npm run
 build` exits 0. Previous batch confirmed by **CI run 3178 on `2f28e20f`, green
 including E2E**.
+
+---
+
+### [CLAUDE-1][MEDIUM][A11Y] The last of the reachable ones — and a count I had been misreporting
+
+**Files:** `components/modules/{contacts,goals,recipes,scan,social-feed}-module.tsx`,
+`components/services/service-tooltip.tsx`, `package.json`
+
+**A correction first, because I had been saying it wrong.** I reported the lint
+budget as "a11y warnings 85 → 22". The 22 was the **whole budget**, and three of
+them are `react-hooks/exhaustive-deps`, which have nothing to do with
+accessibility and were in the 85 from the start. The accurate figures:
+
+| | start | now |
+|---|---|---|
+| lint budget (`--max-warnings`) | 85 | **12** |
+| of which `jsx-a11y` | 82 | **9** |
+| of which `react-hooks/exhaustive-deps` | 3 | **3** (untouched) |
+
+**Four more cards made reachable** — a contact row, a goal row, a recipe card,
+and the scan drop zone. Each contains its own buttons, so each takes
+`role="button"` + `tabIndex` + `openOnKey` rather than becoming one. The drop
+zone reuses the activation `photos-module` already had, which is the point of
+having looked: the repo had solved it once already.
+
+**Two that are NOT defects, suppressed with the reason in the source:**
+
+- `service-tooltip.tsx` — a **false positive**. That div wraps `children` and
+  delegates their events; it has no role and no name because it is not a
+  control. The keyboard path the rule wants is already there, two lines under
+  the mouse one: `onFocusCapture` / `onBlurCapture`, so the tooltip appears when
+  the wrapped control is **tabbed to**. Giving the wrapper a `tabIndex` would put
+  a second, nameless stop in the tab order **in front of** the real control —
+  strictly worse than the warning.
+- `social-feed-module.tsx` — a menu dismissed only by `onMouseLeave`. That is a
+  mouse gesture, not a click handler, so the rule flags the element rather than
+  the gesture. The **keyboard path was missing entirely**, which is the real
+  defect and is now `useDismissOnEscape`; the mouse convenience stays. *A
+  pointer that never enters the menu cannot leave it.*
+
+**What is left is genuinely not mechanical.** Nine `jsx-a11y` warnings across
+~8 files, each a one-off question about whether a particular element is really a
+control, really presentational, or a container that should not exist. Plus the
+three `react-hooks` ones, which are a different kind of work entirely and were
+never part of this thread.
+
+**Status:** FIXED (8 cleared), FILED (the remainder). **Verified:** **14,071
+tests green under both `TZ=UTC` and `TZ=America/Los_Angeles`**, tsc clean,
+`npm run lint` exits 0 at 12, `npm run build` exits 0. Previous batch confirmed
+by **CI run 3179 on `f7f3a2e1`, green including E2E**.

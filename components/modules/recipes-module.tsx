@@ -1,7 +1,7 @@
 'use client';
 
 import { useId, useMemo, useState } from 'react';
-import { labelledGroup } from '@/lib/ui/a11y';
+import { labelledGroup, openOnKey } from '@/lib/ui/a11y';
 import {
   ChefHat, Plus, Star, StarOff, Trash2, Edit2, Clock, Users,
   Search, Filter, Sparkles, ShoppingCart, Heart, ExternalLink, Vote,
@@ -307,8 +307,10 @@ export function RecipesModule() {
 
             return (
               <div key={recipe.id}
-                className="group glass-card flex cursor-pointer flex-col overflow-hidden p-0 transition hover:-translate-y-0.5"
-                onClick={() => setViewing(recipe)}>
+                role="button" tabIndex={0}
+                className="group glass-card flex cursor-pointer flex-col overflow-hidden p-0 transition hover:-translate-y-0.5 focus-ring"
+                onClick={() => setViewing(recipe)}
+                onKeyDown={(e) => openOnKey(e, () => setViewing(recipe))}>
                 {/* Photo / placeholder */}
                 <div className="relative aspect-video overflow-hidden rounded-t-2xl bg-gradient-to-br from-elevated to-surface">
                   {recipe.photo_url ? (
