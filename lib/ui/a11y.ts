@@ -115,3 +115,54 @@ export function activatable(onActivate: () => void): {
 export function labelledGroup(labelId: string): { role: 'group'; 'aria-labelledby': string } {
   return { role: 'group', 'aria-labelledby': labelId };
 }
+
+/**
+ * Make a clickable CARD reachable by keyboard, without stealing the keys its
+ * own buttons need.
+ *
+ * The defect this exists for is not a lint warning, it is a dead end: a card
+ * rendered as `<div onClick={open}>` has no `tabIndex`, so it is not in the tab
+ * order at all. The pin/duplicate/delete buttons INSIDE it are focusable,
+ * which makes the failure worse than it looks — a keyboard user can tab
+ * straight into a note's destructive action while having no way at all to open
+ * the note and read it.
+ *
+ * Why the card is not simply a `<button>`: it contains buttons, and nesting
+ * interactive elements is invalid HTML with genuinely unpredictable results.
+ * `role="button"` + `tabIndex={0}` + this handler is the documented fallback,
+ * and it is what the lint rule itself asks for.
+ *
+ * The `e.target !== e.currentTarget` guard is the part that is easy to get
+ * wrong, and omitting it introduces a NEW bug rather than fixing one: keydown
+ * bubbles, so pressing Enter on the delete button inside the card would fire
+ * the card's handler too and open the note as well as delete it.
+ *
+ * `preventDefault` on Space because Space scrolls the page by default, which is
+ * the behaviour a real `<button>` suppresses and a div does not.
+ */
+export function openOnKey(
+  e: { key: string; target: unknown; currentTarget: unknown; preventDefault: () => void },
+  open: () => void,
+): void {
+  if (e.target !== e.currentTarget) return;
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  e.preventDefault();
+  open();
+}
+
+/**
+ * Run a card-action handler without letting the click reach the card behind it.
+ *
+ * This replaces the `<div onClick={(e) => e.stopPropagation()}>` wrapper that
+ * used to sit around such buttons. That wrapper worked, but it made a plain
+ * container look interactive — it carried a click handler while having no role,
+ * no name and no keyboard path, which is exactly the shape the linter flags and
+ * a reader has to stop and think about. Stopping propagation belongs on the
+ * button that actually needs it.
+ */
+export function stopAnd<E extends { stopPropagation: () => void }>(run: () => void): (e: E) => void {
+  return (e: E) => {
+    e.stopPropagation();
+    run();
+  };
+}

@@ -4893,3 +4893,61 @@ mean a card containing its own buttons cannot simply become one.
 **Status:** FIXED (tooling). **Verified:** **14,065 tests green under both
 `TZ=UTC` and `TZ=America/Los_Angeles`**, tsc clean, `npm run lint` exits 0 at
 the new cap of 82, `npm run build` exits 0.
+
+---
+
+### [CLAUDE-1][HIGH][A11Y] A keyboard could delete a note but could not open one
+
+**Files:** `components/modules/notes-module.tsx`, `lib/ui/a11y.ts`,
+`tests/a-card-you-can-click-is-a-card-you-can-reach.test.ts` (new),
+`package.json`
+
+**This is not a lint warning, it is a dead end.** Both note cards — list row and
+grid tile — were `<div onClick={() => onOpen(note)}>` with **no `tabIndex`**, so
+neither is in the tab order. There is no keyboard path to opening a note.
+
+**What makes it worse than it sounds:** the pin / duplicate / **delete** buttons
+*inside* each card are ordinary `<button>`s, so they ARE focusable. A keyboard
+user can therefore tab **straight into a note's destructive action** while
+having no way at all to open that note and read what they are about to delete.
+The only reachable controls are the dangerous ones.
+
+**Why not simply a `<button>`.** The card contains buttons, and nesting
+interactive elements is invalid HTML with unpredictable behaviour. `role="button"`
++ `tabIndex={0}` + a keydown handler is the documented fallback, and it is what
+the rule's own message asks for.
+
+**Two helpers, in `lib/ui/a11y.ts` rather than inline, because both have a
+subtlety that is easy to get wrong:**
+
+- **`openOnKey`** carries the `e.target !== e.currentTarget` guard. keydown
+  **bubbles**, so without it, pressing Enter on the delete button would fire the
+  button *and* the card — **deleting the note and opening it in one keystroke.**
+  Omitting that line does not merely fail to fix a bug; it introduces one. It
+  also `preventDefault`s Space, which a real `<button>` swallows and a `<div>`
+  does not — otherwise the page jumps a screen on every open.
+- **`stopAnd`** replaces the `<div onClick={(e) => e.stopPropagation()}>` wrapper
+  that surrounded the action buttons. That wrapper worked, but it made a plain
+  container look interactive — a click handler with no role, no name and no
+  keyboard path. Stopping propagation belongs on the button that needs it.
+
+**A second defect found while doing this, and fixed.** Those wrappers were
+`sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100`.
+`focus-visible:` applies when **that element** is focused — and the wrapper
+never is; only its children are. So on desktop a keyboard user tabbing to the
+pin or delete button was operating a control that stayed **invisible**. Now
+`focus-within:`, which is what was meant.
+
+**Non-vacuity, by mutation on both critical lines:** remove the target guard →
+*"does not fire when the key was pressed on something inside the card"* fails
+with `expected "vi.fn()" to not be called at all, but actually been called 1
+times`; remove `preventDefault` → the Space-scroll assertion fails. The other
+four stay green in each case.
+
+**Warnings 82 → 74, `--max-warnings` tightened to match.** Unlike the previous
+commit's 85 → 82, **this one is a real accessibility fix** — eight warnings
+cleared because four elements genuinely changed behaviour.
+
+**Status:** FIXED. **Verified:** **14,071 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles`** (four shards each), tsc clean, `npm run lint` exits 0
+at 74, `npm run build` exits 0.
