@@ -5867,3 +5867,93 @@ assumed one shape of call site**; the first was `useDialogBehavior<HTMLDivElemen
 Caught here before it reached a finding, and the new guard's pattern is
 `readInChunks\s*[<(]` by construction, with a test asserting it matches both
 spellings.
+
+## Q27 — HIGH: four fail-closed loaders that stayed open for the one failure that matters, and a helper that unsettled ten reads
+
+A Supabase query builder resolves with `{ data, error }` for anything the
+database answers and **rejects only when the request never completed** — DNS,
+TCP, TLS, a timed-out fetch. `lib/supabase/settle.ts` records that this is what
+took out `/dashboard` while production was reporting `CONNECT_TIMEOUT`.
+
+The previous session fixed four mixed batches and **filed the rest** — "about
+twenty, recorded here for a pass that reads them rather than pattern-matches
+them", having found that a repo-wide guard produced 137 type errors, syntax
+errors in 40 files, and three different wrong counts. This is that pass. Six
+sites, read one at a time; **two were defects of a kind no name-based scan could
+see, four were contracts that were false in one direction only, and three
+further candidates turned out to be correct and were left alone.**
+
+### The helper that unsettled ten reads at once
+
+`app/(app)/dashboard/agents/page.tsx` batches fifteen reads. Four are wrapped in
+`settle(...)`. The other ten read `count(supabase.from(...))` — which *looks*
+wrapped, and is not:
+
+```ts
+async function count(q: PromiseLike<…>): Promise<CountResult> {
+  const { count: n, error } = await q;      // ← the bare await, three dozen lines away
+```
+
+Every sweep for unsettled batches looks for a bare `supabase.from(` **inside**
+the `Promise.all`. Here every call site is `count(...)`, and the thing that fails
+to settle is one `await` in a local helper. One line fixes ten elements.
+
+`app/(app)/marketplace/store/page.tsx` had the mixed batch in its plainest form:
+two of three reads settled, and the third the true branch of a ternary. The
+**branch** is settled, not the ternary — `settle(cond ? a : b)` does not
+typecheck, since `Promise<A> | Promise<B>` is not `PromiseLike<A | B>`.
+
+### Four contracts that were true of one failure and false of the other
+
+These four each inspect `.error` on **every** element of their batch,
+deliberately and in writing:
+
+| module | its own words |
+|---|---|
+| `lib/twin/completeness-server.ts` | *"`{ ok: false }` when ANY of them failed. A partial snapshot would produce a confidently wrong score"* |
+| `lib/schedule/intelligence-server.ts` | *"READ BOUNDARY: this is a fail-closed loader. A failed read of any source returns `{ ok: false }`"* |
+| `lib/autopilot/policy-scan.ts` | `.find((r) => r.error)` |
+| `lib/briefing/deliver.ts` | per-read `if (res.error)` |
+
+**All four handled the resolved error and none handled the rejection.** Inside
+`Promise.all` one rejection rejects the batch, so a transport failure skipped the
+check entirely and surfaced as an unhandled rejection — the error boundary, not
+`{ ok: false }`. Each contract was true of the failure the *database* reports and
+false of the failure the *network* produces, which is the one that actually took
+this product down.
+
+**`settleAll` relaxes none of it.** It converts a rejection into exactly the
+`{ data: null, count: null, error }` shape those checks already read. The
+fail-closed loader still fails closed; the completeness score still refuses to
+score a partial read. What changes is that they do so **by their own stated
+rule** instead of by an exception nobody catches. Nothing is softened — a promise
+is kept.
+
+### Three that were NOT defects, checked and left
+
+- **`lib/metric/strategy-server.ts` `exactCount`** — `await makeQuery()` then
+  `if (error) throw error`. It throws on *both* paths, so settling changes
+  nothing; "an exact metric must not be silently wrong" is the contract, and it
+  holds.
+- **`lib/life-events/launch.ts` `checkedDelete`** — its rollback stack is drained
+  **sequentially inside `try/catch`**, which already does settling's job and,
+  better, keeps running the remaining compensating deletes.
+- **`lib/google.ts`**, revisited: still correct as it stands.
+
+Two of the three would have been false accusations. Checking each rather than
+converting the pattern is the whole reason the previous session filed them.
+
+**Guard:** `tests/a-fail-closed-loader-must-actually-close.test.ts` drives the
+real `loadGraphCompleteness` with a client whose read rejects the way a transport
+failure does, and requires `{ ok: false }`. Reverting `settleAll` to
+`Promise.all` fails it with the raw `ECONNRESET` escaping — which *is* the
+finding. Two further cases keep it honest: a healthy read must still answer
+`ok: true` (a loader that always closed would pass the first case and be
+useless), and the rejection is exercised on four different elements of the
+nine-read batch, not only the first.
+
+**Recorded: a regex of mine broke an import.** Inserting the `settleAll` import
+after "the last line starting with `import `" landed it *inside* a multi-line
+import block in `intelligence-server.ts`, because the opening `import {` line
+matched. `tsc` caught it immediately (TS1005). Same family as the `useId`
+insertion that split a `useState` earlier in this audit.

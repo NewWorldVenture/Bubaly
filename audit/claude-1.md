@@ -5492,3 +5492,51 @@ finding; the new guard uses `\s*[<(]` and tests both spellings.
 
 **Status:** FIXED. **Verified:** 14,111 tests green under both `TZ=UTC` and
 `TZ=America/Los_Angeles`, tsc clean, lint 0 at 12, build 0. Proven to bite.
+
+---
+
+## [CLAUDE-1][HIGH][RELIABILITY] The filed settle list, read one at a time
+
+**Context.** The previous session fixed four mixed batches and filed ~20 more
+"for a pass that reads them rather than pattern-matches them", after three
+attempts at a repo-wide guard produced 137 type errors, syntax errors in 40
+files, and three different wrong counts. This is that pass.
+
+**Two defects no name-based scan could find.**
+- `app/(app)/dashboard/agents/page.tsx` — ten of fifteen batch elements go
+  through a local `count(q)` helper whose body was a bare `await q`. The call
+  sites read `count(supabase.from(...))`, which looks wrapped. One line settles
+  ten reads.
+- `app/(app)/marketplace/store/page.tsx` — two of three settled, the third the
+  true branch of a ternary. The BRANCH is settled, not the ternary:
+  `settle(cond ? a : b)` does not typecheck.
+
+**Four contracts true of one failure and false of the other.**
+`lib/twin/completeness-server.ts`, `lib/schedule/intelligence-server.ts`,
+`lib/autopilot/policy-scan.ts`, `lib/briefing/deliver.ts` each inspect `.error`
+on every element — and none handled a REJECTION, which skips the check and
+surfaces as an unhandled rejection. Two state fail-closed contracts in their own
+headers that a transport failure silently voids. `settleAll` relaxes nothing: it
+converts a rejection into the `{ data: null, count: null, error }` shape those
+checks already read, so the loader still fails closed — by its own rule now,
+rather than by an exception nobody catches.
+
+**Three checked and left alone.** `lib/metric/strategy-server.ts` `exactCount`
+throws on both paths by design; `lib/life-events/launch.ts` `checkedDelete` is
+drained sequentially inside `try/catch`, which already settles AND keeps running
+the remaining compensating deletes; `lib/google.ts` unchanged. Two of the three
+would have been false accusations.
+
+**Guard.** `tests/a-fail-closed-loader-must-actually-close.test.ts` — the real
+`loadGraphCompleteness` against a client whose read rejects, requiring
+`{ ok: false }`. Reverting to `Promise.all` fails it with the raw ECONNRESET
+escaping. Plus a healthy-read case and the rejection exercised on four of nine
+elements.
+
+**Recorded.** My import-insertion regex put `settleAll` INSIDE a multi-line
+import block, because the opening `import {` line matched "last line starting
+with import". tsc caught it (TS1005) — same family as the `useId` insertion that
+split a `useState` earlier in this audit.
+
+**Status:** FIXED (6 sites). **Verified:** 14,114 tests green under both
+`TZ=UTC` and `TZ=America/Los_Angeles`, tsc clean, lint 0 at 12, build 0.
