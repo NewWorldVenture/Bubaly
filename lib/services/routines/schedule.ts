@@ -221,6 +221,29 @@ export function nextCronRun(expr: string, from: Date, tz: string): Date | null {
  * cannot have a "two days before" fire, and pretending otherwise would send a
  * "get ready" message about something happening tomorrow.
  */
+/**
+ * True when the expression names ONE hour, so it means "once a day at that
+ * hour" rather than "several times a day".
+ *
+ * The distinction only matters on the autumn DST transition, where the repeated
+ * hour makes a local wall-clock time happen twice. For `0 * * * *` that is
+ * correct — two real hours pass and the routine should run in both. For
+ * `30 1 * * *` it is not: the family asked for 01:30 daily and 01:30 arrives
+ * twice, so the routine runs twice in one night.
+ */
+export function firesOncePerDay(expr: string): boolean {
+  const hourField = expr.split(/\s+/)[1];
+  return /^\d{1,2}$/.test(hourField ?? '');
+}
+
+/** Same year-month-day and hour:minute in `tz` — the wall clock a family reads. */
+export function sameLocalMinute(a: Date, b: Date, tz: string): boolean {
+  const x = zoned(a, tz);
+  const y = zoned(b, tz);
+  return x.year === y.year && x.month === y.month && x.day === y.day
+    && x.hour === y.hour && x.minute === y.minute;
+}
+
 export function nextRelativeRun(schedule: RelativeSchedule, anchorDate: string, from: Date, tz: string): Date | null {
   const day = /^(\d{4})-(\d{2})-(\d{2})/.exec(anchorDate);
   if (!day) return null;

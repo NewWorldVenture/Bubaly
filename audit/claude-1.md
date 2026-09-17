@@ -1103,3 +1103,44 @@ asserted `expect(src).toMatch(/\? settle\(supabase\.from\(/)`, which passes as
 long as ONE branch is settled — so unsettling one of missions' three left it
 green. Caught by running exactly that regression. It counts both sides now, and
 the same regression fails it by name.
+
+### [CLAUDE-1][MEDIUM][EDGE CASE] Every once-a-day routine fires twice on the autumn DST night — FIXED
+
+- **File/path:** `app/api/cron/family-routines/route.ts`,
+  `lib/services/routines/schedule.ts`, `supabase/migrations/0259_routine_schedules.sql`
+- **Problem:** The autumn transition repeats an hour, so a once-a-day routine's
+  wall clock arrives **twice**. The scheduler fires whatever has
+  `next_run_at <= now` and then recomputes from `now`, which lands on the second
+  arrival. The family gets the routine twice, an hour apart, both showing the
+  same local time.
+- **Evidence — measured against real `Intl` data, not reasoned about.**
+  `America/New_York`, 2026-11-01 (02:00 EDT → 01:00 EST), expression
+  `30 1 * * *`:
+
+  ```
+  first  = 2026-11-01T05:30:00.000Z   -> 11/1/2026, 01:30:00
+  second = 2026-11-01T06:30:00.000Z   -> 11/1/2026, 01:30:00
+  gap    = 1 hour, identical wall clock
+  ```
+
+  The occurrence key `uq_routine_runs_occurrence (rule_id, due_at)` does not stop
+  it, and that is the subtle part: those are two genuinely different instants, so
+  the reservation is not a duplicate. The idempotency that exists is real and
+  simply does not apply.
+- **Impact:** Once a year, per DST-observing family, every routine with a fixed
+  hour runs twice — a duplicate notification at best, a duplicated action at
+  worst. Spring-forward was checked too and behaves acceptably: a `30 2 * * *`
+  rule on the skipped hour moves to the next day rather than firing at a time
+  that did not exist.
+- **Recommended fix:** applied. On rescheduling, a candidate whose local
+  wall-clock minute equals the occurrence just fired is skipped.
+- **Why it is gated on a fixed hour, which is the whole subtlety:** `0 * * * *`
+  *also* repeats its wall clock across the transition and **must** run in both
+  halves, because two real hours pass — the family asked for every hour, not for
+  a time of day. `firesOncePerDay` is true only when the hour field names a
+  single hour, so `0 1,13 * * *` and `0 */4 * * *` are left alone as well.
+- **Status:** FIXED.
+- **Proved load-bearing twice over:** removing the guard fails the route case;
+  widening the gate to every expression *also* fails it. The behavioural cases
+  assert the two instants, their one-hour gap and their identical wall clock,
+  and that an ordinary June night is still exactly 24 hours apart.

@@ -6,7 +6,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
 import { getAISettings } from '@/lib/services/ai-settings';
 import { nextRelativeFire, scheduleOf } from '@/lib/services/routines';
-import { nextCronRun } from '@/lib/services/routines/schedule';
+import { firesOncePerDay, nextCronRun, sameLocalMinute } from '@/lib/services/routines/schedule';
 import { createRequest, createRun } from '@/lib/ai/runs/store';
 import { kickRun } from '@/lib/ai/runs/continue';
 import type { ServiceScope } from '@/lib/services/types';
@@ -168,9 +168,25 @@ export async function GET(req: NextRequest) {
 
     // Schedule the next occurrence. A cron's is arithmetic; a relative
     // routine's is read from its anchor rows, because the trip may have moved.
-    const next = schedule.kind === 'cron'
+    let next = schedule.kind === 'cron'
       ? nextCronRun(schedule.expr, now, tz)
       : await nextRelativeFire(db, rule.family_id, schedule, now, tz);
+
+    // The autumn DST transition repeats an hour, so a once-a-day routine's wall
+    // clock arrives TWICE. Measured for America/New_York on 2026-11-01: a
+    // `30 1 * * *` rule matches 05:30Z and again 06:30Z, and both render as
+    // 01:30 to the family. The occurrence key is (rule_id, due_at), and those
+    // are two different instants, so the reservation above does not stop it —
+    // the routine simply happens twice that night.
+    //
+    // Only for a FIXED hour. `0 * * * *` also repeats its wall clock across the
+    // transition and should run in both, because two real hours pass; the
+    // family did not ask for a time of day there, they asked for every hour.
+    if (schedule.kind === 'cron' && next && dueAt
+        && firesOncePerDay(schedule.expr)
+        && sameLocalMinute(next, new Date(dueAt), tz)) {
+      next = nextCronRun(schedule.expr, next, tz);
+    }
     // This write is the only thing that moves the rule off the occurrence it
     // just handled, and its result was discarded. A refused update leaves
     // next_run_at on the due_at that has already passed, so the next tick picks
