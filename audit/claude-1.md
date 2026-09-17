@@ -4951,3 +4951,48 @@ cleared because four elements genuinely changed behaviour.
 **Status:** FIXED. **Verified:** **14,071 tests green under both `TZ=UTC` and
 `TZ=America/Los_Angeles`** (four shards each), tsc clean, `npm run lint` exits 0
 at 74, `npm run build` exits 0.
+
+---
+
+### [CLAUDE-1][MEDIUM][A11Y] The photo grid had the same dead end, and a wrapper that existed only to undo its parent
+
+**Files:** `components/modules/photos-module.tsx`, `package.json`
+
+**Same defect as the notes cards**, in both layouts: the grid tile and the list
+row were `<div onClick={() => setLightboxIdx(idx)}>` with no `tabIndex`. The
+favourite and edit buttons inside them are focusable, so once again a keyboard
+could reach the actions on a photo but **could not open the photo**. Both now
+`role="button"` + `tabIndex={0}` + `openOnKey`, reusing the tested helper.
+
+**A structural improvement rather than a patch, on the lightbox.** The backdrop
+closed on any click that reached it, and a child `<div onClick={(e) =>
+e.stopPropagation()}>` wrapped the media purely to prevent that. So one element
+had a click handler whose entire purpose was to undo another element's click
+handler — and the linter flagged the wrapper, correctly, as a plain container
+pretending to be interactive.
+
+Guarding at the source instead — `if (e.target === e.currentTarget)` — means the
+backdrop only responds to its **own** clicks, and **the wrapper's `onClick`
+could be deleted outright.** One warning fixed by fixing the design, not by
+annotating it. Same guard shape as `openOnKey`, for the same reason: events
+bubble, and a parent that acts on a child's event is almost always a bug waiting.
+
+**One suppression, and I want it read as one.** The lightbox root keeps
+`eslint-disable-next-line jsx-a11y/click-events-have-key-events`, with the
+reason in the source. The rule wants a keydown beside the backdrop click; the
+correct keyboard affordance for dismissing a dialog is **Escape**, which
+`useDialogBehavior` binds on `lightboxRef` along with the focus trap and focus
+restore. The rule cannot see into a hook. **Binding Enter or Space there would
+be actively wrong** — inside a dialog those keys belong to whatever has focus, so
+the lightbox would close every time someone activated next or previous.
+
+Placement mattered and cost a cycle: the rule reports the **opening tag**, not
+the `onClick` line, so a disable sitting above the attribute did nothing. The
+count not moving is what said so.
+
+**Warnings 74 → 67**, cap tightened to match. Six of the seven are real
+behaviour changes; the seventh is the suppression above.
+
+**Status:** FIXED. **Verified:** **14,071 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles`**, tsc clean, `npm run lint` exits 0 at 67, `npm run
+build` exits 0.
