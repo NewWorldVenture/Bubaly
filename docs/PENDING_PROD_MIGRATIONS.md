@@ -514,8 +514,8 @@ passed; production application of the atomic `0240-0254` release remains pending
 ## Migrations added since this document's stated baseline (2026-09-12)
 
 The status line at the top of this file is dated **2026-09-05** against main
-`01881fb2`. **53** migration files have landed since, `0255` through
-`0310`, and none of them appear anywhere above. (This read "thirty-one, `0255`
+`01881fb2`. **54** migration files have landed since, `0255` through
+`0311`, and none of them appear anywhere above. (This read "thirty-one, `0255`
 through `0285`" until 2026-09-13, "seventy-one, `0255` through `0295`" until
 2026-09-15, and "forty-five, `0255` through `0302`", "46, `0255` through `0303`"
 and "49, `0255` through `0306`" until 2026-09-16; the range
@@ -1154,3 +1154,124 @@ guarded here, so this only makes the database agree with the rule the applicatio
 states — which is what matters for anyone calling PostgREST directly.
 
 Until this is applied, production carries all nine as measured above.
+
+### `0311` keeps a row's references inside its own family — unapplied
+
+Every family-scoped INSERT policy in this schema checks the row's **own**
+`family_id` and nothing else, and the foreign keys beside them name `parent(id)`
+alone, because that is the parent's primary key. So a member may write a row
+carrying *their* `family_id` and a reference into *somebody else's* family, and
+both the policy and the constraint are satisfied.
+
+The repo already knows the class — `lib/services/tasks/index.ts` guards one
+instance by hand:
+
+> "Confirm the chore belongs to this family before writing an assignment that
+> would otherwise carry a foreign family's chore_id under our family_id."
+
+Application code is not a boundary for anyone calling PostgREST. Measured,
+acting as a manager of family A who is not a member of family B, all three
+landed: a chore assignment under A **pointing at B's chore**, one **assigned to
+B's member**, and an allowance rule under A **pointing at B's child wallet**.
+Five breaches counting the re-point and the integrity check,
+`docs/audit/cross-family-reference-check.sql`.
+
+**Reads were never the hole**, and the probe asserts that in both directions: A
+still cannot `SELECT` B's chore, with or without the guard. What this reaches is
+the code that *acts* on the reference.
+
+#### The half that is live on merge
+
+The nightly cron credits `rule.child_wallet_id`. `creditChildWallet` resolves
+buckets by `(family_id, child_wallet_id)`, so a foreign wallet matches none and
+the credit fails "not fully provisioned" — it does **not** pay another family.
+The damage was what the route did with that failure:
+
+```ts
+if (!res.ok) { …rollback…; throw new Error(`Allowance credit failed: ${res.error}`); }
+```
+
+The outer catch turned that into a 500. Because the rollback restores
+`next_run_on`, the same rule was due again the next night and threw at the same
+point — and the rules are read `.order('id')`, so every rule after it was never
+reached. **One row stopped allowances for every family after it, permanently**,
+with nothing in the response naming the cause. Reaching that state is ordinary:
+any wallet missing a bucket does it, no cross-family reference required.
+
+The route now counts the failure, logs it, leaves the rule retryable and returns
+502 — the contract the repo's other four batch crons already follow, and which
+`tests/cron-batch-failure-status.test.ts` already pinned for them. The money one
+simply was not on its list.
+
+The **schedule-claim** error in the same loop (`if (scheduleError) throw
+scheduleError;`) was the other half of the identical defect and was missed by the
+first pass of this fix. A scan of all 24 cron routes for a `throw` inside a
+per-item loop found it — `wallet-allowance` was the only route in the repo with
+one, and it had two. Nothing is written when the claim fails, so that rule stays
+due and retries on its own; it now takes the same isolated path instead of ending
+the run. `if (subscriptionsError) throw subscriptionsError;` is deliberately left
+alone: it sits *before* the loop, and if plan gating cannot be read then every
+rule would be mis-gated, so failing the run is correct there. `wallet-allowance` is now on it, and
+`tests/allowance-cron-isolates-one-bad-rule.test.ts` asserts the behaviour
+itself: the rule ordered *after* the failing one is paid. That test was
+calibrated against the old route — three of its four cases fail there.
+
+`tests/cron-wallet-allowance-persistence.test.ts` asserted the `throw` as its
+proxy for "the failure is not swallowed". The assertion was retargeted rather
+than deleted: the failure must still be recorded and surfaced, it just must not
+end the run.
+
+#### Scope
+
+Deliberately narrow — the three references measured above, guarded by trigger.
+A composite foreign key would need a `(family_id, id)` unique constraint on every
+parent table and a rewrite of **454** constraints; that is a schema project for
+when the ledger is healthy, not a boundary fix. The shared
+`public.reference_shares_family()` helper takes the column and parent table as
+trigger arguments, so the next reference costs one line — which is what `0275`'s
+header asks for, "by shape rather than by name".
+
+Each wired reference is **validated where it is wired**, because the failure mode
+of a mis-wired one is quiet in exactly the place it matters. The helper
+early-returns for the trusted server, so a parent table with no `family_id`
+column installs happily during a migration replay — which runs with no JWT, so
+`auth.uid()` is null and the guard never reaches its query — and then raises
+`42703` on **every authenticated write** to that table in production. Measured
+both ways: as `postgres` the mis-wired insert succeeds silently, as an
+authenticated user it fails `42703`. The wiring loop now asserts that the child
+has `family_id` and the named column and that the parent has `family_id`, so the
+mistake fails during replay, where CI catches it.
+
+Until this is applied, production carries the cross-family writes as measured
+above. The allowance-run outage is fixed in the route and takes effect on merge.
+
+### The manual allowance run could pay twice — fixed in the app, live on merge
+
+`tests/allowance-cron-idempotency.test.ts` locks the nightly cron's schedule
+claim so it *"can't regress to a blind (double-crediting) update"*. The manual
+**Run due allowances** button — `runDueAllowancesAction` in
+`app/(app)/wallet/actions.ts` — is the sibling path that test does not cover, and
+it was exactly that blind update:
+
+```ts
+.update({ next_run_on: next, last_run_on: today })
+.eq('id', rule.id).eq('family_id', familyId).select('id').single()
+```
+
+No `.lte('next_run_on', today)` predicate, so the update always matched. Both
+paths select due rules the same way, so two overlapping runs — a double-click, or
+a click racing the cron, whose own claim *is* predicated — both read the rule as
+due, both advanced it, and **both credited the child's wallet**.
+
+The claim now carries the predicate and reads with `.maybeSingle()`, and a rule
+that matched no row is skipped rather than treated as an error — the cron's
+pattern exactly. `tests/manual-allowance-run-claims-like-the-cron.test.ts`
+asserts it and was calibrated against the old code, where three of its four cases
+fail.
+
+`tests/wallet-allowance-persistence.test.ts` pinned the old statement verbatim,
+including `.single()`. Its intent — the advance is checked before the credit and
+rolled back if the credit fails — is kept and strengthened rather than deleted:
+it is now a claim.
+
+This needs no migration and takes effect on merge.
