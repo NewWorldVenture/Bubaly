@@ -5799,3 +5799,71 @@ three of those were writes whose `update`/`insert` sat on a later line than the
 one the classifier matched. Reading all six rather than trusting the count is what
 kept three false accusations out of this finding — the same failure mode recorded
 twice already in this audit, caught here before it reached the page.
+
+## Q26 — HIGH: three `.in()` reads whose id list is sized elsewhere, two of them a stall that cannot clear
+
+A PostgREST `.in()` filter travels in the **query string**.
+`lib/supabase/chunked-in.ts` states the consequence and the remedy:
+
+> one `.in()` carrying a few hundred UUIDs builds a URL of roughly 40 bytes per
+> id. Past the gateway's request-line limit the whole read comes back `URI too
+> long` — and because the calling page usually treats that as "no rows", the
+> failure shows up as **silently missing data rather than as an error**. It only
+> appears once a table has enough rows, so it **survives every test against a
+> small dataset.**
+
+100 ids per request keeps the URL near 4 KB. Six call sites use the helper.
+Three passed the whole array:
+
+| site | size of the array | set by |
+|---|---|---|
+| `lib/server/notification-emails.ts` | up to **500** | `pending` is `.limit(500)` |
+| `app/api/cron/return-reminders/route.ts` | up to **200** | `BATCH = 200` |
+| `app/(app)/admin/marketing/push/actions.ts` | **unbounded** | a `readAll`-paged device list |
+
+**The third is the one worth staring at, because a correct fix created it.**
+That route's `push_devices` read was deliberately converted to `readAll`, with a
+comment saying exactly why: *"past 1,000 devices a campaign would reach a prefix
+of its audience and record `recipients` as if that were everyone."* That fix is
+right. And **removing the 1,000-row cap is precisely what makes the `.in()` on
+the next statement unbounded.** Two helpers, two correct rules, written in two
+headers that do not mention each other — and fixing the first made the second
+reachable at scale.
+
+**Not the silent case — a worse one.** All three fail closed (a 502, a
+`failed: 1`), so no wrong data is produced. What makes them worse than a one-off
+failure is that **two of them cannot recover.** Neither writes anything before
+the failing read, so nothing is settled: the next run selects the *identical* set
+and fails *identically*.
+
+- `notification-emails` reads the same ≥500 pending rows every run and sends
+  nothing, forever.
+- `return-reminders` 502s without stamping a reminder, so the same 200 orders
+  come back next run.
+
+The stall **begins exactly when the backlog is large enough to matter** and never
+clears on its own. That is the shape main just fixed in the allowance cron, where
+one bad row ended the platform's run every night.
+
+**Fixed:** all three read through `readInChunks`.
+
+**Scope, stated.** The ratchet names these three, not every `.in()` in the repo.
+Most carry a family-sized set — a household's members, one project's materials —
+and demanding chunking there would mean chunking where one request is correct and
+cheaper. A guard that cries wolf gets exemptions bolted onto it until it means
+nothing.
+
+**Guard:** `tests/an-in-filter-travels-in-the-url.test.ts` — `readInChunks` never
+exceeds 100 ids per request and returns every row, with the batch count asserted
+`> 1` so the fake cannot pass by not chunking; plus the three-site ratchet.
+Reverting `notification-emails` turns it red naming the file and why.
+
+**A mechanism failure caught mid-sweep, and recorded.** The scan that found these
+first counted `readAll(` and reported three *correctly paged* crons as unpaged —
+`notifications`, `push-scan` and `chore-reminders` all write `readAll<Row>(`, with
+a generic argument between the name and the paren. **This is the second time in
+this audit that a guard has asked the right question through a pattern that
+assumed one shape of call site**; the first was `useDialogBehavior<HTMLDivElement>(`.
+Caught here before it reached a finding, and the new guard's pattern is
+`readInChunks\s*[<(]` by construction, with a test asserting it matches both
+spellings.

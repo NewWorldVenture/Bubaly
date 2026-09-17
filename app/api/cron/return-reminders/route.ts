@@ -6,6 +6,7 @@ import { needsDueReminder, needsOverdueAlert, daysUntilDue } from '@/lib/marketp
 import { notify } from '@/lib/services/notifications';
 import { dayKeyInTz, systemScopeForFamily } from '@/lib/services/scope';
 import type { ServiceScope } from '@/lib/services/types';
+import { readInChunks } from '@/lib/supabase/chunked-in';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -63,9 +64,13 @@ export async function GET(req: NextRequest) {
     // Titles for friendlier copy. A failed lookup is a failed batch because the
     // job must not acknowledge a partial notification run as healthy.
     const listingIds = [...new Set((due ?? []).map((o) => o.listing_id))];
-    const { data: listings, error: listingError } = listingIds.length
-      ? await admin.from('marketplace_listings').select('id, title').in('id', listingIds)
-      : { data: [], error: null };
+    // Chunked: BATCH is 200, so this could carry 200 UUIDs in one `.in()` —
+    // about 8 KB of query string against a limit chunked-in.ts puts at 8 KB.
+    // On failure this route 502s without stamping any reminder, so the next run
+    // reads the same 200 orders and 502s again: a stall that does not clear.
+    const { data: listings, error: listingError } = await readInChunks<
+      { id: string; title: string }, { message: string }
+    >(listingIds, (chunk) => admin.from('marketplace_listings').select('id, title').in('id', chunk));
     if (listingError) {
       console.error('Return-reminders listing lookup failed:', listingError);
       return NextResponse.json({ ok: false, error: t('returnReminders.couldNotLoadListingTitles') }, { status: 502 });

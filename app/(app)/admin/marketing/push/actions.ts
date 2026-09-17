@@ -5,6 +5,7 @@ import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from
 import { sendPushToUsers } from '@/lib/server/push';
 import { selectPushRecipients, canSendPush } from '@/lib/marketing/push';
 import { readAll } from '@/lib/supabase/read-all';
+import { readInChunks } from '@/lib/supabase/chunked-in';
 
 function s(fd: FormData, k: string): string | null {
   const v = String(fd.get(k) ?? '').trim();
@@ -64,7 +65,15 @@ export async function sendPushCampaignAction(id: string): Promise<void> {
   const uniqueIds = [...new Set(userIds.filter(Boolean))];
   const emailByUser: Record<string, string | null> = {};
   if (uniqueIds.length) {
-    const { data: profiles, error: profileError } = await supabase.from('profiles').select('id, email').in('id', uniqueIds);
+    // Chunked, and for a reason created by the readAll three lines above: that
+    // fix removed the 1,000-device cap, which is exactly what makes uniqueIds
+    // unbounded here. One `.in()` runs about 40 bytes per id, so an audience of
+    // a few hundred devices builds a query string past the gateway's
+    // request-line limit and the whole campaign fails. Fixing the prefix read
+    // is what made the next statement reachable at scale.
+    const { data: profiles, error: profileError } = await readInChunks<
+      { id: string; email: string | null }, { message: string }
+    >(uniqueIds, (chunk) => supabase.from('profiles').select('id, email').in('id', chunk));
     if (profileError) await markFailedAndThrow(profileError);
     for (const p of profiles ?? []) emailByUser[p.id] = p.email;
   }

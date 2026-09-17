@@ -5451,3 +5451,44 @@ rather than trusting the count kept three false accusations out of this finding.
 
 **Status:** FIXED. **Verified:** 14,106 tests green under both `TZ=UTC` and
 `TZ=America/Los_Angeles` (four shards each), tsc clean, lint 0 at 12, build 0.
+
+---
+
+## [CLAUDE-1][HIGH][RELIABILITY] Three `.in()` reads sized elsewhere; two stall permanently
+
+**Files:** `lib/server/notification-emails.ts`, `app/api/cron/return-reminders/route.ts`,
+`app/(app)/admin/marketing/push/actions.ts`.
+
+**Problem.** A PostgREST `.in()` travels in the query string at ~40 bytes per
+UUID; `lib/supabase/chunked-in.ts` caps a batch at 100 to stay inside a common
+8 KB request-line limit. These three passed arrays of up to 500, up to 200, and
+unbounded respectively.
+
+**The sharpest part.** The push route's device read was correctly converted to
+`readAll` to stop it reaching "a prefix of its audience" — and removing that
+1,000-row cap is exactly what makes the `.in()` on the next line unbounded. Two
+helpers, two correct rules, two headers that never mention each other.
+
+**Impact.** All three fail closed, so no wrong data. But two cannot recover:
+neither writes anything before the failing read, so nothing is settled and the
+next run selects the identical set and fails identically. `notification-emails`
+sends nothing forever once ≥500 pending rows span enough users;
+`return-reminders` 502s on the same 200 orders every run. The stall starts when
+the backlog gets big enough to matter. Same shape as the allowance-cron stall
+main just fixed.
+
+**Fix (taken).** All three through `readInChunks` (six existing call sites).
+
+**Guard.** `tests/an-in-filter-travels-in-the-url.test.ts` — behavioural (never
+>100 per request, every row returned, batch count > 1 so a non-chunking fake
+cannot pass) plus a three-site ratchet. Scoped to arrays sized elsewhere, not
+every `.in()`: most are family-sized and chunking them would be wrong.
+
+**Mechanism failure recorded.** The sweep first counted `readAll(` and reported
+three correctly paged crons as unpaged — they write `readAll<Row>(`. Second time
+in this audit a pattern has assumed one shape of call site
+(`useDialogBehavior<HTMLDivElement>(` was the first). Caught before it reached a
+finding; the new guard uses `\s*[<(]` and tests both spellings.
+
+**Status:** FIXED. **Verified:** 14,111 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles`, tsc clean, lint 0 at 12, build 0. Proven to bite.
