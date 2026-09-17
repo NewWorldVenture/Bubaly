@@ -97,6 +97,7 @@ export async function GET(req: NextRequest) {
 
     let paid = 0;
     let skippedFree = 0;
+    let failed = 0;
     for (const rule of rules ?? []) {
       // A rule with no author predates the column or was written by the service
       // role; those are the seed/migration path and stay payable. A rule that
@@ -128,7 +129,18 @@ export async function GET(req: NextRequest) {
         .lte('next_run_on', today)
         .select('id')
         .maybeSingle();
-      if (scheduleError) throw scheduleError;
+      if (scheduleError) {
+        // Same isolation as the credit failure below: one rule's claim error is
+        // that rule's problem. Throwing here ended the platform's run for every
+        // rule ordered after it, and a claim error that recurs (a constraint or
+        // a poisoned row rather than a blip) would do so every night. Nothing
+        // was written, so the rule stays due and retries on its own.
+        failed++;
+        console.error('Allowance schedule claim failed; leaving it retryable.', {
+          ruleId: rule.id, familyId: rule.family_id, error: scheduleError,
+        });
+        continue;
+      }
       if (!claimed) continue; // another concurrent run already claimed this rule — do not double-pay
 
       const res = await creditChildWallet(supabase, {
@@ -151,12 +163,39 @@ export async function GET(req: NextRequest) {
         if (rollbackError) {
           console.error('Allowance schedule rollback error:', rollbackError);
         }
-        throw new Error(`Allowance credit failed: ${res.error}`);
+        // Degrade-but-log, as the other batch crons do: one family's rule must
+        // not end the platform's run. This used to `throw`, which the outer
+        // catch turned into a 500 — and because the rollback restores
+        // `next_run_on`, the same rule was due again the next night and threw
+        // at the same point. Rules ordered after it were never reached, so a
+        // SINGLE unpayable rule stopped allowances for every family after it,
+        // permanently, with nothing in the response naming the cause.
+        //
+        // Reaching this is not exotic. `creditChildWallet` resolves buckets by
+        // (family_id, child_wallet_id), so it reports "not fully provisioned"
+        // for any wallet missing a bucket — and for a rule whose
+        // `child_wallet_id` belongs to ANOTHER family, which RLS permits
+        // because the foreign key names `child_wallets(id)` alone and the
+        // insert policy only checks the row's own `family_id`. 0311 closes that
+        // second door; this one keeps the run alive whatever the reason.
+        failed++;
+        console.error('Allowance credit failed; leaving it retryable.', {
+          ruleId: rule.id, familyId: rule.family_id, error: res.error,
+        });
+        continue;
       }
       paid++;
     }
 
-    return NextResponse.json({ ok: true, due: (rules ?? []).length, paid, skippedFree, skippedUnauthored });
+    // Both sides of the merge: main's failed-count and 502 (one bad rule must
+    // not end the platform's run, and the run must not report ok when it did),
+    // plus this branch's skippedUnauthored (a rule whose author is not an
+    // active manager is not paid, and says so rather than vanishing).
+    const ok = failed === 0;
+    return NextResponse.json(
+      { ok, due: (rules ?? []).length, paid, skippedFree, skippedUnauthored, failed },
+      { status: ok ? 200 : 502 },
+    );
   } catch (err) {
     console.error('Allowance cron error:', err);
     return NextResponse.json({ error: t('walletAllowance.allowanceRunFailed') }, { status: 500 });

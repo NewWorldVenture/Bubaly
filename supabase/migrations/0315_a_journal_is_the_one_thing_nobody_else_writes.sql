@@ -89,7 +89,7 @@ begin
     || 'for insert to authenticated '
     || 'with check (public.is_family_member(family_id) and %s and created_by = auth.uid())', mine);
 
-  -- USING and WITH CHECK are the SAME expression on purpose. 0311 exists
+  -- USING and WITH CHECK are the SAME expression on purpose. 0327 exists
   -- because an UPDATE policy that guards the row you may touch and not the row
   -- you turn it into lets you rewrite `member_id` and hand the entry to someone
   -- else — or take theirs.

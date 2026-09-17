@@ -49,7 +49,7 @@ create policy driving_trips_update on public.driving_trips
   );
 
 -- Symmetric WITH CHECK, deliberately. Postgres reuses a missing one from USING,
--- which is 0311's lesson; stating it means the row a manager turns the trip INTO
+-- which is 0327's lesson; stating it means the row a manager turns the trip INTO
 -- is checked as well as the row they reached for.
 
 -- ── DELETE: managers, or whoever logged it ───────────────────────────────────

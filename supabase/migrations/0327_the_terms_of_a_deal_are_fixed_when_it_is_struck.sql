@@ -1,6 +1,13 @@
 -- ============================================================================
--- 0311 — an UPDATE policy that guards the row it lets you touch, but not the
+-- 0327 — an UPDATE policy that guards the row it lets you touch, but not the
 --        row you turn it into.
+--
+-- Renumbered from 0311. main landed 0311_family_scoped_references — the TENTH
+-- collision event between the two sessions, and every merge since 0300 has
+-- brought one. Only the number changed. Order is not load-bearing here: this
+-- touches marketplace_orders and marketplace_offers, and nothing in this
+-- branch's 0312-0326 goes near either table, so running last is the same as
+-- running first.
 --
 -- Raised by Claude-3 against `marketplace_orders_update`. Swept by SHAPE rather
 -- than by name, which found a second one the report had missed:
@@ -193,6 +200,6 @@ begin
                  in pg_get_expr(p.polwithcheck, p.polrelid)) = 0;
 
   if stragglers is not null then
-    raise exception '0311: UPDATE policies guard the old row more tightly than the new one: %. Either carry the USING into the WITH CHECK, or add the policy to transition_guards here with a sentence saying why the new row is judged by a different rule.', stragglers;
+    raise exception '0327: UPDATE policies guard the old row more tightly than the new one: %. Either carry the USING into the WITH CHECK, or add the policy to transition_guards here with a sentence saying why the new row is judged by a different rule.', stragglers;
   end if;
 end $$;

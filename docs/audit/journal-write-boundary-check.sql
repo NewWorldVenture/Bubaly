@@ -103,7 +103,7 @@ begin
 
   -- 4. Handing their own entry to the parent — the WITH CHECK half. USING
   --    admits the row (it is theirs); only a symmetric WITH CHECK refuses the
-  --    row it would become. This is 0311's lesson applied here.
+  --    row it would become. This is 0327's lesson applied here.
   begin
     update public.journal_entries set member_id = parent_mid where id = kid_entry;
     raise exception 'a child moved their own entry into a parent''s journal';

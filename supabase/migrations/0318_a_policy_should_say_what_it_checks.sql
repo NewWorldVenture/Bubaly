@@ -48,7 +48,7 @@
 
 -- ── The ten family-scoped tables ─────────────────────────────────────────────
 -- Same shape, same column, one loop. `for all` policies get BOTH halves stated:
--- Postgres reuses a missing `with check` from `using`, which is the reuse 0311
+-- Postgres reuses a missing `with check` from `using`, which is the reuse 0327
 -- was written about, and a policy this long-lived should not rely on a reader
 -- knowing that rule.
 do $$

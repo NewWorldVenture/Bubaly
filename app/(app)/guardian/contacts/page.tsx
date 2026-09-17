@@ -15,11 +15,22 @@ export default async function ContactsPage() {
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 
+  // The second read was already settled and the first was not, which made the
+  // batch reject on a transport failure — DNS, TCP, TLS, a timed-out fetch —
+  // and take the whole page to the error boundary. That is the failure that
+  // took out /dashboard while the database was reporting CONNECT_TIMEOUT; see
+  // lib/supabase/settle.ts. Settling both means one unreachable table costs its
+  // own list, not the page.
   const [{ data: contacts }, { data: members }] = await Promise.all([
-    supabase.from('guardian_contacts')
+    // Settled per main, and without the cast: this branch declared the eight
+    // Guardian tables in database.types.ts, so `guardian_contacts` has a real
+    // row type now. Main named the shape by hand only because the
+    // `as ReturnType<typeof supabase.from>` cast erased it — with the cast gone,
+    // settle's inference carries the row type through on its own.
+    settle(supabase.from('guardian_contacts')
       .select('id, name, phone, email, trust_level, trust_override, notes, total_calls, total_sms, last_contact_at, spam_score')
       .eq('family_id', familyId)
-      .order('name', { ascending: true }),
+      .order('name', { ascending: true })),
 
     settle(supabase
       .from('family_members')

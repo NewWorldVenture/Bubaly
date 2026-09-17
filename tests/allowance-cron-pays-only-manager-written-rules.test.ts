@@ -53,7 +53,13 @@ describe('the allowance cron pays only rules a manager wrote', () => {
   });
 
   it('reports the skip rather than swallowing it', () => {
-    expect(source).toContain('skippedUnauthored });');
+    // Pinned as "the counter is a field of the JSON body", not as a literal
+    // `skippedUnauthored });`. That spelling only held while the response was a
+    // one-liner; merging main's failed-count and 502 wrapped it across lines and
+    // this assertion failed while the behaviour it names was untouched. A test
+    // that breaks on reformatting is a test of formatting.
+    const body = source.slice(source.indexOf('return NextResponse.json'));
+    expect(body).toMatch(/\bskippedUnauthored\b/);
   });
 
   it('still pays a rule with no author — that is the seed and service-role path', () => {

@@ -54,10 +54,10 @@ export default async function MissionsPage() {
   const subIds = subs.map((s) => s.id);
 
   const [{ data: chores }, { data: members }, { data: validations }, { data: disputes }] = await Promise.all([
-    choreIds.length ? supabase.from('chores').select('*').in('id', choreIds) : Promise.resolve({ data: [] }),
+    choreIds.length ? settle(supabase.from('chores').select('*').in('id', choreIds)) : Promise.resolve({ data: [] }),
     settle(supabase.from('family_members').select('id, display_name, color').eq('family_id', familyId)),
-    subIds.length ? supabase.from('chore_ai_validations').select('*').in('submission_id', subIds) : Promise.resolve({ data: [] }),
-    subIds.length ? supabase.from('chore_disputes').select('*').in('submission_id', subIds).eq('status', 'open') : Promise.resolve({ data: [] }),
+    subIds.length ? settle(supabase.from('chore_ai_validations').select('*').in('submission_id', subIds)) : Promise.resolve({ data: [] }),
+    subIds.length ? settle(supabase.from('chore_disputes').select('*').in('submission_id', subIds).eq('status', 'open')) : Promise.resolve({ data: [] }),
   ]);
 
   const choreById = new Map((chores ?? []).map((c) => [c.id, c]));

@@ -18,12 +18,16 @@ export default async function GuardianSettingsPage() {
   const memberId = ctx.active.member.id;
   const supabase = await createServer();
 
+  // Both settled: the guardian-tables read was not, so a transport failure —
+  // DNS, TCP, TLS, a timed-out fetch — rejected the batch and took the page to
+  // the error boundary rather than degrading. See lib/supabase/settle.ts.
   const [{ data: profile }, { data: member }] = await Promise.all([
-    supabase.from('guardian_member_profiles')
+    // Settled per main, cast dropped — see the note in guardian/contacts.
+    settle(supabase.from('guardian_member_profiles')
       .select('*')
       .eq('family_id', familyId)
       .eq('member_id', memberId)
-      .maybeSingle(),
+      .maybeSingle()),
 
     settle(supabase
       .from('family_members')

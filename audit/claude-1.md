@@ -5281,3 +5281,60 @@ literal lines, which chaining cannot confuse.
 **Verified:** guard green; proven to bite by inserting a writer and watching it
 name the exact file and line, with its other three assertions staying green;
 `tsc --noEmit` clean; `eslint` clean on every changed file.
+### [CLAUDE-1][HIGH][ARCHITECTURE] Mixed read batches: some queries settled, one not, so the page still dies
+
+- **File/path:** `app/(app)/guardian/contacts/page.tsx`,
+  `app/(app)/guardian/settings/page.tsx`, `app/(app)/missions/page.tsx`,
+  `app/(app)/display/page.tsx`
+- **Problem:** A Supabase query builder resolves with `{ data, error }` for
+  anything the database answers and **rejects** only when the request never
+  completed — DNS, TCP, TLS, a timed-out fetch. Inside `Promise.all` one
+  rejection rejects the batch, so a page that handles `res.error` for every read
+  still dies on an unhandled rejection and renders the error boundary.
+  `lib/supabase/settle.ts` records that this is what took out `/dashboard` while
+  production was reporting `CONNECT_TIMEOUT`.
+  These four batches had **some** elements wrapped in `settle(...)` and at least
+  one not — the same failure, with none of the protection the surrounding code
+  appears to have.
+- **Evidence:** proved rather than cited — `Promise.all([ok, reject])` rejects and
+  loses the result it already had; `settleAll` returns
+  `{ data: null, count: null, error: { message } }` for the failed one and keeps
+  the other. Two cases in the test file assert exactly that.
+- **Impact:** Guardian is a child-safety surface and `display` is the always-on
+  kiosk; both went to an error boundary on a transport blip that the neighbouring
+  reads in the same batch were written to survive.
+- **Recommended fix:** applied to these four. The conditional ones settle the
+  **branch**, not the ternary: `settle(cond ? a : b)` does not typecheck, since
+  `Promise<A> | Promise<B>` is not `PromiseLike<A | B>`.
+- **Status:** FIXED (4 files) · the remainder OPEN, see below.
+
+**Why there is no repository-wide guard here, which is itself the finding.**
+I tried three times to write one and each attempt was wrong in a different way:
+
+1. A blanket `Promise.all` → `settleAll` rewrite produced **137 type errors** —
+   many batches hold helper calls returning their own result shapes, not
+   `{ data, error }`, and `SettledFallback` is not a substitute for those.
+2. Wrapping every unsettled element produced **syntax errors in 40 files**: my
+   transformer re-joined array elements and put a comma after a trailing `//`
+   comment.
+3. The counting scans over-reported three separate times — 86, then 47, then 37 —
+   because a ternary whose query branch is already settled reads as unsettled, a
+   local `try/catch` wrapper (`marketplace`'s `safe`) settles but is
+   unrecognisable by name, and a generic call `settle<T>(…)` breaks naive bracket
+   tracking, so files I had already fixed kept reappearing.
+
+A guard with false positives is worse than none: it trains people to add
+exemptions. So the test asserts only the four files verified by hand, and the
+~20 remaining batches are recorded here for a pass that reads them rather than
+pattern-matches them: `admin/marketing/visitor-intelligence`,
+`admin/marketplace/reports`, `dashboard/agents`, `dashboard/readiness`,
+`marketplace/store`, four `api/ai/*` routes, `api/blog/{like,save}`, and about
+ten modules under `lib/` (`briefing/deliver`, `metric/strategy-server`,
+`schedule/intelligence-server`, `twin/completeness-server`, `ai/runs/*`,
+`graph/resolve-server`, `autopilot/policy-scan`).
+
+**And the test I wrote to hold the four was itself vacuous on first draft.** It
+asserted `expect(src).toMatch(/\? settle\(supabase\.from\(/)`, which passes as
+long as ONE branch is settled — so unsettling one of missions' three left it
+green. Caught by running exactly that regression. It counts both sides now, and
+the same regression fails it by name.
