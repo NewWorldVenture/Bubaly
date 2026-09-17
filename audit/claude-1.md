@@ -4996,3 +4996,56 @@ behaviour changes; the seventh is the suppression above.
 **Status:** FIXED. **Verified:** **14,071 tests green under both `TZ=UTC` and
 `TZ=America/Los_Angeles`**, tsc clean, `npm run lint` exits 0 at 67, `npm run
 build` exits 0.
+
+---
+
+### [CLAUDE-1][MEDIUM][A11Y] A menu with no way out, and two grids where a native button was the right answer
+
+**Files:** `components/modules/meals-module.tsx`, `package.json`
+
+**The menu had no keyboard exit.** The "more" dropdown closed on a **scrim
+click and nothing else** — `<div className="fixed inset-0" onClick={close} />`.
+There was no Escape handler anywhere in the module. A keyboard user who opened
+that menu could only tab through to an item and activate one; there was no way
+to change their mind. Escape is now bound while it is open, and **that is the
+fix** — the scrim is the mouse convenience that duplicates it, now
+`aria-hidden` with the rule suppressed and the reason stated, because a
+full-screen transparent overlay has no content, no name and nothing to focus.
+
+**Where I stopped and did it properly.** For the two meal grids my first attempt
+was `role={plan ? undefined : 'button'}` — interactive only when the slot is
+empty, which is *semantically* right, since a filled cell's click does nothing.
+`click-events-have-key-events` was satisfied; `no-static-element-interactions`
+was not, because it cannot evaluate a ternary.
+
+The tempting fix is `role="button"` unconditionally. **That would be a lie** —
+every filled cell would announce itself as a button that does nothing when
+pressed, and this audit has spent its whole length objecting to exactly that:
+markup making a promise it does not keep.
+
+So both were restructured instead, and the result is better than what the rule
+asked for:
+
+- **Grid cell** — the wrapper goes back to being pure layout, and the empty
+  state becomes a real `<button>` filling the cell. `focus-visible:opacity-100`
+  added, since the add-affordance is `opacity-0` until hover and a keyboard user
+  would otherwise be focused on something invisible.
+- **List row** — split in two: a filled row is a container with its own remove
+  button; an empty row **is** the action, so it is a `<button>`. Its accessible
+  name comes free from the text already inside it — *"BREAKFAST · Tap to add"* —
+  which names the slot better than any label invented for it, and costs no copy.
+
+The remove button also loses its `e.stopPropagation()`, which existed only to
+escape the parent's click handler that no longer exists.
+
+**One ambiguity left rather than papered over:** the grid's add buttons are all
+named "Add meal", so a screen reader hears the same name 21 times. Naming the
+slot ("Add breakfast on Monday") needs an interpolated string in eleven locales.
+Filed, not invented.
+
+**Warnings 67 → 61**, cap tightened. Five are real behaviour changes, one is the
+scrim suppression.
+
+**Status:** FIXED. **Verified:** **14,071 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles`**, tsc clean, `npm run lint` exits 0 at 61, `npm run
+build` exits 0.
