@@ -11,10 +11,11 @@ import { wrapTwiml, twimlSay, twimlHangup, validateTwilioSignature } from '@/lib
 import { formatPhone } from '@/lib/guardian/phone';
 import { claimGuardianCallback, isValidGuardianEventId, markGuardianCallbackProcessed } from '@/lib/guardian/callbacks';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
+import { appBaseUrl } from '@/lib/server/app-url';
 
 export const runtime = 'nodejs';
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? '';
+const BASE_URL = appBaseUrl();
 const MAX_TWILIO_BODY_BYTES = 64 * 1024;
 
 export async function POST(req: NextRequest) {

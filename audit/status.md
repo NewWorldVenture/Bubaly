@@ -673,3 +673,48 @@ FILES-TOUCHED (this pass):
 
 PR #548 remains a DRAFT; nothing merged or approved.
 LAST-UPDATE: 2026-09-17, after Q23.
+
+## Claude-1 (continuation — Q24)
+
+DONE: **Q24 — the URL that tells Twilio where to call and the URL that checks
+what Twilio signed were two different expressions.** Five spellings of the app's
+public base URL existed; two of them sat on opposite sides of an HMAC.
+`lib/contact-center/server.ts` registers the webhook URL with a fallback; the
+three `app/api/contact-center/*` routes verify with `?? ''` and none. They differ
+only in the fallback, and that alone means an unset NEXT_PUBLIC_APP_URL registers
+a real URL and then 401s every call to it. The seven guardian routes had the
+weakest spelling of the five — no fallback AND no trailing-slash strip — on the
+child-safety surface.
+
+Measured both cases rather than asserted: unset → digests
+fVeNA5BaFm0SWFAWJyPo4CfpK10= vs CiC66AlFtASYow/AoZr0RXphK8U=; trailing slash →
+`https://host//api/guardian/inbound/sms` against a signature over the single-slash
+URL. Both mismatch, both mean 401, and a 401 on an inbound Twilio webhook is
+Guardian silently offline for every family.
+
+FIX: `lib/server/app-url.ts`, one `appBaseUrl()`, used by all ten signature-path
+routes AND the registration site, so the two sides are the same function by
+construction. `lib/email.ts` keeps its NEXT_PUBLIC_SITE_URL precedence and gains
+only the normalisation. `lib/google.ts` deliberately untouched — its own override
+plus a request-origin fallback is right for OAuth.
+
+NEW INSTRUMENT: `tests/a-signed-url-is-the-url-that-was-signed.test.ts`. Both
+halves calibrated against the superseded expressions, plus a ratchet over the
+eleven files on the signature path. Scoped to that path on purpose: sweeping
+Stripe return URLs and email links under it would make a security assertion about
+things that are not security.
+
+WHY THE EXISTING GUARD MISSED IT: `public-webhook-signature-boundary.test.ts`
+asserts each route CALLS validateTwilioSignature and rejects. It checks the
+boundary is PRESENT; it cannot check that the URL handed to it is the one that
+was signed. Presence of a check says nothing about the correctness of its input.
+
+RECORDED: the calibration first spelled the old expressions inline against
+literals and tsc rejected it (TS2873 always-falsy, TS2869 unreachable `??`). The
+compiler was making the finding's own point one level up — the dead branch in
+`'' || fallback` is exactly what made the two sides disagree.
+
+VERIFIED: 14,101 tests green under both TZ=UTC and TZ=America/Los_Angeles, tsc
+clean, lint 0 at budget 12, build 0. Guard proven to bite.
+
+LAST-UPDATE: 2026-09-17, after Q24.

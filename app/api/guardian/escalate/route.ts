@@ -11,10 +11,11 @@ import { MAX_SMALL_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bound
 import { claimGuardianCallback, markGuardianCallbackError, markGuardianCallbackProcessed } from '@/lib/guardian/callbacks';
 import { guardianEscalationEventId, guardianEscalationSchema } from '@/lib/guardian/escalation';
 import { secretEquals } from '@/lib/server/secret-equals';
+import { appBaseUrl } from '@/lib/server/app-url';
 
 export const runtime = 'nodejs';
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? '';
+const BASE_URL = appBaseUrl();
 
 export async function POST(req: NextRequest) {
   const tr = await getTranslations();

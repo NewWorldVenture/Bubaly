@@ -5629,3 +5629,99 @@ when the owner decides: a manager-gated action that writes
 `generateFeedToken()` and flips `feed_enabled`, a rotate action that overwrites
 the token, and the existing `addToCalendarLinks()` for the subscribe buttons —
 all four pieces already exist and only the action is missing.
+
+## Q24 — HIGH: the URL that tells Twilio where to call, and the URL that checks what Twilio signed, were two different expressions
+
+Twilio signs the **exact URL it called** — HMAC-SHA1 over `url + sortedParams` —
+and `validateTwilioSignature` recomputes that digest from a URL we build
+ourselves. The only thing that matters is whether the two strings are identical.
+They were built by **five different expressions**, and two of them faced each
+other across the HMAC:
+
+```
+lib/contact-center/server.ts   (NEXT_PUBLIC_APP_URL || 'https://www.bubaly.com').replace(/\/$/, '')
+app/api/contact-center/*  (×3) (NEXT_PUBLIC_APP_URL ?? '').replace(/\/$/, '')
+app/api/guardian/*        (×7)  NEXT_PUBLIC_APP_URL ?? ''
+lib/email.ts                    NEXT_PUBLIC_APP_URL ?? NEXT_PUBLIC_SITE_URL ?? 'https://www.bubaly.com'
+lib/google.ts                   override ?? validated NEXT_PUBLIC_APP_URL ?? request origin, /\/+$/
+```
+
+`lib/contact-center/server.ts` is the side that **registers** the webhook URL
+with Twilio (`provisionNumber` → `VoiceUrl` / `SmsUrl`). The three
+`app/api/contact-center/*` routes are the side that **verifies**. The two
+expressions differ in exactly one thing — the fallback — and that difference is
+the defect. **Measured, both cases:**
+
+```
+CASE 1 — NEXT_PUBLIC_APP_URL unset
+  registered with Twilio : https://www.bubaly.com/api/contact-center/voice
+  verified against       : /api/contact-center/voice
+  Twilio signs           : fVeNA5BaFm0SWFAWJyPo4CfpK10=
+  route computes         : CiC66AlFtASYow/AoZr0RXphK8U=
+  MATCH                  : NO -> 401, every call rejected
+
+CASE 2 — set with a trailing slash, guardian spelling (no strip)
+  guardian builds        : https://www.bubaly.com//api/guardian/inbound/sms
+  Twilio called + signed : https://www.bubaly.com/api/guardian/inbound/sms
+  MATCH                  : NO -> 401, every inbound message rejected
+```
+
+**Why this is a HIGH and not a configuration nit.** The failure is not a broken
+link somebody reports. It is a **401 on an inbound Twilio webhook**, which means
+the call or message is rejected and Guardian is **silently offline** — for every
+family at once, with nothing in the product saying so. This PR already carries a
+HIGH with exactly that impact ("two families could hold the same Guardian
+number, and every call to it was dropped"); that one needed two households to
+collide on a number, and this one needs **one trailing slash in one environment
+variable**. The seven guardian routes — the child-safety surface — carried the
+least defended of the five spellings: no fallback *and* no trailing-slash strip.
+
+A trailing slash is not exotic. `lib/supabase/server.ts` already carries a note
+that a credential pasted into a dashboard "picks up a trailing newline or a
+wrapping pair of quotes more often than anyone admits," and `lib/google.ts`
+carries a note about this exact variable having once been interpolated bare.
+**The repo had learned this lesson twice already, in writing, one field over.**
+
+**Why the existing guard could not see it.**
+`tests/public-webhook-signature-boundary.test.ts` asserts that every
+provider-facing guardian route calls `validateTwilioSignature` and rejects. That
+guard is right and it stays. It checks that the boundary is **present**; it
+cannot check that the URL handed to the boundary is the one that was signed.
+*Presence of a check says nothing about the correctness of its input.*
+
+**Fixed:** `lib/server/app-url.ts` — one `appBaseUrl()`, returning an absolute
+origin with no trailing slash, falling back rather than ever returning something
+relative (a relative fragment does not fail loudly; it fails an HMAC comparison,
+which looks like a forged request). It trims, unquotes in the same idiom as
+`cleanEnv`, strips `/+$` rather than `/$` because `https://host//` is one paste
+away, and validates the result is absolute. Applied to all ten routes on the
+signature path **and to the registration site**, so the two sides are now the
+same function by construction. `lib/email.ts` keeps its `NEXT_PUBLIC_SITE_URL`
+precedence — that is its contract, passed in as the argument — and gains only the
+normalisation.
+
+**Left alone, deliberately:** `lib/google.ts`. It has a
+`GOOGLE_CALENDAR_REDIRECT_URI` override and falls back to the **request origin**,
+which is correct for OAuth and is not what this helper does. Converting it would
+delete a deliberate, documented contract to fix nothing.
+
+**Guard:** `tests/a-signed-url-is-the-url-that-was-signed.test.ts`. It proves the
+digests agree, and each half is **calibrated against the superseded expression**
+— with the old pair, the registration and verification digests differ; with the
+old guardian spelling, a trailing slash changes the digest. Plus a ratchet over
+the eleven files on the signature path: none may read `NEXT_PUBLIC_APP_URL`
+itself, and each must actually call `appBaseUrl()`. Reverting one file to
+`process.env.NEXT_PUBLIC_APP_URL ?? ''` turns both halves red naming that file.
+
+**A note on scope.** The ratchet covers the signature path only, not every reader
+of the variable. On a Stripe return URL or an email link a malformed base makes a
+visibly bad link; sweeping those under the same guard would make a security
+assertion about things that are not security.
+
+**Something the compiler caught, worth recording.** The calibration first spelled
+the old expressions inline against literals, and `tsc` rejected it — TS2873 "this
+kind of expression is always falsy" and TS2869 "right operand of `??` is
+unreachable". The compiler was making this finding's own point one level up: the
+dead branch in `'' || fallback` is exactly what made the two sides disagree. They
+are now functions of the environment variable, which is also more honest about
+what they are.

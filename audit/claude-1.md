@@ -5338,3 +5338,68 @@ asserted `expect(src).toMatch(/\? settle\(supabase\.from\(/)`, which passes as
 long as ONE branch is settled — so unsettling one of missions' three left it
 green. Caught by running exactly that regression. It counts both sides now, and
 the same regression fails it by name.
+
+---
+
+## [CLAUDE-1][HIGH][SECURITY/INTEGRATION] Two expressions for one URL, facing each other across an HMAC
+
+**Files:** seven `app/api/guardian/*` routes, three `app/api/contact-center/*`
+routes, `lib/contact-center/server.ts` (the registration side), `lib/email.ts`;
+new `lib/server/app-url.ts`.
+
+**Problem.** Twilio signs the exact URL it called; `validateTwilioSignature`
+recomputes that HMAC from a URL we build. Five different expressions built it,
+and the two that matter sat on opposite sides of the comparison:
+`lib/contact-center/server.ts` registers the webhook URL with a fallback;
+`app/api/contact-center/*` verifies with `?? ''` and no fallback. They differ
+only there — and that is the whole bug.
+
+**Evidence (measured, not asserted).** With `NEXT_PUBLIC_APP_URL` unset, the
+registered URL is `https://www.bubaly.com/api/contact-center/voice` and the
+verified one is the relative `/api/contact-center/voice`; digests
+`fVeNA5BaFm0SWFAWJyPo4CfpK10=` vs `CiC66AlFtASYow/AoZr0RXphK8U=`. With the
+variable set *with a trailing slash*, the guardian spelling builds
+`https://host//api/guardian/inbound/sms` against a signature over
+`https://host/api/guardian/inbound/sms`. Both mismatch.
+
+**Impact.** Not a broken link — a **401 on an inbound Twilio webhook**. The call
+or message is rejected and Guardian goes silently offline for every family, with
+nothing in the product saying so. Same impact as the Guardian-number HIGH already
+in this PR, but reachable by one trailing slash in one environment variable
+rather than by two households colliding on a number. The seven guardian routes
+carried the least defended spelling of the five: no fallback and no strip.
+
+**Why the existing guard missed it.** `public-webhook-signature-boundary.test.ts`
+asserts each route CALLS `validateTwilioSignature` and rejects. Correct, and it
+stays. It checks the boundary is present; it cannot check that the URL handed to
+it is the one that was signed.
+
+**Fix (taken).** `lib/server/app-url.ts` — one `appBaseUrl()`: trims, unquotes in
+`cleanEnv`'s idiom, strips `/+$` (not `/$` — `https://host//` is one paste away),
+validates absoluteness, and falls back rather than ever returning something
+relative. A relative fragment does not fail loudly; it fails an HMAC comparison,
+which looks like a forged request. Applied to all ten signature-path routes AND
+the registration site, so both sides are the same function by construction.
+`lib/email.ts` keeps its `NEXT_PUBLIC_SITE_URL` precedence as an argument and
+gains only the normalisation.
+
+**Left alone.** `lib/google.ts` — its own override env var plus a request-origin
+fallback, correct for OAuth. Converting it would delete a documented contract to
+fix nothing.
+
+**Guard.** `tests/a-signed-url-is-the-url-that-was-signed.test.ts`, each half
+calibrated against the superseded expression, plus a ratchet over the eleven
+files: none may read `NEXT_PUBLIC_APP_URL` itself, and each must call
+`appBaseUrl()`. Reverting one file turns both halves red naming it. Scoped to the
+signature path deliberately — sweeping Stripe return URLs and email links under
+the same guard would make a security assertion about things that are not.
+
+**Recorded: the compiler made this finding's point one level up.** The
+calibration first spelled the old expressions inline against literals and `tsc`
+rejected it — TS2873 "always falsy", TS2869 "right operand of `??` unreachable".
+The dead branch in `'' || fallback` is exactly what made the two sides disagree.
+
+**Status:** FIXED. **Verified:** 14,101 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles` (four shards each), `tsc --noEmit` clean, `npm run lint`
+exits 0 at 12, `npm run build` exits 0. Guard proven to bite by reverting
+`app/api/guardian/inbound/sms/route.ts` to `NEXT_PUBLIC_APP_URL ?? ''`.
