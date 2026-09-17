@@ -9,6 +9,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
+import { readAll } from '@/lib/supabase/read-all';
 import { isManager } from '@/lib/constants/roles';
 import { orderAmountCents } from '@/lib/invest/portfolio';
 import { evaluateTrust, roleOf } from '@/lib/trust/server';
@@ -47,9 +48,14 @@ async function investBucketBalance(supabase: Awaited<ReturnType<typeof createSer
     .eq('family_id', familyId).eq('child_wallet_id', childWalletId).eq('kind', 'invest').maybeSingle();
   if (bucketError) return { bucketId: null as string | null, balance: 0, error: bucketError };
   if (!bucket) return { bucketId: null as string | null, balance: 0 };
-  const { data: txns, error: txnError } = await supabase
+  // Third of the three ledger sums; see lib/wallet/server.ts for the full reason.
+  // An unbounded select stops at db-max-rows without saying so, and this total
+  // decides whether a child can place an order.
+  const { rows: txns, error: txnError } = await readAll<{ direction: string; amount_cents: number; status: string }>((from, to) => supabase
     .from('wallet_transactions').select('direction, amount_cents, status')
-    .eq('family_id', familyId).eq('bucket_id', bucket.id).in('status', ['completed', 'processing']);
+    .eq('family_id', familyId).eq('bucket_id', bucket.id).in('status', ['completed', 'processing'])
+    .order('id')
+    .range(from, to));
   if (txnError) return { bucketId: bucket.id, balance: 0, error: txnError };
   const balance = (txns ?? []).reduce((s, t) => s + (t.direction === 'credit' ? t.amount_cents : -t.amount_cents), 0);
   return { bucketId: bucket.id, balance };

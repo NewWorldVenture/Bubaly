@@ -5725,3 +5725,77 @@ unreachable". The compiler was making this finding's own point one level up: the
 dead branch in `'' || fallback` is exactly what made the two sides disagree. They
 are now functions of the environment variable, which is also more honest about
 what they are.
+
+## Q25 — HIGH: three wallet balances summed a prefix of the ledger and called it the total
+
+A child's balance is derived by summing the immutable ledger. Three functions did
+it with a bare, unbounded `select()`:
+
+| | |
+|---|---|
+| `lib/wallet/server.ts` · `childSpendableCents` | *"what a card authorization is checked against in real time"* |
+| `lib/wallet/server.ts` · `bucketBalanceCents` | *"Used to validate spend + transfers so a wallet can never overdraw"* |
+| `app/(app)/wallet/invest/actions.ts` | the INVEST bucket balance an order is placed against |
+
+**The rule was already written down, in this repo, about exactly this.**
+`lib/supabase/read-all.ts` opens with:
+
+> PostgREST answers an unbounded `select()` with at most `db-max-rows` — 1,000 on
+> a default Supabase project — and says nothing about it. No error, no header the
+> client surfaces, no short-read signal: the caller simply receives 1,000 rows and
+> believes that is the table. **Measured directly against a local project — a
+> table holding 2,011 rows returns exactly 1,000 to an unbounded select.**
+
+and closes with the sentence that decides this finding:
+
+> A truncated list is a display bug; **a truncated sum is a wrong number presented
+> as a right one.**
+
+This PR already fixed that defect once, in the ledger reconciler, where it was
+recorded as *"a ledger reconciled from its newest 20,000 rows is not incomplete,
+it is arithmetically wrong."* The helper was built for it. The three functions
+that decide whether a child can spend never called it.
+
+**Worse than a prefix — an undetermined one.** None of the three ordered the
+read, so *which* rows came back was not defined. Drop debits and the balance
+reads **high**, and `reserveHold` approves a card authorization against money
+that is not there. Drop credits and it reads **low**, and legitimate spending is
+declined. Either way the number is presented as the balance with nothing marking
+it partial.
+
+**Reachable, not exotic.** A thousand ledger rows in one bucket is a few years of
+allowance, chores and spending on one child.
+
+**Measured.** Against a stand-in that caps every response at 1,000 rows the way a
+real PostgREST does, over a ledger of 2,500 completed 100-cent credits:
+
+```
+complete total (paged) .... 250,000
+bare unbounded select ..... 100,000     ← what the three functions returned
+```
+
+**Fixed:** all three now read through `readAll` with a stable `.order('id')`.
+The order is not decoration — `read-all.ts` warns that *"an unordered paged read
+can repeat or skip rows between pages"*, and for a sum either one is a wrong
+total. None passes `failOnMax: false`; that opt-out is documented for **lists**,
+and on a sum it would restore precisely this defect — a prefix returned with
+`error: null`.
+
+**Guard:** `tests/a-truncated-sum-is-a-wrong-balance.test.ts`. It runs the real
+`bucketBalanceCents` against the capping stand-in and requires 250,000, with the
+truncated 100,000 asserted separately as calibration so the fake cannot quietly
+stop capping. Plus a ratchet over the three functions by name: each must page,
+each must order, none may opt out of the truncation error. Reverting
+`bucketBalanceCents` to its bare select turns both halves red — the behavioural
+one naming the number, `expected 100000 to be 250000`.
+
+**Scope, stated.** The ratchet covers the three sums, not every read of
+`wallet_transactions`. Of the other six statements, three are writes and three
+are already bounded; `read-all.ts` draws this line itself — page where the rows
+are **summed**, an explicit `.limit()` is correct where they are **listed**.
+
+**A process note.** The sweep that found these classified six reads as unbounded;
+three of those were writes whose `update`/`insert` sat on a later line than the
+one the classifier matched. Reading all six rather than trusting the count is what
+kept three false accusations out of this finding — the same failure mode recorded
+twice already in this audit, caught here before it reached the page.

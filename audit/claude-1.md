@@ -5403,3 +5403,51 @@ The dead branch in `'' || fallback` is exactly what made the two sides disagree.
 `TZ=America/Los_Angeles` (four shards each), `tsc --noEmit` clean, `npm run lint`
 exits 0 at 12, `npm run build` exits 0. Guard proven to bite by reverting
 `app/api/guardian/inbound/sms/route.ts` to `NEXT_PUBLIC_APP_URL ?? ''`.
+
+---
+
+## [CLAUDE-1][HIGH][MONEY] Three wallet balances summed a prefix of the ledger
+
+**Files:** `lib/wallet/server.ts` (`childSpendableCents`, `bucketBalanceCents`),
+`app/(app)/wallet/invest/actions.ts`.
+
+**Problem.** Each derives a balance by summing `wallet_transactions` with a bare,
+unbounded `select()`. PostgREST caps such a response at `db-max-rows` (1,000 by
+default) and reports nothing, so past that many rows in a bucket each function
+summed a prefix and returned it as the balance. None ordered the read, so it was
+an *undetermined* prefix.
+
+**Evidence.** `lib/supabase/read-all.ts` — this repo's own helper — states the
+cap, says it was measured against a local project (2,011 rows → 1,000 returned),
+and ends with: *"a truncated list is a display bug; a truncated sum is a wrong
+number presented as a right one."* This PR already fixed the same defect in the
+ledger reconciler. Measured here against a capping stand-in over 2,500 completed
+100-cent credits: paged 250,000, bare select 100,000.
+
+**Impact.** `childSpendableCents` is documented as what a card authorization is
+checked against in real time; `bucketBalanceCents` as what stops a wallet
+overdrawing. A balance reading high approves a card authorization against money
+that is not there; reading low declines legitimate spending. Nothing marks the
+number partial.
+
+**Fix (taken).** All three read through `readAll` with a stable `.order('id')`
+and without `failOnMax: false` — that opt-out is documented for lists, and on a
+sum it restores the defect.
+
+**Guard.** `tests/a-truncated-sum-is-a-wrong-balance.test.ts` — the real
+`bucketBalanceCents` against a stand-in that caps every response, requiring the
+complete 250,000, with the truncated 100,000 asserted separately so the fake
+cannot silently stop capping; plus a ratchet requiring each of the three to page,
+to order, and not to opt out. Reverting one turns both halves red, the
+behavioural one naming the number.
+
+**Scope.** Three sums, not all nine `wallet_transactions` statements — the other
+six are three writes and three bounded reads, and `read-all.ts` draws that line
+itself.
+
+**Process note.** The sweep classified six reads as unbounded; three were writes
+whose verb sat on a later line than the classifier matched. Reading all six
+rather than trusting the count kept three false accusations out of this finding.
+
+**Status:** FIXED. **Verified:** 14,106 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles` (four shards each), tsc clean, lint 0 at 12, build 0.

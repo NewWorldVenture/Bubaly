@@ -718,3 +718,32 @@ VERIFIED: 14,101 tests green under both TZ=UTC and TZ=America/Los_Angeles, tsc
 clean, lint 0 at budget 12, build 0. Guard proven to bite.
 
 LAST-UPDATE: 2026-09-17, after Q24.
+
+## Claude-1 (continuation — Q25)
+
+DONE: **Q25 — three wallet balances summed a prefix of the ledger.**
+childSpendableCents, bucketBalanceCents and the INVEST balance each summed
+wallet_transactions with a bare unbounded select. PostgREST caps at db-max-rows
+and says nothing, so past ~1,000 rows in a bucket each returned a partial total
+as the balance — and with no .order(), an undetermined one.
+
+The rule was already written in lib/supabase/read-all.ts, measured, and applied
+elsewhere in this same PR (the ledger reconciler). Its header ends "a truncated
+list is a display bug; a truncated sum is a wrong number presented as a right
+one". These three never called it.
+
+Measured against a capping stand-in over 2,500 completed 100-cent credits:
+paged 250,000, bare select 100,000.
+
+FIX: all three through readAll with .order('id'), none opting out of the
+truncation error.
+
+NEW INSTRUMENT: tests/a-truncated-sum-is-a-wrong-balance.test.ts — behavioural
+(the real bucketBalanceCents against a capping client) plus a ratchet over the
+three by name. Proven to bite: reverting one gives "expected 100000 to be 250000".
+
+PROCESS NOTE: the sweep called six reads unbounded; three were writes whose verb
+sat on a later line. Reading all six kept three false accusations out.
+
+VERIFIED: 14,106 green under both timezones, tsc clean, lint 0 at 12, build 0.
+LAST-UPDATE: 2026-09-17, after Q25.
