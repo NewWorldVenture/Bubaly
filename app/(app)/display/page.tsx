@@ -177,8 +177,8 @@ async function loadDisplay(
   const choreIds = [...new Set((chores ?? []).map((c) => c.chore_id))];
   const mealIds = [...new Set((mealRows ?? []).map((m) => m.meal_id).filter(Boolean) as string[])];
   const [{ data: choreRows }, { data: meals }] = await Promise.all([
-    choreIds.length ? supabase.from('chores').select('id, title').in('id', choreIds) : Promise.resolve({ data: [] as { id: string; title: string }[] }),
-    mealIds.length ? supabase.from('meals').select('id, name').in('id', mealIds) : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+    choreIds.length ? settle(supabase.from('chores').select('id, title').in('id', choreIds)) : Promise.resolve({ data: [] as { id: string; title: string }[] }),
+    mealIds.length ? settle(supabase.from('meals').select('id, name').in('id', mealIds)) : Promise.resolve({ data: [] as { id: string; name: string }[] }),
   ]);
   // Started AFTER the batch above and awaited immediately, so no promise is in
   // flight across an array literal where a throw could orphan it (§3).
