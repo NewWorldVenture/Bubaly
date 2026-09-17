@@ -5221,3 +5221,63 @@ never part of this thread.
 tests green under both `TZ=UTC` and `TZ=America/Los_Angeles`**, tsc clean,
 `npm run lint` exits 0 at 12, `npm run build` exits 0. Previous batch confirmed
 by **CI run 3179 on `f7f3a2e1`, green including E2E**.
+
+---
+
+## [CLAUDE-1][MEDIUM][ARCHITECTURE] A public capability with a careful reader and no writer
+
+**Files:**
+- `app/api/sync/feeds/[token]/route.ts` — the public ICS reader
+- `lib/sync/feed-token.ts` — `generateFeedToken` / `signFeedToken` / `verifyFeedSignature`, **imported by nothing**
+- `lib/calendar/providers.ts` — `addToCalendarLinks()`, called only by its test
+- `supabase/migrations/0018_sync_platform.sql:150` — `feed_token text unique`, nullable, **no DEFAULT**
+- `app/(app)/dashboard/sync/page.tsx:52` — selected a column nothing sets, then discarded the rows
+
+**Problem.** The published-calendar feature is implemented in five places and
+cannot be used by anyone. Nothing writes `sync_calendars.feed_token`; nothing
+sets `feed_enabled` true. `.eq('feed_token', token).eq('feed_enabled', true)`
+cannot match a row for any family, so every request to a feed URL is a 404.
+
+**Evidence.** Every mention of `feed_token` in the repository, exhaustively: the
+route's three comment lines, the route's one `.eq(...)` read, the column
+declaration in `0018` and in `CATCH_UP_PROD.sql`, and `lib/database.types.ts`.
+`generateFeedToken()` has zero callers. `feed_enabled` appears only as its
+migration default (`false`), the route's filter, and the sync page's unused
+select.
+
+**Impact.** Not the missing feature — what the next reader concludes. The route
+reads like a live, hardened public surface: two rate limiters, capability-token
+comment, `feed_enabled` scoping, paginated reads. A reviewer audits a feature
+that does not exist and finds it safe. Whoever wires the publish button will
+assume the token side is handled, and the one line that must be right — 32
+CSPRNG bytes rather than the calendar's already-visible uuid — is the one line
+nobody has written.
+
+**Checked for a class; there is none.** `gift_links.token`, `pay_handles.handle`
+and `surveys.slug` are all issued by real, gated writers. The calendar feed is
+the only reader-without-writer of the four.
+
+**Fix (taken).** `tests/a-capability-nothing-can-issue.test.ts` — a ratchet, in
+the idiom used four times already in this audit. `CANNOT_BE_ISSUED` holds one
+entry and only shrinks; when a writer appears the test goes red and the entry is
+**deleted**, not the allowances widened. The route's header now states it is
+unreachable and how to issue a token. The sync page's count is `head: true`.
+
+**Fix (filed, owner decision).** The publish flow itself. A family calendar can
+carry a child's location-tagged events, so "any member may publish" and "a
+manager only" are different products. Proposed shape recorded in `finalaudit.md`
+Q23; all four supporting pieces already exist and only the action is missing.
+
+**A mistake caught on the bench, recorded because it is the third of its kind.**
+The guard's "does not mistake a read for a writer" assertion first asked whether
+a reported line *contained* `.eq(` — but a real write chains one
+(`.update({…}).eq('id', id)`), so the guard's own probe read back as a false
+accusation. Twice before in this audit a guard has asked the right question
+through a mechanism that assumed one shape of call site. This one was caught
+before it shipped, and is now stated as the behaviour of the string-stripper on
+literal lines, which chaining cannot confuse.
+
+**Status:** FIXED (guard + two source corrections), FILED (the publish flow).
+**Verified:** guard green; proven to bite by inserting a writer and watching it
+name the exact file and line, with its other three assertions staying green;
+`tsc --noEmit` clean; `eslint` clean on every changed file.

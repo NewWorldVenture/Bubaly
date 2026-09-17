@@ -19,6 +19,24 @@ import { readAll } from '@/lib/supabase/read-all';
 //
 // Uses the service client because the request is unauthenticated by design; the
 // token IS the authorization, and we scope strictly to feed_enabled rows.
+//
+// ── NOT REACHABLE YET. Nothing issues a token. ─────────────────────────────
+//
+// No code anywhere writes sync_calendars.feed_token, and nothing sets
+// feed_enabled true. The column is nullable with no DEFAULT (0018),
+// feed_enabled defaults false, and generateFeedToken() in lib/sync/feed-token.ts
+// has no callers — that module is imported by nothing. So the filter below
+// cannot match a row for any family, and every request here is a 404 today.
+//
+// This is written down because the handler reads like a live, hardened public
+// surface and is not one: the reviewer who checks the rate limits and the
+// feed_enabled scoping is auditing a feature that does not exist, and whoever
+// wires the publish flow will reasonably assume the token side is handled. It
+// is not. Issue tokens with generateFeedToken() — 32 CSPRNG bytes — and never
+// the calendar's own uuid, which is already visible to every member.
+//
+// Guarded by tests/a-capability-nothing-can-issue.test.ts, which goes red the
+// moment a writer appears so this note cannot quietly outlive its truth.
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ token: string }> },

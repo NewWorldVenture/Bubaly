@@ -603,3 +603,73 @@ CI: green on every completed head this session (d962e558, a4f121d2, 5ee3609b,
 approved.
 
 LAST-UPDATE: 2026-09-16, after the zone-guard generalisation.
+
+# Board continuation (appended 2026-09-17)
+
+Only the Claude-1 block is written here. Claude-2/3/4 did not run; their files
+are untouched since 2026-09-14 and their sections above stand as they were.
+
+## Claude-1 (continuation)
+
+SCOPE: architecture/integration.
+
+DONE: **Q23 — a public capability with a careful reader and no writer.**
+`/api/sync/feeds/<token>` is a hardened public ICS endpoint (two rate limiters,
+token shape validation, `feed_enabled` scoping, paginated reads) keyed on a
+column **nothing in the repository writes**. `generateFeedToken()` has zero
+callers and `lib/sync/feed-token.ts` is imported by nothing, so every feed URL
+has always been a 404 for every family. Verified by exhaustive enumeration: all
+five mentions of `feed_token` are a comment, the route's read, the two schema
+declarations, or the generated types.
+
+The severity is not the missing feature — it is that the route reads like a
+LIVE, audited public surface. A reviewer checks the rate limits and concludes it
+is safe; the truth is it is absent, and the one line that has to be right when
+somebody wires it (32 CSPRNG bytes, not the calendar's visible uuid) is the line
+nobody has written.
+
+Checked whether it is a class: **it is not.** `gift_links.token`,
+`pay_handles.handle` and `surveys.slug` all have real gated writers. This is the
+only reader-without-writer of the four.
+
+NEW INSTRUMENT: `tests/a-capability-nothing-can-issue.test.ts` — a ratchet
+(`CANNOT_BE_ISSUED`, one entry, shrinks only). It separates reads from writes by
+stripping comments and string literals: a read names the column inside a string,
+a write names it as an identifier. Proven to bite — inserting
+`.update({ feed_token: 'x' })` turns it red naming the exact file and line while
+its other three assertions stay green. Non-vacuity comes from running the same
+detector over `child_wallet_id`, which IS written.
+
+THINGS THIS PASS GOT WRONG AND FIXED:
+  - The guard's "does not mistake a read for a writer" assertion asked whether a
+    reported line CONTAINED `.eq(`. A real write chains one
+    (`.update({…}).eq('id', id)`), so the guard's own probe came back as a false
+    accusation. **Third time in this audit a guard has asked the right question
+    through a mechanism that assumed one shape of call site** — the first caught
+    on the bench rather than in the repo. Restated as the stripper's behaviour on
+    literal lines.
+
+ALSO FIXED: `app/(app)/dashboard/sync/page.tsx` fetched `id, feed_enabled` for
+every calendar in the family and used only `.count` — a column that cannot vary,
+fetched to be discarded. Now `head: true`, matching the conflicts query beside it.
+
+FILED, NOT TAKEN (owner decision): the publish flow. A family calendar can carry
+a child's location-tagged events, so "any member may publish" and "a manager
+only" are different products. Proposed shape in `finalaudit.md` Q23 — all four
+supporting pieces exist; only the action is missing.
+
+NEXT: unchanged and older — 16 unattached labels and 66 unnamed selects (copy in
+eleven locales), nine `jsx-a11y` warnings needing per-component judgement, three
+`react-hooks/exhaustive-deps` never in scope.
+
+BLOCKERS: unchanged — F5/F-001 (no path to apply migrations to prod) is
+owner-blocked; the two medical owner-decisions are filed, not mine.
+
+FILES-TOUCHED (this pass):
+  - tests/a-capability-nothing-can-issue.test.ts (new)
+  - app/api/sync/feeds/[token]/route.ts (header only)
+  - app/(app)/dashboard/sync/page.tsx
+  - finalaudit.md (Q23), audit/claude-1.md, audit/status.md
+
+PR #548 remains a DRAFT; nothing merged or approved.
+LAST-UPDATE: 2026-09-17, after Q23.

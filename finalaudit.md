@@ -5544,3 +5544,88 @@ more than it did.
   `5ee3609b` — on the main workflow including E2E.
 - Non-vacuity by mutation on all five findings; each revert names the defect in
   its failure message rather than merely going red.
+
+## Q23 — MEDIUM: a public capability with a careful reader, a hardened route, and no writer
+
+`/api/sync/feeds/<token>` is a public, unauthenticated iCalendar endpoint, and
+it is built with visible care: it validates the token's shape, rate-limits by IP
+**twice** (in memory and durably in the database), scopes strictly to
+`feed_enabled` rows, paginates through `readAll` so a busy calendar cannot be
+silently truncated, and renders ICS with a refresh interval. Beside it,
+`lib/sync/feed-token.ts` supplies 32 bytes of CSPRNG entropy as URL-safe base64,
+an HMAC signer, and a **timing-safe** verifier.
+
+**Nothing issues a token.** Every mention of `sync_calendars.feed_token` in the
+repository is one of four things — the route's own comments, the route's
+`.eq('feed_token', token)` read, the column's declaration in `0018` and
+`CATCH_UP_PROD.sql`, and the generated `database.types.ts`. The column is
+nullable **with no DEFAULT**; `feed_enabled` is `not null default false` and
+nothing ever sets it true; and `generateFeedToken()` has **no callers** —
+`lib/sync/feed-token.ts` is imported by no file in the repository. So
+
+```
+.eq('feed_token', token).eq('feed_enabled', true)
+```
+
+cannot match a row, for any family, ever. **Every request to a feed URL is a
+404, and always has been.** `addToCalendarLinks()` in `lib/calendar/providers.ts`
+— which builds the Google, Apple and `webcal://` subscribe links — is likewise
+called only by its own test, and `/api/sync/feeds` is allow-listed as public in
+`lib/auth/route-access.ts`.
+
+**Why this is worse than ordinary dead code.** The danger is not the absent
+feature, it is what the next reader concludes. A reviewer who checks this route
+reads the two rate limiters, the capability-token comment and the `feed_enabled`
+scoping, and comes away believing the feature is **safe**; the true state is that
+it is **absent**. Whoever eventually wires a publish button will reasonably
+assume the token side is handled — and the single line that actually has to be
+right, writing 32 random bytes rather than reusing the calendar's uuid (already
+visible to every member), is the one line nobody has written. **Dead code that
+looks audited is how a guessable capability URL ships.**
+
+**Checked whether this is a class, and it is not.** The other three public
+token surfaces are live and correctly issued: `gift_links.token` is written by
+`createGiftLinkAction` (manager-gated, wallet ownership verified, `crypto.randomUUID`),
+`pay_handles.handle` by its own action, and `surveys.slug` by the admin console.
+The calendar feed is the only one of the four with a reader and no writer.
+
+**Fixed:** `tests/a-capability-nothing-can-issue.test.ts`, a **ratchet** in the
+idiom this audit has used four times — a closed `CANNOT_BE_ISSUED` list holding
+exactly one entry today, which **only shrinks**. It classifies each mention of a
+column by stripping comments and string literals from the line: a read names the
+column *inside a string* (`.eq('feed_token', …)`), a write names it as an
+identifier. When a writer appears the test goes red and the fix is to **delete
+the entry**, not to widen the allowances. Two further assertions keep it honest —
+the reader must still exist and still filter on the column, or the entry is
+stale. The route now says in its header that it is not reachable, and says how
+to issue a token when someone wires it.
+
+**Revert → :** adding
+`.update({ feed_token: 'x', feed_enabled: true })` anywhere in `app/` turns the
+guard red naming the exact file and line; the other three assertions stay green.
+
+**Non-vacuity, and a mistake caught on the bench.** The guard proves it can tell
+a write from a read by running the same detector over `child_wallet_id`, which
+*is* written, and requiring it to find the writer in `wallet/actions.ts` —
+without that, a detector that finds nothing passes by accident. The first draft
+of the "does not mistake a read for a writer" assertion asked whether a reported
+line *contained* `.eq(`, and a real write chains one
+(`.update({…}).eq('id', id)`), so the guard's own probe came back as a false
+accusation. **That is the third time in this audit a guard has asked the right
+question through a mechanism that assumed one shape of call site** — this one
+caught before it shipped. It is now stated as the behaviour of the stripper on
+literal lines, which cannot be confused by chaining.
+
+**Also fixed:** `app/(app)/dashboard/sync/page.tsx` selected `id, feed_enabled`
+for every calendar in the family and used only `.count`, discarding the rows —
+including a column that cannot vary. Now `head: true`, the idiom the conflicts
+query on the next line already uses.
+
+**Filed, not taken — an owner decision.** Wiring the publish flow is **not** done
+here. Who may publish a family calendar is a privacy decision with a real blast
+radius: these calendars can carry a child's location-tagged events, and "any
+member may publish" and "a manager only" are different products. Proposed shape
+when the owner decides: a manager-gated action that writes
+`generateFeedToken()` and flips `feed_enabled`, a rotate action that overwrites
+the token, and the existing `addToCalendarLinks()` for the subscribe buttons —
+all four pieces already exist and only the action is missing.
