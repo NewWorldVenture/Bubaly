@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useApp } from '@/components/app/app-context';
+import { useDismissOnEscape } from '@/lib/hooks/use-dismiss-on-escape';
 import { dayKeyIn } from '@/lib/time/zoned';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
@@ -78,6 +79,7 @@ export function ChoresModule() {
   const [busy, setBusy] = useState<string | null>(null);
   const [paying, setPaying] = useState<string | null>(null);
   const [menuFor, setMenuFor] = useState<string | null>(null);
+  useDismissOnEscape(menuFor !== null, () => setMenuFor(null));
   const [pointsWindow, setPointsWindow] = useState<'week' | 'month' | 'all'>('week');
 
   const { data, loading, error, refresh } = useRealtimeQuery<Assignment>({
@@ -223,7 +225,10 @@ export function ChoresModule() {
   ];
 
   return (
-    <div className="module-with-sidebar" onClick={() => menuFor && setMenuFor(null)}>
+    // Layout again — see locator-module: dismissal on a page-wide click handler
+    // forced the menu panel to carry a stopPropagation handler purely to cancel
+    // it. The row menu owns a scrim now, and Escape is the keyboard path.
+    <div className="module-with-sidebar">
       <div className="module-main">
         <div className="module-page">
           <PageHeader
@@ -608,14 +613,19 @@ function ChoreRow({ a, memberById, manager, busy, paying, menuFor, setMenuFor, o
             <MoreVertical className="h-4 w-4" />
           </button>
           {menuFor === a.id && (
-            <div className="absolute right-0 z-20 mt-1 w-44 overflow-hidden rounded-xl border border-border bg-elevated shadow-lg" onClick={(e) => e.stopPropagation()}>
+            <>
+              {/* Presentational; Escape is the keyboard path. */}
+              {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+              <div aria-hidden="true" className="fixed inset-0 z-10" onClick={() => setMenuFor(null)} />
+              <div className="absolute right-0 z-20 mt-1 w-44 overflow-hidden rounded-xl border border-border bg-elevated shadow-lg">
               {a.status === 'todo' && <MenuItem onClick={() => onStatus(a, 'in_progress')}><Clock className="h-3.5 w-3.5" /> {tr('chores.startInProgress')}</MenuItem>}
               {!done && a.status !== 'submitted' && <MenuItem onClick={() => onStatus(a, 'submitted')}><CheckCircle2 className="h-3.5 w-3.5" /> {tr('chores.submitForApproval')}</MenuItem>}
               {manager && a.status === 'submitted' && <MenuItem onClick={() => onApprove(a)}><CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> {tr('chores.approve')}</MenuItem>}
               {done && a.status !== 'todo' && <MenuItem onClick={() => onStatus(a, 'todo')}><Circle className="h-3.5 w-3.5" /> {tr('chores.reopen')}</MenuItem>}
               {canPay && <MenuItem onClick={() => onPay(a)}><Sparkles className="h-3.5 w-3.5 text-amber-400" /> {paying === a.id ? 'Paying…' : `Pay ${formatCents(a.chore!.cash_cents!)}`}</MenuItem>}
               {manager && <MenuItem danger onClick={() => onDelete(a)}><Trash2 className="h-3.5 w-3.5" /> {tr('chores.delete')}</MenuItem>}
-            </div>
+              </div>
+            </>
           )}
         </div>
       </div>

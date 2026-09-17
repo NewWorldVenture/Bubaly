@@ -94,12 +94,17 @@ describe('the preference centre is operable by keyboard', () => {
     'components/app/blog-launcher.tsx',
     'components/app/command-bar.tsx',
     'components/app/trial-paywall-gate.tsx',
-    'components/guardian/contact-list.tsx',
     'components/guardian/rules-editor.tsx',
     'components/marketing/exit-intent.tsx',
     'components/ui/camera-capture.tsx',
   ];
 
+  // contact-list.tsx came OFF this list: its editor declared
+  // `role="dialog" aria-modal="true"` and provided none of what that promises —
+  // no Escape, no focus move-in, no trap, no restore. It now uses
+  // `useDialogBehavior`, the same hook the photo lightbox uses, so it satisfies
+  // `hasDialogContract` and this ratchet requires its removal. That is the
+  // mechanism working: the list is not allowed to carry a licence nobody uses.
   function declaresAriaModal(): string[] {
     return [...walk(join(ROOT, 'components')), ...walk(join(ROOT, 'app'))]
       .filter((f) => {

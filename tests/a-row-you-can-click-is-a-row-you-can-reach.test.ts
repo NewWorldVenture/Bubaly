@@ -79,6 +79,26 @@ describe('activatable', () => {
 describe('an aria-hidden scrim does not hide a menu with no way out', () => {
   const SCRIM = /className="fixed inset-0[^"]*"/;
 
+  /**
+   * An Escape path is either written here, or provided by one of the two hooks
+   * that exist to provide it.
+   *
+   * This started as `/['"]Escape['"]/` — the key compared inline — and that
+   * heuristic broke the moment the handling was factored into a hook, which is
+   * the better shape: `useDismissOnEscape` for a popover (Escape only; a
+   * dropdown must NOT trap focus or lock scroll) and `useDialogBehavior` for a
+   * real dialog (Escape, focus trap, focus restore). Six overlays across four
+   * modules moved onto them at once.
+   *
+   * Deliberately a CLOSED list of two names rather than anything matching
+   * /escape/i: a guard that accepts any plausible-looking identifier is a guard
+   * that accepts `const escapeHatch = true`. Adding a third hook here should be
+   * a deliberate act, and the compiler will not do it for you.
+   */
+  const ESCAPE_HOOKS = ['useDismissOnEscape', 'useDialogBehavior'];
+  const hasEscapePath = (source: string): boolean =>
+    /['"]Escape['"]/.test(source) || ESCAPE_HOOKS.some((hook) => source.includes(`${hook}(`));
+
   const files = execSync("git ls-files 'components/*.tsx' 'app/*.tsx'", { encoding: 'utf8' })
     .split('\n').filter(Boolean);
 
@@ -95,7 +115,7 @@ describe('an aria-hidden scrim does not hide a menu with no way out', () => {
         (line) => SCRIM.test(line) && line.includes('onClick') && line.includes('aria-hidden'),
       );
       if (scrims.length === 0) continue;
-      if (!/['"]Escape['"]/.test(source)) offenders.push(`${file} (${scrims.length} scrim(s))`);
+      if (!hasEscapePath(source)) offenders.push(`${file} (${scrims.length} scrim(s))`);
     }
     expect(
       offenders,

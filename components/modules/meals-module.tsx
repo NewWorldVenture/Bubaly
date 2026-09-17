@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useDismissOnEscape } from '@/lib/hooks/use-dismiss-on-escape';
 import {
   ChevronLeft, ChevronRight, Plus, Sparkles, Activity, Check, X as XIcon,
   Search, MoreHorizontal, Clock, Heart, ThumbsUp, Utensils,
@@ -102,12 +103,7 @@ export function MealsModule() {
   // user who opened it had no way to dismiss it — only to tab through to an
   // item and activate one. Escape is the missing half; the scrim is the mouse
   // convenience that duplicates it.
-  useEffect(() => {
-    if (!moreOpen) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMoreOpen(false); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [moreOpen]);
+  useDismissOnEscape(moreOpen, () => setMoreOpen(false));
   const [recipeSearch, setRecipeSearch] = useState('');
   const [dinnerIdx, setDinnerIdx] = useState(0);
   const [addingPlan, setAddingPlan] = useState(false);

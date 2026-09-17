@@ -5049,3 +5049,70 @@ scrim suppression.
 **Status:** FIXED. **Verified:** **14,071 tests green under both `TZ=UTC` and
 `TZ=America/Los_Angeles`**, tsc clean, `npm run lint` exits 0 at 61, `npm run
 build` exits 0.
+
+---
+
+### [CLAUDE-1][HIGH][A11Y] Six overlays and a modal, none of which closed on Escape
+
+**Files:** `lib/hooks/use-dismiss-on-escape.ts` (new),
+`components/app/app-shell.tsx`, `components/guardian/contact-list.tsx`,
+`components/modules/{locator,chores,meals}-module.tsx`,
+`tests/a-row-you-can-click-is-a-row-you-can-reach.test.ts`,
+`tests/consent-preference-centre-focus.test.ts`, `package.json`
+
+**`grep -c Escape` returned 0 for all four files.** Six dismissible overlays —
+both `app-shell` menus, the locator style and "more" menus, the chores row menu,
+the Guardian trust picker — closed on a click and **nothing else**. Every one
+opens from a button a keyboard user can reach, and the click-away target is a
+transparent div a keyboard cannot land on. Open one and there is no way to
+change your mind: activate an item, or tab out of the page.
+
+**The worst of them declared itself a modal.** `contact-list.tsx`'s editor is
+`role="dialog" aria-modal="true"` — a promise of inertness, focus containment
+and Escape — **with none of it implemented.** It now uses `useDialogBehavior`,
+the same hook the photo lightbox uses, which supplies all four.
+
+**A structural fix that removed two warnings by removing the cause.** In locator
+and chores, dismissal hung off an `onClick` on the **entire page wrapper**,
+which forced each menu panel to carry `onClick={(e) => e.stopPropagation()}`
+purely to cancel it: two handlers whose only job was to undo each other, on
+elements no keyboard can reach. Each menu now owns a scrim and the page wrapper
+is layout again.
+
+**`useDismissOnEscape` is deliberately not `useDialogBehavior`.** A dropdown must
+NOT trap focus or lock body scroll — the trigger keeps focus and the page keeps
+scrolling. Escape only.
+
+**Two existing guards caught this work, and both were right.**
+
+1. `tests/consent-preference-centre-focus.test.ts` listed `contact-list.tsx` as
+   hand-rolling `aria-modal` **without** a dialog contract. Giving it the hook
+   made the entry stale, and the ratchet's second assertion — *"the list shrinks
+   as they are converted, and never lies"* — **failed until I removed it.** That
+   is the mechanism working exactly as designed: it refuses to carry a licence
+   nobody is using.
+2. `tests/a-row-you-can-click-is-a-row-you-can-reach.test.ts` requires every
+   `aria-hidden` scrim to have an Escape path **in its file**, tested as
+   `/['"]Escape['"]/`. My refactor moved the handling into a named hook, so the
+   literal vanished and four files were flagged. **The guard asked the right
+   question with a heuristic that assumed an inline handler.** It now also
+   accepts a **closed list of two hook names** — not `/escape/i`, because a
+   guard that accepts any plausible identifier would accept
+   `const escapeHatch = true`. `meals-module` moved onto the hook too, so the
+   pattern is uniform.
+
+Relaxing a guard needs proof it still bites: **removing the hook call from
+`chores-module` while leaving its scrim makes it fail again**, naming the file.
+
+**Warnings 61 → 43** — eighteen in one batch, cap tightened to match.
+
+**A process correction, recorded because it affected what I could honestly
+claim.** I had been pushing faster than CI completes: runs 3172, 3173 and 3175
+were all **cancelled by supersession**, so three commits' worth of DOM changes
+never reached E2E. Local verification is thorough but does not drive a browser.
+Run **3177 on `e91b0550` completed green**, covering all of them, and this batch
+groups four modules into one commit rather than four.
+
+**Status:** FIXED. **Verified:** **14,071 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles`**, tsc clean, `npm run lint` exits 0 at 43, `npm run
+build` exits 0, **CI run 3177 green including E2E**.
