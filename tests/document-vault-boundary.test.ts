@@ -6,23 +6,76 @@
 // have withheld; if TypeScript knows and SQL does not, the Files hub serves it
 // through the anon client and nothing stops that at all. This test is the only
 // thing holding the two together.
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
-import { SENSITIVE_CATEGORIES, isSensitiveCategory } from '@/lib/documents/sensitivity';
+import { SENSITIVE_CATEGORIES, SENSITIVE_PHRASES, isSensitiveCategory } from '@/lib/documents/sensitivity';
 
 const MIGRATION = readFileSync('supabase/migrations/0266_document_vault_boundary.sql', 'utf8');
 
-/** The category list inside `is_sensitive_document`, in SQL's own words. */
+const MARKER = 'create or replace function public.is_sensitive_document';
+
+/**
+ * The migration that currently DEFINES the classifier — the newest one, not
+ * 0266. This test used to read 0266 by name, which meant it compared TypeScript
+ * against a definition the database had already replaced: the day 0312 changed
+ * the rule, the parity check would have been guarding a ghost.
+ */
+function classifierSource(): string {
+  const dir = 'supabase/migrations';
+  const defining = readdirSync(dir)
+    .filter((f) => f.endsWith('.sql'))
+    .sort()
+    .filter((f) => readFileSync(`${dir}/${f}`, 'utf8').includes(MARKER));
+  expect(defining.length, 'no migration defines is_sensitive_document').toBeGreaterThan(0);
+  const newest = defining[defining.length - 1];
+  const sql = readFileSync(`${dir}/${newest}`, 'utf8');
+  return sql.slice(sql.indexOf(MARKER));
+}
+
+/** The vocabulary inside `is_sensitive_document`, in SQL's own words. */
 function sqlCategories(): string[] {
-  const fn = MIGRATION.slice(MIGRATION.indexOf('create or replace function public.is_sensitive_document'));
-  const list = fn.slice(fn.indexOf('in ('), fn.indexOf(');'));
+  const fn = classifierSource();
+  const list = fn.slice(fn.indexOf('array['), fn.indexOf(']::text[] as words'));
   return [...list.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]).sort();
+}
+
+/** The phrase list inside `is_sensitive_document`. */
+function sqlPhrases(): string[] {
+  const fn = classifierSource();
+  const list = fn.slice(fn.indexOf('as phrases') - 200, fn.indexOf('as phrases'));
+  return [...list.matchAll(/'([a-z]+ [a-z]+)'/g)].map((m) => m[1]).sort();
 }
 
 describe('the sensitive-document definition is one definition', () => {
   it('SQL and TypeScript name exactly the same categories', () => {
     expect(sqlCategories()).toEqual([...SENSITIVE_CATEGORIES].sort());
   });
+
+  it('SQL and TypeScript name exactly the same phrases', () => {
+    expect(sqlPhrases()).toEqual([...SENSITIVE_PHRASES].sort());
+  });
+
+  // The defect 0312 closes. `category` is a free-text folder name and the
+  // Documents upload path never sets `is_secure`, so these ARE the boundary.
+  // Under the exact-match rule every one of these read as an ordinary file —
+  // including the last two, whose every word was already on the list.
+  it.each([
+    'Medical Records', 'Tax Returns', 'Bank Statements', 'Passports & IDs',
+    'Birth Certificates', 'Social Security', 'Immigration', 'Mortgage',
+    'Prescriptions', 'Wills & Estate', 'Health Insurance',
+  ])('%s is adults-only, as a parent would file it', (category) => {
+    expect(isSensitiveCategory(category)).toBe(true);
+  });
+
+  // The other half of the rule: matching per WORD rather than by substring is
+  // what keeps these ordinary. A substring match on the bare 'id' would have
+  // swept up all three.
+  it.each(['general', 'Kids Art', 'Videos', 'Ideas', 'School Projects', 'Recipes', 'Birthday Party'])(
+    '%s stays visible to the whole family',
+    (category) => {
+      expect(isSensitiveCategory(category)).toBe(false);
+    },
+  );
 
   it('still covers the categories a family would be shocked to leak', () => {
     // A guard against both lists being edited down together.

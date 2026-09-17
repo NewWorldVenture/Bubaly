@@ -514,8 +514,8 @@ passed; production application of the atomic `0240-0254` release remains pending
 ## Migrations added since this document's stated baseline (2026-09-12)
 
 The status line at the top of this file is dated **2026-09-05** against main
-`01881fb2`. **54** migration files have landed since, `0255` through
-`0311`, and none of them appear anywhere above. (This read "thirty-one, `0255`
+`01881fb2`. **55** migration files have landed since, `0255` through
+`0312`, and none of them appear anywhere above. (This read "thirty-one, `0255`
 through `0285`" until 2026-09-13, "seventy-one, `0255` through `0295`" until
 2026-09-15, and "forty-five, `0255` through `0302`", "46, `0255` through `0303`"
 and "49, `0255` through `0306`" until 2026-09-16; the range
@@ -1275,3 +1275,65 @@ rolled back if the credit fails — is kept and strengthened rather than deleted
 it is now a claim.
 
 This needs no migration and takes effect on merge.
+
+### `0312` makes the sensitive-document rule match what people type — unapplied
+
+`documents.category` is a **free-text folder name** the person types
+(`components/modules/documents-module.tsx` sets
+`category: form.category.trim() || 'general'`), and that upload path never sets
+`is_secure`. So for anything filed through Documents, the category *is* the
+whole boundary.
+
+`0266`'s classifier tested **exact membership** of a seventeen-word list.
+Measured on a replayed database against the folder names a parent actually
+types:
+
+| filed as | sensitive? |
+| --- | --- |
+| `medical` | yes |
+| **`Medical Records`** | **no** |
+| **`Tax Returns`** | **no** |
+| **`Bank Statements`** | **no** |
+| **`Passports & IDs`** | **no** |
+| **`Wills & Estate`** | **no** |
+| **`Health Insurance`** | **no** |
+
+The last two show it was a matching bug rather than a vocabulary gap: every word
+in them was already on the list. A plural or a second word was enough to turn
+the guard off.
+
+This reaches further than one predicate. `documents_select/insert/update/delete`
+(`0266`) and `document_object_is_restricted` (`0303`, the storage-bytes guard)
+all decide through this function — so a passport scan filed under "Passports &
+IDs" was readable by every child in the family, **bytes included**, which is
+exactly what `0303` was written to stop.
+
+Measured consequence, acting as a child with both controls passing: **12
+assertions failed** under the old rule, including *"a child can read 11
+documents filed under sensitive folder names"*. Zero after `0312`.
+`docs/audit/document-category-classifier-check.sql`.
+
+**The change.** Match per **word** rather than on the whole string: lowercase,
+split on non-alphanumerics, test each word against the list, also trying it with
+one trailing `s` removed. Stripping the `s` is what lets "Wills" reach "will";
+doing it on *words* rather than substrings is what keeps "Kids Art", "Videos"
+and "Ideas" ordinary — a substring match on the bare `id` would have hidden all
+three from the family that filed them. A short phrase list carries what no
+single word does, and the vocabulary gains the terms a family vault obviously
+holds.
+
+Over-classification is the safe direction and is chosen deliberately: a gym
+membership filed under "Health Club" becoming adults-only is a smaller harm than
+a child reading a diagnosis.
+
+It remains a list, and a list is what let this through. What changed is that it
+now matches the language people write in.
+
+**A test that was guarding a ghost.** `tests/document-vault-boundary.test.ts`
+held the SQL and TypeScript copies in parity by reading
+`supabase/migrations/0266_…sql` *by name*. The moment a newer migration
+redefined the function, it would have compared TypeScript against a definition
+the database had already replaced. It now resolves the newest migration that
+defines the classifier, and asserts the phrase list too.
+
+Until this is applied, production carries the classifier gap as measured above.
