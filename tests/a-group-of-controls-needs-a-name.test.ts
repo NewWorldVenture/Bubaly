@@ -148,7 +148,7 @@ describe('the counts are bounded, and shrink', () => {
     expect(
       found.length,
       `captions that name nothing:\n${found.map((f) => `${f.file}:${f.line}`).join('\n')}`,
-    ).toBeLessThanOrEqual(17);
+    ).toBeLessThanOrEqual(16);
   });
 
   it('selects with no accessible name', () => {
@@ -165,12 +165,24 @@ describe('the counts are bounded, and shrink', () => {
     //
     // 67 after the feedback board: three of its selects (category, impact,
     // audience) carried a visible caption all along and simply were not wired
-    // to it, so they cost no copy at all. That is the whole of the overlap —
-    // the remaining 67 are the toolbar filters this note is about, and they
-    // still need names somebody decides on.
+    // to it, so they cost no copy at all. 66 after feedback-admin's roadmap
+    // status, the same shape again.
+    //
+    // That last one was found by SWEEPING for it rather than by reading: every
+    // flagged select was checked for a caption within three lines above. The
+    // answer was 2 of 67, which is the useful part — it confirms this note
+    // rather than merely asserting it. The remaining 66 really are toolbar
+    // filters with nothing on screen to name them.
+    //
+    // And the sweep's OTHER hit was a false positive worth recording: at
+    // app/(app)/dashboard/social/settings/page.tsx the text it matched was
+    // `<span>{m.display_name}</span>` — a PERSON'S NAME in a repeated row, not
+    // a caption. That select sets one member's social role; naming it after the
+    // member would be wrong, and the right name ("Social role") is copy that
+    // does not exist yet. Left alone deliberately.
     expect(
       found.length,
       `selects with no accessible name:\n${found.map((f) => `${f.file}:${f.line}`).join('\n')}`,
-    ).toBeLessThanOrEqual(67);
+    ).toBeLessThanOrEqual(66);
   });
 });

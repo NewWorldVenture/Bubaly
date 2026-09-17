@@ -4797,3 +4797,41 @@ contained one, so there is nothing to claim.
 and copy. **Verified:** **14,065 tests green under both `TZ=UTC` and
 `TZ=America/Los_Angeles`** (four shards each), tsc clean, eslint at 85, `npm run
 build` exits 0.
+
+---
+
+### [CLAUDE-1][LOW][A11Y] Sweeping for the last cheap wins, and finding there is one
+
+**Files:** `components/admin/feedback-admin.tsx`,
+`tests/a-group-of-controls-needs-a-name.test.ts`
+
+Rather than assert that the remaining selects need copy, I **measured it**:
+every one of the 67 flagged selects was checked for a caption within three lines
+above. **2 of 67.** That is the useful result — it confirms the standing note
+(*"most of these are toolbar filters with no visible caption, so each needs a
+NAME, and a name is copy in eleven locales"*) instead of taking it on trust,
+and it bounds how much free work is left: almost none.
+
+**One was real.** `feedback-admin.tsx` has a proper "Roadmap status" caption
+sitting unwired above its select. Now `htmlFor`/`id`, with **`useId` rather than
+a literal** — that panel renders once per idea row, so a fixed id would be
+duplicated across every row on the page. It cleared **both** ratchets at once,
+since the caption was counted as an unattached label and the select as unnamed:
+**17 → 16 labels, 67 → 66 selects.**
+
+**The other was a false positive, and it is the more interesting one.** At
+`app/(app)/dashboard/social/settings/page.tsx` the text my sweep matched was
+`<span>{m.display_name}</span>` — **a person's name** in a repeated row, not a
+caption. That select sets one member's social role. Naming the control after the
+member would be wrong (the name is the row's subject, not the control's
+purpose), and the correct name — "Social role" — is copy that does not exist in
+any locale. **Left alone deliberately**, and written into the ratchet so the
+next person does not "fix" it by reaching for the nearest nearby string.
+
+That is the same trap the selects note already warns about in a different
+disguise: *the placeholder is a VALUE, not a name* — and here, *the row's
+subject is not the control's name either.*
+
+**Status:** FIXED (one), FILED (one). **Verified:** **14,065 tests green under
+both `TZ=UTC` and `TZ=America/Los_Angeles`**, tsc clean, eslint at 85, `npm run
+build` exits 0.
