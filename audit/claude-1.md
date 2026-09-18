@@ -1646,3 +1646,58 @@ checks; it just never grows.
 AI routes plus this cron. In the AI routes the fallback covers an *empty* value
 on a NOT NULL column, which is a different situation from a failed read, so they
 are not the same bug. Recorded as a consistency question for an owner, OPEN.
+
+---
+
+## [CLAUDE-1][HIGH][BACKEND] The medication reminder, and the UTC fallback the file argues against
+
+- **Where:** `lib/server/notifications.ts:61`
+- **Problem:** the file spends ten lines explaining why a UTC "today" is
+  unacceptable here, and then silently falls back to UTC when the read fails.
+  Its own comment, verbatim:
+
+  > `todayStartIso` bounds the doses already logged today, and the medication
+  > reminder asks "has this dose been taken yet?" against it. Read in UTC it
+  > starts at 17:00 local in California — so the morning dose looks untaken
+  > every evening and the family is reminded again — and in Tokyo it starts at
+  > 09:00 the PREVIOUS local day, so yesterday's dose is mistaken for today's
+  > and **the reminder never fires**. A missed medication reminder is the worse
+  > of the two, and neither is acceptable.
+
+  The code underneath was `const { data: familyRow } = await …` — the error
+  dropped — followed by `familyRow?.timezone || 'UTC'`.
+- **Impact:** a transient read failure produces exactly the outcome the comment
+  calls unacceptable, and produces it **silently**. This is a sharper case than
+  the sibling reads in the same function: those fan out ~13 source reads and
+  degrade a *category* (a missing notification), while this one corrupts the
+  *day key every category is bounded by* — a wrong notification, and for
+  medication a missing dose reminder.
+- **Recommended fix:** applied. The zone read now fails the family's tick.
+  Verified first that all **three** callers wrap each family in `try/catch` and
+  count `generationFailures`, so the family is retried next tick and a broken
+  tick still reads differently from a quiet one. A family row with **no zone
+  set** keeps the default — absent is not unreadable, and only a failed read is
+  treated as unknown.
+- **Status:** FIXED. 13,896 tests pass, build compiles.
+- **Proved load-bearing:** restoring the dropped-error form fails the new case.
+
+### Triage that produced no finding, recorded so it is not redone
+
+The scan behind this was "a discarded read error falling through to a
+**substantive** default" (not `?? []` / `?? null`), which returned 15 sites.
+Most are cosmetic name fallbacks (`?? 'a family'`). Two looked serious and are
+**not** bugs:
+
+- `lib/server/entitlement.ts:76` — `prefs?.active_family_id ?? ''`. The
+  function's own header says it returns `UNLOCKED_FALLBACK` "on any error / no
+  family / pre-migration DB, so a hiccup never traps a user". Failing **open**
+  on entitlement is a deliberate, documented product decision, and the `?? ''`
+  simply falls through to `familyIds[0]`, the user's first family. Correct.
+- `app/(app)/missions/actions.ts:301` — `assignment.ai_score ?? 100`. Reads like
+  a failed AI validation scoring full marks. It is not: the line above is
+  `if (!assignment || !chore) return;`, so a failed read returns early — fails
+  **closed**. The `?? 100` is reached only on a real row with no AI score, in a
+  path already gated on `isManager`, where a parent is explicitly approving.
+
+Recorded because both cost real time to clear, and the next sweep over this
+shape will surface them again.
