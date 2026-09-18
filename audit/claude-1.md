@@ -5841,3 +5841,86 @@ admin publication flag answering 404 when off "so an unpublished page is
 indistinguishable from one that never existed".
 
 **Status:** NO DEFECT in any of the three. No change made.
+
+---
+
+### [CLAUDE-1][LOW][CRON/DELIVERY] The admin digest's window is wall-clock, so a failed run drops a day — FILED, not fixed
+
+**Path:** `app/api/cron/admin-digest/route.ts:26`
+
+**Problem.** `const since = new Date(Date.now() - 24 * 60 * 60 * 1000)` on a
+`30 12 * * *` schedule. The window is derived from when the run happens, not
+from what was last delivered, which gives two symptoms from one cause:
+
+- a run that fails (the 502 on `feedError`, or a send failure) is never made up
+  — the next run's window begins after the failed one's ended, so that day's
+  activity is never digested;
+- a retry inside the same day re-sends an overlapping digest, since nothing
+  records that one already went.
+
+**Severity is LOW, and precisely why.** The rows are not lost. `lib/feedback/
+notify.ts` inserts into `admin_notifications` independently of any email, and
+`app/(app)/admin/page.tsx` and `admin/feedback/page.tsx` render that table
+directly — its own comment calls the /admin feed "where a super admin finds out
+at all". So a dropped digest loses the PUSH, not the information, and the
+failure is visible as a 502 in the cron log rather than being silent at the
+platform level. Recipients are super admins only; no family, money or safety
+path depends on the email.
+
+**Fix (specified, not applied).** Persist the high-water mark — a
+`last_digested_at` on a singleton settings row, or a one-row `admin_digest_runs`
+table — set it after a successful send, and derive `since` from it with the 24h
+window only as the floor for a first run. That makes a missed day roll into the
+next digest and makes a same-day retry a no-op.
+
+**Why it is filed rather than fixed now, stated plainly so it can be
+overridden.** The correct fix needs persisted state, i.e. a migration. This
+branch has already hit ten migration-number collisions, and the user has told me
+two other Claude workers are auditing this codebase concurrently — a new
+migration number added from here is the most likely thing to collide with
+theirs, for the least valuable change on the board. No bodge was applied in its
+place: widening the window to 48h would stop the loss but make every digest
+double-count a day, which is a different wrong number, and this audit does not
+trade one silent wrongness for another. Say the word and I will add the
+migration.
+
+**Observation, not a defect.** `close-auctions` notifies after its settlement
+RPC commits, and its `due` query selects `status = 'available'` — so a listing
+whose notification fails is never re-selected and the winner is never told,
+while the route still answers 502. The file states this is intended
+("notifications remain best-effort after the transaction succeeds"), and
+`notify()` carries a duplicate guard that would make a retry safe if one
+existed. Recorded because the 502 implies a retryability the notification does
+not have, not because the behaviour is wrong.
+
+---
+
+### [CLAUDE-1][CLEAN] Cron retry-safety and outbound-HTTP sweep
+
+**24 scheduled jobs, checked for what a second run would repeat.** The pattern is
+near-universal and correct: a side effect is gated behind a state flip that a
+retry cannot re-match. `wallet-allowance` claims each rule with a
+compare-and-swap (`.update({next_run_on: next}).lte('next_run_on', today)`) whose
+loser matches zero rows — its comment: "an allowance can never be
+double-credited". `close-auctions` settles inside `marketplace_close_auction`
+and re-reads only `status = 'available'`. Only two crons use a fixed lookback at
+all; `guardian-learning`'s is 60 days on a daily schedule, so consecutive runs
+overlap and a failure self-heals. `admin-digest` is the one exception, filed
+above.
+
+**`notify()` is the choke point and it holds.** Every cron notification funnels
+through `lib/services/notifications`, which reads existing rows and filters
+already-notified recipients before inserting, and FAILS the call when that read
+errors rather than shipping a duplicate storm. Its dedupe read is an unbounded
+`select()`, which is the Q25 shape — checked and it cannot bite here: the set it
+builds is of `user_id`s for one family, so even a `db-max-rows` prefix of the
+matching rows still contains every distinct recipient.
+
+**Outbound HTTP carries timeouts.** Four server-side `fetch(` calls have no
+signal at the call site and all four are false positives: three in
+`lib/marketing/visitor.ts` are browser beacons (they read `navigator` and
+`location`, and use `keepalive`), and `lib/blog/posts.ts:74` is a Supabase
+`global.fetch` wrapper that spreads `init` through, preserving any caller
+signal.
+
+**Status:** NO DEFECT in any of the above. No source change made this pass.

@@ -6277,3 +6277,62 @@ watching the right rule name it.
 
 **Verified:** 14,153 tests green under both `TZ=UTC` and `TZ=America/Los_Angeles`
 (four shards each), `tsc --noEmit` clean, `npm run lint` exits 0 at budget 12.
+
+---
+
+## Q32 — LOW: the admin digest's window is wall-clock, so a failed run drops a day (FILED, not fixed)
+
+`app/api/cron/admin-digest/route.ts`
+
+`const since = new Date(Date.now() - 24 * 60 * 60 * 1000)` on a `30 12 * * *`
+schedule. The window comes from when the run happens rather than from what was
+last delivered, which gives two symptoms from one cause: a run that fails is
+never made up, because the next window begins after the failed one ended; and a
+retry inside the same day re-sends, because nothing records that one already
+went.
+
+**Severity is LOW, and precisely why.** The rows are not lost.
+`lib/feedback/notify.ts` writes `admin_notifications` independently of any
+email, and the /admin pages render that table directly — its own comment calls
+that feed "where a super admin finds out at all". A dropped digest loses the
+**push**, not the information, and the failure shows up as a 502 in the cron
+log. Recipients are super admins; no family, money or safety path depends on it.
+
+**Fix, specified.** Persist a high-water mark (`last_digested_at` on a singleton
+row, or a one-row `admin_digest_runs` table), set it after a successful send, and
+derive `since` from it with the 24h window as the floor for a first run. A missed
+day then rolls into the next digest and a same-day retry becomes a no-op.
+
+**Why it is filed rather than fixed, stated so it can be overridden.** The fix
+needs persisted state, i.e. a migration. This branch has already hit ten
+migration-number collisions and two other Claude workers are auditing this
+codebase concurrently, so a new migration number from here is the most likely
+thing to collide — for the least valuable change on the board. No bodge was
+applied instead: widening to 48h would stop the loss but make every digest
+double-count a day, and this audit does not trade one silent wrongness for
+another.
+
+### The rest of the cron surface is retry-safe
+
+24 scheduled jobs, checked for what a second run would repeat. The pattern is
+near-universal and correct — a side effect gated behind a state flip a retry
+cannot re-match:
+
+| cron | guard |
+|---|---|
+| `wallet-allowance` | compare-and-swap claim; the loser matches zero rows |
+| `close-auctions` | settles in an RPC, re-reads only `status = 'available'` |
+| `guardian-learning` | 60-day lookback on a daily schedule, so a failure self-heals |
+| every notification path | `notify()`'s duplicate guard |
+
+`notify()` is the choke point and it holds: it reads existing rows, filters
+already-notified recipients, and **fails the call** when that read errors rather
+than shipping a duplicate storm. Its dedupe read is an unbounded `select()` —
+the Q25 shape — and it cannot bite here, because the set it builds is of
+`user_id`s for one family, so even a `db-max-rows` prefix still contains every
+distinct recipient.
+
+Outbound HTTP carries timeouts: the four server-side `fetch(` calls with no
+signal at the call site are all false positives — three browser beacons in
+`lib/marketing/visitor.ts`, and a Supabase `global.fetch` wrapper in
+`lib/blog/posts.ts` that spreads `init` through and preserves a caller's signal.
