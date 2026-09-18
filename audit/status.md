@@ -747,3 +747,68 @@ sat on a later line. Reading all six kept three false accusations out.
 
 VERIFIED: 14,106 green under both timezones, tsc clean, lint 0 at 12, build 0.
 LAST-UPDATE: 2026-09-17, after Q25.
+
+## Claude-1 (continuation — Q26, Q27)
+
+DONE: **Q26 — three `.in()` reads whose id list is sized elsewhere.**
+lib/server/notification-emails.ts (up to 500), app/api/cron/return-reminders
+(BATCH=200) and app/(app)/admin/marketing/push/actions.ts (unbounded) passed id
+arrays straight into a single `.in()`. lib/supabase/chunked-in.ts already put the
+cost at ~40 bytes per UUID and capped a batch at 100. Two of the three cannot
+recover: nothing is written before the failing read, so the next run selects the
+identical set and fails identically.
+
+DONE: **Q27 — the filed settle list, read rather than pattern-matched.** Six
+sites: a `count()` helper in dashboard/agents whose body was a bare `await q`,
+unsettling ten batch elements at once; a mixed batch in marketplace/store; and
+four modules (twin/completeness-server, schedule/intelligence-server,
+autopilot/policy-scan, briefing/deliver) that state a fail-closed contract in
+writing and handled only the resolved error, never the rejection. Three more
+checked and deliberately left — two would have been false accusations.
+
+NEW INSTRUMENTS: tests/an-in-filter-travels-in-the-url.test.ts,
+tests/a-fail-closed-loader-must-actually-close.test.ts. Both proven to bite.
+
+## Claude-1 (continuation — Q28, Q29)
+
+DONE: **Q28 — a NOT IN list that grows with the platform, in the delete that
+implements erasure.** lib/network/aggregate-server.ts pruned withdrawn families
+with `.not('family_id','in', '(' + keepIds.join(',') + ')')` — the list of
+everyone STILL opted in, uncapped because the consent read above was fixed to
+page. Past the gateway's request-line limit the delete answers `URI too long`,
+the run fails, nothing is written, and the next night fails identically. The
+threshold is about two hundred consenting families, and what stops working is
+the erasure itself.
+
+Chunking cannot fix `not in` — `id not in (chunk)` deletes every other chunk's
+rows. Set inverted instead: read what the table holds (paged), subtract the
+keepers, delete the remainder by `.in()` through a new writeInChunks.
+
+Every existing test passed over it because the in-memory Supabase has no URL:
+whole-table-reads-are-not-capped seeds 1,011 families and asserts they survive
+the prune, which in production is a 40 KB request line.
+
+DONE: **Q29 — escapeLike is not enough inside `.or()`.** No live defect;
+lib/ai/activity.ts was already correct and already tested. The gap is the rule:
+`.or()` sends one string in PostgREST's filter grammar, where `,` and `()` are
+structural and escapeLike leaves them. Following the repo's documented rule
+inside a `.or()` still yields a splittable filter. It is NOT a tenant crossing —
+the or-group is AND-ed with the family scope and RLS sits under both.
+
+activity.ts's private `safeSearchTerm` was a fifth copy that all six assertions
+of ilike-patterns-are-escaped missed (different name, character class one
+character apart, and a `.or()` call neither `.ilike(` matcher can see). Promoted
+to escapeOrValue; the guard widened with an or-ilike scan and a private-escape
+scan by SHAPE rather than by name.
+
+PROCESS NOTE: the private-escape scan's first draft falsely accused
+lib/services/search/index.ts, which NEUTRALISES those characters rather than
+escaping them — a legitimate, different strategy. Narrowed to require a
+backslash-quoting replacement before it shipped.
+
+NEW INSTRUMENT: tests/a-not-in-list-is-the-whole-network.test.ts (a client with
+a request line, pricing every id at its length + 3 and answering 414 past
+8,192 bytes). Both findings proven to bite by reverting the fix.
+
+VERIFIED: 14,135 green under both timezones, tsc clean, lint 0 at 12, build 0.
+LAST-UPDATE: 2026-09-18, after Q29.

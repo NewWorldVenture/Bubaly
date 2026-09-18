@@ -5957,3 +5957,160 @@ after "the last line starting with `import `" landed it *inside* a multi-line
 import block in `intelligence-server.ts`, because the opening `import {` line
 matched. `tsc` caught it immediately (TS1005). Same family as the `useId`
 insertion that split a `useState` earlier in this audit.
+
+---
+
+## Q28 — HIGH: a `NOT IN` list that grows with the platform, in the delete that implements erasure
+
+`lib/network/aggregate-server.ts` · `lib/supabase/chunked-in.ts` ·
+`tests/a-not-in-list-is-the-whole-network.test.ts`
+
+The nightly Intelligence Network aggregation ends by pruning the contributions of
+families no longer opted in, and it did that with the natural spelling:
+
+```ts
+.delete().not('family_id', 'in', `(${keepIds.join(',')})`)
+```
+
+which carries the wrong list. A PostgREST filter travels in the query string —
+`chunked-in.ts` puts it at roughly 40 bytes per UUID and caps a **read** at 100
+ids to keep the longest URL near 4 KB, "well inside the common 8 KB limit". But
+`keepIds` is every family **still opted in**, not the handful being removed.
+
+### The pairing, for the second time in three findings
+
+The reason that list has no ceiling is a *fix*.
+`tests/whole-table-reads-are-not-capped.test.ts` made the consent read page,
+because a truncated consent list would DELETE the contribution of a family that
+never withdrew — its own ratchet entry says `network_consent` "drives a not-in
+DELETE of contributions". Paging the read to keep the list complete is exactly
+what removed the request line's bound. Q26 recorded the same shape for the push
+campaign, where converting a capped read to `readAll` made the next statement's
+`.in()` unbounded. Twice now, the fix is what made the following line reachable.
+
+### Why chunking could not fix it, and why the Q26 sweep missed it
+
+`family_id not in (chunk)` deletes every row **outside** that chunk, which is
+every other chunk's rows; run it twice and the table is empty. NOT IN does not
+decompose over a partition of its list, so neither `readInChunks` nor
+`readAllInChunks` applies. And `.in()` is a method a scanner can find, while the
+complement is a hand-built string with no method at all.
+
+### What was actually broken
+
+Past the gateway's limit the delete answers `URI too long`, the run returns
+`failed to prune contributions`, and nothing is written before it — so the next
+night selects the identical set and fails identically. The stall begins at
+**roughly two hundred consenting families** and never clears. Worse than a
+stall: what stops working is the *erasure*. A family that withdrew consent keeps
+feeding the aggregates it withdrew from for as long as the prune stays broken.
+
+### Why every existing test passed over it
+
+The in-memory Supabase models rows, PostgREST's row cap and the filter
+vocabulary. It has no URL, so a request line cannot be too long in it.
+`whole-table-reads-are-not-capped` seeds 1,011 consenting families and asserts
+every one survives the prune; in production that assertion builds a 40 KB request
+line. **The fake is right about the row count and silent about the byte count,
+and the byte count is the failure.**
+
+### Fix
+
+Invert the set: read which families the table actually holds (paged — a short
+read would leave a withdrawn family in place), subtract the ones still opted in,
+and delete the remainder by `.in()` a hundred at a time through the new
+`writeInChunks`. The remainder is also the far smaller list. It subsumes the old
+empty-keep branch, which had to exist because `not in ()` is not "delete
+nothing": PostgREST reads the empty list as one empty string, so it would have
+matched — and deleted — every row.
+
+**Guard.** The new test gives the fake the one thing it lacked: a proxy that
+prices every id entering a filter (its length plus three for the percent-encoded
+comma) and answers 414 past 8,192 bytes. Reverting the fix fails it naming the
+number — `failed to prune contributions (longest request line: 11505 bytes)`,
+which is 295 kept families at 39 bytes each. Three non-vacuity cases keep it
+honest: the proxy is shown to reject an oversized filter and accept a fitting
+one, and to count ids inside a `not-in` **string** and not only an `.in()` array
+— a proxy that priced only the fixed spelling would have let the broken one
+through free.
+
+**Ratchet.** A scanner for the hand-built shape across `app/` and `lib/`, with a
+closed list classifying each site by what bounds its list. Three exist; the other
+two are bounded by their source (`options.excludeStatuses` from a closed set of
+run statuses, `DIGEST_NOTIFICATION_TYPES` a module constant). Demanding chunking
+there would assert something untrue. A new site fails until somebody says which
+it is, and an entry for a site that no longer exists fails too.
+
+---
+
+## Q29 — MEDIUM: `escapeLike` is not enough inside `.or()`, and the one place that knew it kept the knowledge private
+
+`lib/supabase/escape-like.ts` · `lib/ai/activity.ts` ·
+`tests/ilike-patterns-are-escaped.test.ts`
+
+**No live defect.** `listAiActivity` was already correct and already tested —
+`tests/ai-activity.test.ts` carries four cases on exactly this behaviour. What
+was missing is the *rule*, and the rule is what `escape-like.ts` exists to have
+exactly one of.
+
+### The rule is insufficient where it matters most
+
+`.ilike(column, pattern)` sends the pattern as its own query parameter, so
+escaping the two LIKE wildcards is the whole job. `.or(filter)` sends **one
+string** in PostgREST's filter grammar, where `,` separates disjuncts and `()`
+groups them. Neither is a LIKE character, so `escapeLike` passes both through.
+Follow this repository's own documented rule — "use `escapeLike` at the call
+site" — inside a `.or()` and the filter is still splittable:
+
+| term | result |
+|---|---|
+| `a,b` | `feature.ilike.%a,b%,…` — `b%` is not `col.op.val` → PostgREST 400 |
+| `x,status.neq.zzz` | a fourth disjunct matching every row: the search stops filtering |
+
+**It is not a tenant crossing**, and saying so is the point: the or-group is
+AND-ed with the caller's `.eq('family_id', …)` and RLS sits under both. A broken
+search and a filter bypass *within* scope. The more alarming claim would have
+been the wrong one.
+
+### A fifth private copy, invisible to the guard built to stop private copies
+
+`lib/ai/activity.ts` had `safeSearchTerm`, which handled both grammars correctly
+and privately. Every assertion in `ilike-patterns-are-escaped` missed it: the
+name is not `escapeLike`; the character class is `[\\%_]` and the double-escape
+scan looks for `[%_]`, one character apart; and the call is
+`.or(`…`feature.ilike.${like}`…`)`, which neither matcher can see because both
+require a **method**. The file whose header says "four private copies are why two
+previous fixes did not propagate" could not see the fifth.
+
+### Fix, and one option deliberately rejected
+
+`escapeOrValue`, composing `escapeLike` and mapping the three grammar characters
+to a space. Quoting the value (`col.ilike."a,b"`) would preserve the term exactly
+and was rejected: the in-memory Supabase splits an or-expression on every
+top-level comma without modelling quotes, so a quoted value would work in
+production and break every test exercising it — shipping behaviour the repository
+cannot test. `activity.ts` drops its private copy for it; behaviour is
+byte-identical and its four existing tests pass unchanged.
+
+### A false accusation, caught before it shipped
+
+The private-copy scan's first draft matched any character class containing `%`
+and `_`, and its first finding was wrong. `lib/services/search/index.ts`
+**neutralises** those characters — `replace(/[%_,()"\\]/g, ' ')` — a different
+and perfectly good strategy for a search box, already that service's single
+definition, and nothing `escape-like.ts` offers. Flagging it would have demanded
+a change that makes the code worse. The rule now requires a backslash-*quoting*
+replacement, which is the thing there must be exactly one of.
+
+**Calibration.** Reverting `activity.ts` to the documented rule *correctly
+applied* — `escapeLike` alone — fails both new rules naming the file. That is the
+strongest calibration available here: the guard fires on code that follows the
+repository's written instruction.
+
+---
+
+## Verification (Q28–Q29)
+
+**14,135 tests green** under both `TZ=UTC` and `TZ=America/Los_Angeles` (four
+shards each), `tsc --noEmit` clean, `npm run lint` exits 0 at budget 12,
+`npm run build` exits 0. Every new guard proven to bite by reverting its fix.
