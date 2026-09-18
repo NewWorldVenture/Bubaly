@@ -47,9 +47,20 @@ export interface FeedEntry {
   sharedAt: string;
 }
 
-/** Normalize user-typed join codes: trim, uppercase, drop separators. */
+/**
+ * Normalize user-typed join codes: trim, uppercase, drop separators, and read
+ * a typed `0` as `O` and a typed `1` as `I`.
+ *
+ * The digit mapping mirrors `marketplace_join_circle` (0314) and is what makes
+ * a code readable off a screen. A generated code can contain none of 0, 1, O or
+ * I, but codes created before 0314 can carry an `O` or an `I` — 22.8% of them
+ * did — and somebody reading one aloud will say "zero". Since a stored code can
+ * never contain a literal digit 0 or 1, reading them as letters is
+ * unambiguous. Keep this in step with the SQL: the two are asserted equal in
+ * tests/marketplace-community.test.ts.
+ */
 export function normalizeJoinCode(input: string): string {
-  return input.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+  return input.toUpperCase().replace(/[^A-Z0-9]/g, '').replace(/0/g, 'O').replace(/1/g, 'I').slice(0, 8);
 }
 
 /** Display form: "ABCD-EFGH". */

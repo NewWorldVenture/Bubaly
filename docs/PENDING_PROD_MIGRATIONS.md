@@ -514,8 +514,8 @@ passed; production application of the atomic `0240-0254` release remains pending
 ## Migrations added since this document's stated baseline (2026-09-12)
 
 The status line at the top of this file is dated **2026-09-05** against main
-`01881fb2`. **56** migration files have landed since, `0255` through
-`0313`, and none of them appear anywhere above. (This read "thirty-one, `0255`
+`01881fb2`. **57** migration files have landed since, `0255` through
+`0314`, and none of them appear anywhere above. (This read "thirty-one, `0255`
 through `0285`" until 2026-09-13, "seventy-one, `0255` through `0295`" until
 2026-09-15, and "forty-five, `0255` through `0302`", "46, `0255` through `0303`"
 and "49, `0255` through `0306`" until 2026-09-16; the range
@@ -1383,3 +1383,54 @@ failed before, none after, with both controls — A's own meal plan still fills
 A's own list, and A can still add to it — passing in both directions.
 
 Until this is applied, production carries both holes as measured above.
+
+### `0314` makes circle join codes typeable — unapplied
+
+`marketplace_create_circle` builds the 8-character code a family shares with
+the neighbours they lend things to, and says what it is for:
+
+```sql
+-- 8-char human-friendly code (no 0/O/1/I), retried on the rare collision.
+v_code := upper(substr(translate(
+  encode(gen_random_bytes(8), 'base64'), '0O1Il+/=', 'ABCDEFGH'), 1, 8));
+```
+
+`translate` runs **before** `upper`, and the from-set names only the uppercase
+`O` and `I`. base64 emits lowercase letters too, so a lowercase `o` or `i`
+passes through untouched and `upper()` turns it back into exactly the character
+the line exists to remove.
+
+Measured over 20,000 generated codes:
+
+```
+codes containing 0 or 1 : 0        (the digits really are excluded)
+codes containing O or I : 4,568    -- 22.8%
+
+OWSBVEFD   YYEQDIBA   THOLKTVA   TNEIEAWB
+```
+
+The asymmetry is what makes it a dead end rather than a coin flip: because a
+stored code can never contain a digit `0` or `1`, a parent who reads
+`OWSBVEFD` off a screen and types a zero gets *"no circle with that code"*
+every time, with nothing telling them they are one character away.
+
+`0314` fixes both halves. The generator's from-set now names both cases of
+every ambiguous letter — the alphabet becomes
+`23456789ABCDEFGHJKLMNPQRSTUVWXYZ`, verified over 50,000 codes with zero `0`,
+`1`, `O` or `I`. And the lookup reads a typed `0` as `O` and a typed `1` as
+`I`, which is unconditionally safe *because* no stored code contains those
+digits — so the 22.8% of codes already issued stay joinable rather than being
+rotated out from under the families who wrote them down.
+
+`lib/marketplace/community.ts` carries the browser-side copy of the same
+normalisation and was updated to match; the two are pinned to each other in
+`tests/marketplace-community.test.ts`, which reads the rule out of this
+migration by name rather than restating it.
+
+Held by `docs/audit/circle-join-code-check.sql`: three assertions failed
+before, none after, with the controls — an unknown code is still rejected, and
+a member of one family still cannot join on behalf of another — passing in
+both directions.
+
+Until this is applied, production keeps minting codes that one family in four
+cannot read aloud.
