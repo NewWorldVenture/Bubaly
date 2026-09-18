@@ -6199,3 +6199,40 @@ audit, after `readAll(` vs `readAll<Row>(` and `useDialogBehavior(` vs
 **Status:** FIXED (1 site). **Verified:** 14,162 tests green under both `TZ=UTC`
 and `TZ=America/Los_Angeles` (four shards each), tsc clean, `npm run lint` exits
 0 at budget 12, `npm run build` exits 0.
+
+---
+
+### [CLAUDE-1][CLEAN] Security headers and the Content-Security-Policy
+
+Not covered by any other worker's file — checked before looking.
+
+**The policy is composed, documented and guarded in both useful directions.**
+`lib/security/csp.mjs` states every decision with its reason rather than leaving
+it to be rediscovered: `script-src` keeps `'unsafe-inline'` because Next hydrates
+through inline scripts and there is no nonce pipeline, with the note that the
+directives which actually stop injection and exfiltration (`object-src 'none'`,
+`base-uri`, `connect-src`, `frame-src`, `frame-ancestors`) are strict;
+`form-action` is omitted deliberately, because Chromium applies it to the
+redirect chain after a POST and it would break server-action redirects into
+Stripe Checkout and Supabase/Google OAuth.
+
+`tests/csp-client-hosts.test.ts` guards the direction that matters and then the
+one behind it: every origin a client-side library fetches must be in
+`CLIENT_API_ORIGINS` *and* in `connect-src`, and separately no client component
+may fetch any third-party origin that is not on the list. Plus a unit test and an
+e2e test of the emitted header.
+
+**Checked for the remaining direction and found nothing.** A stale entry would
+permit `connect-src` to a host nothing talks to. All four — Open-Meteo forecast
+and geocoding, BigDataCloud, OSRM — are live in `lib/`.
+
+**The header split is coherent.** `frame-ancestors` mirrors the
+`X-Frame-Options` split by construction (one `csp(frameAncestors)` helper feeds
+both), so the two headers cannot disagree about who may frame a page. The
+`/blog` SAMEORIGIN relaxation is scoped to public content, exists because the
+signed-in app embeds the public blog in a same-origin modal, and still blocks all
+cross-origin framing. HSTS is two years with `includeSubDomains` and
+deliberately no `preload`, "which commits every subdomain to the browser preload
+list irreversibly".
+
+**Status:** NO DEFECT. No change.
