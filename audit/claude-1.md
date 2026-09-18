@@ -1323,3 +1323,57 @@ every guard with a literal `ROOTS`:
 Two of five guards were blind to `components`, and both had real findings behind
 the blind spot. `no-dev-markers` is included now rather than after the first
 marker arrives.
+
+---
+
+## [CLAUDE-1][HIGH][MOBILE / UX] Twenty-six money inputs could not take a decimal point on iOS
+
+- **Where:** `components/wallet/wallet-hub.tsx` (6), `components/finance/savings-view.tsx` (3),
+  `components/meals/nutrition-view.tsx` (3), and one each in
+  `components/finance/{bills,budgets}-view.tsx`, `components/wallet/invest-view.tsx`,
+  `components/vacations/{trip-budget,trip-itinerary,vacations-list}.tsx`,
+  `components/home/{service,warranties}-client.tsx`,
+  `components/family/driving-safety-view.tsx`,
+  `components/billing/family-value-comparison.tsx`,
+  `components/admin/stripe-setup-form.tsx`,
+  `app/(app)/admin/marketing/{pipeline,proposals,loyalty}/page.tsx`
+- **Problem:** `type="number"` alone does not reliably surface the "." on the iOS
+  Safari keypad. A decimal field without `inputMode="decimal"` cannot accept
+  cents on an iPhone.
+- **Evidence:** `tests/mobile-numeric-inputmode.test.ts` was written to prevent
+  exactly this, and reported **zero** offenders. It read `components/modules`
+  with `readdirSync` — one flat directory, not even its subdirectories.
+- **Impact:** this is the money-entry surface of the app — every wallet balance,
+  available and limit, bill and budget amounts, savings targets and
+  contributions, trip budgets and itinerary costs, investment share counts,
+  service and warranty costs. On an iPhone, none of it could take a decimal.
+- **Recommended fix:** applied to all 26. The guard now walks `app` and
+  `components` whole.
+- **Status:** FIXED. `tsc` clean, 13,875 tests pass, lint unchanged (same 3
+  pre-existing warnings).
+- **Proved load-bearing:** removing one `inputMode` turns it red with file and line.
+
+**This is the guard-that-cannot-fail class in its softest and most convincing
+form.** The `i18n:gate` instance was obvious once seen — it ran in no workflow.
+This one *ran*, on every CI job, and passed honestly. What made it useless was
+that its sanity check — "more than 20 money inputs scanned" — was satisfied by
+the single directory it read. A coverage assertion calibrated to the scanned
+subset cannot detect that the subset is the problem. Its sanity bound is now
+past what one directory can meet, and a new case asserts the walk reaches
+nested directories, so flattening it back fails instead of narrowing quietly.
+
+**Sweep of the sibling mobile guards** (the point was the narrowing, not another
+missing `inputMode`):
+
+| guard | old scope | offenders outside it |
+|---|---|---|
+| `mobile-numeric-inputmode` | `components/modules/*.tsx`, non-recursive | **26** |
+| `mobile-no-horizontal-overflow` | `components/modules/*.tsx`, non-recursive | 0 |
+| `mobile-hover-reveal` | `components/modules/**`, `app/**` | 0 |
+
+All three now scan `app` + `components` whole. The two that are clean were
+widened anyway — the cost is nothing and the gap is identical.
+
+**Also measured, no finding:** `tests/ilike-patterns-are-escaped.test.ts` scans
+`app` + `lib` only, but `components` contains **zero** `.ilike(`/`.like(` calls,
+so nothing hides behind that gap. Recorded so the next sweep does not re-derive it.
