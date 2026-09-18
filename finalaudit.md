@@ -6681,3 +6681,49 @@ this audit — right about the content, wrong about the syntax around it.
 **Verified:** 14,172 tests green under both `TZ=UTC` and
 `TZ=America/Los_Angeles` (four shards each), `tsc --noEmit` clean, `npm run lint`
 exits 0 at budget 12.
+
+---
+
+## Q38 — LOW: the production migration workflow ran two scripts its `paths:` filter did not list
+
+`.github/workflows/supabase-production-migrations.yml` ·
+`tests/a-paths-filter-must-list-what-it-gates.test.ts`
+
+A `paths:` filter decides when a push re-runs a workflow, so anything the
+workflow depends on has to be in it. A missing dependency does not fail — the
+workflow simply does not run, which is the quietest way for a gate to stop
+gating.
+
+This is the workflow that runs `supabase db push --yes` against **production**.
+Its filter already named nine scripts plus the workflow itself, `package.json`
+and `supabase/migrations/**` — the intent is unambiguous. Two had drifted out:
+
+| script | what it gates |
+|---|---|
+| `scripts/audit-supabase-queries.mjs` | the step whose own comment says it catches "a query naming a column or table the release does not create … fails only at runtime, as an empty page" |
+| `scripts/verify-marketing-runtime-remote.mjs` | the marketing runtime readiness report |
+
+Push a fix to either alone and production was never re-verified with the fixed
+gate, until some other listed file happened to change.
+
+**Severity is LOW for its blast radius, not its mechanism.** It delays
+verification rather than corrupting anything, and the next migration push re-runs
+everything. It is recorded because the filter's whole purpose is completeness,
+and a list that is 9-of-11 complete reads as complete.
+
+**Fix.** Both added. Adding to `paths:` can only make the workflow run *more*
+often, never less, so the change carries no behavioural risk — worth saying
+plainly, since this file touches production. The reverse direction was checked
+and is clean: no entry names a script the workflow has stopped running.
+
+**Guard.** A rule over every workflow that declares a `paths:` filter — one
+without a filter runs on every push and has nothing to drift. Each must list
+every `scripts/*.mjs` it runs, directly or through an npm script, and must not
+list one it no longer runs. The npm-script resolver is calibrated against a real
+entry so the rule cannot pass by resolving nothing, and a separate case pins that
+this workflow still contains `supabase db push --yes`, since otherwise the rules
+would quietly stop being about production.
+
+**Verified:** 14,177 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles` (four shards each), `tsc --noEmit` clean, `npm run lint`
+exits 0 at budget 12, workflow YAML still parses.
