@@ -120,7 +120,7 @@ function BudgetModal({ familyId, userId, existing, onClose }: { familyId: string
           <Field label={t('budgets.category')}>{(id) => <Select id={id} value={v.category} onChange={(e) => setV({ ...v, category: e.target.value })}>{(avail.length ? avail : CATEGORIES).map((c) => <option key={c} value={c}>{c}</option>)}</Select>}</Field>
           <Field label={t('budgets.period')}>{(id) => <Select id={id} value={v.period} onChange={(e) => setV({ ...v, period: e.target.value })}>{['weekly', 'monthly', 'yearly'].map((p) => <option key={p} value={p}>{p[0].toUpperCase() + p.slice(1)}</option>)}</Select>}</Field>
         </div>
-        <Field label={t('budgets.amount')}>{(id) => <Input id={id} type="number" step="0.01" value={v.amount} onChange={(e) => setV({ ...v, amount: e.target.value })} placeholder="500" required autoFocus />}</Field>
+        <Field label={t('budgets.amount')}>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" value={v.amount} onChange={(e) => setV({ ...v, amount: e.target.value })} placeholder="500" required autoFocus />}</Field>
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="outline" onClick={onClose}>{t('budgets.cancel')}</Button>
           <Button type="submit" loading={saving} disabled={!v.amount}>Add</Button>

@@ -10,7 +10,11 @@ import path from 'node:path';
 //   opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100
 // This guard forbids a regression to a bare, touch-invisible hover-reveal.
 
-const DIRS = ['components/modules', 'app'];
+// `components/modules` and `app` only, so every other component directory —
+// wallet, finance, calendar, vacations, ui — was outside it. Clean there today;
+// scanned whole now so it stays clean. (The sibling M-006 guard had the same
+// narrowing and 26 offenders were sitting just outside it.)
+const DIRS = ['components', 'app'];
 
 function walk(dir: string): string[] {
   const out: string[] = [];
@@ -26,7 +30,7 @@ describe('no touch-invisible hover-reveal controls (M-005)', () => {
   const files = DIRS.flatMap(walk);
 
   it('scans a meaningful set of component files', () => {
-    expect(files.length).toBeGreaterThan(100);
+    expect(files.length).toBeGreaterThan(300);
   });
 
   it('has no bare `opacity-0 group-hover:opacity-100` (must be sm:-gated so touch shows it)', () => {
