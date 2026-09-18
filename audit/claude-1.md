@@ -6550,3 +6550,51 @@ case.
 **Status:** FIXED. **Verified:** 14,177 tests green under both `TZ=UTC` and
 `TZ=America/Los_Angeles` (four shards each), tsc clean, `npm run lint` exits 0 at
 budget 12, and the workflow YAML still parses.
+
+---
+
+### [CLAUDE-1][LOW][CI/GATING] Q38 extended — a dangling `paths:` entry, and a hole in my own guard
+
+**Path:** `tests/a-paths-filter-must-list-what-it-gates.test.ts`
+
+**The latent risk.** Three workflows pin SPECIFIC migration filenames in their
+`paths:` filters — `0274_finance_transaction_operation_receipts.sql`,
+`0245_move_planner.sql` and `0271_move_date_recalculation.sql`,
+`0070_vacations.sql` and `0270_travel_confirmation_import.sql`. This branch has
+renumbered a migration **ten times** (the tenth moved our own 0311 to 0327 to
+clear a collision with main). A renumbering that lands on one of these makes the
+filter match nothing, the workflow never runs again, and **a runtime test that
+never runs looks exactly like one that passes.**
+
+**Currently clean** — 33 entries across 8 workflows all resolve. The rule is here
+because the failure is silent and this repository has repeatedly demonstrated the
+mechanism that would cause it.
+
+**A hole in the guard I shipped for Q38, found by its own non-vacuity rule.** I
+added an assertion that the rule is really looking at pinned migrations
+(`pinned.length > 3`) and it failed at exactly 3. The cause was not the
+assertion: `workflowsWithPathFilters()` matched only SINGLE-QUOTED entries, and
+`travel-confirmation-runtime.yml` writes its paths bare —
+`- supabase/migrations/0070_vacations.sql`. **That entire workflow was invisible
+to the Q38 guard**, so its scripts-are-listed rule never examined it either. The
+extractor now takes quoted, double-quoted and unquoted forms.
+
+That is worth recording for what it says about the method rather than the bug: a
+non-vacuity assertion exists to catch a rule that has quietly stopped looking at
+anything, and here one caught a rule of mine doing precisely that, one commit
+after I wrote it.
+
+**Also checked and correct, after nearly filing it as a defect.**
+`supabase-forward-release.yml`'s input label reads "Apply the pinned 0240-0254
+release", and this branch is at migration 0327 — which looks stale, and the
+script's own header says the range "used to be stated twice ... the repository
+moved 38 migrations past 0254". But `supabase/production-forward-release.json`
+pins exactly `0240_closet_outfits.sql` through `0254_wallet_write_policy_drift.sql`,
+15 files with sha256 hashes, the script derives the range from that manifest, and
+the docs describe the bundle as deliberately HELD. The label is accurate. Filed
+here as a near-miss: "the number looks old" is not evidence.
+
+**Status:** GUARDED (no dangling entry exists today); the Q38 guard's coverage
+gap is FIXED. **Verified:** 14,179 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles` (four shards each), tsc clean, `npm run lint` exits 0 at
+budget 12. Both quoting styles proven to bite.

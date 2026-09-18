@@ -1,4 +1,5 @@
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { globSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -40,7 +41,14 @@ function workflowsWithPathFilters(): { file: string; source: string; paths: stri
     const source = readFileSync(join(WORKFLOWS, file), 'utf8');
     const head = source.split(/\npermissions:|\njobs:/)[0];
     if (!/^\s+paths:/m.test(head)) continue;
-    out.push({ file, source, paths: [...head.matchAll(/^\s+- '([^']+)'/gm)].map((m) => m[1]) });
+    // Quoted AND unquoted: travel-confirmation-runtime.yml writes its paths bare
+    // (`- supabase/migrations/0070_vacations.sql`), and a quoted-only matcher
+    // skipped that whole workflow — the first version of this file did exactly
+    // that, and its own non-vacuity rule is what caught it.
+    const entries = [...head.matchAll(/^\s+- (?:'([^']+)'|"([^"]+)"|([^'"\s#][^\n]*?))\s*$/gm)]
+      .map((m) => (m[1] ?? m[2] ?? m[3]).trim())
+      .filter(Boolean);
+    out.push({ file, source, paths: entries });
   }
   return out;
 }
@@ -93,6 +101,46 @@ describe('a paths filter lists what the workflow depends on', () => {
         expect(run.has(p), `${file} lists ${p} but no longer runs it`).toBe(true);
       }
     }
+  });
+
+  it('every path a filter names still exists', () => {
+    // Three workflows pin SPECIFIC migration filenames — 0274_finance_…,
+    // 0245_move_planner, 0270_travel_confirmation_import and friends. This
+    // branch has renumbered a migration ten times (the tenth moved our own 0311
+    // to 0327 to clear a collision with main), and a renumbering that lands on
+    // one of these makes the filter match nothing. The workflow then never runs
+    // again, and a runtime test that never runs looks exactly like one that
+    // passes.
+    //
+    // Currently clean — 33 entries across 8 workflows all resolve. This is here
+    // because the failure is silent and the repository has demonstrated the
+    // mechanism that would cause it.
+    const offenders: string[] = [];
+    for (const { file, paths } of workflowsWithPathFilters()) {
+      for (const p of paths) {
+        if (!p.includes('/')) continue;
+        const resolved = p.includes('*')
+          ? globSync(join(ROOT, p)).length > 0
+          : existsSync(join(ROOT, p));
+        if (!resolved) offenders.push(`${file}: ${p}`);
+      }
+    }
+    expect(
+      offenders,
+      'this paths: entry matches no file, so the workflow will never be triggered '
+      + 'by it again. A renumbered migration is the usual cause, and the failure is '
+      + 'silent — a runtime test that never runs looks like one that passes:\n'
+      + offenders.map((o) => `  ${o}`).join('\n'),
+    ).toEqual([]);
+  });
+
+  it('is actually checking migration filenames (guards the guard)', () => {
+    // Non-vacuity for the rule above: if no workflow pinned a migration any
+    // more, it would be asserting over nothing and should be revisited.
+    const pinned = workflowsWithPathFilters()
+      .flatMap((w) => w.paths)
+      .filter((p) => p.startsWith('supabase/migrations/') && p.endsWith('.sql'));
+    expect(pinned.length).toBeGreaterThan(3);
   });
 
   it('the production migration workflow still gates the thing worth gating', () => {
