@@ -6336,3 +6336,70 @@ Outbound HTTP carries timeouts: the four server-side `fetch(` calls with no
 signal at the call site are all false positives — three browser beacons in
 `lib/marketing/visitor.ts`, and a Supabase `global.fetch` wrapper in
 `lib/blog/posts.ts` that spreads `init` through and preserves a caller's signal.
+
+---
+
+## Q33 — MEDIUM: M-023 is a two-sided invariant enforced on one side
+
+`public/sw.js` · `lib/auth/route-access.ts` ·
+`tests/a-cacheable-page-must-stay-public.test.ts`
+
+**No live defect.** `/` and `/offline` are genuinely public today, checked rather
+than assumed: `app/(marketing)/page.tsx`, `app/(marketing)/layout.tsx`,
+`app/layout.tsx` and `app/offline/page.tsx` hold zero session reads and zero
+redirects between them.
+
+The gap is in what is *enforced*. `public/sw.js` states the invariant in its
+header — "authenticated HTML is NEVER written to Cache Storage. Cached pages
+persist unencrypted after logout and would be served offline to whoever next
+opens the app on a shared/family device" — and
+`tests/mobile-sw-auth-cache.test.ts` enforces it with six assertions: the
+precache list, the navigation allowlist, the version bump, the library cache,
+the API/auth exclusion, the offline fallback. **Every one of them is about the
+service worker.** None is about the pages on its allowlist, and the invariant is
+only true if those pages are public.
+
+### Why the unenforced half is the sharper one
+
+```js
+fetch(request).then((res) => { if (CACHEABLE_NAV.has(url.pathname)) c.put(request, res.clone()) })
+```
+
+`fetch` **follows redirects** and `cache.put` keys on the **original** request.
+So the day `/` starts forwarding a signed-in visitor to `/dashboard` — an
+ordinary product change, and the first thing most apps do — the worker writes
+the dashboard's HTML into Cache Storage *under the key `/`*, where it survives
+logout and is handed to the next person who opens the app offline on that
+device. Every existing assertion still passes, and the invariant comment still
+sits in the file saying the opposite.
+
+### The guard
+
+Four rules over the allowlist parsed out of `sw.js` itself rather than restated:
+
+1. every cacheable path is on `PUBLIC` and absent from `PROTECTED`;
+2. every cacheable path names the files that render it — so a path added to
+   `APP_SHELL` fails until somebody says what renders it, which is the moment to
+   notice it is not a marketing page;
+3. no file in a cacheable render chain reads the session or calls `redirect(`;
+4. the matcher is calibrated against the real spellings.
+
+The redirect half of rule 3 is deliberate: a page that merely **forwards** a
+signed-in visitor leaks exactly as much as one that renders their data, because
+the worker follows it.
+
+**Both failure modes proven.** Adding `/dashboard` to `APP_SHELL` fires rules 1
+and 2 by name. Adding the realistic change to `app/(marketing)/page.tsx` —
+`createServer()`, `auth.getUser()`, `redirect('/dashboard')` — fires rule 3.
+
+**A calibration miss of my own, recorded.** The first probe for that second case
+added only `import { redirect } from 'next/navigation'`, and the guard did not
+fire. That was the probe being wrong, not the guard — the matcher requires
+`redirect(`, and an unused import is not a redirect. The lesson is the one this
+audit keeps relearning: a probe that does not reproduce the real change proves
+nothing. Caught this time before it was written down as a pass.
+
+**Verified:** 14,158 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles` (four shards each), `tsc --noEmit` clean, `npm run lint`
+exits 0 at budget 12, and the existing `mobile-sw-auth-cache` suite passes
+alongside it.
