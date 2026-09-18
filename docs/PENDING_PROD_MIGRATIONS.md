@@ -514,8 +514,8 @@ passed; production application of the atomic `0240-0254` release remains pending
 ## Migrations added since this document's stated baseline (2026-09-12)
 
 The status line at the top of this file is dated **2026-09-05** against main
-`01881fb2`. **55** migration files have landed since, `0255` through
-`0312`, and none of them appear anywhere above. (This read "thirty-one, `0255`
+`01881fb2`. **56** migration files have landed since, `0255` through
+`0313`, and none of them appear anywhere above. (This read "thirty-one, `0255`
 through `0285`" until 2026-09-13, "seventy-one, `0255` through `0295`" until
 2026-09-15, and "forty-five, `0255` through `0302`", "46, `0255` through `0303`"
 and "49, `0255` through `0306`" until 2026-09-16; the range
@@ -1337,3 +1337,49 @@ the database had already replaced. It now resolves the newest migration that
 defines the classifier, and asserts the phrase list too.
 
 Until this is applied, production carries the classifier gap as measured above.
+
+### `0313` keeps the meal-plan grocery RPC inside one family — unapplied
+
+`public.grocery_from_meal_plan(p_family_id, p_from, p_to, p_list_id)` from
+`0005` is `SECURITY DEFINER` and granted `execute` to `authenticated`. It
+checked `is_family_member(p_family_id)` on the way in and then trusted
+everything else it was handed.
+
+**The join.** `join public.meals m on m.id = mp.meal_id` — the `where` scoped
+the *plan*, nothing scoped the *meal*. `0311` established that a member may
+write a row carrying their own `family_id` beside a reference into another
+family, so a `meal_plans` row planted under family A pointing at family B's
+meal made the RPC copy B's ingredient names onto A's own grocery list, where A
+can read them. Measured on a replayed database, acting as a parent of A who is
+not a member of B and who provably cannot `select` B's meals:
+
+```
+control: A member of B?                     f
+control: rows A can SELECT from B's meals:  0
+meal_plan under A pointing at B's meal:     1 row
+items A can now READ on their own list:     2 -> PRIVATE-kosher-brisket,
+                                                 PRIVATE-insulin-syringes
+```
+
+Ingredient lists carry religious practice, allergies and medical supplies.
+
+`0311`'s own header said of this class: *"Reads still hold — A cannot SELECT
+B's chore, so this is not a read leak. What it reaches is the code that ACTS on
+the reference."* This function is that code, and acting on the reference made
+it a read leak after all. A `SECURITY DEFINER` routine is where a plantable
+reference stops being harmless, because it is the one place RLS is not looking.
+
+**The list.** `p_list_id` was used as given, so rows landed on another family's
+list (measured: rows carrying A's `family_id` sitting on B's list). B cannot
+see them — `grocery_items` RLS is family-scoped — so this is corruption rather
+than an injection B would read.
+
+`0313` fixes both levels: the function validates every id it is handed, and
+`meal_plans.meal_id → meals` and `grocery_items.list_id → grocery_lists` join
+`0311`'s validated trigger loop, which `0311` said would cost one line each.
+
+Held by `docs/audit/meal-plan-grocery-boundary-check.sql`: four assertions
+failed before, none after, with both controls — A's own meal plan still fills
+A's own list, and A can still add to it — passing in both directions.
+
+Until this is applied, production carries both holes as measured above.
