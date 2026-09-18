@@ -6364,3 +6364,61 @@ for dropped `error` state, which is the UI question. Scoping of the subscription
 itself is the different one, and is what is recorded here.
 
 **Status:** NO DEFECT in any of the three. No change.
+
+---
+
+### [CLAUDE-1][MEDIUM][CRON/DELIVERY] Q32 CORRECTED — the admin digest double-sends every day, not on a rare retry
+
+**This corrects my own severity assessment.** I filed Q32 as LOW on the
+reasoning that a duplicate digest needs a retry, and retries are rare. That
+reasoning was wrong, and the thing that disproves it was in the repository the
+whole time.
+
+**Two schedulers drive the same 24 routes.** `scripts/cron-dispatch.mjs`
+explains why: Vercel's Hobby plan refuses anything more frequent than daily, so
+`vercel.json` carries daily-safe schedules "so production deploys on any plan"
+while the real cadences live in `SCHEDULES` and are driven every five minutes by
+`.github/workflows/cron-dispatch.yml`. The two lists are deliberately MIRRORED —
+the same header says that on Pro you "copy SCHEDULES below" into vercel.json and
+disable the workflow — and `tests/cron-dispatch.test.ts` already guards that
+mirror in both directions.
+
+**What the mirror rests on is one sentence:**
+
+> "The routes are idempotent and CRON_SECRET-gated (lib/server/cron-auth.ts), so
+> a Vercel daily run and a GitHub run of the same route never conflict."
+
+It is true of the routes Q32 checked, for reasons that were verified rather than
+assumed. It is **false for `admin-digest`**, and both schedules are the identical
+`30 12 * * *` — so the two dispatches land in the same minute, both compute
+`Date.now() - 24h`, both find the same activity, and both send. **Every super
+admin receives two identical emails daily.** 20 of the 24 routes fire from both
+sources at the same minute; `admin-digest` is the one where that is not benign.
+
+**What does not change.** Severity stays MEDIUM rather than rising further: the
+rows are still written independently of the email and the /admin pages still read
+that table, so this is duplicate notification traffic to super admins, not lost
+or wrong data. And the fix is still the one Q32 specified — a persisted
+high-water mark, hence a migration — which is still deferred for the stated
+reason (ten prior migration-number collisions, two other workers live). What
+changes is that the user should now weigh that deferral against a defect that
+fires daily rather than one that waits for a retry.
+
+**Guard.** `tests/a-mirrored-cron-must-be-idempotent.test.ts` — a backlog of
+routes known to break the dispatcher's claim, which may only shrink. It pins the
+dispatcher's sentence verbatim so a rewrite forces a re-read; it requires each
+entry to still double-fire at the identical minute AND to still lack a dedupe, so
+the entry fails the moment either is resolved; and it records a mechanism and a
+fix per entry. Proven on both exits: simulating the fix fails it ("now carries a
+dedupe mechanism — remove it"), and moving Vercel's schedule off the
+dispatcher's fails it ("the duplicate is gone, remove the entry").
+
+**A scan I tried and discarded.** The obvious guard is a dedupe-marker scan
+across all 24 routes. Ten of them show no marker in their own `route.ts` because
+the mechanism lives in a lib they call, so that guard would have opened with nine
+false accusations — which is how a guard collects exemptions until it means
+nothing. Narrow and true beat broad and wrong.
+
+**Status:** GUARDED; the fix remains filed (migration). **Verified:** 14,168
+tests green under both `TZ=UTC` and `TZ=America/Los_Angeles` (four shards each),
+tsc clean, `npm run lint` exits 0 at budget 12.

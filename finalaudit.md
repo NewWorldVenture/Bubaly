@@ -6540,3 +6540,66 @@ vs `readAll<Row>(` and `useDialogBehavior(` vs `useDialogBehavior<T>(`.
 **Verified:** 14,162 tests green under both `TZ=UTC` and
 `TZ=America/Los_Angeles` (four shards each), `tsc --noEmit` clean, `npm run lint`
 exits 0 at budget 12, `npm run build` exits 0.
+
+---
+
+## Q36 — Q32 CORRECTED: the admin digest double-sends every day, not on a rare retry
+
+`scripts/cron-dispatch.mjs` · `vercel.json` · `app/api/cron/admin-digest/route.ts`
+· `tests/a-mirrored-cron-must-be-idempotent.test.ts`
+
+**This corrects my own earlier severity assessment.** Q32 was filed as LOW on the
+reasoning that a duplicate digest requires a retry and retries are rare. That
+reasoning was wrong, and what disproves it was in the repository the whole time.
+
+### Two schedulers drive the same 24 routes, deliberately
+
+Vercel's Hobby plan refuses anything more frequent than daily, so `vercel.json`
+carries daily-safe schedules "so production deploys on any plan" while the real
+cadences live in `SCHEDULES` and are driven every five minutes by
+`.github/workflows/cron-dispatch.yml`. The lists are **mirrored on purpose** —
+the same header says that on Pro you "copy SCHEDULES below" into vercel.json and
+disable the workflow — and `tests/cron-dispatch.test.ts` already guards that
+mirror in both directions.
+
+### The mirror rests on one sentence
+
+> "The routes are idempotent and CRON_SECRET-gated (lib/server/cron-auth.ts), so
+> a Vercel daily run and a GitHub run of the same route never conflict."
+
+True of the routes Q32 checked, for verified reasons — `wallet-allowance`'s
+compare-and-swap claim, `close-auctions`' status predicate, `notify()`'s
+duplicate guard. **False for `admin-digest`**, whose two schedules are the
+identical `30 12 * * *`: both dispatches land in the same minute, both compute
+`Date.now() - 24h`, both find the same activity, both send. Every super admin
+receives two identical emails daily. 20 of 24 routes fire from both sources at
+the same minute; this is the one where that is not benign.
+
+### What does not change
+
+Severity stays MEDIUM rather than climbing further. The rows are still written
+independently of the email and the /admin pages still read that table, so this is
+duplicate notification traffic to super admins — not lost or wrong data. The fix
+is still the one Q32 specified (a persisted high-water mark, hence a migration)
+and is still deferred for the stated reason: ten prior migration-number
+collisions, two other audit workers live on this codebase. What changes is that
+the deferral should now be weighed against a defect that fires **daily** rather
+than one waiting on a retry.
+
+### Guard, and a guard I discarded
+
+`a-mirrored-cron-must-be-idempotent` keeps a backlog of routes that break the
+dispatcher's claim, and it may only shrink. It pins the dispatcher's sentence
+verbatim so a rewrite forces a re-read, and requires each entry to still
+double-fire at the identical minute **and** still lack a dedupe — so the entry
+fails the moment either is resolved. Proven on both exits: simulating the fix
+fails it ("now carries a dedupe mechanism — remove it"); moving Vercel's schedule
+off the dispatcher's fails it ("the duplicate is gone, remove the entry").
+
+The obvious alternative — a dedupe-marker scan across all 24 routes — was tried
+and discarded. Ten routes show no marker in their own `route.ts` because the
+mechanism lives in a lib they call, so it would have opened with nine false
+accusations. Narrow and true beat broad and wrong.
+
+**Verified:** 14,168 tests green under both `TZ=UTC` and `TZ=America/Los_Angeles`
+(four shards each), `tsc --noEmit` clean, `npm run lint` exits 0 at budget 12.
