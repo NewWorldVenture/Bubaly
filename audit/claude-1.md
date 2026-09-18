@@ -1453,3 +1453,69 @@ The remaining 93 need per-site judgement. Recorded as OPEN and **unverified** �
 not as 93 findings. Mass-converting them would repeat the `Promise.all` →
 `settleAll` mistake earlier in this audit (137 type errors, then syntax errors
 in 40 files, both reverted).
+
+---
+
+## [CLAUDE-1][HIGH][BACKEND / PERFORMANCE] The admin console reported the first thousand of everything
+
+- **Where:** `app/(app)/admin/reports/page.tsx`, `app/(app)/admin/backup/page.tsx`
+- **Problem:** PostgREST answers an **unbounded** select with at most
+  `db-max-rows` (1,000) and says nothing. The admin console computes its
+  aggregates by reading rows into the page and reducing them, so each silently
+  became "the first thousand" once a table passed it.
+- **Evidence, measured against a fake holding the server's cap** — 1,337
+  documents of 1,000 bytes:
+
+  ```
+  unbounded select   -> 1,000 rows, error: null, total 1,000,000
+  readAllAsQuery     -> 1,337 rows, error: null, total 1,337,000
+  count head:true    -> 1,337                      (never capped)
+  ```
+
+- **Impact:** `admin/reports` is the clearest case *because it is half right*.
+  Its family, user and subscription tiles use `{ count: 'exact', head: true }` —
+  a count is not rows and was never capped. Beside them, the **Documents tile
+  rendered `docs.length`**, so past a thousand documents it read exactly "1,000"
+  forever; storage used, both growth buckets and the revenue trend were reduced
+  over a prefix; and daily activity came from 1,000 `audit_logs`, which fourteen
+  days of a live platform passes easily. Exact counts sat next to charts built
+  from a sample with nothing saying they disagreed. `admin/backup` reported the
+  size of the first thousand documents as the total, on a page titled
+  "Data & Storage".
+- **Recommended fix:** applied. Both page through `readAllAsQuery` to a real
+  ceiling; the Documents tile uses an exact count like its neighbours. **The
+  ceiling matters as much as the paging:** reaching it returns the rows as a
+  prefix *plus an error*, which `admin/reports` already joins into its
+  `PartialReadBanner` and `admin/backup` already renders. Without that, a larger
+  ceiling would only be a larger silent truncation.
+- **Status:** FIXED. `tsc` clean, build compiles, 13,882 tests pass.
+- **Proved:** `tests/admin-aggregates-read-past-the-cap.test.ts` reproduces the
+  truncation against a capped fake before asserting the fix, and asserts that
+  passing the ceiling is *reported* rather than rounded down to.
+
+### Why the existing guard missed it
+
+`tests/whole-table-reads-are-not-capped.test.ts` is a strong **behavioural**
+guard: it seeds a capped fake and asserts four jobs read past it. But the list
+is **enumerated** — `deliverMorningBriefs`, `runNetworkAggregation`,
+`getMarketingCustomersWithError`, `runAutomations` — and nothing keeps it
+complete. A fifth surface (the admin console) was simply never added.
+
+That is a third distinct guard-failure shape, after scope gaps and premise gaps:
+**an enumerated guard with no scan behind it.** It cannot be wrong about what it
+checks; it just never grows.
+
+### OPEN — measured, not fixed
+
+- **A database aggregate is the real fix.** Summing bytes and bucketing months
+  by reading every row into a page does not scale however it is paged. The
+  ceilings applied here convert "silently wrong" into "explicitly incomplete",
+  which is a strict improvement and not the destination.
+- **~20 further unbounded cross-platform reads** remain on admin list pages
+  (`admin/users`, `admin/content`, `admin/audit`, `admin/security`,
+  `admin/billing`, `admin/subscriptions`, `admin/support`, `admin/stripe`).
+  These truncate a **list** rather than corrupt a **number**, which is why they
+  are ranked below the two fixed here. A scan is in this file's history; the
+  raw count of "unbounded unfiltered reads" is 106, and most of that number is
+  small config tables (`roles`, `permissions`, `feature_flags`,
+  `social_providers`) or reads scoped by a non-family id — **not** 106 findings.
