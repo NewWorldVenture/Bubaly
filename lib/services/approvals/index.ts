@@ -265,14 +265,23 @@ async function flipStatus(
   scope: ServiceScope,
   approvalId: string,
   patch: Database['public']['Tables']['approval_requests']['Update'],
+  expectUpdatedAt?: string | null,
 ): Promise<ServiceResult<boolean>> {
-  const { data, error } = await scope.db
+  // `status = 'pending'` stops two DECIDING votes from both executing. It does
+  // not stop two NON-deciding votes from overwriting each other: neither
+  // changes the status, so both match, and the second write replaces the
+  // `approvals` array the first one just wrote. `expectUpdatedAt` closes that —
+  // the `set_updated_at` trigger bumps the column on every write, so it is a
+  // version token, and a caller that loses the race gets zero rows back and
+  // can re-read rather than silently discard a parent's vote.
+  let q = scope.db
     .from('approval_requests')
     .update(patch)
     .eq('id', approvalId)
     .eq('family_id', scope.familyId)
-    .eq('status', 'pending')
-    .select('id');
+    .eq('status', 'pending');
+  if (expectUpdatedAt) q = q.eq('updated_at', expectUpdatedAt);
+  const { data, error } = await q.select('id');
   if (error) {
     console.error('[service:approvals] failed to record the decision', error);
     return fail(describeDbError(error, 'Bubaly could not record that decision.'), { code: SERVICE_CODES.db, retryable: true });
@@ -767,11 +776,19 @@ async function performApproved(
  * threshold is met; every vote is audited, only the deciding one executes. A
  * rejection is final on the first vote — one "no" is enough to stop the AI.
  */
+/**
+ * How many times a vote will re-read and re-append after losing a write race.
+ * Two parents is the case this exists for; a third attempt is slack, not a
+ * design for contention.
+ */
+const VOTE_RETRIES = 3;
+
 export async function decide(
   scope: ServiceScope,
   approvalId: string,
   decision: 'approved' | 'rejected',
   note?: string | null,
+  attempt = 0,
 ): Promise<ServiceResult<DecideResult>> {
   if (decision !== 'approved' && decision !== 'rejected') {
     return fail('A decision must be approved or rejected.', { code: SERVICE_CODES.invalidInput });
@@ -811,9 +828,20 @@ export async function decide(
       reviewed_by: memberId,
       review_note: cleanNote,
     };
-  const flipped = await flipStatus(scope, approvalId, patch);
+  // A vote that does not decide leaves the status pending, so `status` alone
+  // cannot tell this write apart from the other parent's. Pin the version too.
+  const flipped = await flipStatus(scope, approvalId, patch, finalStatus === 'pending' ? row.updated_at : undefined);
   if (!flipped.ok) return flipped;
-  if (!flipped.data) return fail('This request was already decided.', { code: SERVICE_CODES.invalidInput });
+  if (!flipped.data) {
+    // Zero rows means either the request was decided while we were deciding,
+    // or another vote landed between our read and our write. Re-reading tells
+    // the two apart and re-appends onto the array that actually won, so a
+    // simultaneous vote is delayed rather than lost.
+    if (finalStatus === 'pending' && attempt < VOTE_RETRIES) {
+      return decide(scope, approvalId, decision, note, attempt + 1);
+    }
+    return fail('This request was already decided.', { code: SERVICE_CODES.invalidInput });
+  }
 
   await auditDecision(scope, row, decision, cleanNote ?? (
     finalStatus === 'pending'
@@ -908,6 +936,7 @@ export async function editAndApprove(
   approvalId: string,
   editedPayload: unknown,
   note?: string | null,
+  attempt = 0,
 ): Promise<ServiceResult<EditResult>> {
   const edits = asRecord(editedPayload);
   if (!edits) return fail('The edited details must be an object of fields.', { code: SERVICE_CODES.invalidInput });
@@ -962,13 +991,18 @@ export async function editAndApprove(
   const approvedCount = countingApprovals(votes, threshold);
   const required = threshold.required;
   if (approvedCount < required) {
+    // Same race as `decide`: this vote leaves the status pending, so the
+    // version has to be pinned or the other parent's vote is overwritten.
     const held = await flipStatus(scope, approvalId, {
       edited_payload: merged as Json,
       approvals: votes as unknown as Json,
       review_note: cleanNote ?? undefined,
-    });
+    }, row.updated_at);
     if (!held.ok) return held;
-    if (!held.data) return fail('This request was already decided.', { code: SERVICE_CODES.invalidInput });
+    if (!held.data) {
+      if (attempt < VOTE_RETRIES) return editAndApprove(scope, approvalId, edits, note, attempt + 1);
+      return fail('This request was already decided.', { code: SERVICE_CODES.invalidInput });
+    }
     await auditDecision(scope, row, 'modified', cleanNote ?? `Edited ${changed.length ? changed.join(', ') : 'nothing'}; approval ${approvedCount} of ${required} recorded.`, { changed, votes: votes.length, required });
     const remaining = required - approvedCount;
     return ok({
