@@ -1701,3 +1701,76 @@ Most are cosmetic name fallbacks (`?? 'a family'`). Two looked serious and are
 
 Recorded because both cost real time to clear, and the next sweep over this
 shape will surface them again.
+
+---
+
+## [CLAUDE-1][HIGH][FRONTEND / DATABASE] A member could vote twice in the family meal vote
+
+- **Where:** `components/modules/meals-module.tsx` (`castVote`), schema
+  `supabase/migrations/0055_meal_votes.sql`
+- **Problem:** `castVote` clears the member's prior pick and inserts the new one:
+
+  ```ts
+  // One ballot per member: clear any prior pick, then record this one.
+  await sb.from('meal_vote_ballots').delete().eq('vote_id', …).eq('member_id', selfId);
+  const { error } = await sb.from('meal_vote_ballots').insert({ … });
+  if (error) return toastError(…);
+  success('Vote recorded');
+  ```
+
+  The insert's error is checked. **The delete's is discarded** — statement
+  position, so whatever it resolved with goes nowhere.
+- **The database does not backstop it, and the reason is exact.**
+  `meal_vote_ballots_once` is `UNIQUE (option_id, member_id)` — one ballot per
+  member per **option**, not per **vote**. A member switching from option A to
+  option B inserts a *different* key, so the constraint never fires. The
+  comment's invariant ("one ballot per member") is enforced **only** by that
+  unchecked delete.
+- **Impact:** a failed clear plus a successful insert leaves the member holding
+  ballots on both options, while the toast says "Vote recorded". The panel
+  tallies
+
+  ```ts
+  tally(opt) = ballots.filter(b => b.option_id === opt).length
+  total      = ballots.length
+  ```
+
+  so that member adds one to each of two meals **and two to the denominator** —
+  one person deciding a family's dinner twice, for two different dinners.
+- **Recommended fix:** applied at the application layer — the clear is checked
+  and a failure aborts before inserting. Verified load-bearing: restoring the
+  statement-position delete fails two cases.
+- **Status:** FIXED (application). Schema **OPEN** — see below.
+
+**OPEN, deliberately not done here:** the constraint that would actually express
+the invariant is `UNIQUE (vote_id, member_id)`, which would make the database
+refuse a second ballot regardless of what the client does. That is a migration,
+and two other workers are actively adding migrations (0314–0317) and editing the
+ledger and `PENDING_PROD_MIGRATIONS.md`. Adding a competing one is how two
+workers collide on a version number. Recommended for whoever owns the ledger
+next; the application fix closes the user-facing defect in the meantime.
+
+### The guard shape behind this find
+
+`tests/claimed-writes-that-did-not-land.test.ts` forbids exactly this — "a write
+whose result is discarded, followed by something that claims it happened" — and
+scans `app`, `lib` **and** `components`. It did not catch this one because its
+`WATCHED` map is **enumerated by table**: 12 tables, chosen as each instance was
+found. `meal_vote_ballots` is not among them.
+
+That is the **enumerated-with-no-scan** shape again (third sighting, after
+`whole-table-reads-are-not-capped` and the i18n `GATED_SURFACES`). A sweep for
+statement-position writes across the tree finds **34 tables** outside the watched
+set. Most are legitimately fire-and-forget — `activation_events`,
+`social_usage_events`, `home_ai_logs`, `dashboard_layout_events` — which is
+precisely why the guard is enumerated rather than universal, and why the 34 are
+**not** 34 findings. Triaged by hand for a *claim* following the write:
+
+- `components/modules/meals-module.tsx` — **the finding above.**
+- `app/(auth)/actions.ts:147` — clears the login throttle after a successful
+  child sign-in. Discarded, and the comment claims "a genuine kid never carries
+  a stale lock". But it fails **safe** (too strict, never too lenient), and the
+  security-critical direction is already checked:
+  `if (!(await recordFailure())) return …`. LOW.
+- `components/modules/messages-module.tsx:204` — a per-row read-receipt fallback.
+  A receipt that does not stick; no claim is made to the user. LOW.
