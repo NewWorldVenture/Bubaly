@@ -1582,3 +1582,195 @@ checks; it just never grows.
   so a ratchet nobody tightens cannot drift up to meet the code.
 - **Status:** FIXED. Verified load-bearing: one hardcoded string added to a
   component takes it to 2,813 and fails, naming the direction.
+
+---
+
+## [CLAUDE-1][HIGH][BACKEND] Two wallet balances summed from a capped read
+
+- **Where:** `app/(app)/wallet/invest/actions.ts` (`investBucketBalance`),
+  `lib/wallet/server.ts` (`childSpendableCents`, removed)
+- **Money was never at risk, and that is the first thing to establish.** Both
+  authoritative paths sum in **SQL under a lock**: `wallet_reserve_card_auth`
+  (0155) decides card authorizations, `invest_decide_order` (0196) decides fills
+  and refuses with `insufficient_cash`. A SQL aggregate reads every row —
+  `db-max-rows` caps response **rows**, not an aggregate. Verified by reading
+  both functions before drawing any conclusion.
+- **Problem:** the TypeScript pre-checks *in front of* those summed an
+  **unbounded** read, which PostgREST answers with at most 1,000 rows, silently.
+- **Evidence, measured** — 900 credits and 400 debits of $1, true balance $500:
+
+  ```
+  unbounded select -> 1,000 rows, error: null, balance $800
+  readAllAsQuery   -> 1,300 rows, error: null, balance $500
+  ```
+
+  It read **high** here only because the debits sorted after the credits. Which
+  way it errs depends on which thousand the server returns — that is the point.
+- **Impact:** `investBucketBalance` gates order placement with "not enough money
+  in the Invest bucket". A child past a thousand ledger rows could be **refused
+  funds they have**, with nothing they can do about it. Fixed by paging.
+- **`childSpendableCents` was removed, not fixed.** It had **zero callers**
+  anywhere in the repository, and its doc comment said *"this is what a card
+  authorization is checked against in real time"* — untrue of it, and untrue
+  since 0155. Leaving it was the hazard: a correct-looking, ready-to-use helper
+  with a capped sum and a comment inviting the next author to wire it into
+  exactly the decision that must not use it.
+- **Status:** FIXED. 13,894 tests pass, build compiles.
+
+## [CLAUDE-1][MEDIUM][PERFORMANCE / BACKEND] The routine cron read each family's clock once per rule, and guessed it on failure
+
+- **Where:** `app/api/cron/family-routines/route.ts`, both loops
+- **Problem:** each loop read `families.timezone` **inside** the loop, so a
+  household with ten routines cost ten identical round trips. The tick is
+  **deadline-bounded** (`if (Date.now() > deadline) break;`), so wasted round
+  trips are not merely slow — they are routines that never get processed, and a
+  routine that is not processed does not fire.
+- **The worse half:** both reads destructured `{ data: family }` and dropped the
+  error, falling back to `'America/New_York'`. That is not a loss of precision —
+  a failed read **asserts a specific US zone** for a family that may be in
+  Tokyo, and files their routine against the wrong day. This sits directly in
+  front of the DST handling added earlier in this audit, which exists precisely
+  to get a family's wall clock right.
+- **Recommended fix:** applied. One `.in()` read per tick into a Map. A failed
+  zone read now fires nothing and reports, because late is recoverable and the
+  wrong wall clock is not. A family row that is genuinely absent or blank keeps
+  the long-standing default — only a *failed read* is treated as unknown.
+- **Status:** FIXED. Verified load-bearing: restoring the per-rule read makes
+  the tick take 6 `families` reads for 6 rules instead of 1, and file routines
+  despite a failed zone read. The test double needed `.in()` support, which is
+  recorded in it — a double that cannot answer the query shape under test
+  exercises a client the code never meets.
+
+**Also noted, not changed:** the repo has two different default timezones —
+`DEFAULT_TZ = 'UTC'` in `lib/services/scope.ts` and `'America/New_York'` in four
+AI routes plus this cron. In the AI routes the fallback covers an *empty* value
+on a NOT NULL column, which is a different situation from a failed read, so they
+are not the same bug. Recorded as a consistency question for an owner, OPEN.
+
+---
+
+## [CLAUDE-1][HIGH][BACKEND] The medication reminder, and the UTC fallback the file argues against
+
+- **Where:** `lib/server/notifications.ts:61`
+- **Problem:** the file spends ten lines explaining why a UTC "today" is
+  unacceptable here, and then silently falls back to UTC when the read fails.
+  Its own comment, verbatim:
+
+  > `todayStartIso` bounds the doses already logged today, and the medication
+  > reminder asks "has this dose been taken yet?" against it. Read in UTC it
+  > starts at 17:00 local in California — so the morning dose looks untaken
+  > every evening and the family is reminded again — and in Tokyo it starts at
+  > 09:00 the PREVIOUS local day, so yesterday's dose is mistaken for today's
+  > and **the reminder never fires**. A missed medication reminder is the worse
+  > of the two, and neither is acceptable.
+
+  The code underneath was `const { data: familyRow } = await …` — the error
+  dropped — followed by `familyRow?.timezone || 'UTC'`.
+- **Impact:** a transient read failure produces exactly the outcome the comment
+  calls unacceptable, and produces it **silently**. This is a sharper case than
+  the sibling reads in the same function: those fan out ~13 source reads and
+  degrade a *category* (a missing notification), while this one corrupts the
+  *day key every category is bounded by* — a wrong notification, and for
+  medication a missing dose reminder.
+- **Recommended fix:** applied. The zone read now fails the family's tick.
+  Verified first that all **three** callers wrap each family in `try/catch` and
+  count `generationFailures`, so the family is retried next tick and a broken
+  tick still reads differently from a quiet one. A family row with **no zone
+  set** keeps the default — absent is not unreadable, and only a failed read is
+  treated as unknown.
+- **Status:** FIXED. 13,896 tests pass, build compiles.
+- **Proved load-bearing:** restoring the dropped-error form fails the new case.
+
+### Triage that produced no finding, recorded so it is not redone
+
+The scan behind this was "a discarded read error falling through to a
+**substantive** default" (not `?? []` / `?? null`), which returned 15 sites.
+Most are cosmetic name fallbacks (`?? 'a family'`). Two looked serious and are
+**not** bugs:
+
+- `lib/server/entitlement.ts:76` — `prefs?.active_family_id ?? ''`. The
+  function's own header says it returns `UNLOCKED_FALLBACK` "on any error / no
+  family / pre-migration DB, so a hiccup never traps a user". Failing **open**
+  on entitlement is a deliberate, documented product decision, and the `?? ''`
+  simply falls through to `familyIds[0]`, the user's first family. Correct.
+- `app/(app)/missions/actions.ts:301` — `assignment.ai_score ?? 100`. Reads like
+  a failed AI validation scoring full marks. It is not: the line above is
+  `if (!assignment || !chore) return;`, so a failed read returns early — fails
+  **closed**. The `?? 100` is reached only on a real row with no AI score, in a
+  path already gated on `isManager`, where a parent is explicitly approving.
+
+Recorded because both cost real time to clear, and the next sweep over this
+shape will surface them again.
+
+---
+
+## [CLAUDE-1][HIGH][FRONTEND / DATABASE] A member could vote twice in the family meal vote
+
+- **Where:** `components/modules/meals-module.tsx` (`castVote`), schema
+  `supabase/migrations/0055_meal_votes.sql`
+- **Problem:** `castVote` clears the member's prior pick and inserts the new one:
+
+  ```ts
+  // One ballot per member: clear any prior pick, then record this one.
+  await sb.from('meal_vote_ballots').delete().eq('vote_id', …).eq('member_id', selfId);
+  const { error } = await sb.from('meal_vote_ballots').insert({ … });
+  if (error) return toastError(…);
+  success('Vote recorded');
+  ```
+
+  The insert's error is checked. **The delete's is discarded** — statement
+  position, so whatever it resolved with goes nowhere.
+- **The database does not backstop it, and the reason is exact.**
+  `meal_vote_ballots_once` is `UNIQUE (option_id, member_id)` — one ballot per
+  member per **option**, not per **vote**. A member switching from option A to
+  option B inserts a *different* key, so the constraint never fires. The
+  comment's invariant ("one ballot per member") is enforced **only** by that
+  unchecked delete.
+- **Impact:** a failed clear plus a successful insert leaves the member holding
+  ballots on both options, while the toast says "Vote recorded". The panel
+  tallies
+
+  ```ts
+  tally(opt) = ballots.filter(b => b.option_id === opt).length
+  total      = ballots.length
+  ```
+
+  so that member adds one to each of two meals **and two to the denominator** —
+  one person deciding a family's dinner twice, for two different dinners.
+- **Recommended fix:** applied at the application layer — the clear is checked
+  and a failure aborts before inserting. Verified load-bearing: restoring the
+  statement-position delete fails two cases.
+- **Status:** FIXED (application). Schema **OPEN** — see below.
+
+**OPEN, deliberately not done here:** the constraint that would actually express
+the invariant is `UNIQUE (vote_id, member_id)`, which would make the database
+refuse a second ballot regardless of what the client does. That is a migration,
+and two other workers are actively adding migrations (0314–0317) and editing the
+ledger and `PENDING_PROD_MIGRATIONS.md`. Adding a competing one is how two
+workers collide on a version number. Recommended for whoever owns the ledger
+next; the application fix closes the user-facing defect in the meantime.
+
+### The guard shape behind this find
+
+`tests/claimed-writes-that-did-not-land.test.ts` forbids exactly this — "a write
+whose result is discarded, followed by something that claims it happened" — and
+scans `app`, `lib` **and** `components`. It did not catch this one because its
+`WATCHED` map is **enumerated by table**: 12 tables, chosen as each instance was
+found. `meal_vote_ballots` is not among them.
+
+That is the **enumerated-with-no-scan** shape again (third sighting, after
+`whole-table-reads-are-not-capped` and the i18n `GATED_SURFACES`). A sweep for
+statement-position writes across the tree finds **34 tables** outside the watched
+set. Most are legitimately fire-and-forget — `activation_events`,
+`social_usage_events`, `home_ai_logs`, `dashboard_layout_events` — which is
+precisely why the guard is enumerated rather than universal, and why the 34 are
+**not** 34 findings. Triaged by hand for a *claim* following the write:
+
+- `components/modules/meals-module.tsx` — **the finding above.**
+- `app/(auth)/actions.ts:147` — clears the login throttle after a successful
+  child sign-in. Discarded, and the comment claims "a genuine kid never carries
+  a stale lock". But it fails **safe** (too strict, never too lenient), and the
+  security-critical direction is already checked:
+  `if (!(await recordFailure())) return …`. LOW.
+- `components/modules/messages-module.tsx:204` — a per-row read-receipt fallback.
+  A receipt that does not stick; no claim is made to the user. LOW.
