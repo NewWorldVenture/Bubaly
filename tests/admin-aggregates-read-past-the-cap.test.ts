@@ -79,3 +79,50 @@ describe('an admin aggregate is computed over every row, not the first page', ()
     expect(data).toBeNull();
   });
 });
+
+// The billing page is the same defect with a sharper edge: it reduced EVERY
+// figure — Est. MRR, Active, Past Due, the plan donut, the six-month trend and
+// the recent list — from one unbounded read that also carried no `.order()`.
+// Unordered means the thousand rows the server returns are an arbitrary
+// thousand, so "the ten most recent subscriptions" was the ten most recent OF
+// AN ARBITRARY THOUSAND, and "Past Due / Unpaid" could omit unpaid accounts.
+describe('the billing page reduces over every subscription', () => {
+  const OVERDUE_MARKER = 'past_due';
+
+  function seededSubs(n: number, overdueFrom: number) {
+    const db = createInMemorySupabase({ maxRows: CAP });
+    db.seed('subscriptions', Array.from({ length: n }, (_, i) => ({
+      id: `sub-${String(i).padStart(6, '0')}`,
+      family_id: `fam-${String(i).padStart(6, '0')}`,
+      plan: 'family_plus',
+      // Every overdue account sits PAST the cap — the shape that matters, since
+      // an unpaid account the page cannot see is one nobody chases.
+      status: i >= overdueFrom ? OVERDUE_MARKER : 'active',
+      created_at: '2026-01-01T00:00:00Z',
+      current_period_end: null,
+    })));
+    return db as unknown as DB;
+  }
+
+  it('reproduces it: past-due accounts beyond the cap are invisible', async () => {
+    const db = seededSubs(OVER, CAP + 100);
+    const { data } = await db.from('subscriptions').select('family_id, plan, status, created_at, current_period_end');
+
+    expect(data).toHaveLength(CAP);
+    const pastDue = (data ?? []).filter((s) => (s as { status: string }).status === OVERDUE_MARKER);
+    // Every overdue account was seeded past the cap, so the page showed zero.
+    expect(pastDue).toHaveLength(0);
+  });
+
+  it('a paged read sees every past-due account', async () => {
+    const db = seededSubs(OVER, CAP + 100);
+    const { data, error } = await readAllAsQuery<{ status: string }>(
+      (from, to) => db.from('subscriptions').select('family_id, plan, status, created_at, current_period_end').order('id').range(from, to),
+      { max: 50_000 },
+    );
+
+    expect(error).toBeNull();
+    expect(data).toHaveLength(OVER);
+    expect((data ?? []).filter((s) => s.status === OVERDUE_MARKER)).toHaveLength(OVER - (CAP + 100));
+  });
+});
