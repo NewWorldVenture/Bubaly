@@ -45,6 +45,13 @@ export function StepUpForm({ next, serverReadFailed }: { next: string; serverRea
         return;
       }
       setFactors(data.all as MfaFactor[]);
+    }).catch((cause: unknown) => {
+      // `listFactors` converts network failures into `{ error }`, but rethrows
+      // anything that is NOT an AuthError — a path with no handler here, which
+      // left the form on its loading state forever and logged nothing.
+      if (!active) return;
+      console.error('[step-up] mfa factors read threw', cause);
+      setLoadError(classifyMfaError(cause instanceof Error ? cause : new Error(String(cause))));
     });
     return () => { active = false; };
   }, [reloadKey]);

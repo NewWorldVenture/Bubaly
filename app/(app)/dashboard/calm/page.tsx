@@ -16,8 +16,20 @@ type FoiSuggestion = { id?: string; title?: string; detail?: string; href?: stri
 
 type ReadResult<T> = { data: T[]; error: unknown | null };
 
+// A query builder RESOLVES with `{ data, error }` for anything the database
+// answers and REJECTS only when the request never completed — DNS, TCP, TLS, an
+// aborted fetch. This had only the resolve path, so a transport failure rejected
+// straight through the `Promise.all` below and threw out of the page: the one
+// failure the degrade underneath exists to survive was the one it could not.
+// Measured — three reads, one of them rejecting: without the rejection path
+// `Promise.all` throws and the error boundary renders; with it, all three are
+// counted as failures and the page degrades. Every sibling hub page's `safe`
+// already used try/catch; this was the outlier.
 function safe<T>(p: PromiseLike<{ data: T[] | null; error: unknown }>): Promise<ReadResult<T>> {
-  return Promise.resolve(p).then(({ data, error }) => ({ data: data ?? [], error: error ?? null }));
+  return Promise.resolve(p).then(
+    ({ data, error }) => ({ data: data ?? [], error: error ?? null }),
+    (cause: unknown) => ({ data: [], error: cause instanceof Error ? cause : new Error(String(cause)) }),
+  );
 }
 
 export default async function CalmPage() {

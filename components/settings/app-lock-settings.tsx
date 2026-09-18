@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react';
 import { Lock, ShieldCheck } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { settle, describeReadError } from '@/lib/supabase/settle';
 import { useApp } from '@/components/app/app-context';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -20,7 +21,11 @@ export function AppLockSettings() {
   const { userId } = useApp();
   const { success, error: toastError } = useToast();
   // undefined = loading, null = no PIN ever set, otherwise the stored config.
+  // A FAILED read is none of those three, which is why it gets its own state:
+  // the previous version dropped the error and fell through to `null`, and
+  // `null` in this component's own vocabulary means "no PIN ever set".
   const [config, setConfig] = useState<AppLockConfig | null | undefined>(undefined);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -32,13 +37,25 @@ export function AppLockSettings() {
   // it on later must not require re-entering the PIN.
   useEffect(() => {
     let active = true;
-    void createClient()
-      .from('user_preferences').select('notification_prefs').eq('user_id', userId).maybeSingle()
-      .then(({ data }) => {
-        if (!active) return;
-        const cfg = (data?.notification_prefs as Record<string, unknown> | null)?.appLock;
-        setConfig(isAppLockConfig(cfg) ? cfg : null);
-      });
+    void (async () => {
+      // `settle` because a query builder REJECTS on a transport failure (DNS,
+      // TCP, TLS) and resolves with `{ error }` for everything the database
+      // answers. The bare `.then()` this replaces handled neither: a rejection
+      // left the card on its loading dash forever, and an RLS denial or a
+      // missing column set `data` to null, which read as "no PIN ever set".
+      const { data, error } = await settle(createClient()
+        .from('user_preferences').select('notification_prefs').eq('user_id', userId).maybeSingle());
+      if (!active) return;
+      if (error) {
+        // Say the read failed. Do NOT claim there is no PIN — the lock may well
+        // be on, and offering "Set up PIN" here would overwrite a real one.
+        setLoadError(describeReadError(error));
+        return;
+      }
+      setLoadError(null);
+      const cfg = (data?.notification_prefs as Record<string, unknown> | null)?.appLock;
+      setConfig(isAppLockConfig(cfg) ? cfg : null);
+    })();
     return () => { active = false; };
   }, [userId]);
 
@@ -105,7 +122,9 @@ export function AppLockSettings() {
           </div>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
-          {config === undefined ? (
+          {loadError ? (
+            <span className="max-w-[16rem] text-right text-xs text-danger">{loadError}</span>
+          ) : config === undefined ? (
             <span className="text-xs text-muted">…</span>
           ) : enabled ? (
             <>
