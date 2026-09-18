@@ -6279,3 +6279,37 @@ exists and asserting over it forever. Checked rather than assumed: adding
 `TZ=America/Los_Angeles` (four shards each), tsc clean, `npm run lint` exits 0 at
 budget 12, each of the nine green in isolation, and the four repaired ones green
 from a foreign cwd.
+
+---
+
+### [CLAUDE-1][CLEAN] `database.types.ts` against the migrations — no drift in either direction
+
+Worth checking rather than assuming, because these types are **not** purely
+generated here: this PR's own merge commit records that "declaring the eight
+Guardian tables in database.types.ts was what surfaced two of the real defects".
+Hand-maintained types can drift from the schema, and drift is silent — a typed
+table with no table behind it fails at runtime with "relation does not exist",
+long after tsc was happy.
+
+**Measured, three directions, all clean.**
+
+| check | result |
+|---|---|
+| 488 typed tables → a `create table`/`create view` in `supabase/migrations` | 0 missing |
+| 47 typed RPC functions → a `create function` in the migrations | 0 missing |
+| every table read via `.from('…')` in `app/` and `lib/` → present in `Tables` | 0 untyped |
+
+**Recorded about the method, not the result.** My instrument was wrong twice
+before it was right, and both times the giveaway was a count that made no sense
+rather than an assertion that failed. The first pass matched `Tables:\s*\{(.*)`
+with a greedy fallback and captured the `Functions:` block as well, so it
+reported 47 "tables never created" — every one of which was an RPC
+(`rate_limit_hit`, `marketplace_close_auction`). The second pass brace-matched
+the block correctly but looked for `name: {`, while this file declares entries
+through a `T<Row, Insert, Update>` helper, so it found **zero** tables and would
+have reported a clean sweep over an empty set — the vacuous pass this audit
+keeps warning about, this time in my own scaffolding. Both were caught by
+sanity-checking the extraction count before trusting the comparison, which is
+the only reason the third number can be believed.
+
+**Status:** NO DEFECT. No change.
