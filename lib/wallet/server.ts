@@ -122,30 +122,18 @@ export type CreditResult = {
   duplicate?: boolean;
 };
 
-/**
- * Spendable balance for a child = the live balance of their SPEND bucket, derived
- * from the immutable ledger (credits − debits). This is what a card authorization
- * is checked against in real time. Returns 0 when the bucket/wallet is unknown.
- */
-export async function childSpendableCents(supabase: DB, familyId: string, childWalletId: string): Promise<number> {
-  const { data: bucket, error: bucketError } = await supabase
-    .from('wallet_buckets').select('id')
-    .eq('family_id', familyId).eq('child_wallet_id', childWalletId).eq('kind', 'spend').maybeSingle();
-  if (bucketError) throw new Error(walletFailure(bucketError, 'Could not load the wallet Spend bucket.'));
-  if (!bucket) return 0;
-
-  const { data: txns, error: transactionError } = await supabase
-    .from('wallet_transactions')
-    .select('direction, amount_cents, status')
-    .eq('family_id', familyId).eq('bucket_id', bucket.id)
-    .in('status', ['completed', 'processing']);
-  if (transactionError) throw new Error(walletFailure(transactionError, 'Could not load the wallet balance.'));
-
-  return (txns ?? []).reduce((sum, t) => {
-    if (t.status !== 'completed' && t.status !== 'processing') return sum;
-    return sum + (t.direction === 'credit' ? t.amount_cents : -t.amount_cents);
-  }, 0);
-}
+// `childSpendableCents` used to live here. It summed the SPEND bucket's ledger
+// in TypeScript and its doc comment said "this is what a card authorization is
+// checked against in real time" — which was not true of it, and had not been
+// since 0155. The live check is `wallet_reserve_card_auth`, which sums in SQL
+// under `for update` on the bucket, so it reads every row and serialises
+// concurrent authorizations. This one had no callers anywhere in the repository.
+//
+// It was removed rather than fixed because leaving it was the hazard: an
+// unbounded `select` is answered with at most `db-max-rows` (1,000), so a child
+// past a thousand ledger rows would have been given a balance summed over an
+// arbitrary subset — and the comment invited the next author to wire it into
+// exactly the decision that must not use it.
 
 /**
  * Atomically reserve a hold for a card authorization. Under a per-child lock the
