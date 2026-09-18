@@ -5751,3 +5751,53 @@ comparisons all compare fixed-length digests, where the length pre-check
 `secret-equals.ts` warns about leaks nothing; and the three `Promise.all`
 batches containing writes are two reads, a per-element `.catch`, and an
 idempotent batched update.
+
+---
+
+### [CLAUDE-1][LOW][I18N/PARITY] Thirty-four English strings reach six languages untranslated, and the catalogue test checks only the other direction
+
+**Path:** `tests/every-complete-catalogue-is-complete.test.ts` (new) ·
+`lib/i18n/messages/*.json`
+
+**Problem.** `tests/i18n-catalogue-integrity.test.ts` checks ORPHANS — a key a
+locale carries that English no longer has — and never the reverse. The reverse is
+the direction a reader notices. Parity **is** enforced elsewhere, but one
+namespace at a time in whichever feature test somebody remembered to write it in
+(`contactTimeline.`, `filesHubModule.`, photos, contacts…). That is coverage by
+memory, and it has the gap you would predict.
+
+**Evidence.** 34 English keys are absent from all six complete catalogues —
+the *same* 34 in each, which is the signature of one batch of copy that shipped
+and never reached translation. Six namespaces: `quickCapture.` (11), `actions.`
+(9), `roleSurface.` (6), `trialPaywallGate.` (4), `commandBar.` (2),
+`displayComfort.` (2). **Five of the six have no parity test at all.**
+
+**What it is NOT, proven rather than asserted.** These do not render as raw keys.
+`getMessages` seeds every merge with `{ ...enUS }` — "en-US is the root of every
+chain and is therefore never listed" — so a missing key resolves to the English
+string, and one of the new rules pins exactly that. A German reader gets the
+quick-capture sheet, the command bar, the density settings and the trial paywall
+in English inside an otherwise German product. Degraded, not broken. The
+alarming version of this finding would be key text on screen, and that is not
+what happens.
+
+**Also checked and correct:** `lib/i18n/translate.ts` has no English fallback
+(`messages[key] ?? key`) and its header's claim — that by the time it runs, a
+missing key "was never going to be found in the browser either" — holds, because
+the merge happens server-side in `getMessages`. The four zero-key catalogues
+(`en-GB`, `es-MX`, `es-US`, `fr-CA`) are OVERLAYS, correct by design, and the new
+guard exempts them by name with what each overlays. `getRawMessages` is not dead
+— fourteen tests use it.
+
+**Fix — deliberately not the translations.** Writing German, Spanish, French,
+Italian, Dutch and Portuguese product copy that nobody here can read back is
+worse than leaving the gap visible; it is the same "16 labels + 66 selects need
+copy in eleven locales" already filed as an owner decision. What ships is the
+ratchet: a repo-wide parity rule with the 34 recorded as a backlog that may only
+SHRINK. A new English key without its six translations fails; a key translated
+everywhere fails until it is removed from the list; a key deleted from English
+fails until it is removed. Both directions proven by planting each case.
+
+**Status:** GUARDED (the 34 remain owner work, now recorded and fenced).
+**Verified:** 14,153 tests green under both `TZ=UTC` and `TZ=America/Los_Angeles`
+(four shards each), tsc clean, `npm run lint` exits 0 at budget 12.
