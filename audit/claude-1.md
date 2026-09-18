@@ -1519,3 +1519,66 @@ checks; it just never grows.
   raw count of "unbounded unfiltered reads" is 106, and most of that number is
   small config tables (`roles`, `permissions`, `feature_flags`,
   `social_providers`) or reads scoped by a non-family id — **not** 106 findings.
+
+---
+
+## [CLAUDE-1][HIGH][BACKEND] Est. MRR, and the unpaid accounts the billing page could not see
+
+- **Where:** `app/(app)/admin/billing/page.tsx`
+- **Problem:** every figure on the page — Est. MRR, Active Subscriptions,
+  Past Due / Unpaid, the plan donut, the six-month new-MRR trend, the recent
+  list — is reduced from **one** read of `subscriptions`. That read was
+  unbounded (capped at 1,000, silently) **and carried no `.order()`**.
+- **Evidence, measured against a fake holding the cap,** 1,337 subscriptions
+  with every overdue account seeded past it:
+
+  ```
+  unbounded select  -> 1,000 rows, error: null, past-due found:   0
+  readAllAsQuery    -> 1,337 rows, error: null, past-due found: 237
+  ```
+
+- **Impact:** the two faults compound rather than repeat.
+  - *Capped:* MRR and Active understated past a thousand.
+  - *Unordered:* which thousand is arbitrary, so **"Past Due / Unpaid" could
+    omit unpaid accounts outright** — the number on this page most likely to be
+    acted on — and "recent" sorted an arbitrary thousand by `created_at` and
+    took ten, which need not contain a single genuinely recent row.
+  - The page's own subtitle is "live subscription revenue across every family".
+- **Recommended fix:** applied. The subscriptions read pages to a real ceiling;
+  reaching it returns an error, which this page already turns into a read-error
+  state. **On a revenue page, refusing to show a number beats showing a smaller
+  one with no way to tell.** `families` was also read unbounded only to build a
+  name map for ten rows — it now reads just the families those rows name, which
+  is both correct (a row past the cap rendered "—" for a family that exists) and
+  far fewer rows.
+- **Status:** FIXED. `tsc` clean, build compiles, 13,887 tests pass, CI green.
+
+## [CLAUDE-1][MEDIUM][TESTING] A ratchet on the ungated i18n surface — and a number that lied
+
+- **Where:** `scripts/i18n-scan.mjs` (`GATED_SURFACES`), new
+  `tests/i18n-ungated-surface-ratchet.test.ts`
+- **Problem:** `app/` + `components/` is deliberately **not** gated, for a good
+  recorded reason. But "it goes back in the list when it scans clean" has no
+  force on its own: nothing stopped the number growing and nothing would have
+  reported it.
+- **A wrong conclusion, recorded because it was nearly shipped.** The comment
+  records 2,343; today's scan says **2,812**. That reads like 469 strings of
+  drift, and I was one step from reporting it that way. Measured with **one
+  scanner held fixed** against both trees:
+
+  ```
+  current scanner, tree at 0babad30 (where 2,343 was written)   2,903
+  current scanner, tree today                                   2,812
+  ```
+
+  The surface has **improved by 91**. The apparent rise was entirely the scanner
+  getting better at seeing strings — the same improvement that produced the
+  2,343. *Two numbers from two different scanners say nothing about the code,
+  and the obvious reading of them was backwards.*
+- **Recommended fix:** applied — a ratchet, not a gate. The surface need not be
+  clean, only not get worse. The failure message names both causes of a rise,
+  because they are indistinguishable from the number alone, and a third case
+  fails when the surface improves enough that the ceiling should be **lowered**,
+  so a ratchet nobody tightens cannot drift up to meet the code.
+- **Status:** FIXED. Verified load-bearing: one hardcoded string added to a
+  component takes it to 2,813 and fails, naming the direction.
