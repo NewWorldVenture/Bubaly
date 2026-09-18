@@ -6024,3 +6024,60 @@ audit, caught this time before it was written down as a pass.
 **Verified:** 14,158 tests green under both `TZ=UTC` and
 `TZ=America/Los_Angeles` (four shards each), tsc clean, `npm run lint` exits 0 at
 budget 12. The existing `mobile-sw-auth-cache` suite passes alongside it.
+
+---
+
+### [CLAUDE-1][MEDIUM][OBSERVABILITY] Push is the third subsystem that dies silently, and the health guard only ever checked one direction
+
+**Path:** `lib/health/status.ts` (FEATURE_ENV) ·
+`tests/health-feature-secrets.test.ts` (extended) · `lib/server/push.ts`
+
+**Thread attribution.** `FEATURE_ENV` and its guard are a thread
+`audit/claude-4.md` has been working (they raised `RESEND_API_KEY`). Their file
+still reads "RESEND_API_KEY still absent from FEATURE_ENV"; it is present now, so
+that note is stale — recorded here rather than edited there, since it is not my
+file. This finding is the completeness extension, not a re-report of theirs.
+
+**The asymmetry.** `tests/health-feature-secrets.test.ts` has twelve assertions
+and every one runs outbound: what IS listed is really read, is env-only, is not
+admin-settable. None runs inbound — nothing checks that a secret which MEETS the
+criteria is listed. That is the direction a subsystem dies in, and it is the same
+shape as Q31, where orphaned catalogue keys were guarded and missing ones were
+not. It has now cost this codebase twice: `RESEND_API_KEY` was missing until
+Claude-4 raised it, and the two below were missing until this pass.
+
+**The gap.** `VAPID_PRIVATE_KEY` and `FCM_SERVER_KEY` gate web push and native
+iOS/Android push. Both meet FEATURE_ENV's own stated test exactly:
+
+- *Absence silently disables a whole shipped subsystem.* In
+  `lib/server/push.ts`, `if (!vapid || …) { result.skipped++; continue; }` and
+  `if (!fcmConfigured() || !d.token) { result.skipped++; continue; }` — **skipped,
+  not failed**. The caller receives `{ sent: 0, skipped: N, failed: 0 }` and
+  reports itself clean while no push has left the building. Precisely the
+  `RESEND_API_KEY` shape: not an error, an absence that reads as success.
+- *Env-only, no stored fallback.* Contrast the AI keys, which FEATURE_ENV
+  deliberately excludes because `lib/ai/provider.ts` reads
+  `cfg.openaiKey ?? process.env.OPENAI_API_KEY` — a deployment configured in the
+  admin console has no env var and a working assistant. There is no equivalent
+  for the push keys anywhere in `app/`, `lib/`, or the migrations.
+
+The product already knows this state exists — `admin/marketing/push/page.tsx`
+tells an operator delivery is "skipped until keys are set". `/api/health` was the
+one place that did not.
+
+**Fix.** Both added to `FEATURE_ENV` with the mechanism in the source. All twelve
+pre-existing assertions pass unchanged against the additions, which is the
+existing guard independently confirming both are genuinely read and genuinely
+env-only.
+
+**Guard — the missing direction.** A closed list of subsystem gates, each
+carrying its subsystem and the mechanism that makes its failure silent, asserted
+to be contained in `FEATURE_ENV`. Plus a source check that the push paths really
+do increment `skipped` rather than `failed` (if that ever changed, these two
+would stop belonging), and the admin-fallback exclusion test applied to them.
+Dropping both from `FEATURE_ENV` fails the new rule naming each gate and how it
+dies.
+
+**Status:** FIXED. **Verified:** 14,162 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles` (four shards each), tsc clean, `npm run lint` exits 0 at
+budget 12, `npm run build` exits 0.

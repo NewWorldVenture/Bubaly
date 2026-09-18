@@ -78,6 +78,18 @@ export const FEATURE_ENV = [
   'CONTACT_CENTER_INBOUND_SECRET',
   'MARKETING_UNSUB_SECRET',
   'GUARDIAN_INTERNAL_SECRET',
+  // Web Push, end to end. `ensureVapid()` in lib/server/push.ts needs the pair
+  // and, without it, every webpush device is counted `skipped` rather than
+  // `failed` — so the caller sees { sent: 0, failed: 0 } and reports itself
+  // clean while no push has left the building. Exactly the RESEND_API_KEY shape
+  // above: not an error, an absence that reads as success. Env-only at its one
+  // read site, with no admin-console fallback, unlike the AI keys.
+  'VAPID_PRIVATE_KEY',
+  // The same, for the native iOS/Android apps: `fcmConfigured()` gates the FCM
+  // path and an unset key skips every native device just as quietly. The admin
+  // push page already tells an operator delivery is "skipped until keys are
+  // set" — /api/health was the one place that did not.
+  'FCM_SERVER_KEY',
 ] as const;
 
 /**
