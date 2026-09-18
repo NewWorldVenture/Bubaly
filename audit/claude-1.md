@@ -6313,3 +6313,54 @@ sanity-checking the extraction count before trusting the comparison, which is
 the only reason the third number can be believed.
 
 **Status:** NO DEFECT. No change.
+
+---
+
+### [CLAUDE-1][CLEAN] Cache invalidation and realtime scoping — three leads, none of them a defect
+
+Recorded because "I looked here and it was fine" is worth more to the next
+reader than silence, and because two of the three died for reasons worth knowing.
+
+**1. `revalidatePath` targets that match no route — none.** A path with no route
+behind it makes `revalidatePath` a silent no-op: the write lands, the page stays
+stale, and nothing errors. 479 calls across 102 files, 113 distinct literal
+paths, checked against the 539 routable paths (dynamic `[param]` segments
+matched positionally). **All 113 resolve.** The single apparent miss,
+`/sitemap.xml`, was my own walker: `app/sitemap.ts` generates that URL and my
+`SPECIAL` file set did not list `sitemap.ts`. Fourth false positive of my own
+instrument this session, caught the same way as the others — by asking what the
+tool does with a case before believing its output.
+
+**2. Server actions that write and never revalidate — a dead lead, not a
+finding.** Eighteen such files. The largest, `app/(app)/wallet/hub-actions.ts`
+(ten writes), reaches exactly one component, and `components/wallet/wallet-hub.tsx`
+has no `router.refresh()` anywhere — which looked damning until I read it. It
+holds five `useRealtimeQuery` subscriptions and calls the matching
+`refreshCards()` / `refreshPasses()` / `refreshAccounts()` / `refreshTxns()` after
+each delete, by table. The data is never server-rendered into the page, so
+`revalidatePath` would invalidate nothing anyone reads. **The heuristic is simply
+wrong for this codebase** — the house pattern is client-side realtime — so the
+other seventeen were not ground through to produce seventeen more explanations.
+
+**3. Realtime subscriptions are family-scoped, twice over.** This is a
+tenant-crossing surface and worth stating plainly.
+`realtimeChannelFor(table, familyId)` returns `null` unless `familyId` is present
+AND the table is in the closed `REALTIME_TABLES` allowlist; the caller guards
+with `if (!spec) return`. When it does return, the filter is unconditionally
+`family_id=eq.${familyId}`. And the subscription callback **discards the
+payload** — it only calls `refresh()`, so the rows that reach the UI come from
+the caller's own family-scoped fetcher rather than from the socket. Either layer
+alone would do; both are present.
+
+Two details in that module show the ground was already walked: the comment
+explaining that Realtime "happily accepts a channel on an unpublished table and
+then never sends anything, so the socket looks healthy while the screen quietly
+goes stale", and the `deletesAreLive` / `DELETE_LIVE_TABLES` pair, which exists
+because a Postgres DELETE carries only the primary key unless REPLICA IDENTITY
+is FULL — so a `family_id`-filtered subscription never matches one.
+
+**Thread note.** `audit/claude-2.md` swept all 113 `useRealtimeQuery` consumers
+for dropped `error` state, which is the UI question. Scoping of the subscription
+itself is the different one, and is what is recorded here.
+
+**Status:** NO DEFECT in any of the three. No change.
