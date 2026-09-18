@@ -514,8 +514,8 @@ passed; production application of the atomic `0240-0254` release remains pending
 ## Migrations added since this document's stated baseline (2026-09-12)
 
 The status line at the top of this file is dated **2026-09-05** against main
-`01881fb2`. **59** migration files have landed since, `0255` through
-`0316`, and none of them appear anywhere above. (This read "thirty-one, `0255`
+`01881fb2`. **60** migration files have landed since, `0255` through
+`0317`, and none of them appear anywhere above. (This read "thirty-one, `0255`
 through `0285`" until 2026-09-13, "seventy-one, `0255` through `0295`" until
 2026-09-15, and "forty-five, `0255` through `0302`", "46, `0255` through `0303`"
 and "49, `0255` through `0306`" until 2026-09-16; the range
@@ -1540,3 +1540,49 @@ carrying no `related_id` are untouched. The middle two are the ones that would
 have caught the wrong index.
 
 Until this is applied, production can pay one chore twice.
+
+### `0317` makes the listing state machine decide from a locked row — unapplied
+
+`marketplace_set_listing_status` is the seller's state machine: withdraw,
+complete, relist, mark pending. It read the listing with **no lock** and wrote
+with **no predicate**, so the transition was judged against a row another
+transaction may already have changed.
+
+Of the twenty-two `SECURITY DEFINER` functions in this schema that read a row
+and then update it, this was the **only** one with neither mechanism — every
+other one takes `for update`, predicates its write, or both. `marketplace_buy_now`,
+its immediate neighbour, does all three.
+
+**Measured with two real concurrent sessions.** The transition that exposes it
+is one the state machine forbids (`pending` is legal only from `available`):
+
+```
+before:  seller: (no error — the forbidden transition was accepted)
+         listing=pending  claimed_by=<buyer>  confirmed_orders=1
+
+after:   seller: ERROR: Cannot move listing from claimed to pending
+         listing=claimed  claimed_by=<buyer>  confirmed_orders=1
+```
+
+The seller read `available`, decided `available → pending` was legal against
+that stale value, then blocked on the buyer's row lock and wrote anyway. The
+listing goes back on the market as `pending` while carrying a confirmed order
+and the buyer's `claimed_by` — a second buyer can be pointed at an item that is
+already sold.
+
+**What this is not:** `claimed → withdrawn` is legal from both the stale and the
+fresh read, so a seller withdrawing a just-claimed listing is not this defect —
+it is the product working as designed, and the probe asserts it still does. Only
+a transition the state machine rejects from the true status shows the stale read.
+The first scenario tried here was that one, and it demonstrated nothing; it is
+recorded because the distinction is the whole point.
+
+Held by `docs/audit/listing-status-machine-check.sql`, which reads the mechanism
+out of `pg_get_functiondef` rather than a file (so it cannot pass against a
+definition a later migration replaced) and **re-runs the sweep that found this
+one**, so the next function to drop both mechanisms is caught at replay rather
+than by a buyer. Three assertions failed before, none after, with four controls
+— the two legal transitions, the forbidden one, and the non-owner — passing in
+both directions.
+
+Until this is applied, production can put a sold item back on the market.
