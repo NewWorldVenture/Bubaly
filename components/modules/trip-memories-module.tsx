@@ -17,15 +17,16 @@ import { groupByTrip } from '@/lib/vacations/memories';
 import { uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument, DOCUMENT_MAX_BYTES, DOCUMENT_MAX_MB } from '@/lib/storage/documents';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { todayInZone } from '@/lib/schedule/zoned';
 
 type Memory = Tables<'trip_memories'>;
 type VacationLite = { id: string; title: string };
 
-const blank = () => ({ title: '', memory_date: new Date().toISOString().slice(0, 10), note: '', location: '', vacation_id: '', member_id: '', file: null as File | null });
+const blank = (tz: string) => ({ title: '', memory_date: todayInZone(tz), note: '', location: '', vacation_id: '', member_id: '', file: null as File | null });
 
 export function TripMemoriesModule() {
   const t = useTranslations();
-  const { familyId, userId, members } = useApp();
+  const { familyId, userId, members, family } = useApp();
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
@@ -113,7 +114,7 @@ export function TripMemoriesModule() {
         <h3 className="flex items-center gap-2 text-base font-semibold"><BookHeart className="h-4 w-4 text-brand-text" /> {t('tripMemories.tripMemories')}</h3>
         <div className="flex items-center gap-2">
           <AiInsight kind="memories" iconOnly />
-          <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> {t('tripMemories.addMemory')}</Button>
+          <Button onClick={() => setForm(blank(family?.timezone ?? 'UTC'))}><Plus className="h-4 w-4" /> {t('tripMemories.addMemory')}</Button>
         </div>
       </div>
 

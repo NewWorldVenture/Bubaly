@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { usd, billDueStatus, DUE_META, fmtDueDate } from '@/lib/finance/hub';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { todayInZone } from '@/lib/schedule/zoned';
 
 type Bill = Tables<'bills'>;
 export type BillsMode = 'all' | 'autopay' | 'due';
@@ -145,9 +146,10 @@ export function BillsView({ mode }: { mode: BillsMode }) {
 
 function BillModal({ familyId, userId, defaultAutopay, onClose }: { familyId: string; userId: string; defaultAutopay: boolean; onClose: () => void }) {
   const t = useTranslations();
+  const { family } = useApp();
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
-  const [v, setV] = useState({ name: '', amount: '', due_date: new Date().toISOString().slice(0, 10), category: 'Utilities', is_recurring: true, autopay: defaultAutopay });
+  const [v, setV] = useState({ name: '', amount: '', due_date: todayInZone(family?.timezone ?? 'UTC'), category: 'Utilities', is_recurring: true, autopay: defaultAutopay });
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();

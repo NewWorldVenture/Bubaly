@@ -53,3 +53,18 @@ export function clockInZone(ms: number, tz: string): string {
     return new Date(ms).toISOString().slice(11, 16);
   }
 }
+
+/**
+ * Today on the family's wall, as `YYYY-MM-DD`.
+ *
+ * The form this replaces — `new Date().toISOString().slice(0, 10)` — answers
+ * the day at Greenwich, which is a different day from the family's for a large
+ * and predictable slice of every day (7h/day in Los Angeles, 10h/day in
+ * Sydney). Written into a DATE column that difference persists: a parent in
+ * Los Angeles logging an expense at 18:30 on Sunday files it against Monday.
+ *
+ * Takes `now` so callers can pin it in a test; reads the clock otherwise.
+ */
+export function todayInZone(tz: string, now: number = Date.now()): string {
+  return dayKeyInZone(now, tz) ?? new Date(now).toISOString().slice(0, 10);
+}

@@ -27,6 +27,7 @@ import {
   type SubscriptionCandidate, type SubscriptionCandidateResponse, type SubscriptionReviewContext, type TrackedCandidateMatch,
 } from '@/lib/finance/subscription-candidates';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { todayInZone } from '@/lib/schedule/zoned';
 
 type Sub = Tables<'subscriptions_tracked'>;
 
@@ -34,15 +35,15 @@ const CATEGORIES = ['Streaming', 'Music', 'Software', 'Gaming', 'News', 'Fitness
 const blank = () => ({ id: '', name: '', cost: '', cadence: 'monthly', category: 'Streaming', status: 'active', next_charge: '', last_used: '', note: '' });
 
 export function SubscriptionsModule() {
-  const { familyId, userId, selfMember } = useApp();
+  const { familyId, userId, selfMember, family } = useApp();
   const context: SubscriptionReviewContext = {
     familyId, userId, memberId: selfMember?.id ?? null, role: selfMember?.role ?? null, active: selfMember?.is_active === true,
   };
   // Remount the entire workspace, including any open Add draft, on access changes.
-  return <SubscriptionsWorkspace key={subscriptionReviewContextKey(context)} context={context} />;
+  return <SubscriptionsWorkspace key={subscriptionReviewContextKey(context)} context={context} timezone={family?.timezone ?? 'UTC'} />;
 }
 
-export function SubscriptionsWorkspace({ context }: { context: SubscriptionReviewContext }) {
+export function SubscriptionsWorkspace({ context, timezone = 'UTC' }: { context: SubscriptionReviewContext; timezone?: string }) {
   const t = useTranslations();
   const { familyId, userId } = context;
   const { success, error: toastError } = useToast();
@@ -83,7 +84,7 @@ export function SubscriptionsWorkspace({ context }: { context: SubscriptionRevie
   }
 
   async function markUsed(id: string) {
-    const { error } = await createClient().from('subscriptions_tracked').update({ last_used: new Date().toISOString().slice(0, 10) }).eq('id', id);
+    const { error } = await createClient().from('subscriptions_tracked').update({ last_used: todayInZone(timezone) }).eq('id', id);
     if (error) toastError(describeDbError(error)); else success(t('subscriptionsModule.markedUsedToday'));
   }
   async function setStatus(id: string, status: string) {

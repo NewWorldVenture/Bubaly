@@ -25,6 +25,7 @@ import {
   deleteWalletRowAction,
 } from '@/app/(app)/wallet/hub-actions';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { todayInZone } from '@/lib/schedule/zoned';
 
 type Account = Tables<'financial_accounts'>;
 type Txn = Tables<'transactions'>;
@@ -541,7 +542,8 @@ function AddTransactionModal({ accounts, onClose, onDone }: { accounts: Account[
   const t = useTranslations();
   const tr = useTranslations();
   const { saving, submit } = useAddForm(addTransactionAction, onClose, onDone);
-  const [v, setV] = useState({ name: '', merchant: '', amount: '', type: 'expense', status: 'posted', category: '', account_id: '', date: new Date().toISOString().slice(0, 10) });
+  const { family } = useApp();
+  const [v, setV] = useState({ name: '', merchant: '', amount: '', type: 'expense', status: 'posted', category: '', account_id: '', date: todayInZone(family?.timezone ?? 'UTC') });
   return (
     <Modal open onClose={onClose} title={tr('wallet.addTransaction')}>
       <form onSubmit={(e) => { e.preventDefault(); void submit(v); }} className="space-y-4">
