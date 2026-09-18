@@ -3,13 +3,16 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 // Launch-readiness ratchet (mandate: "remove mocks / placeholders / dead code").
-// Shipping code (app/ + lib/) must carry NO leftover developer markers —
+// Shipping code (app/ + lib/ + components/) must carry NO leftover developer markers —
 // TODO / FIXME / HACK / XXX (uppercase, the comment-marker convention; the task
 // STATUS value 'todo' is lowercase and unaffected) and no scaffolding sentinels
 // like NotImplemented. This was swept clean at authoring time (0 hits across the
 // whole tree); the guard keeps a new one from slipping in unnoticed. Tests,
 // scripts and generated types are out of scope.
-const ROOTS = ['app', 'lib'];
+// `components` is shipping code by the same standard and was outside this
+// scan. It is clean today (0 hits when added), so including it costs nothing
+// and stops the first marker there from arriving unnoticed.
+const ROOTS = ['app', 'lib', 'components'];
 const MARKER = /\b(TODO|FIXME|HACK|XXX)\b/;
 
 function sourceFiles(dir: string): string[] {
@@ -38,7 +41,7 @@ describe('shipping code carries no leftover developer markers', () => {
     expect(files.length).toBeGreaterThan(300);
   });
 
-  it('has no TODO / FIXME / HACK / XXX markers in app/ or lib/', () => {
+  it('has no TODO / FIXME / HACK / XXX markers in app/, lib/ or components/', () => {
     const offenders: string[] = [];
     for (const f of files) {
       const code = stripComments(readFileSync(f, 'utf8'));
