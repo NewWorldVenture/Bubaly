@@ -5686,3 +5686,68 @@ repository's written instruction.
 **Status:** FIXED (rule + 1 call site). **Verified:** 14,135 tests green under
 both `TZ=UTC` and `TZ=America/Los_Angeles` (four shards each), tsc clean,
 `npm run lint` exits 0 at budget 12, `npm run build` exits 0.
+
+---
+
+### [CLAUDE-1][MEDIUM][BACKEND/PAGING] Two paged reads without a total order — one latent, one that drops a benchmark band
+
+**Path:** `lib/network/benchmarks-server.ts:60-77` ·
+`app/(app)/admin/marketing/push/actions.ts:59` ·
+`tests/a-paged-read-needs-a-total-order.test.ts` (new)
+
+**The rule, already written down.** `lib/supabase/read-all.ts`: give a paged
+query "an `.order()` that is unique — a primary key, not the `family_id` being
+filtered on — or pages can repeat and skip rows." `.range(from, to)` is a
+separate request with a separately planned sort, so a key that is not a TOTAL
+order lets a page boundary move inside a run of equal values: the row at offset
+1,000 in the first query can sit at 999 in the second and never come back.
+`lib/blog/posts.ts` measured the exposure on its own table — "717 of the
+published rows share a `published_at` with another row".
+
+**The sweep.** 49 paged reads. 39 order by `id`. Of the remaining ten, four add
+an explicit tiebreak with the reason in the source, four order by a column that
+IS unique in the schema (checked against the migrations, not assumed), and two
+did neither. **Eight of ten would have been false accusations.**
+
+**`network_aggregates` — the live one.** 0135 declares
+`unique (scope, cohort_key, metric, value)`. `readBenchmarkAggregates` orders by
+`cohort_size, cohort_key, metric` and pins `scope` with `.eq`. The tiebreak was
+added deliberately and for the right reason — its comment says "`cohort_size` is
+far from unique, so it also needs a tiebreak" — and stopped **one column short
+of the table's own key**. A metric's `value` rows are its BANDS, so every metric
+is a tie group of several. A dropped band is not a shorter benchmark, it is a
+different one. Fixed by appending `.order('value')`, completing the declared key.
+
+**`push_devices` — latent, and said so.** 0035: "One row per physical device", so
+`user_id` repeats for anyone with a phone and a laptop, and the campaign audience
+read ordered by it alone. The effect today is **not** a live bug and the source
+comment now says why: only rows inside a tie group can be permuted, so the set of
+distinct `user_id` values is invariant, and `selectPushRecipients` dedupes to
+exactly that set. The moment the read grows a second column — a `device_key`, a
+per-device count, a platform breakdown — the dropped row becomes the audience bug
+the comment three lines above claims to have fixed. Fixed by `.order('id')`.
+
+**Guard.** A ratchet that models the rule as a careful reviewer applies it: a
+paged read is totally ordered when its `.order()` columns **together with the
+columns an `.eq()` pins to a constant** contain a declared unique key. The
+pinned half is not a loophole — it is exactly why the benchmarks read looked
+fine while being one column short. `.gte()` and `.in()` deliberately do not
+count, and that distinction is calibrated against the benchmarks read's own
+`.gte('cohort_size', FLOOR)`. The registry names the migration line that declares
+each key, and an entry for a table nothing pages any more fails too. Reverting
+both fixes flags both sites, naming their order columns and their pins.
+
+**Status:** FIXED (2 sites). **Verified:** 14,142 tests green under both `TZ=UTC`
+and `TZ=America/Los_Angeles` (four shards each), tsc clean, `npm run lint` exits
+0 at budget 12, `npm run build` exits 0.
+
+**Clean negatives recorded from this pass** (checked, not defects): all
+`unstable_cache` uses are global marketing content, not family-scoped; the only
+module-level mutable cache is the in-process rate limiter; the three webhook
+routes verify against the raw body with `constructEvent` or HMAC +
+`timingSafeEqual`; the Stripe price→plan chain throws on a missing `priceId`
+before comparing against a possibly-unset env var; six private constant-time
+comparisons all compare fixed-length digests, where the length pre-check
+`secret-equals.ts` warns about leaks nothing; and the three `Promise.all`
+batches containing writes are two reads, a per-element `.catch`, and an
+idempotent batched update.
