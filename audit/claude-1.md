@@ -5618,3 +5618,71 @@ that no longer exists fails too.
 **Status:** FIXED. **Verified:** 14,124 tests green under both `TZ=UTC` and
 `TZ=America/Los_Angeles` (four shards each), tsc clean, `npm run lint` exits 0 at
 budget 12, `npm run build` exits 0.
+
+---
+
+### [CLAUDE-1][MEDIUM][BACKEND/QUERY-GRAMMAR] `escapeLike` is not enough inside `.or()`, and the one place that knew it kept the knowledge private
+
+**Path:** `lib/supabase/escape-like.ts` (new `escapeOrValue`) ·
+`lib/ai/activity.ts:140-171` · `tests/ilike-patterns-are-escaped.test.ts` (widened)
+
+**No live defect.** `listAiActivity` was already correct and already tested —
+`tests/ai-activity.test.ts` has four cases on exactly this behaviour. What was
+missing is the rule, and the rule is what this repository built `escape-like.ts`
+to have exactly one of.
+
+**Problem, part one — the rule is insufficient where it matters most.**
+`.ilike(column, pattern)` sends the pattern as its own query parameter, so
+escaping the two LIKE wildcards is the whole job. `.or(filter)` sends one string
+in PostgREST's filter grammar, where `,` separates disjuncts and `()` groups
+them. Neither is a LIKE character, so `escapeLike` passes them through untouched.
+Follow the repo's own documented rule ("use `escapeLike` at the call site")
+inside a `.or()` and the filter is still splittable:
+
+- `a,b` → `feature.ilike.%a,b%,…` — `b%` is not `col.op.val`, PostgREST 400;
+- `x,status.neq.zzz` → a fourth disjunct matching every row, so the search stops
+  filtering and lists whatever scope it was already inside.
+
+**It is not a tenant crossing**, and saying so is the point: the or-group is
+AND-ed with the caller's `.eq('family_id', …)` and RLS sits under both. This is a
+broken search and a filter bypass *within* scope. The more alarming claim would
+have been the wrong one.
+
+**Problem, part two — a fifth private copy, invisible to the guard built to stop
+private copies.** `lib/ai/activity.ts` had `safeSearchTerm`, which handled both
+grammars correctly and privately. All of `ilike-patterns-are-escaped`'s
+assertions missed it: the name is not `escapeLike`; the character class is
+`[\\%_]` and the double-escape scan looks for `[%_]`, one character apart; and
+the call is `.or(` + backtick + `feature.ilike.${like}` + backtick + `)`, which
+neither `.ilike(col, …)` matcher can see. The file whose header says "four
+private copies are why two previous fixes did not propagate" could not see the
+fifth.
+
+**Fix.** `escapeOrValue` in `escape-like.ts`, composing `escapeLike` and mapping
+the three grammar characters to a space. Quoting the value (`col.ilike."a,b"`)
+would preserve the term exactly and was rejected: the in-memory Supabase splits
+an or-expression on every top-level comma without modelling quotes, so a quoted
+value would work in production and break every test exercising it — shipping
+behaviour the repository cannot test. `lib/ai/activity.ts` drops its private copy
+for it; behaviour is byte-identical, and its four existing tests pass unchanged.
+
+**Guard, and a false accusation caught before it shipped.** Three rules added:
+a repo-wide scan for `.or()` expressions interpolating into an `ilike.` fragment
+(requiring `escapeOrValue`), a scan for a private wildcard escape *by shape
+rather than by name*, and calibration for both. The second one's first draft
+matched any character class containing `%` and `_`, and its first finding was
+wrong: `lib/services/search/index.ts` **neutralises** those characters
+(`replace(/[%_,()"\\]/g, ' ')`) — a different, perfectly good strategy for a
+search box, already that service's single definition, and nothing `escape-like.ts`
+offers. Flagging it would have demanded a change making the code worse. The rule
+now requires a backslash-*quoting* replacement, which is the thing there must be
+exactly one of.
+
+**Calibration.** Reverting `lib/ai/activity.ts` to the documented rule correctly
+applied — `escapeLike` alone — fails both new rules naming the file. That is the
+strongest form available here: the guard fires on code that follows the
+repository's written instruction.
+
+**Status:** FIXED (rule + 1 call site). **Verified:** 14,135 tests green under
+both `TZ=UTC` and `TZ=America/Los_Angeles` (four shards each), tsc clean,
+`npm run lint` exits 0 at budget 12, `npm run build` exits 0.
