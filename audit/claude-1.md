@@ -1582,3 +1582,67 @@ checks; it just never grows.
   so a ratchet nobody tightens cannot drift up to meet the code.
 - **Status:** FIXED. Verified load-bearing: one hardcoded string added to a
   component takes it to 2,813 and fails, naming the direction.
+
+---
+
+## [CLAUDE-1][HIGH][BACKEND] Two wallet balances summed from a capped read
+
+- **Where:** `app/(app)/wallet/invest/actions.ts` (`investBucketBalance`),
+  `lib/wallet/server.ts` (`childSpendableCents`, removed)
+- **Money was never at risk, and that is the first thing to establish.** Both
+  authoritative paths sum in **SQL under a lock**: `wallet_reserve_card_auth`
+  (0155) decides card authorizations, `invest_decide_order` (0196) decides fills
+  and refuses with `insufficient_cash`. A SQL aggregate reads every row —
+  `db-max-rows` caps response **rows**, not an aggregate. Verified by reading
+  both functions before drawing any conclusion.
+- **Problem:** the TypeScript pre-checks *in front of* those summed an
+  **unbounded** read, which PostgREST answers with at most 1,000 rows, silently.
+- **Evidence, measured** — 900 credits and 400 debits of $1, true balance $500:
+
+  ```
+  unbounded select -> 1,000 rows, error: null, balance $800
+  readAllAsQuery   -> 1,300 rows, error: null, balance $500
+  ```
+
+  It read **high** here only because the debits sorted after the credits. Which
+  way it errs depends on which thousand the server returns — that is the point.
+- **Impact:** `investBucketBalance` gates order placement with "not enough money
+  in the Invest bucket". A child past a thousand ledger rows could be **refused
+  funds they have**, with nothing they can do about it. Fixed by paging.
+- **`childSpendableCents` was removed, not fixed.** It had **zero callers**
+  anywhere in the repository, and its doc comment said *"this is what a card
+  authorization is checked against in real time"* — untrue of it, and untrue
+  since 0155. Leaving it was the hazard: a correct-looking, ready-to-use helper
+  with a capped sum and a comment inviting the next author to wire it into
+  exactly the decision that must not use it.
+- **Status:** FIXED. 13,894 tests pass, build compiles.
+
+## [CLAUDE-1][MEDIUM][PERFORMANCE / BACKEND] The routine cron read each family's clock once per rule, and guessed it on failure
+
+- **Where:** `app/api/cron/family-routines/route.ts`, both loops
+- **Problem:** each loop read `families.timezone` **inside** the loop, so a
+  household with ten routines cost ten identical round trips. The tick is
+  **deadline-bounded** (`if (Date.now() > deadline) break;`), so wasted round
+  trips are not merely slow — they are routines that never get processed, and a
+  routine that is not processed does not fire.
+- **The worse half:** both reads destructured `{ data: family }` and dropped the
+  error, falling back to `'America/New_York'`. That is not a loss of precision —
+  a failed read **asserts a specific US zone** for a family that may be in
+  Tokyo, and files their routine against the wrong day. This sits directly in
+  front of the DST handling added earlier in this audit, which exists precisely
+  to get a family's wall clock right.
+- **Recommended fix:** applied. One `.in()` read per tick into a Map. A failed
+  zone read now fires nothing and reports, because late is recoverable and the
+  wrong wall clock is not. A family row that is genuinely absent or blank keeps
+  the long-standing default — only a *failed read* is treated as unknown.
+- **Status:** FIXED. Verified load-bearing: restoring the per-rule read makes
+  the tick take 6 `families` reads for 6 rules instead of 1, and file routines
+  despite a failed zone read. The test double needed `.in()` support, which is
+  recorded in it — a double that cannot answer the query shape under test
+  exercises a client the code never meets.
+
+**Also noted, not changed:** the repo has two different default timezones —
+`DEFAULT_TZ = 'UTC'` in `lib/services/scope.ts` and `'America/New_York'` in four
+AI routes plus this cron. In the AI routes the fallback covers an *empty* value
+on a NOT NULL column, which is a different situation from a failed read, so they
+are not the same bug. Recorded as a consistency question for an owner, OPEN.
