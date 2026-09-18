@@ -514,8 +514,8 @@ passed; production application of the atomic `0240-0254` release remains pending
 ## Migrations added since this document's stated baseline (2026-09-12)
 
 The status line at the top of this file is dated **2026-09-05** against main
-`01881fb2`. **58** migration files have landed since, `0255` through
-`0315`, and none of them appear anywhere above. (This read "thirty-one, `0255`
+`01881fb2`. **59** migration files have landed since, `0255` through
+`0316`, and none of them appear anywhere above. (This read "thirty-one, `0255`
 through `0285`" until 2026-09-13, "seventy-one, `0255` through `0295`" until
 2026-09-15, and "forty-five, `0255` through `0302`", "46, `0255` through `0303`"
 and "49, `0255` through `0306`" until 2026-09-16; the range
@@ -1484,3 +1484,59 @@ offer is still accepted, and a different available listing still sells — passi
 in both directions.
 
 Until this is applied, production can sell one item to two families.
+
+### `0316` pays a chore once — unapplied
+
+`payChoreRewardAction` states the invariant in its own comment:
+
+```ts
+// Already paid? (one wallet credit per assignment)
+const { data: existing } = await supabase.from('wallet_transactions').select('id')
+  .eq('family_id', familyId).eq('related_type', 'chore_assignments').eq('related_id', assignment.id).limit(1);
+if ((existing ?? []).length > 0) return { ok: false, error: '…already paid' };
+```
+
+and then enforced it with a SELECT followed by an INSERT. Nothing in the schema
+backed it — `wallet_transactions` carried no unique index on those columns at
+all. Two "Pay" clicks arriving together both read zero rows and both credited
+the child's wallet. Real money, minted twice.
+
+**The obvious key is wrong twice over**, and both were found by reading the
+writers rather than the guard:
+
+1. `related_type = 'allowance_rules'` is **recurring** — a rule credits every
+   week carrying the same `related_id`. A unique index on
+   `(family_id, related_type, related_id)` would break allowances on the second
+   payment.
+2. `creditChildWallet` writes **one row per bucket** for a single credit, all
+   sharing `related_id`. Measured, for a 4,000¢ payout under the default
+   40/40/10/10 split:
+
+   ```
+   parts: {"spend":1600,"save":1600,"give":400,"invest":400}
+   ledger rows written: 4
+   ```
+
+   So even scoped to `chore_assignments`, a three-column index would reject the
+   **first** payout, not the second.
+
+`0316` therefore creates a partial unique index on
+`(family_id, related_id, bucket_id)` where `related_type = 'chore_assignments'`.
+The rows of one payout go in as a single multi-row INSERT, so a second payout
+collides on its first bucket and the whole statement is refused — there is no
+half-credited wallet. The migration counts pre-existing violations first and
+raises with the count rather than repairing a money ledger on its own; on a
+replay from zero there are none.
+
+`creditChildWallet` now returns `duplicate: true` for a `23505`, and
+`payChoreRewardAction` reports it with the same "already paid" message its own
+read uses, so the loser of the race sees that rather than a constraint name.
+
+Held by `docs/audit/chore-paid-once-check.sql`: two assertions failed before,
+none after, with four controls passing in both directions — the first
+multi-bucket payout still lands, a different assignment still pays, **a weekly
+allowance still credits the same rule repeatedly**, and `spend_request` debits
+carrying no `related_id` are untouched. The middle two are the ones that would
+have caught the wrong index.
+
+Until this is applied, production can pay one chore twice.

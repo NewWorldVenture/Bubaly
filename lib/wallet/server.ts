@@ -108,7 +108,19 @@ export async function fundGoal(supabase: DB, params: {
   return { ok: true, txnId: result.transaction_id };
 }
 
-export type CreditResult = { ok: boolean; error?: string; credited: number };
+export type CreditResult = {
+  ok: boolean;
+  error?: string;
+  credited: number;
+  /**
+   * The ledger already holds this exact credit. Set when the insert hits a
+   * unique violation — today that is `uq_wallet_txn_chore_payout` (0316),
+   * which is what stops two simultaneous "Pay" clicks from crediting a chore
+   * twice. A caller that has its own "already paid?" read should report this
+   * the same way it reports that read finding a row, not as a failure.
+   */
+  duplicate?: boolean;
+};
 
 /**
  * Spendable balance for a child = the live balance of their SPEND bucket, derived
@@ -265,7 +277,21 @@ export async function creditChildWallet(supabase: DB, params: {
   if (rows.length === 0) return { ok: false, error: 'Nothing to allocate', credited: 0 };
 
   const { error } = await supabase.from('wallet_transactions').insert(rows);
-  if (error) return { ok: false, error: walletFailure(error, 'Could not credit that wallet.'), credited: 0 };
+  if (error) {
+    // A unique violation here means the ledger already carries this credit —
+    // the other half of a race the caller's own "already paid?" read cannot
+    // win on its own. The rows of one credit go in as a single multi-row
+    // INSERT, so this refuses all of them together: no half-credited wallet.
+    const duplicate = (error as { code?: string }).code === '23505';
+    return {
+      ok: false,
+      error: duplicate
+        ? 'That reward has already been paid.'
+        : walletFailure(error, 'Could not credit that wallet.'),
+      credited: 0,
+      duplicate,
+    };
+  }
 
   await logWalletAudit(supabase, {
     family_id: params.familyId, actor_user_id: params.createdBy, action: `credit_${params.type}`,
