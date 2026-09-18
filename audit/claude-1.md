@@ -1267,3 +1267,59 @@ skipped:** `app/(app)/dashboard/{auto,home}/actions.ts` and
 (`onConflict: 'family_id,as_of_date'`) — changing it changes what "already
 snapshotted today" means, so it wants its own change with the idempotency
 thought through, not a drive-by. OPEN.
+
+---
+
+## [CLAUDE-1][HIGH][PERFORMANCE / FRONTEND] Two reads capped at 1,000 rows in the directory the guard skipped
+
+- **Where:** `components/calendar/busyness-heatmap.tsx`, `components/modules/language-module.tsx`
+- **Problem:** both wrote `.limit(2000)`. PostgREST caps a response at
+  `db-max-rows` (1,000) whatever the client asked for, so neither was a bound —
+  each was a silent truncation wearing the costume of a deliberate choice. This
+  is the exact defect `tests/no-limit-above-the-row-cap.test.ts` was written to
+  end across 26 call sites; these two survived because its roots were `app` and
+  `lib`, and a client component reaches PostgREST through the same browser
+  client and the same cap.
+- **Evidence:** `busyness-heatmap` orders by `starts_at` **ascending**, so the
+  1,000 rows it kept were the *oldest* in the window — an eight-week busyness
+  strip that silently dropped the most recent weeks. `language-module` reads
+  `vocab_cards` ordered by `due_on`, so a deck past 1,000 lost its tail and
+  every count drawn from it (due today, total, mastery) was over a prefix.
+- **Impact:** the heatmap turned out to have **three** defects, and the limit was
+  the least of them:
+  1. the truncation above;
+  2. the fetch destructured `{ data }` and dropped `error` — a failed read left
+     rows empty and rendered eight calm weeks *with a rebalancing tip under
+     them*, telling a family they are not busy because the query broke;
+  3. a raw `.then()` on a query builder with no `.catch()`, so a transport
+     failure (DNS/TCP/TLS) became an unhandled rejection rather than an error
+     the component could show.
+  All three came from hand-rolling a `useEffect` fetch instead of using
+  `useRealtimeQuery`, which already carries the error, the offline fallback and
+  the missing-table degrade. **The correct implementation already existed and
+  had not reached this call site** — the fifth instance of that shape this audit
+  has found.
+- **Recommended fix:** applied. Both now page through `readAllAsQuery(…, { max: 2000 })`,
+  and the heatmap uses `useRealtimeQuery` with an `ErrorState` branch. Both
+  pagers add `.order('id')` after the intended sort: `starts_at` and `due_on`
+  are not total orders, and paging a non-total order repeats and skips rows
+  across page boundaries.
+- **Status:** FIXED. `tsc` clean, build compiles, 13,873 tests pass.
+- **Proved load-bearing:** restoring either `.limit(2000)` turns the extended
+  guard red, naming the file and line.
+
+**The gap, not the instances.** Both were found by asking which *guards* scan
+only part of the tree, rather than by hunting another over-cap limit. Surveying
+every guard with a literal `ROOTS`:
+
+| guard | roots | gap |
+|---|---|---|
+| `family-day-not-greenwich-day` | `app`, `lib` | **yes** — 9 writes in `components` |
+| `no-limit-above-the-row-cap` | `app`, `lib` | **yes** — 2 over-cap limits |
+| `no-dev-markers-in-shipping-code` | `app`, `lib` | clean today (0 hits), included anyway |
+| `no-hardcoded-secrets` | `app`, `lib`, `components` | none |
+| `no-injection-vectors` | `app`, `lib`, `components` | none |
+
+Two of five guards were blind to `components`, and both had real findings behind
+the blind spot. `no-dev-markers` is included now rather than after the first
+marker arrives.
