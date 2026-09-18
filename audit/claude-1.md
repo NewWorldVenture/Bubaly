@@ -5801,3 +5801,43 @@ fails until it is removed. Both directions proven by planting each case.
 **Status:** GUARDED (the 34 remain owner work, now recorded and fenced).
 **Verified:** 14,153 tests green under both `TZ=UTC` and `TZ=America/Los_Angeles`
 (four shards each), tsc clean, `npm run lint` exits 0 at budget 12.
+
+---
+
+### [CLAUDE-1][CLEAN] Architecture sweep: route gating, render caching, and the one public data page
+
+Recorded because a verified negative is a result, and because each of these is
+the kind of claim that is worth being able to point at later.
+
+**Route gating is total, and enforced by a test.** The `(app)` layout's comment
+says it "intentionally does NOT enforce auth/redirects — each section's own
+layout still does that", and read alone that is alarming: six section layouts
+(`dashboard`, `economy`, `feedback`, `guardian`, `home`, `marketplace`,
+`missions`, `referrals`, `services`, `wallet`) call no auth helper at all. The
+gate is not there. It is `middleware.ts`, whose matcher is catch-all except
+static assets, against `PROTECTED` in `lib/auth/route-access.ts` — which lists
+every one of those sections plus `/account`, `/display`, `/library`,
+`/onboarding`, `/parent`, `/settings`. The one `(app)` section NOT protected,
+`auth`, is the OAuth callback and is correctly on `PUBLIC`. Totality is already
+enforced by `tests/route-access-is-total.test.ts`, and the two lists carry the
+`/display` vs `/family-display` distinction explicitly — "the two differ by one
+word and only one of them may render without a session".
+
+**No per-family page is statically rendered.** Every route segment config in
+`app/` is `force-dynamic`; the only `revalidate` is `= 0`. The 80 `(app)` pages
+that construct a service client without reading cookies are all `admin/*` except
+three, and those three read singletons, not family rows: `dashboard/billing`
+reads `stripe_settings` ("Reads only the non-secret fee config"),
+`dashboard/settings` reads the referral config ("this read decorates a promo; it
+gates nothing"), and `dashboard/contact-center` gates on `requirePlanLevel`.
+
+**The one public page that reads household data is triply gated.**
+`/resources/benchmarks` is on `PUBLIC` and reads `network_aggregates` with the
+service role — deliberately, since "this page has no viewer to gate on". The
+k-anonymity floor is applied at write time in `aggregateContributions`, again at
+read time (`.gte('cohort_size', K_ANONYMITY_FLOOR)` — the same statement Q30
+fixed the ordering of), and a third time at render (`isSuppressed`), with the
+admin publication flag answering 404 when off "so an unpublished page is
+indistinguishable from one that never existed".
+
+**Status:** NO DEFECT in any of the three. No change made.

@@ -812,3 +812,39 @@ a request line, pricing every id at its length + 3 and answering 414 past
 
 VERIFIED: 14,135 green under both timezones, tsc clean, lint 0 at 12, build 0.
 LAST-UPDATE: 2026-09-18, after Q29.
+
+## Claude-1 (continuation — Q30, Q31, and a clean architecture sweep)
+
+DONE: **Q30 — two paged reads without a total order.** read-all.ts requires a
+unique .order() or "pages can repeat and skip rows". 49 paged reads, 10 ordering
+by something other than id, 8 of those correct — four with an explicit tiebreak,
+four on a column read out of the migration that declares it unique. Two defects:
+network_aggregates had a deliberate tiebreak that stopped one column short of its
+own unique (scope, cohort_key, metric, value), and a metric's `value` rows ARE
+its bands, so a dropped row is a different benchmark; push_devices ordered by a
+non-unique user_id, which is LATENT here (the consumer dedupes to distinct user
+ids) and said so rather than overclaimed.
+
+NEW INSTRUMENT: tests/a-paged-read-needs-a-total-order.test.ts — models the rule
+as a reviewer applies it: order columns TOGETHER WITH .eq()-pinned columns must
+contain a declared unique key. The registry cites the migration line for each.
+
+DONE: **Q31 — the catalogue test checks orphans and never the reverse.** 34
+English keys absent from all six complete catalogues, same 34 in each, across six
+namespaces; five of the six have no parity test. They render in ENGLISH, not as
+raw keys (getMessages seeds every merge with {...enUS}), and the new rule proves
+that rather than asserting it. Shipped as a ratchet with the 34 recorded as a
+backlog that may only shrink — the translations themselves stay owner work.
+
+CLEAN (checked, no defect, no change): route gating is total and already
+test-enforced via middleware + PROTECTED, not the section layouts the (app)
+layout comment points at; every route segment config is force-dynamic and no
+per-family page is statically rendered; /resources/benchmarks applies the
+k-anonymity floor at write, read AND render. Also clean this session: readAll's
+single failOnMax opt-out, allocate's cent conservation, marketplace fee
+derivation by subtraction, unstable_cache scoping, webhook raw-body signature
+verification, secretEquals-vs-private-digest comparisons, and Promise.all over
+writes.
+
+VERIFIED: 14,153 green under both timezones, tsc clean, lint 0 at 12, build 0.
+LAST-UPDATE: 2026-09-18, after Q31.
