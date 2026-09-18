@@ -5540,3 +5540,81 @@ split a `useState` earlier in this audit.
 
 **Status:** FIXED (6 sites). **Verified:** 14,114 tests green under both
 `TZ=UTC` and `TZ=America/Los_Angeles`, tsc clean, lint 0 at 12, build 0.
+
+---
+
+### [CLAUDE-1][HIGH][BACKEND/DATA-RETENTION] The right-to-be-forgotten prune carried the whole network in its request line
+
+**Path:** `lib/network/aggregate-server.ts:211-221` (the contribution prune) ·
+`lib/supabase/chunked-in.ts` (new `writeInChunks`) ·
+`tests/a-not-in-list-is-the-whole-network.test.ts` (new)
+
+**Problem.** The nightly Intelligence Network aggregation ends by deleting the
+contributions of families no longer opted in. It did that with the natural
+spelling — `.delete().not('family_id', 'in', ` + "`(${keepIds.join(',')})`)" + ` —
+which carries the wrong list. A PostgREST filter travels in the query string;
+`chunked-in.ts` puts that at roughly 40 bytes per UUID and caps a *read* at 100
+ids to keep the longest URL near 4 KB, "well inside the common 8 KB limit". But
+`keepIds` is every family **still opted in**, not the handful being removed, and
+it has no ceiling.
+
+**The pairing.** The reason it has no ceiling is a fix. `tests/whole-table-reads-
+are-not-capped.test.ts` made the consent read page, because a truncated consent
+list would DELETE the contribution of a family that never withdrew — its own
+ratchet entry says `network_consent` "drives a not-in DELETE of contributions".
+Paging that read to keep the list complete is exactly what removed the request
+line's bound. Identical shape to Q26's push campaign, where converting a capped
+read to `readAll` made the next statement's `.in()` unbounded.
+
+**Why chunking could not fix it.** `family_id not in (chunk)` deletes every row
+outside that chunk — which is every other chunk's rows. NOT IN does not
+decompose over a partition of its list, so neither `readInChunks` nor
+`readAllInChunks` applies, and that is part of why the Q26 sweep did not reach
+this site: `.in()` is a method a scanner can find, and the complement is a
+hand-built string with no method at all.
+
+**Evidence.** Reverting the fix and running the new guard:
+`failed to prune contributions (longest request line: 11505 bytes)` — 295 kept
+families at 39 bytes each, against an 8,192-byte limit. The threshold is about
+**two hundred consenting families**.
+
+**Impact.** The delete fails, the run returns `failed to prune contributions`,
+and nothing is written before it — so the next night selects the identical set
+and fails identically. The stall never clears on its own. What stops working is
+the *erasure*: a family that withdrew consent keeps feeding the aggregates it
+withdrew from, for as long as the prune stays broken.
+
+**Why the existing tests pass over it.** The in-memory Supabase models rows,
+PostgREST's row cap and the filter vocabulary — it has no URL, so a request line
+cannot be too long in it. `whole-table-reads-are-not-capped` seeds 1,011
+consenting families and asserts every one survives the prune; in production that
+assertion builds a 40 KB request line. The fake is right about the row count and
+silent about the byte count, and the byte count is the failure.
+
+**Fix.** Invert the set: read which families the table actually holds (paged,
+since a short read would leave a withdrawn family in place), subtract the ones
+still opted in, and delete the remainder by `.in()` a hundred at a time through
+the new `writeInChunks`. The remainder is also the far smaller list. It subsumes
+the old empty-keep branch, which existed because `not in ()` is not "delete
+nothing" — PostgREST reads the empty list as one empty string, so it would have
+matched and deleted every row.
+
+**Guard.** `tests/a-not-in-list-is-the-whole-network.test.ts` gives the fake the
+one thing it lacked: a proxy that prices every id entering a filter (id length +
+3 for the percent-encoded comma) and answers 414 past 8,192 bytes. Reverting the
+fix fails it naming the byte count. Three non-vacuity cases keep it honest — the
+proxy is shown to reject an oversized filter and accept a fitting one, and to
+count ids inside a `not-in` **string** and not only an `.in()` array, since a
+proxy that priced only the fixed spelling would let the broken one through free.
+
+**Ratchet.** A scanner for `not(col, 'in', ` + "`(${xs.join(',')})`)" + ` across
+`app/` and `lib/`, with a closed list classifying each by what bounds its list —
+`options.excludeStatuses` (a closed set of run statuses) and
+`DIGEST_NOTIFICATION_TYPES` (a module constant). Both are genuinely bounded;
+demanding chunking there would assert something untrue. A new site fails until
+somebody says which it is, and the list must shrink honestly: an entry for a site
+that no longer exists fails too.
+
+**Status:** FIXED. **Verified:** 14,124 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles` (four shards each), tsc clean, `npm run lint` exits 0 at
+budget 12, `npm run build` exits 0.
