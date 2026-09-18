@@ -6081,3 +6081,55 @@ dies.
 **Status:** FIXED. **Verified:** 14,162 tests green under both `TZ=UTC` and
 `TZ=America/Los_Angeles` (four shards each), tsc clean, `npm run lint` exits 0 at
 budget 12, `npm run build` exits 0.
+
+---
+
+### [CLAUDE-1][CLEAN] Route-list staleness — a hypothesis that an existing guard refuted
+
+Recorded because a wrong hypothesis that gets caught is worth more on the record
+than a silent deletion, and because I came within one commit of weakening a
+correct guard.
+
+**The hypothesis.** Q31 and Q34 were both "a guard that checks one direction
+only" — orphaned catalogue keys guarded and missing ones not; listed health
+secrets guarded and unlisted ones not. `tests/route-access-is-total.test.ts` has
+the same shape: it checks that every routable path is classified, and never that
+every classified path is routable. Because `matchesPrefix` matches a path AND
+everything beneath it, a stale `PUBLIC` entry would silently pre-authorize any
+future route created there. That is a real mechanism and worth measuring.
+
+**Measured, after fixing my own instrument twice.** My first parser captured
+comment text as list entries — apostrophes in `a child's` and `provider's`
+matched a `'([^']+)'` pattern — and my first walker missed Next's special files,
+so `/opengraph-image` and `/twitter-image` looked stale when they are not.
+Corrected: strip line comments before extracting literals, and treat
+`opengraph-image.tsx`, `twitter-image.tsx`, `icon.tsx`, `sitemap.ts` and friends
+as routable.
+
+**The result inverted the hypothesis.** Across 544 routable paths:
+**`PUBLIC` has zero entries without a route** — the dangerous direction is
+entirely clean. Three `PROTECTED` entries have no page: `/account`, `/money`,
+`/settings`, whose directories hold only an `actions.ts`.
+
+**And those three are correct, which I established the hard way.** I removed
+them, reasoning that a server action dispatches to the URL of the page that
+rendered it, so no route is served at those paths, and that listing them
+reproduces the soft-404 this module's header says the two-list split was built
+to end. `route-access-is-total` immediately failed: "keeps every authenticated
+app segment protected" enumerates the DIRECTORIES under `app/(app)` and requires
+each on `PROTECTED`, because "the (app) group is the authenticated surface; none
+of it may drift onto the public list or off the protected one."
+
+That guard is right and my change was wrong. These are not typo paths — they are
+real directories inside the authenticated tree that hold only actions *today*,
+and a page can appear in any of them. Over-protection costs a soft 404 on three
+paths nothing links to (checked: no `href`, no `redirect`, no email or mobile
+deep link; the real page is `/dashboard/settings`, covered by `/dashboard`).
+Under-protection risks serving an authenticated page. The guard's author chose
+the safe side and wrote down why. **Reverted in full.**
+
+The inverse-direction guard I set out to add would have *conflicted* with that
+rule rather than complementing it, so it was not written either.
+
+**Status:** NO DEFECT. No change kept. The meta-pattern from Q31 and Q34 does not
+generalise here, and that is the finding.
