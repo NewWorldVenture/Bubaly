@@ -6204,3 +6204,76 @@ per-element `.catch`, and an idempotent batched update.
 **Verified:** 14,142 tests green under both `TZ=UTC` and `TZ=America/Los_Angeles`
 (four shards each), `tsc --noEmit` clean, `npm run lint` exits 0 at budget 12,
 `npm run build` exits 0. Both fixes proven to bite by reverting them.
+
+---
+
+## Q31 — LOW: thirty-four English strings reach six languages untranslated, and the catalogue test checks only the other direction
+
+`tests/every-complete-catalogue-is-complete.test.ts` · `lib/i18n/messages/*.json`
+
+`tests/i18n-catalogue-integrity.test.ts` checks **orphans** — a key a locale
+carries that English no longer has — and never the reverse. The reverse is the
+direction a reader notices: a key English has and a locale does not is a sentence
+that comes out in the wrong language.
+
+Parity **is** enforced, but one namespace at a time, in whichever feature test
+somebody remembered to write it in — `contactTimeline.`, `filesHubModule.`,
+photos, contacts. That is coverage by memory, and it has the gap you would
+predict.
+
+### The measurement
+
+Thirty-four English keys are absent from all six complete catalogues — the
+**same** thirty-four in each, which is the signature of one batch of copy that
+shipped and never reached translation.
+
+| namespace | keys | parity test |
+|---|---:|---|
+| `quickCapture.` | 11 | none |
+| `actions.` | 9 | partial (photos, contacts) |
+| `roleSurface.` | 6 | none |
+| `trialPaywallGate.` | 4 | none |
+| `commandBar.` | 2 | none |
+| `displayComfort.` | 2 | none |
+
+### What it is NOT
+
+They do not render as raw keys, and one of the new rules **proves** that rather
+than asserting it. `getMessages` seeds every merge with `{ ...enUS }` — "en-US is
+the root of every chain and is therefore never listed" — so a missing key
+resolves to the English string. A German reader gets the quick-capture sheet, the
+command bar, the density settings and the trial paywall in English inside an
+otherwise German product. Degraded, not broken.
+
+That distinction is worth the paragraph, because the alarming version of this
+finding is exactly what `lib/i18n/translate.ts` would produce if its assumption
+were wrong. It ends `messages[key] ?? key` with **no** English fallback,
+deliberately: holding en-US in the client chunk measured 244 KB gzip and 62% of
+the marketing home page's first-load JS. Its header claims that by the time it
+runs, a key the catalogue lacks "was never going to be found in the browser
+either". Checked: true, because the merge happens on the server. The new rule
+pins it so it stays true.
+
+### Two more checked and not defects
+
+The four zero-key catalogues — `en-GB`, `es-MX`, `es-US`, `fr-CA` — are
+**overlays** carrying only what diverges. `en-GB` is one even though
+`FALLBACK_CHAIN` does not list it, because en-US is the implicit root of every
+merge; the guard exempts each by name with what it overlays, so the exemption is
+a claim rather than an oversight. And `getRawMessages`, which reads like a helper
+written for a parity test nobody wrote, turns out to have fourteen callers.
+
+### What ships is not the translations
+
+Writing German, Spanish, French, Italian, Dutch and Portuguese product copy that
+nobody here can read back is worse than leaving the gap visible — it is the same
+"16 labels + 66 selects need copy in eleven locales" already filed as an owner
+decision. What ships is the **ratchet**: a repo-wide parity rule with the
+thirty-four recorded as a backlog that may only SHRINK. A new English key without
+its six translations fails, naming the key and its English text; a key translated
+everywhere fails until it is removed from the list; a key deleted from English
+fails until it is removed. Both directions proven by planting each case and
+watching the right rule name it.
+
+**Verified:** 14,153 tests green under both `TZ=UTC` and `TZ=America/Los_Angeles`
+(four shards each), `tsc --noEmit` clean, `npm run lint` exits 0 at budget 12.
