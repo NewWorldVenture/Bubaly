@@ -514,8 +514,8 @@ passed; production application of the atomic `0240-0254` release remains pending
 ## Migrations added since this document's stated baseline (2026-09-12)
 
 The status line at the top of this file is dated **2026-09-05** against main
-`01881fb2`. **57** migration files have landed since, `0255` through
-`0314`, and none of them appear anywhere above. (This read "thirty-one, `0255`
+`01881fb2`. **58** migration files have landed since, `0255` through
+`0315`, and none of them appear anywhere above. (This read "thirty-one, `0255`
 through `0285`" until 2026-09-13, "seventy-one, `0255` through `0295`" until
 2026-09-15, and "forty-five, `0255` through `0302`", "46, `0255` through `0303`"
 and "49, `0255` through `0306`" until 2026-09-16; the range
@@ -1434,3 +1434,53 @@ both directions.
 
 Until this is applied, production keeps minting codes that one family in four
 cannot read aloud.
+
+### `0315` sells one item once — unapplied
+
+`marketplace_accept_offer` is `SECURITY DEFINER` and checked two things: that
+the caller owns the listing, and that the **offer** is still open.
+
+```sql
+if v_offer.status <> 'open' then raise exception 'Offer is no longer open'; end if;
+```
+
+It never checked the **listing**. The guard was on the piece of paper, not on
+the thing being sold.
+
+Nothing stops a second offer against a claimed listing — `marketplace_offers_insert`
+requires only family membership and that the offer is made in the member's own
+name — and a backup offer is a reasonable thing for a family to make. Accepting
+one, though, sold the item twice. Measured on a replayed database with **no
+concurrency at all**, acting as the listing's own owner:
+
+```
+accepted buyer one -> listing=claimed, orders=1
+buyer two could place an offer on a CLAIMED listing: t
+accepted buyer two -> listing=claimed, orders=2
+                      (Buyer one @40, Buyer two @45)
+```
+
+Two confirmed orders for one balance bike, two families each told it is theirs,
+and `claimed_by` silently rewritten from the first buyer to the second while the
+first keeps a confirmed order. `marketplace_orders` carries no unique index on
+`listing_id`, so the schema does not catch it either.
+
+`0315` puts the precondition **in the UPDATE** that claims the listing rather
+than in an `if` above it. An `if` would fix only the sequential case; carrying
+the condition in the write makes the row lock do the work, so two genuinely
+concurrent accepts serialise and the second matches zero rows. Same shape as
+the allowance rule the cron re-credited and the social target that published
+twice: the write that is supposed to be the claim has to be the thing that is
+exclusive.
+
+Offers are deliberately left alone — a family may still register interest in
+something already claimed; what changes is that accepting it cannot sell the
+item a second time. That is asserted as a control, so the fix is not quietly
+widened.
+
+Held by `docs/audit/listing-claimed-once-check.sql`: two assertions failed
+before, none after, with three controls — the first sale still works, a backup
+offer is still accepted, and a different available listing still sells — passing
+in both directions.
+
+Until this is applied, production can sell one item to two families.
