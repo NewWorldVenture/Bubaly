@@ -1377,3 +1377,79 @@ widened anyway — the cost is nothing and the gap is identical.
 **Also measured, no finding:** `tests/ilike-patterns-are-escaped.test.ts` scans
 `app` + `lib` only, but `components` contains **zero** `.ilike(`/`.like(` calls,
 so nothing hides behind that gap. Recorded so the next sweep does not re-derive it.
+
+---
+
+## [CLAUDE-1][HIGH][BACKEND / FRONTEND] Five reads that handled every database failure and no network one
+
+- **Where:** `app/(app)/dashboard/calm/page.tsx`, `components/settings/app-lock-settings.tsx`,
+  `components/modules/event-detail-modal.tsx`, `components/modules/meals-module.tsx`,
+  `components/auth/step-up-form.tsx` (and `components/marketplace/quick-post.tsx`, best-effort)
+- **Problem:** a query builder **resolves** with `{ data, error }` for anything the
+  database answers and **rejects** only when the request never completed — DNS,
+  TCP, TLS, an aborted fetch. `.then(handler)` supplies only the first path.
+- **Impact:** each broke differently, which is why counting them as one shape matters:
+
+  | site | what the missing rejection path did |
+  |---|---|
+  | `calm/page.tsx` | a transport failure went through `Promise.all` and out of the page — the error boundary rendered **instead of** the degraded view the page was built to show |
+  | `app-lock-settings.tsx` | a failed read presented a **configured App Lock as never set up** |
+  | `event-detail-modal.tsx` | "No RSVPs yet — be the first!" over a read that never came back |
+  | `meals-module.tsx` | the meal library silently never updated |
+  | `step-up-form.tsx` | the MFA form sat on its loading state forever |
+
+- **Evidence (calm/page.tsx), measured:** three reads with one rejecting —
+
+  ```
+  safe (as shipped)        -> Promise.all THREW    (error boundary)
+  safe + rejection path    -> Promise.all RESOLVED, 3/3 failures counted (degrades)
+  ```
+
+  Every sibling hub page's local `safe` already used `try/catch`
+  (`marketplace/page.tsx`, `planning/page.tsx`, `dining/page.tsx`,
+  `lib/meals/degrade-read.ts`). This one was the lone outlier of six.
+- **`app-lock-settings` deserves its own note.** The component's own comment
+  defines three states — `undefined` = loading, `null` = no PIN ever set,
+  otherwise the config. A failed read is a **fourth** meaning and was given the
+  second. So a transient error offered the user "Set up PIN", and setting one
+  there **overwrites the real config of a lock they still have**. A failed read
+  now says so and offers nothing.
+- **Status:** FIXED. `tsc` clean, build compiles, 13,878 tests pass, lint unchanged.
+- **Proved load-bearing:** restoring `safe()`'s single-argument form turns the
+  new guard red at the exact line.
+
+**Why the existing guard could not see any of this.** `tests/read-error-surfaced.test.ts`
+is a good guard covering exactly this failure mode — for `useRealtimeQuery` call
+sites. Every one of these **bypassed the hook** and hand-rolled a fetch, which
+put them outside its premise entirely. *A guard on the safe path does not cover
+the path taken to avoid it.* That is a distinct shape from the scope gaps above
+and worth naming separately.
+
+`tests/query-builders-have-a-rejection-path.test.ts` now forbids the shape
+itself. Its argument splitting is bracket-depth-based, not regex: a first
+attempt matched `}` `,` to spot `.then(onFulfilled, onRejected)` and reported
+the file that had **just been fixed** to use it — the handler body `({ data })`
+puts a `)` between the `}` and the `,`. Recorded because a guard whose false
+positive is the correct code is worse than no guard.
+
+### Measured, NOT fixed — and explicitly not verified
+
+A scan for `const { ... } = await …from(…)` destructures that omit `error`
+returns **95 sites**. That number is a population, not a finding: most are
+existence checks where null-on-error and null-on-absent want the same answer,
+and the raw count even included a `settle()` written minutes earlier. Two were
+probed by hand:
+
+- `app/(app)/family/child-login-actions.ts:46` — a username uniqueness check
+  that fails **open** (a failed read reads as "not taken"), running as the
+  **service role**. Looked serious; is not. `child_logins` carries
+  `unique index on (lower(username))`, and `syntheticChildEmail(username)`
+  collides at the auth layer first, so the invariant holds and the rollback path
+  runs. It degrades the error message, not the data. **LOW.**
+- `app/(app)/family/child-login-actions.ts:37` — fails **closed** ("member not
+  found"). Correct as written.
+
+The remaining 93 need per-site judgement. Recorded as OPEN and **unverified** —
+not as 93 findings. Mass-converting them would repeat the `Promise.all` →
+`settleAll` mistake earlier in this audit (137 type errors, then syntax errors
+in 40 files, both reverted).
