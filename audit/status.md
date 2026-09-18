@@ -848,3 +848,71 @@ writes.
 
 VERIFIED: 14,153 green under both timezones, tsc clean, lint 0 at 12, build 0.
 LAST-UPDATE: 2026-09-18, after Q31.
+
+## Claude-1 (continuation — Q32 to Q35, plus housekeeping)
+
+Posted for the other two workers' benefit as much as the record: the user has
+told me Claude-2 and Claude-4 are active on this codebase concurrently. If a
+thread below is yours, I have tried to say so rather than absorb it.
+
+DONE: **Q32 — the admin digest's window is wall-clock.** `Date.now() - 24h` on a
+daily schedule, so a failed run is never made up and a same-day retry re-sends.
+FILED, NOT FIXED: the fix needs persisted state, i.e. a migration, and this
+branch has hit ten migration-number collisions already — with two other workers
+live, a new number from me is the likeliest thing to collide, for the least
+valuable change on the board. Severity is LOW for a checked reason:
+admin_notifications rows are written independently of the email and the /admin
+pages read that table directly, so a dropped digest loses the push, not the
+information. The rest of the 24 crons are retry-safe (wallet-allowance's
+compare-and-swap claim, close-auctions' status predicate, notify()'s duplicate
+guard).
+
+DONE: **Q33 — M-023 was enforced on one side only.** mobile-sw-auth-cache has six
+assertions and every one is about the service worker; none is about the pages on
+its allowlist, and the invariant is only true if those are public. `fetch`
+follows redirects and `cache.put` keys on the ORIGINAL request, so the day /
+forwards a signed-in visitor to /dashboard the worker stores dashboard HTML under
+the key /. No live defect — the pages are public today, checked. New guard pins
+the page side.
+
+DONE: **Q34 — push is the third subsystem that dies silently.** VAPID_PRIVATE_KEY
+and FCM_SERVER_KEY added to FEATURE_ENV: an unset key takes the
+`{ result.skipped++; continue; }` branch, so callers see { sent: 0, failed: 0 }
+and report clean. NOTE FOR CLAUDE-4: FEATURE_ENV is your thread — you raised
+RESEND_API_KEY, and your file still says it is "still absent", which is now
+stale. I did not edit your file. This is the completeness extension: the guard
+had twelve assertions all running outbound (what is listed belongs) and none
+inbound (what belongs is listed), which is why both of us found gaps in it.
+
+DONE: **Q35 — a cap that rose with the load it resisted.** lib/server/rate-limit.ts
+says of itself "Good for a single instance / dev". /api/assistant used it while
+claiming "an attacker cannot use this endpoint to test guessed tokens at speed" —
+per-instance buckets, and load spawns instances. Switched to the durable
+enforceRequestRateLimit, matching what /api/ai/gift already does. MEDIUM not
+HIGH: the token is randomBytes(32), so guessing was never the live risk; this is
+a stated property being made true, not a hole closed. NOTE FOR CLAUDE-3: you
+inventoried which routes HAVE a limit; this is the different question of which
+limiter. Seven other bare-limiter sites deliberately left.
+
+REVERTED: a hypothesis that PROTECTED carried stale entries. /account, /money and
+/settings have no page, only actions.ts — but route-access-is-total requires
+every DIRECTORY under app/(app) to be protected, and that guard is right: they
+are real directories in the authenticated tree and a page can appear in any of
+them. My change was wrong and is fully reverted.
+
+HOUSEKEEPING: nine guard files added across Q23-Q33 had never been run by CI.
+Each verified green in isolation (no inter-file dependency for the shard split),
+and four of mine were reading through bare cwd-relative paths; all now anchored
+to join(__dirname, '..'), with the calibrations re-checked so anchoring did not
+turn them decorative.
+
+CLEAN (checked, no defect, no change): cron retry-safety; notify()'s dedupe;
+outbound fetch timeouts; the mobile↔web contract and the /api/ai bearer carve-out
+(38 of 39 routes authenticate, the 39th is /api/ai/gift which is deliberately
+PUBLIC and is Claude-3's); CSP and security headers; and database.types.ts
+against the migrations — 488 tables, 47 RPCs, zero drift in either direction.
+
+VERIFIED: 14,162 green under both timezones, tsc clean, lint 0 at 12, build 0.
+STILL UNVERIFIED BY CI: no ci.yml run has been created for any commit after
+b05f0b32, across sixteen pushes. Everything above is local only.
+LAST-UPDATE: 2026-09-18, after Q35.
