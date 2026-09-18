@@ -14,6 +14,7 @@ import { planMealAction, removeMealPlanAction } from '@/app/(app)/dashboard/meal
 import { addMealPlanToGroceryListAction, setGroceryItemCheckedAction } from '@/app/(app)/dashboard/grocery/actions';
 import type { Substitution } from '@/lib/meals/substitutions';
 import { describeDbError } from '@/lib/supabase/errors';
+import { panelTallies, panelVoterCount, panelMyPick } from '@/lib/meals/vote-panel';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select, Textarea } from '@/components/ui/input';
@@ -277,6 +278,19 @@ export function MealsModule() {
     // the toast said "Vote recorded", and the tally below counts each ballot
     // once and divides by `ballots.length` — so that member votes twice, for
     // two different meals, and inflates the denominator too.
+    // DO NOT "fix" this with UNIQUE (vote_id, member_id). That constraint
+    // expresses THIS surface's model — one pick per member — and would reject
+    // the second option a member rates on the recipes page, whose castBallot()
+    // upserts one ballot PER OPTION with choice 'yes' | 'no' | 'maybe' and is
+    // supposed to hold several. The two surfaces genuinely disagree about what
+    // a ballot is; picking one in the schema is a product decision, not a
+    // constraint anybody can add on the way past. What WAS unambiguously wrong
+    // — this panel reading those ballots as if choice did not exist — is fixed
+    // in lib/meals/vote-panel.ts.
+    //
+    // The clear below also still wipes a member's per-option opinions from the
+    // recipes page. That is the same disagreement, on the write side, and it
+    // is left alone deliberately for the same reason.
     const { error: clearError } = await sb.from('meal_vote_ballots')
       .delete().eq('vote_id', voteData.vote.id).eq('member_id', selfId);
     if (clearError) return toastError(describeDbError(clearError));
@@ -709,9 +723,14 @@ function FamilyVoteCard({ data, selfId, memberById, onVote }: {
   onVote: (optionId: string) => void;
 }) {
   const tr = useTranslations();
-  const tally = (optId: string) => data.ballots.filter((b) => b.option_id === optId).length;
-  const total = data.ballots.length || 1;
-  const myPick = data.ballots.find((b) => b.member_id === selfId)?.option_id ?? null;
+  // Counting rows and ignoring `choice` made a 'no' from the recipes page read
+  // as a vote FOR the option, counted one member's three opinions as three
+  // voters, and could show an option you voted against as your pick. See
+  // lib/meals/vote-panel.ts — the correct tally already existed.
+  const tallies = panelTallies(data.options.map((o) => o.id), data.ballots);
+  const tally = (optId: string) => tallies.get(optId) ?? 0;
+  const total = panelVoterCount(data.ballots);
+  const myPick = panelMyPick(data.ballots, selfId);
   return (
     <div className="sidebar-card">
       <p className="text-sm font-semibold">{tr('meals.familyVote')}</p>
