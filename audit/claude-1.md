@@ -6133,3 +6133,69 @@ rule rather than complementing it, so it was not written either.
 
 **Status:** NO DEFECT. No change kept. The meta-pattern from Q31 and Q34 does not
 generalise here, and that is the finding.
+
+---
+
+### [CLAUDE-1][MEDIUM][ABUSE-CONTROL] A cap that rose with the load it was meant to resist
+
+**Path:** `app/api/assistant/route.ts` · `lib/server/rate-limit.ts` ·
+`lib/server/request-rate-limit.ts` · `tests/assistant-bridge.test.ts`
+
+**Thread boundary.** `audit/claude-3.md` inventoried which routes HAVE a rate
+limit (their §303, §741-742, §801). This is the different question — WHICH
+limiter, and whether the cap survives horizontal scale. Not a re-report.
+
+**The mechanism, stated by the repo itself.** `lib/server/rate-limit.ts` opens:
+"Lightweight in-memory rate limiter (fixed window) for API routes. Good for a
+single instance / dev; swap for Upstash Redis in multi-instance prod." Every warm
+lambda holds its own `buckets` Map. On a serverless platform a cap of 30/min is
+really 30/min **per instance** — and load is what spawns instances, so the
+ceiling rose with the pressure it existed to resist.
+
+**The site that made a claim it did not keep.** `app/api/assistant/route.ts`:
+
+> "Rate limited by IP BEFORE the token lookup, so an attacker cannot use this
+> endpoint to test guessed tokens at speed."
+
+That is a stated security property, implemented with the limiter documented as
+not holding across instances. The repo already knows the right pattern for this
+exact shape — `/api/ai/gift`, also public and model-backed, uses the durable one
+with "limit via Postgres so the cap holds under horizontal scale" — and
+`enforceRequestRateLimit` composes both: the in-process check as a cheap fast
+path, then the Postgres count. Swapped to that; the service client was a
+synchronous constructor already in the file, so it simply moves up four lines.
+
+**Severity is MEDIUM, not HIGH, and the reason is the token.**
+`lib/assistant/link-token.ts` mints `randomBytes(32)` — 256 bits. Guessing was
+never the live risk whatever the cap, so this is **not a hole being closed**: it
+is a stated property being made true, and a public model-backed endpoint getting
+a cap that is one number rather than one number times however many instances are
+warm. Claiming a brute-force fix here would be the more dramatic finding and the
+false one.
+
+**Seven other bare-`rateLimit` sites, deliberately left.**
+`assistant/alexa`, `recipes/search`, `blog/search-index`, `mkt/consent`,
+`exit-intent/resolve`, `dashboard/library/actions`, `library/media/[itemId]`. At
+none of them is the cap the primary control — the authenticated ones key on
+`ctx.user.id`, and the public ones front cheap reads rather than spend. Sweeping
+them in would be asserting an urgency that is not there; converting the one site
+whose source makes a promise is the whole of the defect.
+
+**A guard whose mechanism was wrong for the second time.**
+`tests/assistant-bridge.test.ts` asserts the limiter runs before the token
+lookup, by comparing `indexOf('rateLimit(\`assistant')` against
+`indexOf('await resolveAssistantLink(')`. The property still held after the swap
+— the call is still first — but the literal no longer matched
+`enforceRequestRateLimit(supabase, \`assistant:…`, so it failed on spelling. Its
+own comment already records an earlier version of the same mistake ("the first
+attempt compared the first occurrence of each name … so it measured import
+order"). Re-anchored on the KEY, which is what makes a call THE rate limit for
+this route and does not move when the implementation behind it does. The
+assertion itself is untouched: moving the limiter after the lookup still fails
+it ("expected 3245 to be less than 3162"). Third instance of this family in this
+audit, after `readAll(` vs `readAll<Row>(` and `useDialogBehavior(` vs
+`useDialogBehavior<T>(`.
+
+**Status:** FIXED (1 site). **Verified:** 14,162 tests green under both `TZ=UTC`
+and `TZ=America/Los_Angeles` (four shards each), tsc clean, `npm run lint` exits
+0 at budget 12, `npm run build` exits 0.

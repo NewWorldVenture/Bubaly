@@ -6467,3 +6467,76 @@ from `FEATURE_ENV` fails it, naming each gate and how it dies.
 **Verified:** 14,162 tests green under both `TZ=UTC` and
 `TZ=America/Los_Angeles` (four shards each), `tsc --noEmit` clean, `npm run lint`
 exits 0 at budget 12, `npm run build` exits 0.
+
+---
+
+## Q35 — MEDIUM: a cap that rose with the load it was meant to resist
+
+`app/api/assistant/route.ts` · `lib/server/rate-limit.ts` ·
+`lib/server/request-rate-limit.ts` · `tests/assistant-bridge.test.ts`
+
+**Thread boundary first.** `audit/claude-3.md` inventoried which routes *have* a
+rate limit. This is the different question — **which** limiter, and whether the
+cap survives horizontal scale.
+
+`lib/server/rate-limit.ts` says it of itself, in its first two lines:
+
+> "Lightweight in-memory rate limiter (fixed window) for API routes. Good for a
+> single instance / dev; swap for Upstash Redis in multi-instance prod."
+
+Every warm lambda holds its own `buckets` Map, so on a serverless platform a cap
+of 30/min is really 30/min **per instance** — and load is what spawns instances.
+The ceiling rose with the pressure it existed to resist.
+
+### The site that made a claim it did not keep
+
+```
+// Rate limited by IP BEFORE the token lookup, so an attacker cannot use this
+// endpoint to test guessed tokens at speed.
+```
+
+A stated security property, implemented with the limiter documented as not
+holding across instances. The repo already knows the right pattern for this exact
+shape: `/api/ai/gift`, also public and model-backed, uses the durable limiter
+with "limit via Postgres so the cap holds under horizontal scale", and
+`enforceRequestRateLimit` composes both — the in-process check as a cheap fast
+path, then the Postgres count. Swapped to that; the service client was already a
+synchronous constructor in the file, so it moves up four lines.
+
+### Severity is MEDIUM and the token is why
+
+`lib/assistant/link-token.ts` mints `randomBytes(32)` — 256 bits. Guessing was
+never the live risk whatever the cap. So this is **not a hole being closed**: it
+is a stated property being made true, and a public model-backed endpoint getting
+a cap that is one number rather than one number times however many instances
+happen to be warm. Claiming a brute-force fix here would be the more dramatic
+finding and the false one.
+
+### Seven other sites, deliberately left
+
+`assistant/alexa`, `recipes/search`, `blog/search-index`, `mkt/consent`,
+`exit-intent/resolve`, `dashboard/library/actions`, `library/media/[itemId]` all
+call the bare limiter. At none of them is the cap the primary control — the
+authenticated ones key on `ctx.user.id`, the public ones front cheap reads rather
+than spend. Sweeping them in would assert an urgency that is not there.
+
+### A guard whose mechanism was wrong for the second time
+
+`tests/assistant-bridge.test.ts` asserts the limiter runs before the token
+lookup by comparing `indexOf('rateLimit(\`assistant')` against
+`indexOf('await resolveAssistantLink(')`. After the swap the property still held
+— the call is still first — but the literal no longer matched
+`enforceRequestRateLimit(supabase, \`assistant:…`, so it failed on **spelling**.
+Its own comment already records an earlier version of the same mistake: "the
+first attempt compared the first occurrence of each name … so it measured import
+order".
+
+Re-anchored on the KEY, which is what makes a call *the* rate limit for this
+route and does not move when the implementation behind it does. The assertion is
+untouched — moving the limiter after the lookup still fails it, "expected 3245 to
+be less than 3162". Third instance of this family in this audit, after `readAll(`
+vs `readAll<Row>(` and `useDialogBehavior(` vs `useDialogBehavior<T>(`.
+
+**Verified:** 14,162 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles` (four shards each), `tsc --noEmit` clean, `npm run lint`
+exits 0 at budget 12, `npm run build` exits 0.
