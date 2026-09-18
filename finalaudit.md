@@ -6114,3 +6114,93 @@ repository's written instruction.
 **14,135 tests green** under both `TZ=UTC` and `TZ=America/Los_Angeles` (four
 shards each), `tsc --noEmit` clean, `npm run lint` exits 0 at budget 12,
 `npm run build` exits 0. Every new guard proven to bite by reverting its fix.
+
+---
+
+## Q30 — MEDIUM: two paged reads without a total order, one of them a benchmark band that vanishes
+
+`lib/network/benchmarks-server.ts` · `app/(app)/admin/marketing/push/actions.ts` ·
+`tests/a-paged-read-needs-a-total-order.test.ts`
+
+`lib/supabase/read-all.ts` states the rule precisely: give a paged query "an
+`.order()` that is unique — a primary key, not the `family_id` being filtered on
+— or pages can repeat and skip rows." `.range(from, to)` is a separate request
+with a separately planned sort, so a key that is not a **total** order lets a
+page boundary move inside a run of equal values: the row at offset 1,000 in the
+first query can sit at 999 in the second and never be returned at all.
+`lib/blog/posts.ts` measured its own exposure — "717 of the published rows share
+a `published_at` with another row".
+
+### The sweep, and the eight that were fine
+
+Forty-nine paged reads. Thirty-nine order by `id`. Of the other ten:
+
+| site | ordering | verdict |
+|---|---|---|
+| blog posts, journey events, sync calendar events, benchmarks | explicit tiebreak, reason in source | correct |
+| `checkout_sessions.session_id` | `UNIQUE` (0051) | correct |
+| `family_model_dirty.family_id` | `primary key` (0134) | correct |
+| `network_consent.family_id` | `primary key` (0132) | correct |
+| `network_contributions.family_id` | `primary key` (0135) | correct |
+| `marketing_suppressions.email` | `PRIMARY KEY` (0021) | correct |
+| `network_aggregates` | one column short of its own key | **defect** |
+| `push_devices` | `user_id`, not unique | **latent defect** |
+
+Each uniqueness claim was read out of the migration that declares it rather than
+inferred from the column's name. **Eight of ten would have been false
+accusations.**
+
+### One column short of the table's own key
+
+0135 declares `unique (scope, cohort_key, metric, value)`.
+`readBenchmarkAggregates` orders by `cohort_size, cohort_key, metric` and pins
+`scope` with `.eq`. The tiebreak was added deliberately and for exactly the right
+reason — "`cohort_size` is far from unique, so it also needs a tiebreak for two
+pages not to overlap or skip" — and stopped one column short.
+
+A metric's `value` rows **are** its bands, so every metric is a tie group of
+several. A dropped band is not a shorter benchmark, it is a different one. Fixed
+by appending `.order('value')`, completing the key the table already declares.
+
+### One that is latent, and says so
+
+`push_devices` is "one row per physical device" (0035), so `user_id` repeats for
+anyone with a phone and a laptop. This one is **not** a live bug and the source
+now records why: only rows inside a tie group can be permuted, so the set of
+distinct `user_id` values is invariant, and `selectPushRecipients` dedupes to
+exactly that set. Calling it a live audience bug would have been the more
+dramatic claim and the false one.
+
+It is still worth the one word. The moment that read grows a second column — a
+`device_key`, a per-device count, a platform breakdown — the dropped row becomes
+precisely the audience bug the comment three lines above it claims to have fixed.
+
+### The guard models the rule the way a reviewer applies it
+
+A paged read is totally ordered when its `.order()` columns **together with the
+columns an `.eq()` pins to a constant** contain a declared unique key. The pinned
+half is not a loophole — it is exactly why the benchmarks read looked fine while
+being one column short, since `scope` is fixed for every row it can return and
+cannot break a tie, but the other three members of the key then all have to be in
+the order. `.gte()` and `.in()` deliberately do not count, and that distinction is
+calibrated against the benchmarks read's own `.gte('cohort_size', FLOOR)`.
+
+The registry cites the migration line that declares each key — an assumption
+about uniqueness is the one thing this file exists to stop — and an entry for a
+table nothing pages any more fails too.
+
+### Clean negatives from the same pass
+
+Recorded rather than left unsaid: every `unstable_cache` use is global marketing
+content rather than family-scoped; the only module-level mutable cache is the
+in-process rate limiter; all three webhook routes verify against the **raw** body
+with `constructEvent` or HMAC + `timingSafeEqual`; the Stripe price→plan chain
+throws on a missing `priceId` before it can compare `undefined` against an unset
+env var; six private constant-time comparisons all compare fixed-length digests,
+where the length pre-check `secret-equals.ts` warns about leaks nothing; and the
+three `Promise.all` batches containing writes turn out to be two reads, a
+per-element `.catch`, and an idempotent batched update.
+
+**Verified:** 14,142 tests green under both `TZ=UTC` and `TZ=America/Los_Angeles`
+(four shards each), `tsc --noEmit` clean, `npm run lint` exits 0 at budget 12,
+`npm run build` exits 0. Both fixes proven to bite by reverting them.
