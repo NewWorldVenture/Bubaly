@@ -6603,3 +6603,81 @@ accusations. Narrow and true beat broad and wrong.
 
 **Verified:** 14,168 tests green under both `TZ=UTC` and `TZ=America/Los_Angeles`
 (four shards each), `tsc --noEmit` clean, `npm run lint` exits 0 at budget 12.
+
+---
+
+## Q37 — MEDIUM: a late GitHub tick drops a cron firing, and nothing records it
+
+`scripts/cron-dispatch.mjs` · `tests/a-late-tick-drops-a-cron.test.ts`
+
+The dispatcher's window is anchored to when it **ran**, not to when it was
+**due**:
+
+```js
+for (let back = 0; back < tickMinutes; back += 1) {
+  const t = new Date(now.getTime() - back * 60_000);
+  if (matchesAt(parsed, t)) { due.push(route); break; }
+}
+```
+
+GitHub's scheduled workflows are best-effort and routinely late. A tick due at
+09:00 that starts at 09:07 searches (09:02, 09:07]; a route scheduled for 09:00
+is not in it. Nothing errors and nothing retries — the next tick's window starts
+later still, so that firing is gone.
+
+### Demonstrated, not argued
+
+Through the script's own dry run:
+
+| invocation | routes dispatched |
+|---|---|
+| `--at 09:00Z` | marketing, marketing-social, journey-recovery, close-auctions, ai-runs, family-routines |
+| `--at 09:07Z` | marketing, close-auctions, ai-runs |
+
+`journey-recovery`, `marketing-social` and `family-routines` silently dropped.
+
+### Who it actually costs
+
+1,107 firings per weekday depend solely on a GitHub tick landing within five
+minutes — but most are frequent routes whose next occurrence is minutes away, so
+a lost slot costs minutes. The exposure is the **sparse** ones, where the next
+chance is hours: `checkout-abandoned`, `library-feeds` and `marketing-providers`
+(every six hours, and Vercel schedules **none** of those minutes),
+`provider-sync` (5 of 6), `journey-recovery` (2 of 3), `autopilot-scan` and
+`model-refresh` (1 of 2 each).
+
+### The redundancy cuts both ways
+
+Q36 recorded that `vercel.json` mirrors all 24 routes, and that this is what makes
+`admin-digest` double-send. **The same mirror is what protects the daily jobs
+here** — Vercel fires at the right minute whatever GitHub does. It does not
+protect a firing Vercel has no schedule for, which is precisely the sparse set.
+
+### Why this is pinned rather than fixed
+
+No clean stateless fix exists, and each option was checked rather than asserted:
+
+- widening the window makes a daily route fire several times a day, which also
+  multiplies the `admin-digest` duplicate from Q36;
+- anchoring to the tick boundary still misses a tick GitHub **dropped** rather
+  than delayed, which it also does under load;
+- the robust fixes are persisted catch-up state, or the end state the
+  dispatcher's own header names — "On Vercel Pro the original per-minute
+  schedules can go back into vercel.json and this workflow can be disabled".
+
+That is an owner's trade-off, not mine to pick.
+
+**Guard.** The new file runs the real `dueRoutes` at both times and asserts the
+drop, names the sparse routes Vercel does not cover, and checks the frequent ones
+really are frequent enough to self-heal — so their exclusion is reasoned rather
+than assumed. It tracks reality rather than freezing a number: raising
+`TICK_MINUTES` to 15 makes the drop disappear and fails the test.
+
+**Recorded — my own mistake.** The first version would not parse: I wrote cron
+expressions inside a JSDoc block, and `*/5` contains `*/`, which terminates the
+comment. Same family as the import insertion that split a `useState` earlier in
+this audit — right about the content, wrong about the syntax around it.
+
+**Verified:** 14,172 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles` (four shards each), `tsc --noEmit` clean, `npm run lint`
+exits 0 at budget 12.

@@ -6422,3 +6422,80 @@ nothing. Narrow and true beat broad and wrong.
 **Status:** GUARDED; the fix remains filed (migration). **Verified:** 14,168
 tests green under both `TZ=UTC` and `TZ=America/Los_Angeles` (four shards each),
 tsc clean, `npm run lint` exits 0 at budget 12.
+
+---
+
+### [CLAUDE-1][MEDIUM][CRON/DELIVERY] A late GitHub tick drops a cron firing, and nothing records it
+
+**Path:** `scripts/cron-dispatch.mjs` (`dueRoutes`, `TICK_MINUTES`) ·
+`tests/a-late-tick-drops-a-cron.test.ts` (new)
+
+**The mechanism.** The dispatcher's window is anchored to when it RAN, not to
+when it was due:
+
+```js
+for (let back = 0; back < tickMinutes; back += 1) {
+  const t = new Date(now.getTime() - back * 60_000);
+  if (matchesAt(parsed, t)) { due.push(route); break; }
+}
+```
+
+GitHub's scheduled workflows are best-effort and routinely late. A tick due at
+09:00 that starts at 09:07 searches (09:02, 09:07], and a route scheduled for
+09:00 is simply not in it. Nothing errors and nothing retries — the next tick's
+window starts later still, so that firing is gone.
+
+**Demonstrated, not argued**, through the script's own dry run:
+
+```
+--at 09:00Z  → marketing, marketing-social, journey-recovery, close-auctions, ai-runs, family-routines
+--at 09:07Z  → marketing, close-auctions, ai-runs
+```
+
+`journey-recovery`, `marketing-social` and `family-routines` were dropped.
+
+**Who it actually costs.** 1,107 firings per weekday depend solely on a GitHub
+tick landing within five minutes, but most are frequent routes whose next
+occurrence is minutes away — a lost slot there costs minutes. The exposure is the
+SPARSE ones, where the next chance is hours: `checkout-abandoned`,
+`library-feeds` and `marketing-providers` (every six hours, and Vercel schedules
+**none** of those minutes), `provider-sync` (5 of 6), `journey-recovery` (2 of 3),
+`autopilot-scan` and `model-refresh` (1 of 2 each).
+
+**The redundancy cuts both ways.** Q36 recorded that `vercel.json` mirrors all 24
+routes and that this makes `admin-digest` double-send. The same mirror is what
+protects the daily jobs here — Vercel fires at the right minute whatever GitHub
+does. It does not protect a firing Vercel has no schedule for, which is exactly
+the sparse set above.
+
+**Why this is pinned rather than fixed.** There is no clean stateless fix, and I
+checked each option rather than asserting it:
+- widening the window makes a daily route fire several times a day (the loop
+  `break`s, so once per tick — but a 15-minute window means three ticks match),
+  which also multiplies the `admin-digest` duplicate Q36 found;
+- anchoring to the tick boundary still misses a tick GitHub DROPPED rather than
+  delayed, which it also does under load;
+- the robust fixes are persisted catch-up state (an `actions/cache` round trip),
+  or the end state the dispatcher's own header already names — "On Vercel Pro the
+  original per-minute schedules can go back into vercel.json and this workflow
+  can be disabled."
+
+That is an owner's trade-off, not mine to pick.
+
+**Guard.** The new file runs the real `dueRoutes` at both times and asserts the
+drop, names the sparse routes whose firings Vercel does not cover, and checks the
+frequent ones really are frequent enough to self-heal (so their exclusion is
+reasoned, not assumed). It tracks reality rather than freezing a number: raising
+`TICK_MINUTES` to 15 makes the drop disappear and fails the test, forcing the
+record to be updated with the behaviour.
+
+**Recorded: my own mistake.** The first version of the guard would not parse. I
+wrote cron expressions inside a JSDoc block, and `*/5` contains `*/`, which
+terminates the comment — two parse errors from a file that was otherwise
+correct. Same family as the import-insertion that split a `useState` earlier in
+this audit: a mechanical edit that was right about the content and wrong about
+the syntax around it.
+
+**Status:** GUARDED; the fix is an owner decision. **Verified:** 14,172 tests
+green under both `TZ=UTC` and `TZ=America/Los_Angeles` (four shards each), tsc
+clean, `npm run lint` exits 0 at budget 12.
