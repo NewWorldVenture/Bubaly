@@ -5924,3 +5924,41 @@ signal at the call site and all four are false positives: three in
 signal.
 
 **Status:** NO DEFECT in any of the above. No source change made this pass.
+
+---
+
+### [CLAUDE-1][CLEAN] The mobile↔web contract, and the middleware's bearer carve-out
+
+**The carve-out is the interesting part.** `middleware.ts` lets a request past
+the session gate when it carries a well-formed `Authorization: Bearer …` AND its
+path is `/api/ai` or under it — because "a 307 to the HTML login page is not an
+answer a JSON client can act on". That carve-out rests on a claim written beside
+it: "every other route under /api/ai calls `requireUserContext`, which fails
+closed without a session." A well-formed bearer is not a VALID one, so if any
+route under that prefix skipped its own check, the carve-out would be the way in.
+
+**Checked, and the claim holds.** 39 route files under `app/api/ai/`; 38 call
+`authenticateAI`, `getBearerUserContext` or `requireUserContext`. The one
+exception, `app/api/ai/gift`, never reaches the bearer branch at all: it is on
+`PUBLIC` in `lib/auth/route-access.ts`, and `isPublic` is evaluated first, so it
+is public by decision rather than by omission — with the gift token and a
+Postgres-backed 5/min/IP limiter as its stated boundary. That route is already
+covered in `audit/claude-3.md` (their §302, §740); recorded here only because it
+is the residue of this check, not claimed as a finding of mine.
+
+Worth noting the two regexes differ in the safe direction: middleware admits
+`/^Bearer\s+\S+$/i` while `extractBearerToken` requires
+`/^Bearer\s+([A-Za-z0-9\-._~+/]+=*)$/i`. A header that passes the first and
+fails the second reaches the handler and gets a JSON 401 — which is the point of
+the carve-out — rather than being 307'd at the edge.
+
+**The mobile app's surface is two endpoints, both inside the carve-out.**
+`mobile/src/lib/assistant-core.ts` calls `/api/ai?mode=json` and
+`mobile/src/lib/voice-core.ts` calls `/api/ai/voice/transcribe`. Both exist, both
+authenticate the bearer themselves (`getBearerUserContext` and `authenticateAI`
+respectively), and transcribe's header records that it deliberately shares
+/api/ai's resolver "so the cookie and the bearer resolve in the same place". An
+apparent third endpoint, `/api/broadcast`, was a false hit from
+`mobile/node_modules` — no such route exists and nothing in `mobile/src` calls it.
+
+**Status:** NO DEFECT. No source change.
