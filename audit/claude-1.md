@@ -1144,3 +1144,51 @@ the same regression fails it by name.
   widening the gate to every expression *also* fails it. The behavioural cases
   assert the two instants, their one-hour gap and their identical wall clock,
   and that an ordinary June night is still exactly 24 hours apart.
+
+### [CLAUDE-1][HIGH][EDGE CASE] Relative routines fired on the wrong DAY, every day of the year — FIXED
+
+- **File/path:** `lib/services/routines/schedule.ts` (`nextRelativeRun`),
+  `lib/services/scope.ts` (`zonedTimeMs`)
+- **Problem:** A relative routine fires an offset from an anchor date at the
+  family's hour — "the night before the trip, at 22:00". Placing that hour
+  measured the zone offset at the UTC instant `<key>T<atHour>:00Z` and subtracted
+  it. That reads the offset on whichever local **day** that instant falls on,
+  which is not always the target day; when it is not, the hour difference wraps
+  and the correction moves a whole day.
+- **Evidence — measured, and note the dates: plain summer days, so this is not a
+  DST edge case but every day of the year.** All with `offsetDays: 0`:
+
+  ```
+  America/New_York, anchor 2026-06-15, atHour  1  -> fired 06-14 01:00   a day EARLY
+  America/New_York, anchor 2026-06-15, atHour  2  -> fired 06-14 02:00   a day EARLY
+  America/New_York, anchor 2026-06-15, atHour  9  -> fired 06-15 09:00   correct
+  Asia/Tokyo,       anchor 2026-06-15, atHour 22  -> fired 06-16 22:00   a day LATE
+  Asia/Tokyo,       anchor 2026-06-15, atHour 23  -> fired 06-16 23:00   a day LATE
+  Asia/Tokyo,       anchor 2026-06-15, atHour  9  -> fired 06-15 09:00   correct
+  ```
+
+  The pattern is the giveaway: a zone **behind** UTC breaks early-morning
+  routines, a zone **ahead** of it breaks late-evening ones, and the middle of
+  the day is fine in both — which is exactly what an offset misread on the wrong
+  local day produces.
+- **Impact:** Every US family's early-morning relative routine and every
+  Asia-Pacific family's evening one fired a day out. "The night before the trip"
+  arrived two nights before. This sat behind the hours most likely to be chosen
+  for a *reminder*, and the hours a developer is least likely to test.
+- **Recommended fix:** applied — `zonedTimeMs(key, atHour, 0, tz)`, the
+  repository's own helper, which resolves the offset twice (at the guess, then at
+  the corrected instant) so it lands on the right local day and survives both DST
+  transitions. **The correct implementation already existed and had not reached
+  this call site** — the fourth instance of that shape this audit has found,
+  after `escapeLike`, the kiosk's error boundary and the accessible `Modal`.
+- **Status:** FIXED. `tsc` clean, build exits 0, 13,858 tests pass.
+- **Proved load-bearing:** restoring the old drift arithmetic fails **8 of 11**
+  cases, naming the zone, the hour and the day it landed on. Four cases exist to
+  stop the fix over-reaching — the correct mid-day hours, the offset arithmetic,
+  both DST transition days, and the already-passed case returning null.
+
+**Also recorded:** `zonedTimeMs` exists twice — `lib/services/scope.ts` (129
+importers) and `lib/schedule/zoned.ts` (3). They differ only in whether
+`tzOffsetMs` takes a `Date` or a number. Not merged here because both are
+correct and a third session is active in this tree, but it is the same
+duplication that let this call site drift in the first place. OPEN.
