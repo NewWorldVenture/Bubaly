@@ -1192,3 +1192,78 @@ importers) and `lib/schedule/zoned.ts` (3). They differ only in whether
 `tzOffsetMs` takes a `Date` or a number. Not merged here because both are
 correct and a third session is active in this tree, but it is the same
 duplication that let this call site drift in the first place. OPEN.
+
+---
+
+## [CLAUDE-1][HIGH][FRONTEND / DATABASE] Nine forms wrote Greenwich's day into a DATE column
+
+- **Where:** `components/modules/{school,expenses,trip-memories,health-visits,finances,pets,subscriptions}-module.tsx`,
+  `components/finance/bills-view.tsx`, `components/wallet/wallet-hub.tsx`
+- **Problem:** each defaulted a date field to `new Date().toISOString().slice(0, 10)`
+  (school-module used the `.split('T')[0]` spelling) — the day at Greenwich, not
+  the day on the family's wall. This is the default a parent gets when they leave
+  the date blank, and it lands in a DATE column.
+- **Evidence:** measured, not reasoned:
+
+  ```
+  2026-09-18T01:30Z   Greenwich 2026-09-18
+      America/Los_Angeles  2026-09-17   DIFFERS
+      America/New_York     2026-09-17   DIFFERS
+  2026-09-18T23:30Z   Greenwich 2026-09-18
+      Pacific/Auckland     2026-09-19   DIFFERS
+      Asia/Tokyo           2026-09-19   DIFFERS
+  ```
+
+  7h/day wrong in Los Angeles, 10h/day in Sydney.
+- **Impact:** a parent in Los Angeles adding a grade at 18:30 Sunday filed it
+  against Monday; one in Auckland logging an expense before 13:00 filed it
+  against yesterday. A wrong read renders one wrong screen; a wrong **write**
+  persists, and every later read of that row is wrong too. In `finances` and
+  `pets` the prefilled value and the submit-time fallback were *both* Greenwich,
+  so the form and its fallback could also disagree with each other.
+- **Recommended fix:** applied. New `todayInZone(tz, now?)` in
+  `lib/schedule/zoned.ts` (client-safe — no `server-only`, unlike
+  `lib/services/scope.ts`). All nine sites are client components with the family
+  row already in scope, so each resolves through `family?.timezone ?? 'UTC'` —
+  the defensive form the repo already uses at `family-module.tsx:393`, and
+  necessary because many test mocks return a `useApp()` object with no `family`.
+- **Status:** FIXED. `tsc` clean, `next build` exits 0, 13,866 tests pass.
+
+### Why the existing guard missed all nine
+
+`tests/family-day-not-greenwich-day.test.ts` is a good guard aimed at exactly
+this bug, and it could not see any of them, for three independent reasons:
+
+1. `UTC_DAY_KEY` matched only `.slice(0, 10)`, never `.split('T')[0]` — the
+   spelling school-module used, making that file invisible to it entirely.
+2. Its detector matched only PostgREST **filter** operators
+   (`gte|lte|gt|lt|eq|neq`). The whole **write** side was uncovered.
+3. `ROOTS = ['app', 'lib']`. All nine are in `components`.
+
+Extended with a write-side check over all three roots. The write side can be
+asked *precisely* — is the value assigned to a DATE column a Greenwich key? — so
+unlike the read check it needs no whole-file `ZONE_AWARE` blind spot.
+
+**Measuring this honestly took three attempts, and the first two were wrong:**
+
+| detector | files | verdict |
+|---|---|---|
+| any `col:` key anywhere in a file that also builds a Greenwich key | 57 | over-reports 4.4× — matches type annotations, unrelated literals, chart config |
+| `col:` with `[^,]*` up to the key | 13 | under-reports — a comma inside `str(fd, 'service_date')` ends the value early |
+| depth-aware property-value extraction | **14** | every one verified by eye |
+
+The loose number would have put 43 phantom findings on the board. Recorded
+because the temptation to ship the first count is the failure mode, not the regex.
+
+- **Proved load-bearing:** restoring the school-module line turns the guard red,
+  naming the file and column — in the spelling *and* the directory that were both
+  invisible before.
+
+**Five server-side writes remain, allowlisted with reasons rather than silently
+skipped:** `app/(app)/dashboard/{auto,home}/actions.ts` and
+`app/(app)/wallet/hub-actions.ts` need a zone threaded through their `ctx()`;
+`lib/planning/prep-server.ts` through its signature;
+`lib/reasoning/engine-server.ts` writes `as_of_date`, which is an **upsert key**
+(`onConflict: 'family_id,as_of_date'`) — changing it changes what "already
+snapshotted today" means, so it wants its own change with the idempotency
+thought through, not a drive-by. OPEN.
