@@ -1,6 +1,14 @@
 import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { PUBLIC, PROTECTED, matchesPrefix } from '@/lib/auth/route-access';
+
+// Paths are anchored to the repo root rather than to the process cwd. Vitest
+// runs from the root, so a bare relative read works today — but it works by
+// coincidence, and `join(__dirname, '..')` is the idiom the older guards in
+// this directory already use. Verified by running this file with the cwd
+// somewhere else, which ENOENTs on the bare form and passes on this one.
+const ROOT = join(__dirname, '..');
 
 /**
  * M-023 has two sides and only one of them was pinned.
@@ -31,7 +39,7 @@ import { PUBLIC, PROTECTED, matchesPrefix } from '@/lib/auth/route-access';
  * read the session or redirect.
  */
 
-const SW = readFileSync('public/sw.js', 'utf8');
+const SW = readFileSync(join(ROOT, 'public/sw.js'), 'utf8');
 
 /** The navigation allowlist, read out of the worker rather than restated. */
 function cacheableNav(): string[] {
@@ -85,7 +93,7 @@ describe('a page the service worker may cache must stay public', () => {
       const chain = RENDER_CHAIN[path];
       expect(chain, `${path} is cacheable but has no render chain recorded`).toBeDefined();
       for (const file of chain ?? []) {
-        expect(existsSync(file), `${path}: ${file} does not exist`).toBe(true);
+        expect(existsSync(join(ROOT, file)), `${path}: ${file} does not exist`).toBe(true);
       }
     }
   });
@@ -94,7 +102,7 @@ describe('a page the service worker may cache must stay public', () => {
     const offenders: string[] = [];
     for (const path of cacheableNav()) {
       for (const file of RENDER_CHAIN[path] ?? []) {
-        const source = readFileSync(file, 'utf8');
+        const source = readFileSync(join(ROOT, file), 'utf8');
         const hit = SESSION_READ.exec(source);
         if (hit) offenders.push(`${path}: ${file} uses ${hit[0]}`);
       }

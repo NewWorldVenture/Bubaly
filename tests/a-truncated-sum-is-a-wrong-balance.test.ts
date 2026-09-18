@@ -1,6 +1,14 @@
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { bucketBalanceCents } from '@/lib/wallet/server';
+
+// Paths are anchored to the repo root rather than to the process cwd. Vitest
+// runs from the root, so a bare relative read works today — but it works by
+// coincidence, and `join(__dirname, '..')` is the idiom the older guards in
+// this directory already use. Verified by running this file with the cwd
+// somewhere else, which ENOENTs on the bare form and passes on this one.
+const ROOT = join(__dirname, '..');
 
 /**
  * A wallet balance is derived by summing the immutable ledger. Three functions
@@ -133,14 +141,14 @@ describe('every ledger sum pages', () => {
     // Non-vacuity: a renamed function would otherwise make this whole block
     // assert over empty strings and pass.
     for (const { file, fn } of LEDGER_SUMS) {
-      expect(bodyOf(readFileSync(file, 'utf8'), fn).length, `${file}: ${fn} not found`).toBeGreaterThan(100);
+      expect(bodyOf(readFileSync(join(ROOT, file), 'utf8'), fn).length, `${file}: ${fn} not found`).toBeGreaterThan(100);
     }
   });
 
   it('reads through readAll with a stable order, not a bare select', () => {
     const offenders: string[] = [];
     for (const { file, fn } of LEDGER_SUMS) {
-      const body = bodyOf(readFileSync(file, 'utf8'), fn);
+      const body = bodyOf(readFileSync(join(ROOT, file), 'utf8'), fn);
       if (!body.includes('readAll<')) offenders.push(`${file}: ${fn} does not page`);
       // readAll's own header: "an unordered paged read can repeat or skip rows
       // between pages". For a sum either one is a wrong total, so the order is
@@ -159,7 +167,7 @@ describe('every ledger sum pages', () => {
     // `failOnMax: false` is the documented opt-out for LISTS. On a sum it would
     // restore the exact defect: a prefix returned with error: null.
     for (const { file, fn } of LEDGER_SUMS) {
-      const body = bodyOf(readFileSync(file, 'utf8'), fn);
+      const body = bodyOf(readFileSync(join(ROOT, file), 'utf8'), fn);
       expect(/failOnMax:\s*false/.test(body), `${file}: ${fn} opts out of the truncation error`).toBe(false);
     }
   });

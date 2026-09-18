@@ -6236,3 +6236,46 @@ deliberately no `preload`, "which commits every subdomain to the browser preload
 list irreversibly".
 
 **Status:** NO DEFECT. No change.
+
+---
+
+### [CLAUDE-1][HOUSEKEEPING] Anchoring my own guards' paths — cleaning up after myself
+
+Not a finding about the product. Nine guard files were added across Q23–Q33 and
+CI has never executed one of them, which I have been naming as the top risk on
+every check-in without ever testing it. This is that test.
+
+**What I actually checked.** Each of the nine run green in ISOLATION, so none
+depends on another file having run first — that is the failure a four-way shard
+split would otherwise surface as a mystery. Then each was run with the process
+cwd somewhere other than the repo root.
+
+**Four of mine broke, and they were mine.** `an-in-filter-travels-in-the-url`,
+`a-truncated-sum-is-a-wrong-balance`, `a-not-in-list-is-the-whole-network` and
+`a-cacheable-page-must-stay-public` read through bare repo-relative strings
+(`readFileSync('public/sw.js')`, `walkTs('app')`,
+`readFileSync(file)` over a list of relative paths), which resolve against the
+process cwd. From `lib/` they ENOENT. `a-paged-read-needs-a-total-order` passed,
+because it anchors with `join(__dirname, '..')` — the idiom the older guards in
+this directory already use, and the one I should have used throughout.
+
+**Severity, stated honestly: this is not a live CI risk.** CI runs `npm test`
+from the repo root, cwd is the root, and the bare form resolves. That is exactly
+why the full suite has been green all along. It worked by coincidence rather than
+by construction, in code I wrote, and the repo had already settled on the
+construction.
+
+**Fix.** All four anchored to `const ROOT = join(__dirname, '..')`, with a note in
+each saying why and recording that it was verified by running from another cwd.
+Re-run from `lib/`: 32 passed where two files previously ENOENT'd.
+
+**And they still bite.** Anchoring a path is exactly the kind of change that can
+quietly turn a guard decorative — it could now be reading a file that always
+exists and asserting over it forever. Checked rather than assumed: adding
+`/dashboard` to `APP_SHELL` still fires two rules, and breaking the
+`readInChunks` call in the push campaign still fires the `.in()` rule by name.
+
+**Status:** DONE. **Verified:** 14,162 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles` (four shards each), tsc clean, `npm run lint` exits 0 at
+budget 12, each of the nine green in isolation, and the four repaired ones green
+from a foreign cwd.

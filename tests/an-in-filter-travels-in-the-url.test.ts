@@ -1,6 +1,14 @@
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { readInChunks } from '@/lib/supabase/chunked-in';
+
+// Paths are anchored to the repo root rather than to the process cwd. Vitest
+// runs from the root, so a bare relative read works today — but it works by
+// coincidence, and `join(__dirname, '..')` is the idiom the older guards in
+// this directory already use. Verified by running this file with the cwd
+// somewhere else, which ENOENTs on the bare form and passes on this one.
+const ROOT = join(__dirname, '..');
 
 /**
  * A PostgREST `.in()` filter travels in the query string. lib/supabase/chunked-in.ts
@@ -83,7 +91,7 @@ describe('an .in() filter travels in the URL', () => {
   it('each named file still exists and still reads by id', () => {
     // Non-vacuity: a moved file would make the assertion below scan nothing.
     for (const { file } of UNBOUNDED_ID_READS) {
-      const source = readFileSync(file, 'utf8');
+      const source = readFileSync(join(ROOT, file), 'utf8');
       expect(source.length, `${file} is empty or missing`).toBeGreaterThan(200);
       expect(/\.in\(/.test(source), `${file} no longer filters by id at all`).toBe(true);
     }
@@ -92,7 +100,7 @@ describe('an .in() filter travels in the URL', () => {
   it('chunks the reads whose id array is sized elsewhere', () => {
     const offenders: string[] = [];
     for (const { file, why } of UNBOUNDED_ID_READS) {
-      const source = readFileSync(file, 'utf8');
+      const source = readFileSync(join(ROOT, file), 'utf8');
       if (!/readInChunks\s*[<(]/.test(source)) offenders.push(`${file} — ${why}`);
     }
     expect(

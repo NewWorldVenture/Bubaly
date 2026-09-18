@@ -1,11 +1,18 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, sep } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { createInMemorySupabase, type InMemorySupabase } from './helpers/in-memory-supabase';
 import { runNetworkAggregation } from '@/lib/network/aggregate-server';
 import { writeInChunks } from '@/lib/supabase/chunked-in';
+
+// Paths are anchored to the repo root rather than to the process cwd. Vitest
+// runs from the root, so a bare relative read works today — but it works by
+// coincidence, and `join(__dirname, '..')` is the idiom the older guards in
+// this directory already use. Verified by running this file with the cwd
+// somewhere else, which ENOENTs on the bare form and passes on this one.
+const ROOT = join(__dirname, '..');
 
 /**
  * The nightly network aggregation ends by pruning the contributions of families
@@ -254,10 +261,10 @@ const BOUNDED_NOT_IN: { file: string; list: string; why: string }[] = [
 function handBuiltNotIn(): { file: string; list: string }[] {
   const hits: { file: string; list: string }[] = [];
   for (const dir of ['app', 'lib']) {
-    for (const abs of walkTs(dir)) {
+    for (const abs of walkTs(join(ROOT, dir))) {
       const source = readFileSync(abs, 'utf8');
       for (const m of source.matchAll(/\.not\(\s*[^,]+,\s*['"]in['"]\s*,\s*`\(\$\{([^}]*?)\.join\(/g)) {
-        hits.push({ file: abs.split(sep).join('/'), list: m[1].trim() });
+        hits.push({ file: relative(ROOT, abs).split(sep).join('/'), list: m[1].trim() });
       }
     }
   }
