@@ -104,15 +104,24 @@ export async function materializePaperworkActionAction(input: {
   }
 
   if (materializedId) {
-    const next = actions.map((a, i) =>
-      i === input.actionIndex ? { ...a, materialized_as: materializedAs, materialized_id: materializedId } : a);
-    const allDone = next.every((a) => a.materialized_id);
-    // The record was already created above — if this stamp-back fails, log it so a
-    // future tap doesn't silently double-create against an un-stamped item.
-    const { error: stampError } = await supabase.from('paperwork_items')
-      .update({ actions: next as never, status: allDone ? 'done' : 'in_progress' })
-      .eq('id', item.id);
+    // 0327. This used to rewrite the WHOLE actions array from the copy read at
+    // the top of this function, so two overlapping taps — "Add to calendar"
+    // then "Remind me" on the same letter, which the module's per-action
+    // buttons invite — each erased the other's stamp, and the next tap created
+    // a second record. The function stamps one element and recomputes `status`
+    // from the row as it stands, so a sibling that landed in between counts.
+    //
+    // The record was already created above, so a failure here is logged rather
+    // than thrown: a future tap double-creating is bad, and losing the reminder
+    // the family just watched appear is worse.
+    const { data: stamped, error: stampError } = await supabase.rpc('paperwork_stamp_action', {
+      p_item_id: item.id,
+      p_index: input.actionIndex,
+      p_as: materializedAs,
+      p_id: materializedId,
+    });
     if (stampError) console.error('[paperwork] materialization stamp-back failed', { itemId: item.id, error: stampError });
+    else if (stamped === false) console.warn('[paperwork] action was already stamped by a concurrent tap', { itemId: item.id, actionIndex: input.actionIndex });
   }
   revalidatePath(PATH);
 }

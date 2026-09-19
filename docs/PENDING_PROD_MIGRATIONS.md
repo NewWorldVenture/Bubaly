@@ -1732,3 +1732,20 @@ because their value is zero until they are applied:
   both as positive controls, plus `0309`'s own boundary and a manager's full
   create/edit/delete. `docs/audit/health-record-boundary-check.sql`.
   Audit C1-S8-03.
+
+- **`0327_a_paperwork_stamp_does_not_rewrite_its_siblings.sql`** — adds
+  `public.paperwork_stamp_action(uuid, int, text, text)`, a `SECURITY INVOKER`
+  function that stamps ONE element of `paperwork_items.actions` and refuses one
+  already stamped. `materializePaperworkActionAction` promised in its own doc
+  comment that "tapping twice never double-creates" and kept it with a
+  read-modify-write over the whole array, so two overlapping taps each erased
+  the other's stamp and the next tap created a second calendar event or
+  reminder. Not a rare interleaving: the module renders one button per action
+  and disables only the busy one, and its single `busyKey` re-enables the first
+  button when the second tap starts. `status` is recomputed from the row rather
+  than from the caller's copy, so a sibling stamp that lands in between counts
+  toward `done`. The function changes no authorization — the probe asserts a
+  child of the family may still stamp and a stranger may not.
+  `docs/audit/paperwork-stamp-concurrency-check.sql` reproduces the OLD
+  semantics beside the new function and fails if they stop reproducing the
+  defect. Audit C1-S8-05.

@@ -646,3 +646,32 @@ FOUND: `C1-S8-04` [MEDIUM][AUDIT] — of the 15 decision values
 SUITE: 1,249 files / 14,068 tests, 0 failures.
 NEXT (goal order): paperwork-module, then voice-module.
 LAST-UPDATE: 2026-09-19
+
+## Claude-1 — Session 8, Pass X (paperwork)
+FOUND: `C1-S8-05` [MEDIUM][CORRECTNESS] — `materializePaperworkActionAction`
+  promises in its OWN doc comment that "tapping twice never double-creates", and
+  kept that with a read-modify-write over the whole `actions` array: read at the
+  top, create the record (the slow part), write the WHOLE array back. Two
+  overlapping taps each erase the other's stamp; the record exists, the item
+  doesn't say so, the next tap creates a second one.
+  NOT a rare interleaving — paperwork-module.tsx renders one button per action
+  and disables only the busy one (`disabled={pending && busy}` against a single
+  `busyKey`), so a permission slip needing both an RSVP and a signature is two
+  taps, and starting the second RE-ENABLES the first button mid-flight.
+  REPRODUCED in both layers before fixing: the JS test lost a stamp and created
+  a second calendar event; the SQL probe shows "old semantics: 1 of 2 stamps
+  survived the overlap".
+  FIXED: `0327` adds `paperwork_stamp_action()` — one element via jsonb_set,
+  refuses an already-stamped element (check and write in ONE statement), returns
+  false when it didn't win. `status` recomputed FROM THE ROW, not the caller's
+  copy — the same mistake one level down, easy to reintroduce inside the fix.
+  SECURITY INVOKER; the probe proves RLS is unchanged from both ends.
+  NOT CLOSED, named: two taps on the SAME action inside the create window.
+  Closing it means claiming before creating, which trades a rare double-create
+  for a claim that can get stuck. A product decision, recorded not silently made.
+  Probe refuses to pass if the OLD semantics stop reproducing the defect, so it
+  can't become a tautology.
+REPLAY: 340 migrations, 0 failed. PROBES: 48/48.
+SUITE: 1,250 files / 14,072 tests, 0 failures. nextVersion ratcheted to 0328.
+NEXT (goal order): voice-module — the last item.
+LAST-UPDATE: 2026-09-19

@@ -8003,3 +8003,113 @@ in turn, and the emergency error-discard restored.
 | drop the emergency ledger error on the floor again | **RED** |
 
 Full suite: **1,249 files / 14,068 tests, 0 failures.**
+
+
+---
+
+# Pass X — the promise in the doc comment, broken by two taps
+
+## C1-S8-05 [MEDIUM][CORRECTNESS] — "tapping twice never double-creates" fails on the ordinary two-button gesture
+
+**Files:** `app/(app)/dashboard/paperwork/actions.ts`
+(`materializePaperworkActionAction`) · `components/modules/paperwork-module.tsx`
+**Status:** FIXED by `0327_a_paperwork_stamp_does_not_rewrite_its_siblings.sql`
++ the action (**migration not yet applied to production**) ·
+`docs/audit/paperwork-stamp-concurrency-check.sql` ·
+`tests/a-paperwork-stamp-does-not-erase-its-sibling.test.ts`
+
+### Problem
+
+The function's own doc comment states the guarantee:
+
+> The action's materialization state is stamped back onto the paperwork row so
+> tapping twice never double-creates, and the link is auditable.
+
+It kept that guarantee with a read-modify-write over the whole array:
+
+```ts
+const actions = item.actions;                       // read, at the top
+… create the calendar event / reminder …            // the slow part
+const next = actions.map((a, i) => i === idx ? { ...a, materialized_id } : a);
+await supabase.from('paperwork_items').update({ actions: next });   // write ALL
+```
+
+Two overlapping calls both read the same array, and the second write erases the
+first one's stamp. The record it created still exists; the item no longer says
+so; the next tap creates a second one.
+
+**This is the normal gesture, not a rare interleaving.** The module renders one
+button per extracted action and disables only the busy one:
+
+```tsx
+const busy = busyKey === `${it.id}:${i}`;
+… disabled={pending && busy}
+```
+
+So a permission slip that needs both an RSVP and a signature — the case the
+feature exists for — is two taps, and the second starts while the first is still
+creating its record. Worse, `busyKey` holds a single value, so starting the
+second tap **re-enables the first button** mid-flight.
+
+### Measured before the fix
+
+In the application, through `tests/a-paperwork-stamp-does-not-erase-its-sibling.test.ts`:
+
+```
+AssertionError: the RSVP stamp was erased: expected null to be truthy
+AssertionError: a second calendar event was created: expected [ …(2) ] to have a length of 1 but got 2
+```
+
+And in Postgres, with the old semantics reproduced beside the new function so
+the two are compared rather than asserted about:
+
+```
+NOTICE:  old semantics: 1 of 2 stamps survived the overlap
+NOTICE:  0327 OK — one stamp per call, siblings intact, status recomputed, RLS unchanged
+```
+
+### Fix
+
+`public.paperwork_stamp_action(item, index, as, id)` stamps **one element** with
+`jsonb_set` and refuses an element that already carries a `materialized_id` —
+the check and the write in one statement, rather than a check in the application
+and a write much later. It returns `false` when it did not win, so the caller
+never reports a second record as filed.
+
+`status` is recomputed **from the row as it stands**, not from the caller's
+copy: a sibling stamp that landed in between counts toward `done` instead of
+being pushed back to `in_progress`. That is the same mistake one level down, and
+it would have been easy to reintroduce inside the fix for it.
+
+`SECURITY INVOKER` — stated in the migration because it is the point. The
+caller's RLS still decides which rows they may touch; this is not a way around
+`paperwork_items_update`, and the probe proves it from both ends (a child of the
+family may still stamp, because paperwork is family-wide by design; a stranger
+gets `false`).
+
+### What is NOT closed, named rather than implied
+
+Two taps on the **same** action, inside the window between creating the record
+and calling the function. Closing that means claiming the action *before* the
+record exists, which trades a rare double-create for a claim that can get stuck
+when the request dies in between. That is a product decision about which failure
+a family would rather have, and it is recorded here instead of being silently
+chosen. The pre-existing early return (`if (action.materialized_id) return`)
+still covers the common case of a slow double-tap on one button.
+
+### The guard, both halves
+
+- **`tests/a-paperwork-stamp-does-not-erase-its-sibling.test.ts`** drives two
+  concurrent materializations, asserts both stamps survive, then does what the
+  user does next — taps whichever button still looks undone — and asserts no
+  second record appears. Proved red by reverting the action to the whole-array
+  rewrite: **both assertions fail, naming the erased stamp and the duplicate
+  event.**
+- **`docs/audit/paperwork-stamp-concurrency-check.sql`** exercises the real
+  function against real jsonb, and refuses to pass if the old semantics stop
+  reproducing the defect — so the probe cannot quietly become a tautology. It
+  also covers an index past the end, a negative index, an archived item keeping
+  its status, a second tap on the same action, and the two RLS directions.
+
+Replay: **340 migrations, 0 failed.** Probes: **48/48**.
+Suite: **1,250 files / 14,072 tests, 0 failures.**
