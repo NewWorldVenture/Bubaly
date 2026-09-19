@@ -169,7 +169,7 @@ localization gate passes.
 | Localization and query audits | PASS on unchanged application source: localization and query audit (491 tables, 86 functions, 146 routes) |
 | Controlled browser regression | Focused restoration verified: prior run 248 pass / 8 reward failures; repaired rewards 32/32 pass. Complete integrated hosted regression pending |
 | Hosted browser discovery | PASS: 1,078 tests across 47 files, including the new SMS ingress fixture and five durable-login journeys; authenticated/durable flags retained. Discovery only; `Temp/bubaly-integrated-discovery-final-20260919.log` |
-| Hosted database/authenticated/browser acceptance | Pending publication and execution for the integrated source |
+| Hosted database/authenticated/browser acceptance | Published `43df0881` run `35462526440`: browser gate failed with 1,072 pass / six fixture failures (four finance missing-module imports, two SMS setups refused by the last-manager guard). New SMS ingress case passed. Database replay: 330 migrations, 38/38 probes and 327 existing-schema reapplications pass. Fixture repair and fresh hosted execution required |
 | Real providers, deployed session policy and physical devices | Unverified |
 | Second complete feature regression | Not complete; individual audit obligations remain open |
 
@@ -177,3 +177,8 @@ The completed local gates above are tied to the frozen source and explicitly
 identified subsequent test-only correction. Historical gates are preserved for
 their named sources. The complete feature and hosted regression remains
 **IN PROGRESS**, and the release gate remains **NO**.
+
+Follow-up application work and its separate verification are recorded in the
+[PKCE/recovery cycle](auth-pkce-refresh-preservation-cycle.md) and
+[voicemail cycle](guardian-voicemail-intake-cycle.md). The hosted evidence here
+belongs to published `43df0881`, not those later changes.

@@ -40,6 +40,7 @@ function collect(filename: string): string {
 }
 const entries = Object.fromEntries(['components/auth/signup-form.tsx', 'components/ui/toast.tsx', 'components/i18n/locale-provider.tsx',
   'lib/i18n/locales.ts', 'lib/supabase/client.ts', 'lib/auth/browser-signout.ts'].map(file => [file, collect(file)]));
+entries.ssr = collect(require.resolve('@supabase/ssr'));
 const origin = 'https://signup-boundaries-fixture.invalid';
 const provider = 'https://signup-provider.invalid';
 const existingUser = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -53,7 +54,7 @@ type Probe = {
   settleSubmits: () => Promise<void>; pending: number; errors: string[]; navigations: string[]; refreshes: number;
   stitches: number; referrals: string[]; rejectStitch: boolean; rejectReferral: boolean;
   pkce: () => Promise<string | null>; user: () => Promise<string | null>; signIn: () => Promise<void>;
-  signOut: () => Promise<void>; recover: () => Promise<void>; oauth: () => Promise<string>;
+  recover: () => Promise<void>; oauth: () => Promise<string>;
   exchange: () => Promise<void>; refreshSession: () => Promise<void>; seedSession: (padding: number, expired?: boolean) => Promise<void>;
   storedUser: () => Promise<string | null>; events: Array<{ event: string; user: string | null }>;
   captureLogout: () => void; appLogout: (captured?: boolean) => string;
@@ -170,10 +171,36 @@ async function fixture(page: Page, options: { mode?: Mode; hold?: boolean; query
     p.pkce = async () => { const value = await db.auth.storage.getItem(db.auth.storageKey + '-code-verifier'); return value === null ? null : JSON.parse(value); };
     p.user = async () => (await db.auth.getSession()).data.session?.user.id ?? null;
     p.signIn = async () => { const result = await db.auth.signInWithPassword({ email: 'existing@example.invalid', password: 'synthetic-password' }); if (result.error) throw result.error; };
-    p.signOut = async () => { const result = await db.auth.signOut({ scope: 'local' }); if (result.error) throw result.error; };
     p.recover = async () => { const result = await db.auth.resetPasswordForEmail('recovery@example.invalid'); if (result.error) throw result.error; };
     p.oauth = async () => { const result = await db.auth.signInWithOAuth({ provider: 'google', options: { skipBrowserRedirect: true } }); if (result.error) throw result.error; return result.data.url; };
-    p.exchange = async () => { const result = await db.auth.exchangeCodeForSession('synthetic-accepted-signup'); if (result.error) throw result.error; };
+    p.exchange = async () => {
+      // The production singleton owns renewal, not callback consumption. Use
+      // a separate installed-SDK operation with empty bootstrap for exchange.
+      const ssr = load(entries.ssr);
+      let activeStorage = false;
+      const isolated = ssr.createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
+        isSingleton: false,
+        cookieOptions: { path: '/', sameSite: 'lax', secure: true },
+        auth: { persistSession: true, autoRefreshToken: false, detectSessionInUrl: false, skipAutoInitialize: true },
+        cookies: {
+          getAll: () => activeStorage ? ssr.parseCookieHeader(document.cookie).map(cookie => ({ name: cookie.name, value: cookie.value ?? '' })) : [],
+          setAll: cookies => {
+            if (!activeStorage) throw new Error('Unexpected exchange initialization write');
+            for (const cookie of cookies) document.cookie = ssr.serializeCookieHeader(cookie.name, cookie.value, cookie.options);
+          },
+        },
+      });
+      try {
+        await new Promise(resolve => {
+          const initial = isolated.auth.onAuthStateChange(event => {
+            if (event === 'INITIAL_SESSION') { initial.data.subscription.unsubscribe(); resolve(); }
+          });
+        });
+        activeStorage = true;
+        const result = await isolated.auth.exchangeCodeForSession('synthetic-accepted-signup');
+        if (result.error) throw result.error;
+      } finally { await isolated.auth.dispose(); }
+    };
     p.refreshSession = async () => { const result = await db.auth.refreshSession(); if (result.error) throw result.error; };
     p.storedUser = async () => { const value = await db.auth.storage.getItem(db.auth.storageKey); return value ? JSON.parse(value).user.id : null; };
     p.seedSession = async (padding, expired = false) => {
@@ -435,11 +462,11 @@ for (const newer of ['recover', 'oauth'] as const) {
   }
 }
 
-for (const boundary of ['signOut', 'exchange'] as const) {
+for (const boundary of ['appLogout', 'exchange'] as const) {
   for (const mode of ['lost', 'session'] as const) {
     test(`${boundary} consumption during a pending ${mode} signup is never undone`, async ({ page }) => {
       const state = await fixture(page, { mode, hold: true });
-      if (boundary === 'signOut') await page.evaluate(() => window.__signupBoundaries.signIn());
+      if (boundary === 'appLogout') await page.evaluate(() => window.__signupBoundaries.signIn());
       await emailForm(page); await retained(page); await expect.poll(() => state.signups.length).toBe(1);
       await page.evaluate(async kind => { await window.__signupBoundaries[kind](); }, boundary);
       expect(await page.evaluate(() => window.__signupBoundaries.pkce())).toBeNull();
@@ -473,14 +500,47 @@ test('confirmed owned signup replaces every stale ambient session chunk and emit
     .toEqual([{ event: 'SIGNED_IN', user: newUser }]);
 });
 
-test('known separate SDK limitation: a later singleton refresh still consumes a pending signup verifier', async ({ page }) => {
-  await fixture(page, { mode: 'lost' }); await page.evaluate(() => window.__signupBoundaries.signIn());
-  await emailForm(page); await retained(page); await page.evaluate(() => window.__signupBoundaries.settleSubmits());
-  expect(await page.evaluate(() => window.__signupBoundaries.pkce())).toBeTruthy();
-  await page.evaluate(() => window.__signupBoundaries.refreshSession());
-  expect(await page.evaluate(() => window.__signupBoundaries.pkce())).toBeNull();
-  expect(await page.evaluate(() => window.__signupBoundaries.storedUser())).toBe(existingUser);
-});
+for (const mode of ['confirm', 'lost'] as const) {
+  test(`ordinary refresh preserves the exact pending ${mode} signup verifier`, async ({ page }) => {
+    const state = await fixture(page, { mode }); await page.evaluate(() => window.__signupBoundaries.signIn());
+    await emailForm(page); await retained(page); await page.evaluate(() => window.__signupBoundaries.settleSubmits());
+    const verifier = await page.evaluate(() => window.__signupBoundaries.pkce());
+    expect(verifier).toBeTruthy();
+    expect(challenge(verifier!)).toBe(state.signups[0].body.code_challenge);
+    await page.evaluate(() => window.__signupBoundaries.refreshSession());
+    expect(state.calls.filter(call => call.includes('grant_type=refresh_token'))).toHaveLength(1);
+    expect(await page.evaluate(() => window.__signupBoundaries.pkce())).toBe(verifier);
+    expect(await page.evaluate(() => window.__signupBoundaries.storedUser())).toBe(existingUser);
+    expect(state.signups).toHaveLength(1);
+    await page.evaluate(() => window.__signupBoundaries.exchange());
+    expect(state.exchanges).toEqual([{ auth_code: 'synthetic-accepted-signup', code_verifier: verifier }]);
+    expect(await page.evaluate(() => window.__signupBoundaries.storedUser())).toBe(newUser);
+    expect(await page.evaluate(() => window.__signupBoundaries.pkce())).toBeNull();
+    expect(await page.evaluate(() => window.__signupBoundaries.errors)).toEqual([]);
+  });
+}
+
+for (const kind of ['oauth', 'recovery'] as const) {
+  test(`ordinary refresh preserves the exact pending ${kind} verifier until explicit application logout`, async ({ page }) => {
+    const state = await fixture(page); await page.evaluate(() => window.__signupBoundaries.signIn());
+    const oauthUrl = await page.evaluate(async kind => {
+      if (kind === 'oauth') return window.__signupBoundaries.oauth();
+      await window.__signupBoundaries.recover(); return null;
+    }, kind);
+    const verifier = await page.evaluate(() => window.__signupBoundaries.pkce());
+    expect(verifier).toBeTruthy();
+    if (oauthUrl) expect(new URL(oauthUrl).searchParams.get('code_challenge')).toBe(challenge(verifier!));
+    else expect(verifier).toMatch(/\/recovery$/);
+    await page.evaluate(() => window.__signupBoundaries.refreshSession());
+    expect(state.calls.filter(call => call.includes('grant_type=refresh_token'))).toHaveLength(1);
+    expect(await page.evaluate(() => window.__signupBoundaries.pkce())).toBe(verifier);
+    expect(await page.evaluate(() => window.__signupBoundaries.storedUser())).toBe(existingUser);
+    expect(await page.evaluate(() => window.__signupBoundaries.appLogout())).toBe('signed-out');
+    expect(await page.evaluate(() => window.__signupBoundaries.pkce())).toBeNull();
+    expect(await page.evaluate(() => window.__signupBoundaries.storedUser())).toBeNull();
+    expect(await page.evaluate(() => window.__signupBoundaries.errors)).toEqual([]);
+  });
+}
 
 test('blocked verifier cookie storage prevents a signup from being dispatched', async ({ page }) => {
   const state = await fixture(page);

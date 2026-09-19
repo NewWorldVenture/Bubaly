@@ -29,7 +29,7 @@ function collect(filename: string): string {
   return id;
 }
 const entries = Object.fromEntries(['components/auth/recovery-form.tsx', 'components/auth/login-form.tsx', 'components/i18n/locale-provider.tsx',
-  'lib/i18n/locales.ts', 'lib/supabase/client.ts'].map(file => [file, collect(file)]));
+  'lib/i18n/locales.ts', 'lib/supabase/client.ts', 'lib/auth/browser-signout.ts'].map(file => [file, collect(file)]));
 const origin = 'https://auth-recovery-fixture.invalid', provider = 'https://recovery-provider.invalid';
 const userA = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', userB = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const sidA = '11111111-1111-4111-8111-111111111111', sidB = '22222222-2222-4222-8222-222222222222';
@@ -51,6 +51,7 @@ type Fixture = {
 };
 type Probe = { mount: () => void; retire: () => void; capture: () => void; fire: (times?: number) => void; settle: () => Promise<void>;
   signIn: (account: Account) => Promise<void>; rotate: () => Promise<void>; user: () => Promise<string | null>; factoryHashes: string[]; errors: string[]; storage: () => Record<string, string>; seedGrant: (value: string) => void;
+  logoutWithBlockedSessionDeletion: () => string;
   installers: Array<{ reads: number; ambientReads: number; writes: number; disposed: boolean }> };
 declare global { interface Window { __recoveryUi: Probe } }
 function user(account: Account) { return { id: account === 'A' ? userA : userB, email: `${account.toLowerCase()}@example.invalid`, aud: 'authenticated', role: 'authenticated', app_metadata: {}, user_metadata: {}, created_at: '2026-09-12T00:00:00Z' }; }
@@ -148,6 +149,21 @@ async function fixture(page: Page, options: { hash?: string; query?: string; exi
     loaded[ssrId].exports = { ...ssr, createBrowserClient: observedBrowserClient };
     const factory = load(entries['lib/supabase/client.ts']), original = factory.createClient;
     factory.createClient = () => { p.factoryHashes.push(location.hash); return original(); };
+    const logout = load(entries['lib/auth/browser-signout.ts']);
+    p.logoutWithBlockedSessionDeletion = () => {
+      const cookie = Object.getOwnPropertyDescriptor(Document.prototype, 'cookie');
+      const key = 'sb-recovery-provider-auth-token';
+      Object.defineProperty(document, 'cookie', {
+        configurable: true,
+        get: () => cookie.get.call(document),
+        set: value => {
+          const name = String(value).split('=')[0];
+          if (!((name === key || name.startsWith(key + '.')) && /max-age=0/i.test(String(value)))) cookie.set.call(document, value);
+        },
+      });
+      try { return logout.signOutBrowserSession(logout.captureSignOutIntent(), { revoke: false }).status; }
+      finally { delete document.cookie; }
+    };
     const RecoveryForm = load(entries['components/auth/recovery-form.tsx']).RecoveryForm, LoginForm = load(entries['components/auth/login-form.tsx']).LoginForm;
     const LocaleProvider = load(entries['components/i18n/locale-provider.tsx']).LocaleProvider, locale = load(entries['lib/i18n/locales.ts']).localeOrDefault(${JSON.stringify(locale)});
     function render() { root ??= ReactDOM.createRoot(document.getElementById('root'));
@@ -257,6 +273,40 @@ test('held installed-SDK user lookup cannot write recovery cookies after unmount
   const state = await fixture(page, { hash: implicit(), existing: 'B', hold: { user: true } }); await expect.poll(() => state.userReads.length).toBe(1);
   await page.evaluate(() => window.__recoveryUi.retire()); await state.release('user'); await page.evaluate(() => window.__recoveryUi.settle());
   expect(await page.evaluate(() => window.__recoveryUi.user())).toBe(userB); expect(await page.evaluate(() => window.__recoveryUi.storage())).toEqual({});
+});
+
+for (const stage of ['prepare', 'user'] as const) {
+  for (const existing of [undefined, 'B'] as const) {
+    test(`logout generation retires held recovery ${stage} with ${existing ? 'unchanged B cookies' : 'an empty session slot'}`, async ({ page }) => {
+      const state = await fixture(page, { hash: implicit(), existing, hold: { [stage]: true } });
+      await expect.poll(() => stage === 'prepare' ? state.calls.filter(call => call.action === 'prepare').length : state.userReads.length).toBe(1);
+      const cookieState = async () => (await page.context().cookies()).map(({ name, value }) => ({ name, value })).sort((a, b) => a.name.localeCompare(b.name));
+      const before = await cookieState();
+      expect(await page.evaluate(() => window.__recoveryUi.logoutWithBlockedSessionDeletion())).toBe(existing ? 'unavailable' : 'signed-out');
+      const after = await cookieState();
+      const marker = 'sb-recovery-provider-auth-token-logout-generation';
+      expect(after.filter(cookie => cookie.name !== marker)).toEqual(before);
+      expect(after.find(cookie => cookie.name === marker)?.value).toMatch(/^[a-f0-9]{32}$/);
+      await state.release(stage); await page.evaluate(() => window.__recoveryUi.settle());
+      await expect.poll(async () => await page.getByRole('alert').count() + await page.getByRole('button', { name: 'Save new password', exact: true }).count()).toBeGreaterThan(0);
+      expect(await page.evaluate(() => window.__recoveryUi.user())).toBe(existing ? userB : null);
+      await expect(page.getByRole('button', { name: 'Save new password', exact: true })).toHaveCount(0);
+      expect(await page.evaluate(() => window.__recoveryUi.storage())).toEqual({});
+      if (stage === 'prepare') expect(state.userReads).toEqual([]);
+    });
+  }
+}
+
+test('another project changing its auth cookies does not retire this recovery installation', async ({ page }) => {
+  const state = await fixture(page, { hash: implicit(), existing: 'B', hold: { user: true } });
+  await expect.poll(() => state.userReads.length).toBe(1);
+  const unrelated = ['sb-unrelated-auth-token', 'sb-unrelated-auth-token-code-verifier', 'sb-unrelated-auth-token-logout-generation']
+    .map(name => ({ name, value: 'synthetic-other-project', url: origin }));
+  await page.context().addCookies(unrelated);
+  await state.release('user'); await ready(page);
+  expect(await page.evaluate(() => window.__recoveryUi.user())).toBe(userA);
+  expect((await page.context().cookies()).filter(cookie => cookie.name.startsWith('sb-unrelated-')).map(({ name, value }) => ({ name, value })))
+    .toEqual(unrelated.map(({ name, value }) => ({ name, value })));
 });
 
 test('recovery installer does not initialize ambient storage or start another renewal loop', async ({ page }) => {

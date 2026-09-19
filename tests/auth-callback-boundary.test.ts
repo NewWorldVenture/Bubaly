@@ -8,20 +8,19 @@ describe('auth callback boundary', () => {
     expect(source).toContain('error: userError');
     expect(source).toContain('if (!user) {');
     expect(source).toContain("const retryHref = authScreenHref('/login', selection, true);");
-    expect(source).toContain('return NextResponse.redirect(new URL(retryHref, url.origin));');
+    expect(source).toContain('return redirect(retryHref);');
   });
 
   it('does not bounce a just-signed-in user to /login over a transient read', () => {
-    // `exchangeCodeForSession` has already written the session cookies by this
-    // point, so the visitor IS signed in. Sending them to /login because the
-    // read-back failed shows the login page to someone who just signed in.
+    // A successful exchange is staged before this read. A transient lookup
+    // must still publish it and continue to the ordinary destination.
     expect(source).toContain('isRetryableAuthError(userError)');
-    expect(source).toContain('return NextResponse.redirect(new URL(next, url.origin));');
+    expect(source).toContain('return finish(redirect(next));');
     // And the fallback is the ordinary destination, never the admin console:
     // that routing decision needs a user this branch could not read.
     const retryableBranch = source.slice(
       source.indexOf('if (!user) {'),
-      source.indexOf('return NextResponse.redirect(new URL(retryHref, url.origin));'),
+      source.indexOf('return redirect(retryHref);'),
     );
     expect(retryableBranch).not.toContain("'/admin'");
   });
@@ -45,11 +44,11 @@ describe('auth callback boundary', () => {
     // end of the handler covers "no code, or the exchange itself failed", where
     // there is no session and /login is the right answer.
     const start = source.indexOf('if (!error) {');
-    const end = source.indexOf('return res;', start);
+    const end = source.indexOf('return finish(res);', start);
     expect(start).toBeGreaterThan(-1);
     expect(end).toBeGreaterThan(start);
     const exchanged = source.slice(start, end);
-    const loginRedirects = exchanged.match(/new URL\(retryHref, url.origin\)/g) ?? [];
+    const loginRedirects = exchanged.match(/redirect\(retryHref\)/g) ?? [];
     expect(loginRedirects).toHaveLength(1);
   });
 });

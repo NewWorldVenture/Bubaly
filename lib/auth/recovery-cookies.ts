@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import type { NextResponse } from 'next/server';
 import { durableCookieOptions, isSecureOrigin } from '@/lib/auth/session';
 import { RecoveryError } from '@/lib/auth/recovery-server';
+import type { Database } from '@/lib/database.types';
 
 const MAX_COOKIE_LENGTH = 65_536;
 const MAX_CHUNKS = 24;
@@ -69,20 +70,27 @@ export async function readRecoveryCookieToken(): Promise<string> {
 }
 
 /** Stage the exchange's cookies until the exact returned token is verified. */
-export async function createRecoveryCookieExchange() {
+export async function createPkceCookieExchange() {
   const { origin, key } = configuration();
   const anon = cleanEnv(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
   if (!anon) throw new RecoveryError('authRecovery.setupRequired');
   const incoming = (await cookies()).getAll().map(({ name, value }) => ({ name, value }));
+  // Bootstrap without ambient session values, but retain their names for
+  // cleanup. Subsequent SDK writes must update this private view: an exchanged
+  // session may itself renew before publication and change its chunk layout.
+  const staged = new Map(incoming.map(cookie => [cookie.name, sessionCookie(cookie.name, key) ? '' : cookie.value]));
   const pending = new Map<string, CookieChange>();
-  const client = createServerClient(origin, anon, {
+  const client = createServerClient<Database>(origin, anon, {
     cookieOptions: durableCookieOptions(isSecureOrigin(process.env.NEXT_PUBLIC_SITE_URL)),
     cookies: {
-      // Retain names for the SDK's old-chunk cleanup and retain the verifier.
-      // Hide ambient session values from constructor INITIAL_SESSION reads,
-      // which can otherwise refresh even with automatic refresh disabled.
-      getAll: () => incoming.map(cookie => sessionCookie(cookie.name, key) ? { ...cookie, value: '' } : cookie),
-      setAll: changes => { for (const change of changes) pending.set(change.name, change); },
+      getAll: () => [...staged].map(([name, value]) => ({ name, value })),
+      setAll: changes => {
+        for (const change of changes) {
+          pending.set(change.name, change);
+          if (change.options.maxAge === 0) staged.delete(change.name);
+          else staged.set(change.name, change.value);
+        }
+      },
     },
   });
   return {
@@ -93,3 +101,5 @@ export async function createRecoveryCookieExchange() {
     dispose: () => client.auth.dispose(),
   };
 }
+
+export const createRecoveryCookieExchange = createPkceCookieExchange;

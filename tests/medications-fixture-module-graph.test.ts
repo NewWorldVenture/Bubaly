@@ -1,4 +1,4 @@
-// The medications E2E fixtures load the real module graph inside the page, from
+// These controlled E2E fixtures load the real module graph inside the page, from
 // a hand-written list of files. Their loader throws `Unexpected fixture module`
 // on anything missing, and because that happens while the harness is still
 // building its probe, the whole spec file fails with `mount is not a function` —
@@ -17,7 +17,7 @@ const SPECS = [
   'tests/e2e/medications-ledger.spec.ts', 'tests/e2e/medications-readback-review.spec.ts',
   'tests/e2e/rewards-ledger.spec.ts', 'tests/e2e/rewards-readback-review.spec.ts',
   'tests/e2e/hydration-ledger.spec.ts', 'tests/e2e/quick-capture-task.spec.ts',
-  'tests/e2e/signout-form-boundaries.spec.ts',
+  'tests/e2e/signout-form-boundaries.spec.ts', 'tests/e2e/finance-read-states.spec.ts',
 ];
 
 /** The repo's `@/` alias and relative specifiers, to a real file or null. */

@@ -55,6 +55,7 @@ test.describe('Guardian autonomous SMS recovery against disposable PostgreSQL an
     const admin = client(origin, serviceKey), guardian = withGuardianTables(admin);
     const sid = `SM${randomUUID().replaceAll('-', '')}`, untrustedSid = `SM${randomUUID().replaceAll('-', '')}`;
     let account: OwnedAccount | undefined;
+    let manager: OwnedAccount | undefined;
     try {
       account = await createOwnedAccount(origin, serviceKey);
       const familyId = account.familyId;
@@ -85,8 +86,17 @@ test.describe('Guardian autonomous SMS recovery against disposable PostgreSQL an
       const notifications = () => admin.from('notifications').select('*').eq('family_id', familyId).eq('related_id', commId).order('id');
 
       // A child may file an ordinary communication; that never authorizes recovery.
-      const childRole = await admin.from('family_members').update({ role: 'child' }).eq('id', memberId).eq('family_id', familyId).select('id');
-      expect(!childRole.error && childRole.data?.length === 1).toBe(true);
+      const lastManager = await admin.from('family_members').update({ role: 'child' }).eq('id', memberId).eq('family_id', familyId).select('id');
+      expect(lastManager.error?.code, 'The installed last-manager guard must remain active').toBe('23514');
+      manager = await createOwnedAccount(origin, serviceKey);
+      const coParent = await admin.from('family_members').insert({
+        family_id: familyId, user_id: manager.userId, role: 'parent', display_name: 'Owned fixture co-parent', is_active: true,
+      }).select('user_id,role,is_active');
+      expect(coParent.error).toBeNull();
+      expect(coParent.data).toEqual([{ user_id: manager.userId, role: 'parent', is_active: true }]);
+      const childRole = await admin.from('family_members').update({ role: 'child' }).eq('id', memberId).eq('family_id', familyId).select('user_id,role,is_active');
+      expect(childRole.error).toBeNull();
+      expect(childRole.data).toEqual([{ user_id: account.userId, role: 'child', is_active: true }]);
       const child = client(origin, anonKey);
       const login = await child.auth.signInWithPassword({ email: account.email, password: account.password });
       expect(!login.error && login.data.user?.id === account.userId, 'Sign in only the owned synthetic child account').toBe(true);
@@ -145,6 +155,11 @@ test.describe('Guardian autonomous SMS recovery against disposable PostgreSQL an
           .then(result => { if (result.error) throw new Error('Owned callback cleanup failed'); }),
         ...(account ? [account.dispose()] : []),
       ]);
+      // A target family must disappear before its last manager's owned user.
+      if (manager) {
+        const managerCleanup = await Promise.allSettled([manager.dispose()]);
+        cleanup.push(...managerCleanup);
+      }
       if (cleanup.some(result => result.status === 'rejected')) throw new Error('Guardian recovery E2E could not remove its owned fixtures.');
     }
   });

@@ -2,6 +2,12 @@
 
 2026-09-19. **Design only; unimplemented and unverified.** This document prepares the next bounded cycle for the existing AUTH-001 record in [the permanent audit](../../finalaudit.md). It changes no application source, closes no record, and makes no hosted-authentication claim. The current integration's application source remains frozen.
 
+Follow-up: [the refresh-preservation cycle](auth-pkce-refresh-preservation-cycle.md)
+now implements and tests the bounded ordinary-refresh and middleware portions.
+The attempt-owned records and guarded callback adoption proposed below remain
+unimplemented. The original design and motivating failures are retained here as
+historical context; current evidence is in the follow-up cycle.
+
 ## Executed evidence motivating the design
 
 The [pending-signup/logout cycle](auth-pending-signup-logout-cycle.md#remaining-boundaries) records two separate executed reproductions using installed SDKs and synthetic intercepted responses:

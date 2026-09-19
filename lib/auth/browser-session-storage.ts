@@ -1,6 +1,6 @@
 import { isChunkLike, parseCookieHeader, serializeCookieHeader, stringFromBase64URL, type CookieOptions } from '@supabase/ssr';
 import { AuthRetryableFetchError } from '@supabase/supabase-js';
-import { durableCookieOptions, isSecureOrigin } from './session';
+import { durableCookieOptions, isSecureOrigin, preservePendingPkceVerifier } from './session';
 import { createSessionRefreshFetch } from '@/shared/auth/refresh-fetch';
 
 type Cookie = { name: string; value: string };
@@ -157,6 +157,7 @@ export function createBrowserSessionStorage(url: string) {
     cookies: {
       getAll: read,
       setAll: (cookies: CookieWrite[]) => {
+        cookies = preservePendingPkceVerifier(cookies, url);
         const writes = cookies.filter(cookie => cookie.options.maxAge !== 0);
         if (!writes.length && cookies.some(cookie => isOwned(cookie.name, key)) && deletionGeneration !== null
           && generation(read(), key) !== deletionGeneration) throw interrupted();

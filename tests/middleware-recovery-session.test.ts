@@ -24,11 +24,15 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
-describe('recovery requests do not publish ambient session renewal cookies', () => {
+describe('auth completion requests do not publish ambient session renewal cookies', () => {
   it.each([
     ['/auth/recovery', 'GET'], ['/auth/recovery', 'POST'],
     ['/auth/recovery?handoff=synthetic', 'POST'],
     ['/auth/callback?next=/auth/recovery&code=synthetic', 'GET'],
+    ['/auth/callback?next=/home&code=synthetic', 'GET'],
+    ['/auth/callback?code=synthetic', 'GET'],
+    ['/auth/callback?error=access_denied', 'GET'],
+    ['/auth/callback', 'GET'],
     ['/login?reset=1', 'GET'], ['/login?reset=1', 'POST'],
   ])('%s %s leaves the request and response cookie state untouched', async (path, method) => {
     const req = request(path, method);
@@ -40,7 +44,7 @@ describe('recovery requests do not publish ambient session renewal cookies', () 
     expect(response.cookies.getAll()).toEqual([]);
   });
 
-  it.each(['/home', '/login', '/login?reset=0', '/auth/recovery-extra', '/auth/callback?next=/home&code=synthetic'])('retains normal session refresh for %s', async path => {
+  it.each(['/home', '/login', '/login?reset=0', '/auth/recovery-extra', '/auth/callback-extra'])('retains normal session refresh for %s', async path => {
     const req = request(path);
     const before = req.cookies.get(cookieName)?.value;
     const response = await middleware(req);

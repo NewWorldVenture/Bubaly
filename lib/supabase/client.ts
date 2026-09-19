@@ -45,11 +45,12 @@ function build(): BrowserClient {
         // Cookie generation checks still protect changes made in other tabs.
         ...(storage ? { lock: processLock } : {}),
         // Stay signed in until sign-out: keep the session across restarts,
-        // refresh the access token in the background, and finish the PKCE
-        // OAuth / magic-link handoff when the browser lands back on the app.
+        // refresh the access token in the background. Explicit callback
+        // handlers own code exchanges; initialization must not consume a
+        // pending verifier or adopt a session outside that completion path.
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: true,
+        detectSessionInUrl: false,
         flowType: 'pkce',
       },
     },

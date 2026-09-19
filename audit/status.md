@@ -2,17 +2,32 @@
 
 ## Pull request 510 integration — 2026-09-19
 
-CURRENT: Integrating main `57f22c0b` into the existing production-audit branch.
-WORKSPACE: Separate `bubaly-final-production-audit-20260912` worktree; changes are
-published through the existing draft pull request. The main checkout is untouched.
-SCOPE: Preserve both audit histories, reconcile overlapping fixes, verify the
-weekly planner, retain signed SMS before optional reply work, and repair explicit
-logout ownership and reward-action readback. Four parallel workers have disjoint
-auth, messaging, audit-record and integration assignments.
-NEXT: Finish checks on the combined source and obtain current hosted CI evidence.
-OPEN: Browser/server PKCE refresh still consumes a pending handoff; provider
-configuration and production database rollout remain separate release gates.
-EVIDENCE: `docs/final-audit/main-integration-cycle-20260919.md` and `finalaudit.md`.
+CURRENT: Follow-up local gates complete; new hosted acceptance required.
+WORKSPACE: Separate `bubaly-final-production-audit-20260912` worktree, existing
+PR 510. Upstream main remains `57f22c0b`; the main checkout is untouched.
+SCOPE: Preserve pending PKCE handoffs across browser/server/middleware refresh,
+retire held recovery after explicit logout, stage isolated callback cookies with
+correct chunk cleanup, and harden signed voicemail intake. Correct the six
+hosted fixture failures without weakening their authorization assertions.
+EVIDENCE: Frozen application tree `543f3a1b58612fc17704020f4397bf68828ffaf1`
+passes full UTC and DST runs (16,417 tests / 1,298 files each), a 251-page build,
+localization and query audits. Final strict types pass; lint has three existing
+warnings. The sole later application-source delta is a voicemail typing fix
+whose emitted runtime is byte-identical; focused 62/62 checks pass. Four later
+fixture/guard changes have focused finance 14/14 and graph-guard 8/8 evidence.
+Final discovery lists 1,086 tests across 47 files.
+HOSTED: Baseline `43df0881` passed Web, Database, Mobile and Finance checks,
+but browser CI failed (1,072 passed / six fixture failures). The corrected
+fixtures and new application changes require their own hosted run.
+NEXT: Obtain exact-source hosted CI evidence for this follow-up through PR 510.
+OPEN: Delayed callback responses still lack guarded browser adoption; ordinary
+failed-link fallback can still publish ambient refresh. Provider configuration,
+production database rollout and complete feature verification remain open.
+REFERENCES: `docs/final-audit/auth-pkce-refresh-preservation-cycle.md`,
+`docs/final-audit/guardian-voicemail-intake-cycle.md`,
+`docs/final-audit/main-integration-cycle-20260919.md` and `finalaudit.md`.
+RELEASE: NO. Permanent audit IDs and status counts are unchanged.
+LAST-UPDATE: 2026-09-19T19:11:57.296Z
 
 Four workers audit this repository in parallel. Each worker maintains ONLY its
 own section below. Read this file before touching any source file: if another

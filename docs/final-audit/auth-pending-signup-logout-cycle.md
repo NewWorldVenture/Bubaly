@@ -31,6 +31,12 @@ Final browser evidence is `Temp/bubaly-auth-verifier-final-20260919.log`; full U
 
 ## Remaining boundaries
 
+These were the remaining boundaries at this cycle's frozen source. The subsequent
+[refresh-preservation cycle](auth-pkce-refresh-preservation-cycle.md) repairs and
+tests ordinary browser/server/middleware verifier loss. Delayed callback ownership
+and hosted authentication remain open; the reproductions below remain historical
+evidence for the defect that motivated that repair.
+
 Ordinary successful singleton refresh still consumes a pending signup verifier through the installed SDK's `_saveSession`. The existing known-limitation test reproduces this separately; the current repair does not claim to fix it. A safe continuation must distinguish refresh cleanup from explicit logout and matched code-exchange consumption without using a sticky last-request flag or restoring retired verifier bytes. Hosted confirmation delivery, cross-device recovery, project session settings and the final full regression remain open.
 
 The same issue was independently executed with the installed SSR client: one synthetic successful refresh retained user A but emitted both a session-cookie write and a deletion of the pending verifier cookie. `Temp/bubaly-ssr-pkce-refresh-probe-20260919.log` records `hadVerifier: true`, `hasVerifierAfter: false`, `userRetained: true` and the exact cookie-name-only writes. No provider or server process ran. Middleware and generic server clients use this SDK cookie contract, so a browser-only deletion filter would not complete the repair.

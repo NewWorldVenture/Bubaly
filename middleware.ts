@@ -6,7 +6,7 @@ import { safeInternalRedirect } from '@/lib/auth/redirect';
 import { PROTECTED, PUBLIC, matchesPrefix } from '@/lib/auth/route-access';
 import {
   durableCookieOptions, hasAuthCookies, isRetryableAuthError, isSecureRequest,
-  shouldForwardAuthCode,
+  shouldForwardAuthCode, preservePendingPkceVerifier,
 } from '@/lib/auth/session';
 
 
@@ -82,7 +82,7 @@ export async function middleware(req: NextRequest) {
   // Recovery verifies the exact candidate token in its own action/callback.
   // Ambient refresh here would attach session A cookies to a delayed response
   // and could overwrite a newer browser session B before UI guards can act.
-  if (recoveryPage || (path === '/auth/callback' && req.nextUrl.searchParams.get('next') === '/auth/recovery')) {
+  if (recoveryPage || path === '/auth/callback') {
     return NextResponse.next({ request: req });
   }
 
@@ -141,6 +141,7 @@ export async function middleware(req: NextRequest) {
       cookies: {
         getAll: () => req.cookies.getAll(),
         setAll: (toSet: { name: string; value: string; options: CookieOptions }[], headers: Record<string, string> = {}) => {
+          toSet = preservePendingPkceVerifier(toSet, supabaseUrl);
           toSet.forEach(({ name, value }) => req.cookies.set(name, value));
           res = NextResponse.next({ request: req });
           toSet.forEach(({ name, value, options }) => res.cookies.set(name, value, options));

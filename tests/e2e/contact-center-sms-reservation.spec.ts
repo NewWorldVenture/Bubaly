@@ -41,6 +41,7 @@ test.describe('Contact Center reply reservation against disposable PostgreSQL an
     if (!serviceKey || !anonKey) throw new Error('SMS reservation E2E needs disposable backend configuration.');
     const admin = client(origin, serviceKey);
     let account: OwnedAccount | undefined;
+    let manager: OwnedAccount | undefined;
     try {
       account = await createOwnedAccount(origin, serviceKey);
       const familyId = account.familyId;
@@ -83,9 +84,21 @@ test.describe('Contact Center reply reservation against disposable PostgreSQL an
       expect(finalReceipts.data).toHaveLength(2);
       for (const receipt of finalReceipts.data!) expect(receipt.outputs).toMatchObject({ phase: 'emission_reserved' });
 
-      const role = await admin.from('family_members').update({ role: 'child' })
+      // The real schema forbids demoting the last manager, even through the
+      // service client. Retain that guard while creating a genuine child actor.
+      const lastManager = await admin.from('family_members').update({ role: 'child' })
         .eq('family_id', familyId).eq('user_id', account.userId).select('id');
-      expect(!role.error && role.data?.length === 1).toBe(true);
+      expect(lastManager.error?.code, 'A disposable family must retain an active manager').toBe('23514');
+      manager = await createOwnedAccount(origin, serviceKey);
+      const coParent = await admin.from('family_members').insert({
+        family_id: familyId, user_id: manager.userId, role: 'parent', display_name: 'Owned fixture co-parent', is_active: true,
+      }).select('user_id,role,is_active');
+      expect(coParent.error).toBeNull();
+      expect(coParent.data).toEqual([{ user_id: manager.userId, role: 'parent', is_active: true }]);
+      const role = await admin.from('family_members').update({ role: 'child' })
+        .eq('family_id', familyId).eq('user_id', account.userId).select('user_id,role,is_active');
+      expect(role.error).toBeNull();
+      expect(role.data).toEqual([{ user_id: account.userId, role: 'child', is_active: true }]);
       const child = client(origin, anonKey);
       const signedIn = await child.auth.signInWithPassword({ email: account.email, password: account.password });
       expect(!signedIn.error && signedIn.data.user?.id === account.userId, 'Use only the owned synthetic child').toBe(true);
@@ -97,6 +110,10 @@ test.describe('Contact Center reply reservation against disposable PostgreSQL an
       });
       expect(forged.error?.code).toBe('42501');
       expect((await ledger()).data).toEqual(finalReceipts.data);
-    } finally { if (account) await account.dispose(); }
+    } finally {
+      // Delete the target family first, before deleting its last manager's user.
+      try { if (account) await account.dispose(); }
+      finally { if (manager) await manager.dispose(); }
+    }
   });
 });

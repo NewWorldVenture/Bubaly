@@ -22,6 +22,11 @@ vi.mock('@/lib/supabase/server', () => ({
   createServiceClient: () => ({}),
 }));
 vi.mock('@/lib/constants/super-admins', () => ({ isSuperAdminEmail: () => mock.allowlisted }));
+vi.mock('@/lib/auth/recovery-cookies', () => ({
+  createPkceCookieExchange: async () => ({
+    client: await (await import('@/lib/supabase/server')).createServer(), applyTo: vi.fn(), dispose: vi.fn(),
+  }),
+}));
 vi.mock('@/lib/marketing/identity', () => ({ stitchVisitorIdentity: mock.stitch }));
 vi.mock('@supabase/ssr', () => ({
   createServerClient: (_url: string, _key: string, options: {

@@ -84,7 +84,6 @@ describe('a notification that can wake a house goes through notify()', () => {
     // not a property — these specific three fired on every screened message.
     for (const file of [
       'app/api/guardian/inbound/whatsapp/route.ts',
-      'app/api/guardian/status/voicemail/route.ts',
     ]) {
       const src = readFileSync(file, 'utf8');
       expect(src, `${file} must not write notifications directly`).not.toMatch(/from\('notifications'\)/);
@@ -101,6 +100,11 @@ describe('a notification that can wake a house goes through notify()', () => {
     expect(smsProcessor).not.toMatch(/from\('notifications'\)/);
     expect(smsProcessor).toContain('notifyGuardianSms(scope, {');
     expect(smsProcessor).toContain('guardianSmsScope(client, input.familyId');
+    const voicemailRoute = readFileSync('app/api/guardian/status/voicemail/route.ts', 'utf8');
+    expect(voicemailRoute).not.toMatch(/from\('notifications'\)/);
+    expect(voicemailRoute).toContain('notifyGuardianSms(scope, {');
+    expect(voicemailRoute).toContain('guardianSmsScope(supabase, typedComm.family_id');
+    expect(voicemailRoute).toContain('beforeWrite: () => requireGuardianVoicemailLease(');
   });
 
   it('none of the converted three marks itself urgent', () => {

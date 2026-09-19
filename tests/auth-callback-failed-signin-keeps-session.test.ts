@@ -27,6 +27,11 @@ vi.mock('@/lib/supabase/server', () => ({
   createServiceClient: () => ({}),
 }));
 vi.mock('@/lib/marketing/identity', () => ({ stitchVisitorIdentity: async () => ({ decision: 'merge' }) }));
+vi.mock('@/lib/auth/recovery-cookies', () => ({
+  createPkceCookieExchange: async () => ({
+    client: await (await import('@/lib/supabase/server')).createServer(), applyTo: vi.fn(), dispose: vi.fn(),
+  }),
+}));
 
 const SESSION = 'sb-ltcxlbipiihclxwioyqj-auth-token';
 

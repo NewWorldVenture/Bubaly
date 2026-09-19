@@ -8,9 +8,11 @@ import { expect, test } from '@playwright/test';
 const react = fs.readFileSync(path.join(path.dirname(require.resolve('react/package.json')), 'umd/react.development.js'), 'utf8');
 const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-dom/package.json')), 'umd/react-dom.development.js'), 'utf8');
 const sources = Object.fromEntries([
-  ...['budgets', 'bills', 'payments', 'savings'].map(name => `components/finance/${name}-view.tsx`),
+  'components/finance/budgets-view.tsx', 'components/finance/bills-view.tsx',
+  'components/finance/payments-view.tsx', 'components/finance/savings-view.tsx',
   'components/ui/states.tsx', 'components/ui/states-client.tsx', 'components/ui/button.tsx',
   'components/ui/input.tsx', 'components/app/page-header.tsx', 'lib/finance/hub.ts',
+  'lib/supabase/errors.ts', 'lib/schedule/zoned.ts',
 ].map(file => [`@/${file.replace(/\.tsx?$/, '')}`, ts.transpileModule(fs.readFileSync(file, 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.React },
 }).outputText]));

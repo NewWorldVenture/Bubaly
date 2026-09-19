@@ -3,7 +3,7 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { createBrowserClient, parseCookieHeader, serializeCookieHeader } from '@supabase/ssr';
+import { createBrowserClient, isChunkLike, parseCookieHeader, serializeCookieHeader } from '@supabase/ssr';
 import { Button } from '@/components/ui/button';
 import { Field, Input } from '@/components/ui/input';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -38,7 +38,12 @@ function persistGrant(scope: Scope, value?: string): boolean {
   return true;
 }
 function authCookies(): string {
-  return JSON.stringify(parseCookieHeader(document.cookie).filter(cookie => /^sb-.+-auth-token(?:-code-verifier)?(?:\.\d+)?$/.test(cookie.name))
+  const key = `sb-${new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!).hostname.split('.')[0]}-auth-token`;
+  // Logout remains a newer decision even when the browser refuses to clear
+  // the session bytes. Other projects cannot retire this recovery operation.
+  return JSON.stringify(parseCookieHeader(document.cookie).filter(cookie => isChunkLike(cookie.name, key)
+    || isChunkLike(cookie.name, `${key}-user`) || isChunkLike(cookie.name, `${key}-code-verifier`)
+    || cookie.name === `${key}-logout-generation`)
     .sort((a, b) => a.name.localeCompare(b.name)));
 }
 function validGrant(value: unknown): value is string { return typeof value === 'string' && value.length <= 2048 && GRANT.test(value); }

@@ -28,17 +28,20 @@ describe('Guardian callback replay and input boundaries', () => {
 
   it.each(callbackRoutes)('claims %s before downstream side effects', (relativePath) => {
     const source = readFileSync(resolve(root, relativePath), 'utf8');
-    expect(source).toContain('claimGuardianCallback');
+    const voicemail = relativePath.endsWith('/status/voicemail/route.ts');
+    const claim = voicemail ? 'claimGuardianVoicemail' : 'claimGuardianCallback';
+    expect(source).toContain(claim);
     expect(source).toContain('readBoundedRequestFormData');
-    expect(source).toContain('markGuardianCallbackProcessed');
+    expect(source).toContain(voicemail ? 'finishGuardianVoicemail' : 'markGuardianCallbackProcessed');
 
-    const claimIndex = source.indexOf('await claimGuardianCallback');
+    const claimIndex = source.indexOf(`await ${claim}`);
     expect(claimIndex).toBeGreaterThanOrEqual(0);
     const sideEffectIndexes = [
       source.indexOf('runDecisionPipeline('),
       source.indexOf('detectScamWithAI('),
       source.indexOf('screeningTurn({'),
       source.indexOf("from('notifications')"),
+      source.indexOf('notifyGuardianSms('),
     ].filter((index) => index >= 0);
     expect(sideEffectIndexes.every((index) => claimIndex < index)).toBe(true);
   });

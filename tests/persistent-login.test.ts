@@ -276,7 +276,7 @@ describe('the browser holds exactly one auth client', () => {
   });
 
   it('states the persistence options rather than inheriting them', () => {
-    for (const option of ['persistSession: true', 'autoRefreshToken: true', 'detectSessionInUrl: true']) {
+    for (const option of ['persistSession: true', 'autoRefreshToken: true', 'detectSessionInUrl: false']) {
       expect(client, option).toContain(option);
     }
     expect(client).toContain('durableCookieOptions');
