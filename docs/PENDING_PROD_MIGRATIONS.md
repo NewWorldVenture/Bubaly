@@ -1711,3 +1711,24 @@ because their value is zero until they are applied:
   the four paths that must keep working: the member's own upsert,
   `setLocationSharing(false)`, `deletePlace()`'s `ON DELETE SET NULL` against a
   table with no UPDATE policy, and the family-delete cascade. Audit C1-S8-02.
+
+- **`0326_a_health_record_is_written_by_a_parent.sql`** — restrictive manager
+  guards on `immunizations` and `health_visits`, the two health tables `0309`
+  did not reach. `0309` gated the medication tables, named the class ("a class
+  fixed where somebody remembered and left open where nobody did") and listed
+  the neighbours it had checked — `medical_profiles`, `health_providers`,
+  `insurance_policies` — but not these two, which kept `0068`/`0069`'s
+  `FOR ALL … is_family_member`. They render on `/dashboard/medical` directly
+  beneath `MedicalRecordsModule`, so one page carried two boundaries; the
+  free-text `medical_profiles.immunizations` blob was manager-only while the
+  structured ledger `0069` wrote to replace it was not. Measured as a signed-in
+  child: rewrote a sibling's mental-health visit `outcome`, deleted that visit,
+  back-dated a sibling's MMR and cleared `next_due_date`, deleted the
+  vaccination record. Neither module carried a role check either, so this was
+  not even a hidden button — the fix ships the UI half
+  (`canEdit = isManager(role)`) with the migration.
+  Reading stays family-wide (M23 owns per-member read scoping) and
+  `medication_doses` stays open exactly as `0309` left it; the probe asserts
+  both as positive controls, plus `0309`'s own boundary and a manager's full
+  create/edit/delete. `docs/audit/health-record-boundary-check.sql`.
+  Audit C1-S8-03.

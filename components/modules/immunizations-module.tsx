@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { Syringe, Plus, Pencil, Trash2, CalendarClock } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
+import { isManager } from '@/lib/constants/roles';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -29,7 +30,11 @@ const STATUS_STYLE: Record<string, string> = {
 
 export function ImmunizationsModule({ title = 'Immunizations' }: { title?: string }) {
   const t = useTranslations();
-  const { familyId, userId, members } = useApp();
+  const { familyId, userId, members, role } = useApp();
+  // 0326 makes the database refuse a non-manager write on this table. The
+  // controls follow it, the way medications-module.tsx already does — a button
+  // that renders and then fails is worse than one that was never offered.
+  const canEdit = isManager(role);
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
@@ -95,7 +100,7 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
               {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
             </select>
           )}
-          <Button size="sm" onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Add</Button>
+          {canEdit && <Button size="sm" onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> Add</Button>}
         </div>
       </div>
 
@@ -137,10 +142,12 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
                     {(s.lot_number || s.notes) && <p className="mt-1 text-sm text-muted">{[s.lot_number ? `Lot ${s.lot_number}` : '', s.notes].filter(Boolean).join(' · ')}</p>}
                   </div>
                   {who && <Avatar name={who.display_name} color={who.color} size={28} />}
-                  <div className="flex shrink-0 gap-1">
-                    <button onClick={() => edit(s)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-4 w-4" /></button>
-                    <button onClick={() => remove(s.id)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Trash2 className="h-4 w-4" /></button>
-                  </div>
+                  {canEdit && (
+                    <div className="flex shrink-0 gap-1">
+                      <button onClick={() => edit(s)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-4 w-4" /></button>
+                      <button onClick={() => remove(s.id)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Trash2 className="h-4 w-4" /></button>
+                    </div>
+                  )}
                 </div>
               </li>
             );

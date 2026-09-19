@@ -564,3 +564,40 @@ PROBES: 46/46. nextVersion ratcheted to 0326.
 NEXT (goal order): medical-records / medications / immunizations / health-visits,
   then trust-sharing-section + trust-activity-tab, paperwork-module, voice-module.
 LAST-UPDATE: 2026-09-19
+
+## Claude-1 — Session 8, Pass V (cont.): the health hub
+FOUND: `C1-S8-03` [HIGH][SECURITY/RLS] — `immunizations` and `health_visits`
+  still carried 0068/0069's `FOR ALL … is_family_member`. 0309 gated the
+  medication tables, NAMED this exact class in its header, and listed the
+  neighbours it had checked (medical_profiles, health_providers,
+  insurance_policies) — these two are not on that list. They render on
+  /dashboard/medical directly under MedicalRecordsModule: one page, three
+  panels, two boundaries. Sharpest version: `medical_profiles.immunizations`
+  (free text) is manager-only while the STRUCTURED ledger 0069 wrote to replace
+  it was not.
+  Measured as a signed-in child on a replayed schema (339 migrations, 0 failed):
+  rewrote a SIBLING's mental-health visit `outcome` (0068: "diagnosis / what
+  happened / notes"), deleted that visit, back-dated a sibling's MMR and cleared
+  next_due_date, deleted the vaccination record.
+  Neither module carried ANY role check — unlike medications-module's
+  `canEdit = isManager(role)` — so this was not even a hidden button, and there
+  is no server action in the path: these modules write PostgREST with the
+  viewer's own JWT, so RLS was the whole authorization model.
+  FIXED both halves: `0326_a_health_record_is_written_by_a_parent.sql`
+  (restrictive guards, 0254's mechanism, 0309's shape) AND the two modules' role
+  gates. Reading and `medication_doses` deliberately left open and asserted as
+  positive controls; the probe also re-asserts 0309's boundary so a regression
+  there can't read as this migration working.
+  GUARD `tests/a-manager-gated-table-is-manager-gated-on-screen.test.ts` asserts
+  the PAIRING, not either half: it derives the manager-gated tables from the
+  migrations (7 today) and requires every 'use client' browser-writer of one to
+  declare isManager. Proved red 3x, incl. a brand-new ungated writer.
+  ITS OWN BLIND SPOT, recorded: the first draft used `git ls-files` and reported
+  the two tables as ungated because 0326 was written but not yet staged. Now
+  walks from disk. A scanner whose input depends on the index answers a
+  different question from the one asked of it.
+SUITE: 1,248 files / 14,058 tests, 0 failures. PROBES: 47/47.
+  nextVersion ratcheted to 0327.
+NEXT (goal order): trust-sharing-section + trust-activity-tab (the permission
+  surface itself), then paperwork-module, then voice-module.
+LAST-UPDATE: 2026-09-19

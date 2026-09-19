@@ -7751,3 +7751,111 @@ state, where the same screen asserts both. Either the toggle's copy should say
 what it does ("stop sharing my live location"), or history should follow the
 flag. `0325` deliberately does not decide this — it only ensures that whoever
 does decide, the record cannot be quietly rewritten by its subject first.
+
+
+## C1-S8-03 [HIGH][SECURITY/RLS] — 0309 named the class, listed its neighbours, and stopped two tables short
+
+**Files:** `supabase/migrations/0069_immunizations.sql:32-35` ·
+`supabase/migrations/0068_health_visits.sql:42-45` ·
+`components/modules/immunizations-module.tsx` ·
+`components/modules/health-visits-module.tsx`
+**Status:** FIXED by `0326_a_health_record_is_written_by_a_parent.sql` +
+the two modules' role gates (**migration not yet applied to production**) ·
+`docs/audit/health-record-boundary-check.sql` ·
+`tests/a-manager-gated-table-is-manager-gated-on-screen.test.ts`
+
+### Problem
+
+`0309` gated `medications` and `medication_schedules` behind restrictive manager
+guards, and its header names this audit's recurring shape exactly:
+
+> This is the shape this series keeps finding — a class fixed where somebody
+> remembered and left open where nobody did.
+
+It then listed the neighbours it had checked and found already enforced:
+`medical_profiles`, `health_providers`, `insurance_policies`.
+
+`immunizations` and `health_visits` are not on that list. Both still carried
+`0068`/`0069`'s `FOR ALL TO authenticated USING (is_family_member(family_id))`.
+
+They are not a far corner of the product. `/dashboard/medical` renders all three
+modules one under the other, so **one page carries three panels and two
+different boundaries** — and the sharpest version of that is inside a single
+subject: the free-text `medical_profiles.immunizations` blob is manager-only,
+while the structured `immunizations` ledger `0069` wrote **to replace it** was
+not. `lib/ai/context/policy.ts` names both tables as sensitive: *"vaccination
+records"* (line 61), *"visit notes"* (line 57).
+
+And unlike medications, this was never even a hidden button.
+`medications-module.tsx` declares `canEdit = isManager(role)`; neither
+`immunizations-module.tsx` nor `health-visits-module.tsx` carried **any** role
+check, so the Edit and Delete controls rendered for a child and worked. There is
+no server action in this path — these modules write PostgREST directly with the
+viewer's own JWT — so RLS was the whole of the authorization model.
+
+### Measured, as a signed-in child, on a replayed schema (339 migrations, 0 failed)
+
+```
+NOTICE:  child rewrote a SIBLING's mental-health visit outcome
+NOTICE:  child deleted a SIBLING's visit record
+NOTICE:  child back-dated a SIBLING's vaccination and cleared the next-due
+NOTICE:  child deleted a SIBLING's vaccination record
+```
+
+`outcome` is the column `0068` documents as *"diagnosis / what happened /
+notes"*, on a table whose `kind` enum includes `mental_health` and `therapy`.
+`next_due_date` is what `dueStatus()` turns into the overdue badge, on the ledger
+`0069` wrote for *"school/camp/travel forms"*.
+
+### Fix, in the two halves that kept drifting apart
+
+1. **`0326`** adds restrictive manager guards to both tables, using `0254`'s
+   mechanism and `0309`'s exact shape — restrictive policies AND with the union
+   of the permissive ones, so no permissive policy, present or added later
+   whatever it is named, can grant past them.
+2. **Both modules declare `canEdit = isManager(role)`** and hide Add, Edit and
+   Delete behind it, matching `medications-module.tsx`. Without this half a
+   child would tap a button and receive a raw PostgREST refusal — the
+   "permission denied for table …" class `C2` already filed.
+
+Deliberately left open, and asserted as positive controls so a later change
+cannot take them away quietly: **reading** (every family member sees the family
+health hub — that is the product; per-member read scoping is M23 and a product
+decision), and **`medication_doses`**, the "I took it" tick, exactly as `0309`
+left it and for `0309`'s reason.
+
+The probe also re-asserts `0309`'s own boundary, so a regression there cannot be
+mistaken for this migration working, and checks that a parent can still create,
+edit and delete both record types.
+
+### The guard, which is about the pairing rather than either half
+
+`tests/a-manager-gated-table-is-manager-gated-on-screen.test.ts` derives the
+manager-gated tables from the migrations themselves (any
+`*_manager_*_guard` restrictive policy — 7 tables today) and requires that every
+`'use client'` component writing one through the browser declares `isManager`.
+It generalises past the two tables `0326` fixed: the next module to write a
+guarded table is caught the day it is added.
+
+Proved red three times:
+
+| mutation | guard |
+|---|---|
+| `canEdit = isManager(role)` → `true` in `immunizations-module.tsx` (import left in place) | **RED** — names the file and table |
+| the same in `health-visits-module.tsx` | **RED** |
+| a new client component writing `immunizations` with no role check | **RED** |
+
+The import being left in place matters: the check is for a **call**, not a
+mention, so it cannot be satisfied the way `C4-S5-01`'s `toContain('helperName')`
+was satisfied by an import line.
+
+### One thing the guard got wrong first, recorded because it is the guard's own blind spot
+
+The first draft enumerated files with `git ls-files`, and reported
+`immunizations` and `health_visits` as **not manager-gated** — because `0326`
+had just been written and was not yet staged. A scanner whose input depends on
+the git index answers a different question from the one asked of it. It now
+walks the directory from disk.
+
+Full suite after the change: **1,248 files / 14,058 tests, 0 failures**;
+probes **47/47**.
