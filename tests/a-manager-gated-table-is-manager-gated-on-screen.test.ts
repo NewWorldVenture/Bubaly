@@ -54,7 +54,7 @@ const ROOT = path.resolve(__dirname, '..');
  * write their own row, so a UI role gate would be wrong.
  */
 const MANAGER_ONLY_WRITES = [
-  'allowance_rules', 'assistant_links', 'bills', 'budgets', 'child_logins',
+  'allowance_rules', 'assistant_links', 'behavior_logs', 'bills', 'budgets', 'child_logins',
   'child_wallets', 'currency_transactions', 'documents', 'economy_rewards',
   'family_ai_settings', 'family_automation_rules', 'family_credentials',
   'family_currencies', 'family_facts', 'family_insurance_policies',
@@ -146,7 +146,7 @@ describe('a manager-gated table is manager-gated on screen', () => {
     // reaches the pin is caught here rather than silently unscanned.
     const missing = restrictivelyGuarded().filter((t) => !MANAGER_ONLY_WRITES.includes(t as never));
     expect(missing, 'a restrictive manager guard exists for a table the pin does not list').toEqual([]);
-    expect(MANAGER_ONLY_WRITES.length).toBeGreaterThanOrEqual(42);
+    expect(MANAGER_ONLY_WRITES.length).toBeGreaterThanOrEqual(43);
   });
 
   it('finds the browser writers it is about', () => {

@@ -8391,3 +8391,137 @@ Recorded because both are the shape this audit keeps hitting:
 
 Replay: **341 migrations, 0 failed.** Probes: **49/49**.
 Suite: **1,251 files / 14,081 tests, 0 failures.**
+
+
+---
+
+# Pass AA — two tables whose schemas already named the author
+
+Working the census's first group: records that are **about** one person and
+writable by anyone.
+
+## C1-S8-09 [HIGH][SECURITY/RLS] — the child can delete the concern logged about them, and award themselves points
+
+**Files:** `supabase/migrations/00730_behavior_tracking.sql:16,22,35-38` ·
+`supabase/migrations/0032_care_log.sql:16-24,40-43` ·
+`components/modules/behavior-module.tsx` · `components/modules/care-module.tsx`
+**Status:** FIXED by `0329_a_record_about_you_is_not_yours_to_rewrite.sql` + both
+modules' controls (**migration not yet applied to production**) ·
+`docs/audit/observation-log-boundary-check.sql`
+
+Both tables separate the subject from the author **in their own column
+comments**, and neither policy knew about either. They needed *different* fixes,
+and the reason they differ is written into each table's header.
+
+### `behavior_logs` — a parenting tool
+
+```sql
+member_id  uuid REFERENCES public.family_members(id) …,  -- the child
+logged_by  uuid REFERENCES auth.users(id) …
+```
+
+`0073`'s header: *"per-child behavior observations … Powers parenting insights:
+balance score, trends, streaks, and AI tips."* It carries `kind = 'concern'`
+notes and a signed `points` column. Its only policy was
+`FOR ALL … is_family_member`, and `behavior-module.tsx` carried no role check —
+so not even a hidden button.
+
+```
+NOTICE:  child erased a "concern" logged about them
+NOTICE:  child awarded themselves 99 behaviour points
+```
+
+The `points` column is an invitation to precisely the second one. Manager-gated
+writes, by `0254`'s restrictive mechanism and `0309`'s shape — the same call
+`0309` made for prescriptions and `0326` for the vaccination ledger: the record
+is an adult's observation and the person observed is not its author.
+
+### `care_log` — a shared family log, and **not** the manager class
+
+Treating it the same way would have broken the feature. `0032`'s header says the
+log exists *"so the whole family can see who last checked in and how they're
+doing"* — family-wide reads **and** family-wide inserts are the stated intent. A
+sibling recording a visit to a grandparent is the point of the table.
+
+What is not intended is one member rewriting another's entry:
+
+```
+NOTICE:  child rewrote a SIBLING's care-log note
+NOTICE:  child reassigned a care-log entry to a different author
+```
+
+`logged_by` is documented as *"the family member who performed/recorded the
+care"*, and an entry whose author or subject can be changed afterwards records
+nothing.
+
+So `care_log` gets the `0322`/`0323` treatment — the one this series wrote for
+marketplace reviews, which is the same problem: **a thing written by somebody,
+editable by anybody.** INSERT stays open to every family member; UPDATE and
+DELETE belong to the author or to a manager for moderation; and `member_id` and
+`logged_by` are immutable through the shared `public.columns_are_immutable()`
+trigger — so **not even a parent may rewrite who recorded what**. The probe
+asserts that last one explicitly, because it was true before the fix:
+
+```
+NOTICE:  a parent reassigned the authorship of a care entry
+```
+
+The trigger rather than a `with check` mirror is `0321`'s lesson: when the
+predicate reads the column an attacker would change, mirroring it does not
+always close the hole.
+
+### The UI halves
+
+`behavior-module.tsx` gains `canEdit = isManager(role)`. `care-module.tsx` gains
+`mayEdit(e) = e.logged_by === selfMember?.id || isManager(role)` — the card
+already rendered *"by {memberName(e.logged_by)}"*, so the controls now agree
+with what the card says.
+
+### Deliberately left alone
+
+**Reads stay family-wide on both.** Whether a child should see the "concern"
+entries logged about them is a real question about a real family — some
+households would want that transparency and some would not — and it belongs to
+whoever owns the product. The probe asserts both logs stay readable, so changing
+that has to be deliberate.
+
+### The guard
+
+`docs/audit/observation-log-boundary-check.sql` holds all five refusals plus
+what must keep working: any member may still add a care entry, an author may
+still correct and delete their own, a parent may still write and edit a
+behaviour log, a manager may still moderate a care entry, and both logs stay
+readable.
+
+`tests/a-manager-gated-table-is-manager-gated-on-screen.test.ts` picks
+`behavior_logs` up automatically — its pinned list gained the table, and the
+test's own self-check (every restrictively-guarded table must appear in the pin)
+proved red when the entry was removed:
+
+| mutation | guard |
+|---|---|
+| remove `isManager` from `behavior-module.tsx` | **RED** — names file and table |
+| drop `behavior_logs` from the pin while its migration guard exists | **RED** |
+
+Replay: **342 migrations, 0 failed.** Probes: **50/50**.
+Suite: **1,251 files / 14,081 tests, 0 failures.**
+
+### What the census has left
+
+Of the 16 sensitive browser-written tables with no write boundary, **four are
+now closed**: `journal_entries` and `family_insurance_policies` (`0328`),
+`behavior_logs` and `care_log` (`0329`). The twelve that remain are below.
+
+(`location_events`, `member_locations`, `immunizations` and `health_visits`
+never appeared among the 16 — `0325` and `0326` had already closed them by the
+time the census ran, which is the census working rather than four more wins.)
+
+The remainder:
+
+| table | why it is still open |
+|---|---|
+| `driving_trips` | the teen's own score inputs; whether a driver may delete their own trip is a product decision |
+| `safety_check_ins` | self-reported, but deleting one erases a safety record — the `location_events` question again |
+| `tax_documents` | shared family admin; plausibly collaborative |
+| `weather_locations` | low stakes |
+| `health_metrics` `health_goals` `symptom_logs` `sleep_logs` `sleep_checkins` `nutrition_logs` `medication_doses` `voice_commands` | self-logging, family-wide **by design** — `0309` states that reasoning for `medication_doses` and it applies to the rest |

@@ -1771,3 +1771,23 @@ because their value is zero until they are applied:
   a member keeps full control of their OWN journal, that every member still
   reads the policies, that a parent keeps the pen on them, and that a parent
   still cannot read a child's journal. Audit C1-S8-07.
+
+- **`0329_a_record_about_you_is_not_yours_to_rewrite.sql`** — two tables whose
+  own column comments separate the subject from the author, and two DIFFERENT
+  fixes, because the reason they differ is in each table's header.
+  `behavior_logs` (`member_id … -- the child`, `logged_by`) is "per-child
+  behavior observations … Powers parenting insights" with `concern` notes and a
+  signed `points` column; measured as a child, it erased a concern logged about
+  them and inserted `points = 99` in their own favour. Manager-gated writes via
+  restrictive guards, `0254`'s mechanism and `0309`'s shape.
+  `care_log` is NOT the manager class and gating it that way would break the
+  feature — `0032` says the log exists "so the whole family can see who last
+  checked in", so family-wide reads and inserts are the intent. It gets the
+  `0322`/`0323` treatment instead: UPDATE and DELETE belong to the author or a
+  manager, and `member_id`/`logged_by` are immutable through the shared
+  `columns_are_immutable()` trigger, so not even a parent may rewrite who
+  recorded what (measured: one could).
+  READS stay family-wide on both — whether a child should see the concerns
+  logged about them is a product decision, and the probe asserts both logs stay
+  readable so changing it has to be deliberate. Both modules' controls ship with
+  the migration. `docs/audit/observation-log-boundary-check.sql`. Audit C1-S8-09.

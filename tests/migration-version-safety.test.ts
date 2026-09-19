@@ -44,7 +44,7 @@ describe('Supabase migration filename safety', () => {
     // restricts their social access. Stating it rather than deriving it is
     // the point: the number is how a new migration announces itself, so a file
     // that quietly reuses one, or a rebase that drops one, fails here.
-    expect(audit.nextVersion).toBe('0329');
+    expect(audit.nextVersion).toBe('0330');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

@@ -758,3 +758,41 @@ TWO INSTRUMENT ERRORS, caught before they became findings:
 REPLAY: 341 migrations, 0 failed. PROBES: 49/49.
 SUITE: 1,251 files / 14,081 tests, 0 failures. nextVersion ratcheted to 0329.
 LAST-UPDATE: 2026-09-19
+
+## Claude-1 — Session 8, Pass AA (the census's first group)
+FOUND: `C1-S8-09` [HIGH][SECURITY/RLS] — `behavior_logs` and `care_log`. Both
+  separate SUBJECT from AUTHOR in their own column comments; neither policy knew
+  about either. They needed DIFFERENT fixes and the reason is in each header.
+  `behavior_logs`: `member_id … -- the child` + `logged_by`, header says
+  "per-child behavior observations … Powers parenting insights", carries
+  `concern` notes and a signed `points` column, policy was FOR ALL
+  is_family_member, module had NO role check. Measured as a child: erased a
+  concern logged about them; awarded themselves 99 points (the `points` column
+  is an invitation to exactly that). → manager-gated writes, 0254's restrictive
+  mechanism, 0309's shape.
+  `care_log`: NOT the manager class — 0032 says the log exists "so the whole
+  family can see who last checked in", so family-wide reads AND inserts are the
+  stated intent; gating it that way would have broken the feature. The defect is
+  one member REWRITING another's entry. → 0322/0323's treatment (the marketplace
+  review shape): insert stays open, update/delete belong to the author or a
+  manager, and `member_id`/`logged_by` are immutable via the shared
+  columns_are_immutable() trigger — so NOT EVEN A PARENT may rewrite who
+  recorded what (measured: one could). Trigger not a `with check` mirror:
+  0321's lesson, since the predicate reads the column an attacker would change.
+  UI halves shipped: behavior canEdit=isManager; care mayEdit = author || manager
+  (the card already rendered "by <name>", so the controls now agree with it).
+LEFT ALONE, DELIBERATELY: reads stay family-wide on both. Whether a child should
+  SEE the concerns logged about them is a real question about a real family; the
+  probe asserts both stay readable so changing it has to be deliberate.
+GUARD: probe holds 5 refusals + 5 things that must still work. The manager-gated
+  -on-screen test picked behavior_logs up via its pin; proved red both ways
+  (module role check removed; table dropped from the pin while its migration
+  guard exists — the pin's self-check).
+CENSUS SCORE: 4 of the 16 now closed (journal_entries + family_insurance_policies
+  in 0328; behavior_logs + care_log in 0329). 12 remain, tabulated in
+  finalaudit.md with why each is still open. NOTE: location_events /
+  member_locations / immunizations / health_visits were never among the 16 —
+  0325/0326 had already closed them when the census ran.
+REPLAY: 342 migrations, 0 failed. PROBES: 50/50.
+SUITE: 1,251 files / 14,081 tests, 0 failures. nextVersion ratcheted to 0330.
+LAST-UPDATE: 2026-09-19
