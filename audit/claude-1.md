@@ -2008,3 +2008,41 @@ Fix:      tests/context-policy-holds-one-hop-out.test.ts resolves each slice's
           and the resolver pointed at a non-matching path (positive control).
 Status:   FIXED
 ```
+
+```
+[CLAUDE-1][MEDIUM][SECURITY] three pure helpers were public endpoints; nothing swept for the rest
+File:     app/(app)/dashboard/inbox/actions.ts        inboxRequestText
+          app/(app)/dashboard/paperwork/actions.ts    paperworkInsertRow
+          app/(app)/marketplace/assistant-actions.ts  previewMarketIntentAction
+Problem:  Every export from a 'use server' module is a POST endpoint. An earlier
+          pass measured 439 actions / 9 reaching no auth and never ratcheted it,
+          so nothing stopped a tenth. Re-measured with an independent instrument:
+          the same 9. Three were the class tests/server-actions-contract.test.ts
+          already names in its header — "a parser has no business being an
+          endpoint" — found once in recurring-ads, fixed there, never swept.
+Evidence: inboxRequestText: pure string formatter, one in-module caller.
+          paperworkInsertRow: BUILDS a row; the caller inserts it after
+            requireUserContext. Exported only so a test could pin the payload.
+          previewMarketIntentAction: regex classifier, NO callers anywhere.
+Impact:   None of the three reads or writes anything — no disclosure. Each is an
+          unauthenticated POST endpoint that need not exist: unmetered compute
+          over caller-supplied text plus permanent surface area. Stated plainly
+          because the alarming signature (paperworkInsertRow takes familyId and
+          userId) is NOT the defect — it only returns what it builds. The dead
+          one is the instructive one: nothing pointed at it, so nothing made
+          anyone look at it.
+Fix:      inboxRequestText un-exported; paperworkInsertRow moved to
+          lib/paperwork/triage.ts beside the helpers it calls (test imports it
+          from there, so the reason it was exported survives);
+          previewMarketIntentAction deleted.
+          tests/every-server-action-reaches-auth.test.ts ratchets it: every
+          'use server' export must reach auth, with six named public/pre-auth
+          exceptions, each carrying its reason.
+          THE INSTRUMENT FAILED THE SAME WAY THE CODE DID: the first analyser saw
+          only `export function`, so a private assertSuperAdmin() was invisible
+          and it reported 100 unguarded actions instead of 9. Same shape as
+          C1-S7-01's parser bugs. Both directions now pinned — the scan must find
+          >400 actions, and adminSetUserBanAction (guarded only via that private
+          helper) must be credited. Both proved red alone.
+Status:   FIXED
+```

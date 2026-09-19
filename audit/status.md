@@ -216,6 +216,18 @@ PRIOR SESSIONS (unchanged, see history below): F-020 migration idempotency;
     Writing it produced two parser bugs in a row that each made the answer zero,
     both caught by its own blind-spot assertion — the strongest evidence this
     audit has that the vacuous-guard class is easy to fall into.
+  - C1-S7-02: re-measured the server-action auth reachability an earlier pass
+    recorded but never ratcheted (439 actions / 9 unguarded) — reproduced the 9
+    with an independent instrument. Three were pure helpers exported from
+    'use server' modules, i.e. unauthenticated POST endpoints: a string
+    formatter, a row BUILDER (the caller inserts, after auth), and a regex
+    classifier with no callers at all. None reads or writes, so none is a
+    disclosure; all three are gone (un-exported / moved to lib/ / deleted) and
+    tests/every-server-action-reaches-auth.test.ts now ratchets the rule with six
+    named public-by-design exceptions. My first analyser saw only `export
+    function`, missed a private assertSuperAdmin(), and reported 100 instead of
+    9 — the instrument failed the same way the code did, and both directions are
+    now pinned by assertions.
 NEXT: C2-M03 is the largest open finding — ~251 en-US-pinned date/time call
   sites across ~135 files against an 11-locale catalogue. The trap is recorded
   in Pass P: dayKey() uses 'en-US' as a PARSE locale and must not be switched.

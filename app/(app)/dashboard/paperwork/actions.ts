@@ -5,7 +5,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import {
-  triagePaperwork, paperworkKindFields, type PaperworkAction, kindLabel, type PaperworkKind,
+  paperworkInsertRow, type PaperworkAction, kindLabel, type PaperworkKind,
 } from '@/lib/paperwork/triage';
 import { isAIConfigured, resolveProvider, describeAIError } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
@@ -18,45 +18,6 @@ import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 
 const PATH = '/dashboard/paperwork';
 
-/**
- * The row a captured piece of paperwork becomes.
- *
- * It exists as its own exported function — async, which is all a `'use server'`
- * module may export — because of the one mistake tsc cannot catch here: the
- * generated Insert type for `kind` is a plain `string`, while 0169's CHECK
- * admits seven values and triage now recognises nine. Writing 'receipt' or
- * 'reservation' straight from `triagePaperwork` is a 23514 at runtime that
- * loses the pasted paperwork entirely, so the mapping goes through
- * `paperworkKindFields` (admitted value on the column, finer kind kept in
- * `meta`) and a test pins the payload without needing a database.
- */
-export async function paperworkInsertRow(input: {
-  familyId: string;
-  userId: string;
-  text: string;
-  sender?: string | null;
-  now?: Date;
-}) {
-  const t = triagePaperwork(input.text, input.now ?? new Date());
-  const fields = paperworkKindFields(t.kind);
-  return {
-    family_id: input.familyId,
-    kind: fields.kind,
-    title: t.title,
-    summary: t.summary,
-    raw_text: input.text.slice(0, 20_000),
-    sender: input.sender ?? null,
-    due_on: t.due_on,
-    amount: t.amount,
-    urgency: t.urgency,
-    status: 'needs_action',
-    actions: t.actions.map((a) => ({ ...a, materialized_as: null, materialized_id: null })),
-    // What triage actually saw, so a receipt filed as a payment is still
-    // recoverable as a receipt when the column is widened.
-    meta: { ...fields.meta },
-    created_by: input.userId,
-  };
-}
 
 /** Paste/capture a piece of paperwork → triage it → drop it in the inbox. */
 export async function addPaperworkAction(formData: FormData): Promise<void> {

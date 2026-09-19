@@ -7105,3 +7105,77 @@ resolver makes the suite go quietly green on an empty result set.
 
 `SENSITIVE_TABLES` and its `except` fields are read from `policy.ts` at runtime
 rather than restated, so the guard cannot drift from the list it enforces.
+
+
+## C1-S7-02 [MEDIUM][SECURITY] — three pure helpers were public endpoints, and nothing swept for the rest
+
+**File:** `app/(app)/dashboard/inbox/actions.ts` ·
+`app/(app)/dashboard/paperwork/actions.ts` ·
+`app/(app)/marketplace/assistant-actions.ts`
+**Status:** FIXED — plus `tests/every-server-action-reaches-auth.test.ts`
+
+### Problem
+
+Every exported function in a `'use server'` module is a POST endpoint. An earlier
+pass measured this once — 439 exported actions, 9 reaching no auth call — and
+**never ratcheted it**, so nothing stopped a tenth. Re-measuring with an
+independent instrument reproduced the number exactly, and three of the nine were
+a class this repository had already named in
+`tests/server-actions-contract.test.ts`'s own header:
+
+> the recurring-ads actions module exported two pure string parsers. They
+> belonged in `lib/` anyway, for the same reason the rule exists — **a parser
+> has no business being an endpoint**.
+
+Found once, fixed there, never swept for elsewhere. The three that remained:
+
+| export | what it is |
+| --- | --- |
+| `inboxRequestText` | a pure string formatter; one caller, in its own module |
+| `paperworkInsertRow` | **builds** a row object — the caller inserts it, after `requireUserContext`. Exported only so a test could pin the payload |
+| `previewMarketIntentAction` | a regex classifier over a string — and **no callers anywhere in the tree** |
+
+### Impact, stated precisely
+
+**None of the three reads or writes anything**, so none is a disclosure. Each is
+an unauthenticated POST endpoint that did not need to exist: unmetered compute
+over caller-supplied text, and surface area that has to be re-reasoned about
+every time someone touches these files. `paperworkInsertRow` looks worst — it
+takes `familyId` and `userId` as arguments — and is the mildest in fact, because
+it only *returns* the row it builds. Saying so plainly matters more than the
+finding: the alarming signature is not the defect.
+
+The third is the one worth pausing on. `previewMarketIntentAction` had no callers
+at all: dead code that was nonetheless a live endpoint, which is how this class
+survives — nothing points at it, so nothing makes anyone look at it.
+
+### Fix
+
+`inboxRequestText` is no longer exported (its one caller is in the same file).
+`paperworkInsertRow` moves to `lib/paperwork/triage.ts`, beside the
+`triagePaperwork` and `paperworkKindFields` it calls; the test imports it from
+there, so the reason it was exported survives while the endpoint does not.
+`previewMarketIntentAction` is deleted.
+
+`tests/every-server-action-reaches-auth.test.ts` turns the one-off measurement
+into a ratchet: every `'use server'` export must reach an auth call, with six
+named exceptions that are public or pre-auth on purpose — a child sign-in, a
+referral cookie written before any account exists, the gift-pledge, public-review
+and public-survey flows behind unguessable links, and `setLocale`. Each carries
+its reason, and a seventh entry is a deliberate decision to publish an endpoint,
+which is the review the list exists to force.
+
+### The instrument failed the same way the code did
+
+The first version of the analyser captured only `export function` declarations,
+so a private `assertSuperAdmin()` was invisible and it reported **100** unguarded
+actions rather than 9 — burying the real six in noise. That is the same shape as
+C1-S7-01's two parser bugs and as the defect being hunted: **a detector that
+cannot see an auth call calls everything unguarded, and one that cannot see an
+action calls nothing unguarded.** Both directions are now pinned by assertions —
+the scan must find more than 400 actions, and `adminSetUserBanAction`, which
+reaches auth *only* through that private helper, must be credited as guarded.
+
+Both proved red on their own: adding a new unauthenticated export fails the
+allow-list assertion; restricting the declaration scanner to exported functions
+fails the private-helper assertion with 65 false positives.

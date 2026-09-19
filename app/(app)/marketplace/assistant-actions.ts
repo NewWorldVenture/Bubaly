@@ -109,7 +109,3 @@ export async function askMarketAssistantAction(
   return { ok: true, reply: grounded.reply, links: grounded.links, source: 'engine' };
 }
 
-/** Cheap intent preview for analytics/suggestion chips (no data access). */
-export async function previewMarketIntentAction(question: string): Promise<string> {
-  return routeMarketIntent(question);
-}
