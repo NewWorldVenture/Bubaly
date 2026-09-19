@@ -6,7 +6,7 @@ import { ArrowRight, Home, Plus, Trash2, Wrench, Package, Check, Shield, FileTex
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -441,9 +441,14 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
     setRemovingId(doc.id);
     const supabase = createClient();
     await removeFamilyDocument(supabase, doc.storage_path);
-    const { error } = await supabase.from('documents').delete().eq('id', doc.id);
+    // NOTE the order: the storage object is removed FIRST, so a row delete the
+    // database refuses leaves a row pointing at a file that no longer exists.
+    // Verifying the delete at least makes that visible instead of reporting it
+    // as done; the ordering itself is recorded in audit/claude-1.md.
+    const { data: rows, error } = await supabase.from('documents').delete().eq('id', doc.id).select('id');
     setRemovingId(null);
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(rows)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('homeModule.fileRemoved'));
     onChanged();
   }

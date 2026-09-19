@@ -12,6 +12,7 @@ import { isManager } from '@/lib/constants/roles';
 import { performUpload } from '@/lib/documents/upload';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field } from '@/components/ui/input';
@@ -109,10 +110,15 @@ export function FilesHubModule({ view }: { view: FileView }) {
     if (typeof window !== 'undefined' && !window.confirm(t('filesHubModule.deleteConfirm', { name: d.title }))) return;
     setBusy(id);
     const sb = createClient();
+    // NOTE the order: the storage object is removed FIRST, so a row delete the
+    // database refuses leaves a row pointing at a file that no longer exists.
+    // Verifying the delete at least makes that visible instead of reporting it
+    // as done; the ordering itself is recorded in audit/claude-1.md.
     if (d.storage_path) await removeFamilyDocument(sb, d.storage_path);
-    const { error: err } = await sb.from('documents').delete().eq('id', id);
+    const { data: rows, error: err } = await sb.from('documents').delete().eq('id', id).select('id');
     setBusy(null);
     if (err) return toastError(t('filesHubModule.deleteFailed'));
+    if (wroteNoRows(rows)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(t('filesHubModule.fileDeleted')); refresh();
   }
 
@@ -120,16 +126,20 @@ export function FilesHubModule({ view }: { view: FileView }) {
     const d = byId.get(id); if (!d) return;
     if (!manager) return toastError(t('filesHubModule.onlyAParentOrAnother2'));
     setBusy(id);
-    const { error: err } = await createClient().from('documents').update({ is_secure: !d.is_secure }).eq('id', id);
+    // `is_secure` moves a file between the shared area and the vault — a toggle
+    // that silently did nothing leaves it where it was, reported as moved.
+    const { data: rows, error: err } = await createClient().from('documents').update({ is_secure: !d.is_secure }).eq('id', id).select('id');
     setBusy(null);
     if (err) return toastError(t('filesHubModule.moveFailed'));
+    if (wroteNoRows(rows)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(t(d.is_secure ? 'filesHubModule.movedShared' : 'filesHubModule.movedVault')); refresh();
   }
 
   async function toggleFavorite(id: string) {
     const d = byId.get(id); if (!d) return;
-    const { error: err } = await createClient().from('documents').update({ is_favorite: !d.is_favorite }).eq('id', id);
+    const { data: rows, error: err } = await createClient().from('documents').update({ is_favorite: !d.is_favorite }).eq('id', id).select('id');
     if (err) return toastError(t('filesHubModule.updateFailed'));
+    if (wroteNoRows(rows)) return toastError(t('errors.thatChangeWasNotSaved'));
     refresh();
   }
 

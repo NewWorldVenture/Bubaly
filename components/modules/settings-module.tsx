@@ -9,7 +9,7 @@ import { DEFAULT_REFERRAL_CONFIG, type ReferralConfig } from '@/lib/referrals/co
 import { fmtMoney } from '@/lib/utils/format';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -169,9 +169,10 @@ export function SettingsModule({ referralConfig }: { referralConfig?: ReferralCo
     if (!name) return toastError(t('settingsModule.nameIsRequired'));
     setSavingFamily(true);
     const supabase = createClient();
-    const { error } = await supabase.from('families').update({ name }).eq('id', family.id);
+    const { data: rows, error } = await supabase.from('families').update({ name }).eq('id', family.id).select('id');
     setSavingFamily(false);
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(rows)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(t('settingsModule.familyNameUpdated'));
   }
 
