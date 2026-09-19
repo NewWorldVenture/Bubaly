@@ -1836,3 +1836,21 @@ explaining that fix. Excluding comments is now a case in the guard itself. Three
 previous scans in this audit made the identical mistake (the Node version check,
 the consent `aria-modal` scan, and this one), which is enough to call it a
 standing hazard rather than a coincidence.
+
+**Self-audit of the above, and a defect it found.** `useDialogBehavior` keys its
+effect on `open` and bails when the ref is not attached yet. The **app-lock
+gate** was adopted with a literal `true`, and it returns early while unlocked
+(`if (!enabled || unlocked) return <>{children}</>`). So the effect ran once on
+mount, found no dialog, and — `true` never changing — never ran again. **A gate
+that locks after mount had no focus trap at all**: the one overlay of the eleven
+where a trap matters most, adopted in a way that silently did nothing.
+
+Fixed by threading the real condition (`enabled && !unlocked`, the same one the
+scroll lock beside it uses). The other five adopters passing `true` were checked
+individually — each renders its dialog on every pass, where `true` is correct.
+The hook's doc now names this case, because the failure is invisible: no error,
+no warning, just a dialog that quietly is not modal.
+
+This is the third defect in this audit found by auditing my own work, after the
+`server-only` guard that closed a hole which was never open and the test that
+asserted the defect it was named for.
