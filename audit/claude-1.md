@@ -7978,3 +7978,37 @@ reason in source. Flagged here because that file may belong to another worker.
 
 **Status:** FIXED and guarded. **Verified:** 14,283 green under both timezones,
 tsc clean, lint 0 at 12.
+
+---
+
+[CLAUDE-1][MEDIUM][TRUST] The permission surface: a delegation naming a non-member, and a revoke that reported success over nothing
+
+Continued the client-path sweep into the modules the coverage review named next
+— the permission surface itself, plus paperwork and voice.
+
+**`createDelegationAction`** took `fromMemberId` and `toMemberId` on trust.
+`trust_delegations` references `family_members(id)` with nothing tying either
+column to `family_id` (0093:69-71), so a uuid from another household satisfies
+the foreign key while `family_id` comes from the session. Now checked in code.
+**Not an escalation**, and I verified that rather than assuming: `evaluateTrust`
+reads `to_member_id` family-scoped and never reads `from_member_id`, so the row
+is inert — it renders in the UI as a grant made BY a non-member.
+
+**`revokeDelegationAction`** returned `ok: true` whenever `error` was null. Q42's
+mechanism on the surface where it matters most: an UPDATE matching no row is not
+an error, so a manager revoking an already-revoked or foreign delegation was
+told the access was withdrawn. Now verified with `.select('id')`.
+
+**Three clean, which is half the result.** `trust-activity-tab` has no writes.
+`paperwork-module` routes through family-scoped actions that throw, and
+`paperwork_items` is `is_family_member` throughout — a policy that cannot filter
+a member, so silence is not a lie there. `voice-module` likewise (0121); it got
+family scoping for consistency but is correctly NOT in the Q42 guard's list.
+
+**A guard assertion I had to tighten.** My first schema check was
+`/family_id.*from_member_id/s`, which the `s` flag makes true for two columns
+merely declared near each other — it would have passed judgement on a table that
+constrains nothing. Now it looks for a composite FK or a CHECK naming both.
+
+**Status:** FIXED and guarded. **Verified:** 14,292 green under both timezones,
+tsc clean, lint 0.

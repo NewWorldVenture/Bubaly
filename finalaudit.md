@@ -7086,3 +7086,55 @@ the source. A test that breaks on destructuring is a test of formatting.
 **Verified:** 14,283 tests green under both `TZ=UTC` and
 `TZ=America/Los_Angeles` (four shards each), `tsc --noEmit` clean, `npm run
 lint` exits 0 at budget 12.
+
+---
+
+## Q43 — The permission surface: a delegation that named a non-member, and a revoke that reported success over nothing
+
+**Severity: MEDIUM**, and deliberately not filed higher. Neither defect is a
+privilege escalation, which is worth saying plainly because both sit on the one
+page whose job is saying who may act for whom.
+
+**1. `createDelegationAction` took both member ids on trust.**
+`trust_delegations.from_member_id` and `to_member_id` reference
+`family_members(id)` with **nothing** tying either to `family_id` (0093:69-71).
+A member uuid from another household satisfies the foreign key, and the action
+set `family_id` from the session while taking both ids straight from its input.
+The row lands in the caller's own family naming someone who is not in it.
+
+It grants nothing, and I checked that rather than assuming it: `evaluateTrust`
+(`lib/trust/server.ts`) selects `to_member_id` filtered by `family_id` and
+matches it against members of that family, so a foreign id never matches, and
+`from_member_id` is not read by the evaluator at all. The defect is that the
+trust UI then renders a grant made BY a non-member. Now validated in code — both
+ids must be in the family before the insert.
+
+**2. `revokeDelegationAction` reported success over an update that matched
+nothing.** It issued the UPDATE and returned `ok: true` on `error === null`. An
+update matching no row is not an error, so revoking a delegation already
+revoked, belonging to another family, or gone told the manager the access was
+withdrawn. Now `.select('id').maybeSingle()`, and an empty result is a refusal.
+This is Q42's mechanism again, on the surface where it matters most.
+
+**Three modules audited and clean, which is the other half of the result.**
+`trust-activity-tab` performs no writes. `paperwork-module` routes everything
+through server actions that are family-scoped and throw on error, and
+`paperwork_items` is `is_family_member` for every operation — a policy that
+cannot filter a legitimate member, so silence there is not a lie.
+`voice-module` is the same: 0121 gives `voice_commands` `is_family_member`
+throughout, so its delete got family scoping in the house style but is NOT the
+Q42 class, and the table is correctly absent from that guard's list.
+
+**Guard.** `tests/a-delegation-names-two-members-of-this-family.test.ts` pins the
+in-code check, the verified revoke, the schema premise (no family-scoped
+constraint exists, so the code is the only thing standing there), and the
+evaluator's read — so if `from_member_id` ever starts being read, the impact
+assessment above fails rather than quietly going stale. Calibrated both ways.
+
+Its first schema assertion was wrong and had to be tightened: `/family_id.*
+from_member_id/s` is satisfied by the two columns merely being declared near
+each other, so it would have failed on a table that constrains nothing. It now
+looks for a composite foreign key or a CHECK naming both.
+
+**Verified:** 14,288 green under both `TZ=UTC` and `TZ=America/Los_Angeles`,
+tsc clean, lint 0 at 12.

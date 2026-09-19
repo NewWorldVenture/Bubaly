@@ -245,6 +245,22 @@ export async function createDelegationAction(input: {
   const domains = input.domains.filter(d => isDomain(d) && d !== 'all');
 
   const supabase = await createServer();
+
+  // Both ids must belong to THIS family. `trust_delegations` references
+  // `family_members(id)` with nothing tying either column to `family_id`
+  // (0093:69-71), so a uuid from another household satisfies the foreign key
+  // and lands in this family's table. It grants nothing — `evaluateTrust`
+  // matches `to_member_id` against members of this family only, and never reads
+  // `from_member_id` at all — but it renders in the trust UI as a real grant
+  // made BY someone who is not in the household, which is a lie on the one
+  // surface that exists to say who may act for whom.
+  const { data: named, error: namedError } = await supabase
+    .from('family_members').select('id')
+    .eq('family_id', ctx.active.familyId)
+    .in('id', [input.fromMemberId, input.toMemberId]);
+  if (namedError) return actionFailure(namedError, t('actions.couldNotCreateThatDelegation'));
+  if ((named ?? []).length !== 2) return { ok: false, error: t('actions.delegateToADifferentMember') };
+
   const { error: e } = await supabase.from('trust_delegations').insert({
     family_id: ctx.active.familyId,
     from_member_id: input.fromMemberId, to_member_id: input.toMemberId,
@@ -286,9 +302,17 @@ export async function revokeDelegationAction(input: { id: string }): Promise<Res
   const { ctx, error } = await managerCtx();
   if (!ctx) return { ok: false, error };
   const supabase = await createServer();
-  const { error: e } = await supabase.from('trust_delegations').update({ revoked_at: new Date().toISOString() })
-    .eq('id', input.id).eq('family_id', ctx.active.familyId);
+  // `.select('id')` because an UPDATE that matches nothing is not an error.
+  // Without it, revoking a delegation that is already revoked, belongs to
+  // another family, or no longer exists returned ok:true and the UI said the
+  // access was withdrawn. On a permission surface that is the worst possible
+  // place to report a write that did not happen.
+  const { data: revoked, error: e } = await supabase.from('trust_delegations')
+    .update({ revoked_at: new Date().toISOString() })
+    .eq('id', input.id).eq('family_id', ctx.active.familyId)
+    .select('id').maybeSingle();
   if (e) return actionFailure(e, t('actions.couldNotRevokeThatDelegation'));
+  if (!revoked) return { ok: false, error: t('actions.couldNotRevokeThatDelegation') };
   revalidatePath('/dashboard/trust');
   return { ok: true };
 }

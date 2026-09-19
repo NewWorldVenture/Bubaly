@@ -128,7 +128,13 @@ export function VoiceModule() {
 
   async function remove(c: VoiceCommand) {
     const sb = createClient();
-    const { error: err } = await sb.from('voice_commands').delete().eq('id', c.id);
+    // Family-scoped in the house style, NOT because the policy bites: 0121
+    // gives voice_commands `is_family_member` for every operation, so it cannot
+    // filter a legitimate member's delete and reporting nothing is not a lie.
+    // That is also why this table is absent from the gated list in
+    // tests/a-filtered-delete-is-not-a-deletion.
+    const { error: err } = await sb.from('voice_commands').delete()
+      .eq('id', c.id).eq('family_id', familyId);
     if (err) toastError(describeDbError(err));
   }
 
