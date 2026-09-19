@@ -303,14 +303,14 @@ export function RecoveryForm({ request = false, initialGrant }: { request?: bool
       <h1 className="text-2xl font-bold">{t(requesting ? 'authRecovery.requestTitle' : view.phase === 'updated' ? 'authRecovery.updatedTitle' : 'authRecovery.title')}</h1>
       {view.phase === 'checking' && <p role="status" className="mt-4 text-sm text-muted">{t('authRecovery.checking')}</p>}
       {view.error && <p role="alert" className="mt-4 text-sm text-danger">{t(view.error)}</p>}
-      {(view.phase === 'request' || view.phase === 'sending') && <form onSubmit={sendEmail} className="mt-5 space-y-4" noValidate>
+      {(view.phase === 'request' || view.phase === 'sending') && <form method="post" onSubmit={sendEmail} className="mt-5 space-y-4" noValidate>
         <p className="text-sm text-muted">{t('authRecovery.requestDescription')}</p>
         <fieldset disabled={view.phase === 'sending'} className="min-w-0 space-y-4">
           <Field label={t('login.email')} required>{id => <Input id={id} name="email" type="email" autoComplete="email" />}</Field>
           <Button type="submit" loading={view.phase === 'sending'} className="w-full">{t('authRecovery.sendLink')}</Button>
         </fieldset>
       </form>}
-      {(view.phase === 'ready' || view.phase === 'saving') && <form onSubmit={savePassword} className="mt-5 space-y-4" noValidate>
+      {(view.phase === 'ready' || view.phase === 'saving') && <form method="post" onSubmit={savePassword} className="mt-5 space-y-4" noValidate>
         <p className="text-sm text-muted">{t('authRecovery.account', { email: view.email ?? '' })}</p>
         <fieldset disabled={view.phase === 'saving'} className="min-w-0 space-y-4">
           <Field label={t('authRecovery.newPassword')} hint={t('signupForm.atLeast8Characters')} required>{id => <Input id={id} name="password" type="password" autoComplete="new-password" />}</Field>

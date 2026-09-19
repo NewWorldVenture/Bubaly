@@ -52,6 +52,32 @@ function actionRequest(request: { url(): string; method(): string; headers(): Re
     && typeof request.headers()['next-action'] === 'string';
 }
 
+async function captureActualActionReceipt(page: Page, origin: string, expected: 'rejected' | 'exchanged') {
+  let receipt: { status: number; cookieNeutral: boolean; matches: boolean } | null | undefined;
+  await page.route(url => url.origin === origin && url.pathname === '/auth/complete', async route => {
+    if (!actionRequest(route.request(), origin)) { await route.continue(); return; }
+    try {
+      const response = await route.fetch({ maxRedirects: 0, timeout: 15_000 });
+      try {
+        // Capture the real receipt before releasing it to the browser: a layout
+        // navigation can discard Chromium's body handle. Retain no token bytes.
+        const captured = { status: response.status(), cookieNeutral: !response.headers()['set-cookie'],
+          matches: (await response.text()).includes(`"status":"${expected}"`) };
+        await route.fulfill({ response });
+        receipt = captured;
+      } finally { await response.dispose().catch(() => {}); }
+    } catch {
+      receipt = null;
+      await route.abort().catch(() => {});
+    }
+  });
+  return async () => {
+    await expect.poll(() => receipt !== undefined, { timeout: 30_000 }).toBe(true);
+    expect(receipt, `The actual completion action must return ${expected} without setting auth cookies`)
+      .toEqual({ status: 200, cookieNeutral: true, matches: true });
+  };
+}
+
 async function holdOriginalAdmission(page: Page, origin: string) {
   let ready = false, failed = false, release = () => {};
   const gate = new Promise<void>(resolve => { release = resolve; });
@@ -220,12 +246,9 @@ test.describe('callback admission through the real Next HTTP path', () => {
       const callbackUrl = await seedInvalidExchange(context, origin);
       const before = await sessionBytes(context);
       const completion = await context.newPage();
-      const action = completion.waitForResponse(response => actionRequest(response.request(), origin));
+      const receipt = await captureActualActionReceipt(completion, origin, 'rejected');
       await completion.goto(callbackUrl, { waitUntil: 'domcontentloaded' });
-      const response = await action;
-      expect(response.status()).toBe(200);
-      const body = await response.text();
-      expect(body.includes('"status":"rejected"'), 'The actual server action must reject the nonexistent provider code').toBe(true);
+      await receipt();
       await expect(completion).toHaveURL(`${origin}/home`, { timeout: 30_000 });
       expect(await sessionBytes(context) === before, 'Failed code exchange must retain the existing session bytes').toBe(true);
       expect(readSession(await context.cookies(), authCookieName(provider)).user.id === account.userId).toBe(true);
@@ -246,13 +269,11 @@ test.describe('callback admission through the real Next HTTP path', () => {
       expect((await context.cookies()).some(cookie => cookie.value && (cookie.name === verifier || cookie.name.startsWith(`${verifier}.`))),
         'The production email request must create a PKCE verifier').toBe(true);
       const link = await waitForOwnedRecoveryEmail(account.email, origin);
-      const exchange = page.waitForResponse(response => actionRequest(response.request(), origin), { timeout: 30_000 })
-        .then(async response => response.status() === 200 && !response.headers()['set-cookie']
-          && (await response.text()).includes('"status":"exchanged"')).catch(() => false);
+      const exchange = await captureActualActionReceipt(page, origin, 'exchanged');
       // Keep the token-bearing URL out of Playwright's named navigation steps.
       try { await page.evaluate(value => { window.location.assign(value); }, link); }
       catch { throw new Error('Callback admission E2E could not follow its validated local recovery link.'); }
-      expect(await exchange, 'The real completion action must exchange the emailed PKCE code without setting auth cookies').toBe(true);
+      await exchange();
       // Compare a boolean so a broken redirect cannot expose its code in output.
       await expect.poll(() => page.url() === `${origin}/auth/recovery`, { timeout: 30_000 }).toBe(true);
       await expect(page.getByRole('button', { name: 'Save new password', exact: true })).toBeVisible({ timeout: 30_000 });

@@ -2,33 +2,43 @@
 
 ## Pull request 510 integration — 2026-09-19
 
-CURRENT: AUTH-001/AUTH-002/AUTH-003 request-admission witness cycle IN PROGRESS
-on published baseline dc99dc83. All prior 14,006 IDs/statuses remain preserved.
+CURRENT: AUTH-002 and SEC-005 native credential-form repair IN PROGRESS.
+All prior 14,018 IDs/statuses remain preserved; two additions make 14,020 total.
 WORKSPACE: Separate bubaly-final-production-audit-20260912 worktree, existing
 PR 510 merged as main 4bee6275; production frontend is live. The main checkout is untouched.
-SCOPE: Original callback request ownership reaches completion without recapturing
-newer cookies. Both entrypoints preserve supplied witnesses; duplicate cookie
-names remain visible for rejection. The witness is comparison metadata only.
-LOCAL FINAL: Application ee003898 passes UTC and DST 16,543/16,543 in 1,303 files
+SCOPE: Actual SSR/native execution confirms synthetic credentials could enter a
+default GET URL before hydration. Login readiness plus POST and four adjacent
+POST-only forms repair this boundary. Existing logins remain intact; no masked
+hosted query value is inferred. Unfinished initiation work is excluded.
+CURRENT LOCAL: Source freeze 1536752b has 34 login and 96 adjacent browser checks,
+122 compatibility units across six suites, scoped lint, build (252 pages) and
+full strict types PASS. New hosted/deployed native-submission/successful-login
+acceptance is pending. Independent source review finds no blockers.
+PRIOR LOCAL FINAL: Application ee003898 passes UTC and DST 16,543/16,543 in 1,303 files
 each, build 252, strict types, lint with three existing warnings and i18n/query
 (491 tables / 86 functions / 146 routes). Focused browser ownership 81 and
 completion/recovery 82 pass; server/routing 147 and shared/server/page 77 overlap.
-TEST INFRASTRUCTURE: New actual HTTP/Mailpit fixture and disposable localhost
-redirect configuration are pinned at d0adca17; four cases pass discovery/types/lint
-but have not executed. Final discovery is 1,183 cases / 49 files. No new runtime PASS.
+HOSTED WITNESS: Exact 6353d0d4 CI 35465566214 completed Web/Database/Mobile;
+Finance 35465566163 succeeds. E2E 105957139370 passes 1,180/1,183 with zero skips.
+The genuine emailed recovery/password-save/logout/new-password-login case passes;
+three callback fixture cases fail. Alert-selection and response-capture fixes are
+test-only; their hosted acceptance is pending. Production email delivery is unproven.
 HOSTED BASELINE: Exact dc99dc83 CI 35464679043 has Web, Database and Mobile SUCCESS;
 Finance 35464679048 has 66 explicit 0274 PASS notices. Web passes both 16,495-test
 unit runs, build 252 and strict types. Database passes 330 migrations, 38 probes
 and 327 reapplications. E2E passes 1,150/1,150 with auth/durable enabled. No restarts.
 ROLLOUT: Exact Vercel deployment dpl_4pWBho8dManFcsbzy8Z8FDFybTsy is live; eight HTTP and four real-browser public checks pass. Historical production migration 0177 failed again; no SQL change or retry. Test-only Next alert selectors are corrected; hosted acceptance is pending.
-NEXT: Finish new hosted recovery acceptance and investigate the existing production database failure. See docs/final-audit/production-rollout-20260919.md.
-OPEN: Attempt-owned initiation, non-atomic cookie compare/write, successful hosted
-recipient/PKCE recovery, real provider delivery and production configuration.
-CURRENT RECORD: docs/final-audit/auth-callback-admission-witness-cycle.md.
-REFERENCES: docs/final-audit/auth-callback-browser-ownership-cycle.md and finalaudit.md.
-RELEASE: NO. Twelve new structural rows are NOT STARTED; total 14,018. No complete
-workflow PASS or existing status promotion.
-LAST-UPDATE: 2026-09-19T20:00:00Z
+NEXT: Publish the focused native-form patch; verify deployed
+native submission and hosted successful login. Continue the separate database investigation.
+See docs/final-audit/production-rollout-20260919.md.
+OPEN: Deployed native-login acceptance, attempt-owned initiation,
+non-atomic cookie compare/write, real provider delivery and production configuration.
+CURRENT RECORD: docs/final-audit/auth-native-form-cycle.md.
+REFERENCES: docs/final-audit/auth-callback-admission-witness-cycle.md,
+docs/final-audit/auth-callback-browser-ownership-cycle.md and finalaudit.md.
+RELEASE: NO. SEC-005 is IN PROGRESS and new SUPPORT-6C0575881A8C is NOT STARTED;
+total 14,020. No complete workflow PASS or existing status promotion.
+LAST-UPDATE: 2026-09-19 native-form source freeze 1536752b
 
 Four workers audit this repository in parallel. Each worker maintains ONLY its
 own section below. Read this file before touching any source file: if another

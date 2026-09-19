@@ -27,6 +27,8 @@ export function LoginForm() {
   const { error: toastError } = useToast();
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  // SSR must not accept credentials before React can prevent native submission.
+  const [ready, setReady] = useState(false);
   const [showPhone, setShowPhone] = useState(false);
   const [recoveryLink, setRecoveryLink] = useState(false);
   const mounted = useRef(false);
@@ -54,6 +56,7 @@ export function LoginForm() {
   }, [intent]);
   useLayoutEffect(() => {
     mounted.current = true;
+    setReady(true);
     return () => { mounted.current = false; attempt.current += 1; };
   }, []);
   // The /auth/callback route bounces failed OAuth / email-confirmation here.
@@ -165,8 +168,8 @@ export function LoginForm() {
         <div className="flex-1 border-t border-border" />
       </div>
 
-      <form onSubmit={onSubmit} className="space-y-4" noValidate>
-        <fieldset disabled={loading} className="min-w-0 space-y-4">
+      <form method="post" onSubmit={onSubmit} className="space-y-4" noValidate>
+        <fieldset disabled={!ready || loading} className="min-w-0 space-y-4">
         <Field label={t('login.email')} error={errors.email} required>
           {(id) => <Input id={id} name="email" type="email" autoComplete="email" placeholder="you@example.com" />}
         </Field>

@@ -84,7 +84,7 @@ export function KidLoginForm() {
       <h1 className="text-center text-2xl font-bold tracking-tight">{t('kidLogin.kidSignIn')}</h1>
       <p className="mt-1 text-center text-sm text-muted">{t('kidLogin.enterYourUsernameAndPinNo')}</p>
 
-      <form onSubmit={onSubmit} className="mt-6 space-y-4" noValidate>
+      <form method="post" onSubmit={onSubmit} className="mt-6 space-y-4" noValidate>
         <label htmlFor="kid-login-username" className="block">
           <span className="mb-1 block text-sm font-medium">{t('kidLogin.username')}</span>
           <input

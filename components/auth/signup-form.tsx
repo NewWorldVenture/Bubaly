@@ -219,7 +219,7 @@ export function SignupForm() {
           </button>
         </div>
       ) : (
-        <form onSubmit={onSubmit} className="space-y-4 animate-fade-in" noValidate>
+        <form method="post" onSubmit={onSubmit} className="space-y-4 animate-fade-in" noValidate>
           <Field label={t('signup.nameLabel')} error={errors.fullName} required>
             {(id) => <Input id={id} name="fullName" autoComplete="name" placeholder={t('signupForm.jordanRivera')} autoFocus />}
           </Field>
