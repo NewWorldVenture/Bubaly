@@ -158,10 +158,11 @@ export async function GET(req: NextRequest) {
     const settings = await getAISettings(scope);
     const schedule = scheduleOf(rule);
     if (!settings.enabled || !schedule) {
-      await db.from('routine_runs').update({
+      const { error: writeError1 } = await db.from('routine_runs').update({
         status: 'skipped',
         detail: settings.enabled ? 'The routine no longer has a readable schedule.' : 'Bubaly is switched off for this family.',
       }).eq('rule_id', rule.id).eq('due_at', dueAt);
+      if (writeError1) console.error('[cron/family-routines] routine_runs write failed', writeError1);
       // A pause is not a deletion. Advancing to the next occurrence lets the
       // routine simply resume when the family switches Bubaly back on; nulling
       // it (what this used to do) silently lost every routine a family owned
@@ -198,11 +199,13 @@ export async function GET(req: NextRequest) {
     // recoverable rather than permanent.
     const request = await createRequest(scope, { requestText: prompt, kind: 'routine' }, { db });
     if (!request.ok) {
-      await db.from('routine_runs').update({ status: 'failed', detail: request.error }).eq('rule_id', rule.id).eq('due_at', dueAt);
+      const { error: writeError2 } = await db.from('routine_runs').update({ status: 'failed', detail: request.error }).eq('rule_id', rule.id).eq('due_at', dueAt);
+      if (writeError2) console.error('[cron/family-routines] routine_runs write failed', writeError2);
       problems.push(rule.id);
     } else {
       const run = await createRun(scope, { requestId: request.data.id, runType: 'routine', summary: prompt, state: 'queued' }, { db });
-      await db.from('routine_runs').update({ status: 'filed', request_id: request.data.id }).eq('rule_id', rule.id).eq('due_at', dueAt);
+      const { error: writeError3 } = await db.from('routine_runs').update({ status: 'filed', request_id: request.data.id }).eq('rule_id', rule.id).eq('due_at', dueAt);
+      if (writeError3) console.error('[cron/family-routines] routine_runs write failed', writeError3);
       if (run.ok) kickRun(run.data.id, { budgetMs: 20_000 });
       filed += 1;
     }

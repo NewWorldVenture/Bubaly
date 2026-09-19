@@ -4360,3 +4360,318 @@ three pre-existing warnings. CI green on `b0bacc54`.
 **Still the one recommendation this audit would make above all others: break
 what a guard protects and confirm it goes red.** This pass adds a corollary —
 **and check that it was looking there at all.**
+
+---
+
+# Pass C1-K — section C: the client code paths behind the swept tables
+
+Session `01KRUgA6hD6QgzmtpSP6TUmP`, working the "Auditable now" list: the
+sensitive tables were swept at the RLS layer, and what had never been examined
+is the client code around them — reads, writes, delete handling, error
+reporting. Two defects, one withdrawn hypothesis, two modules swept clean.
+
+> A note on this file: the copy on `main` is 4,362 lines and does not contain
+> Passes S/T or the C1-S6-* findings, so this pass was written without being
+> able to read them. If they land later, the overlap to check first is
+> `medical-records-module`.
+
+## C1-K-01 · HIGH · A write RLS refused was reported as a write that happened
+
+`health_providers`, `insurance_policies` and `medical_profiles` are
+`SELECT is_family_member` but `UPDATE`/`DELETE can_manage_family`. That gate
+works — Pass T was right about it. The defect is on the client side of it.
+
+A teen, child or caregiver sees the provider list, the insurance cards and the
+medical profile, and can press Delete on any of them. **RLS does not refuse
+those statements with an error.** It matches zero rows and returns success. All
+five write handlers in `medical-records-module` read
+
+```ts
+if (err) { toastError(...); return; }
+success('Deleted');
+```
+
+so they announced a deletion that did not happen, and "Profile saved" over
+allergies and emergency contacts that never changed.
+
+Measured in `docs/audit/health-write-gate-check.sql` against the replayed
+schema: a teen's `DELETE` on `health_providers` affects **0 rows and raises
+nothing** while the teen can still `SELECT` it (the control — otherwise
+"cannot delete" would only mean "cannot see"), a teen's `UPDATE` on
+`insurance_policies` likewise, and a parent's `DELETE` affects 1.
+
+Fixed by giving each of the five writes `.select('id')` and refusing on an
+empty result with `actions.onlyAParentGuardianCan16` — a key that already
+exists in all seven locales, so no half-translated string ships with the fix.
+Inserts blocked by RLS *do* raise, so only the update paths needed the count.
+
+## C1-K-03 · HIGH · The same lie in five more modules
+
+The blast radius was not one module. **33 tables** are member-read /
+manager-write; a sweep for client `update`/`delete`/`upsert` on any of them
+found **20 writes across 7 files**, and every one but a single already-correct
+handler in `family-module` reported success on `!error` alone:
+
+| Module | Tables | What a non-manager was told |
+| --- | --- | --- |
+| `medications-module` | `medications`, `medication_schedules` | "Medication deleted", "Medication updated", and a silent no-op on the active toggle |
+| `medical-records-module` | `health_providers`, `insurance_policies`, `medical_profiles` | "Deleted", "Profile saved" |
+| `rewards-module` | `rewards` | "Reward deleted" |
+| `billing-module` | `bills`, `financial_accounts` | "Bill removed", "Bill marked as paid", "Account removed" |
+| `bills-view` | `bills` | "Marked paid", "Auto Pay on", "Deleted" |
+| `family-module` | `family_members` | "Member removed", "Member updated" |
+| `settings-module` | `families`, `family_members` | "Family name updated", "Member removed", "Member updated" |
+
+`medications` deserves its own line: it is the data this product treats as most
+sensitive, and a teen pressing Delete on a prescription was told it was gone.
+
+All 20 now carry `.select('id')` and refuse an empty result.
+`tests/manager-gated-writes-report-refusals.test.ts` pins the class per module
+per table, so a module added later has to answer for it — it caught two writes
+(the member EDIT paths in `family-module` and `settings-module`) that this
+pass's own sweep had missed.
+
+## Correction to an earlier claim of mine
+
+A previous pass in this session reported that **no member-removal path exists**
+in the app, and closed a question about stale `social_access_permissions` rows
+on that basis. That was wrong. Removal is
+`family_members.update({ is_active: false })` in both `family-module` and
+`settings-module`; the earlier grep looked for `.delete()` under two directories
+and missed it. **The stale-social-access question is therefore open again**:
+`getSocialAccess` grants on an explicit row even when the membership row is
+gone, so a removed member with a surviving `status = 'active'` row keeps their
+social role. Not fixed here — it needs a decision about whether removal should
+revoke or whether the row should be read through membership.
+
+## C1-K-02 · MEDIUM · A best-effort log could lose the capture it was logging
+
+`run()` in `voice-module` saves the capture, then writes the voice history
+under a comment stating the contract: *"best-effort — a logging failure must
+not lose the thing we just created"*. The write sat inside the same `try`,
+awaited bare. supabase-js **resolves** an API error (which the bare await
+ignored, honouring the contract) but **rejects** a transport failure — and that
+rejection jumped to the catch, which reported "Could not run that command",
+offered no Undo for the thing that had been created, and wrote a `failed` row
+into the history it was trying to keep honest. The capture survived in the
+database with no route back to it from the UI.
+
+The second insert has the same shape *inside* the catch, where a rejection
+replaces the real failure with its own.
+
+Both now terminate their own promise with an `onRejected` handler and log.
+
+## Withdrawn · `medications` is not unguarded
+
+Listing the policies on `medications` shows a `can_manage_family` gate sitting
+beside an `is_family_member` policy for insert/update/delete — which reads as a
+manager gate defeated by a broad one, since permissive policies are OR'd. They
+are not both permissive: the `can_manage_family` ones are **RESTRICTIVE**, so
+they AND. A teen cannot write medications.
+
+Recorded because the listing that misled me is the obvious one — it omits
+`polpermissive` — and the probe now asserts the true invariant so the next
+reader gets the answer from the database instead of the policy names.
+
+## Swept clean
+
+- **`locator-module`** (live location, the highest-priority entry). Reads
+  capture `locationsError`/`placesError`/`eventsError` and short-circuit to an
+  `ErrorState` with retry *before* the map renders, so a failed read cannot
+  show an empty map as "nobody is anywhere". Every write goes through a server
+  action and checks `res.ok`.
+- **`health-visits-module`**. `health_visits` is `ALL is_family_member`, so no
+  manager gate exists to be misreported; its delete confirms first and reports
+  both branches.
+
+## C1-K-04 · MEDIUM · A server action that threw left a button spinning and said nothing
+
+Six client call sites await a `Promise<void>` server action bare inside
+`startTransition`. Those actions signal failure by THROWING a translated
+Error — `requireSocialPermission` raises `SocialAccessError`, the paperwork and
+contact actions throw their own `tr(...)` messages — so:
+
+```ts
+startTransition(async () => {
+  await setPaperworkStatusAction({ itemId, status });
+  setBusyKey(null);          // ← never runs when the await throws
+});
+```
+
+The button span forever and the reason, already translated, went nowhere. In
+`account-row` the thrown reason is precisely *"you do not have permission to
+connect accounts"*, which is the one thing the person needed to be told.
+
+Fixed at all six (`paperwork-module` ×3, `contact-timeline-module` ×2,
+`account-row`): catch, show the thrown message, clear the busy state in a
+`finally`.
+
+`contact-timeline-module` reports **inline** rather than through a toast — the
+component is rendered on its own in tests and otherwise has no `<ToastProvider>`
+dependency, and adding one would make it crash anywhere it renders outside the
+provider. The reason a delete failed also belongs beside the timeline it failed
+on.
+
+### A harness that had to move with it
+
+`tests/contact-timeline-localization.test.ts` (another session's) mocks React
+state **by slot index**, with a comment recording the coupling: *"Slots are the
+component's two states followed by the real drafter's five."* The new
+`actionError` state shifted every index by one and failed 7 of its 43 cases.
+The index was realigned 4 → 5 and the comment updated to say so. Verified not
+vacuous: blanking the `contactTimeline.writing` label still fails those same 7.
+
+## C1-K-05 · MEDIUM · The same silence across the auto and home sections
+
+Following C1-K-04 out mechanically: **24 more call sites across 11 files**
+await a throwing `Promise<void>` action bare inside a transition — every save
+and delete in `auto/{insurance,licenses,registration,rentals,service,vehicles}`
+and `home/{pros,service,warranties}`, both family switchers in `app-shell`, and
+the card-issuing loop in `money-cards-view`.
+
+Two of those deserve naming:
+
+- **`app-shell.switchTo` / `switchFamily`.** A throw closed the menu and did
+  nothing else — no navigation, no message. Switching household is the one
+  action where "nothing happened" is indistinguishable from "it worked and this
+  is the new one".
+- **`money-cards-view.issueAllVirtual`.** A loop with no error handling: a throw
+  part-way left the button stuck, skipped the remaining children, and the toast
+  named the number of cards *intended*, not issued. It now counts what actually
+  issued and says so.
+
+Fixed with one shared helper rather than 24 hand-written catches:
+`components/ui/action-error.tsx` — `useActionError()` catches, keeps the thrown
+(already translated) message and returns whether the action got through, so
+`setOpen(false)` can be gated on success; `<ActionError>` renders it beside the
+thing that failed.
+
+Deliberately **not** a toast. These components render on their own in tests with
+no `<ToastProvider>` above them, so a toast would turn a failed save into a
+crash — which is how C1-K-04's first attempt broke 38 tests.
+
+## C1-K-06 · MEDIUM · Promise chains with no rejection path
+
+`.then(onFulfilled)` with one argument and no `.catch()` cannot report a
+failure. supabase-js and the server actions REJECT on a transport failure —
+they only *resolve* `{ ok: false }` for a request that was answered — so these
+chains turned an outage into an unhandled rejection.
+
+Earlier passes fixed exactly this in `meals-module`, `event-detail-modal`,
+`quick-post` and `app-lock-settings`, each leaving a comment saying so. It had
+not reached eight more:
+
+| Where | What the silence looked like |
+| --- | --- |
+| `social-feed-module`'s shared `run()` | a rejection skipped `setBusy(null)`: control disabled, spinner spinning, nothing said — **every** control in the module goes through it |
+| `routines-panel`, `moments-view` | an **Undo** that looked done; the events were still on the calendar |
+| `ai-settings` | `{ ok: false }` handled, a rejection not — the skeleton stayed forever |
+| `medical-records`' `CardImage` | a failed signing left the placeholder, which reads exactly like "this card was never uploaded" |
+| `workload-module` | a weekly snapshot silently not saved |
+| `service-tooltip`, `free-tier-sidebar` | cosmetic, but invisible when broken |
+
+Each now has a rejection path that logs, and reports to the person wherever
+there is somewhere to report. `social-feed`'s `run()` was the highest-leverage
+of them — one helper behind every control in that module.
+
+The insurance card now says *Unavailable* rather than showing the same
+placeholder it shows for an absent card. Those are different facts.
+
+## C1-K-07 · MEDIUM · 19 API writes whose answer was never read
+
+Section C also names ~57 unaudited API routes. Sweeping every `app/api/**/route.ts`
+for a write with nothing destructured found **19 across 13 routes**.
+
+PostgREST **resolves** an RLS refusal, a missing column and a constraint
+violation as `{ error }` — it does not throw — so even the routes that wrap the
+call in `try/catch` never saw those.
+
+Two are worth naming:
+
+- **`app/api/contact`.** Its `support_tickets` insert is deliberately
+  best-effort *because* "the email below is the primary path", and the comment
+  promises the ticket "surfaces in the admin console even if email delivery is
+  unavailable". A resolved error meant that documented fallback silently did
+  not exist — a support request accepted and lost.
+- **`app/api/cron/family-routines`** (×3). These writes record that a routine
+  was filed. A lost status update lets the next pass file the same routine
+  again, so here the silence costs **correctness**, not just observability.
+
+The rest are AI logs, usage events and sync preferences — genuinely
+best-effort, and a silent logging failure is exactly what makes an audit
+impossible.
+
+All 19 now capture and log their error. None blocks its response: the point is
+a trace, which is the difference between degrading and vanishing.
+
+## Converged with another session on C1-K-01/03
+
+While this pass was running, another session found the **same class
+independently** and landed `wroteNoRows()` in `lib/supabase/errors.ts` with a
+test of its own. Its header carries the measurement that explains the whole
+defect, and states it better than this document did:
+
+> `using` (UPDATE/DELETE) **filters** silently to zero rows; `with check`
+> (INSERT) **raises**. Measured on Postgres 16 against the policy shape 0309
+> installs, as a non-manager.
+
+That is why only the update/delete paths needed a row count — and it is
+independent corroboration of `health-write-gate-check.sql`, reached from the
+opposite direction.
+
+The merge conflicted in `rewards-module`. Resolved **towards theirs**: one
+shared helper beats two spellings, and `errors.thatChangeWasNotSaved` is the
+more accurate message — zero rows can also mean the row was deleted
+concurrently, not only that permission was refused. The three modules only this
+pass had fixed (`medical-records`, `family-module`, `settings-module`) were
+migrated to the same helper and key, and both sessions' guards now assert the
+**property** rather than either spelling.
+
+## Verification
+
+`tsc` clean · `next lint` 0 errors · **14,056 tests / 1,232 files** ·
+**40/40 probes** (330 migrations replayed, 0 failed).
+
+Every fix calibrated by reverting it: removing the row checks fails 2 of the 8
+assertions in `a-refused-health-write-does-not-say-saved` and the per-table
+assertion in `manager-gated-writes-report-refusals`; removing one rejection
+handler fails 2 of 5 in `a-voice-log-failure-does-not-lose-the-capture`;
+removing one catch fails 2 of 16 in
+`a-thrown-action-does-not-leave-a-button-spinning`. Controls hold in both
+directions — the pre-existing error branches still fire, and Undo still appears
+on success.
+
+## Swept clean, mechanically, and worth recording as such
+
+- **Every write on a manager-gated table now carries a row check.** A sweep of
+  all 33 gated tables across `components/` *and* `app/` returns **zero**
+  remaining `update`/`delete`/`upsert` without `.select('id')`. Closed by the
+  two sessions combined.
+- **Optimistic UI that never reconciles: not found.** 109 raw candidates
+  narrowed to 26, and every one is either a busy flag under another name
+  (`setDismissing`, `setPlanning`, `setMarkingAll`) or a setter that runs
+  *after* the write succeeded (`setReviewedCount(0)`, `setNote('')`). No module
+  shows a change the database refused.
+- **Writes whose error is captured then ignored: none.** The three the detector
+  flagged all check, just further down than a 400-character window reached.
+- **Section C's priority list is fully covered**: `locator-module`,
+  `health-visits`, `immunizations`, `trust-sharing-section` and
+  `trust-activity-tab` clean; `medical-records`, `medications`, `paperwork` and
+  `voice` fixed above.
+
+### Recorded, not fixed
+
+`career-module.setPrimary` clears `is_primary` on every other resume and *then*
+sets it on the target. If the second update fails, the family is left with no
+primary resume at all. The user is told it failed, and making it atomic needs a
+transaction or an RPC rather than two client statements — so it is written down
+here rather than half-fixed.
+
+### Also swept clean
+
+- Every `useRealtimeQuery` call in every component binds its `error`, and none
+  binds one it never uses. The "empty list shown as nothing-here" class does not
+  exist in this codebase.
+- `trust-activity-tab` already guards it explicitly ("A failed read renders the
+  retryable error state, never an empty ledger"); `trust-sharing-section` and
+  `paperwork-module`'s AI draft path check `res.ok`.

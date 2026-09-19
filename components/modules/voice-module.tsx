@@ -98,12 +98,21 @@ export function VoiceModule() {
         kind: route.kind, text: route.text, familyId, userId, memberId: selfMember?.id ?? null,
       });
       // Log the command to the family's voice history (best-effort — a logging
-      // failure must not lose the thing we just created).
+      // failure must not lose the thing we just created). It sits inside the
+      // same try as saveCapture, so `await` alone did not keep that promise:
+      // supabase-js RESOLVES an API error but REJECTS a transport failure, and
+      // a rejection here jumped to the catch, told the user "Could not run that
+      // command", offered no Undo, and wrote a `failed` history row — for a
+      // capture that had already succeeded. Swallowing it is what best-effort
+      // means.
       await sb.from('voice_commands').insert({
         family_id: familyId, member_id: selfMember?.id ?? null, transcript: route.text,
         resolved_kind: route.kind, action_table: tableForKind(route.kind),
         action_count: res.count, status: 'routed', created_by: userId,
-      });
+      }).then(
+        ({ error }) => { if (error) console.error('[voice] history write failed', error); },
+        (err: unknown) => { console.error('[voice] history write failed', err); },
+      );
       success(
         `${describeRoute(route.kind)}${res.count > 1 ? ` · ${res.count} items` : ''}`,
         { label: 'Undo', onClick: () => {
@@ -116,10 +125,15 @@ export function VoiceModule() {
     } catch (err) {
       journey.abandon();
       // Record the failed attempt so the history is honest.
+      // Same reason, and one more: this runs INSIDE the catch, so a rejection
+      // here would replace the real failure with its own.
       await sb.from('voice_commands').insert({
         family_id: familyId, member_id: selfMember?.id ?? null, transcript: raw,
         resolved_kind: route.kind, status: 'failed', created_by: userId,
-      }).select('id');
+      }).select('id').then(
+        ({ error }) => { if (error) console.error('[voice] failure history write failed', error); },
+        (e: unknown) => { console.error('[voice] failure history write failed', e); },
+      );
       toastError(describeDbError(err, tr('voiceModule.couldNotRunThatCommand')));
     } finally {
       setRunning(false);

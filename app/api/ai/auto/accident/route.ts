@@ -79,10 +79,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: describeAIError(err).message }, { status: 503 });
   }
 
-  await supabase.from('auto_ai_logs').insert({
+  const { error: writeError1 } = await supabase.from('auto_ai_logs').insert({
     family_id: ctx.active.familyId, user_id: ctx.user.id, vehicle_id: vehicleId, kind: 'accident',
     input: { situation, injuries, hasInsurance }, output: { text }, created_by: ctx.user.id,
   });
+  if (writeError1) console.error('[ai/auto/accident] auto_ai_logs write failed', writeError1);
 
   return NextResponse.json({ text });
 }

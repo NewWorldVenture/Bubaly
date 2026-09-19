@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+
+import { ActionError, useActionError } from '@/components/ui/action-error';
 import { Car, Plus, Pencil, Trash2, Gauge } from 'lucide-react';
 import { saveVehicleAction, deleteVehicleAction } from '@/app/(app)/dashboard/auto/actions';
 import { vehicleLabel, BODY_TYPES, FUEL_TYPES } from '@/lib/auto/renewals';
@@ -23,10 +25,12 @@ export function VehiclesClient({ vehicles, members }: { vehicles: Vehicle[]; mem
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Vehicle | null>(null);
   const [pending, start] = useTransition();
+  const { message: actionError, run } = useActionError();
   const driverName = (id: string | null) => members.find((m) => m.id === id)?.display_name ?? null;
 
   return (
     <div className="space-y-4">
+      <ActionError message={actionError} />
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold">{t('vehiclesClient.vehicles')}</h2>
         <Button onClick={() => { setEditing(null); setOpen(true); }}><Plus className="h-4 w-4" /> {t('vehiclesClient.addVehicle')}</Button>
@@ -53,7 +57,7 @@ export function VehiclesClient({ vehicles, members }: { vehicles: Vehicle[]; mem
               </div>
               <div className="mt-3 flex items-center gap-3 border-t border-border/50 pt-2 text-xs">
                 <button onClick={() => { setEditing(v); setOpen(true); }} className="inline-flex items-center gap-1 text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" />{' '}{tr('vehiclesClient.edit')}</button>
-                <button onClick={() => start(async () => { await deleteVehicleAction(v.id); })} className="inline-flex items-center gap-1 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" />{' '}{tr('vehiclesClient.delete')}</button>
+                <button onClick={() => start(async () => { await run(() => deleteVehicleAction(v.id)); })} className="inline-flex items-center gap-1 text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" />{' '}{tr('vehiclesClient.delete')}</button>
               </div>
             </Card>
           ))}
@@ -61,7 +65,7 @@ export function VehiclesClient({ vehicles, members }: { vehicles: Vehicle[]; mem
       )}
 
       <Modal open={open} onClose={() => setOpen(false)} title={editing ? 'Edit vehicle' : 'Add vehicle'}>
-        <form action={(fd) => start(async () => { await saveVehicleAction(fd); setOpen(false); })} className="space-y-3">
+        <form action={(fd) => start(async () => { if (await run(() => saveVehicleAction(fd))) setOpen(false); })} className="space-y-3">
           {editing && <input type="hidden" name="id" value={editing.id} />}
           <div className="grid grid-cols-3 gap-3">
             <Field label={t('vehiclesClient.year')}><Input type="number" name="year" defaultValue={editing?.year ?? ''} /></Field>

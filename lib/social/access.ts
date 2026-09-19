@@ -1,7 +1,14 @@
 // lib/social/access.ts
 // Server-side resolution of the caller's social role + permission guards. Mirrors
 // the SQL helper public.social_has_permission (migration 0034). Use these in
-// server actions / route handlers BEFORE any privileged write; RLS is the backstop.
+// server actions / route handlers BEFORE any privileged write.
+//
+// RLS is NOT a backstop for most of this. Migration 0034 templates
+// select/insert/update/delete on the social tables as plain
+// public.is_family_member(family_id); social_publish_jobs_insert is the only
+// policy that consults social_has_permission. So for connect_accounts,
+// manage_settings, approve_posts, schedule_posts and the rest, these guards are
+// the enforcement boundary, not a mirror of one.
 import 'server-only';
 import { createServer } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
@@ -28,7 +35,7 @@ export async function getSocialAccess(familyId: string): Promise<SocialAccess | 
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) return null;
 
-  const [{ data: explicit }, { data: member }] = await settleAll([
+  const [{ data: explicit, error: explicitError }, { data: member, error: memberError }] = await settleAll([
     supabase
       .from('social_access_permissions')
       .select('social_role, status')
@@ -44,6 +51,18 @@ export async function getSocialAccess(familyId: string): Promise<SocialAccess | 
       .eq('is_active', true)
       .maybeSingle(),
   ]);
+
+  // A read that FAILED is not a row that is absent. The explicit row wins and
+  // may RESTRICT — a parent demoted to 'analyst' is ordinary configuration —
+  // so treating an unreadable row as "no explicit role" would hand them the
+  // household default of 'admin' instead. Refuse rather than guess: every
+  // caller already handles null (403, SocialAccessError, `access?.can()`), and
+  // migration 0034 templates the social tables on plain is_family_member, so
+  // for every permission but publish_posts this resolver IS the boundary.
+  if (explicitError || memberError) {
+    console.error('[social/access] role read failed', { familyId, explicitError, memberError });
+    return null;
+  }
 
   // Not a member of this family at all → no access (RLS would block anyway).
   if (!member && !explicit) return null;

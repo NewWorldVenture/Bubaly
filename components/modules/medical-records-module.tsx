@@ -1,5 +1,7 @@
 'use client';
 
+import { wroteNoRows } from '@/lib/supabase/errors';
+
 import { useEffect, useMemo, useState } from 'react';
 import {
   Stethoscope, Smile, Plus, Pencil, Trash2, FileText, ClipboardList,
@@ -40,19 +42,34 @@ const blankProfile = { member_id: '', blood_type: '', allergies: '', conditions:
 
 /** Renders a private Storage image via a short-lived signed URL. */
 function CardImage({ path, label }: { path: string | null; label: string }) {
+  const t = useTranslations();
   const [url, setUrl] = useState<string | null>(null);
+  // A bare `.then()` had no rejection path: a failed signing left an unhandled
+  // rejection and the placeholder on screen forever, which reads exactly like
+  // "this card was never uploaded". For an insurance card those are very
+  // different facts, so a failure says so and is logged.
+  const [failed, setFailed] = useState(false);
   useEffect(() => {
     let active = true;
+    setFailed(false);
     if (!path) { setUrl(null); return; }
     const sb = createClient();
-    getDocumentSignedUrl(sb, path, 600).then(({ url }) => { if (active) setUrl(url); });
+    getDocumentSignedUrl(sb, path, 600).then(
+      ({ url }) => { if (active) setUrl(url); },
+      (err: unknown) => {
+        console.error('[medical-records] card image could not be signed', err);
+        if (active) setFailed(true);
+      },
+    );
     return () => { active = false; };
   }, [path]);
   if (!path) return null;
   return (
     <div className="overflow-hidden rounded-lg border border-border">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      {url ? <img src={url} alt={label} className="h-24 w-full object-cover" /> : <div className="grid h-24 w-full place-items-center bg-surface/40 text-xs text-muted">{label}</div>}
+      {url
+        ? <img src={url} alt={label} className="h-24 w-full object-cover" />
+        : <div className="grid h-24 w-full place-items-center bg-surface/40 text-xs text-muted">{failed ? t('installButton.unavailable') : label}</div>}
     </div>
   );
 }
@@ -131,19 +148,28 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       is_primary: providerForm.is_primary,
       notes: providerForm.notes || null,
     };
-    const { error: err } = providerForm.id
-      ? await sb.from('health_providers').update(fields).eq('id', providerForm.id)
-      : await sb.from('health_providers').insert({ ...fields, family_id: familyId, kind, created_by: userId });
+    // `.select('id')` is what makes a REFUSED write tell itself apart from a
+    // successful one. health_providers / insurance_policies / medical_profiles
+    // are SELECT is_family_member but UPDATE/DELETE can_manage_family, so a
+    // teen, child or caregiver SEES these records and cannot change them — and
+    // RLS does not refuse them with an error. It matches zero rows and returns
+    // success, so `if (error)` alone reported "saved" over an unchanged row.
+    // (An INSERT blocked by RLS does raise, so only the update path needs this.)
+    const { data: rows, error: err } = providerForm.id
+      ? await sb.from('health_providers').update(fields).eq('id', providerForm.id).select('id')
+      : await sb.from('health_providers').insert({ ...fields, family_id: familyId, kind, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(`Could not save ${providerWord.toLowerCase()}`); return; }
+    if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(`${providerWord} saved`);
     setProviderForm(null);
   }
 
   async function deleteProvider(id: string) {
     const sb = createClient();
-    const { error: err } = await sb.from('health_providers').delete().eq('id', id);
+    const { data: rows, error: err } = await sb.from('health_providers').delete().eq('id', id).select('id');
     if (err) { toastError(t('medicalRecordsModule.couldNotDelete')); return; }
+    if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('medicalRecordsModule.deleted'));
   }
 
@@ -179,19 +205,21 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       back_image_path: policyForm.back_image_path || null,
       notes: policyForm.notes || null,
     };
-    const { error: err } = policyForm.id
-      ? await sb.from('insurance_policies').update(fields).eq('id', policyForm.id)
-      : await sb.from('insurance_policies').insert({ ...fields, family_id: familyId, kind, created_by: userId });
+    const { data: rows, error: err } = policyForm.id
+      ? await sb.from('insurance_policies').update(fields).eq('id', policyForm.id).select('id')
+      : await sb.from('insurance_policies').insert({ ...fields, family_id: familyId, kind, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(t('medicalRecordsModule.couldNotSaveInsurance')); return; }
+    if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('medicalRecordsModule.insuranceSaved'));
     setPolicyForm(null);
   }
 
   async function deletePolicy(id: string) {
     const sb = createClient();
-    const { error: err } = await sb.from('insurance_policies').delete().eq('id', id);
+    const { data: rows, error: err } = await sb.from('insurance_policies').delete().eq('id', id).select('id');
     if (err) { toastError(t('medicalRecordsModule.couldNotDelete')); return; }
+    if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('medicalRecordsModule.deleted'));
   }
 
@@ -217,9 +245,11 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       notes: profileForm.notes || null,
       updated_by: userId,
     };
-    const { error: err } = await sb.from('medical_profiles').upsert(payload, { onConflict: 'member_id' });
+    const { data: rows, error: err } = await sb.from('medical_profiles')
+      .upsert(payload, { onConflict: 'member_id' }).select('id');
     setSaving(false);
     if (err) { toastError(t('medicalRecordsModule.couldNotSaveProfile')); return; }
+    if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('medicalRecordsModule.profileSaved'));
     setProfileForm(null);
   }

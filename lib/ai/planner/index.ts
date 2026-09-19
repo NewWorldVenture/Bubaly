@@ -252,6 +252,15 @@ export async function planRequest(
     console.error('[planner] trust inputs could not be loaded; nothing was planned', error);
     return fail(describeDbError(error, 'Bubaly could not check what it is allowed to do, so it did not plan anything.'), { code: SERVICE_CODES.db, retryable: true });
   }
+  // The catch above cannot see a failed READ: loadTrustInputs goes through
+  // settleAll, which turns a rejected transport into a resolved `{ data: null,
+  // error }`, so an unreadable policy table arrives as an EMPTY policy list and
+  // the plan would be built as though the family had denied nothing. `degraded`
+  // is that case, and it belongs on the same path this catch already chose.
+  if (trust.degraded) {
+    console.error('[planner] trust inputs were degraded; nothing was planned', { familyId: scope.familyId });
+    return fail('Bubaly could not check what it is allowed to do, so it did not plan anything.', { code: SERVICE_CODES.db, retryable: true });
+  }
   // The intent's catalogue is what the prompt offers AND what the validator
   // accepts: a step naming a real tool from another intent's catalogue is
   // dropped (`off_catalogue`), so the narrowing in `toolsForIntent` is a
@@ -593,6 +602,15 @@ export async function replanRun(
   } catch (error) {
     console.error('[planner] trust inputs could not be loaded for a re-plan', error);
     return fail(describeDbError(error, 'Bubaly could not check what it is allowed to do.'), { code: SERVICE_CODES.db, retryable: true });
+  }
+  // The catch above cannot see a failed READ: loadTrustInputs goes through
+  // settleAll, which turns a rejected transport into a resolved `{ data: null,
+  // error }`, so an unreadable policy table arrives as an EMPTY policy list and
+  // the plan would be built as though the family had denied nothing. `degraded`
+  // is that case, and it belongs on the same path this catch already chose.
+  if (trust.degraded) {
+    console.error('[planner] trust inputs were degraded on a re-plan', { familyId: scope.familyId });
+    return fail('Bubaly could not check what it is allowed to do.', { code: SERVICE_CODES.db, retryable: true });
   }
   const tools = toolsForIntent(intent, listTools());
   const inputs: ValidationInputs = {

@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+
+import { ActionError, useActionError } from '@/components/ui/action-error';
 import { Wrench, Plus, Trash2 } from 'lucide-react';
 import { saveAutoServiceAction, deleteAutoServiceAction } from '@/app/(app)/dashboard/auto/actions';
 import { vehicleLabel } from '@/lib/auto/renewals';
@@ -22,11 +24,13 @@ export function AutoServiceClient({ records, vehicles }: { records: AutoService[
   const t = useTranslations();
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
+  const { message: actionError, run } = useActionError();
   const vName = (id: string | null) => { const v = vehicles.find((x) => x.id === id); return v ? vehicleLabel(v) : '—'; };
   const totalSpend = records.reduce((s, r) => s + (Number(r.cost) || 0), 0);
 
   return (
     <div className="space-y-4">
+      <ActionError message={actionError} />
       <div className="flex items-center justify-between">
         <div><h2 className="text-sm font-semibold">{t('serviceClient.serviceLog')}</h2><p className="text-xs text-muted">{t('serviceClient.oilChangesTiresRepairsAFull')}</p></div>
         <Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> {t('serviceClient.logService')}</Button>
@@ -48,7 +52,7 @@ export function AutoServiceClient({ records, vehicles }: { records: AutoService[
                     <td className="px-3 py-2 text-muted">{fmtDate(r.service_date)}</td>
                     <td className="px-3 py-2 text-muted">{r.mileage != null ? `${r.mileage.toLocaleString()} mi` : '—'}</td>
                     <td className="px-3 py-2">{r.cost != null ? `$${Number(r.cost).toLocaleString()}` : '—'}</td>
-                    <td className="px-3 py-2 text-right"><button onClick={() => start(async () => { await deleteAutoServiceAction(r.id); })} className="text-muted hover:text-danger"><Trash2 className="h-4 w-4" /></button></td>
+                    <td className="px-3 py-2 text-right"><button onClick={() => start(async () => { await run(() => deleteAutoServiceAction(r.id)); })} className="text-muted hover:text-danger"><Trash2 className="h-4 w-4" /></button></td>
                   </tr>
                 ))}
               </tbody>
@@ -58,7 +62,7 @@ export function AutoServiceClient({ records, vehicles }: { records: AutoService[
       )}
 
       <Modal open={open} onClose={() => setOpen(false)} title={t('serviceClient.logAService')}>
-        <form action={(fd) => start(async () => { await saveAutoServiceAction(fd); setOpen(false); })} className="space-y-3">
+        <form action={(fd) => start(async () => { if (await run(() => saveAutoServiceAction(fd))) setOpen(false); })} className="space-y-3">
           <Field label={t('serviceClient.whatWasDone')}><Input name="title" required placeholder={t('serviceClient.oilChangeRotation')} /></Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label={t('serviceClient.vehicle')}><Select name="vehicle_id" defaultValue=""><option value="">—</option>{vehicles.map((v) => <option key={v.id} value={v.id}>{vehicleLabel(v)}</option>)}</Select></Field>

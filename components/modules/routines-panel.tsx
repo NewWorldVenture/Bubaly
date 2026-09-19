@@ -162,6 +162,11 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
             delete applyIds.current[key];
             success(tr('routinesPanel.undone'));
             onApplied();
+          }, (err: unknown) => {
+            // A rejection used to leave the Undo looking done. It is not: the
+            // events are still on the calendar.
+            console.error('[routines] undo failed', err);
+            toastError(err instanceof Error && err.message ? err.message : tr('globalError.somethingWentWrong'));
           });
         },
       });

@@ -9,7 +9,7 @@ import { DEFAULT_REFERRAL_CONFIG, type ReferralConfig } from '@/lib/referrals/co
 import { fmtMoney } from '@/lib/utils/format';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -169,17 +169,19 @@ export function SettingsModule({ referralConfig }: { referralConfig?: ReferralCo
     if (!name) return toastError(t('settingsModule.nameIsRequired'));
     setSavingFamily(true);
     const supabase = createClient();
-    const { error } = await supabase.from('families').update({ name }).eq('id', family.id);
+    const { data: rows, error } = await supabase.from('families').update({ name }).eq('id', family.id).select('id');
     setSavingFamily(false);
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(rows)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(t('settingsModule.familyNameUpdated'));
   }
 
   async function removeMember(memberId: string) {
     if (!confirm(t('settingsModule.removeThisMemberFromThe'))) return;
     const supabase = createClient();
-    const { error } = await supabase.from('family_members').update({ is_active: false }).eq('id', memberId);
+    const { data: rows, error } = await supabase.from('family_members').update({ is_active: false }).eq('id', memberId).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(rows)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(t('settingsModule.memberRemoved'));
     window.location.reload();
   }
@@ -451,10 +453,11 @@ function EditMemberModal({ member, isSelf, onClose }: {
     const birthday = String(form.get('birthday') ?? '').trim();
     if (!display_name) { toastError(t('settingsModule.nameIsRequired')); return; }
     setSaving(true);
-    const { error } = await createClient().from('family_members')
-      .update({ display_name, role, birthday: birthday || null }).eq('id', member.id);
+    const { data: rows, error } = await createClient().from('family_members')
+      .update({ display_name, role, birthday: birthday || null }).eq('id', member.id).select('id');
     setSaving(false);
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(rows)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(t('settingsModule.memberUpdated'));
     onClose();
     window.location.reload();

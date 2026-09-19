@@ -65,9 +65,33 @@ function toPolicy(r: Record<string, unknown>): Policy {
 /** Load every input the engine needs for one family. */
 export async function loadTrustInputs(supabase: DB, familyId: string): Promise<{
   policies: Policy[]; grants: Grant[]; delegations: Delegation[]; emergencyDomains: string[];
+  /**
+   * True when a read that could have produced a DENY did not come back.
+   *
+   * These four results were destructured for `data` alone and every `error` was
+   * dropped, each falling back to `?? []`. A failed `trust_policies` read then
+   * evaluated as "this family has no policies" and a failed `permission_grants`
+   * read as "this member has no deny grant" — and those are steps 2 and 3 of
+   * the engine, the two that produce an explicit deny. The engine fell through
+   * to role defaults, which are more permissive by construction; that is why a
+   * family writes a policy in the first place.
+   *
+   * `settleAll` exists precisely so a transport rejection arrives "in the shape
+   * the page expects" and the caller's own error handling runs. This caller had
+   * none, so the whole mechanism landed on the floor here.
+   *
+   * Delegations and emergency sessions are NOT counted: losing either removes
+   * an elevation, which fails closed on its own.
+   */
+  degraded: boolean;
 }> {
   const nowIso = new Date().toISOString();
-  const [{ data: policies }, { data: grants }, { data: dels }, { data: emergencies }] = await settleAll([
+  const [
+    { data: policies, error: policiesError },
+    { data: grants, error: grantsError },
+    { data: dels },
+    { data: emergencies },
+  ] = await settleAll([
     // Ordered. lib/trust/engine.ts sorts by `priority` alone, and
     // Array.prototype.sort is stable, so with equal priorities the winner is
     // whichever row came back first — and a query with no ORDER BY does not
@@ -91,7 +115,13 @@ export async function loadTrustInputs(supabase: DB, familyId: string): Promise<{
 
   const emergencyDomains = [...new Set((emergencies ?? []).flatMap((e: Record<string, unknown>) => (e.elevated_domains as string[]) ?? []))];
 
+  if (policiesError || grantsError) {
+    console.error('[trust] the rules could not be read; decisions will degrade to approval',
+      { familyId, policies: policiesError?.message, grants: grantsError?.message });
+  }
+
   return {
+    degraded: Boolean(policiesError || grantsError),
     policies: (policies ?? []).map(toPolicy),
     grants: (grants ?? []).map((g: Record<string, unknown>) => ({
       memberId: String(g.member_id), domain: String(g.domain),
@@ -232,11 +262,39 @@ export async function evaluateTrust(supabase: DB, familyId: string, req: Evaluat
   // pins what a member may file on approval_requests and 0260 removes member
   // INSERT on trust_audit_logs entirely, so both go through the service role.
   const writer = await ledgerWriter(supabase);
-  const decision = evaluateAction({
+  const engineDecision = evaluateAction({
     actor: req.actor, domain: req.domain, capability: req.capability, context: req.context,
     policies: inputs.policies, grants: inputs.grants, delegations: inputs.delegations,
     emergencyDomains: inputs.emergencyDomains,
   });
+
+  // The rules did not load, so this `allow` may only exist because the deny
+  // that would have governed is missing. Ask a parent instead.
+  //
+  // Not a hard deny: the audit-write comment below is right that a bookkeeping
+  // failure must not become an outage of the whole AI layer, and the same
+  // applies here. But the asymmetry matters — an audit row EXPLAINS a decision,
+  // whereas the policies ARE the decision, and proceeding without them is not
+  // degrading gracefully, it is quietly answering a different question.
+  // `require_approval` is the one outcome that neither invents permission nor
+  // takes the feature away: a human can still say yes.
+  //
+  // A deny is left exactly as it is. Losing rules can only ever have made the
+  // engine more permissive, so a deny reached without them is still a deny.
+  //
+  // An EMERGENCY allow is left alone. `evaluateAction` resolves emergency
+  // elevation in step 1, before a policy or grant is read at all, so a failed
+  // read cannot have produced it — and putting an approval in front of
+  // Emergency Operations Mode is the one place where asking is worse than
+  // acting.
+  const decision: Decision = inputs.degraded && engineDecision.effect === 'allow'
+    && engineDecision.basis !== 'emergency'
+    ? {
+      effect: 'require_approval',
+      reason: 'Bubaly could not read this family’s permission rules, so it is asking rather than assuming.',
+      basis: 'degraded',
+    }
+    : engineDecision;
 
   let approvalId: string | undefined;
   let alreadyPending = false;

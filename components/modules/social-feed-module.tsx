@@ -106,8 +106,20 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
 
   async function run(key: string, fn: () => Promise<{ ok: boolean; error?: string }>, ok?: string) {
     setBusy(key);
-    const res = await fn();
-    setBusy(null);
+    // `fn()` can REJECT, not just resolve `{ ok: false }` — a transport failure,
+    // or a server action that throws (requireSocialPermission does). That
+    // rejection skipped `setBusy(null)`, so the control stayed disabled with a
+    // spinner and nothing was said. Every caller in this module goes through
+    // here, so this is the one place it has to be handled.
+    let res: { ok: boolean; error?: string };
+    try {
+      res = await fn();
+    } catch (err) {
+      console.error('[social-feed] action failed', err);
+      res = { ok: false, error: err instanceof Error && err.message ? err.message : undefined };
+    } finally {
+      setBusy(null);
+    }
     if (!res.ok) return toastError(res.error ?? 'Something went wrong');
     if (ok) success(ok);
     router.refresh();
@@ -211,7 +223,14 @@ export function SocialFeedModule({ sources, items }: { sources: FeedSource[]; it
                   onFavorite={() => run(`fav-${item.id}`, () => toggleFavoriteAction({ id: item.id, favorite: !item.isFavorite }))}
                   onOpen={() => {
                     if (item.permalink) window.open(item.permalink, '_blank', 'noopener');
-                    if (!item.isRead) void markReadAction({ id: item.id, read: true }).then(() => router.refresh());
+                    // Degrade quietly (the link already opened) but never silently:
+                    // a bare `.then()` made an unread item stay unread with no trace.
+                    if (!item.isRead) {
+                      void markReadAction({ id: item.id, read: true }).then(
+                        () => router.refresh(),
+                        (err: unknown) => console.error('[social-feed] mark read failed', err),
+                      );
+                    }
                   }} />
               ))}
             </div>
