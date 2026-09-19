@@ -922,6 +922,11 @@ Pro / widened window / persisted catch-up). A coupled latent defect — a 120s
 dispatcher abort against routes budgeting 240-260s — is armed by fixing it.
 Corrected my own a-late-tick-drops-a-cron, whose severity model this refutes.
 
+supabase-schema-audit.yml examined: NO DEFECT (no npm ci is fine - node builtins
+only; .next is mkdir'd; enforcement correctly lives in the production-migrations
+workflow, which passes --enforce-history and is pinned by tests). All 8 workflows
+have now been read.
+
 VERIFIED: 14,184 green under both timezones, tsc clean, lint 0 at 12.
 STILL UNVERIFIED BY CI: no ci.yml run has been created for any commit after
 b05f0b32, across thirty checks. Everything above is local only.

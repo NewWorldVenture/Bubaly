@@ -6772,3 +6772,43 @@ summary line and discarded the `FAIL` line above it. Recorded as an unidentified
 failure rather than an infrastructure flake, because I have no evidence for the
 latter; the process error was mine, and the fix is to grep for `FAIL` rather
 than tail the summary.
+
+---
+
+[CLAUDE-1][INFO][INFRASTRUCTURE] `supabase-schema-audit.yml` — examined, no defect
+
+The eighth and last workflow, and the only one this audit had never opened.
+Checked because I had named it to the user as an uncovered gap, not because
+anything pointed at it.
+
+Three things looked like defects and each turned out to be fine on inspection:
+
+- **No `npm ci` step.** The job is `checkout` → `setup-node` → `node
+  scripts/audit-production-migration-state.mjs`, with no install. That would
+  break any script with a dependency — but this one imports only `node:fs` and
+  `node:url`. Correct as written, and cheaper for it.
+- **Uploads `.next/production-schema-audit.json` with `if-no-files-found:
+  error`,** and nothing in the job builds, so `.next/` does not exist at
+  checkout. The script `mkdirSync('.next', { recursive: true })` immediately
+  before writing. Fine.
+- **The workflow does not pass `--enforce-history`,** so `hasUnrecordedBaseline`
+  is computed, reported in the JSON, and never blocks. That is the correct
+  division: this workflow is the read-only, manually-dispatched observation
+  twin. Enforcement lives in `supabase-production-migrations.yml:94`, which does
+  pass the flag, is listed in that workflow's `paths:` filter (line 18, so a
+  change to the script re-runs the gate), and is pinned by
+  `tests/production-migration-state.test.ts`, which asserts the flag's presence
+  *and its position* relative to `db push`. 33 tests green across the two files
+  covering the script.
+
+**Payload is metadata-only, as its name claims.** The catalog query returns
+table and policy names; the ledger query is `select version, name from
+supabase_migrations.schema_migrations`. No row data leaves production. The
+artifact is retained 3 days, the job is gated on `environment: production`, and
+the repository is private. Noted for completeness, not as a concern.
+
+`workflow_dispatch`-only with `permissions: contents: read`,
+`timeout-minutes: 5`, and its own concurrency group. Nothing to fix.
+
+**Status:** NO DEFECT. This closes the last workflow I had not examined — all 8
+of `.github/workflows/` have now been read.
