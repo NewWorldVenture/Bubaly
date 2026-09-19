@@ -7859,3 +7859,147 @@ walks the directory from disk.
 
 Full suite after the change: **1,248 files / 14,058 tests, 0 failures**;
 probes **47/47**.
+
+
+---
+
+# Pass W — the ledger that watched everything except itself
+
+The permission surface: `trust-sharing-section`, `trust-activity-tab`, and the
+actions behind them.
+
+**Most of this surface holds.** Measured on the replayed schema, all four trust
+tables — `trust_policies`, `permission_grants`, `trust_delegations`,
+`emergency_sessions` — are manager-gated at the database, not just in the server
+action, with the role check written out in each policy; `approval_requests`
+carries one of the most carefully pinned INSERT policies in the repository
+(eleven columns forced to their initial values and the filer proved to be the
+acting member); `trust_audit_logs` has a SELECT policy and no write policy at
+all, exactly as `0260` intended. The actions file validates every domain,
+capability, effect and subject against its vocabulary, derives the approval
+threshold from the model rather than trusting the posted count, and looks the
+sharing preset up on the server so `"Babysitter tonight"` cannot arrive carrying
+`finances` for a year. That is recorded because a pass that reports only what it
+found would misrepresent this surface.
+
+The defect is one level up: the ledger records what the rules DECIDED and
+nothing about who CHANGED the rules.
+
+## C1-S8-04 [MEDIUM][AUDIT] — five reserved decision values, written by nothing, and all five are changes to the permission system
+
+**Files:** `app/(app)/dashboard/trust/actions.ts` (seven actions) ·
+`lib/trust/ledger.ts`
+**Status:** FIXED (four of five) · `tests/a-permission-change-is-recorded.test.ts`
+
+### Problem
+
+`trust_audit_logs_decision_check` has named fifteen decision values since the
+table shipped. Ten are written somewhere in the tree. Five are written nowhere —
+and the five sort themselves:
+
+| written | never written |
+|---|---|
+| `allow` `deny` `require_approval` `auto_approve` `executed` `approved` `rejected` `modified` `approved_execution` `emergency_override` | **`policy_changed` `grant_changed` `delegation_changed` `role_changed` `emergency_ended`** |
+
+Everything on the left is a decision taken *under* the rules. Everything on the
+right is a change *to* the rules. So a parent could write a policy letting
+Bubaly act unattended, grant a capability, hand another member their authority,
+or end an emergency elevation that outranks every deny in the system — and the
+ledger had no row for any of it.
+
+This is not a dormant table. `app/(app)/dashboard/trust/page.tsx:52` renders its
+last 40 rows, and `components/settings/privacy-center.tsx:76` presents it to a
+family as **"Who accessed what"**.
+
+It is the same shape as this document's `call_logs` observation, one level up:
+a capability written into the schema, named precisely, and never wired.
+
+### The sixth defect, in the same file
+
+`activateEmergencyAction` was the **only** one of the six `trust_audit_logs`
+writers that discarded its error:
+
+```ts
+await (await ledgerWriter(supabase)).from('trust_audit_logs').insert({ … });
+```
+
+The other five each capture it and each state a policy — the privacy export
+**refuses to hand over the data** when its receipt cannot be written;
+`lib/services/approvals` logs and deliberately does not roll a parent's "yes"
+back into "pending"; `lib/trust/server.ts` logs *"decision was made but not
+recorded"*.
+
+That the exception is emergency mode matters, because of how `serverWriter`
+degrades:
+
+```ts
+try { return createServiceClient() as unknown as T; } catch { return fallback; }
+```
+
+The fallback is the **caller's** client, and `0260` removed member INSERT on
+this table. So in any environment without service credentials the write is
+refused by RLS, the error is dropped, and **a ledger that had stopped recording
+is indistinguishable from a family that had never declared an emergency** — on
+the one action the code itself describes as outranking every deny, policy and
+risk tier.
+
+### Fix
+
+`recordTrustChange()` joins `lib/trust/ledger.ts`, the module that already owns
+"who writes the trust ledger", and the seven actions call it:
+`savePolicyAction`, `togglePolicyAction`, `deletePolicyAction`,
+`setPermissionGrantAction`, `createDelegationAction`, `revokeDelegationAction`,
+`endEmergencyAction`. `activateEmergencyAction` now captures its error and logs
+it loudly.
+
+It never throws and never fails its caller — the change has already landed, and
+rolling a parent's edit back over a missing audit row is worse than a gap in the
+log, which is the reasoning `lib/services/approvals` already states. The privacy
+export keeps the opposite rule and is left alone: there the receipt *is* the
+point.
+
+Two details worth naming:
+
+- **The reasons are stored in English on purpose.** Every other user-visible
+  string on this surface is translated per request; a ledger row is evidence,
+  read back long afterwards and possibly by someone who did not write it, so it
+  is not. (`createSharingPresetAction` stores its delegation `reason` translated
+  — that is a different field, the manager's own note about their own act.)
+- **Deleting a policy is the case that most needed this**, because it is the
+  only permission change that leaves no row behind anywhere else.
+
+### `role_changed` is left unwritten, and that is the finding's other half
+
+Not an oversight in this pass — there is nowhere to write it from.
+`components/modules/family-module.tsx:532` changes a member's role with a direct
+browser write:
+
+```ts
+await sb.from('family_members').update(payload).eq('id', member.id);   // payload.role
+```
+
+No server action is in that path, and `trust_audit_logs` is service-role-only by
+`0260`. Recording a role change therefore needs a server action for member
+editing, which is a change to how that module works and well past an audit fix.
+**Recorded, measured, and left for a deliberate decision** rather than papered
+over — and the guard asserts the browser-write shape is still there, so whoever
+adds the server path is told that `role_changed` is waiting for them.
+
+### The guard
+
+`tests/a-permission-change-is-recorded.test.ts` drives the seven actions against
+the in-memory Supabase and reads the ledger back. It asserts the row's
+`family_id`, `actor_id`, `domain`, `capability`, `reason` and `context` — not
+merely that *something* was written — and it asserts that a **refused** action
+writes nothing at all, because a ledger that logged attempts as changes would
+read as though the child had succeeded.
+
+Proved red eight times: each of the seven `recordTrustChange` call sites removed
+in turn, and the emergency error-discard restored.
+
+| mutation | guard |
+|---|---|
+| remove any one of the 7 `recordTrustChange` calls | **RED** (7/7) |
+| drop the emergency ledger error on the floor again | **RED** |
+
+Full suite: **1,249 files / 14,068 tests, 0 failures.**

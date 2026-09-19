@@ -601,3 +601,48 @@ SUITE: 1,248 files / 14,058 tests, 0 failures. PROBES: 47/47.
 NEXT (goal order): trust-sharing-section + trust-activity-tab (the permission
   surface itself), then paperwork-module, then voice-module.
 LAST-UPDATE: 2026-09-19
+
+## Claude-1 — Session 8, Pass W (the permission surface)
+FIRST, THE COUNTERWEIGHT: most of this surface holds, measured not assumed. All
+  four trust tables are manager-gated AT THE DATABASE (not just in the action);
+  `approval_requests` has one of the most carefully pinned INSERT policies in
+  the repo (11 columns forced to initial values + the filer proved to be the
+  acting member); `trust_audit_logs` is select-only, as 0260 intended; the
+  actions validate every domain/capability/effect/subject, derive the approval
+  threshold from the MODEL, and resolve sharing presets server-side so
+  "Babysitter tonight" can't arrive carrying `finances` for a year.
+FOUND: `C1-S8-04` [MEDIUM][AUDIT] — of the 15 decision values
+  `trust_audit_logs_decision_check` has named since the table shipped, 10 are
+  written somewhere and 5 are written NOWHERE: policy_changed, grant_changed,
+  delegation_changed, role_changed, emergency_ended. The split is not random —
+  everything written is a decision taken UNDER the rules; everything missing is
+  a change TO the rules. The ledger `trust/page.tsx` renders and
+  `privacy-center.tsx` calls "Who accessed what" had no row for creating a
+  policy, granting a capability, delegating authority, or ending an emergency
+  elevation that outranks every deny. Same shape as this document's `call_logs`
+  observation, one level up: named in the schema, never wired.
+  SIXTH DEFECT, same file: `activateEmergencyAction` was the ONLY one of the six
+  trust_audit_logs writers that discarded its error — and `serverWriter` falls
+  back to the CALLER'S client when service creds are missing, where 0260's
+  removal of member INSERT means the write is refused. So in that configuration
+  a ledger that had stopped recording looked exactly like a family that had
+  never declared an emergency.
+  FIXED: `recordTrustChange()` in lib/trust/ledger.ts + 7 call sites; the
+  emergency write now captures and logs. Never fails its caller (approvals'
+  stated reasoning); the privacy export keeps the OPPOSITE rule (refuses the
+  download without a receipt) and is untouched.
+  LEFT UNWRITTEN, DELIBERATELY: `role_changed`. family-module.tsx:532 changes a
+  member's role by direct browser write with NO server action, and the ledger is
+  service-role-only — so there is nowhere to write it from. Recording it needs a
+  server action for member editing: past an audit fix, named for a decision. The
+  guard asserts the browser-write shape still exists so whoever adds that path
+  is told role_changed is waiting.
+  GUARD `tests/a-permission-change-is-recorded.test.ts` drives all 7 actions
+  against the in-memory Supabase and reads the ledger back — asserting
+  family_id/actor_id/domain/capability/reason/context, not just "something was
+  written" — and that a REFUSED action writes nothing (a ledger logging attempts
+  as changes would read as though the child succeeded). Proved red 8x: each of
+  the 7 call sites removed in turn, plus restoring the error-discard.
+SUITE: 1,249 files / 14,068 tests, 0 failures.
+NEXT (goal order): paperwork-module, then voice-module.
+LAST-UPDATE: 2026-09-19
