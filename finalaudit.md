@@ -4521,9 +4521,38 @@ component's two states followed by the real drafter's five."* The new
 The index was realigned 4 → 5 and the comment updated to say so. Verified not
 vacuous: blanking the `contactTimeline.writing` label still fails those same 7.
 
+## C1-K-05 · MEDIUM · The same silence across the auto and home sections
+
+Following C1-K-04 out mechanically: **24 more call sites across 11 files**
+await a throwing `Promise<void>` action bare inside a transition — every save
+and delete in `auto/{insurance,licenses,registration,rentals,service,vehicles}`
+and `home/{pros,service,warranties}`, both family switchers in `app-shell`, and
+the card-issuing loop in `money-cards-view`.
+
+Two of those deserve naming:
+
+- **`app-shell.switchTo` / `switchFamily`.** A throw closed the menu and did
+  nothing else — no navigation, no message. Switching household is the one
+  action where "nothing happened" is indistinguishable from "it worked and this
+  is the new one".
+- **`money-cards-view.issueAllVirtual`.** A loop with no error handling: a throw
+  part-way left the button stuck, skipped the remaining children, and the toast
+  named the number of cards *intended*, not issued. It now counts what actually
+  issued and says so.
+
+Fixed with one shared helper rather than 24 hand-written catches:
+`components/ui/action-error.tsx` — `useActionError()` catches, keeps the thrown
+(already translated) message and returns whether the action got through, so
+`setOpen(false)` can be gated on success; `<ActionError>` renders it beside the
+thing that failed.
+
+Deliberately **not** a toast. These components render on their own in tests with
+no `<ToastProvider>` above them, so a toast would turn a failed save into a
+crash — which is how C1-K-04's first attempt broke 38 tests.
+
 ## Verification
 
-`tsc` clean · `next lint` 0 errors · **14,000 tests / 1,229 files** ·
+`tsc` clean · `next lint` 0 errors · **14,008 tests / 1,230 files** ·
 **40/40 probes** (330 migrations replayed, 0 failed).
 
 Every fix calibrated by reverting it: removing the row checks fails 2 of the 8

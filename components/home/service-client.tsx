@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+
+import { ActionError, useActionError } from '@/components/ui/action-error';
 import { Wrench, Plus, Trash2, CalendarClock } from 'lucide-react';
 import { saveServiceRecordAction, deleteServiceRecordAction } from '@/app/(app)/dashboard/home/actions';
 import { fmtDate } from '@/lib/utils/format';
@@ -21,11 +23,13 @@ export function ServiceClient({ records, assets }: { records: ServiceRecord[]; a
   const t = useTranslations();
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
+  const { message: actionError, run } = useActionError();
   const assetName = (id: string | null) => assets.find((a) => a.id === id)?.name ?? null;
   const totalSpend = records.reduce((s, r) => s + (Number(r.cost) || 0), 0);
 
   return (
     <div className="space-y-4">
+      <ActionError message={actionError} />
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{t('serviceClient.serviceLog')}</h1>
@@ -57,7 +61,7 @@ export function ServiceClient({ records, assets }: { records: ServiceRecord[]; a
                   <td className="px-3 py-2 text-muted">{fmtDate(r.service_date)}</td>
                   <td className="px-3 py-2">{r.cost != null ? `$${Number(r.cost).toLocaleString()}` : '—'}</td>
                   <td className="px-3 py-2">{r.next_due_on ? <Badge tone="warning">{fmtDate(r.next_due_on)}</Badge> : '—'}</td>
-                  <td className="px-3 py-2 text-right"><button onClick={() => start(async () => { await deleteServiceRecordAction(r.id); })} className="text-muted hover:text-danger"><Trash2 className="h-4 w-4" /></button></td>
+                  <td className="px-3 py-2 text-right"><button onClick={() => start(async () => { await run(() => deleteServiceRecordAction(r.id)); })} className="text-muted hover:text-danger"><Trash2 className="h-4 w-4" /></button></td>
                 </tr>
               ))}
             </tbody>
@@ -66,7 +70,7 @@ export function ServiceClient({ records, assets }: { records: ServiceRecord[]; a
       )}
 
       <Modal open={open} onClose={() => setOpen(false)} title={t('serviceClient.logAService')}>
-        <form action={(fd) => start(async () => { await saveServiceRecordAction(fd); setOpen(false); })} className="space-y-3">
+        <form action={(fd) => start(async () => { if (await run(() => saveServiceRecordAction(fd))) setOpen(false); })} className="space-y-3">
           <Field label={t('serviceClient.whatWasDone')}><Input name="title" required placeholder={t('serviceClient.hvacAnnualTuneUp')} /></Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label={t('serviceClient.asset')}>
