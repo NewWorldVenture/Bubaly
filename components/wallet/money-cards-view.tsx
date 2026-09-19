@@ -405,7 +405,7 @@ function PhysicalCardModal({ child, onClose, onIssued }: {
     });
     setLoading(false);
     if (!res.ok) return toastError(res.error ?? 'Could not order card');
-    success(`Physical card ordered for ${child.name}!`);
+    success(t('wallet.physicalCardOrdered', { name: child.name }));
     onIssued();
   }
 

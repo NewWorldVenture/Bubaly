@@ -332,7 +332,7 @@ export function MessagesModule() {
     e.preventDefault();
     const content = text.trim();
     if (!content || !activeConv || sending) return;
-    if (content.length > 4000) { toastError('Message is too long (max 4000 characters)'); return; }
+    if (content.length > 4000) { toastError(tr('validation.messageTooLong', { max: 4000 })); return; }
     const prevReplyTo = replyTo;
     setSending(true);
     setText('');
@@ -396,7 +396,7 @@ export function MessagesModule() {
   async function sendFile(file: File) {
     if (!activeConv || uploadingFile) return;
     // 25 MB cap mirrors the storage bucket limit; fail fast with a clear message.
-    if (file.size > 25 * 1024 * 1024) { toastError('File is too large (max 25 MB)'); return; }
+    if (file.size > 25 * 1024 * 1024) { toastError(tr('validation.fileTooLarge', { max: 25 })); return; }
     setUploadingFile(true);
     try {
       const supabase = createClient();

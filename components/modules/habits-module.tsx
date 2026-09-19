@@ -118,7 +118,7 @@ export function HabitsModule() {
         ? await supabase.from('habit_logs').delete().eq('id', existing.id)
         : await supabase.from('habit_logs').update({ count: next }).eq('id', existing.id);
       if (error) return toastError(describeDbError(error));
-      if (next >= countTarget(habit) && existing.count < countTarget(habit)) success(`${habit.title}: target met 💧`);
+      if (next >= countTarget(habit) && existing.count < countTarget(habit)) success(t('modules.habitTargetMet', { title: habit.title }));
     } else {
       if (delta <= 0) return;
       const { error } = await supabase.from('habit_logs').insert({

@@ -91,7 +91,7 @@ export function VoiceModule() {
     setRunning(true);
     journey.start();
     const route = classifyVoiceCommand(raw);
-    if (!route.text) { setRunning(false); journey.abandon(); toastError("Didn't catch a command — try again."); return; }
+    if (!route.text) { setRunning(false); journey.abandon(); toastError(tr('voiceModule.didntCatchACommand')); return; }
     const sb = createClient();
     try {
       const res = await saveCapture(sb, {

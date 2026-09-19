@@ -268,7 +268,7 @@ function FundGoalModal({ goal, onClose }: { goal: GoalView; onClose: () => void 
     const res = await fundGoalAction({ goalId: goal.id, amountCents: Math.round(dollars * 100) });
     setLoading(false);
     if (!res.ok) return toastError(res.error ?? 'Could not fund goal');
-    success(`Moved ${formatCents(Math.round(dollars * 100))} into ${goal.title}`);
+    success(t('wallet.movedAmountIntoGoal', { amount: formatCents(Math.round(dollars * 100)), goal: goal.title }));
     onClose();
     router.refresh();
   }

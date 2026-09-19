@@ -158,7 +158,7 @@ export function WeatherModule() {
       sort_order: saved.length,
     }).select('id').single();
     if (err || !data) { toastError(describeDbError(err, t('weatherModule.couldNotAddCity'))); return; }
-    success(`Added ${r.name}`);
+    success(t('modules.addedNamed', { name: r.name }));
     setAdding(false); setQuery(''); setResults([]);
     await loadSaved();
     setActiveKey(`db:${data.id}`);

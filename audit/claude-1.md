@@ -8093,3 +8093,29 @@ mostly `console.error` calls the regex had swept in.
 
 **Status:** FIXED (scanner) + ratchet re-based. **Verified:** 14,297 green both
 timezones, tsc clean, lint 0.
+
+---
+
+[CLAUDE-1][MEDIUM][I18N] 49 of the 73 newly-visible strings translated into all seven catalogues
+
+Follow-through on Q46. 34 new keys, each translated into de-DE, es-ES, fr-FR,
+it-IT, nl-NL and pt-PT; the other four locale files are empty regional variants
+that inherit by fallback. Keys grouped so one serves several sites.
+
+Ceiling lowered 2878 -> 2828 to match reality; slack above the real number is
+not a ratchet.
+
+**The types caught three latent bugs the template literals hid.** Parameterising
+`Synced ${json.synced} events` failed to compile because `json.synced` is
+`number | undefined` — a template literal renders that as "Synced undefined
+events", silently. Same for `res.entities`/`res.edges`. All three default to 0
+now. Giving copy a type found bugs the copy itself was concealing.
+
+**24 left, deliberately.** All embed English pluralisation in the source
+(`${n} mission${n === 1 ? '' : 's'}`) or call a function inside the hole.
+Suffix-plurals do not survive translation — German, French and Italian inflect
+differently. Those need plural-aware keys, not a placeholder that is correct
+only in English, so they wait for a pass that adds that support.
+
+**Status:** 49/73 FIXED, 24 filed with a stated reason. **Verified:** 14,297
+green both timezones, tsc clean, lint 0, catalogue integrity green.

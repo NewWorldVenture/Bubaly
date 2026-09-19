@@ -82,7 +82,7 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
     if (toAdd.length === 0) { setBusy(false); return toastError(t('tripItinerary.allDaysAlreadyExist')); }
     const { error } = await createClient().from('vacation_itinerary_days').insert(toAdd);
     setBusy(false);
-    if (error) toastError(error.message); else success(`Added ${toAdd.length} days`);
+    if (error) toastError(error.message); else success(t('trips.addedDays', { count: toAdd.length }));
   }
 
   async function saveItem(e: React.FormEvent) {

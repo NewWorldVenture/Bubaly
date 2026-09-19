@@ -273,7 +273,7 @@ export function DocumentsModule() {
   function pickFile(f: File | null) {
     // Fail fast at pick time (before the form) with the real bucket limit.
     if (f && f.size > DOCUMENT_MAX_BYTES) {
-      toastError(`“${f.name}” is too large (max ${DOCUMENT_MAX_MB} MB).`);
+      toastError(tr('modules.fileTooLargeNamed', { name: f.name, max: DOCUMENT_MAX_MB }));
       return;
     }
     setFile(f);

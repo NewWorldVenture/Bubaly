@@ -408,7 +408,7 @@ function ItemForm({ familyId, userId, memberId, members, item, onClose, onSaved 
   const [seasons, setSeasons] = useState<string[]>(item?.seasons ?? []);
 
   async function uploadPhoto(file: File) {
-    if (file.size > 25 * 1024 * 1024) { toastError('Photo is too large (max 25 MB)'); return; }
+    if (file.size > 25 * 1024 * 1024) { toastError(t('validation.photoTooLarge', { max: 25 })); return; }
     setUploading(true);
     try {
       const path = familyMediaPath(familyId, 'closet', file.name);

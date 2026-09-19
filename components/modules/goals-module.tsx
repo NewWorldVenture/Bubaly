@@ -198,7 +198,7 @@ function GoalModal({ goal, familyId, userId, onClose, onSaved }: {
     const form = new FormData(e.currentTarget);
     const title = String(form.get('title') ?? '').trim();
     if (!title) return toastError(t('goalsModule.titleIsRequired'));
-    if (title.length > 120) return toastError('Title is too long (max 120 characters)');
+    if (title.length > 120) return toastError(t('validation.titleTooLong', { max: 120 }));
     const targetDate = String(form.get('target_date') ?? '') || null;
     if (!goal && targetDate && new Date(targetDate) < new Date(new Date().toDateString())) {
       return toastError(t('goalsModule.pickATargetDateIn'));

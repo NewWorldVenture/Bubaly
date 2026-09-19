@@ -537,7 +537,7 @@ function NewListModal({ familyId, onClose, onCreated }: {
     if (loading) return;
     const trimmed = name.trim();
     if (!trimmed) { toastError(tr('todosModule.giveYourCategoryAName')); return; }
-    if (trimmed.length > 80) { toastError('Name is too long (max 80 characters)'); return; }
+    if (trimmed.length > 80) { toastError(tr('validation.nameTooLong', { max: 80 })); return; }
     setLoading(true);
     try {
       const supabase = createClient();
@@ -621,7 +621,7 @@ function ItemModal({ familyId, selfId, lists, members, item, onClose, onSaved, o
     if (loading) return;
     const trimmed = title.trim();
     if (!trimmed) { toastError(tr('todosModule.addATaskTitle')); return; }
-    if (trimmed.length > 200) { toastError('Title is too long (max 200 characters)'); return; }
+    if (trimmed.length > 200) { toastError(tr('validation.titleTooLong', { max: 200 })); return; }
     if (!listId) { toastError(tr('todosModule.pickACategory')); return; }
     setLoading(true);
     try {

@@ -65,7 +65,10 @@ import { scanPaths } from '../scripts/i18n-scan.mjs';
 // The shape of this is the same one the header already warns about: a surface
 // measured by a scanner that could not see a whole CATEGORY of copy. It was
 // data structures last time and the app's own toast calls this time.
-const CEILING = 2878;
+// LOWERED 2878 -> 2828. 49 of the 73 strings the widened scanner exposed are
+// now real catalogue keys in all seven populated locales, so the ceiling comes
+// down to match. A ratchet left slack above the real number is not a ratchet.
+const CEILING = 2828;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);

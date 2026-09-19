@@ -7283,3 +7283,45 @@ had swept in; the real number came only after excluding them.
 
 **Verified:** 14,297 green under both `TZ=UTC` and `TZ=America/Los_Angeles`,
 tsc clean, lint 0 at 12.
+
+---
+
+## Q47 — Translating the 73 strings the scanner had been blind to
+
+Q46 taught the scanner to see the app's own toasts and raised the ratchet to
+2,878 to account for it. This is the follow-through: **49 of those 73 strings
+are now real catalogue keys** in all seven populated locales, and the ceiling
+comes down to **2,828** to match. A ratchet carrying slack above the real number
+is not a ratchet.
+
+**34 new keys**, each translated into de-DE, es-ES, fr-FR, it-IT, nl-NL and
+pt-PT rather than left as English placeholders — the four remaining locale files
+are empty regional variants that merge down a fallback chain, so they inherit.
+Grouped so one key serves several sites: `validation.titleTooLong` covers
+chores, goals and reminders; `wallet.addedAmountToChild` covers the dashboard,
+the child detail view and the gift view; `modules.fileTooLargeNamed` covers
+documents and trip memories.
+
+Translation was done with the target language's own conventions, not word
+substitution — French takes `Mo` for megabytes, German and Spanish take the
+non-breaking `max.` abbreviation with a space before the unit, and the quotation
+marks follow each locale (`„…“`, `«…»`, `“…”`).
+
+**The types caught a latent bug the template literals had been hiding.**
+Converting `` `Synced ${json.synced} events` `` to a parameterised key failed to
+compile: `json.synced` is `number | undefined`. A template literal renders that
+as the string "undefined" — *"Synced undefined events"* — silently. The same was
+true of `res.entities` and `res.edges` in the graph module. All three now
+default to 0. Three real defects surfaced purely by giving the copy a type,
+which is an argument for the whole exercise.
+
+**24 remain, and they are a different problem.** Every one embeds pluralisation
+in the source — `${n} mission${n === 1 ? '' : 's'}` — or calls a function inside
+the hole. English plural-by-suffix does not survive translation: German, French
+and Italian inflect differently, and Slavic-style multi-form plurals need more
+than two branches. Converting those honestly needs plural-aware keys, not a
+placeholder, so they are left for a pass that adds that support rather than
+being papered over with a key that is only correct in English.
+
+**Verified:** 14,297 green under both `TZ=UTC` and `TZ=America/Los_Angeles`,
+tsc clean, lint 0 at 12, catalogue integrity green across 58 assertions.

@@ -318,7 +318,7 @@ export function InventoryModule() {
           onClose={() => setMoveFor(null)} onSaved={() => { setMoveFor(null); success(tr('inventoryModule.moveLogged')); }} />
       )}
       {lendFor && (
-        <LendForm item={lendFor} onClose={() => setLendFor(null)} onSaved={() => { setLendFor(null); success(`${lendFor.name} marked as lent out`); }} />
+        <LendForm item={lendFor} onClose={() => setLendFor(null)} onSaved={() => { setLendFor(null); success(tr('modules.markedLentOut', { name: lendFor.name })); }} />
       )}
     </div>
   );
@@ -348,7 +348,7 @@ function ItemForm({ familyId, userId, members, locations, item, defaultLocationI
   const [photoPath, setPhotoPath] = useState<string | null>(item?.photo_path ?? null);
 
   async function uploadPhoto(file: File) {
-    if (file.size > 25 * 1024 * 1024) { toastError('Photo is too large (max 25 MB)'); return; }
+    if (file.size > 25 * 1024 * 1024) { toastError(tr('validation.photoTooLarge', { max: 25 })); return; }
     setUploading(true);
     try {
       const path = familyMediaPath(familyId, 'inventory', file.name);

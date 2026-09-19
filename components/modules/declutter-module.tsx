@@ -111,7 +111,7 @@ export function DeclutterModule() {
   async function resetZone(z: Zone) {
     const { error } = await createClient().from('declutter_zones').update({ clutter_score: 1, last_reset_at: new Date().toISOString() }).eq('id', z.id);
     if (error) return toastError(describeDbError(error));
-    success(`${z.name} reset to tidy`);
+    success(tr('modules.zoneResetToTidy', { name: z.name }));
   }
 
   async function bumpScore(z: Zone, delta: 1 | -1) {
@@ -321,7 +321,7 @@ export function DeclutterModule() {
           onClose={() => setMissionForm({ open: false, mission: null })} onSaved={() => { setMissionForm({ open: false, mission: null }); success(tr('declutterModule.missionSaved')); }} />
       )}
       {completing && (
-        <CompleteForm familyId={familyId} userId={userId} mission={completing} memberId={completing.assignee_id ?? selfMember?.id ?? null} onClose={() => setCompleting(null)} onSaved={(pts) => { setCompleting(null); success(`Mission done · +${pts} pts`); }} />
+        <CompleteForm familyId={familyId} userId={userId} mission={completing} memberId={completing.assignee_id ?? selfMember?.id ?? null} onClose={() => setCompleting(null)} onSaved={(pts) => { setCompleting(null); success(tr('modules.missionDonePoints', { points: pts })); }} />
       )}
       {sessionOpen && (
         <SessionForm familyId={familyId} userId={userId} zones={activeZones} members={members} defaultMember={selfMember?.id ?? null} onClose={() => setSessionOpen(false)} onSaved={() => { setSessionOpen(false); success(tr('declutterModule.sessionLogged')); }} />

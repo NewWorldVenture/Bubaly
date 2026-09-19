@@ -628,7 +628,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
     setSubtasks((s) => [...s, newSubtask(t)]); setSubtaskInput('');
   }
   async function uploadImage(file: File) {
-    if (file.size > 25 * 1024 * 1024) { toastError('Image is too large (max 25 MB)'); return; }
+    if (file.size > 25 * 1024 * 1024) { toastError(tr('validation.imageTooLarge', { max: 25 })); return; }
     setUploading(true);
     try {
       const supabase = createClient();
@@ -677,7 +677,7 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
     };
     // ── Validation ──
     if (!payload.title) return toastError(tr('remindersModule.titleIsRequired'));
-    if (payload.title.length > 200) return toastError('Title is too long (max 200 characters)');
+    if (payload.title.length > 200) return toastError(tr('validation.titleTooLong', { max: 200 }));
     // A brand-new time-based reminder in the past would never fire — block it.
     const timeBased = kind === 'time' || kind === 'medication' || kind === 'bill' || kind === 'school' || kind === 'chore';
     if (!reminder && timeBased && remindAtRaw) {

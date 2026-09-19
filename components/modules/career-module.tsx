@@ -100,7 +100,7 @@ export function CareerModule() {
     if (clearError) return toastError(describeDbError(clearError));
     const { error } = await supabase.from('resume_versions').update({ is_primary: true }).eq('id', r.id);
     if (error) return toastError(describeDbError(error));
-    success(`${r.title} is now the primary resume`);
+    success(tr('modules.primaryResumeSet', { title: r.title }));
   }
 
   async function deleteResume(r: Resume) {

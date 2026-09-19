@@ -72,7 +72,7 @@ export function ExpensesModule() {
     e.preventDefault();
     if (saving) return;
     if (!form || !form.description.trim()) return toastError(tr('expensesModule.addADescription'));
-    if (form.description.trim().length > 120) return toastError('Description is too long (max 120 characters)');
+    if (form.description.trim().length > 120) return toastError(tr('validation.descriptionTooLong', { max: 120 }));
     const parsed = parseFloat(form.amount || '0');
     if (!Number.isFinite(parsed) || parsed <= 0) return toastError(tr('expensesModule.enterAValidAmountGreater'));
     const totalCents = Math.round(parsed * 100);

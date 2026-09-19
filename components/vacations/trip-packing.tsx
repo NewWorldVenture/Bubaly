@@ -87,7 +87,7 @@ export function TripPacking({ vacationId }: { vacationId: string }) {
     if (toAdd.length === 0) { setBusy(false); return toastError(tr('tripPacking.yourListAlreadyCoversThe')); }
     const { error } = await createClient().from('vacation_packing_items').insert(toAdd);
     setBusy(false);
-    if (error) toastError(error.message); else success(`Added ${toAdd.length} suggested items`);
+    if (error) toastError(error.message); else success(tr('trips.addedSuggestedItems', { count: toAdd.length }));
   }
 
   async function toggle(it: PackItem) {

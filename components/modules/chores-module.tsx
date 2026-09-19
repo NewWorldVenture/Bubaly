@@ -756,7 +756,7 @@ function NewChoreModal({ familyId, userId, members, prefill, onClose, onSaved }:
     const icon = String(form.get('icon') ?? '').trim() || null;
 
     if (!title) return toastError(tr('choresModule.addAChoreTitle'));
-    if (title.length > 160) return toastError('Title is too long (max 160 characters)');
+    if (title.length > 160) return toastError(tr('validation.titleTooLong', { max: 160 }));
     if (!memberId) return toastError(tr('choresModule.pickWhoThisChoreIs'));
     if (!Number.isFinite(points) || points < 0 || points > 1000) return toastError(tr('choresModule.rewardMustBeBetween0'));
 

@@ -66,7 +66,7 @@ export function SendMoneyView({ wallets, canManage }: { wallets: SendChild[]; ca
     });
     setSending(false);
     if (!res.ok) return toastError(res.error ?? 'Transfer failed');
-    success(`Sent ${formatCents(amountCents)} to ${toChild.name}`);
+    success(t('wallet.sentAmountToChild', { amount: formatCents(amountCents), name: toChild.name }));
     router.push('/wallet');
   }
 
