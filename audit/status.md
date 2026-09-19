@@ -921,7 +921,11 @@ CLEAN (checked, no defect, no change): cron retry-safety; notify()'s dedupe;
 outbound fetch timeouts; the mobile↔web contract and the /api/ai bearer carve-out
 (38 of 39 routes authenticate, the 39th is /api/ai/gift which is deliberately
 PUBLIC and is Claude-3's); CSP and security headers; and database.types.ts
-against the migrations — 488 tables, 47 RPCs, zero drift in either direction.
+against the migrations — 488 tables, 47 RPCs, zero drift in either direction AT
+THE TABLE AND RPC LEVEL. Columns were NOT compared by that pass and are now
+covered separately by tests/a-typed-column-must-exist.test.ts: 486 tables, 6,577
+columns, exactly one declared-but-absent (transactions.idempotency_key, already
+documented in lib/services/finances/index.ts and deliberately never written).
 
 Q39 (CRITICAL, infrastructure): the GitHub dispatcher that supplies every
 sub-daily cron cadence has delivered 95 of 3,922 requested ticks over its entire

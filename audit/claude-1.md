@@ -7806,3 +7806,66 @@ from the path it was written for. None of the defences themselves were wrong.
 That is a reasonable place to stop pushing on this subsystem.
 
 **Status:** NO DEFECT in either.
+
+---
+
+[CLAUDE-1][LOW][SCHEMA] A column TypeScript believes in that Postgres has never heard of — known, documented, and unenforced until now
+
+**Files:** `lib/database.types.ts:1207`, `lib/services/finances/index.ts:774`,
+`supabase/migrations/0256_idempotency_keys.sql`.
+
+**The fact.** `database.types.ts` declares `idempotency_key` on the
+`transactions` Row type. No migration creates it: `0006` creates the table
+without it, `0256` adds the column to exactly six tables and `transactions` is
+not among them, and no `alter table public.transactions add column` exists
+anywhere in 345 migrations. Checked exhaustively in both spellings before
+believing it.
+
+**It is already known.** `lib/services/finances/index.ts:774` says so in the one
+file that would otherwise write it:
+
+> `idempotency_key` is likewise not written. `lib/database.types.ts` types the
+> column on this table and NO migration adds it — `0256` gave it only to its six
+> keyed tables — so writing it would be a PGRST204 against real schema.
+
+So this is not a new defect, and I am not claiming one. What I am filing is the
+gap between that being *true* and it being *enforced*.
+
+**Why it still matters.** `database.types.ts` is the only thing standing between
+a query and a runtime error — `supabase.from('x').insert({ y })` is checked
+against these types and against nothing else. A column declared here that no
+migration creates is therefore worse than an undeclared one: **the compiler
+actively approves the write** and PostgREST answers PGRST204 in production. The
+comment lives in one file; nothing stops a second writer — a new server action,
+an AI tool, an import path — from setting a field the types promise is there.
+`.select('*')` reads are unaffected (the column simply never comes back), which
+is why this has cost nothing so far.
+
+**Measured before building anything.** 486 tables parsed from the types, 6,577
+columns compared against the migration-derived column map, **exactly one**
+declared-but-absent: `transactions.idempotency_key`. A single divergence across
+6,577 comparisons is what makes this worth a guard rather than a cleanup — the
+rule is almost universally already true.
+
+**Guard added.** `tests/a-typed-column-must-exist.test.ts` reuses `readSchema`
+from `scripts/audit-supabase-queries.mjs`, so both sides come from one reading of
+the migrations rather than two. It asserts every typed column exists, with a
+one-entry exception list carrying the reason, and it is a ratchet: when the
+migration lands *or* the field leaves the types, the entry must be removed. It
+also pins that the finances comment still says what the exception relies on, so
+the licence and its justification cannot drift apart.
+
+Calibrated three ways, all of which bite: planting an invented column names it;
+removing the exception entry re-flags `transactions.idempotency_key`; and
+breaking the Row-type regex fails the non-vacuity floor rather than passing
+green over nothing. That third one is deliberate — I have had four parsers
+return zero today and read as a pass, and this file now refuses to.
+
+**A clarification to this audit's own record.** `audit/status.md` lists under
+CLEAN: "database.types.ts against the migrations — 488 tables, 47 RPCs, zero
+drift in either direction." That is accurate at the level it was checked —
+tables and RPCs — but it reads as though columns were covered too, and they were
+not; nothing compared them until now. The line is narrowed rather than deleted,
+because the table and RPC verification did happen and still holds.
+
+**Status:** NO NEW DEFECT. Known divergence, now enforced instead of remembered.
