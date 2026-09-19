@@ -1914,3 +1914,53 @@ the settings form writes to PostgREST directly from the browser and client-side
 validation is defence in depth rather than enforcement. That needs a migration,
 and two other workers are actively on the ledger, so it is recorded for whoever
 owns it next rather than raced for a version number.
+
+---
+
+## [CLAUDE-1][VERIFIED HEALTHY][SECURITY] The SSRF surface — audited call by call, no finding
+
+Recorded as a **negative** result, in full, so the next auditor does not
+re-derive it.
+
+A server that fetches a URL a user chose is a request the user gets to aim:
+at `169.254.169.254` it reads cloud instance credentials, at a private address
+it reaches services nothing else can. This repository defends it, and defends
+it *properly* — the parts most implementations get wrong are the parts this one
+gets right:
+
+- `validatePublicCalendarUrl` **resolves** the hostname (`dns.lookup`) and
+  rejects the **resolved addresses**, not merely the literal — link-local
+  (incl. `0xa9fe0000`, the metadata range), loopback, RFC1918, CGNAT,
+  multicast, TEST-NETs, IPv4-mapped IPv6, `metadata.google.internal`;
+- credentials in the URL (`url.username || url.password`) are refused;
+- `fetchPublicText` fetches with **`redirect: 'manual'`** and **re-validates
+  every redirect target**, so a public host cannot 302 the fetch onto a
+  private one;
+- responses are size-bounded and time-bounded.
+
+**Every call site audited:** nine server-side `fetch()` calls take a
+non-literal URL. Family calendar feeds → `fetchPublicCalendarText`; library RSS
+→ `fetchPublicFeed`; weekend curated feeds → `fetchPublicCalendarText`;
+Ticketmaster, SeatGeek, OpenAI, TheMealDB → constant hosts with only a path or
+query varying; the health probe → the Supabase URL from env.
+
+**Two things that look like findings and are not:**
+
+- `safeFeedUrl` and `normalizeFeedUrl` check **protocol only**, unlike
+  `isSafePublicUrl`. They are *normalizers*, and the real guard wraps them —
+  `lib/library/ingest.ts` says so in its own comment. Not three competing SSRF
+  guards.
+- `isSafeReturnPath` (open redirect) has one importer. Both redirect consumers
+  are covered — the step-up page by it, `auth/callback` by
+  `safeInternalRedirect`. Two helpers for one rule is duplication worth noting,
+  not a hole.
+
+**What was added:** `tests/user-urls-are-fetched-through-the-guard.test.ts`,
+because nothing stopped the next route from writing bare `fetch(userUrl)` beside
+the guard — the same premise gap that produced the `useRealtimeQuery` and
+`aria-modal` findings. It pins **two** properties: the rule (a non-constant
+fetch URL goes through the guard or is named with the reason its host is fixed)
+**and the guard's own substance** (it resolves rather than parses, blocks the
+link-local range, re-checks redirect targets, refuses credentials). Verified
+load-bearing both ways: a probe route calling `fetch(searchParam)` turns it red,
+and so does changing `redirect: 'manual'` to `'follow'`.
