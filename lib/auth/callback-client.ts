@@ -1,9 +1,11 @@
-import { isChunkLike, parseCookieHeader, serializeCookieHeader } from '@supabase/ssr';
+import { isChunkLike, serializeCookieHeader } from '@supabase/ssr';
 import { AuthRetryableFetchError, type AuthTokenResponsePassword, type Session } from '@supabase/supabase-js';
 import { captureBrowserSessionSnapshot, type BrowserSessionSnapshot } from './browser-session-storage';
 import { isPasswordSessionCurrent, signInWithOwnedSessionTokens } from './password-client';
 import { durableCookieOptions, isSecureOrigin } from './session';
 import type { CallbackTokens } from './callback';
+import { callbackAdmissionMaterial, encodeCallbackAdmissionWitness, parseCallbackAdmissionCookies, parseCallbackAdmissionWitness,
+  type CallbackAdmissionMaterial, type CallbackAdmissionWitness } from './callback-witness';
 
 type Cookie = { name: string; value: string };
 declare const callbackOwnership: unique symbol;
@@ -12,6 +14,7 @@ export type CallbackOwnership = { readonly [callbackOwnership]: true };
 type State = {
   key: string; generation: string; verifier: Cookie[]; sessionCookies: Cookie[];
   session: BrowserSessionSnapshot | null; capturedAt: number;
+  admission: CallbackAdmissionMaterial;
   phase: 'pending' | 'installing' | 'adopted' | 'complete' | 'retired';
 };
 const owners = new WeakMap<CallbackOwnership, State>();
@@ -21,7 +24,8 @@ const isSession = (name: string, key: string) => isChunkLike(name, key) || isChu
 
 function readState(): Omit<State, 'phase' | 'capturedAt'> {
   const key = `sb-${new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!).hostname.split('.')[0]}-auth-token`;
-  const cookies = parseCookieHeader(document.cookie).map(cookie => ({ name: cookie.name, value: cookie.value ?? '' }));
+  const cookies = parseCallbackAdmissionCookies(document.cookie);
+  if (!cookies) throw interrupted();
   const select = (matches: (name: string) => boolean) => cookies.filter(cookie => matches(cookie.name)).sort((a, b) => a.name.localeCompare(b.name));
   const verifier = select(name => isChunkLike(name, `${key}-code-verifier`));
   const sessionCookies = select(name => isSession(name, key));
@@ -36,7 +40,9 @@ function readState(): Omit<State, 'phase' | 'capturedAt'> {
     if (whole ? verifier.length !== 1 || !whole.value : verifier.some((_, index) =>
       !verifier.some(cookie => cookie.name === `${key}-code-verifier.${index}` && cookie.value))) throw interrupted();
   }
-  return { key, generation: generations[0]?.value ?? '', verifier, sessionCookies, session: captureBrowserSessionSnapshot() };
+  const admission = callbackAdmissionMaterial(cookies, key);
+  if (!admission) throw interrupted();
+  return { key, generation: generations[0]?.value ?? '', verifier, sessionCookies, session: captureBrowserSessionSnapshot(), admission };
 }
 
 /** Capture synchronously, including the logout marker when no session exists. */
@@ -57,6 +63,25 @@ export function isCallbackOwnershipCurrent(owner: CallbackOwnership): boolean {
     if (state.session?.userId && state.session.sessionId) return state.session.userId === current.session?.userId
       && state.session.sessionId === current.session.sessionId;
     return canonical(state.sessionCookies) === canonical(current.sessionCookies);
+  } catch { return false; }
+}
+
+/** Compare request-time evidence before exchange or fallback; never recapture it. */
+export async function assertAdmissionOwnership(owner: CallbackOwnership, witness: CallbackAdmissionWitness): Promise<boolean> {
+  try {
+    const state = owners.get(owner);
+    if (!state || state.phase !== 'pending' || !isCallbackOwnershipCurrent(owner)
+      || !witness || Object.keys(witness).length !== 5) return false;
+    const expected = parseCallbackAdmissionWitness(encodeCallbackAdmissionWitness(witness));
+    if (!expected) return false;
+    const fields = ['project', 'generation', 'verifier', 'session'] as const;
+    const hashes = await Promise.all(fields.map(async field => {
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(state.admission[field]));
+      return [...new Uint8Array(digest)].map(value => value.toString(16).padStart(2, '0')).join('');
+    }));
+    if (state.phase !== 'pending' || !isCallbackOwnershipCurrent(owner)) return false;
+    const current = readState().admission;
+    return fields.every((field, index) => hashes[index] === expected[field] && current[field] === state.admission[field]);
   } catch { return false; }
 }
 

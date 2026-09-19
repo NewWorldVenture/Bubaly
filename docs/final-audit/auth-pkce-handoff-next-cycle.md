@@ -4,9 +4,12 @@
 
 Follow-up: [the refresh-preservation cycle](auth-pkce-refresh-preservation-cycle.md)
 now implements and tests the bounded ordinary-refresh and middleware portions.
-The attempt-owned records and guarded callback adoption proposed below remain
-unimplemented. The original design and motivating failures are retained here as
-historical context; current evidence is in the follow-up cycle.
+The [browser adoption cycle](auth-callback-browser-ownership-cycle.md) now
+implements guarded callback adoption, and the
+[admission witness cycle](auth-callback-admission-witness-cycle.md) addresses its
+request-to-mount boundary. Attempt-owned initiation records remain unimplemented.
+The original design and motivating failures below are retained as historical
+context; current evidence is in those follow-up cycles.
 
 ## Executed evidence motivating the design
 

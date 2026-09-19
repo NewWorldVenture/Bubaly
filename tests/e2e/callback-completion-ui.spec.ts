@@ -28,7 +28,7 @@ function collect(filename: string): string {
   return id;
 }
 const entries = Object.fromEntries(['components/auth/callback-completion.tsx', 'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts',
-  'lib/auth/browser-signout.ts', 'lib/auth/password-client.ts', 'lib/supabase/client.ts'].map(file => [file, collect(file)]));
+  'lib/auth/browser-signout.ts', 'lib/auth/password-client.ts', 'lib/supabase/client.ts', 'lib/auth/callback-witness.ts'].map(file => [file, collect(file)]));
 const origin = 'https://callback-ui.invalid', provider = 'https://callback-provider.invalid';
 const cookieKey = 'sb-callback-provider-auth-token', grantKey = 'bubaly.auth.recovery.grant.v1';
 const userA = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', userB = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -47,11 +47,12 @@ type MalformedRecovery = 'missing-grant' | 'non-string-grant' | 'invalid-grant' 
 type Fixture = { calls: Array<{ name: string; values: unknown[] }>; held: Partial<Record<Kind, boolean>>; failUser: boolean; rejected: boolean; userReads: number;
   release: (kind: Kind) => Promise<void> };
 type Probe = { errors: string[]; routes: string[]; mount: () => void; retire: () => void; login: (account: 'A' | 'B') => Promise<void>;
-  logout: () => Promise<void>; user: () => Promise<string | null>; replaceVerifier: () => void; seedGrant: () => void; rotate: () => Promise<void> };
+  logout: () => Promise<void>; user: () => Promise<string | null>; replaceVerifier: () => void; seedGrant: () => void; rotate: () => Promise<void>;
+  prepareAdmission: () => Promise<void>; logoutWithVerifierRetained: () => Promise<void> };
 declare global { interface Window { __callbackUi: Probe } }
 async function fixture(page: Page, options: { hold?: Kind; recovery?: boolean; strict?: boolean; blockStorage?: boolean; noCode?: boolean;
   existing?: 'A' | 'B'; next?: string; locale?: string; visitorReset?: boolean; malformedRecovery?: MalformedRecovery;
-  extraQuery?: Record<string, string>; hash?: string } = {}): Promise<Fixture> {
+  extraQuery?: Record<string, string>; hash?: string; beforeMount?: 'logout-retained' | 'login' | 'rotate' | 'logout'; admission?: string | null } = {}): Promise<Fixture> {
   const pending: Partial<Record<Kind, Array<() => Promise<void>>>> = {};
   const state: Fixture = { calls: [], held: options.hold ? { [options.hold]: true } : {}, failUser: false, rejected: false, userReads: 0,
     release: async kind => { delete state.held[kind]; await Promise.all((pending[kind] ?? []).splice(0).map(run => run())); } };
@@ -104,7 +105,7 @@ async function fixture(page: Page, options: { hold?: Kind; recovery?: boolean; s
     .filter(([key]) => /^(authCallback\.|authRecovery\.|signup\.|signupForm\.|login\.)/.test(key)));
   await page.addScriptTag({ content: `(() => {
     const sources = ${JSON.stringify(modules)}, entries = ${JSON.stringify(entries)}, loaded = {};
-    const p = window.__callbackUi = { errors: [], routes: [] }; let root, shown = true;
+    const p = window.__callbackUi = { errors: [], routes: [] }; let root, shown = true, admission = null;
     window.addEventListener('error', e => p.errors.push(e.message));
     window.addEventListener('unhandledrejection', e => { p.errors.push(String(e.reason)); e.preventDefault(); });
     const action = async (name, values) => { const r = await fetch('/fixture-actions/' + name, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(values) }); return r.json(); };
@@ -125,7 +126,7 @@ async function fixture(page: Page, options: { hold?: Kind; recovery?: boolean; s
     document.cookie = ${JSON.stringify(cookieKey + '-code-verifier=' + encodeURIComponent('base64-' + Buffer.from(JSON.stringify('synthetic-verifier')).toString('base64url')) + '; Path=/; Secure; SameSite=Lax')};
     document.cookie = 'bubaly_vid=visitor-original; Path=/; Secure';
     ${options.blockStorage ? "Object.defineProperty(window, 'sessionStorage', { configurable: true, get() { throw new Error('Storage disabled'); } });" : ''}
-    function render() { root ??= ReactDOM.createRoot(document.getElementById('root')); const content = React.createElement(LocaleProvider,{locale,source:'default',messages:${JSON.stringify(messages)}}, shown ? React.createElement(form,${JSON.stringify({ code: options.noCode ? null : 'synthetic-code', next })}) : React.createElement('p',null,'Other route'));
+    function render() { root ??= ReactDOM.createRoot(document.getElementById('root')); const content = React.createElement(LocaleProvider,{locale,source:'default',messages:${JSON.stringify(messages)}}, shown ? React.createElement(form,{...${JSON.stringify({ code: options.noCode ? null : 'synthetic-code', next })}, admission: ${options.admission === undefined ? 'admission' : JSON.stringify(options.admission)}}) : React.createElement('p',null,'Other route'));
       ReactDOM.flushSync(() => root.render(${options.strict ? 'React.createElement(React.StrictMode,null,content)' : 'content'})); }
     p.mount = () => { shown = true; render(); }; p.retire = () => { shown = false; render(); };
     p.login = async account => { const r = await password.signInWithOwnedSession({email:account.toLowerCase()+'@example.invalid',password:'synthetic-password'},()=>true); if(r.error) throw r.error; };
@@ -134,8 +135,28 @@ async function fixture(page: Page, options: { hold?: Kind; recovery?: boolean; s
     p.rotate = async () => { const r = await factory.createClient().auth.refreshSession(); if(r.error) throw r.error; };
     p.replaceVerifier = () => { document.cookie = ${JSON.stringify(cookieKey + '-code-verifier=newer-verifier; Path=/; Secure')}; };
     p.seedGrant = () => sessionStorage.setItem(${JSON.stringify(grantKey)},'newer.grant');
+    p.prepareAdmission = async () => {
+      const witness = load(entries['lib/auth/callback-witness.ts']);
+      const ssr = load(sources[entries['lib/auth/callback-witness.ts']].imports['@supabase/ssr']);
+      const material = witness.callbackAdmissionMaterial(ssr.parseCookieHeader(document.cookie).map(c => ({name:c.name,value:c.value ?? ''})), ${JSON.stringify(cookieKey)});
+      const snapshot = {v:1};
+      for (const [name,value] of Object.entries(material)) snapshot[name] = [...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value)))].map(b=>b.toString(16).padStart(2,'0')).join('');
+      admission = witness.encodeCallbackAdmissionWitness(snapshot);
+    };
+    p.logoutWithVerifierRetained = async () => {
+      const original = Object.getOwnPropertyDescriptor(Document.prototype,'cookie');
+      Object.defineProperty(document,'cookie',{configurable:true,get:()=>original.get.call(document),set:value=>{
+        if (!(String(value).startsWith(${JSON.stringify(cookieKey + '-code-verifier=')}) && /max-age=0/i.test(String(value)))) original.set.call(document,value);
+      }});
+      try { await p.logout(); } finally { delete document.cookie; }
+    };
   })();` });
   if (options.existing) await page.evaluate(account => window.__callbackUi.login(account), options.existing);
+  await page.evaluate(() => window.__callbackUi.prepareAdmission());
+  if (options.beforeMount === 'logout-retained') await page.evaluate(() => window.__callbackUi.logoutWithVerifierRetained());
+  if (options.beforeMount === 'logout') await page.evaluate(() => window.__callbackUi.logout());
+  if (options.beforeMount === 'login') await page.evaluate(() => window.__callbackUi.login('B'));
+  if (options.beforeMount === 'rotate') await page.evaluate(() => window.__callbackUi.rotate());
   await page.evaluate(() => window.__callbackUi.mount());
   return state;
 }
@@ -305,4 +326,45 @@ test('completion history cleanup keeps only the safe destination before any acti
   expect(await page.evaluate(() => window.__callbackUi.routes)).toEqual([]);
   await page.evaluate(() => window.__callbackUi.retire());
   await state.release('complete');
+});
+
+for (const beforeMount of ['logout-retained', 'login'] as const) {
+  test(`the original page request cannot complete after ${beforeMount} before mount`, async ({ page }) => {
+    const state = await fixture(page, { beforeMount });
+    await expect(page.getByRole('alert')).toContainText('Your sign-in state changed');
+    expect(state.calls).toEqual([]); expect(state.userReads).toBe(0);
+    expect(await page.evaluate(() => window.__callbackUi.routes)).toEqual([]);
+    expect(await page.evaluate(() => window.__callbackUi.user())).toBe(beforeMount === 'login' ? userB : null);
+  });
+}
+
+for (const admission of [null, '', 'invalid', 'a'.repeat(513)]) {
+  test(`invalid request witness cannot use an existing login as fallback (${admission === null ? 'absent' : admission.length})`, async ({ page }) => {
+    const state = await fixture(page, { admission, noCode: true, existing: 'B' });
+    await expect(page.getByRole('alert')).toContainText('Your sign-in state changed');
+    expect(state.calls).toEqual([]); expect(state.userReads).toBe(0);
+    expect(await page.evaluate(() => window.__callbackUi.routes)).toEqual([]);
+    expect(await page.evaluate(() => window.__callbackUi.user())).toBe(userB);
+  });
+}
+for (const beforeMount of ['logout', 'login'] as const) {
+  test(`no-code page response respects ${beforeMount} before mount`, async ({ page }) => {
+    const state = await fixture(page, { noCode: true, existing: 'A', beforeMount });
+    await expect(page.getByRole('alert')).toContainText('Your sign-in state changed');
+    expect(state.calls).toEqual([]); expect(state.userReads).toBe(0);
+    expect(await page.evaluate(() => window.__callbackUi.routes)).toEqual([]);
+    expect(await page.evaluate(() => window.__callbackUi.user())).toBe(beforeMount === 'login' ? userB : null);
+  });
+}
+test('same-session renewal between request and mount still completes', async ({ page }) => {
+  const state = await fixture(page, { existing: 'A', beforeMount: 'rotate' }); await navigated(page);
+  expect(state.calls.map(call => call.name)).toEqual(['complete']);
+  expect(await page.evaluate(() => window.__callbackUi.user())).toBe(userA);
+});
+test('recovery page received after another login does not begin exchange or grant inspection', async ({ page }) => {
+  const state = await fixture(page, { existing: 'A', recovery: true, beforeMount: 'login' });
+  await expect(page.getByRole('alert')).toContainText('Your sign-in state changed');
+  expect(state.calls).toEqual([]); expect(state.userReads).toBe(0);
+  expect(await page.evaluate(() => window.__callbackUi.user())).toBe(userB);
+  expect(await page.evaluate(key => sessionStorage.getItem(key), grantKey)).toBeNull();
 });

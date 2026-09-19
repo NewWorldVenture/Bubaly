@@ -36,7 +36,8 @@ vi.mock('@/lib/auth/recovery-cookies', () => ({
   }),
 }));
 vi.mock('@/lib/marketing/identity', () => ({ stitchVisitorIdentity: mock.stitch }));
-vi.mock('@supabase/ssr', () => ({
+vi.mock('@supabase/ssr', async original => ({
+  ...await original<typeof import('@supabase/ssr')>(),
   createServerClient: (_url: string, _key: string, options: {
     cookies: { setAll: (items: { name: string; value: string; options: object }[], headers: Record<string, string>) => void };
   }) => ({ auth: { getUser: async () => {

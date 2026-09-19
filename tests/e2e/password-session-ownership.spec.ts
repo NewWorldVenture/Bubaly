@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
+import { createHash } from 'node:crypto';
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 
 // Production helper, browser storage and cache store with the installed SDK.
@@ -47,6 +48,10 @@ type Probe = {
   fallbackRead: (method: 'getUser' | 'getSession') => Promise<{ user: string | null; ownerCurrent: boolean; error?: string }>;
   captureCallback: () => boolean; callbackFingerprint: () => Promise<string | null>; callbackCurrent: () => boolean;
   adoptCallback: (tokens: { access_token: string; refresh_token: string }) => Promise<Result>; adoptedCallbackCurrent: () => boolean;
+  adoptAfterAdmission: (tokens: { access_token: string; refresh_token: string }, witness: unknown) => Promise<Result>;
+  admissionCurrent: (witness: unknown) => Promise<boolean>;
+  pauseDigest: () => void; digestPaused: () => boolean; releaseDigest: () => void;
+  clearRefusingVerifier: () => boolean;
   snapshot: () => unknown; clear: () => boolean; lastCurrent: () => boolean;
   observe: () => void; cacheUser: () => string | null; signals: () => number;
   pauseWrite: () => void; writePaused: () => boolean; releaseWrite: () => void;
@@ -118,12 +123,15 @@ async function install(context: BrowserContext) {
   return { requests, mode: (value: Mode) => { mode = value; }, hold: () => { held = new Promise(resolve => { release = resolve; }); },
     release: () => { release?.(); held = undefined; } };
 }
-async function load(page: Page) {
-  await page.goto(origin);
+async function load(page: Page, pathname = '') {
+  await page.goto(origin + pathname);
   await page.addScriptTag({ content: sdk });
   const bootstrap = String.raw`function boot({sources,entry,callbackEntry,browserEntry,storageEntry,cacheEntry,signalEntry,ssrEntry,provider,key}) {
  const loaded={}; const process={env:{NEXT_PUBLIC_SUPABASE_URL:provider,NEXT_PUBLIC_SUPABASE_ANON_KEY:'synthetic-public-key'}};
- let pause=false,paused=false,release,setSessionCalls=0,disposedClients=0,pauseRefresh=false,refreshPaused=false,releaseRefresh;
+ let pause=false,paused=false,release,setSessionCalls=0,disposedClients=0,pauseRefresh=false,refreshPaused=false,releaseRefresh,pauseDigest=false,digestPaused=false,releaseDigest;
+ const digest=crypto.subtle.digest.bind(crypto.subtle);crypto.subtle.digest=async(...args)=>{
+  if(pauseDigest){pauseDigest=false;digestPaused=true;await new Promise(resolve=>{releaseDigest=resolve;});}return digest(...args);
+ };
  function load(id){
   if(id==='sdk')return window.supabase;
   if(loaded[id])return loaded[id].exports;
@@ -162,6 +170,15 @@ async function load(page: Page) {
   callbackFingerprint:async()=>{try{return await callback.callbackVerifierFingerprint(callbackOwner);}catch{return null;}},
   callbackCurrent:()=>!!callbackOwner&&callback.isCallbackOwnershipCurrent(callbackOwner),
   adoptCallback:tokens=>record(callback.adoptCallbackSession(tokens,callbackOwner,()=>active)),
+  adoptAfterAdmission:async(tokens,witness)=>await callback.assertAdmissionOwnership(callbackOwner,witness)?record(callback.adoptCallbackSession(tokens,callbackOwner,()=>active)):{ok:false,user:null,current:false},
+  admissionCurrent:witness=>callback.assertAdmissionOwnership(callbackOwner,witness),
+  pauseDigest:()=>{pauseDigest=true;},digestPaused:()=>digestPaused,releaseDigest:()=>{releaseDigest?.();},
+  clearRefusingVerifier:()=>{
+   const own=Object.getOwnPropertyDescriptor(document,'cookie'),descriptor=Object.getOwnPropertyDescriptor(Document.prototype,'cookie');
+   Object.defineProperty(document,'cookie',{configurable:true,get:()=>descriptor.get.call(document),set:value=>{if(!String(value).startsWith(key+'-code-verifier='))descriptor.set.call(document,value);}});
+   try{return storage.clearBrowserSessionSnapshot(storage.captureBrowserSessionSnapshot(true));}catch{return false;}
+   finally{if(own)Object.defineProperty(document,'cookie',own);else delete document.cookie;}
+  },
   adoptedCallbackCurrent:()=>!!last&&!!callbackOwner&&callback.isAdoptedCallbackSessionCurrent(last,callbackOwner),
   storedUser:()=>storage.captureBrowserSessionSnapshot()?.userId??null,snapshot:storage.captureBrowserSessionSnapshot,
   clear:()=>storage.clearBrowserSessionSnapshot(storage.captureBrowserSessionSnapshot(true)),
@@ -662,6 +679,141 @@ for (const layout of ['missing', 'overlap', 'gap', 'empty'] as const) {
     expect(await page.evaluate(() => window.__passwordOwner.captureCallback())).toBe(layout === 'missing');
     expect(await page.evaluate(() => window.__passwordOwner.callbackFingerprint())).toBeNull();
     expect(await page.evaluate(tokens => window.__passwordOwner.adoptCallback(tokens), session('a'))).toMatchObject({ ok: false });
+    expect(await page.evaluate(() => window.__passwordOwner.setSessionCalls())).toBe(0);
+  });
+}
+
+async function requestWitness(context: BrowserContext) {
+  const { callbackAdmissionMaterial } = await import('../../lib/auth/callback-witness');
+  const material = callbackAdmissionMaterial((await context.cookies(origin)).map(({ name, value }) => ({ name, value })), key);
+  if (!material) throw new Error('Invalid synthetic admission state');
+  return { v: 1, ...Object.fromEntries(Object.entries(material).map(([name, value]) => [name, createHash('sha256').update(value).digest('hex')])) };
+}
+
+for (const change of ['logout-refused-verifier-deletion', 'newer-login'] as const) {
+  test('held admission response cannot adopt after ' + change + ' before completion captures its owner', async ({ context, page }) => {
+    await prepareCallback(context, page);
+    const admission = await requestWitness(context);
+    if (change === 'logout-refused-verifier-deletion') {
+      expect(await page.evaluate(() => window.__passwordOwner.clearRefusingVerifier())).toBe(false);
+      expect((await context.cookies(origin)).some(cookie => cookie.name === key + '-logout-generation')).toBe(true);
+    } else expect(await page.evaluate(() => window.__passwordOwner.signIn('b'))).toMatchObject({ ok: true, user: ids.b });
+    // The completion document only mounts now, after the request-time browser
+    // state changed. A fresh local snapshot alone cannot detect this boundary.
+    expect(await page.evaluate(() => window.__passwordOwner.captureCallback())).toBe(true);
+    const before = await context.cookies(origin);
+    expect(before.find(cookie => cookie.name === key + '-code-verifier')?.value).toBe('synthetic-callback-verifier');
+    expect(await page.evaluate(({ tokens, admission }) => window.__passwordOwner.adoptAfterAdmission(tokens, admission), { tokens: session('a'), admission })).toMatchObject({ ok: false });
+    expect(await context.cookies(origin)).toEqual(before);
+    expect(await page.evaluate(() => window.__passwordOwner.setSessionCalls())).toBe(0);
+  });
+}
+
+test('request-time admission accepts actual same-session renewal before completion mounts', async ({ context, page }) => {
+  await prepareCallback(context, page);
+  expect(await page.evaluate(() => window.__passwordOwner.signIn('a'))).toMatchObject({ ok: true });
+  const admission = await requestWitness(context);
+  expect(await page.evaluate(() => window.__passwordOwner.refresh())).toMatchObject({ ok: true, user: ids.a });
+  expect(await page.evaluate(() => window.__passwordOwner.captureCallback())).toBe(true);
+  expect(await page.evaluate(witness => window.__passwordOwner.admissionCurrent(witness), admission)).toBe(true);
+  expect(await page.evaluate(({ tokens, admission }) => window.__passwordOwner.adoptAfterAdmission(tokens, admission), { tokens: session('a'), admission })).toMatchObject({ ok: true, user: ids.a });
+});
+
+test('request-time admission includes empty no-code fallback state and its later logout generation', async ({ context, page }) => {
+  await install(context); await load(page);
+  const admission = await requestWitness(context);
+  expect(await page.evaluate(() => window.__passwordOwner.captureCallback())).toBe(true);
+  expect(await page.evaluate(witness => window.__passwordOwner.admissionCurrent(witness), admission)).toBe(true);
+  expect(await page.evaluate(() => window.__passwordOwner.clear())).toBe(true);
+  expect(await page.evaluate(() => window.__passwordOwner.captureCallback())).toBe(true);
+  expect(await page.evaluate(witness => window.__passwordOwner.admissionCurrent(witness), admission)).toBe(false);
+});
+
+for (const layout of ['malformed', 'overlapping-chunks', 'legacy-without-session-id'] as const) {
+  test('request-time admission uses exact cookie ownership for ' + layout, async ({ context, page }) => {
+    await prepareCallback(context, page);
+    const original = session('a');
+    if (layout === 'legacy-without-session-id') {
+      const parts = original.access_token.split('.');
+      const claims = JSON.parse(Buffer.from(parts[1], 'base64url').toString());
+      delete claims.session_id;
+      parts[1] = Buffer.from(JSON.stringify(claims)).toString('base64url');
+      original.access_token = parts.join('.');
+    }
+    const value = layout === 'malformed' ? 'malformed-session' : 'base64-' + Buffer.from(JSON.stringify(original)).toString('base64url');
+    await context.addCookies([{ name: key, value, url: origin },
+      ...(layout === 'overlapping-chunks' ? [{ name: key + '.0', value: 'stale-chunk', url: origin }] : [])]);
+    const admission = await requestWitness(context);
+    expect(await page.evaluate(() => window.__passwordOwner.captureCallback())).toBe(true);
+    expect(await page.evaluate(witness => window.__passwordOwner.admissionCurrent(witness), admission)).toBe(true);
+    await context.addCookies([{ name: key, value: value + 'changed', url: origin }]);
+    expect(await page.evaluate(() => window.__passwordOwner.captureCallback())).toBe(true);
+    expect(await page.evaluate(witness => window.__passwordOwner.admissionCurrent(witness), admission)).toBe(false);
+  });
+}
+
+for (const field of ['project', 'generation', 'verifier', 'session'] as const) {
+  test('request-time admission refuses a different ' + field + ' digest', async ({ context, page }) => {
+    await prepareCallback(context, page);
+    const admission = await requestWitness(context);
+    expect(await page.evaluate(witness => window.__passwordOwner.admissionCurrent(witness), { ...admission, [field]: '0'.repeat(64) })).toBe(false);
+    expect(await page.evaluate(() => window.__passwordOwner.setSessionCalls())).toBe(0);
+  });
+}
+
+for (const change of ['logout', 'newer-login', 'newer-verifier', 'deadline'] as const) {
+  test('request-time admission rechecks ' + change + ' after asynchronous hashing', async ({ context, page }) => {
+    if (change === 'deadline') await page.clock.install();
+    await prepareCallback(context, page);
+    const admission = await requestWitness(context);
+    await page.evaluate(() => window.__passwordOwner.pauseDigest());
+    const checking = page.evaluate(witness => window.__passwordOwner.admissionCurrent(witness), admission);
+    await expect.poll(() => page.evaluate(() => window.__passwordOwner.digestPaused())).toBe(true);
+    if (change === 'logout') expect(await page.evaluate(() => window.__passwordOwner.clear())).toBe(true);
+    if (change === 'newer-login') expect(await page.evaluate(() => window.__passwordOwner.signIn('b'))).toMatchObject({ ok: true });
+    if (change === 'newer-verifier') await context.addCookies([{ name: key + '-code-verifier', value: 'newer-verifier', url: origin }]);
+    if (change === 'deadline') await page.clock.runFor(60_001);
+    const before = await context.cookies(origin);
+    await page.evaluate(() => window.__passwordOwner.releaseDigest());
+    expect(await checking).toBe(false);
+    expect(await context.cookies(origin)).toEqual(before);
+  });
+}
+
+test('request-time admission ignores other projects and accepts canonical verifier chunks', async ({ context, page }) => {
+  await install(context); await load(page);
+  await context.addCookies([{ name: key + '-code-verifier.0', value: 'first-', url: origin },
+    { name: key + '-code-verifier.1', value: 'second', url: origin }]);
+  const admission = await requestWitness(context);
+  await context.addCookies([{ name: 'sb-other-auth-token', value: 'other-login', url: origin },
+    { name: 'sb-other-auth-token-code-verifier', value: 'other-verifier', url: origin },
+    { name: 'sb-other-auth-token-logout-generation', value: 'other-logout', url: origin }]);
+  expect(await page.evaluate(() => window.__passwordOwner.captureCallback())).toBe(true);
+  expect(await page.evaluate(witness => window.__passwordOwner.admissionCurrent(witness), admission)).toBe(true);
+});
+
+test('request-time admission does not claim initiation ownership when the callback first arrives after logout', async ({ context, page }) => {
+  await prepareCallback(context, page);
+  expect(await page.evaluate(() => window.__passwordOwner.clearRefusingVerifier())).toBe(false);
+  // This request begins after logout, unlike a response held across logout.
+  // Only a future initiation record can identify this uncleared verifier as old.
+  const admission = await requestWitness(context);
+  expect(await page.evaluate(() => window.__passwordOwner.captureCallback())).toBe(true);
+  expect(await page.evaluate(witness => window.__passwordOwner.admissionCurrent(witness), admission)).toBe(true);
+});
+
+for (const family of ['session', 'verifier'] as const) {
+  test('request-time admission rejects duplicate ' + family + ' cookies at root and auth paths', async ({ context, page }) => {
+    await prepareCallback(context, page);
+    const cookieName = family === 'session' ? key : key + '-code-verifier';
+    const value = family === 'session' ? 'base64-' + Buffer.from(JSON.stringify(session('a'))).toString('base64url') : 'synthetic-callback-verifier';
+    await context.addCookies([{ name: cookieName, value, url: origin }]);
+    const admission = await requestWitness(context);
+    await context.addCookies([{ name: cookieName, value, domain: new URL(origin).hostname, path: '/auth', secure: true, sameSite: 'Lax' }]);
+    await load(page, '/auth/complete');
+    expect(await page.evaluate(name => document.cookie.split(';').filter(pair => pair.trim().startsWith(name + '=')).length, cookieName)).toBe(2);
+    expect(await page.evaluate(() => window.__passwordOwner.captureCallback())).toBe(false);
+    expect(await page.evaluate(witness => window.__passwordOwner.admissionCurrent(witness), admission)).toBe(false);
     expect(await page.evaluate(() => window.__passwordOwner.setSessionCalls())).toBe(0);
   });
 }

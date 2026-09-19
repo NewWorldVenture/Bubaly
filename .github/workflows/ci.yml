@@ -277,6 +277,28 @@ jobs:
         env:
           CI: '1'
 
+      - name: Align disposable Auth redirects with the E2E app
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('supabase/config.toml')
+          source = path.read_text()
+          original = '''[auth]
+          enable_signup = true
+          site_url = "http://localhost:3000"
+          additional_redirect_urls = ["http://localhost:3000/auth/callback"]'''
+          replacement = '''[auth]
+          enable_signup = true
+          site_url = "http://localhost:3107"
+          additional_redirect_urls = ["http://localhost:3107/**"]'''
+          # This checkout and GoTrue are disposable. Keep the product defaults,
+          # other sections and credentials untouched; stop if their shape drifts.
+          assert source.count(original) == 1, 'Unexpected disposable Auth config'
+          path.write_text(source.replace(original, replacement, 1))
+          PY
+
       - name: Start isolated Supabase
         run: supabase start
 

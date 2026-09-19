@@ -10,8 +10,9 @@ import { useTranslations } from '@/components/i18n/locale-provider';
 import { RecoveryForm } from '@/components/auth/recovery-form';
 import { createClient } from '@/lib/supabase/client';
 import { captureBrowserSessionSnapshot } from '@/lib/auth/browser-session-storage';
-import { adoptCallbackSession, callbackVerifierFingerprint, captureCallbackOwnership, isAdoptedCallbackSessionCurrent,
+import { adoptCallbackSession, assertAdmissionOwnership, callbackVerifierFingerprint, captureCallbackOwnership, isAdoptedCallbackSessionCurrent,
   isCallbackOwnershipCurrent, type CallbackOwnership } from '@/lib/auth/callback-client';
+import { parseCallbackAdmissionWitness } from '@/lib/auth/callback-witness';
 import { RECOVERY_GRANT_STORAGE_KEY, type CallbackReceipt } from '@/lib/auth/callback';
 import { safeInternalRedirect } from '@/lib/auth/redirect';
 import { isRetryableAuthError } from '@/lib/auth/session';
@@ -43,7 +44,7 @@ function message(key: string): string {
 }
 
 /** Provider receipts stay in memory until this browser verifies and owns adoption. */
-export function CallbackCompletion({ code, next }: { code: string | null; next: string }) {
+export function CallbackCompletion({ code, next, admission }: { code: string | null; next: string; admission: string | null }) {
   const t = useTranslations();
   const router = useRouter();
   const [view, setView] = useState<View>({ phase: 'checking' });
@@ -144,6 +145,10 @@ export function CallbackCompletion({ code, next }: { code: string | null; next: 
     async function run() {
       begin(opening);
       if (!opening.owner) { finish(opening, { phase: 'error', error: 'authCallback.sessionChanged' }); return; }
+      const witness = parseCallbackAdmissionWitness(admission);
+      let admitted = false;
+      try { admitted = !!witness && await assertAdmissionOwnership(opening.owner, witness); } catch { /* Invalid request context cannot authorize completion. */ }
+      if (!admitted || !owns(opening)) { changed(opening); return; }
       if (!code) { await fallback(opening); return; }
       let fingerprint: string;
       try { fingerprint = await callbackVerifierFingerprint(opening.owner); }

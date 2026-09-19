@@ -6,6 +6,12 @@ This cycle passes focused execution, independent review and all required local
 gates. New-source hosted execution remains pending. No complete workflow is
 passed, and production readiness remains **NO**.
 
+Publication follow-up: exact `dc99dc83` subsequently passes CI `35464679043` and
+Finance `35464679048`, including 1,150/1,150 hosted browser cases and both
+16,495-check full unit runs. Source/tree provenance and logs are recorded in
+[the next admission cycle](auth-callback-admission-witness-cycle.md#published-baseline-ci).
+This resolves this cycle's hosted-gate wait, without passing the broader audit.
+
 The previous [PKCE/recovery cycle](auth-pkce-refresh-preservation-cycle.md) retains
 pending verifiers during ordinary renewal and fences delayed recovery-form work
 after explicit logout. Its callback still publishes staged session cookies in a

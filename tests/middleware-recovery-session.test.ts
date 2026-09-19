@@ -46,13 +46,14 @@ describe('auth completion requests do not publish ambient session renewal cookie
   });
 
   it.each(['GET', 'POST'])('does not rescue a completion code back into an admission loop (%s)', async method => {
-    const req = request('/auth/complete?code=synthetic&next=/home', method);
+    const req = request('/auth/complete?code=synthetic&next=/home&admission=original-comparison-witness', method);
     req.cookies.set(`${cookieName}-code-verifier`, 'synthetic-verifier');
     const before = req.cookies.getAll();
     const response = await middleware(req);
     expect(response.status).toBe(200); expect(response.headers.get('location')).toBeNull();
     expect(fetch).not.toHaveBeenCalled(); expect(response.cookies.getAll()).toEqual([]);
     expect(req.cookies.getAll()).toEqual(before);
+    expect(req.nextUrl.searchParams.get('admission')).toBe('original-comparison-witness');
   });
 
   it.each(['/home', '/login', '/login?reset=0', '/auth/recovery-extra', '/auth/callback-extra'])('retains normal session refresh for %s', async path => {

@@ -1,11 +1,17 @@
 import { NextResponse } from 'next/server';
 import { resolveAuthSelection } from '@/lib/billing/review-selection';
+import { captureCallbackRequestWitness } from '@/lib/auth/callback-witness-server';
+import { parseCallbackAdmissionWitness } from '@/lib/auth/callback-witness';
 
 /** Admission only. The browser owns the later exchange and session adoption. */
 export async function GET(request: Request) {
+  const originalCookies = request.headers.get('cookie');
   const url = new URL(request.url);
+  const supplied = url.searchParams.getAll('admission');
+  const admission = supplied.length === 1 && parseCallbackAdmissionWitness(supplied[0]) ? supplied[0]
+    : supplied.length ? null : captureCallbackRequestWitness(originalCookies);
   const selection = resolveAuthSelection(url.searchParams, 'next');
-  const query = new URLSearchParams({ next: selection.next ?? '/home' });
+  const query = new URLSearchParams({ next: selection.next ?? '/home', admission: admission ?? 'invalid' });
   const codes = url.searchParams.getAll('code');
   const code = codes[0];
   if (codes.length === 1 && typeof code === 'string' && code.length > 0 && code.length <= 4096
