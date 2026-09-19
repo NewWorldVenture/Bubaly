@@ -82,10 +82,11 @@ export async function POST(req: Request) {
   }
 
   // Persist for history/audit.
-  await supabase.from('home_ai_logs').insert({
+  const { error: writeError1 } = await supabase.from('home_ai_logs').insert({
     family_id: ctx.active.familyId, user_id: ctx.user.id, asset_id: assetId, kind: 'diagnose',
     input: { assetName, category, brand, model, symptom }, output: { text, trade }, created_by: ctx.user.id,
   });
+  if (writeError1) console.error('[ai/home/diagnose] home_ai_logs write failed', writeError1);
 
   return NextResponse.json({ text, recommendedTrade: trade, recommendedTradeLabel: tradeLabel });
 }

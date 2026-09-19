@@ -85,7 +85,8 @@ export async function POST(req: NextRequest) {
     .insert({ post_id: postId, visitor_id: visitorId });
   if (insertError) {
     if (insertError.code === '23505') {
-      await supabase.from('blog_post_likes').delete().eq('post_id', postId).eq('visitor_id', visitorId);
+      const { error: writeError1 } = await supabase.from('blog_post_likes').delete().eq('post_id', postId).eq('visitor_id', visitorId);
+      if (writeError1) console.error('[blog/like] blog_post_likes write failed', writeError1);
     } else {
       return NextResponse.json({ error: t('like.couldNotRecordTheLike') }, { status: 500 });
     }

@@ -53,10 +53,11 @@ export async function GET(req: NextRequest) {
       console.error(`checkout_abandoned fire failed for ${s.session_id}:`, e);
     }
     // Mark abandoned regardless of fire result so we never re-sweep this row.
-    await supabase
+    const { error: writeError1 } = await supabase
       .from('checkout_sessions')
       .update({ status: 'abandoned', abandoned_at: new Date().toISOString() })
       .eq('session_id', s.session_id);
+    if (writeError1) console.error('[cron/checkout-abandoned] checkout_sessions write failed', writeError1);
   }
 
   return NextResponse.json({ pending: (pending ?? []).length, abandoned: abandoned.length, fired });

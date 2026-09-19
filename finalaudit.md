@@ -4577,9 +4577,36 @@ of them — one helper behind every control in that module.
 The insurance card now says *Unavailable* rather than showing the same
 placeholder it shows for an absent card. Those are different facts.
 
+## C1-K-07 · MEDIUM · 19 API writes whose answer was never read
+
+Section C also names ~57 unaudited API routes. Sweeping every `app/api/**/route.ts`
+for a write with nothing destructured found **19 across 13 routes**.
+
+PostgREST **resolves** an RLS refusal, a missing column and a constraint
+violation as `{ error }` — it does not throw — so even the routes that wrap the
+call in `try/catch` never saw those.
+
+Two are worth naming:
+
+- **`app/api/contact`.** Its `support_tickets` insert is deliberately
+  best-effort *because* "the email below is the primary path", and the comment
+  promises the ticket "surfaces in the admin console even if email delivery is
+  unavailable". A resolved error meant that documented fallback silently did
+  not exist — a support request accepted and lost.
+- **`app/api/cron/family-routines`** (×3). These writes record that a routine
+  was filed. A lost status update lets the next pass file the same routine
+  again, so here the silence costs **correctness**, not just observability.
+
+The rest are AI logs, usage events and sync preferences — genuinely
+best-effort, and a silent logging failure is exactly what makes an audit
+impossible.
+
+All 19 now capture and log their error. None blocks its response: the point is
+a trace, which is the difference between degrading and vanishing.
+
 ## Verification
 
-`tsc` clean · `next lint` 0 errors · **14,046 tests / 1,231 files** ·
+`tsc` clean · `next lint` 0 errors · **14,051 tests / 1,232 files** ·
 **40/40 probes** (330 migrations replayed, 0 failed).
 
 Every fix calibrated by reverting it: removing the row checks fails 2 of the 8
