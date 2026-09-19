@@ -5,6 +5,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
+import { toE164 } from '@/lib/guardian/phone';
 import { describeActionError } from '@/lib/supabase/errors';
 import { normalizeEmailLocal, isValidEmailLocal, isReservedEmailLocal } from '@/lib/contact-center/address';
 import { getOrCreateChannelResult, provisionFamilyNumber } from '@/lib/contact-center/server';
@@ -78,7 +79,18 @@ export async function updateConciergeAction(input: {
   const patch: Partial<{ ai_concierge_enabled: boolean; ai_greeting: string | null; forward_to_phone: string | null }> = {};
   if (typeof input.enabled === 'boolean') patch.ai_concierge_enabled = input.enabled;
   if (typeof input.greeting === 'string') patch.ai_greeting = input.greeting.trim().slice(0, 500) || null;
-  if (input.forwardTo !== undefined) patch.forward_to_phone = input.forwardTo;
+  if (input.forwardTo !== undefined) {
+    // The greeting beside this is trimmed and capped; this was stored raw, and
+    // unlike the greeting it is DIALLED — it reaches `<Dial>` in the voice
+    // route and Twilio's `To` in three escalation paths. Normalise to E.164 or
+    // refuse, rather than storing something that is not a number. Clearing the
+    // fallback stays possible: an empty value is null, not an error.
+    // Audit C1-S7-05.
+    const cleared = input.forwardTo === null || input.forwardTo.trim() === '';
+    const normalized = cleared ? null : toE164(input.forwardTo);
+    if (!cleared && !normalized) return { ok: false, error: t('actions.enterAValidPhoneNumber') };
+    patch.forward_to_phone = normalized;
+  }
   const { error } = await admin.from('family_contact_channels').update(patch).eq('family_id', g.familyId);
   if (error) return { ok: false, error: describeActionError(error, t('actions.couldNotUpdateTheConcierge')) };
   revalidatePath('/dashboard/contact-center');

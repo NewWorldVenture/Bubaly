@@ -2881,3 +2881,39 @@ Fix:      Both escalations now carry filed.inserted, matching the email sibling.
           assertions; breaking a guardian claim fires the third.
 Status:   FIXED
 ```
+
+```
+[CLAUDE-1][LOW][SECURITY] the field that gets dialled was the one nobody validated
+File:     app/(app)/dashboard/contact-center/actions.ts:81
+          lib/guardian/twilio.ts (twimlDial)
+Problem:  forward_to_phone is the family's human fallback — the voice route
+          transfers callers to it and three escalation paths text it. It was
+          stored raw (`patch.forward_to_phone = input.forwardTo`) while
+          `greeting`, TWO LINES ABOVE in the same function, is trimmed and capped
+          at 500. The spoken field was validated; the dialled one was not.
+          It then reached twimlDial, the only builder in lib/guardian/twilio.ts
+          without an escape — twimlSay, twimlGather and twimlRecord all escape
+          their text; this interpolated number and caller id raw.
+Evidence: <Dial> is the one verb where unescaped content is not a broken sentence
+          but a different call: `+1555…</Dial><Dial>+1900…` appends a second
+          destination and the family's Twilio account pays for it.
+Impact:   LOW, and stated plainly. Setting the fallback needs guardParentPlus, so
+          a manager can only aim it at their own family's bill — not an
+          escalation, not reachable by the strangers the rest of this pass is
+          about. Filed on the SHAPE: a non-number reaching a verb that dials,
+          past a validated sibling field, through the one unescaped builder. The
+          everyday version is a paste or typo breaking the emergency forward.
+Fix:      Two independent layers. (1) twimlDial escapes, matching every sibling,
+          so the boundary holds for values ALREADY in the database. (2) toE164
+          joins lib/guardian/phone.ts (which already owns phone shapes) and the
+          action normalises or refuses; the NANP assumptions mirror formatPhone
+          directly above rather than inventing a second convention, and clearing
+          stays possible so no family is trapped forwarding forever.
+          The refusal uses actions.enterAValidPhoneNumber, which ALREADY EXISTED
+          in all seven populated catalogues. I assumed I would have to add it and
+          was about to write seven translations — a made-up key would have been a
+          fresh C1-S4-03 defect, since translate() falls back to the key.
+          Checking first cost one command.
+          Proved red in both layers independently: 2 assertions each.
+Status:   FIXED
+```

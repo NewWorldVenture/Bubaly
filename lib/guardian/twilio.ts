@@ -76,10 +76,22 @@ export function twimlRecord(opts: {
 <Record ${attrs} />`;
 }
 
-/** TwiML: transfer to a phone number. */
+/**
+ * TwiML: transfer to a phone number.
+ *
+ * Both values are escaped, which the other builders in this file already do and
+ * this one did not. `<Dial>` is the one verb where unescaped content is not a
+ * broken sentence but a different call: text carrying `</Dial><Dial>…` appends a
+ * second destination, and the family's Twilio account pays for wherever it goes.
+ * `phoneNumber` reaches here from `family_contact_channels.forward_to_phone`,
+ * which a manager sets — so this is defence in depth rather than the only
+ * boundary, and `toE164` in the action is the other half. Audit C1-S7-05.
+ */
 export function twimlDial(phoneNumber: string, callerId?: string): string {
-  const callerAttr = callerId ? ` callerId="${callerId}"` : '';
-  return `<Dial${callerAttr}>${phoneNumber}</Dial>`;
+  const esc = (v: string) => v
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const callerAttr = callerId ? ` callerId="${esc(callerId)}"` : '';
+  return `<Dial${callerAttr}>${esc(phoneNumber)}</Dial>`;
 }
 
 /** TwiML: hang up. */

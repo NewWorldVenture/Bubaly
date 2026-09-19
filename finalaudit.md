@@ -7362,3 +7362,69 @@ because the trade-off belongs to whoever owns that line.
 
 Proved red per route: reverting either escalation fires two assertions, and
 breaking any guardian route's claim fires the third.
+
+
+## C1-S7-05 [LOW][SECURITY] — the field that gets dialled was the one nobody validated
+
+**File:** `app/(app)/dashboard/contact-center/actions.ts:81` ·
+`lib/guardian/twilio.ts` (`twimlDial`)
+**Status:** FIXED — plus `tests/a-dialled-number-is-a-number.test.ts`
+
+### Problem
+
+`family_contact_channels.forward_to_phone` is the family's human fallback: the
+voice route transfers inbound callers to it, and all three escalation paths text
+it. `updateConciergeAction` stored it with no trim, no cap and no shape check —
+
+```ts
+if (input.forwardTo !== undefined) patch.forward_to_phone = input.forwardTo;
+```
+
+— while `greeting`, **two lines above in the same function**, is trimmed and
+capped at 500 characters. The field that is only ever *spoken* was validated;
+the field that is *dialled* was not.
+
+It then reaches `twimlDial`, which was the only builder in
+`lib/guardian/twilio.ts` that did not escape. `twimlSay`, `twimlGather` and
+`twimlRecord` all escape their text; this one interpolated the number and the
+caller id raw:
+
+```ts
+return `<Dial${callerAttr}>${phoneNumber}</Dial>`;
+```
+
+`<Dial>` is the one TwiML verb where unescaped content is not a broken sentence
+but a **different phone call**: a value carrying `</Dial><Dial>+1900…` appends a
+second destination, and the family's Twilio account pays for wherever it goes.
+
+### Why this is LOW, said plainly
+
+Setting the fallback requires `guardParentPlus`. A manager can only aim this at
+their own family's bill, so it is not an escalation and it is not reachable by
+the strangers the rest of this pass has been about. It is filed on the strength
+of the **shape**, not the threat: a value that is not a number, reaching a verb
+that dials, past a sibling field that is validated, through the one builder in
+its file that does not escape. The everyday version is a paste or a typo
+breaking the emergency forward — no attacker required.
+
+### Fix, in two layers that do not depend on each other
+
+1. **`twimlDial` escapes**, matching every sibling builder — so the boundary
+   holds whatever the stored value is, including the values already in the
+   database today.
+2. **`toE164`** joins `lib/guardian/phone.ts`, the module that already owns
+   phone shapes, and `updateConciergeAction` normalises or refuses. Its 10- and
+   11-digit NANP assumptions mirror `formatPhone` directly above rather than
+   inventing a second convention, and clearing the fallback stays possible — an
+   empty value is `null`, not an error, so no family is trapped forwarding
+   forever.
+
+The refusal message uses `actions.enterAValidPhoneNumber`, which already existed
+in all seven populated catalogues. **I had assumed I would need to add it** — and
+was about to write seven translations — which would have been a new
+`C1-S4-03`-shaped defect if the key had been invented rather than real.
+`translate()` falls back to the key, so a made-up key renders as itself.
+Checking first cost one command.
+
+Proved red in both layers independently: restoring the raw interpolation fires
+two assertions, and restoring the raw write fires two more.
