@@ -20,6 +20,26 @@
 -- SKIPS with a notice rather than failing — a check that cannot run is not a
 -- check that found a problem, and conflating the two teaches people to ignore
 -- red.
+--
+-- ── the second session needs a password ────────────────────────────────────
+--
+-- dblink refuses a password-less connection unless the caller is a SUPERUSER,
+-- and on Supabase the `postgres` role is not one:
+--
+--   select current_user, usesuper from pg_user where usename = current_user;
+--   postgres | f
+--
+-- So this probe did not skip and did not pass — it ERRORED, on every Supabase
+-- database it was ever pointed at:
+--
+--   ERROR: password is required
+--   DETAIL: Non-superusers must provide a password in the connection string.
+--   CONTEXT: SQL statement "SELECT dblink_connect('a15_a', v_conn)"
+--
+-- which means the overlapping-transaction race below has never once been
+-- exercised. The password is read from a GUC rather than hardcoded; run-probes.sh
+-- forwards $PGPASSWORD into it. Absent one the probe SKIPS and says exactly what
+-- to set, which is the same bargain as the missing-dblink case above.
 
 create extension if not exists dblink;
 
@@ -49,6 +69,8 @@ declare
   v_family uuid := '00000000-0000-4000-8000-0000000000f1';
   v_wallet uuid := 'd0000000-0000-4000-8000-0000000000c9';
   v_conn   text;
+  v_pass   text;
+  v_super  boolean;
   approved_a boolean;
   approved_b boolean;
   n_approved int;
@@ -59,10 +81,35 @@ begin
     return;
   end if;
 
-  v_conn := 'dbname=' || current_database()
-    || ' host=' || split_part(current_setting('unix_socket_directories'), ',', 1)
-    || ' port=' || current_setting('port')
-    || ' user=' || current_user;
+  select usesuper into v_super from pg_user where usename = current_user;
+  v_pass := coalesce(current_setting('bubaly.dblink_password', true), '');
+
+  if v_super then
+    -- A superuser may open a password-less session over the local socket.
+    v_conn := 'dbname=' || current_database()
+      || ' host=' || split_part(current_setting('unix_socket_directories'), ',', 1)
+      || ' port=' || current_setting('port')
+      || ' user=' || current_user;
+  elsif v_pass <> '' and inet_server_addr() is not null then
+    -- Everyone else needs a host that ASKS for the password. Supplying one is
+    -- not enough: dblink also refuses when the server would not have demanded
+    -- it, so that a non-superuser cannot connect as anybody they like —
+    --
+    --   host all all 127.0.0.1/32  trust           -- refused, no password asked
+    --   host all all 172.16.0.0/12 scram-sha-256   -- accepted
+    --
+    -- `inet_server_addr()` is the address this very session reached the server
+    -- on, so it is the one address known to be routable and covered by a real
+    -- pg_hba line, without the probe hardcoding anything about the deployment.
+    v_conn := 'dbname=' || current_database()
+      || ' host=' || host(inet_server_addr())
+      || ' port=' || current_setting('port')
+      || ' user=' || current_user
+      || ' password=' || v_pass;
+  else
+    raise notice 'A-15 SKIP: % is not a superuser and no usable password/TCP address is available, so dblink cannot open the second session — run via docs/audit/run-probes.sh with PGHOST/PGPASSWORD set', current_user;
+    return;
+  end if;
 
   -- ASYNC on purpose. Two plain dblink() calls would run one after the other,
   -- each in its own committed transaction — that proves a hold is counted across

@@ -514,8 +514,8 @@ passed; production application of the atomic `0240-0254` release remains pending
 ## Migrations added since this document's stated baseline (2026-09-12)
 
 The status line at the top of this file is dated **2026-09-05** against main
-`01881fb2`. **60** migration files have landed since, `0255` through
-`0317`, and none of them appear anywhere above. (This read "thirty-one, `0255`
+`01881fb2`. **63** migration files have landed since, `0255` through
+`0320`, and none of them appear anywhere above. (This read "thirty-one, `0255`
 through `0285`" until 2026-09-13, "seventy-one, `0255` through `0295`" until
 2026-09-15, and "forty-five, `0255` through `0302`", "46, `0255` through `0303`"
 and "49, `0255` through `0306`" until 2026-09-16; the range
@@ -1586,3 +1586,174 @@ than by a buyer. Three assertions failed before, none after, with four controls
 both directions.
 
 Until this is applied, production can put a sold item back on the market.
+
+## 0318 — a sharing circle could never be created
+
+`marketplace_create_circle` is `security definer` and pinned
+`set search_path = public`. Pinning is the correct instinct for a definer
+function — an inherited search_path lets a caller shadow an unqualified object
+and have the definer execute it with elevated rights. But **Supabase installs
+pgcrypto into the `extensions` schema, not `public`**, so this pin excluded the
+one function the body calls:
+
+```
+NOTICE:  marketplace_create_circle -> FAILS:
+         function gen_random_bytes(integer) does not exist (42883)
+```
+
+Measured directly on the schema:
+
+```
+set search_path = public;              select gen_random_bytes(8);  -- ERROR 42883
+set search_path = public, extensions;  select gen_random_bytes(8);  -- \x9f4c...
+```
+
+**This is not a recent regression.** `0176_marketplace_circles.sql:133` declared
+the same bare pin when the function was born, so **no family has ever created a
+sharing circle** — the feature has been dead since it shipped. `0314` then fixed
+a genuine ambiguous-character bug in the code generator (`translate` runs before
+`upper`, so a lowercase `o`/`i` was uppercased back into the character the line
+existed to remove) inside a generator that never reached the point of generating.
+
+`0318` pins `public, extensions`, matching the working precedent already in the
+tree: `0238`'s `sync_blog_image_provenance` pins the same pair and calls
+`digest()` happily. **Adding `extensions` does not loosen the pin** — the schema
+holds extension functions, is not writable by `authenticated`, and so cannot be
+used to shadow anything in `public`. `marketplace_join_circle` and
+`marketplace_leave_circle` keep their bare `public` pin, because they call
+nothing from `extensions` and a search_path should name what the body needs and
+no more.
+
+**What this is not:** `invites.token` (`0002_tables.sql:71`) also calls
+`gen_random_bytes`, but as a COLUMN DEFAULT. A default's function references
+resolve to OIDs when the column is declared, so the search_path in force at
+insert time is irrelevant and that call site is sound. Function bodies resolve
+at call time; that is the whole difference, and it is why a grep for the call
+finds two sites and only one of them is broken.
+
+Held by `tests/definer-search-path-pinned.test.ts`, which already asserted that
+every definer function *pins* a search_path — a rule this function passed while
+being broken. It now also asserts that a pinned search_path **reaches what the
+body calls**, resolving each function's effective (last `create or replace`)
+definition so it judges the database as it stands rather than flagging `0176`
+forever. Reverting `0318` turns it red.
+
+Verified end to end against a local stack with all 318 migrations applied:
+
+```
+NOTICE:  created circle 016a65fc-5db8-4909-856b-12c489407a81 with code JRQAKE2C
+```
+
+Until this is applied, production's marketplace circles cannot be created at all.
+
+## 0319 — a child could move, erase or invent any family member's location
+
+`app/(app)/dashboard/locator/actions.ts` states the rule in its own comment:
+
+```
+* Strictly self-only — a member can only post their own location.
+```
+
+and the action honours it: `member.id` comes from `requireUserContext()`, never
+from the caller's input. That was the **only** place it held.
+
+`member_locations` and `location_events` each carried one policy:
+
+```
+Members can manage member_locations  ALL  using/with check: is_family_member(family_id)
+Members can manage location_events   ALL  using/with check: is_family_member(family_id)
+```
+
+`FOR ALL`, family-scoped, with **no `member_id` condition on either side** —
+and `authenticated` holds INSERT, UPDATE and DELETE on both. The browser has a
+direct line to them: `lib/realtime/published-tables.ts` publishes both and
+`components/modules/locator-module.tsx` subscribes from the client. So
+"self-only" described the server action, not the table, and the action could be
+walked around.
+
+**Measured, acting as a child of the family, with the control passing:**
+
+```
+BREACH: a child rewrote the PARENT's live location (rows: 1)
+BREACH: a child DELETED the parent's live location row (rows: 1)
+BREACH: a child fabricated a location EVENT attributed to the parent (rows: 1)
+NOTE:   a child posted their own location directly, bypassing updateMyLocation
+```
+
+The fourth empties the feature of meaning — a child who writes their own row at
+will can sit anywhere and report being at school, and the geofence, the
+arrived/left classification and the alert raised to the rest of the family are
+all computed from a number the child chose. The first three are worse in kind:
+the map can be made to lie about where a **parent** is, a parent can be removed
+from it entirely, and `location_events` — the family's safety timeline, which
+`lib/ai/context/policy.ts` feeds to a model as "location history" — can be given
+entries that never happened, attributed to someone else.
+
+**The fix is deliberately not managers-only.** A device posting its own position
+is the ordinary path and `updateMyLocation` runs under the member's own JWT, so a
+managers-only guard would pass every "a child cannot…" assertion while silently
+ending location reporting for every non-manager in the family. The rule is
+`can_manage_family(family_id) OR is_self_member(member_id)`, which is already the
+house pattern for member-owned rows (`driver_licenses`, `event_rsvps`). UPDATE
+carries it on both `using` and `with check`, because `using` alone still permits
+re-attribution — the child's own row, relabelled as somebody else's. SELECT is
+untouched: the shared family map is the product.
+
+Held by `docs/audit/location-ownership-check.sql`, whose positive controls carry
+unusual weight because the obvious fix is the wrong one — four of its ten
+assertions fail if location reporting or manager administration is ever closed in
+the name of closing this hole. With the six guards dropped it reports 9 failed
+assertions; with them, 40/40 across the whole suite.
+
+Until this is applied, any family member's phone can move, erase or invent
+anyone else's position in production.
+
+## 0320 — a restricted member could delete their way back to a broader role
+
+This closes **AUTHZ-003**, which has stood at FAIL (Critical) since it was found
+by source analysis, with repair blocked by that cycle's standing no-SQL
+boundary. It has now been reproduced by execution.
+
+`social_role_for` reads an explicit grant and falls back to the member's family
+role when there is no row:
+
+```
+coalesce((select social_role from social_access_permissions
+            where family_id = ... and user_id = auth.uid() and status = 'active'),
+         (case fm.role when 'parent' then 'admin'
+                       when 'adult'  then 'marketing_manager' ... end))
+```
+
+**A coalesce over a deletable row is a privilege that grows back.** The granular
+policies added later tightened INSERT and UPDATE to
+`is_family_admin(family_id) OR social_has_permission(family_id,'manage_access')`
+and left DELETE on the generic family-member policy — so the row could not be
+created or edited by the person it restricted, and could be deleted by them.
+
+**Measured, acting as the restricted adult:**
+
+```
+BEFORE: role=read_only         publish_posts=f
+DELETE of own restriction affected 1 row(s)
+AFTER:  role=marketing_manager publish_posts=t connect_accounts=t
+```
+
+The household deliberately held this adult at `read_only`. One DELETE later they
+may publish to, and connect, the family's social accounts.
+
+The guard carries the same rule the other two verbs already use, rather than
+inventing a third: `social_has_permission` grants `manage_access` only to `owner`
+and `admin` (every other social role carries an enumerated list that omits it),
+so this does not widen who may administer access. There is deliberately no "but
+it is mine" carve-out — the row being one's own is what makes deleting it an
+escalation.
+
+Held by `docs/audit/social-restriction-removal-check.sql`, which asserts the
+restriction is in force BEFORE testing its removal (without that control the
+probe would pass against a database where the adult never had the permission),
+and asserts the restricted role survives — the row count says the DELETE did
+nothing, and that assertion says the permission did not grow back. With the
+guard dropped it reports 4 failed assertions.
+
+Until this is applied, a household member held at a restrictive social role can
+remove that restriction themselves in production.

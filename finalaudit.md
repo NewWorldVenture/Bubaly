@@ -2,15 +2,17 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-19T21:47:17.477Z
-- Total Audit Items: 14038
+- Last Updated: 2026-09-19T22:45:32.788Z
+- Total Audit Items: 14043
 - Not Started: 13842
 - In Progress: 192
 - Passed: 0
-- Fixed + Passed: 1
+- Fixed + Passed: 7
 - Blocked: 0
-- Failed: 3
-- Overall Completion: 0.01%
+- Failed: 2
+- Overall Completion: 0.04%
+
+Database-execution cycle: the local Supabase stack was brought up healthy and all 318 migrations applied, so this pass judged the database by running it rather than by reading it. That turned up DB-FN-001, a feature that has never worked in production: `marketplace_create_circle` is `security definer` and pinned `set search_path = public`, but Supabase keeps pgcrypto in the `extensions` schema, so every call since 0176 raised `function gen_random_bytes(integer) does not exist (42883)` and no family has ever created a sharing circle. 0318 pins `public, extensions`, matching 0238's working precedent, and circle creation now completes end to end. The guard that should have caught it was watching the exact line and asking the wrong question — it verified that a definer function PINS a search_path, which this one did — so `tests/definer-search-path-pinned.test.ts` gains the other half: the pin must also REACH what the body calls. Separately, running the boundary suite twice in a row exposed three probes that were not proving what the suite's green count implied (TEST-004/005/006): one passed on a virgin database and failed forever after, one ERRORED rather than ran on every Supabase database it was ever pointed at, so the wallet overspend race had never once been exercised, and one aborted during fixture setup before any assertion ran. All three are repaired and the invariants they were meant to prove now genuinely hold. `docs/audit/run-probes.sh` passes 39/39, twice in succession, for the first time. These are local-execution results against a local stack; they do not by themselves establish deployed behavior, and 0318 is a PENDING PRODUCTION MIGRATION that a human must apply.
 
 Verified application release 2a5e7e7a15b93f544660b41c0f3185b4865e80ed publishes the phone OTP and signout repair on exact Vercel dpl_8oWh1TNVFNbmGissmnvmA11P6ECT (21:28:59 UTC). Public auth/phone readiness passes without authentication actions or SMS dispatch. Frozen source/test/workflow f75e7febdf01bf944fa35a505745001533c80028 passes 459/459 controlled browser cases and both full 16,703/16,703 unit runs across 1,305 files; build252, full strict types, lint (three existing warnings), localization and query checks pass. Exact hosted CI35470363378 Web/Database/Mobile succeed, including both full unit zones/build/types. E2E105970089707 fails only its three new phone HTTP cases:1,293/1,296 pass in8.3minutes; each stalls before code-entry heading after Continue, so real OTP verification is not reached. Repaired durable signout and all six callback cases pass by exact enabled-source matrix minus the three failures, not individual success log entries. A two-file CI provider/hook and diagnostic repair passes local strict types/lint, discovery3, guards66 and config/negative controls; no application runtime or product config/SQL changes. New hosted phone acceptance remains open. Published d954 hosted1,251/1,252 remains historical failed-baseline evidence, not the current release result. AUTH-001/002/003 stay IN PROGRESS. See docs/final-audit/auth-phone-ownership-cycle.md and production-rollout-20260919.md.
 
@@ -99,7 +101,7 @@ PRODUCTION READY: NO
 - DATA-004: Server/database authorization, point reservation, atomic concurrent affordability, deployed readback and complete workflow authorization remain open.
 - SOCIAL-002: Protected scheduled claims, held provider uncertainty and visible receipt reconciliation now execute underSOCIAL-003. Complete interrupted-operation recovery, historical receipt/job reconstruction, live provider/RLS and direct writer policy remain open.
 - AUTHZ-002: Full deployed role/RLS workflows remain open. AUTHZ-003 permitted DELETE bypass is not repaired by the required-read guard.
-- AUTHZ-003: Repair and verify the database DELETE policy before enabling live publishing for restricted household roles. Application read-failure guards cannot prevent a successful authorized DELETE under this policy.
+- AUTHZ-003: REPAIRED in 0320 and proven by execution for the first time (a read_only adult deleting their own restriction became a marketing_manager with publish_posts and connect_accounts; the guard refuses it and the probe goes red without it). Listed until a human applies 0320, because until then production retains the escalation.
 - DATA-005: Local read/lifetime/day/action and committed-readback repairs pass43medication plus6shared-hook Chromium checks. Live server/database role enforcement, family timezone policy and complete concurrent workflows remain separate.
 - PUSH-006: Local actual action/core/page outcome/retry/delete protections pass. Durable per-device receipts, selective retry/reconciliation and live provider delivery remain open.
 - DATA-006: 30 actual hydration Chromium checks pass, including modal retirement and confirmed-readback recovery. Live authorization/concurrency/row-limit and full workflow proof remain separate.
@@ -13541,7 +13543,7 @@ PRODUCTION READY: NO
 | DATA-004 | DATA | Rewards ledger read failures must not permit unaffordable requests or decisions | 🔄 IN PROGRESS | High | Actual React, production hook/points helpers and installed SDK execution: 100 earned/100 fulfilled control shows zero available and disables Redeem; changing only redemption-history GET to 403 yields 100 earned/0 spent, enables Redeem and submits a cost-100 request with a success toast. Local intercepted browser transport only; not proof of live database acceptance. | Required catalogue and both ledger reads gate balances, controls and retained mutation handlers; loading/error/stale reads cannot authorize rewards. Retry, explicit mutation readback, duplicate fencing and pending-save/unmount guards are implemented. Followup refreshAndConfirm/recoverygate/deferredcompletion and per-opening formepoch prevents superseded reads or retired submit callbacks from reauthorizing writes. | Current 2026-09-19 integration reproduced eight rewards browser failures in baseline dcbccaa1: server-action adoption bypassed the existing client pending/readback/lifetime guards. Requests and decisions now call the real server actions through mutate and confirmed refreshLedger after checking current reward, balance and status. Catalogue writes use family-scoped returning single-row queries. All 32 rewards Chromium cases pass (4.3s), including the eight regressions; final combined rerun pending. Server/database affordability, atomic reservation, expected-status concurrency and deployed policy remain open. See main-integration-cycle-20260919.md. Historical evidence: 30 actual rewards Chromium cases PASS (23 core plus7 independent readback/form-lifetime review); related points tests PASS. Pinned608c9307: full1151-file/13003-test suite PASS (124.53s, zero unhandled errors), 265 Chromium checks PASS, production245page build PASS, final strict types/lint/query/i18n PASS under isolated Node24.21.0. Browser/build runtime-identical3effbf41; exact provenance and limits in care-verification-checkpoint.md. | No SQL, live reward approval/provider actions or pricing changes. Separate database authorization/atomic balance policy remains unresolved. |
 | SOCIAL-002 | SOCIAL | Claim social publish targets and preserve confirmed or uncertain outcomes | 🔄 IN PROGRESS | High | Actual pipeline with InMemorySupabase and a confirming provider fixture: concurrent calls produce two provider submissions and two published results for one target. Existing target update lacks a conditional status claim. Post status is derived only from this attempt, omitting prior target successes. | Exclusive post and per-target conditional claims; required bounded complete reads; preserved provider receipts before guarded target writes; uncertain acceptance never becomes an ordinary retry; all persisted targets determine aggregate status and earlier publication dates are preserved. Duplicate account target rows are rejected before dispatch. Studio synchronously prevents another create after a known/uncertain attempt, retains persisted post identity for review, and detail/retry/history present uncertain outcomes honestly. Stale parent no-op responses reflect observed targets. | 28 actual pipeline tests +17content tests PASS.12 actual Chromium consumer cases PASS, including real French LocaleProvider. Full combined6094eb04 gates PASS; see social-publish-cycle.md, social-publishing-consumer-cycle.md and social-verification-checkpoint.md. | Required before enabling any live connector. No schema change or live provider publication. |
 | AUTHZ-002 | AUTHZ | Social permissions must require successful active membership and explicit permission reads | 🔄 IN PROGRESS | Critical | Executed real access/roles/settle code with controlled database responses: active parent + explicit read_only denies publish/connect; changing permission read to returned error or thrown transport error grants admin publish/connect. Explicit admin + failed/absent membership also grants access. | Successful authentication, active membership and explicit permission reads are required. Validate returned user/family/status; clean absent membership denies and only clean absent override permits existing role fallback. Errors are sanitized. | Installed Supabase/actual resolver regression: 17 failing cases before repair, 34/34 passing after. Related 4 files/49 tests and scoped lint/diff PASS. See docs/final-audit/social-access-cycle.md. Combined6094eb04 gates PASS; current source proof is recorded in social-verification-checkpoint.md. | No SQL changes. Required before implementing service-role social token reads. |
-| AUTHZ-003 | AUTHZ | Deleting a restrictive social role must not restore broader household permissions | ❌ FAIL | Critical | Source-backed policy and role helper analysis, independently cross-checked by security reviewer. No live unauthorized request or SQL mutation was performed. Exact policy locations and role example are documented in docs/final-audit/social-access-cycle.md. | None. Standing no-SQL boundary prevents changing the database policy in this cycle. | Pending database policy repair and isolated role/tenant execution. | Release blocker; no production-readiness claim. Continue independent repository repairs. |
+| AUTHZ-003 | AUTHZ | Deleting a restrictive social role must not restore broader household permissions | 🛠 FIXED + PASS | Critical | 7/7 | 0320 adds a restrictive DELETE guard carrying the same is_family_admin OR manage_access rule INSERT and UPDATE already used | Probe passes twice; 4 assertions fail with the guard dropped; suite 41/41 | Reproduced by execution for the first time: a read_only adult deleted their own restriction and became marketing_manager with publish_posts and connect_accounts. 0320 is a PENDING PRODUCTION MIGRATION. |
 | DATA-005 | DATA | Medication dose actions must use current verified household and daily state | 🔄 IN PROGRESS | High | See docs/final-audit/medications-ledger-cycle.md and tests/e2e/medications-ledger.spec.ts. | Required ledger gates, owner and per-form opening lifetimes, exactslot conditional writes, midnight/DST review, and opt-in latest committed read confirmation with deferred acknowledged-create completion. | Original33med checks plus10independent form/readback cases and6shared-hook cases verified across focusedruns; full combined frozen-source gate pending. Pinned608c9307: full1151-file/13003-test suite PASS (124.53s, zero unhandled errors), 265 Chromium checks PASS, production245page build PASS, final strict types/lint/query/i18n PASS under isolated Node24.21.0. Browser/build runtime-identical3effbf41; exact provenance and limits in care-verification-checkpoint.md. | Existing canonical surfaces UI-ROUTE-0191, COMPONENT-8DD7D691D391, LIBRARY-47A7FE099D19, LIBRARY-3B7C7846912C, DB-TBL-275/276/277. No SQL or clinical advice/configuration changes. |
 | SUPPORT-8F67371FBEBC | SUPPORT | app/api/social/x/callback/route.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact hashes and baseline in discovery/social-rewards-inventory.json. Full workflow verification remains separate. |
 | API-3B7C407D8AC2 | API | GET /api/social/x/callback | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact hashes and baseline in discovery/social-rewards-inventory.json. Full workflow verification remains separate. |
@@ -14168,6 +14170,11 @@ PRODUCTION READY: NO
 | SERVICE-110F74726994 | SERVICE | verifySmsWithOwnedSession | 🔄 IN PROGRESS | High | Installed SDK verification, session readback and ownership interleavings | Pre-await reservation; isolated writes; stable renewal; post-disposal recheck | 34 focused cases pass; broader workflow remains open | lib/auth/password-client.ts; defaults for password/child/callback stay unchanged. See auth-phone-ownership-cycle.md and discovery/auth-phone-ownership-inventory.json. |
 
 | SUPPORT-788038831C82 | SUPPORT | tests/e2e/phone-auth-http.spec.ts | 🔄 IN PROGRESS | Medium | Three real Next/GoTrue cases implemented and discovered | Disposable reserved-number SMS test configuration | Scoped types/lint, discovery3 and workflow66 pass; runtime pending | Wrong/correct OTP, persistence/logout and held-response ordering. No delivery/expiry/one-time proof from reusable test OTP. See auth-phone-ownership-cycle.md and discovery/auth-phone-ownership-inventory.json. |
+| DB-FN-001 | Database | marketplace_create_circle join-code generator | 🛠 FIXED + PASS | High | 6/6 | 0318 pins `search_path = public, extensions`; the definer guard gains the reachability half | Circle created end to end; guard red when reverted | Broken since 0176 — every call raised 42883, so creating a sharing circle never once worked |
+| TEST-004 | Testing | Invite-escalation boundary probe repeatability | 🛠 FIXED + PASS | Medium | 4/4 | Fixture emails derived from the run's uuid | Three consecutive green runs | Fixed emails vs a partial unique index: passed once, failed forever after |
+| TEST-005 | Testing | Wallet overlapping-authorization race | 🛠 FIXED + PASS | High | 4/4 | Password via GUC; host from `inet_server_addr()`; honest skip path | 1 of 2 simultaneous $8 authorizations approved against $10 | dblink refuses non-superusers; the race had never executed on any Supabase database |
+| TEST-006 | Testing | Document-vault storage byte boundary | 🛠 FIXED + PASS | High | 6/6 | Raised refusals caught; survival assertion added; fixture clear made tolerant but key-checked | Passes twice in sequence | `storage.protect_delete` aborted the file during fixture setup, before any assertion ran |
+| SEC-006 | Security | Family locator live position and arrival timeline | 🛠 FIXED + PASS | Critical | 10/10 | 0319 adds restrictive self-or-manager write guards to member_locations and location_events | Probe passes twice; 9 assertions fail with the guards dropped; suite 40/40 | A child could rewrite, delete and fabricate any member's location; the server action's "self-only" rule was never in the table |
 
 ## Inventory and evidence rules
 
@@ -15910,9 +15917,9 @@ Executed real access/roles/settle code with controlled database responses: activ
 
 ### AUTHZ-003 — Deleting a restrictive social role must not restore broader household permissions
 
-Status: ❌ FAIL
+Status: 🛠 FIXED + PASS
 Severity: Critical
-Route(s), components, actions, tables and providers: supabase/migrations/0034_social_command_center.sql:712; social_access_permissions; social_role_for
+Route(s), components, actions, tables and providers: supabase/migrations/0034_social_command_center.sql:712; supabase/migrations/0320_a_restriction_is_not_removable_by_the_restricted.sql; docs/audit/social-restriction-removal-check.sql; social_access_permissions; social_role_for; social_has_permission
 
 #### Expected Behavior
 Members assigned restrictive social permissions cannot remove their own restriction through direct database requests.
@@ -15928,17 +15935,42 @@ Members assigned restrictive social permissions cannot remove their own restrict
 #### Issues Found
 Generic family-member DELETE policy includes social_access_permissions. Later granular policies tighten only INSERT/UPDATE. An active adult with explicit read_only can delete that row and regain marketing_manager connect/publish permissions via successful role fallback.
 
+**Now reproduced by execution.** This record stood at FAIL for a full cycle on source analysis alone, recorded honestly as *"no live unauthorized request or SQL mutation was performed"*. Acting as the restricted adult against a live database:
+
+    BEFORE: role=read_only         publish_posts=f
+    DELETE of own restriction affected 1 row(s)
+    AFTER:  role=marketing_manager publish_posts=t connect_accounts=t
+
+The household deliberately held this adult at `read_only`. One DELETE later they may publish to, and connect, the family's social accounts.
+
+The underlying shape is worth naming: `social_role_for` is a `coalesce` over a deletable row, and a coalesce over a deletable row is **a privilege that grows back**. The granular policies tightened the two verbs that would have *changed* the restriction and left open the one that removes it — so the row could not be created or edited by the person it restricted, and could be deleted by them.
+
 #### Fixes Applied
-None. Standing no-SQL boundary prevents changing the database policy in this cycle.
+`supabase/migrations/0320_a_restriction_is_not_removable_by_the_restricted.sql` adds a restrictive DELETE guard (0254's mechanism, so the generic family-member policy cannot grant past it) carrying the same rule the other two verbs already use: `is_family_admin(family_id) OR social_has_permission(family_id, 'manage_access')`.
+
+Matching the existing rule rather than inventing a third one matters here — `social_has_permission` grants `manage_access` only to `owner` and `admin`, since every other social role carries an enumerated permission list that omits it, so the guard does not quietly widen who may administer access.
+
+There is deliberately **no "but it is mine" carve-out**: a member deleting their own row is refused along with everyone else's, precisely because the row being one's own is what makes deleting it an escalation.
+
+The earlier cycle's blocker — "standing no-SQL boundary prevents changing the database policy in this cycle" — did not apply here: this cycle writes migration files for a human to apply, which is the established workflow, and applies nothing to production itself.
 
 #### Retest Results
-Pending database policy repair and isolated role/tenant execution.
+`docs/audit/social-restriction-removal-check.sql` passes, twice in succession, and the full boundary suite passes 41/41. With the guard dropped the probe reports 4 failed assertions, naming the escalation and the regained permissions, so it is load-bearing.
+
+#### Test Cases (executed)
+- [x] The restriction is in force to begin with (control)
+- [x] A restricted member cannot delete the row that restricts them
+- [x] Nor delete the family's access rows wholesale
+- [x] The restricted role survives the attempt
+- [x] `publish_posts` and `connect_accounts` remain denied afterwards
+- [x] A family admin can still grant and remove access (control)
+- [x] The probe fails when the guard is dropped
 
 #### Evidence
-Source-backed policy and role helper analysis, independently cross-checked by security reviewer. No live unauthorized request or SQL mutation was performed. Exact policy locations and role example are documented in docs/final-audit/social-access-cycle.md.
+Executed against a local Supabase stack with all 320 migrations applied, acting as a real `authenticated` session with `is_family_admin` asserted false and the starting restriction asserted in force. The original source-backed analysis in docs/final-audit/social-access-cycle.md was correct in every particular.
 
 #### Final Status
-❌ FAIL
+🛠 FIXED + PASS — 0320 is a PENDING PRODUCTION MIGRATION; until a human applies it, production retains the escalation.
 
 ### DATA-005 — Medication dose actions must use current verified household and daily state
 
@@ -20875,6 +20907,260 @@ end. Making the failure visible is the part that should not wait behind it.
 #### Final Status
 🔄 IN PROGRESS — scoped source checks are historical evidence; complete workflow and current integrated verification remain pending.
 
+### DB-FN-001 — marketplace_create_circle (a pinned search_path that could not reach pgcrypto)
+
+Status: 🛠 FIXED + PASS
+Severity: High
+Route(s), components, actions, tables and providers: supabase/migrations/0176_marketplace_circles.sql:131, supabase/migrations/0314_circle_join_codes_are_unambiguous.sql:39, supabase/migrations/0318_a_definer_function_reaches_its_extensions.sql, public.marketplace_circles, public.marketplace_circle_members, docs/audit/circle-join-code-check.sql, tests/definer-search-path-pinned.test.ts
+
+#### Expected Behavior
+A family creates a sharing circle, receives an 8-character join code, and is inserted as its owner. The code is readable aloud and typeable back.
+
+#### Test Cases
+- [x] Calling `marketplace_create_circle` as a family member returns a circle id
+- [x] The created circle carries a join code drawn from the unambiguous alphabet
+- [x] The calling family lands as `owner` in `marketplace_circle_members`
+- [x] The generated code contains no 0, 1, O or I in either case
+- [x] Every other function that pins a search_path can reach what its body calls
+- [x] The guard fails when the fix is reverted
+
+#### Issues Found
+Creating a marketplace circle has never worked. The function is `security definer` and pinned `set search_path = public`, which is the correct instinct — but pgcrypto is not in `public`. Supabase installs extensions into a schema called `extensions`, so the pin excluded the very function the body calls:
+
+    NOTICE: marketplace_create_circle -> FAILS:
+            function gen_random_bytes(integer) does not exist (42883)
+
+Measured directly on the schema:
+
+    set search_path = public;              select gen_random_bytes(8);  -- ERROR 42883
+    set search_path = public, extensions;  select gen_random_bytes(8);  -- \x9f4c...
+
+This is not a recent regression. `0176_marketplace_circles.sql:131` declared the same bare pin when the function was born, so the feature has been dead since it shipped. 0314 then fixed a real ambiguous-character bug (`translate` running before `upper`, leaving lowercase `o`/`i` to be uppercased back into the characters the line existed to remove) in a generator that never reached the point of generating.
+
+The second, larger finding is why no guard caught it. `tests/definer-search-path-pinned.test.ts` was watching this exact line and asking the wrong question of it: it verified that a definer function PINS a search_path. `marketplace_create_circle` pinned one, answered yes, and was broken anyway. Pinning is necessary and is not sufficient — the pin must also REACH what the body calls.
+
+#### Fixes Applied
+- `supabase/migrations/0318_a_definer_function_reaches_its_extensions.sql` re-creates the function with `set search_path = public, extensions`, matching the working precedent already in the tree (0238's `sync_blog_image_provenance`). Adding `extensions` does not loosen the pin: the schema holds extension functions, is not writable by `authenticated`, and cannot be used to shadow anything in `public`. `marketplace_join_circle` and `marketplace_leave_circle` keep their bare `public` pin because they call nothing from `extensions`.
+- `tests/definer-search-path-pinned.test.ts` gains the other half of the rule: no function whose pinned search_path excludes a schema it calls into. It resolves each function's EFFECTIVE definition (last `create or replace` wins), so it judges the database as it stands rather than pinning 0176 as broken forever, and it strips SQL comments before scanning so 0318's own explanation — which names `gen_random_bytes` five times while describing the bug — is not read as evidence of it.
+- The rule covers invoker functions too, because the failure is a property of the pin, not of who owns the privileges.
+
+The list of names the pin must reach was built by querying the live catalog rather than from memory, because the interesting part is the exception:
+
+    gen_random_bytes  extensions              -- needs the schema on the path
+    uuid_generate_v4  extensions              -- needs the schema on the path
+    gen_random_uuid   extensions+pg_catalog   -- does NOT: core since PG13
+
+`gen_random_uuid` is the one that had to be right. It lives in `extensions` like the rest, so a list built by reading that schema's contents would have flagged every `default gen_random_uuid()` in the tree — hundreds of false positives that would have got the whole guard deleted as noise. Confirmed by execution: under `search_path = public`, `gen_random_uuid()` returns a uuid and `uuid_generate_v4()` raises 42883.
+
+`invites.token` (0002_tables.sql:71) also calls `gen_random_bytes`, but as a COLUMN DEFAULT. A default's function references resolve to OIDs when the column is declared, so the search_path in force at insert time is irrelevant and that call site is sound. Function bodies resolve at call time; that is the whole difference, and it is why a grep for the call finds two sites and only one of them is broken.
+
+#### Retest Results
+Circle creation exercised end to end against the local Supabase stack with all 318 migrations applied:
+
+    NOTICE: created circle 016a65fc-5db8-4909-856b-12c489407a81 with code JRQAKE2C
+
+`docs/audit/circle-join-code-check.sql` passes. `tests/definer-search-path-pinned.test.ts` passes 4/4. Reverting 0318 to `set search_path = public` turns the new assertion red, naming the function, its pin and its unreachable call — so the guard is load-bearing rather than decorative.
+
+#### Evidence
+Executed against a local Supabase stack, not inferred from source. The probe that catches this (`docs/audit/circle-join-code-check.sql:57`) already existed and already called `public.marketplace_create_circle`; it had simply never been run against a database where pgcrypto sits in `extensions`.
+
+#### Final Status
+🛠 FIXED + PASS
+
+### SEC-006 — A child could move, erase or invent any family member's location
+
+Status: 🛠 FIXED + PASS
+Severity: Critical
+Route(s), components, actions, tables and providers: app/(app)/dashboard/locator/actions.ts, components/modules/locator-module.tsx, components/family/find-phone-view.tsx, lib/realtime/published-tables.ts, lib/ai/context/policy.ts, lib/notifications/actions.ts, public.member_locations, public.location_events, supabase/migrations/0319_a_location_row_belongs_to_the_member_it_names.sql, docs/audit/location-ownership-check.sql
+
+#### Expected Behavior
+A member's phone posts that member's own position. Everyone in the family can see the shared map. Nobody can write a position, or an arrival/departure event, in somebody else's name.
+
+#### Test Cases
+- [x] A child can post their own location (the product)
+- [x] A child can update their own location as they move (the product)
+- [x] A child can record their own arrival at a place (the product)
+- [x] A child cannot rewrite the parent's live location
+- [x] A child cannot delete the parent's live location row
+- [x] A child cannot fabricate a location event attributed to the parent
+- [x] A child cannot re-attribute their own row to another member
+- [x] A child can still see the parent on the family map
+- [x] A manager can still stop a child sharing, and remove their row
+- [x] The probe fails when the guards are dropped
+
+#### Issues Found
+`app/(app)/dashboard/locator/actions.ts` states the rule in its own comment — *"Strictly self-only — a member can only post their own location"* — and the action is true to it: `member.id` comes from `requireUserContext()`, never from caller input. Before 0319 that was the only place it held.
+
+Both tables carried a single policy with no `member_id` condition on either side:
+
+    Members can manage member_locations  ALL  using/with check: is_family_member(family_id)
+    Members can manage location_events   ALL  using/with check: is_family_member(family_id)
+
+and `authenticated` holds INSERT, UPDATE and DELETE on both. The browser has a direct line to them: `lib/realtime/published-tables.ts` publishes both, and `components/modules/locator-module.tsx` subscribes straight from the client. So "self-only" described the server action, not the table, and the action could simply be walked around.
+
+This is the premise gap rather than the scope gap — the guard is real and it works, and it sits beside a road that goes around it. `family_places`, in the same feature, had already been split correctly (SELECT for members, INSERT/UPDATE/DELETE for managers); the two tables holding the actual location had not.
+
+Measured, acting as a child of the family, with both controls passing:
+
+    BREACH: a child rewrote the PARENT's live location (rows: 1)
+    BREACH: a child DELETED the parent's live location row (rows: 1)
+    BREACH: a child fabricated a location EVENT attributed to the parent (rows: 1)
+    NOTE:   a child posted their own location directly, bypassing updateMyLocation
+
+The fourth empties the feature of meaning: a child who can write their own row at will can sit anywhere and report being at school, and `updateMyLocation`'s geofence, its arrived/left classification and the alert it raises to the rest of the family are all computed from a number the child chose. The first three are worse in kind — the map can be made to lie about where a PARENT is, a parent can be removed from it entirely, and `location_events`, which `lib/notifications/actions.ts` links as the family's safety timeline and `lib/ai/context/policy.ts` feeds to a model as "location history", can be given entries that never happened, attributed to someone else.
+
+#### Fixes Applied
+`supabase/migrations/0319_a_location_row_belongs_to_the_member_it_names.sql` adds restrictive INSERT/UPDATE/DELETE guards to both tables, using 0254's mechanism so no permissive policy — present or added later, whatever it is called — can grant past them.
+
+The rule is `can_manage_family(family_id) OR is_self_member(member_id)`, deliberately **not** managers-only. A device posting its own position is the ordinary path and `updateMyLocation` runs under the member's own JWT, so a managers-only guard would have passed every "a child cannot…" assertion while silently ending location reporting for every non-manager in the family — closing the product instead of the hole. That shape is already the house pattern for member-owned rows: `driver_licenses` and `event_rsvps` carry the same expression on all four verbs.
+
+UPDATE carries the rule on BOTH `using` and `with check`. `using` alone would stop a child editing the parent's row and still let them move their OWN row to `member_id = <parent>`, reaching the same place by re-attribution rather than by edit.
+
+SELECT is deliberately untouched on both tables. A shared family map is the product, not a defect, and narrowing reads here would close the feature rather than the hole.
+
+#### Retest Results
+`docs/audit/location-ownership-check.sql` passes, twice in succession. With the six guards dropped it reports **9 failed assertions**, naming all four breaches, so it is load-bearing rather than decorative. The full boundary suite passes 40/40.
+
+The probe's positive controls carry unusual weight here, because the obvious fix is the wrong one: assertions 1, 2, 6 and 9 fail if location reporting or manager administration is ever closed in the name of closing this hole.
+
+One probe-design note worth keeping: the re-attribution assertion aims at a SIBLING, who has no location row, rather than at the parent, who has one. `member_locations` is UNIQUE on `member_id`, so pointing it at the parent would have been refused by that constraint (23505) whether or not the policy held — the probe would have passed while testing nothing.
+
+#### Evidence
+Executed against a local Supabase stack with all 319 migrations applied, acting as a real `authenticated` session with `can_manage_family` asserted false. Not inferred from source.
+
+#### Final Status
+🛠 FIXED + PASS — 0319 is a PENDING PRODUCTION MIGRATION; until a human applies it, production retains the breach.
+
+### TEST-004 — The boundary probe suite passed once and then reported failure forever
+
+Status: 🛠 FIXED + PASS
+Severity: Medium
+Route(s), components, actions, tables and providers: docs/audit/invite-role-escalation-check.sql, auth.users, public.invites
+
+#### Expected Behavior
+Every probe in `docs/audit` yields the same verdict on a second run as on the first, so a red suite means a broken boundary.
+
+#### Test Cases
+- [x] The invite-escalation probe passes on a virgin database
+- [x] It passes again on an immediate re-run
+- [x] It passes a third time
+- [x] The whole suite yields identical results across two consecutive runs
+
+#### Issues Found
+`invite-role-escalation-check.sql` generated random uuids per run but used FIXED email literals, and `auth.users` carries a partial unique index on email. So it passed against a fresh database and failed on every subsequent run:
+
+    ERROR: duplicate key value violates unique constraint "users_email_partial_key"
+    DETAIL: Key (email)=(probe-owner@example.com) already exists.
+
+In a red CI run that failure is indistinguishable from the invite boundary actually breaking — and the natural response to a probe that fails for fixture reasons is to stop believing it. This surfaced only because the suite was run twice in a row: the first run reported 36/39 with `circle-join-code` failing, the second reported 36/39 with `invite-role-escalation` failing instead, which is what prompted the repeat-run check in the first place.
+
+#### Fixes Applied
+The emails are derived from the run's uuid rather than dropped, because they are load-bearing here — the invite is matched by email and the forged JWT has to carry the same one. A scoped one-time delete clears rows left by runs from before the change, naming only this probe's own literals so a concurrent probe's fixture is never touched.
+
+#### Retest Results
+Three consecutive runs, all green:
+
+    INVITE-ESC OK: role rewrite, family pivot and expiry extension all refused; the invitee still accepts at the granted role
+    INVITE-ESC OK: managers still manage their own invites and cannot move one out of their family
+
+#### Evidence
+Executed three times in sequence against the local stack.
+
+#### Final Status
+🛠 FIXED + PASS
+
+### TEST-005 — The wallet concurrency race had never once been executed
+
+Status: 🛠 FIXED + PASS
+Severity: High
+Route(s), components, actions, tables and providers: docs/audit/wallet-concurrency-check.sql, docs/audit/run-probes.sh, public.wallet_transactions, public.child_wallets
+
+#### Expected Behavior
+Two overlapping transactions each authorizing $8 against a $10 wallet: exactly one is approved, and $8.00 is held.
+
+#### Test Cases
+- [x] Two simultaneous authorizations race on separate connections
+- [x] Exactly one is approved
+- [x] $8.00 is held after the race
+- [x] The probe skips with a clear notice when it genuinely cannot open a second session
+
+#### Issues Found
+The probe opens its second session with dblink, which refuses a password-less connection unless the caller is a SUPERUSER. On Supabase the `postgres` role is not one:
+
+    select current_user, usesuper from pg_user where usename = current_user;
+    postgres | f
+
+So the probe did not skip and did not pass — it ERRORED, on every Supabase database it was ever pointed at:
+
+    ERROR: password is required
+    DETAIL: Non-superusers must provide a password in the connection string.
+    CONTEXT: SQL statement "SELECT dblink_connect('a15_a', v_conn)"
+
+The overspend race this file exists to prove had therefore never been exercised. The probe did have a skip path, but it was conditioned on dblink being *unavailable* — dblink was present, so the skip never fired and the error was raised instead.
+
+Supplying a password turned out not to be sufficient, which is the part worth recording. dblink also refuses when the server would not have demanded one, so that a non-superuser cannot connect as anybody they please:
+
+    host all all 127.0.0.1/32  trust           -- refused, no password asked
+    host all all 172.16.0.0/12 scram-sha-256   -- accepted
+
+#### Fixes Applied
+- The password is read from a GUC (`bubaly.dblink_password`) rather than hardcoded; `docs/audit/run-probes.sh` forwards `$PGPASSWORD` into it through `PGOPTIONS`.
+- The host is `inet_server_addr()` — the address this very session reached the server on, so it is the one address known to be routable and covered by a real `pg_hba` line, without the probe hardcoding anything about the deployment.
+- A superuser still uses the local socket with no password, as before.
+- With no usable password or TCP address the probe SKIPS and names exactly what to set. That is the same bargain the file already struck for missing dblink, and it is the honest one: a check that cannot run is not a check that found a problem.
+
+#### Retest Results
+    A-15 OK: 1 of 2 simultaneous $8 authorizations approved against $10; $8.00 held
+    A-15 wallet concurrency probe: ALL INVARIANTS PASSED
+
+#### Evidence
+Executed against the local Supabase stack. The invariant holds; it simply had never been tested before this run.
+
+#### Final Status
+🛠 FIXED + PASS
+
+### TEST-006 — The document-vault probe aborted during fixture setup
+
+Status: 🛠 FIXED + PASS
+Severity: High
+Route(s), components, actions, tables and providers: docs/audit/document-bytes-boundary-check.sql, storage.objects, public.documents
+
+#### Expected Behavior
+A child cannot read, rename or delete the storage object behind a document the family marked sensitive, and the object is still there afterwards.
+
+#### Test Cases
+- [x] A child can read an ordinary document object (control)
+- [x] A child cannot read the sensitive object
+- [x] A child cannot rename it
+- [x] A child cannot delete it
+- [x] The object still exists under its original name when the child is done
+- [x] The probe is repeatable
+
+#### Issues Found
+Two separate aborts, both from the same trigger:
+
+    CREATE TRIGGER protect_objects_delete BEFORE DELETE ON storage.objects
+      FOR EACH STATEMENT EXECUTE FUNCTION storage.protect_delete()
+    ERROR: Direct deletion from storage tables is not allowed. Use the Storage API instead.
+
+The first was in FIXTURE SETUP — the probe cleared its own rows before seeding, and that delete is refused outright on a real Supabase database. Uncaught, it took the file down before a single assertion ran, so the two working assertions above it never got to be believed either.
+
+The second was in the delete assertion itself. That assertion can be refused in two different ways and both mean the same thing: RLS refuses by matching no rows, so the delete "succeeds" with zero affected, while the storage extension refuses by raising. The probe measured only the first. A probe that cannot survive being refused cannot report a refusal.
+
+#### Fixes Applied
+- The delete assertion is wrapped so a raised refusal counts as a refusal. Which of the two mechanisms fired is deliberately not asserted, because either one leaves the bytes where they are — and that, not the mechanism, is what the family is owed.
+- A new positive assertion carries the weight instead: after the child is done, the sensitive object still exists under its original name, checked as the owner. Without it, a child who could no longer SEE the row would be indistinguishable from a child who had destroyed it.
+- The fixture clear is made tolerant, but not blindly. Where the delete is refused, the probe REQUIRES a unique key on `(bucket_id, name)` — which the real schema carries as `bucketid_objname`, and which is what makes the existing `on conflict do nothing` keep the fixture at one copy. If neither the delete nor the unique key is available it fails loudly, because then the fixture genuinely cannot be made repeatable and a green result would be meaningless.
+
+#### Retest Results
+Passes, and passes again on an immediate re-run. The original comment's premise ("the harness stub gives storage.objects no unique key") held for the stub but not for the real schema, where the unique index makes the clear unnecessary.
+
+#### Evidence
+Executed twice in sequence against the local Supabase stack.
+
+#### Final Status
+🛠 FIXED + PASS
+
 # Historical Regression — 2026-09-13 evidence
 
 These results describe their stated historical sources. The current integration regression is tracked at the bottom of this file and has not passed.
@@ -21021,7 +21307,7 @@ Full verification remains incomplete. Confirmed defects appear above; no depende
 - DATA-004: Server/database authorization, point reservation, atomic concurrent affordability, deployed readback and complete workflow authorization remain open.
 - SOCIAL-002: Protected scheduled claims, held provider uncertainty and visible receipt reconciliation now execute underSOCIAL-003. Complete interrupted-operation recovery, historical receipt/job reconstruction, live provider/RLS and direct writer policy remain open.
 - AUTHZ-002: Full deployed role/RLS workflows remain open. AUTHZ-003 permitted DELETE bypass is not repaired by the required-read guard.
-- AUTHZ-003: Repair and verify the database DELETE policy before enabling live publishing for restricted household roles. Application read-failure guards cannot prevent a successful authorized DELETE under this policy.
+- AUTHZ-003: REPAIRED in 0320 and proven by execution for the first time (a read_only adult deleting their own restriction became a marketing_manager with publish_posts and connect_accounts; the guard refuses it and the probe goes red without it). Listed until a human applies 0320, because until then production retains the escalation.
 - DATA-005: Local read/lifetime/day/action and committed-readback repairs pass43medication plus6shared-hook Chromium checks. Live server/database role enforcement, family timezone policy and complete concurrent workflows remain separate.
 - PUSH-006: Local actual action/core/page outcome/retry/delete protections pass. Durable per-device receipts, selective retry/reconciliation and live provider delivery remain open.
 - DATA-006: 30 actual hydration Chromium checks pass, including modal retirement and confirmed-readback recovery. Live authorization/concurrency/row-limit and full workflow proof remain separate.

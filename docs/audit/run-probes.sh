@@ -11,6 +11,15 @@
 # boundary rather than only the first.
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+
+# wallet-concurrency-check opens a SECOND session through dblink to race two
+# overlapping transactions. dblink demands a password from non-superusers, and
+# Supabase's `postgres` role is not a superuser — so without this the probe
+# errored rather than ran. Forwarded as a GUC so the probe never hardcodes it;
+# with no PGPASSWORD set the probe skips and says so.
+if [ -n "${PGPASSWORD:-}" ]; then
+  export PGOPTIONS="${PGOPTIONS:-} -c bubaly.dblink_password=${PGPASSWORD}"
+fi
 shopt -s nullglob
 probes=("$ROOT"/docs/audit/*-check.sql)
 

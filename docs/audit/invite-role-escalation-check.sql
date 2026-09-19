@@ -15,7 +15,28 @@
 -- only one makes every check below vacuous), RLS is shown to be live, and the
 -- legitimate flow is shown to still work. A probe that only checks that an
 -- attack fails cannot tell a fixed policy from a broken fixture.
+--
+-- ── the fixture is fresh on every run ───────────────────────────────────────
+--
+-- The ids below are random per run but the emails used to be string literals,
+-- and `auth.users` carries a partial unique index on email. So the probe passed
+-- against a virgin database and then failed on the SECOND run for the rest of
+-- time:
+--
+--   ERROR: duplicate key value violates unique constraint "users_email_partial_key"
+--   DETAIL: Key (email)=(probe-owner@example.com) already exists.
+--
+-- That failure is indistinguishable, in a red CI run, from the invite boundary
+-- actually breaking — and the natural response to a probe that fails for
+-- fixture reasons is to stop running it. The email is load-bearing here (the
+-- invite is matched by email and the forged JWT has to carry the same one), so
+-- it is derived from the run's uuid rather than dropped.
 \set ON_ERROR_STOP on
+
+-- Rows left behind by runs from before the emails were unique. Scoped to this
+-- probe's own literals so a concurrent probe's fixture is never touched.
+delete from auth.users where email in (
+  'probe-owner@example.com', 'probe-invitee@example.com', 'probe-mgr@example.com');
 
 do $$
 declare
@@ -25,25 +46,29 @@ declare
   invitee  uuid := gen_random_uuid();
   tok      text := 'probe_' || replace(gen_random_uuid()::text, '-', '');
   othertok text := 'probe_' || replace(gen_random_uuid()::text, '-', '');
+  -- Unique per run: auth.users has a partial unique index on email.
+  owner_em text := 'probe-owner-'   || owner   || '@example.com';
+  inv_em   text := 'probe-invitee-' || invitee || '@example.com';
+  other_em text := 'a-different-person-' || other || '@example.com';
   n        int;
   landed   text;
   blocked  boolean;
 begin
   -- ── Fixture (as the table owner; setup is not the test) ──
   insert into auth.users(id, email) values
-    (owner, 'probe-owner@example.com'), (invitee, 'probe-invitee@example.com');
+    (owner, owner_em), (invitee, inv_em);
   insert into public.families(id, name) values (fid, 'Probe'), (other, 'Unrelated');
   insert into public.family_members(family_id, user_id, role, display_name, is_active)
     values (fid, owner, 'parent', 'Owner', true);
   insert into public.invites(family_id, email, role, token, status, invited_by, expires_at) values
-    (fid,   'probe-invitee@example.com', 'guest', tok,      'pending', owner, now() + interval '7 days'),
-    (other, 'a-different-person@example.com', 'guest', othertok, 'pending', owner, now() + interval '7 days');
+    (fid,   inv_em,   'guest', tok,      'pending', owner, now() + interval '7 days'),
+    (other, other_em, 'guest', othertok, 'pending', owner, now() + interval '7 days');
 
   -- ── Become the invitee ──
   perform set_config('role', 'authenticated', true);
   perform set_config('request.jwt.claim.sub', invitee::text, true);
   perform set_config('request.jwt.claims',
-    json_build_object('sub', invitee::text, 'email', 'probe-invitee@example.com')::text, true);
+    json_build_object('sub', invitee::text, 'email', inv_em)::text, true);
 
   -- ── Guards: prove the probe is testing what it claims ──
   if current_user <> 'authenticated' then
@@ -52,7 +77,7 @@ begin
   if auth.uid() is distinct from invitee then
     raise exception 'INVITE-ESC FAIL: auth.uid() is %, expected the invitee — impersonation did not take', auth.uid();
   end if;
-  if auth.jwt()->>'email' is distinct from 'probe-invitee@example.com' then
+  if auth.jwt()->>'email' is distinct from inv_em then
     raise exception 'INVITE-ESC FAIL: auth.jwt() email is % — the email arm is untested', auth.jwt()->>'email';
   end if;
   if public.can_manage_family(fid) then
@@ -121,19 +146,21 @@ declare
   fid uuid := gen_random_uuid(); other uuid := gen_random_uuid();
   owner uuid := gen_random_uuid();
   tok text := 'probe_' || replace(gen_random_uuid()::text, '-', '');
+  mgr_em text := 'probe-mgr-' || owner || '@example.com';
+  guest_em text := 'someone-' || owner || '@example.com';
   n int;
 begin
-  insert into auth.users(id, email) values (owner, 'probe-mgr@example.com');
+  insert into auth.users(id, email) values (owner, mgr_em);
   insert into public.families(id, name) values (fid, 'Managed'), (other, 'Unmanaged');
   insert into public.family_members(family_id, user_id, role, display_name, is_active)
     values (fid, owner, 'parent', 'Owner', true);
   insert into public.invites(family_id, email, role, token, status, invited_by, expires_at)
-    values (fid, 'someone@example.com', 'guest', tok, 'pending', owner, now() + interval '7 days');
+    values (fid, guest_em, 'guest', tok, 'pending', owner, now() + interval '7 days');
 
   perform set_config('role', 'authenticated', true);
   perform set_config('request.jwt.claim.sub', owner::text, true);
   perform set_config('request.jwt.claims',
-    json_build_object('sub', owner::text, 'email', 'probe-mgr@example.com')::text, true);
+    json_build_object('sub', owner::text, 'email', mgr_em)::text, true);
   if not public.can_manage_family(fid) then
     raise exception 'INVITE-ESC FAIL: the manager fixture is wrong — can_manage_family is false';
   end if;

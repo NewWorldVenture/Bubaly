@@ -40,7 +40,35 @@ begin
   -- re-run would stack a second copy of each fixture object and the control
   -- below would read 2 where it expects 1 — a failure that says nothing about
   -- the boundary. Clear this probe's own rows first.
-  delete from storage.objects where bucket_id = 'documents' and name like fam::text || '/%';
+  --
+  -- On a REAL Supabase database this delete is refused outright:
+  --
+  --   ERROR: Direct deletion from storage tables is not allowed. Use the Storage API instead.
+  --   CONTEXT: PL/pgSQL function storage.protect_delete()
+  --
+  -- and, uncaught, it took the probe down during FIXTURE SETUP — before a
+  -- single assertion ran. There the delete is also unnecessary, because the
+  -- real schema carries `bucketid_objname` unique on (bucket_id, name) and the
+  -- `on conflict do nothing` below is what keeps the fixture at one copy. So:
+  -- try to clear, and if the storage extension refuses, require the unique key
+  -- that makes clearing unnecessary rather than assuming it.
+  begin
+    delete from storage.objects where bucket_id = 'documents' and name like fam::text || '/%';
+  exception when others then
+    if not exists (
+      select 1 from pg_index idx
+      join pg_class c on c.oid = idx.indrelid
+      join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname = 'storage' and c.relname = 'objects' and idx.indisunique
+        and idx.indpred is null
+        and (select array_agg(a.attname::text order by a.attname)
+               from unnest(idx.indkey) k
+               join pg_attribute a on a.attrelid = idx.indrelid and a.attnum = k)
+            = array['bucket_id', 'name']
+    ) then
+      raise exception 'document-bytes-boundary: storage.objects refuses DELETE (%) and has no unique (bucket_id, name) key, so the fixture cannot be made repeatable', sqlerrm;
+    end if;
+  end;
   delete from public.documents where family_id = fam;
 
   -- ── household ────────────────────────────────────────────────────────────
@@ -133,14 +161,46 @@ begin
   end if;
 
   -- 3. DELETE it. Destroying the family's passport scan needs no read at all.
-  delete from storage.objects where bucket_id = 'documents' and name = secure_path;
-  get diagnostics affected = row_count;
-  if affected <> 0 then
-    raise warning 'BREACH: a child DELETED the storage object for a sensitive document (rows: %)', affected;
-    failures := failures + 1;
-  end if;
+  --
+  -- This one can be refused in two different ways and BOTH must be read as a
+  -- refusal. RLS refuses by matching no rows, so the delete "succeeds" with
+  -- zero affected. The storage extension refuses by raising:
+  --
+  --   CREATE TRIGGER protect_objects_delete BEFORE DELETE ON storage.objects
+  --     FOR EACH STATEMENT EXECUTE FUNCTION storage.protect_delete()
+  --   ERROR: Direct deletion from storage tables is not allowed. Use the Storage API instead.
+  --
+  -- Uncaught, that exception aborted the whole probe — so this file reported
+  -- FAIL on every Supabase database carrying that trigger, which is all of
+  -- them, and the two assertions above it never got to be believed either. A
+  -- probe that cannot survive being refused cannot report a refusal.
+  begin
+    delete from storage.objects where bucket_id = 'documents' and name = secure_path;
+    get diagnostics affected = row_count;
+    if affected <> 0 then
+      raise warning 'BREACH: a child DELETED the storage object for a sensitive document (rows: %)', affected;
+      failures := failures + 1;
+    end if;
+  exception when others then
+    -- Refused by a raise rather than by a row filter. Which of the two it was
+    -- is not asserted, because either one leaves the bytes where they are —
+    -- and that, not the mechanism, is what the family is owed. The survival
+    -- check below is what actually proves it.
+    null;
+  end;
 
   reset role;
+
+  -- The claim the three assertions above are really making: the passport scan
+  -- is still on disk, under the name the vault knows it by. Checked as the
+  -- owner, because a child who could no longer SEE the row would otherwise be
+  -- indistinguishable from a child who had destroyed it.
+  select count(*) into visible from storage.objects
+   where bucket_id = 'documents' and name = secure_path;
+  if visible <> 1 then
+    raise warning 'BREACH: the sensitive document object is gone after the child was done with it (rows: %)', visible;
+    failures := failures + 1;
+  end if;
   if failures > 0 then
     raise exception 'document-bytes-boundary: % assertion(s) failed', failures;
   end if;
