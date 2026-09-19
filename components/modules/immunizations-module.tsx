@@ -87,8 +87,17 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
 
   async function remove(id: string) {
     if (!confirm(t('immunizationsModule.deleteThisImmunizationRecord'))) return;
-    const { error } = await createClient().from('immunizations').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success(t('immunizationsModule.deleted'));
+    // `.select('id')` is the whole point: RLS filters a DELETE rather than
+    // refusing it, so a row this member may not remove comes back as
+    // `error: null` with nothing deleted. 0323 makes immunizations a Rule B
+    // table — a record of medical fact, which its SUBJECT may not erase — so
+    // that is a live outcome for a child pressing this button, and reporting it
+    // as "Deleted" told them their record was gone when it was not.
+    const { data, error } = await createClient().from('immunizations').delete()
+      .eq('id', id).eq('family_id', familyId).select('id').maybeSingle();
+    if (error) { toastError(describeDbError(error)); return; }
+    if (!data) { toastError(t('actions.couldNotDeleteThatRecord')); return; }
+    success(t('immunizationsModule.deleted'));
   }
 
   function edit(s: Immunization) {

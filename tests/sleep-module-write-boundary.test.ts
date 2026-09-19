@@ -18,7 +18,13 @@ describe('sleep-module writes fail visibly', () => {
     for (const fn of ['deleteLog', 'archiveRoutine']) {
       const [b] = bodies(fn);
       expect(b, fn).toBeTruthy();
-      expect(b).toMatch(/const \{ error \} =/);
+      // `{ data, error }` counts. A delete on an RLS-gated table has to ask
+      // PostgREST which rows it touched — `.select('id')` — because the policy
+      // FILTERS the write rather than refusing it, so `error` alone cannot tell
+      // "removed" from "not yours to remove". Pinning the exact destructuring
+      // spelling made this fail on a change that strengthened the very thing it
+      // asks about. See tests/a-filtered-delete-is-not-a-deletion.test.ts.
+      expect(b).toMatch(/const \{ (data, )?error \} =/);
       expect(b).toContain('toastError(describeDbError(error))');
     }
   });

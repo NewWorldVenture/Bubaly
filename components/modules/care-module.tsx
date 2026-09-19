@@ -133,8 +133,15 @@ export function CareModule() {
   async function remove(e: CareEntry) {
     if (!confirm(tr('careModule.deleteThisCareEntry'))) return;
     const sb = createClient();
-    const { error: err } = await sb.from('care_log').delete().eq('id', e.id);
+    // RLS filters a DELETE rather than refusing it, so without `.select('id')`
+    // a row this member may not remove returns `error: null` and the module
+    // reports success over a record that is still there.
+    // 0323 treats care_log as Rule B — a record of medical fact about someone,
+    // which its subject may not erase.
+    const { data, error: err } = await sb.from('care_log').delete()
+      .eq('id', e.id).eq('family_id', familyId).select('id').maybeSingle();
     if (err) { toastError(describeDbError(err)); return; }
+    if (!data) { toastError(tr('actions.couldNotDeleteThatRecord')); return; }
     success(tr('careModule.entryDeleted'));
   }
 

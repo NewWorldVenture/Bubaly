@@ -7869,3 +7869,52 @@ not; nothing compared them until now. The line is narrowed rather than deleted,
 because the table and RPC verification did happen and still holds.
 
 **Status:** NO NEW DEFECT. Known divergence, now enforced instead of remembered.
+
+---
+
+[CLAUDE-1][HIGH][CLIENT-PATH] RLS filters a write; it does not refuse one — twelve client paths reported success over records they never touched
+
+Opened the client-code-path gap the coverage review named: the sensitive tables
+were swept at the RLS layer, and their **modules' reads, writes, delete handling
+and error reporting** were never audited. Starting with health and location, as
+advised.
+
+**The mechanism.** A `delete` under a policy the caller fails does not raise.
+Postgres removes the rows the policy admits — none — and PostgREST answers
+`error: null`. Branching on `error` alone cannot tell "removed" from "not yours
+to remove".
+
+**The audit's own migrations are what made it live.** 0328 (medications,
+medication_schedules manager-only), 0323 (health_visits, immunizations, care_log
+as Rule B — the subject may not erase a record about themselves), 0330
+(behaviour notes belong to their author), 0331 (journals), 0324 (check-ins
+scoped by created_by). A child pressing Delete on their own immunization record
+was told "Deleted" and the record stayed.
+
+**Twelve call sites, eight files, all fixed** — `.select('id').maybeSingle()` so
+an empty result is an answer, `.eq('family_id', familyId)` in the §7 house
+style, and an honest message. `check-in-view` reported nothing at all.
+`medications-module.toggleActive` is the same defect on an UPDATE: the switch
+sprang back on the next realtime read with no explanation.
+
+**Checked, not assumed, three times.** `medication_doses` is excluded from the
+guard because 00261 gives it "Members can manage" — a policy that cannot bite
+makes the `.select()` prove nothing. `locator-module`, the top-priority module,
+needed NO change: every write goes through a server action that checks
+`isManager` in code before querying, so it refuses honestly rather than
+filtering silently — that is the pattern the health modules should follow. And I
+first read es-MX as missing the new string; it is an EMPTY regional variant that
+merges down a fallback chain, so it inherits it.
+
+**Guard:** `tests/a-filtered-delete-is-not-a-deletion.test.ts`, calibrated three
+ways. The vacuity calibration is worth noting: my first attempt to break the
+matcher silently failed to break anything and the test passed, which would have
+left the non-vacuity assertion unverified. Redone until it genuinely bit.
+
+**One shared guard widened.** `sleep-module-write-boundary` pinned
+`const { error } =` exactly and failed on a change that strengthened the
+property it asks about. Widened to `/const \{ (data, )?error \} =/` with the
+reason in source. Flagged here because that file may belong to another worker.
+
+**Status:** FIXED and guarded. **Verified:** 14,283 green under both timezones,
+tsc clean, lint 0 at 12.

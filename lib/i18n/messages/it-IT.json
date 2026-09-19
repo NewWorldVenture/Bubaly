@@ -146,6 +146,7 @@
   "actions.couldNotDeleteThatInteraction": "Impossibile eliminare quell’interazione.",
   "actions.couldNotDeleteThatNote": "Impossibile eliminare quella nota.",
   "actions.couldNotDeleteThatPolicy": "Impossibile eliminare quella polizza.",
+  "actions.couldNotDeleteThatRecord": "Impossibile eliminare quel record.",
   "actions.couldNotDeleteThatService": "Impossibile eliminare quel registro di manutenzione.",
   "actions.couldNotDeleteThatWarranty": "Impossibile eliminare quella garanzia.",
   "actions.couldNotDisconnectThatAccount": "Impossibile scollegare quell’account.",

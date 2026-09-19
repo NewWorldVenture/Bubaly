@@ -55,8 +55,15 @@ export function JournalModule() {
 
   async function remove(id: string) {
     const supabase = createClient();
-    const { error: delErr } = await supabase.from('journal_entries').delete().eq('id', id);
+    // RLS filters a DELETE rather than refusing it, so without `.select('id')`
+    // a row this member may not remove returns `error: null` and the module
+    // reports success over a record that is still there.
+    // 0331: a journal is the one thing nobody else writes, so a blocked delete
+    // here is the expected outcome for anyone but its author.
+    const { data, error: delErr } = await supabase.from('journal_entries').delete()
+      .eq('id', id).eq('family_id', familyId).select('id').maybeSingle();
     if (delErr) return toastError(describeDbError(delErr));
+    if (!data) return toastError(t('actions.couldNotDeleteThatRecord'));
     success(t('journalModule.entryDeleted'));
     void refresh();
   }

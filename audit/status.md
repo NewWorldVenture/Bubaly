@@ -998,4 +998,10 @@ a8bfff31 under concurrency: cancel-in-progress. Checked rather than assumed.
 
 VERIFIED LOCALLY: 14,275 green under both timezones, tsc clean, lint 0 at 12,
 migration audit passes at 345 files with 0333 next.
+Q42 (HIGH, client paths): RLS FILTERS a write rather than refusing it, so twelve
+client delete/update paths across eight modules reported success over records
+they never touched. Made live by this audit own 0323/0324/0328/0330/0331. Fixed
+with .select(id) + family scope + honest messaging; guard added; locator-module
+needed nothing because it gates in code, not only in RLS. 14,283 green.
+
 LAST-UPDATE: 2026-09-19, after the main merge and the first green CI.

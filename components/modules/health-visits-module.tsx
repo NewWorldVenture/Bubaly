@@ -88,8 +88,14 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
 
   async function remove(id: string) {
     if (!confirm(t('healthVisitsModule.deleteThisVisitRecord'))) return;
-    const { error } = await createClient().from('health_visits').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success(t('healthVisitsModule.visitDeleted'));
+    // See immunizations-module: RLS filters a DELETE instead of refusing it, so
+    // without `.select('id')` a blocked removal is indistinguishable from a
+    // successful one. 0323 gives health_visits the same Rule B treatment.
+    const { data, error } = await createClient().from('health_visits').delete()
+      .eq('id', id).eq('family_id', familyId).select('id').maybeSingle();
+    if (error) { toastError(describeDbError(error)); return; }
+    if (!data) { toastError(t('actions.couldNotDeleteThatRecord')); return; }
+    success(t('healthVisitsModule.visitDeleted'));
   }
 
   function edit(v: Visit) {

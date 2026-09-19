@@ -142,8 +142,14 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
 
   async function deleteProvider(id: string) {
     const sb = createClient();
-    const { error: err } = await sb.from('health_providers').delete().eq('id', id);
+    // RLS filters a DELETE rather than refusing it, so without `.select('id')`
+    // a row this member may not remove returns `error: null` and the module
+    // says "Deleted" over a record that is still there. This module already
+    // has the honest string for it.
+    const { data, error: err } = await sb.from('health_providers').delete()
+      .eq('id', id).eq('family_id', familyId).select('id').maybeSingle();
     if (err) { toastError(t('medicalRecordsModule.couldNotDelete')); return; }
+    if (!data) { toastError(t('medicalRecordsModule.couldNotDelete')); return; }
     success(t('medicalRecordsModule.deleted'));
   }
 
@@ -190,8 +196,14 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
 
   async function deletePolicy(id: string) {
     const sb = createClient();
-    const { error: err } = await sb.from('insurance_policies').delete().eq('id', id);
+    // RLS filters a DELETE rather than refusing it, so without `.select('id')`
+    // a row this member may not remove returns `error: null` and the module
+    // says "Deleted" over a record that is still there. This module already
+    // has the honest string for it.
+    const { data, error: err } = await sb.from('insurance_policies').delete()
+      .eq('id', id).eq('family_id', familyId).select('id').maybeSingle();
     if (err) { toastError(t('medicalRecordsModule.couldNotDelete')); return; }
+    if (!data) { toastError(t('medicalRecordsModule.couldNotDelete')); return; }
     success(t('medicalRecordsModule.deleted'));
   }
 

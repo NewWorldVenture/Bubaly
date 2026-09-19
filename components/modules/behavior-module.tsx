@@ -99,8 +99,15 @@ export function BehaviorModule() {
 
   async function remove(id: string) {
     if (!confirm(tr('behaviorModule.deleteThisEntry'))) return;
-    const { error } = await createClient().from('behavior_logs').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success(tr('behaviorModule.deleted'));
+    // RLS filters a DELETE rather than refusing it, so without `.select('id')`
+    // a row this member may not remove returns `error: null` and the module
+    // reports success over a record that is still there.
+    // 0330 makes a behaviour note the property of whoever WROTE it.
+    const { data, error } = await createClient().from('behavior_logs').delete()
+      .eq('id', id).eq('family_id', familyId).select('id').maybeSingle();
+    if (error) { toastError(describeDbError(error)); return; }
+    if (!data) { toastError(tr('actions.couldNotDeleteThatRecord')); return; }
+    success(tr('behaviorModule.deleted'));
   }
 
   async function getInsight() {

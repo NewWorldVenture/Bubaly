@@ -146,6 +146,7 @@
   "actions.couldNotDeleteThatInteraction": "Diese Interaktion konnte nicht gelöscht werden.",
   "actions.couldNotDeleteThatNote": "Diese Notiz konnte nicht gelöscht werden.",
   "actions.couldNotDeleteThatPolicy": "Diese Police konnte nicht gelöscht werden.",
+  "actions.couldNotDeleteThatRecord": "Dieser Eintrag konnte nicht gelöscht werden.",
   "actions.couldNotDeleteThatService": "Dieser Serviceeintrag konnte nicht gelöscht werden.",
   "actions.couldNotDeleteThatWarranty": "Diese Garantie konnte nicht gelöscht werden.",
   "actions.couldNotDisconnectThatAccount": "Dieses Konto konnte nicht getrennt werden.",

@@ -146,6 +146,7 @@
   "actions.couldNotDeleteThatInteraction": "Impossible de supprimer cette interaction.",
   "actions.couldNotDeleteThatNote": "Impossible de supprimer cette note.",
   "actions.couldNotDeleteThatPolicy": "Impossible de supprimer ce contrat.",
+  "actions.couldNotDeleteThatRecord": "Impossible de supprimer cet enregistrement.",
   "actions.couldNotDeleteThatService": "Impossible de supprimer cet enregistrement d’entretien.",
   "actions.couldNotDeleteThatWarranty": "Impossible de supprimer cette garantie.",
   "actions.couldNotDisconnectThatAccount": "Impossible de déconnecter ce compte.",

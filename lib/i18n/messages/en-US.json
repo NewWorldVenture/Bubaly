@@ -146,6 +146,7 @@
   "actions.couldNotDeleteThatInteraction": "Could not delete that interaction.",
   "actions.couldNotDeleteThatNote": "Could not delete that note.",
   "actions.couldNotDeleteThatPolicy": "Could not delete that policy.",
+  "actions.couldNotDeleteThatRecord": "Could not delete that record.",
   "actions.couldNotDeleteThatService": "Could not delete that service record.",
   "actions.couldNotDeleteThatWarranty": "Could not delete that warranty.",
   "actions.couldNotDisconnectThatAccount": "Could not disconnect that account.",

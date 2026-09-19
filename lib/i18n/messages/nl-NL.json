@@ -146,6 +146,7 @@
   "actions.couldNotDeleteThatInteraction": "Kan die interactie niet verwijderen.",
   "actions.couldNotDeleteThatNote": "Kan die notitie niet verwijderen.",
   "actions.couldNotDeleteThatPolicy": "Kan die polis niet verwijderen.",
+  "actions.couldNotDeleteThatRecord": "Kan dat record niet verwijderen.",
   "actions.couldNotDeleteThatService": "Kan dat onderhoudsrecord niet verwijderen.",
   "actions.couldNotDeleteThatWarranty": "Kan die garantie niet verwijderen.",
   "actions.couldNotDisconnectThatAccount": "Kan dat account niet loskoppelen.",

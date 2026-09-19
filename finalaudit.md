@@ -6890,3 +6890,68 @@ approval, replan and dead-letter paths is not a unilateral change.
 exactly this question as "prior that this is a defect is low". Following it
 anyway is what turned it into a finding; the refutation recorded there was about
 a different claim and still stands.
+
+---
+
+## Q42 — RLS filters a write; it does not refuse one. Twelve client paths reported success over records that were never touched
+
+**Severity: HIGH.** `delete from t where id = $1` under a policy the caller
+fails does not raise. Postgres removes the rows the policy admits — none — and
+PostgREST answers `error: null`. Every health, journal, behaviour, sleep and
+check-in module branched on `error` alone, so a blocked write and a successful
+one were the same observation:
+
+```ts
+const { error } = await sb.from('medications').delete().eq('id', m.id);
+if (error) { toastError(...); return; }
+success('Medication deleted');     // over a prescription still in the table
+```
+
+**This audit is what made it live.** These are not hypothetical policies. 0328
+made `medications` and `medication_schedules` manager-only; 0323 gives
+`health_visits`, `immunizations` and `care_log` Rule B, so the subject of a
+medical record may not erase it; 0330 makes a behaviour note its author's; 0331
+makes a journal nobody else's; 0324 scopes a safety check-in by `created_by`.
+Tightening the database turned a dormant client bug into a user-visible lie, and
+nothing in the client moved with it. A child pressing Delete on their own
+immunization record was told "Deleted" and the record stayed.
+
+**Twelve call sites across eight files**, all fixed: `medications-module`
+(delete, schedule delete, `toggleActive`, dose scope), `medical-records-module`
+(providers, policies), `immunizations-module`, `health-visits-module`,
+`behavior-module`, `journal-module`, `care-module`, `sleep-module`,
+`check-in-view`. Each now chains `.select('id').maybeSingle()` so an empty
+result is an answer rather than an absence, adds `.eq('family_id', familyId)` in
+the house style the §7 service layer already set, and reports honestly.
+`check-in-view` reported *nothing at all* on a silent no-op.
+
+**One new string, translated properly.** `actions.couldNotDeleteThatRecord` in
+all seven populated catalogues. The other four locale files are EMPTY regional
+variants that merge down a fallback chain (en-GB→en-US, es-MX/es-US→es-ES,
+fr-CA→fr-FR), so they inherit it — I first misread es-MX as an untranslated gap
+and checked rather than filing it.
+
+**The contrast worth keeping.** `locator-module` — the top-priority module and
+the most sensitive data in the product — has none of this, because every write
+goes through a server action that checks `isManager` in CODE before it queries.
+It refuses honestly instead of filtering silently. That is the pattern; the
+health modules are the exception.
+
+**Guard.** `tests/a-filtered-delete-is-not-a-deletion.test.ts` requires every
+client `.delete()` on a policy-gated table to ask which rows it removed and to
+scope by family, and checks the refusal string exists in every populated
+catalogue. Scoped by table on purpose: `medication_doses` is deliberately NOT
+listed, because 00261 gives it "Members can manage" and a policy that cannot
+bite makes the `.select()` prove nothing — the list has to mean "policies that
+bite" or it stops meaning anything. Calibrated three ways, all biting, including
+a deliberate break of its own matcher after a first calibration attempt silently
+failed to break anything and passed.
+
+**One existing guard had to be widened.** `sleep-module-write-boundary` pinned
+`const { error } =` exactly, and failed on a change that strengthened the very
+property it asks about. Now `/const \{ (data, )?error \} =/`, with the reason in
+the source. A test that breaks on destructuring is a test of formatting.
+
+**Verified:** 14,283 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles` (four shards each), `tsc --noEmit` clean, `npm run
+lint` exits 0 at budget 12.

@@ -75,8 +75,13 @@ export function SleepModule() {
   const maxMinutes = Math.max(summary.target.max * 60, ...fortnight.map((l) => l.duration_min), 1);
 
   async function deleteLog(log: Log) {
-    const { error } = await createClient().from('sleep_logs').delete().eq('id', log.id);
+    // RLS filters a DELETE rather than refusing it, so without `.select('id')`
+    // a row this member may not remove returns `error: null` and the module
+    // reports success over a record that is still there.
+    const { data, error } = await createClient().from('sleep_logs').delete()
+      .eq('id', log.id).eq('family_id', familyId).select('id').maybeSingle();
     if (error) return toastError(describeDbError(error));
+    if (!data) return toastError(t('actions.couldNotDeleteThatRecord'));
     success(t('sleepModule.nightRemoved'));
   }
 

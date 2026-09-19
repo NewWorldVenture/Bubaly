@@ -163,7 +163,8 @@ export function MedicationsModule() {
     let err;
     if (existing && existing.status === status) {
       // Toggle back to pending.
-      ({ error: err } = await sb.from('medication_doses').delete().eq('id', existing.id));
+      ({ error: err } = await sb.from('medication_doses').delete()
+        .eq('id', existing.id).eq('family_id', familyId));
     } else if (existing) {
       ({ error: err } = await sb.from('medication_doses').update({
         status, taken_at: status === 'taken' ? new Date().toISOString() : null,
@@ -213,15 +214,29 @@ export function MedicationsModule() {
   async function deleteMed(m: Medication) {
     if (!confirm(`Delete ${m.name}? This also removes its schedules and dose history.`)) return;
     const sb = createClient();
-    const { error: err } = await sb.from('medications').delete().eq('id', m.id);
+    // RLS FILTERS a delete, it does not refuse one: a row this member may not
+    // remove comes back `error: null` with nothing deleted. 0328 made
+    // medications and medication_schedules manager-only for insert/update/
+    // delete, so a child pressing this got "Medication deleted" while the
+    // prescription stayed exactly where it was. `.select('id')` is what turns
+    // that silence into an answer.
+    const { data, error: err } = await sb.from('medications').delete()
+      .eq('id', m.id).eq('family_id', familyId).select('id').maybeSingle();
     if (err) { toastError(describeDbError(err)); return; }
+    if (!data) { toastError(t('actions.couldNotDeleteThatRecord')); return; }
     success(t('medicationsModule.medicationDeleted'));
   }
 
   async function toggleActive(m: Medication) {
     const sb = createClient();
-    const { error: err } = await sb.from('medications').update({ is_active: !m.is_active }).eq('id', m.id);
-    if (err) toastError(describeDbError(err));
+    // An UPDATE under 0328's manager gate behaves the same way a DELETE does:
+    // filtered, not refused. Without the select this silently did nothing and
+    // the switch sprang back on the next realtime read with no explanation.
+    const { data, error: err } = await sb.from('medications')
+      .update({ is_active: !m.is_active })
+      .eq('id', m.id).eq('family_id', familyId).select('id').maybeSingle();
+    if (err) { toastError(describeDbError(err)); return; }
+    if (!data) toastError(t('actions.couldNotDeleteThatRecord'));
   }
 
   // ── Schedule CRUD ─────────────────────────────────────────
@@ -248,8 +263,11 @@ export function MedicationsModule() {
 
   async function deleteSchedule(id: string) {
     const sb = createClient();
-    const { error: err } = await sb.from('medication_schedules').delete().eq('id', id);
-    if (err) toastError(describeDbError(err));
+    // Same 0328 gate as deleteMed above, and the same silence without a select.
+    const { data, error: err } = await sb.from('medication_schedules').delete()
+      .eq('id', id).eq('family_id', familyId).select('id').maybeSingle();
+    if (err) { toastError(describeDbError(err)); return; }
+    if (!data) toastError(t('actions.couldNotDeleteThatRecord'));
   }
 
   function toggleDay(day: number) {

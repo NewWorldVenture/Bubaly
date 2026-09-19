@@ -146,6 +146,7 @@
   "actions.couldNotDeleteThatInteraction": "Não foi possível eliminar essa interação.",
   "actions.couldNotDeleteThatNote": "Não foi possível eliminar essa nota.",
   "actions.couldNotDeleteThatPolicy": "Não foi possível eliminar essa apólice.",
+  "actions.couldNotDeleteThatRecord": "Não foi possível eliminar esse registo.",
   "actions.couldNotDeleteThatService": "Não foi possível eliminar esse registo de manutenção.",
   "actions.couldNotDeleteThatWarranty": "Não foi possível eliminar essa garantia.",
   "actions.couldNotDisconnectThatAccount": "Não foi possível desligar essa conta.",
