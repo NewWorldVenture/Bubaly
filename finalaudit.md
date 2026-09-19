@@ -7138,3 +7138,43 @@ looks for a composite foreign key or a CHECK naming both.
 
 **Verified:** 14,288 green under both `TZ=UTC` and `TZ=America/Los_Angeles`,
 tsc clean, lint 0 at 12.
+
+---
+
+## Q44 — Two sweeps that found nothing, and are worth the same as one that did
+
+After Q42 and Q43 the obvious move was to assume the same defect class was
+everywhere. It is not, and establishing that took more care than filing it
+would have.
+
+**Server actions: clean.** A first pass found **176** `delete`/`update` sites in
+`app/**` with no `.select()` — a number that would have made an alarming
+finding and a worthless one. Most are cron routes running as the service role,
+where RLS never applies, and most of the rest gate with `isManager` in code
+before they query, which makes the RLS filter unreachable. Narrowing to what can
+actually bite — session-client writes to a table whose policy filters some
+members — leaves **three** sites, all `allowance_rules` in
+`app/(app)/wallet/actions.ts`, and all three sit directly behind an explicit
+`isManager(ctx.active.role)` check. One already uses `.select()`. Nothing to fix.
+
+I built and then **discarded** a migration-derived list of "manager-gated
+tables" that returned 97 entries including `calendar_events`, `ai_messages` and
+junk like `_owner_delete`. It was sweeping array literals that merely sat near a
+`can_manage_family` string. A list that wrong is worse than no list, and filing
+against it would have produced a page of false accusations. The verified set I
+read directly from 0323/0324/0328/0330/0331 was used instead.
+
+**API routes: clean.** All **141** `app/api/**/route.ts` files carry a gate or
+are deliberately public. A first scan reported 26 ungated, which was wrong: my
+symbol list omitted `authenticateAI`, the helper the AI run-control routes use,
+so `/api/ai/runs/[id]/pause` and `/cancel` looked unauthenticated when they are
+not. Checking one before filing is what caught it. With the list corrected, four
+remain, and each is public by design: `build-info`, `blog/search-index`,
+`health`, and `exit-intent/resolve` — which is read-only, IP rate-limited at
+60/min, bounded-body, and slices every string input to 200 chars.
+
+**The point.** Both sweeps began with a number that looked like a finding (176,
+26) and both numbers were artefacts of a matcher, not of the code. The
+difference between an audit and a scanner is which of those two you report.
+
+**Verified:** 14,292 green under both timezones, tsc clean, lint 0 at 12.

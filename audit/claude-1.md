@@ -8012,3 +8012,29 @@ constrains nothing. Now it looks for a composite FK or a CHECK naming both.
 
 **Status:** FIXED and guarded. **Verified:** 14,292 green under both timezones,
 tsc clean, lint 0.
+
+---
+
+[CLAUDE-1][INFO][SWEEP] Server actions and API routes — both clean, after two matchers lied
+
+**Server actions.** 176 `delete`/`update` sites in `app/**` lack a `.select()`.
+Nearly all are service-role cron writes (RLS never applies) or sit behind an
+in-code `isManager` gate that makes the filter unreachable. Narrowed to
+session-client writes on tables whose policy actually bites: **three**, all
+`allowance_rules` in wallet actions, all behind an explicit manager check, one
+already using `.select()`. Nothing to fix.
+
+I discarded a migration-derived "manager-gated tables" list that returned 97
+entries including `calendar_events` and `_owner_delete` — it matched array
+literals sitting near a `can_manage_family` string. Filing against it would have
+produced a page of false accusations.
+
+**API routes.** All 141 are gated or deliberately public. My first scan said 26
+ungated; the list omitted `authenticateAI`, so the AI run pause/cancel routes
+looked open when they are not. The four remaining are public by design, and
+`exit-intent/resolve` — the only POST among them — is read-only, IP
+rate-limited 60/min, bounded-body and input-sliced.
+
+**Status:** NO DEFECT in either layer. Recorded because "I looked and found
+nothing" is worth the same as a finding to whoever asks next whether these were
+covered.
