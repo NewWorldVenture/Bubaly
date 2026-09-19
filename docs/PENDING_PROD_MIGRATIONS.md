@@ -1791,3 +1791,29 @@ because their value is zero until they are applied:
   logged about them is a product decision, and the probe asserts both logs stay
   readable so changing it has to be deliberate. Both modules' controls ship with
   the migration. `docs/audit/observation-log-boundary-check.sql`. Audit C1-S8-09.
+
+- **`0330_a_public_bucket_serves_what_you_put_in_it.sql`** — pins
+  `allowed_mime_types` on the public `family-media` bucket. Three of the four
+  public buckets have pinned theirs since creation (`00890`, `0194`, `0197`);
+  `0216` set `public = true` and a size limit and no type list, on the bucket
+  that takes the widest range of uploads (six browser paths, no server-side
+  path), so an `image/svg+xml` or `text/html` upload became a page served from
+  the project's own Supabase domain with no session. This is NOT `F-E03` again:
+  that one is deferred as `LB-009` because signed URLs need a data migration of
+  every stored URL, and an allowlist needs none — the expensive fix was covering
+  a cheap one.
+  **THIS CHANGES UPLOAD BEHAVIOUR IN PRODUCTION**, so the permitted list is
+  stated here in full and is read off the six modules' own `accept` attributes:
+  `image/jpeg|png|webp|gif|avif|heic|heif`, `video/mp4|quicktime|webm`,
+  `application/pdf`, `application/msword`, the two OOXML word/spreadsheet types,
+  `application/vnd.ms-excel`, `text/plain`. HEIC/HEIF are included although no
+  `accept` names them, because `image/*` is what the picker says and an iPhone
+  photo arrives as HEIC. Nothing the product offers is refused, and
+  `tests/a-public-bucket-allows-only-what-the-ui-offers.test.ts` fails if a file
+  picker ever gains a type the bucket would refuse.
+  It does NOT make the bucket private and does NOT touch stored objects.
+  Unlike `0216`'s `on conflict do nothing`, it UPDATEs — the production bucket
+  already exists, so an insert would no-op.
+  `docs/audit/public-bucket-mime-check.sql` asserts the general rule: every
+  public bucket pins a list, and none allows a type a browser executes.
+  Audit C1-S8-10.

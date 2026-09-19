@@ -8525,3 +8525,122 @@ The remainder:
 | `tax_documents` | shared family admin; plausibly collaborative |
 | `weather_locations` | low stakes |
 | `health_metrics` `health_goals` `symptom_logs` `sleep_logs` `sleep_checkins` `nutrition_logs` `medication_doses` `voice_commands` | self-logging, family-wide **by design** — `0309` states that reasoning for `medication_doses` and it applies to the rest |
+
+
+---
+
+# Pass AB — the deferred fix that was covering a cheap one
+
+## The boundary-column sweep, which came back clean
+
+First, a negative result, recorded because this audit's standard is to report
+the classes that come back zero.
+
+Both of Session 8's HIGH findings had the same shape: **a column that declares a
+boundary, and a policy that never references it** (`journal_entries.is_private`,
+`member_locations.is_sharing`). So every column in the schema whose name makes
+such a claim was checked against its table's policies:
+
+| column | table | verdict |
+|---|---|---|
+| `is_private` | `journal_entries` | **referenced** — `0328` |
+| `is_sensitive` | `household_info` | **referenced** |
+| `is_sharing` | `member_locations` | not referenced — already recorded as `C1-S8-02`'s product decision |
+| `secret` | `family_credentials` | a false positive of the name pattern — it is the stored password, and SELECT is manager-only |
+| `sensitive_omitted` | `ai_request_context` | a record of what was withheld, not a boundary |
+| `shared_with_email` / `shared_with_member` | `sync_calendar_shares` | **no consumers anywhere** in `app/`, `lib/` or `components/` — a designed-and-unwired table, the `call_logs` pattern again |
+| `is_shared` / `is_public` | `family_albums`, `todo_lists`, `family_recipes` | claims of WIDER visibility, not narrower — the opposite failure, and out of this rule's scope |
+| `secret_key` | `stripe_settings` | **RLS on, zero policies** — deny-by-default. Verified empirically as `authenticated`: 0 rows. Correct, and the strongest lockdown in the schema |
+
+**No new finding.** The class does not recur.
+
+## C1-S8-10 [MEDIUM][SECURITY] — the only public bucket with no type restriction is the one that takes everything
+
+**Files:** `supabase/migrations/0216_family_media_bucket.sql:23`
+**Status:** FIXED by `0330_a_public_bucket_serves_what_you_put_in_it.sql`
+(**not yet applied to production**) · `docs/audit/public-bucket-mime-check.sql` ·
+`tests/a-public-bucket-allows-only-what-the-ui-offers.test.ts`
+
+Four buckets are `public = true`. Three pin what may be stored in them; one does
+not, and it is the one that takes the widest range of user uploads:
+
+| migration | bucket | `allowed_mime_types` |
+|---|---|---|
+| `00890` | `avatars` | five image types |
+| `0194` | `marketplace-photos` | five image types |
+| `0197` | `feedback-attachments` | five image types |
+| **`0216`** | **`family-media`** | **none** |
+
+Six browser upload paths write there — Photos, Create-Memory, Inventory, Closet,
+Reminder attachments, Message attachments — and there is **no server-side upload
+path at all**, so the client `accept` attribute is the only thing standing
+between a user and the bucket. An `accept` attribute is a file-picker hint, not
+a boundary: a direct Storage API call ignores it. Two of the six set no `accept`
+at all.
+
+Anything stored is served from `/storage/v1/object/public/…` with no session, so
+an `image/svg+xml` or `text/html` upload is **a page hosted on the project's own
+Supabase domain**, reachable by anyone with the link, surviving row deletion and
+membership revocation — exactly as `F-E03` already records for the read path.
+
+### Why this is not `F-E03` again
+
+`F-E03` ("the bucket is public") is tracked as `LB-009` and **deferred, because
+hardening reads to signed URLs needs a data migration of every stored URL**.
+That deferral has been covering a hole it was never meant to cover: an allowlist
+constrains **new uploads** and needs no data migration whatsoever. The expensive
+fix stayed parked, and the cheap one beside it was never taken. Pass Q's
+refuted-hypothesis list examined this bucket and correctly declined to re-file
+the public-read finding — the content type was simply not the question being
+asked.
+
+### The list is read off the product, not invented
+
+The risk in any allowlist is the opposite one: refusing something a family is
+entitled to upload. So it comes from the six modules' own `accept` attributes —
+`image/*`, `video/*`, and `messages-module`'s `application/pdf,.doc,.docx,
+.xls,.xlsx,.txt` — item for item. HEIC and HEIF are included although no
+`accept` names them, because `image/*` is what the picker says and an iPhone
+photo arrives as HEIC; leaving them out is how an allowlist breaks a real
+family's upload.
+
+`image/svg+xml`, `text/html` and `application/xhtml+xml` are excluded, and that
+is the point: no picker in this product offers them, and they are the types a
+browser executes.
+
+**What this does not do:** it does not make the bucket private (`F-E03` stands,
+and `LB-009` is still the right follow-up), and it does not touch objects
+already stored. It stops the next one. Unlike `0216`'s `insert … on conflict do
+nothing`, it `UPDATE`s — the production bucket already exists, so an insert
+would no-op.
+
+### Two guards, in two directions
+
+`tests/a-public-bucket-allows-only-what-the-ui-offers.test.ts` holds the
+allowlist and the file pickers together **both ways**: a picker that gains a
+type the bucket refuses fails, and an executable type that reaches the allowlist
+fails. Proved red four times:
+
+| mutation | guard |
+|---|---|
+| `image/svg+xml` added to the allowlist | **RED** — *"is served executable from a public URL"* |
+| `application/pdf` dropped | **RED** |
+| every video type dropped while a picker offers `video/*` | **RED** — *"a file picker offers a type the bucket will refuse"* |
+| a picker gains `application/zip` | **RED** |
+
+`docs/audit/public-bucket-mime-check.sql` asserts the **general** rule against
+the replayed schema — every public bucket pins a list and none allows an
+executable type — so the next public bucket is covered the day it is added. It
+refuses to run if fewer than four public buckets exist, and it explicitly leaves
+private buckets alone so the rule is not quietly widened. Proved red twice: with
+the list cleared the way `0216` left it, and with `image/svg+xml` added.
+
+### One thing the guard got wrong first
+
+Two of the four mutations initially failed on the parse test's count floor
+(`>= 16`) rather than on the coverage assertion that exists to catch them — a
+tight scope check in a test about *parsing* was masking the test about
+*coverage*. The floor is now deliberately well below the real count.
+
+Replay: **343 migrations, 0 failed.** Probes: **51/51**.
+Suite: **1,252 files / 14,086 tests, 0 failures.**

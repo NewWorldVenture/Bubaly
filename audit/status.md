@@ -796,3 +796,50 @@ CENSUS SCORE: 4 of the 16 now closed (journal_entries + family_insurance_policie
 REPLAY: 342 migrations, 0 failed. PROBES: 50/50.
 SUITE: 1,251 files / 14,081 tests, 0 failures. nextVersion ratcheted to 0330.
 LAST-UPDATE: 2026-09-19
+
+## Claude-1 — Session 8, Pass AB (a clean sweep, then the cheap fix nobody took)
+REFUTED (recorded so it is not re-searched): the boundary-column sweep. Both of
+  this session's HIGH findings were "a column declares a boundary, no policy
+  references it", so I checked EVERY such column against its table's policies.
+  is_private → now referenced (0328). is_sensitive → referenced. is_sharing →
+  already recorded as C1-S8-02's product decision. `secret` on family_credentials
+  → false positive of my name pattern (it's the stored password; SELECT is
+  manager-only). sync_calendar_shares' shared_with_* → the table has NO consumers
+  anywhere (designed-and-unwired, the call_logs pattern). is_shared / is_public →
+  claims of WIDER visibility, the opposite failure, out of scope.
+  stripe_settings.secret_key → RLS on, ZERO policies = deny by default; verified
+  empirically as `authenticated`: 0 rows. The strongest lockdown in the schema.
+  THE CLASS DOES NOT RECUR. No new finding.
+FOUND: `C1-S8-10` [MEDIUM][SECURITY] — of four public buckets, three pin
+  allowed_mime_types and `family-media` does not, and it's the one taking the
+  widest range of uploads (6 browser paths, NO server-side path, so the client
+  `accept` attribute — a picker hint, not a boundary — was the only control; two
+  of the six set none at all). Public delivery means an svg or html upload is a
+  page on the project's own Supabase domain with no session.
+  NOT F-E03 AGAIN: that one is deferred as LB-009 because signed URLs need a
+  data migration of every stored URL. An allowlist needs NONE. The expensive fix
+  had been covering a cheap one nobody took. (Pass Q looked at this bucket and
+  correctly declined to re-file the public-READ finding — content type was
+  simply not the question being asked.)
+  FIXED by 0330. The list is READ OFF the six modules' own `accept` attributes
+  rather than invented, so nothing the product offers is refused; HEIC/HEIF
+  added because `image/*` is what the picker says and an iPhone photo is HEIC.
+  svg/html/xhtml excluded — nothing offers them and a browser executes them.
+  Does NOT make the bucket private and does NOT touch stored objects. UPDATEs
+  rather than inserts, because 0216's `on conflict do nothing` means prod
+  already has the row.
+  TWO GUARDS, BOTH DIRECTIONS: the JS test fails if a picker gains a type the
+  bucket refuses AND if an executable type reaches the allowlist (proved red 4x).
+  The SQL probe asserts the GENERAL rule on the replayed schema so the next
+  public bucket is covered the day it's added (proved red 2x); it refuses to run
+  with fewer than 4 public buckets and leaves private buckets alone explicitly.
+  GUARD'S OWN ERROR, recorded: two mutations first failed on the parse test's
+  count floor instead of the coverage assertion — a tight scope check in a test
+  about PARSING masking the test about COVERAGE. Floor lowered well below the
+  real count.
+NOTE: this pass deliberately did NOT push while CI was mid-run on eee60276 —
+  a push would have cancelled it (cancel-in-progress). That run came back fully
+  green on all four jobs before this work was pushed.
+REPLAY: 343 migrations, 0 failed. PROBES: 51/51.
+SUITE: 1,252 files / 14,086 tests, 0 failures. nextVersion ratcheted to 0331.
+LAST-UPDATE: 2026-09-19
