@@ -44,7 +44,13 @@ export type HistoryEventLike = {
   occurred_at: string;
 };
 
-export type HistoryDay = { key: string; label: string; count: number; events: HistoryEventLike[] };
+// `label` is display copy and `isToday` is the machine field. They are separate
+// on purpose: the "today" rail in the locator used to branch on
+// `day.label === 'Today'`, which quietly turns into dead code the moment the
+// label is translated — and the test that pins the label lives on THIS side of
+// the seam, so it would have stayed green while the rail vanished. Consumers
+// branch on `isToday`; only humans read `label`.
+export type HistoryDay = { key: string; label: string; isToday: boolean; count: number; events: HistoryEventLike[] };
 
 function dayKey(iso: string): string {
   const d = new Date(iso);
@@ -69,7 +75,7 @@ export function groupHistoryByDay(events: HistoryEventLike[], now: Date = new Da
     const places = new Set(evs.filter((e) => e.event_type === 'arrived').map((e) => e.place_name ?? e.id));
     const label = key === todayKey ? 'Today' : key === yesterdayKey ? 'Yesterday'
       : new Date(`${key}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
-    return { key, label, count: places.size || evs.length, events: evs };
+    return { key, label, isToday: key === todayKey, count: places.size || evs.length, events: evs };
   });
 }
 

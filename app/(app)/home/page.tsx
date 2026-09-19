@@ -682,12 +682,16 @@ export default async function HomePage() {
             {(tasks ?? []).length === 0 && <EmptyRow>{tr('home.noOpenTasksNicelyDone')}</EmptyRow>}
             {((tasks ?? []) as { id: string; title: string; due_date: string | null; assigned_to_id: string | null }[]).map((t) => {
               const owner = t.assigned_to_id ? memberById.get(t.assigned_to_id) : undefined;
-              const due = t.due_date ? (t.due_date === todayIso ? 'Today' : new Date(t.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })) : null;
+              // The amber "due today" treatment reads the date, not the word.
+              // Branching on `due === 'Today'` made the highlight a hostage of
+              // the copy: translate the label and the badge silently goes grey.
+              const dueToday = t.due_date != null && t.due_date === todayIso;
+              const due = t.due_date ? (dueToday ? 'Today' : new Date(t.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })) : null;
               return (
                 <div key={t.id} className="flex items-center gap-3">
                   <span className="h-4 w-4 shrink-0 rounded-full border-2 border-emerald-400/60" />
                   <p className="min-w-0 flex-1 truncate text-sm">{t.title}</p>
-                  {due && <span className={cn('shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold', due === 'Today' ? 'bg-amber-500/15 text-amber-400' : 'text-muted')}>{due}</span>}
+                  {due && <span className={cn('shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold', dueToday ? 'bg-amber-500/15 text-amber-400' : 'text-muted')}>{due}</span>}
                   {owner && <Avatar name={owner.display_name} color={owner.color ?? undefined} size={22} className="shrink-0 rounded-full" />}
                 </div>
               );

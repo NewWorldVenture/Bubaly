@@ -7467,3 +7467,133 @@ remove a call transcript and whether a scam call's record should be erasable at
 all — a family may want the log of a harassing caller to survive one member's
 tidying. That is a product decision about evidence, not a missing `.delete()`.
 Flagged with the measurement so it is decided rather than inherited.
+
+
+---
+
+# Pass U — the words were load-bearing
+
+The audit's outstanding i18n item, `C2-M03`, is the biggest open finding in this
+document: ~251 `en-US`-pinned date/time call sites across ~135 files against an
+eleven-locale catalogue. Pass P recorded one trap in its path — `dayKey()` uses
+`'en-US'` as a *parse* locale and must not be switched. This pass went looking
+for the rest of that class and found a second, sharper one: **four branches that
+ask a question of a string written to be read by a human.**
+
+## C1-S8-01 [MEDIUM][I18N/CORRECTNESS] — four branches compare against rendered copy, and the tests that would notice sit on the wrong side of the seam
+
+**Files:**
+`components/modules/locator-module.tsx:460` ·
+`app/(app)/home/page.tsx:690` ·
+`mobile/src/lib/format.ts:69,74` ·
+`lib/onboarding/first-brief.ts:205`
+**Status:** FIXED — all four, plus `tests/a-display-label-is-not-a-branch.test.ts`
+
+### Problem
+
+Each site asks *"is this today?"* (or *"is this all-day?"*) by comparing a
+display label to an English word:
+
+```tsx
+{day.label === 'Today' && (           // locator: renders the today rail
+due === 'Today' ? 'bg-amber-500/15'   // home page: the amber "due today" badge
+if (… && label !== 'Today') …Overdue  // mobile: decides what is OVERDUE
+first.timeLabel !== 'All day'         // onboarding brief: " at 9:00 AM" suffix
+```
+
+Every one is correct today, in en-US, which is exactly what makes it a trap.
+The work that will break them is already scheduled: translating these labels is
+what `C2-M03` *is*. On the day it lands —
+
+- the locator stops rendering its today timeline entirely;
+- the home page's amber due-today badge goes grey;
+- the onboarding brief starts writing *"First up: Recital at All day."*;
+- and, worst, **every mobile item due later today starts reading "Overdue"** —
+  a change in what the product asserts about a family's day, not a change in
+  wording.
+
+### Why a guard, and not four edits
+
+Because of where the existing tests sit. `tests/location-overview.test.ts:42`
+pins `days[0].label` to `'Today'`. `tests/mobile-core.test.ts:141-146` pins
+`dueLabel(...)` to its English output. Both are on the **producer** side of the
+seam. Translate the labels and those two go red, someone updates the expected
+strings — the obvious, correct-looking thing to do — and the four **consumers**
+stay green while silently changing behaviour. The suite would report the
+regression as fixed.
+
+That is the shape `C4-S5-01` named: a guard that cannot fail. Here it is worse
+than vacuous, because it fails in a way that *directs attention away* from the
+breakage.
+
+### The repository already knows how to do this
+
+Two in-tree patterns, both better than anything this pass invented:
+
+| pattern | where | machine field |
+|---|---|---|
+| label + tone | `lib/chores/dashboard.ts:167` — `dueLabel()` returns `{ label, tone: 'overdue' \| 'today' \| 'soon' \| … }` | `tone` |
+| facts + canonical text | `lib/concierge/digest.ts` persists `dayOffset`/`kind` and treats its English text purely as a staleness check; `digest-display.ts` localises from the facts with `Intl.RelativeTimeFormat` | `dayOffset` |
+
+The concierge digest is the model answer and it is already shipped: structured
+facts stored, English stored only to reject stale presentation, translation
+applied request-locally. Nothing new had to be designed — the four sites simply
+reached past a structured field that was already there.
+
+### Fix
+
+Each branch now reads structure, and the copy is left to humans:
+
+1. `lib/location/overview.ts` — `HistoryDay` gains `isToday: boolean` beside
+   `label`; the locator branches on it.
+2. `app/(app)/home/page.tsx` — `dueToday` is derived from `due_date === todayIso`
+   once and drives both the label and the badge class.
+3. `mobile/src/lib/format.ts` — `dueLabel()` compares **day keys**
+   (`dayKey(date, tz) === dayKey(now, tz)`), the calendar question asked of the
+   calendar. `dayLabel()` is now called only to be printed.
+4. `lib/onboarding/first-brief.ts` — `first.allDay`, the boolean sitting on the
+   same object the old code reached past.
+
+No user-visible string changed in en-US; the full suite (1,247 files / 14,055
+tests) is green, and `tests/location-overview.test.ts` and
+`tests/mobile-core.test.ts` still pass **unmodified** — which is the point: the
+fix was structural, so the producer-side tests never had to be touched.
+
+### The guard
+
+`tests/a-display-label-is-not-a-branch.test.ts` scans every tracked `.ts`/`.tsx`
+under `app/`, `components/`, `lib/` and `mobile/src` for a comparison against
+one of eight rendered labels, with comments stripped so prose about the rule
+cannot satisfy the rule — the inverse of `C4-S5-01`'s spelling-only failure.
+
+**Proved red four times, individually.** Each fix was reverted in place, the
+guard run, and the restore verified:
+
+| reverted site | guard |
+|---|---|
+| `components/modules/locator-module.tsx:460` | RED — names the line |
+| `app/(app)/home/page.tsx:694` | RED — names the line |
+| `mobile/src/lib/format.ts:78` | RED — names the line |
+| `lib/onboarding/first-brief.ts:208` | RED — names the line |
+
+It also asserts its own scope (>1,500 files scanned, two named files present),
+so it cannot pass by matching nothing, and it asserts the structured forms
+(`day.isToday`, `tone === 'today'`, variable-to-variable comparison) do **not**
+fire — a scanner that flagged the fix would have been useless.
+
+### Two things this pass looked for and did not find
+
+Recorded so the next pass does not repeat the search:
+
+- **No module is unwired from i18n.** A first count said seven modules had zero
+  `t()` calls, including `trust-sharing-section.tsx` and `social-feed-module.tsx`.
+  That was my instrument, not the code: those files bind the translator as `tr`.
+  Re-run against the identifier actually bound to `useTranslations()`, **all 118
+  modules in `components/modules/` call their translator**, the lowest being
+  `handle-it-button.tsx` (55 lines, 0 calls — a button with no text of its own).
+- **The hardcoded relative-day labels in `lib/` are real but are `C2-M03`'s
+  work, not a separate finding.** Seventeen `lib/` modules return literal
+  `'Today'`/`'just now'`/`` `${n}h ago` ``. They belong with the 251 pinned
+  `Intl` call sites in one piece of work; filing them separately would have
+  split one fix across two findings. What this pass contributes is that the
+  work now has a guard waiting for it at the consumer end.

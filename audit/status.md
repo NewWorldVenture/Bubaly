@@ -493,3 +493,39 @@ finalaudit.md: retiring the duplicate Google Calendar integration, and removing
 the inbound-email `?key=` form.
 CI: green on `7ccd0551`, full matrix including E2E and the migration replay.
 LAST-UPDATE: 2026-09-15
+
+## Claude-1 — Session 8 (bucket C: the un-named modules' client code)
+IN PROGRESS. Started on the modules the completion assessment named as the
+remaining yield — locator first, for carrying the most sensitive data with no
+targeted pass.
+FOUND: `C1-S8-01` [MEDIUM][I18N/CORRECTNESS] — four branches compare against
+  rendered English copy (`day.label === 'Today'`, `due === 'Today'`,
+  `label !== 'Today'`, `first.timeLabel !== 'All day'`). All correct in en-US;
+  all silently wrong the moment C2-M03 — the largest open finding, and the very
+  next scheduled work — translates those labels. The mobile one is the sharp
+  end: every item due later TODAY would start reading "Overdue".
+  The reason it needed a guard rather than four edits: the tests that pin these
+  labels (`location-overview.test.ts:42`, `mobile-core.test.ts:141-146`) sit on
+  the PRODUCER side of the seam. Translating goes red there, someone updates the
+  expected strings, and the four consumers stay green while changing behaviour —
+  C4-S5-01's class, made worse by pointing attention at the wrong file.
+  FIXED all four against structure already present in the code (`isToday`,
+  `dueToday`, day-key comparison, `first.allDay`). No en-US string changed and
+  both producer-side tests still pass UNMODIFIED, which is the proof the fix was
+  structural. New guard `tests/a-display-label-is-not-a-branch.test.ts` proved
+  red four times, each revert named by file and line; it also asserts its own
+  scope (>1,500 files) and that the structured forms do NOT fire.
+REFUTED (recorded so it is not re-searched):
+  - "Seven modules are unwired from i18n" — my instrument counted `t(` only.
+    Those files bind the translator as `tr`. Re-measured against the identifier
+    actually bound to `useTranslations()`: all 118 modules call their translator.
+    Caught before it reached a finding; the alarming number was mine, not the
+    code's — the third census error of this kind, all the same shape.
+  - The 17 `lib/` modules returning literal 'Today'/'just now'/'3h ago' are
+    C2-M03's work, not a separate finding. Filing them apart would split one fix
+    across two IDs. What this pass adds is a guard waiting at the consumer end.
+SUITE: 1,247 files / 14,055 tests, 0 failures. `tsc --noEmit` clean.
+FILES-TOUCHED: lib/location/overview.ts, components/modules/locator-module.tsx,
+  app/(app)/home/page.tsx, mobile/src/lib/format.ts, lib/onboarding/first-brief.ts,
+  tests/a-display-label-is-not-a-branch.test.ts, finalaudit.md, audit/status.md
+LAST-UPDATE: 2026-09-19
