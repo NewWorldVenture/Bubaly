@@ -964,7 +964,34 @@ either. Retry-dedupe works; sibling-dedupe does not. Proven against the real
 exported functions, calibrated by removing stepId from each derivation. FILED not
 fixed: honouring both keys changes ledger retry semantics.
 
-VERIFIED: 14,194 green under both timezones, tsc clean, lint 0 at 12.
-STILL UNVERIFIED BY CI: no ci.yml run has been created for any commit after
-b05f0b32, across thirty checks. Everything above is local only.
-LAST-UPDATE: 2026-09-19, after Q39.
+CI IS UNBLOCKED, AND THE CAUSE WAS NOT WHAT I REPORTED FOR 31 CHECK-INS. I said
+no ci.yml run existed after b05f0b32 and that ci.yml has no workflow_dispatch so
+I had no trigger. True, and not the cause. PR #548's mergeable_state was "dirty"
+- an unresolved conflict with main. GitHub builds pull_request runs against
+refs/pull/548/merge; a conflicted PR produces NO run at all, silently. Merging
+main (4cbcb95b, the eleventh collision: 0312-0316 renumbered to 0328-0332)
+restored it. One API call would have found this at any point.
+
+VERIFIED BY CI on a8bfff31, run 35412413029 - the first real verification of ~27
+pushes. All six checks green:
+  Typecheck / Lint / Test / Build      success (7m57s)
+  E2E (public, a11y, authed, mobile)   success (9m09s)
+  Database (migration replay + RLS)    success (1m29s)
+  Mobile (Expo) typecheck + config     success
+  finance-operation-sql                success
+  Vercel Preview Comments              success
+The Database job replays all 345 migrations against real Postgres and runs the
+RLS boundary probes, so the eleventh collision's renumbering is confirmed by
+something other than my own reasoning - the single largest risk in that merge.
+
+Now CI-confirmed: the twelve guard files CI had never executed (paths anchored to
+join(__dirname,'..')), Q39's cadence guard, Q40's attempt-budget reproduction,
+Q41's two-steps reproduction, writeInChunks, escapeOrValue, the readAll .order()
+changes, and the /api/assistant durable rate limit.
+
+Run 3217 on 4cbcb95b reads "cancelled", not "failed" - superseded 67s later by
+a8bfff31 under concurrency: cancel-in-progress. Checked rather than assumed.
+
+VERIFIED LOCALLY: 14,275 green under both timezones, tsc clean, lint 0 at 12,
+migration audit passes at 345 files with 0333 next.
+LAST-UPDATE: 2026-09-19, after the main merge and the first green CI.
