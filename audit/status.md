@@ -216,6 +216,15 @@ PRIOR SESSIONS (unchanged, see history below): F-020 migration idempotency;
     Writing it produced two parser bugs in a row that each made the answer zero,
     both caught by its own blind-spot assertion — the strongest evidence this
     audit has that the vacuous-guard class is easy to fall into.
+  - Deep dive on the text-messaging surface (C1-S7-03, C1-S7-04). Two findings in
+    the Contact Center, both sibling inconsistencies where one route of three has
+    it right: the concierge fed a stranger's SMS/email/voicemail text to a model
+    unfenced while lib/guardian/scam-ai.ts fences the same class and says so; and
+    two escalations re-fired on a Twilio retry, telling the family the same
+    emergency twice, while the email route already gated on filed.inserted.
+    Also measured and left OPEN: 3 of 34 model-backed API routes carry no rate
+    limit (the record claimed 31 of 31), and a signature authenticates the
+    transport, not the sender.
   - C1-S7-02: re-measured the server-action auth reachability an earlier pass
     recorded but never ratcheted (439 actions / 9 unguarded) — reproduced the 9
     with an independent instrument. Three were pure helpers exported from

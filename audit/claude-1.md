@@ -2840,3 +2840,44 @@ Fix:      NOT fixed — the right limit is per-sender or per-family, the existin
           corrected by reading the files rather than trusting the grep.
 Status:   OPEN — needs a product decision
 ```
+
+```
+[CLAUDE-1][MEDIUM][RELIABILITY] a retried webhook told the family the same emergency twice
+File:     app/api/contact-center/sms/route.ts:94
+          app/api/contact-center/voice/transcription/route.ts:76
+Problem:  lib/guardian/callbacks.ts exists to make Twilio callbacks idempotent
+          and says why ("Twilio does not retry a 200"); all FOUR guardian
+          webhooks claim before acting. The four Contact Center webhooks never
+          claim — they de-dupe the inbound ROW via recordInboundMessage's
+          `inserted` flag instead, which is sound — and two of the three routes
+          that escalate used that flag for only ONE side effect.
+Evidence: voice/transcription's own comment: "Twilio retries a transcription
+          callback, so only a delivery that was actually new reaches the
+          planner" — then sends the urgent SMS three lines later, OUTSIDE that
+          guard. sms does the same. email, same feature, same helper, gets it
+          right: `if (filed.inserted && shouldNotifyFamily(...))`.
+          So the guard went on the new code (M20's planner) and not on the
+          escalation already beside it. Same shape as C1-S6-10.
+          The window is wide: the concierge's model call is allowed 60s
+          (OPENAI_TIMEOUT_MS) on routes with no maxDuration, longer than any
+          webhook timeout, so a retry landing mid-flight is ordinary.
+Impact:   Every retry re-sends "🚨 Urgent at your Bubaly line: …" to the
+          family's real phone and writes a second notifications row. For an
+          urgent alert, duplication is not noise — it reads as a SECOND
+          emergency, the one thing an urgent channel must not do.
+Fix:      Both escalations now carry filed.inserted, matching the email sibling.
+          DELIBERATELY NOT GATED: the SMS auto-reply. It is a TwiML <Message> in
+          the response body, so suppressing it on a retry means the sender gets
+          NO reply if the first response never reached Twilio. A duplicate
+          courteous reply to a stranger is a smaller harm than silence, and
+          unlike the escalation it does not impersonate an emergency. The
+          trade-off belongs to whoever owns that line.
+          tests/a-retried-webhook-does-not-alarm-twice.test.ts guards the class:
+          the escalating routes must gate on a new delivery, the notification
+          insert must sit inside that gate, the guardian routes must keep
+          claiming, and recordInboundMessage must still report `inserted` — the
+          bit the whole approach rests on.
+          Proved red per route: reverting either escalation fires two
+          assertions; breaking a guardian claim fires the third.
+Status:   FIXED
+```

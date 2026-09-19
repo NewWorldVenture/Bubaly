@@ -7293,3 +7293,72 @@ took three passes — the first census missed `rateLimit`/`rateLimitDb` (lowerca
 and reported five offenders, then missed a custom `secretsMatch` and called the
 email route unauthenticated. Both numbers were wrong in the alarming direction,
 and both were corrected by reading the files rather than trusting the grep.
+
+
+## C1-S7-04 [MEDIUM][RELIABILITY] — a retried webhook told the family the same emergency twice
+
+**File:** `app/api/contact-center/sms/route.ts:94` ·
+`app/api/contact-center/voice/transcription/route.ts:76`
+**Status:** FIXED — plus `tests/a-retried-webhook-does-not-alarm-twice.test.ts`
+
+### Problem
+
+This repository knows the rule and wrote it down. `lib/guardian/callbacks.ts`
+exists to make Twilio callbacks idempotent, explains why in its own header
+(*"Twilio does not retry a 200"*), and all **four** guardian webhooks claim their
+callback before doing any work.
+
+The four Contact Center webhooks never claim. They de-duplicate the inbound
+**row** instead, via `recordInboundMessage`, which returns `inserted: false` for
+a delivery already seen. That is a sound alternative — and two of the three
+routes that escalate used it for only **one** of their side effects.
+
+The comments are the evidence that this was not a rule nobody knew.
+`voice/transcription` says, in as many words:
+
+> M20: a voicemail asking to reschedule is work, not an audio file. **Twilio
+> retries a transcription callback**, so only a delivery that was actually new
+> reaches the planner.
+
+…and then sends the urgent SMS **three lines later, outside that guard**. The
+`sms` route does the same. `email`, in the same feature with the same helper,
+gets it right:
+
+```ts
+if (filed.inserted && shouldNotifyFamily(result.intent) && channel?.forward_to_phone) {
+```
+
+So the guard was applied to the new code — M20's planner — and not to the
+escalation already sitting beside it. The same shape as `C1-S6-10`, where I
+fixed one verb and did not check the next.
+
+### The retry window is not narrow
+
+The concierge's model call is allowed **60 seconds** (`OPENAI_TIMEOUT_MS`) on
+routes that declare no `maxDuration`. That is longer than any webhook timeout, so
+a retry arriving while the first attempt is still in flight is the ordinary case
+under a slow model, not an exotic race. By the time it lands, the first attempt
+may already have sent the escalation.
+
+### Impact
+
+On every retry the family's real phone receives
+`🚨 Urgent at your Bubaly line: …` again, and a second `notifications` row is
+written. For an urgent alert, duplication is not cosmetic noise — it reads as a
+**second emergency**, which is the specific thing an urgent channel must not do.
+
+### Fix, and what was deliberately left alone
+
+Both escalations now carry `filed.inserted`, matching their `email` sibling
+exactly. Nothing else changed.
+
+The SMS auto-reply was **not** gated, and that is a judgement rather than an
+omission. It is a TwiML `<Message>` in the response body, so suppressing it on a
+retry means that if the first attempt's response never reached Twilio the sender
+gets **no** reply at all. Duplicating a courteous auto-reply to a stranger is a
+smaller harm than silence where the product promised an answer, and unlike the
+escalation it does not impersonate an emergency. Recorded rather than changed,
+because the trade-off belongs to whoever owns that line.
+
+Proved red per route: reverting either escalation fires two assertions, and
+breaking any guardian route's claim fires the third.
