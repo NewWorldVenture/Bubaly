@@ -20,7 +20,7 @@ vi.mock('@/lib/i18n/server', async () => {
 
 import GrandparentPortalPage from '@/app/(app)/dashboard/grandparent-portal/page';
 
-const callback = readFileSync('app/auth/callback/route.ts', 'utf8');
+const callback = readFileSync('lib/auth/callback-server.ts', 'utf8');
 const authActions = readFileSync('app/(auth)/actions.ts', 'utf8');
 
 type Rows = Record<string, unknown>[];
@@ -281,12 +281,13 @@ describe('role-aware landing', () => {
     expect(authActions).toContain('return DEFAULT_LANDING_PATH;');
   });
 
-  it('is applied by the OAuth callback only when every membership is a guest one', () => {
-    // Shape, not formatting: the membership branch became an else off the
-    // error check (a failed read must not read as "no family"), so the
-    // onboarding arm is now braced rather than a one-liner.
-    expect(callback).toMatch(/else if \(membership\.length === 0\) \{[\s\S]{0,80}?destination = '\/onboarding';/);
-    expect(callback).toContain("else if (membership.every((m) => m.role === 'guest')) {");
+  it('is applied by isolated callback completion only after a successful guest-only membership read', () => {
+    // Admission now stays cookie-neutral; the isolated completion helper owns
+    // role routing. auth-callback-boundary executes the guest, mixed-role and
+    // unavailable-read cases against this same helper.
+    expect(callback).toContain('if (!membership.error && Array.isArray(membership.data)) {');
+    expect(callback).toContain("if (!membership.data.length) destination = '/onboarding';");
+    expect(callback).toContain("else if (membership.data.every(member => member.role === 'guest'))");
     expect(callback).toContain("destination = landingPathForRole('guest');");
   });
 

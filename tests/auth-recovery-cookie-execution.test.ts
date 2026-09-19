@@ -6,9 +6,9 @@ const boundary = vi.hoisted(() => ({ getAll: vi.fn(), get: vi.fn(), set: vi.fn()
 vi.mock('next/headers', () => ({ cookies: async () => ({ getAll: boundary.getAll, get: boundary.get, set: boundary.set }) }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: boundary.server, createServiceClient: vi.fn() }));
 vi.mock('@/lib/marketing/identity', () => ({ stitchVisitorIdentity: vi.fn() }));
-import { createRecoveryGrant, RECOVERY_HANDOFF_COOKIE } from '@/lib/auth/recovery-server';
+import { createRecoveryGrant, RECOVERY_HANDOFF_COOKIE, verifyRecoveryGrant } from '@/lib/auth/recovery-server';
 import { consumeRecoveryAction, inspectRecoveryAction, saveRecoveryAction } from '@/app/(auth)/auth/recovery/actions';
-import { GET } from '@/app/auth/callback/route';
+import { completeCallbackAction } from '@/app/(auth)/auth/complete/actions';
 
 const ORIGIN = 'https://recovery-cookie-execution.supabase.co';
 const COOKIE = 'sb-recovery-cookie-execution-auth-token';
@@ -83,11 +83,11 @@ function setSession(value: ReturnType<typeof session>, chunkSize?: number) {
   jar = new Map(createChunks(COOKIE, encode(value), chunkSize).map(cookie => [cookie.name, cookie.value]));
 }
 function withVerifier() { jar.set(`${COOKIE}-code-verifier`, encode('synthetic-verifier/recovery')); }
-function callback() { return GET(new Request('https://app.example.invalid/auth/callback?next=%2Fauth%2Frecovery&code=synthetic-code')); }
-function applyResponse(response: Awaited<ReturnType<typeof GET>>, browser = jar) {
-  for (const cookie of response.cookies.getAll()) {
-    if (cookie.maxAge === 0) browser.delete(cookie.name); else browser.set(cookie.name, cookie.value);
-  }
+function callback() {
+  const verifier = [...jar].filter(([name]) => name === `${COOKIE}-code-verifier` || name.startsWith(`${COOKIE}-code-verifier.`))
+    .map(([name, value]) => ({ name, value })).sort((a, b) => a.name.localeCompare(b.name));
+  return completeCallbackAction({ code: 'synthetic-code', next: '/auth/recovery',
+    verifierFingerprint: createHash('sha256').update(JSON.stringify(verifier)).digest('hex') });
 }
 function owner(browser = jar) {
   const encoded = browser.get(COOKIE) ?? [...browser].filter(([name]) => name.startsWith(`${COOKIE}.`))
@@ -137,53 +137,51 @@ describe('actual recovery action, signed verifier and installed cookie format', 
   });
 });
 
-describe('actual callback exchange stages installed SDK cookies until verification', () => {
+describe('actual callback exchange returns verified receipts without cookie publication', () => {
   it('keeps B when A exchange succeeds but required verification fails', async () => {
     setSession(session(token({ sub: B }))); withVerifier(); const before = [...jar];
     override = call => call.url.pathname === '/auth/v1/user' ? Response.json({ message: 'Synthetic outage' }, { status: 503 }) : undefined;
-    const response = await callback();
-    expect(response.headers.get('location')).toBe('https://app.example.invalid/auth/recovery?error=invalid');
-    expect(response.cookies.getAll().map(cookie => cookie.name)).toEqual([RECOVERY_HANDOFF_COOKIE]);
-    applyResponse(response); expect([...jar]).toEqual(before); expect(owner()).toBe(B);
+    const receipt = await callback();
+    expect(receipt.status).toBe('unavailable'); expect(receipt).not.toHaveProperty('tokens');
+    expect([...jar]).toEqual(before); expect(owner()).toBe(B);
     expect(tokenCalls()).toHaveLength(1);
   });
   it('does not expose the expired ambient B session to SDK constructor refresh', async () => {
     setSession(session(token({ sub: B, exp: SECOND - 1 }))); withVerifier();
-    const response = await callback();
+    const before = [...jar], receipt = await callback();
     expect(tokenCalls()).toHaveLength(1);
     expect(tokenCalls()[0].url.search).toBe('?grant_type=pkce');
     expect(owner()).toBe(B);
-    applyResponse(response); expect(owner()).toBe(A);
+    expect(receipt).toMatchObject({ status: 'exchanged', recovery: { identity: { userId: A, sessionId: SID } } });
+    expect([...jar]).toEqual(before);
   });
-  it('publishes verified A and durable chunk cleanup, then consumes the matching handoff', async () => {
+  it('returns a grant bound to verified A while preserving ambient B chunks and pending verifier', async () => {
     setSession(session(token({ sub: B }), { user: { ...user(B), user_metadata: { padding: 'x'.repeat(8000) } } }), 1000);
-    const originalChunks = [...jar.keys()]; withVerifier();
-    const response = await callback();
+    withVerifier(); const before = [...jar];
+    const receipt = await callback();
     expect(owner()).toBe(B);
-    expect(response.cookies.get(COOKIE)).toMatchObject({ path: '/', sameSite: 'lax', secure: true, maxAge: 34_560_000 });
-    for (const name of originalChunks) expect(response.cookies.get(name)?.maxAge).toBe(0);
-    expect(response.cookies.get(`${COOKIE}-code-verifier`)?.maxAge).toBe(0);
-    applyResponse(response); expect(owner()).toBe(A);
-    const handoff = new URL(response.headers.get('location')!).searchParams.get('handoff')!;
-    expect(await consumeRecoveryAction(handoff)).toMatchObject({ ok: true, identity: { userId: A, sessionId: SID } });
-    expect(response.headers.get('cache-control')).toBe('no-store');
-    expect(response.headers.get('referrer-policy')).toBe('no-referrer');
+    expect(receipt.status).toBe('exchanged');
+    if (receipt.status !== 'exchanged' || !receipt.recovery) throw new Error('Expected verified recovery receipt');
+    expect(await verifyRecoveryGrant(receipt.recovery.grant, receipt.tokens.access_token)).toMatchObject({ userId: A, sessionId: SID });
+    expect(await inspectRecoveryAction(receipt.recovery.grant)).toMatchObject({ ok: false, errorKey: 'authRecovery.sessionChanged' });
+    expect([...jar]).toEqual(before); expect(jar.has(RECOVERY_HANDOFF_COOKIE)).toBe(false);
   });
   it.each([400, 503])('keeps the verifier and B after failed PKCE exchange %s so a fresh request can retry', async status => {
     setSession(session(token({ sub: B }))); withVerifier(); const before = [...jar];
     override = call => call.url.pathname === '/auth/v1/token' ? Response.json({ code: 'synthetic_failure' }, { status }) : undefined;
-    const failed = await callback(); applyResponse(failed);
+    const failed = await callback();
     expect([...jar]).toEqual(before); expect(owner()).toBe(B);
-    expect(failed.headers.get('location')).toContain('error=invalid');
+    expect(failed.status).toBe(status === 400 ? 'rejected' : 'unavailable');
     override = undefined;
-    const retried = await callback(); applyResponse(retried);
-    expect(owner()).toBe(A); expect(tokenCalls()).toHaveLength(2);
+    const retried = await callback();
+    expect(retried).toMatchObject({ status: 'exchanged', recovery: { identity: { userId: A, sessionId: SID } } });
+    expect(owner()).toBe(B); expect([...jar]).toEqual(before); expect(tokenCalls()).toHaveLength(2);
   });
   it('discards exchanged cookies when the returned token lacks verified recovery evidence', async () => {
     setSession(session(token({ sub: B }))); withVerifier();
     exchanged = session(token({ amr: [{ method: 'password', timestamp: SECOND }] }));
-    const response = await callback(); applyResponse(response);
-    expect(response.headers.get('location')).toContain('error=invalid');
-    expect(owner()).toBe(B); expect(response.cookies.get(COOKIE)).toBeUndefined();
+    const before = [...jar], receipt = await callback();
+    expect(receipt.status).toBe('rejected'); expect(receipt).not.toHaveProperty('tokens');
+    expect(owner()).toBe(B); expect([...jar]).toEqual(before);
   });
 });

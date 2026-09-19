@@ -33,6 +33,7 @@ describe('auth completion requests do not publish ambient session renewal cookie
     ['/auth/callback?code=synthetic', 'GET'],
     ['/auth/callback?error=access_denied', 'GET'],
     ['/auth/callback', 'GET'],
+    ['/auth/complete', 'GET'], ['/auth/complete', 'POST'],
     ['/login?reset=1', 'GET'], ['/login?reset=1', 'POST'],
   ])('%s %s leaves the request and response cookie state untouched', async (path, method) => {
     const req = request(path, method);
@@ -42,6 +43,16 @@ describe('auth completion requests do not publish ambient session renewal cookie
     expect(fetch).not.toHaveBeenCalled();
     expect(req.cookies.get(cookieName)?.value === before).toBe(true);
     expect(response.cookies.getAll()).toEqual([]);
+  });
+
+  it.each(['GET', 'POST'])('does not rescue a completion code back into an admission loop (%s)', async method => {
+    const req = request('/auth/complete?code=synthetic&next=/home', method);
+    req.cookies.set(`${cookieName}-code-verifier`, 'synthetic-verifier');
+    const before = req.cookies.getAll();
+    const response = await middleware(req);
+    expect(response.status).toBe(200); expect(response.headers.get('location')).toBeNull();
+    expect(fetch).not.toHaveBeenCalled(); expect(response.cookies.getAll()).toEqual([]);
+    expect(req.cookies.getAll()).toEqual(before);
   });
 
   it.each(['/home', '/login', '/login?reset=0', '/auth/recovery-extra', '/auth/callback-extra'])('retains normal session refresh for %s', async path => {

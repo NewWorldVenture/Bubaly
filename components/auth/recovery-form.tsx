@@ -12,8 +12,9 @@ import { emailSchema } from '@/lib/validation';
 import { durableCookieOptions, isRetryableAuthError, isSecureOrigin } from '@/lib/auth/session';
 import type { RecoveryIdentity } from '@/lib/auth/recovery-server';
 import { consumeRecoveryAction, inspectRecoveryAction, prepareRecoveryAction, saveRecoveryAction } from '@/app/(auth)/auth/recovery/actions';
+import { RECOVERY_GRANT_STORAGE_KEY } from '@/lib/auth/callback';
 
-const STORAGE_KEY = 'bubaly.auth.recovery.grant.v1';
+const STORAGE_KEY = RECOVERY_GRANT_STORAGE_KEY;
 const DEADLINE_MS = 35_000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const GRANT = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
@@ -98,7 +99,7 @@ function captureEntry(request: boolean): Entry {
   return { kind: 'error', error: 'authRecovery.invalidLink' };
 }
 
-export function RecoveryForm({ request = false }: { request?: boolean }) {
+export function RecoveryForm({ request = false, initialGrant }: { request?: boolean; initialGrant?: string }) {
   const t = useTranslations();
   const params = useSearchParams();
   const [locationEpoch, setLocationEpoch] = useState(0);
@@ -116,10 +117,11 @@ export function RecoveryForm({ request = false }: { request?: boolean }) {
   }
 
   useLayoutEffect(() => {
-    const key = `${request}:${search}:${locationEpoch}`;
+    const key = `${request}:${search}:${locationEpoch}:${initialGrant ?? ''}`;
     let scope = scopeRef.current;
     if (!scope || scope.key !== key) {
-      scope = { key, active: true, phase: 'checking', entry: captureEntry(request), revision: 0, persistedGrant: readStoredGrant() };
+      scope = { key, active: true, phase: 'checking', entry: initialGrant && validGrant(initialGrant)
+        ? { kind: 'stored', grant: initialGrant } : captureEntry(request), revision: 0, persistedGrant: readStoredGrant() };
       scopeRef.current = scope;
     }
     const opening = scope;
@@ -221,7 +223,7 @@ export function RecoveryForm({ request = false }: { request?: boolean }) {
           if (url.searchParams.getAll('handoff').length === 1 && url.searchParams.get('handoff') === entry.handoff) {
             url.searchParams.delete('handoff');
             window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
-            opening.key = `${request}:${url.searchParams.toString()}:${locationEpoch}`;
+            opening.key = `${request}:${url.searchParams.toString()}:${locationEpoch}:${initialGrant ?? ''}`;
           }
         }
         opening.authKey = expected; opening.identity = result.identity; opening.grant = grant;
@@ -239,7 +241,7 @@ export function RecoveryForm({ request = false }: { request?: boolean }) {
       window.removeEventListener('hashchange', changed);
       queueMicrotask(() => { if (!opening.active) { opening.unsubscribe?.(); if (opening.timer) clearTimeout(opening.timer); } });
     };
-  }, [request, search, locationEpoch]);
+  }, [request, search, locationEpoch, initialGrant]);
 
   async function sendEmail(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

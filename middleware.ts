@@ -54,6 +54,9 @@ export async function middleware(req: NextRequest) {
   // Logout replies must never carry stale authentication cookie mutations.
   // The browser performs its own guarded local deletion after explicit intent.
   if (path === '/auth/signout' || path === '/auth/signout/complete') return NextResponse.next({ request: req });
+  // Completion carries a code to a guarded browser-owned action. It must not
+  // loop through misplaced-code rescue or refresh an ambient account.
+  if (path === '/auth/complete') return NextResponse.next({ request: req });
   // Child credentials are verified by this public action, then the browser
   // adopts its receipt conditionally. A delayed action response must not carry
   // an unrelated ambient session refresh that bypasses that ownership check.

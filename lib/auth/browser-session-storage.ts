@@ -91,11 +91,15 @@ export function clearBrowserSessionSnapshot(snapshot: BrowserSessionSnapshot | n
 /** Fence SDK refresh responses and cookie writes against explicit local logout. */
 export function createBrowserSessionStorage(url: string) {
   const key = storageKey(url);
+  const sessionOwner = (cookies: Cookie[]) => JSON.stringify(cookies.filter(cookie =>
+    isChunkLike(cookie.name, key) || isChunkLike(cookie.name, `${key}-user`) || cookie.name === generationKey(key)
+  ).sort((a, b) => a.name.localeCompare(b.name)));
   const endpoint = new URL(`${url.replace(/\/+$/, '')}/auth/v1/token`);
   // The singleton SDK serializes renewal through its public refresh operation.
   // Keep only its last response candidate, never an accumulating token cache.
-  let candidate: { accessToken: string; generation: string } | null = null;
+  let candidate: { accessToken: string; owner: string } | null = null;
   let deletionGeneration: string | null = null;
+  let deletionOwner: string | null = null;
   const providerFetch = createSessionRefreshFetch(url);
   const interrupted = () => new AuthRetryableFetchError('Session changed while renewal was in progress.', 0);
   const retryable = () => new Response(JSON.stringify({ message: 'Session changed while renewal was in progress.' }), {
@@ -121,6 +125,7 @@ export function createBrowserSessionStorage(url: string) {
         const headers = new Headers(init?.headers ?? (typeof input === 'object' && 'headers' in input ? input.headers : undefined));
         if (typeof currentToken === 'string' && headers.get('authorization') === `Bearer ${currentToken}`) {
           deletionGeneration = generation(before, key);
+          deletionOwner = sessionOwner(before);
         }
       }
       return providerFetch(input, init);
@@ -128,6 +133,7 @@ export function createBrowserSessionStorage(url: string) {
     candidate = null;
     const before = read();
     const expectedGeneration = generation(before, key);
+    const expectedOwner = sessionOwner(before);
     if (expectedGeneration && typeof init?.body === 'string') {
       // A retry from an old SDK operation must not dispatch the retired token.
       const request = JSON.parse(init.body) as { refresh_token?: unknown };
@@ -145,10 +151,11 @@ export function createBrowserSessionStorage(url: string) {
     // The SDK still awaits its own body/storage reads after fetch returns.
     // Retain this boundary through the eventual deletion-only cookie write.
     deletionGeneration = expectedGeneration;
+    deletionOwner = expectedOwner;
     if (response.ok) {
       const session = await response.clone().json() as Record<string, unknown>;
       if (generation(read(), key) !== expectedGeneration) return retryable();
-      if (typeof session.access_token === 'string') candidate = { accessToken: session.access_token, generation: expectedGeneration };
+      if (typeof session.access_token === 'string') candidate = { accessToken: session.access_token, owner: expectedOwner };
     }
     return response;
   };
@@ -159,16 +166,20 @@ export function createBrowserSessionStorage(url: string) {
       setAll: (cookies: CookieWrite[]) => {
         cookies = preservePendingPkceVerifier(cookies, url);
         const writes = cookies.filter(cookie => cookie.options.maxAge !== 0);
+        const removesSession = !writes.length && cookies.some(cookie => isChunkLike(cookie.name, key) || isChunkLike(cookie.name, `${key}-user`));
         if (!writes.length && cookies.some(cookie => isOwned(cookie.name, key)) && deletionGeneration !== null
-          && generation(read(), key) !== deletionGeneration) throw interrupted();
+          && (generation(read(), key) !== deletionGeneration || (deletionOwner !== null && sessionOwner(read()) !== deletionOwner))) throw interrupted();
         const session = payload(writes, key);
         const token = session?.access_token;
         if (typeof token === 'string' && candidate?.accessToken === token) {
-          if (generation(read(), key) !== candidate.generation) {
+          if (sessionOwner(read()) !== candidate.owner) {
             throw interrupted();
           }
         }
         for (const cookie of cookies) document.cookie = serializeCookieHeader(cookie.name, cookie.value, cookie.options);
+        // SDK cleanup can remove the session and separate user in successive
+        // batches. Carry ownership through our own synchronous removal only.
+        if (removesSession && deletionOwner !== null) deletionOwner = sessionOwner(read());
       },
     },
   };

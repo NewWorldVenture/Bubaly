@@ -52,13 +52,14 @@ const CONSTANT_HOST: Record<string, string> = {
 const AUTH_TRANSPORTS = new Set([
   'lib/auth/password-client.ts', 'lib/auth/signup-client.ts',
   'lib/auth/revoke-session.ts', 'lib/auth/recovery-server.ts',
+  'lib/auth/callback-server.ts',
 ]);
 
 /**
- * These four owned auth transports target the configured Supabase project,
+ * These owned auth transports target the configured Supabase project,
  * not a user-selected host. Recognize the particular fetch call and its SDK
  * wiring, rather than exempting the file: a new fetch beside it must still fail.
- * The recovery server additionally constrains the origin/path and redirects.
+ * The recovery and callback servers constrain origin/path and redirects.
  */
 function configuredAuthFetchLines(file: string, source: string): Set<number> {
   const allowed = new Set<number>();
@@ -77,7 +78,26 @@ function configuredAuthFetchLines(file: string, source: string): Set<number> {
   const calls = descendants(tree, node => ts.isCallExpression(node) && ts.isIdentifier(node.expression)
     && node.expression.text === 'fetch') as ts.CallExpression[];
   for (const call of calls) {
-    if (file === 'lib/auth/recovery-server.ts') {
+    if (file === 'lib/auth/callback-server.ts') {
+      let helper: ts.Node | undefined = call.parent;
+      while (helper && !ts.isFunctionDeclaration(helper)) helper = helper.parent;
+      if (!helper || !ts.isFunctionDeclaration(helper) || helper.name?.text !== 'boundedFetch'
+        || helper.parameters[0]?.name.getText(tree) !== 'origin' || call.arguments[0]?.getText(tree) !== 'input'
+        || !declaration(helper, 'url', 'newURL(inputinstanceofRequest?input.url:String(input))')) continue;
+      const operation = descendants(tree, node => ts.isFunctionDeclaration(node) && node.name?.text === 'completeCallback')[0];
+      const wiring = descendants(tree, node => ts.isCallExpression(node) && node.expression.getText(tree) === 'boundedFetch') as ts.CallExpression[];
+      // Both the isolated PKCE SDK and optional attribution SDK use exactly the
+      // environment-derived project origin. A user-chosen sibling is not allowed.
+      if (!operation || !declaration(operation, 'origin', 'newURL(clean(process.env.NEXT_PUBLIC_SUPABASE_URL)).origin')
+        || wiring.length !== 2 || wiring.some(node => node.arguments[0]?.getText(tree) !== 'origin'
+          || node.getStart(tree) < operation.getStart(tree) || node.end > operation.end)) continue;
+      const guard = descendants(helper, node => ts.isIfStatement(node)
+        && compact(node.expression) === "url.origin!==origin||(!url.pathname.startsWith('/rest/v1/')&&!['/auth/v1/token','/auth/v1/user'].includes(url.pathname))"
+        && compact(node.thenStatement) === "thrownewError('Unexpectedcallbackendpoint');");
+      const init = call.arguments[1];
+      if (guard.length !== 1 || guard[0].getStart(tree) > call.getStart(tree) || !init
+        || compact(init) !== "{...init,redirect:'manual',cache:'no-store',signal:requestSignal}") continue;
+    } else if (file === 'lib/auth/recovery-server.ts') {
       let arrow: ts.Node | undefined = call.parent;
       while (arrow && !ts.isArrowFunction(arrow)) arrow = arrow.parent;
       if (!arrow || !ts.isArrowFunction(arrow) || !ts.isVariableDeclaration(arrow.parent)
@@ -219,5 +239,18 @@ describe('a URL a user chose is only fetched through the SSRF guard', () => {
     const source = readFileSync(file, 'utf8');
     expect(configuredAuthFetchLines(file, source.replace('url.origin !== config.origin', 'false')).size).toBe(0);
     expect(configuredAuthFetchLines(file, source.replace("redirect: 'manual'", "redirect: 'follow'")).size).toBe(0);
+  });
+
+  it('does not recognize callback requests after origin, endpoint, caller or redirect guards are weakened', () => {
+    const file = 'lib/auth/callback-server.ts';
+    const source = readFileSync(file, 'utf8');
+    for (const mutated of [
+      source.replace('url.origin !== origin', 'false'),
+      source.replace("!url.pathname.startsWith('/rest/v1/')", 'false'),
+      source.replace("throw new Error('Unexpected callback endpoint');", '{}'),
+      source.replace('boundedFetch(origin, controller.signal)', 'boundedFetch(userChosenUrl, controller.signal)'),
+      source.replace("redirect: 'manual'", "redirect: 'follow'"),
+      source.replace("redirect: 'manual', cache: 'no-store', signal: requestSignal", "redirect: 'manual', cache: 'no-store', signal: requestSignal, ...init"),
+    ]) expect(configuredAuthFetchLines(file, mutated).size).toBe(0);
   });
 });

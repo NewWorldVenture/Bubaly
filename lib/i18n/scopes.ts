@@ -52,7 +52,7 @@ export const AUTH_SCOPE = [
   // rendering a raw key like `authRecovery.sendLink` at the person trying to
   // get back into their account. `actions` carries the two kid-login errors
   // that the sign-in form surfaces from the server action.
-  'authRecovery', 'signOutButton', 'stepUp', 'actions',
+  'authRecovery', 'authCallback', 'signOutButton', 'stepUp', 'actions',
 ] as const;
 
 /** The public link surfaces that sit outside a route group: a gift, a review. */

@@ -2,10 +2,15 @@
 
 ## Pull request 510 integration — 2026-09-19
 
-CURRENT: Follow-up local gates complete; new hosted acceptance required.
+CURRENT: AUTH-001/AUTH-002/AUTH-003 callback browser-ownership cycle IN PROGRESS
+on published baseline 4ccc57fc; previous follow-up gates remain historical.
 WORKSPACE: Separate `bubaly-final-production-audit-20260912` worktree, existing
 PR 510. Upstream main remains `57f22c0b`; the main checkout is untouched.
-SCOPE: Preserve pending PKCE handoffs across browser/server/middleware refresh,
+ACTIVE SCOPE: Cookie-neutral callback admission, isolated action receipts, guarded
+browser adoption and exact verifier consumption. Independent authority review
+and executing callback/browser regressions pass focused and final full local
+gates. New-source hosted acceptance remains pending.
+PREVIOUS SCOPE: Preserve pending PKCE handoffs across browser/server/middleware refresh,
 retire held recovery after explicit logout, stage isolated callback cookies with
 correct chunk cleanup, and harden signed voicemail intake. Correct the six
 hosted fixture failures without weakening their authorization assertions.
@@ -18,16 +23,32 @@ fixture/guard changes have focused finance 14/14 and graph-guard 8/8 evidence.
 Final discovery lists 1,086 tests across 47 files.
 HOSTED: Baseline `43df0881` passed Web, Database, Mobile and Finance checks,
 but browser CI failed (1,072 passed / six fixture failures). The corrected
-fixtures and new application changes require their own hosted run.
-NEXT: Obtain exact-source hosted CI evidence for this follow-up through PR 510.
-OPEN: Delayed callback responses still lack guarded browser adoption; ordinary
-failed-link fallback can still publish ambient refresh. Provider configuration,
-production database rollout and complete feature verification remain open.
+fixtures pass the exact 4ccc hosted run recorded below.
+NEXT: Publish the locally verified cycle and verify its new hosted run.
+CURRENT GATES: Application tree 2af81377 is frozen; test-only tree 8966b974 adds
+guard/transport controls. Build passes 252 pages, lint retains three warnings,
+query audit passes 491/86/146; strict post-build types and localization pass.
+Discovery lists 1,150 tests in 48 files.
+The first full run had two failures; focused 49/49 retest passes after the
+guard correction and unchanged SMS import retry. Final UTC and DST each pass
+16,495/16,495 checks across 1,301 files with zero failures/skips.
+HOSTED CURRENT: Exact 4ccc57fc runs 35463644948 / 35463644960 are terminal SUCCESS.
+Browser acceptance passes 1,086/1,086; Web UTC/DST each pass 16,418 checks in 1,298
+files, 251-page build and strict types. Database passes 330 migrations, 38 probes
+and 327 reapplications; Finance has 66 explicit 0274 PASS notices. CI merge tree
+7c39fb76557f3df5111286c704b949a81ea997d0 equals the published head tree.
+These baseline results do not cover the new source.
+OPEN: Initiation-before-completion ownership and non-atomic browser cookie
+compare/write remain separate boundaries. Current callback repairs have focused
+and full local execution but still require new hosted acceptance. Provider
+configuration, production rollout and complete feature verification remain open.
+CURRENT RECORD: `docs/final-audit/auth-callback-browser-ownership-cycle.md`.
 REFERENCES: `docs/final-audit/auth-pkce-refresh-preservation-cycle.md`,
 `docs/final-audit/guardian-voicemail-intake-cycle.md`,
 `docs/final-audit/main-integration-cycle-20260919.md` and `finalaudit.md`.
-RELEASE: NO. Permanent audit IDs and status counts are unchanged.
-LAST-UPDATE: 2026-09-19T19:11:57.296Z
+RELEASE: NO. All prior IDs/statuses are preserved; 21 newly discovered structural
+records are NOT STARTED (14,006 total). AUTH-001/002/003 remain IN PROGRESS.
+LAST-UPDATE: 2026-09-19T19:32:26.133Z
 
 Four workers audit this repository in parallel. Each worker maintains ONLY its
 own section below. Read this file before touching any source file: if another

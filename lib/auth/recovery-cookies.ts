@@ -1,15 +1,13 @@
 import 'server-only';
-import { combineChunks, createServerClient, stringFromBase64URL, stringToBase64URL, type CookieOptions } from '@supabase/ssr';
+import { combineChunks, createServerClient, isChunkLike, stringFromBase64URL, stringToBase64URL } from '@supabase/ssr';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { cookies } from 'next/headers';
-import type { NextResponse } from 'next/server';
 import { durableCookieOptions, isSecureOrigin } from '@/lib/auth/session';
 import { RecoveryError } from '@/lib/auth/recovery-server';
 import type { Database } from '@/lib/database.types';
 
 const MAX_COOKIE_LENGTH = 65_536;
 const MAX_CHUNKS = 24;
-type Cookie = { name: string; value: string };
-type CookieChange = Cookie & { options: CookieOptions };
 function cleanEnv(value: string | undefined): string {
   const trimmed = (value ?? '').trim();
   return /^(["']).*\1$/.test(trimmed) ? trimmed.slice(1, -1).trim() : trimmed;
@@ -69,24 +67,31 @@ export async function readRecoveryCookieToken(): Promise<string> {
   }
 }
 
-/** Stage the exchange's cookies until the exact returned token is verified. */
-export async function createPkceCookieExchange() {
+/** Compare the browser's captured verifier before constructing an isolated SDK. */
+export async function createPkceCookieExchange(options: { verifierFingerprint: string; fetch: typeof fetch }) {
   const { origin, key } = configuration();
   const anon = cleanEnv(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
   if (!anon) throw new RecoveryError('authRecovery.setupRequired');
   const incoming = (await cookies()).getAll().map(({ name, value }) => ({ name, value }));
-  // Bootstrap without ambient session values, but retain their names for
-  // cleanup. Subsequent SDK writes must update this private view: an exchanged
-  // session may itself renew before publication and change its chunk layout.
-  const staged = new Map(incoming.map(cookie => [cookie.name, sessionCookie(cookie.name, key) ? '' : cookie.value]));
-  const pending = new Map<string, CookieChange>();
+  const verifierKey = `${key}-code-verifier`;
+  const selected = incoming.filter(cookie => isChunkLike(cookie.name, verifierKey)).sort((a, b) => a.name.localeCompare(b.name));
+  if (!selected.length || selected.length > 128 || selected.reduce((size, cookie) => size + cookie.value.length, 0) > 256 * 1024
+    || new Set(selected.map(cookie => cookie.name)).size !== selected.length || selected.some(cookie => !cookie.value)
+    || (selected.some(cookie => cookie.name === verifierKey) ? selected.length !== 1
+      : selected.some((_cookie, index) => !selected.some(cookie => cookie.name === `${verifierKey}.${index}`)))) invalid();
+  if (typeof options.verifierFingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(options.verifierFingerprint)) invalid();
+  const fingerprint = createHash('sha256').update(JSON.stringify(selected)).digest();
+  if (!timingSafeEqual(fingerprint, Buffer.from(options.verifierFingerprint, 'hex'))) invalid();
+  // Ambient session values never enter this operation. Every SDK write remains
+  // private; there is deliberately no response-cookie publication method.
+  const staged = new Map(selected.map(cookie => [cookie.name, cookie.value]));
   const client = createServerClient<Database>(origin, anon, {
     cookieOptions: durableCookieOptions(isSecureOrigin(process.env.NEXT_PUBLIC_SITE_URL)),
+    global: { fetch: options.fetch },
     cookies: {
       getAll: () => [...staged].map(([name, value]) => ({ name, value })),
       setAll: changes => {
         for (const change of changes) {
-          pending.set(change.name, change);
           if (change.options.maxAge === 0) staged.delete(change.name);
           else staged.set(change.name, change.value);
         }
@@ -95,11 +100,8 @@ export async function createPkceCookieExchange() {
   });
   return {
     client,
-    applyTo(response: Pick<NextResponse, 'cookies'>) {
-      for (const { name, value, options } of pending.values()) response.cookies.set(name, value, options);
-    },
+    origin,
+    anonymousId: incoming.find(cookie => cookie.name === 'bubaly_vid')?.value ?? null,
     dispose: () => client.auth.dispose(),
   };
 }
-
-export const createRecoveryCookieExchange = createPkceCookieExchange;

@@ -6,6 +6,11 @@ import { notifySessionStorageChanged } from './session-change';
 
 type Cookie = { name: string; value: string; options: CookieOptions };
 type Tokens = { access_token: string; refresh_token: string };
+/** Optional operation owner for callbacks captured before the exchange request. */
+export type OwnedSessionBoundary = {
+  isCurrent: () => boolean;
+  didAdopt: (session: Session) => void;
+};
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const interrupted = () => new AuthRetryableFetchError('Sign-in could not be completed. Please try again.', 0);
 const unavailable = (error: unknown): never => { throw isAuthError(error) ? error : interrupted(); };
@@ -62,6 +67,7 @@ async function withOwnedClient(
   run: (client: ReturnType<typeof createBrowserClient>, owns: () => boolean) => Promise<AuthTokenResponsePassword>,
   canCommitSession: () => boolean,
   canAdoptSession: (session: Session) => boolean = () => true,
+  boundary?: OwnedSessionBoundary,
 ): Promise<AuthTokenResponsePassword> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const key = `sb-${new URL(url).hostname.split('.')[0]}-auth-token`;
@@ -73,7 +79,7 @@ async function withOwnedClient(
   let active = true;
   let exposed = false;
   let adopted: Session | null = null;
-  const owns = () => active && canCommitSession() && snapshot() === expected;
+  const owns = () => active && canCommitSession() && (boundary ? boundary.isCurrent() : snapshot() === expected);
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const client = createBrowserClient(url, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
@@ -104,6 +110,7 @@ async function withOwnedClient(
         const planned = JSON.stringify([...intended].map(([name, value]) => ({ name, value })).sort((a, b) => a.name.localeCompare(b.name)));
         if (expected !== planned || !isPasswordSessionCurrent(candidate)) throw interrupted();
         adopted = candidate;
+        boundary?.didAdopt(candidate);
       },
     },
   });
@@ -119,7 +126,7 @@ async function withOwnedClient(
       const result = await run(client, owns);
       if (result.error) return result;
       if (!validSession(result.data.session) || !canAdoptSession(result.data.session) || !adopted || !active || !canCommitSession()
-        || !isPasswordSessionCurrent(result.data.session)) throw interrupted();
+        || (boundary && !boundary.isCurrent()) || !isPasswordSessionCurrent(result.data.session)) throw interrupted();
       notifySessionStorageChanged();
       return result;
     })();
@@ -140,7 +147,7 @@ export function signInWithOwnedSession(credentials: SignInWithPasswordCredential
 }
 
 /** Capture browser ownership before the authorized server action produces tokens. */
-export function signInWithOwnedSessionTokens(receiveTokens: () => Promise<Tokens>, canCommitSession: () => boolean): Promise<AuthTokenResponsePassword> {
+export function signInWithOwnedSessionTokens(receiveTokens: () => Promise<Tokens>, canCommitSession: () => boolean, boundary?: OwnedSessionBoundary): Promise<AuthTokenResponsePassword> {
   let owner: { userId: string; sessionId: string | null } | null = null;
   return withOwnedClient(async (client, owns) => {
     const tokens = await receiveTokens();
@@ -150,5 +157,5 @@ export function signInWithOwnedSessionTokens(receiveTokens: () => Promise<Tokens
     owner = { userId: submitted.sub, sessionId: typeof submitted.session_id === 'string' ? submitted.session_id : null };
     return client.auth.setSession(tokens);
   }, canCommitSession, session => !!owner && session.user.id === owner.userId
-    && (owner.sessionId === null || claims(session.access_token)?.session_id === owner.sessionId)).catch(unavailable);
+    && (owner.sessionId === null || claims(session.access_token)?.session_id === owner.sessionId), boundary).catch(unavailable);
 }
