@@ -1011,3 +1011,36 @@ THREE BEHAVIOURAL CONFLICTS GIT COULD NOT SEE, all caught by the full suite:
 GATE AFTER MERGE: tsc clean; suite 1,258 files / 14,119 tests / 0 failures;
 replay 343 migrations / 0 failed; probes 52/52.
 LAST-UPDATE: 2026-09-19
+
+## Claude-1 — Pass AE: four parallel workers (the brief asks for them)
+Dispatched 4 on disjoint scopes (un-named server actions / API routes / feature
+modules / scheduled jobs). ALL FOUR hit the session rate limit mid-flight, three
+mid-edit. NOTHING was kept on trust: re-typechecked, full suite, and each new
+test mutation-checked before commit.
+FOUND (verified independently, not accepted from the reports):
+  `C1-S8-13` [HIGH][SAFETY] pantry-chef's allergy read used `?? []`, so a failed
+    read TURNED THE SAFETY FILTER OFF and reported success. Confirmed by reading
+    both consumers: the prompt then says "No known family allergies were
+    provided", annotateAllergens returns early flagging nothing, and
+    allergiesConsidered: 0 is what a family with none on file sees. Peanut
+    recipes, unflagged, to a household with a peanut-allergic child. Now 503.
+  `C1-S8-14` [HIGH][RELIABILITY] a failed push_devices read returned an all-zero
+    PushResult — the ONE shape dispatchPendingPushes reads as success, since
+    nothingGotThrough requires failed > 0. pushed_at was stamped, and nothing
+    clears it. One blip marked a batch delivered without sending it.
+  `C1-S8-15` [MEDIUM] closeMealVote's two deciding reads used `?? []` — a blip
+    closed the vote with winner_option_id: null, stamped final, reported success.
+  `C1-S8-16` [MEDIUM] three cron jobs: two answered a hardcoded 200 over a failed
+    sweep (cron-dispatch.mjs reads res.ok); return-reminders used .limit(200)
+    with NO ORDER BY on a code-side filter, so an order due today could fall
+    outside the arbitrary slice every run. Now paged with readAll.
+TWO THINGS SETTLED RATHER THAN ACCEPTED:
+  - a worker died between changing deleteProvider's signature and its call site;
+    tsc caught it, the suite would not have.
+  - tests/dashboard-modules-keep-prior-read.test.ts went RED on an IMPROVEMENT,
+    because it pinned the literal `if (error) return [];` instead of the
+    behaviour. A test that fails when the code gets better is testing the wrong
+    thing. Rewrote it to assert the bail precedes the clobber; re-proved red both
+    ways (bail removed; bail moved after the clobber).
+SUITE: 1,261 files / 14,127 tests, 0 failures. tsc clean.
+LAST-UPDATE: 2026-09-19

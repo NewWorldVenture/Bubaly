@@ -10173,3 +10173,99 @@ NO
 
 ## Final Sign-Off
 Pending — blocked on B1 at minimum.
+
+
+---
+
+# Pass AE — four workers, disjoint scopes, and what survived verification
+
+The brief asks for as many parallel workers as possible. Four ran on disjoint
+scopes — un-named server actions, un-named API routes, un-named feature modules,
+and the scheduled jobs. All four hit the session rate limit mid-flight, three of
+them mid-edit. **Nothing they produced was kept on trust**: every change was
+re-typechecked, run through the full suite, and each new test was mutation-checked
+before being committed.
+
+## C1-S8-13 [HIGH][SAFETY] — a failed allergy read switched the safety filter off
+
+**File:** `app/api/ai/pantry-chef/route.ts:133`
+**Status:** 🛠 FIXED + PASS
+
+```ts
+const { data: profiles } = await service.from('medical_profiles').select('allergies')…
+const allergies = normalizeAllergies(...(profiles ?? []).map(…));
+```
+
+Verified by reading both consumers rather than taking the report on trust:
+
+- `buildPantryChefPrompt(allergies)` with an empty list tells the model
+  *"No known family allergies were provided."*
+- `annotateAllergens(recipes, allergies)` opens with
+  `if (allergies.length === 0) return recipes;` — nothing is flagged.
+- the response carries `allergiesConsidered: allergies.length` → **0**, which is
+  precisely what a family with none on file sees.
+
+So a failed read does not degrade the feature, it **turns the safety filter off
+and reports success**. A household whose child has a peanut allergy is shown
+peanut recipes, unflagged, and told nothing went wrong. It now answers 503 —
+refusing is the only safe direction, the same call the privacy export makes when
+its receipt cannot be written.
+
+## C1-S8-14 [HIGH][RELIABILITY] — an unreadable device roster marked a notification delivered
+
+**File:** `lib/server/push.ts:106`
+**Status:** 🛠 FIXED + PASS
+
+A failed `push_devices` read fell into the `!devices` branch and returned
+`{ sent: 0, skipped: 0, failed: 0, pruned: 0 }`. That is the one shape
+`dispatchPendingPushes` reads as success: its retry condition is
+
+```ts
+const nothingGotThrough = r.failed > 0 && r.sent === 0 && r.pruned === 0;
+```
+
+With `failed === 0` the row was **stamped `pushed_at`** — the only column the
+pending query filters on, which nothing ever clears and which has no retry. One
+blip on that table marked a whole batch delivered without sending any of it.
+Counting the read failure as a failed send puts the row back on the retry path
+that already exists, rather than inventing a new one.
+
+## C1-S8-15 [MEDIUM][CORRECTNESS] — a database blip picked the family's dinner
+
+**File:** `app/(app)/dashboard/recipes/vote/actions.ts` (`closeMealVote`)
+**Status:** 🛠 FIXED + PASS
+
+The two reads that *decide the winner* used `?? []`, so a transport failure
+closed the vote with `winner_option_id: null`, stamped it final, and reported
+success. A vote that could not be counted now stays open.
+
+## C1-S8-16 [MEDIUM][RELIABILITY] — three scheduled jobs
+
+**Status:** 🛠 FIXED + PASS
+
+| job | defect |
+|---|---|
+| `cron/checkout-abandoned` | answered a hardcoded 200 over a sweep in which every nudge threw; `scripts/cron-dispatch.mjs` reads `res.ok` |
+| `cron/family-routines` | body said `ok: false` while the status stayed 200 — same blind spot |
+| `cron/return-reminders` | `.limit(200)` with **no ORDER BY**, on a filter applied in code: an order due today could fall outside that arbitrary slice on every run and never be nudged. Now paged with `readAll` |
+
+Plus `wroteNoRows` / `.select('id')` on several actions, a confirmation on the
+provider delete, and weather's unreadable city list surfaced rather than rendered
+as an empty one.
+
+## Two things that had to be settled rather than accepted
+
+**A worker died between changing a signature and its call site.**
+`deleteProvider(id: string)` became `deleteProvider(p: Provider)` and the call
+site still passed `p.id`. `tsc` caught it; the suite would not have.
+
+**A guard went red on an improvement.**
+`tests/dashboard-modules-keep-prior-read.test.ts` pinned the literal statement
+`if (error) return [];`. When the weather bail grew to also *surface* the error —
+strictly better, and the exact behaviour that file exists to encourage — the
+guard failed. **A test that fails when the code gets better is testing the wrong
+thing.** The guard now asserts the behaviour (the error bail precedes the clobber)
+and was re-proved red in both directions: removing the bail, and moving it after
+the clobber.
+
+Suite: **1,261 files / 14,127 tests, 0 failures.** `tsc` clean.
