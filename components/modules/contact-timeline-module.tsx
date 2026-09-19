@@ -62,6 +62,10 @@ export function ContactTimelineModule({
 }) {
   const tr = useTranslations();
   const locale = useLocale().code;
+  // Inline rather than a toast: this component is rendered on its own in
+  // tests and does not otherwise depend on <ToastProvider>, and the reason a
+  // delete or a log failed belongs beside the timeline it failed on.
+  const [actionError, setActionError] = useState<string | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -71,9 +75,17 @@ export function ContactTimelineModule({
   const remove = (entryId: string) => {
     const rawId = entryId.replace(/^int-/, '');
     setBusyId(entryId);
+    setActionError(null);
     startTransition(async () => {
-      await deleteInteractionAction({ id: rawId, contactId: contact.id });
-      setBusyId(null);
+      // The action returns void and THROWS on failure; without a catch the
+      // throw skipped `setBusyId(null)` and the row span forever, silently.
+      try {
+        await deleteInteractionAction({ id: rawId, contactId: contact.id });
+      } catch (err) {
+        setActionError(err instanceof Error && err.message ? err.message : tr('globalError.somethingWentWrong'));
+      } finally {
+        setBusyId(null);
+      }
     });
   };
 
@@ -119,10 +131,19 @@ export function ContactTimelineModule({
         <ReconnectDrafter contactId={contact.id} name={contact.name} />
       </section>
 
+      {actionError && (
+        <p role="alert" className="mt-3 rounded-xl border border-danger/30 bg-danger/[0.06] px-3 py-2 text-xs text-danger">
+          {actionError}
+        </p>
+      )}
+
       {/* Composer */}
       {composerOpen && (
         <form
-          action={(fd) => startTransition(async () => { await logInteractionAction(fd); setComposerOpen(false); })}
+          action={(fd) => startTransition(async () => {
+            try { await logInteractionAction(fd); setComposerOpen(false); }
+            catch (err) { setActionError(err instanceof Error && err.message ? err.message : tr('globalError.somethingWentWrong')); }
+          })}
           className="mt-4 rounded-2xl border border-brand/30 bg-brand/[0.05] p-4"
         >
           <input type="hidden" name="contact_id" value={contact.id} />

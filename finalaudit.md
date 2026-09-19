@@ -4484,14 +4484,62 @@ reader gets the answer from the database instead of the policy names.
   manager gate exists to be misreported; its delete confirms first and reports
   both branches.
 
+## C1-K-04 · MEDIUM · A server action that threw left a button spinning and said nothing
+
+Six client call sites await a `Promise<void>` server action bare inside
+`startTransition`. Those actions signal failure by THROWING a translated
+Error — `requireSocialPermission` raises `SocialAccessError`, the paperwork and
+contact actions throw their own `tr(...)` messages — so:
+
+```ts
+startTransition(async () => {
+  await setPaperworkStatusAction({ itemId, status });
+  setBusyKey(null);          // ← never runs when the await throws
+});
+```
+
+The button span forever and the reason, already translated, went nowhere. In
+`account-row` the thrown reason is precisely *"you do not have permission to
+connect accounts"*, which is the one thing the person needed to be told.
+
+Fixed at all six (`paperwork-module` ×3, `contact-timeline-module` ×2,
+`account-row`): catch, show the thrown message, clear the busy state in a
+`finally`.
+
+`contact-timeline-module` reports **inline** rather than through a toast — the
+component is rendered on its own in tests and otherwise has no `<ToastProvider>`
+dependency, and adding one would make it crash anywhere it renders outside the
+provider. The reason a delete failed also belongs beside the timeline it failed
+on.
+
+### A harness that had to move with it
+
+`tests/contact-timeline-localization.test.ts` (another session's) mocks React
+state **by slot index**, with a comment recording the coupling: *"Slots are the
+component's two states followed by the real drafter's five."* The new
+`actionError` state shifted every index by one and failed 7 of its 43 cases.
+The index was realigned 4 → 5 and the comment updated to say so. Verified not
+vacuous: blanking the `contactTimeline.writing` label still fails those same 7.
+
 ## Verification
 
-`tsc` clean · `next lint` 0 errors · **13,984 tests / 1,227 files** ·
+`tsc` clean · `next lint` 0 errors · **14,000 tests / 1,229 files** ·
 **40/40 probes** (330 migrations replayed, 0 failed).
 
-Both fixes calibrated by reverting them: removing the row checks fails 2 of the
-8 assertions in `a-refused-health-write-does-not-say-saved`, removing one
-rejection handler fails 2 of 5 in
-`a-voice-log-failure-does-not-lose-the-capture`. Controls hold in both
+Every fix calibrated by reverting it: removing the row checks fails 2 of the 8
+assertions in `a-refused-health-write-does-not-say-saved` and the per-table
+assertion in `manager-gated-writes-report-refusals`; removing one rejection
+handler fails 2 of 5 in `a-voice-log-failure-does-not-lose-the-capture`;
+removing one catch fails 2 of 16 in
+`a-thrown-action-does-not-leave-a-button-spinning`. Controls hold in both
 directions — the pre-existing error branches still fire, and Undo still appears
 on success.
+
+### Swept clean in this pass, and worth recording as such
+
+- Every `useRealtimeQuery` call in every component binds its `error`, and none
+  binds one it never uses. The "empty list shown as nothing-here" class does not
+  exist in this codebase.
+- `trust-activity-tab` already guards it explicitly ("A failed read renders the
+  retryable error state, never an empty ledger"); `trust-sharing-section` and
+  `paperwork-module`'s AI draft path check `res.ok`.
