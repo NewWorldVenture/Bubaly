@@ -64,7 +64,16 @@ export async function POST(req: NextRequest) {
     }).catch((error) => { console.error('[contact-center] voicemail planner routing threw', error); });
   }
 
-  if (shouldNotifyFamily(result.intent) && channel?.forward_to_phone) {
+  // `filed.inserted` guards this too, not just the planner above. Twilio retries
+  // a callback it did not get a 2xx for within its timeout, and the concierge's
+  // model call is allowed 60s (OPENAI_TIMEOUT_MS) on a route with no
+  // maxDuration — so the retry window is wide open, and by the time the retry
+  // lands the first attempt may already have sent this. A duplicate urgent
+  // alert is not cosmetic noise: it reads to the family as a SECOND emergency.
+  // app/api/contact-center/email/route.ts already guards its escalation this
+  // way; these two were left behind when M20 added the planner guard beside
+  // them. Audit C1-S7-04.
+  if (filed.inserted && shouldNotifyFamily(result.intent) && channel?.forward_to_phone) {
     try { await sendSms(channel.forward_to_phone, `🚨 Urgent voicemail at your Bubaly line: ${result.summary}`); } catch (error) { console.error('[contact-center] urgent voicemail SMS failed', error); }
     try {
       const { error: notifyError } = await admin.from('notifications').insert({

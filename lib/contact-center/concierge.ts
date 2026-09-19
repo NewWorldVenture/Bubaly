@@ -1,5 +1,6 @@
 import 'server-only';
 import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
+import { fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
 import { resolveInboundEntityContext } from '@/lib/graph/resolve-server';
 import type { ServiceScope } from '@/lib/services/types';
 import {
@@ -27,7 +28,9 @@ For each inbound message, respond with STRICT JSON only (no prose, no code fence
 {"intent": one of ["urgent","appointment","delivery","sales","spam","personal","other"],
  "summary": a one-sentence summary for the family's inbox (<= 140 chars),
  "reply": a short, warm, professional reply to send back to the sender (<= 320 chars)}.
-Escalate genuine emergencies as "urgent". Never invent facts or make commitments on the family's behalf.`;
+Escalate genuine emergencies as "urgent". Never invent facts or make commitments on the family's behalf.
+
+${UNTRUSTED_CONTENT_RULE}`;
 
 function coerceIntent(v: unknown): InboundIntent {
   return typeof v === 'string' && (INTENTS as string[]).includes(v) ? (v as InboundIntent) : 'other';
@@ -70,7 +73,17 @@ export async function runConcierge(input: {
       system: SYSTEM,
       messages: [{
         role: 'user',
-        content: `Channel: ${input.channel}\nFrom: ${input.from ?? 'unknown'}\nReplying on behalf of: ${familyLabel}\nMessage:\n${input.text.slice(0, 2000)}`,
+        // The message body and the sender's number come from a stranger — this
+        // line answers texts, emails and voicemail transcripts from anyone who
+        // knows the family's number. `lib/guardian/scam-ai.ts` handles the same
+        // class of input and says so in its own header ("the transcript is
+        // ATTACKER-CONTROLLED (an inbound caller / SMS)"), fencing it with a
+        // random nonce and telling the model the fence contains data. This did
+        // not, and its output is not cosmetic: `summary` is delivered to the
+        // family's real phone as "🚨 Urgent at your Bubaly line: …". Audit C1-S7-03.
+        content: `Channel: ${input.channel}\nReplying on behalf of: ${familyLabel}\n`
+          + `From: ${fenceUntrustedBlock('inbound_from', input.from ?? 'unknown', 64)}\n`
+          + `Message:\n${fenceUntrustedBlock('inbound_message', input.text, 2000)}`,
       }],
       tools: [],
       maxTokens: 400,

@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils/cn';
 import { saveCapture, undoCapture, tableForKind } from '@/lib/capture/save';
 import { useJourney } from '@/lib/analytics/use-journey';
 import { classifyVoiceCommand, describeRoute } from '@/lib/voice/command-router';
+import { recordVoiceCommand } from '@/lib/voice/history';
 import type { CaptureKind } from '@/lib/capture/parse';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -97,9 +98,10 @@ export function VoiceModule() {
       const res = await saveCapture(sb, {
         kind: route.kind, text: route.text, familyId, userId, memberId: selfMember?.id ?? null,
       });
-      // Log the command to the family's voice history (best-effort — a logging
-      // failure must not lose the thing we just created).
-      await sb.from('voice_commands').insert({
+      // Best-effort, and now audible: a dropped history row is logged rather
+       // than discarded, so a history that stopped recording is distinguishable
+       // from a family that stopped speaking.
+      await recordVoiceCommand(sb, {
         family_id: familyId, member_id: selfMember?.id ?? null, transcript: route.text,
         resolved_kind: route.kind, action_table: tableForKind(route.kind),
         action_count: res.count, status: 'routed', created_by: userId,
@@ -115,12 +117,18 @@ export function VoiceModule() {
       speech.reset();
     } catch (err) {
       journey.abandon();
-      // Record the failed attempt so the history is honest.
-      await sb.from('voice_commands').insert({
+      // TELL THE USER FIRST. This used to run after the history write, and
+      // supabase-js rejects when the fetch fails — so with the network down,
+      // which is the usual reason a command fails at all, the rejection escaped
+      // this catch and the user was told nothing whatsoever. The report must
+      // not sit downstream of a call that fails for the same reason.
+      toastError(describeDbError(err, tr('voiceModule.couldNotRunThatCommand')));
+      // Record the failed attempt so the history is honest. recordVoiceCommand
+      // cannot reject, so nothing below it can be lost either.
+      await recordVoiceCommand(sb, {
         family_id: familyId, member_id: selfMember?.id ?? null, transcript: raw,
         resolved_kind: route.kind, status: 'failed', created_by: userId,
-      }).select('id');
-      toastError(describeDbError(err, tr('voiceModule.couldNotRunThatCommand')));
+      });
     } finally {
       setRunning(false);
     }

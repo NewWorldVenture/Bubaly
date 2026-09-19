@@ -11,7 +11,7 @@ describe('Super Admin notification delivery boundary', () => {
   it('keeps mark-read mutations privileged and sanitized', () => {
     const source = readFileSync('app/(app)/admin/notifications-actions.ts', 'utf8');
     expect(source).toContain('if (!(await isSuperAdmin()))');
-    expect(source).toContain('describeActionError');
+    expect(source).toContain('describeActionError(');
     expect(source).toContain("if (error) return { ok: false, error: describeActionError(error, t('notificationsActions.couldNotUpdateNotifications')) }");
   });
 

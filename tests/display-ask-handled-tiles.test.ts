@@ -102,7 +102,7 @@ describe('the ask tile files a request — it does not act', () => {
     // AskBubaly is the only submit path, and it posts to /api/ai/requests via
     // submitAIRequest. The display adds no second route and no direct write.
     const ask = readFileSync('components/concierge/ask-bubaly.tsx', 'utf8');
-    expect(ask).toContain('submitAIRequest');
+    expect(ask).toContain('submitAIRequest(');
     expect(source).not.toMatch(/fetch\(|supabase|\.insert\(|\.upsert\(/);
   });
 

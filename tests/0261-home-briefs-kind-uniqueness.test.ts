@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
@@ -30,7 +31,7 @@ describe('0261 daily/evening uniqueness repair (static contracts)', () => {
     expect(sql).toMatch(/if brief_table is null then raise exception '[^']*'; end if;/);
     const lock = sql.indexOf('lock table only public.home_briefs in access exclusive mode;');
     expect(lock).toBeGreaterThan(0);
-    expect(lock).toBeLessThan(sql.indexOf('select attnum into family_column'));
+    expect(lock).toBeLessThan(at(sql, 'select attnum into family_column'));
     expect(sql).toMatch(/if not exists \( select 1 from pg_catalog\.pg_class c where c\.oid = brief_table and c\.relkind = 'r' \) then raise exception '[^']*'; end if;/);
   });
 
@@ -41,7 +42,7 @@ describe('0261 daily/evening uniqueness repair (static contracts)', () => {
   ])('requires the expected non-null, non-dropped %s', (variable, column, type) => {
     expect(sql).toContain(`select attnum into ${variable} from pg_catalog.pg_attribute where attrelid = brief_table and attname = '${column}' and atttypid = 'pg_catalog.${type}'::regtype and attnotnull and not attisdropped;`);
     expect(sql).toMatch(/if family_column is null or date_column is null or kind_column is null then raise exception '[^']*'; end if;/);
-    expect(sql.indexOf('if family_column is null')).toBeLessThan(sql.indexOf(replacementGuard));
+    expect(at(sql, 'if family_column is null')).toBeLessThan(at(sql, replacementGuard));
   });
 
   it('requires the named replacement to belong to home_briefs and cover exactly the three key columns', () => {
@@ -53,7 +54,7 @@ describe('0261 daily/evening uniqueness repair (static contracts)', () => {
     // Compare the key set: a different order or extra INCLUDE columns is valid.
     expect(replacementGuard).not.toContain('indnatts');
     expect(replacementGuard.split(') then raise exception ')[0]).not.toMatch(/\bor\b/);
-    expect(sql.indexOf(replacementGuard)).toBeLessThan(sql.indexOf('for legacy in'));
+    expect(at(sql, replacementGuard)).toBeLessThan(at(sql, 'for legacy in'));
   });
 
   it.each([
@@ -100,8 +101,8 @@ describe('0261 daily/evening uniqueness repair (static contracts)', () => {
     expect(unknownIndexGuard).toContain('and u.indnkeyatts = 2');
     expect(unknownIndexGuard).toContain('array[u.indkey[0], u.indkey[1]] @> array[family_column, date_column]');
     expect(unknownIndexGuard).toContain("and not exists ( select 1 from pg_catalog.pg_constraint c where c.conrelid = brief_table and c.contype = 'u' and c.conindid = u.indexrelid and cardinality(c.conkey) = 2 and c.conkey @> array[family_column, date_column] )");
-    expect(sql.indexOf(unknownIndexGuard)).toBeGreaterThan(sql.indexOf(replacementGuard));
-    expect(sql.indexOf(unknownIndexGuard)).toBeLessThan(sql.indexOf('for legacy in'));
+    expect(at(sql, unknownIndexGuard)).toBeGreaterThan(at(sql, replacementGuard));
+    expect(at(sql, unknownIndexGuard)).toBeLessThan(at(sql, 'for legacy in'));
   });
 
   it('contains only the scoped constraint DDL and no data, index, policy or privilege changes', () => {

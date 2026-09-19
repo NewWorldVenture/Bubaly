@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 import { describe, it, expect } from 'vitest';
 import {
   MAX_RECORD_RESULTS, MAX_RESULTS, MIN_RECORD_QUERY, navMatchScore, routeCommand, searchHref,
@@ -184,7 +185,7 @@ describe('routeCommand — household records', () => {
     expect(withArg).toEqual(withoutArg);
     expect(withArg.some((x) => x.kind === 'record')).toBe(false);
     const kinds = withArg.map((x) => x.kind);
-    expect(kinds.indexOf('navigate')).toBeLessThan(kinds.indexOf('capture'));
+    expect(at(kinds, 'navigate')).toBeLessThan(at(kinds, 'capture'));
     expect(kinds.at(-1)).toBe('assistant');
   });
 });

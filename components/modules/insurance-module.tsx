@@ -6,6 +6,7 @@ import {
   X, ChevronRight, Phone, Wallet, ShieldAlert,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
+import { isManager } from '@/lib/constants/roles';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -40,7 +41,11 @@ function fmtDate(d: string): string {
 
 export function InsuranceModule() {
   const tr = useTranslations();
-  const { familyId, userId, members } = useApp();
+  const { familyId, userId, members, role } = useApp();
+  // 0328 gives this table the manager-gated writes its twin `insurance_policies`
+  // has always had. The controls follow, the way medications-module.tsx does —
+  // a button that renders and then fails is worse than one never offered.
+  const canEdit = isManager(role);
   const { success, error: toastError } = useToast();
 
   const policies = useRealtimeQuery<Policy>({
@@ -74,7 +79,7 @@ export function InsuranceModule() {
       <PageHeader
         title={tr('insurance.insuranceHub')}
         description={tr('insuranceModule.everyHouseholdPolicyInOne')}
-        action={<div className="flex items-center gap-2"><AiInsight kind="insurance" iconOnly /><Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {tr('insurance.addPolicy')}</Button></div>}
+        action={<div className="flex items-center gap-2"><AiInsight kind="insurance" iconOnly />{canEdit && <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> {tr('insurance.addPolicy')}</Button>}</div>}
       />
 
       {policies.data.length > 0 && (
@@ -191,7 +196,7 @@ export function InsuranceModule() {
           policy={selected}
           coversName={memberName(selected.member_id)}
           onClose={() => setSelected(null)}
-          onRemove={() => removePolicy(selected.id)}
+          onRemove={canEdit ? () => removePolicy(selected.id) : null}
         />
       )}
     </div>
@@ -274,7 +279,7 @@ function PolicyForm({ familyId, userId, members, onClose, onSaved }: {
 }
 
 function PolicyDetail({ policy, coversName, onClose, onRemove }: {
-  policy: Policy; coversName: string | null; onClose: () => void; onRemove: () => void;
+  policy: Policy; coversName: string | null; onClose: () => void; onRemove: (() => void) | null;
 }) {
   const tr = useTranslations();
   const meta = policyTypeMeta(policy.policy_type);
@@ -338,7 +343,7 @@ function PolicyDetail({ policy, coversName, onClose, onRemove }: {
         {policy.notes && <p className="rounded-xl border border-border bg-surface/40 px-3 py-2 text-sm text-muted">{policy.notes}</p>}
 
         <div className="flex justify-between border-t border-border pt-3">
-          <Button variant="ghost" onClick={onRemove} className="text-rose-400 hover:text-rose-300"><Trash2 className="h-4 w-4" /> {tr('insurance.remove')}</Button>
+          {onRemove && <Button variant="ghost" onClick={onRemove} className="text-rose-400 hover:text-rose-300"><Trash2 className="h-4 w-4" /> {tr('insurance.remove')}</Button>}
           <Button variant="ghost" onClick={onClose}><X className="h-4 w-4" /> {tr('insurance.close')}</Button>
         </div>
       </div>

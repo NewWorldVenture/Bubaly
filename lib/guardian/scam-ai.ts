@@ -17,7 +17,7 @@
 import { randomBytes } from 'node:crypto';
 import { detectScamFromText, type ScamDetectionResult, type ScamType } from './scam';
 import { readBoundedResponseJson } from '@/lib/server/bounded-response-body';
-import { fetchExternal } from '@/lib/server/external-fetch';
+import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
 
 const VALID_SCAM_TYPES = new Set<ScamType>([
   'robocall', 'warranty_scam', 'irs_scam', 'grandparent_scam', 'tech_support_scam',
@@ -101,7 +101,7 @@ export async function detectScamWithAI(
       });
       responseText = msg.content[0]?.type === 'text' ? msg.content[0].text : '';
     } else {
-      const res = await fetchExternal('https://api.openai.com/v1/chat/completions', {
+      const res = await fetchWithDeadline('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
         body: JSON.stringify({

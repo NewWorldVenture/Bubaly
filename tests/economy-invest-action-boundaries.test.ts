@@ -8,7 +8,7 @@ const migration = readFileSync('supabase/migrations/0196_atomic_economy_and_inve
 describe('economy and simulated-investing transaction boundaries', () => {
   it('sanitizes action failures and checks all direct writes', () => {
     for (const source of [economyActions, investActions]) {
-      expect(source).toContain('describeActionError');
+      expect(source).toContain('describeActionError(');
       expect(source).not.toMatch(/return\s*\{[^\n]*error:\s*(?:error|txnErr|orderError)\??\.message/);
     }
 

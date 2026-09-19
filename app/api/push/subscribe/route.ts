@@ -5,6 +5,7 @@ import { createServer } from '@/lib/supabase/server';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { MAX_PUSH_REQUEST_BYTES, parsePushRegistration } from '@/lib/server/push-request';
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body';
+import { isDeliverablePushEndpoint } from '@/lib/server/push-endpoint';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,6 +22,12 @@ export async function POST(req: Request) {
   try { body = JSON.parse(rawBody); } catch { return NextResponse.json({ error: t('subscribe.invalidRequestBody') }, { status: 400 }); }
   const parsed = parsePushRegistration(body);
   if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+  // parsePushRegistration checks the hostname as a string. This asks DNS where
+  // it actually points, because the server POSTs to this endpoint later with no
+  // further say from the user. Audit C3-S5-03.
+  if (parsed.value.endpoint && !(await isDeliverablePushEndpoint(parsed.value.endpoint))) {
+    return NextResponse.json({ error: 'Invalid web push subscription' }, { status: 400 });
+  }
 
   const supabase = await createServer();
   const limited = await enforceRequestRateLimit(supabase, `push-subscribe:${user.id}`, { limit: 20 });

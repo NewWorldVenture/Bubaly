@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
@@ -21,7 +22,7 @@ describe('A-07 chore approval requires a family manager', () => {
     const fn = body.slice(0, body.indexOf('\nexport async function', 1));
     expect(fn).toContain('if (!isManager(ctx.active.role)) return;');
     // the gate must precede the reward-affecting call
-    expect(fn.indexOf('isManager')).toBeLessThan(fn.indexOf('finalizeApproval'));
+    expect(at(fn, 'isManager')).toBeLessThan(at(fn, 'finalizeApproval'));
   });
 
   it('gates rejectSubmissionAction on isManager', () => {

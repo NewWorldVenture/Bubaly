@@ -3,7 +3,7 @@ import { googleAdapter } from '@/lib/sync/providers/google-adapter';
 import { microsoftAdapter } from '@/lib/sync/providers/microsoft';
 
 const mocks = vi.hoisted(() => ({ fetch: vi.fn() }));
-vi.mock('@/lib/server/external-fetch', () => ({ fetchExternal: mocks.fetch }));
+vi.mock('@/lib/server/fetch-with-deadline', () => ({ fetchWithDeadline: mocks.fetch }));
 const json = (value: unknown) => new Response(JSON.stringify(value), { status: 200 });
 const from = '2026-03-08T05:00:00.000Z';
 const to = '2026-04-07T04:00:00.000Z';

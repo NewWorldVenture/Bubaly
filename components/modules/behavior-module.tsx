@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { Smile, Frown, Minus, Plus, Trash2, Sparkles, TrendingUp, Flame, Award } from 'lucide-react';
 import Link from 'next/link';
 import { useApp } from '@/components/app/app-context';
+import { isManager } from '@/lib/constants/roles';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -30,7 +31,11 @@ const KIND_ICON = { positive: Smile, concern: Frown, neutral: Minus } as const;
 
 export function BehaviorModule() {
   const tr = useTranslations();
-  const { familyId, userId, members } = useApp();
+  const { familyId, userId, members, role } = useApp();
+  // 0329 makes this a parenting tool in the database too: `member_id` is
+  // commented "-- the child" and `logged_by` is the adult who wrote it, so the
+  // person observed is not the author. The controls follow the boundary.
+  const canEdit = isManager(role);
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
@@ -121,7 +126,7 @@ export function BehaviorModule() {
             className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-border bg-surface px-3 text-sm font-semibold text-muted transition hover:text-fg hover:bg-elevated">
             <Award className="h-4 w-4" /> {tr('behavior.independence')}
           </Link>
-          <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> {tr('behavior.logBehavior')}</Button>
+          {canEdit && <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> {tr('behavior.logBehavior')}</Button>}
         </div>
       </div>
 
@@ -210,7 +215,7 @@ export function BehaviorModule() {
                 {l.note && <p className="text-xs text-muted">{l.note}</p>}
                 <p className="mt-0.5 text-[11px] text-muted">{fmtDate(l.occurred_at)}</p>
               </div>
-              <button onClick={() => remove(l.id)} className="text-muted hover:text-danger" aria-label={tr('behavior.delete')}><Trash2 className="h-4 w-4" /></button>
+              {canEdit && <button onClick={() => remove(l.id)} className="text-muted hover:text-danger" aria-label={tr('behavior.delete')}><Trash2 className="h-4 w-4" /></button>}
             </div>
           );
         })}

@@ -109,7 +109,14 @@ export function FilesHubModule({ view }: { view: FileView }) {
     if (typeof window !== 'undefined' && !window.confirm(t('filesHubModule.deleteConfirm', { name: d.title }))) return;
     setBusy(id);
     const sb = createClient();
-    if (d.storage_path) await removeFamilyDocument(sb, d.storage_path);
+    // The object goes first and its result is READ: deleting the row first
+    // makes a surviving file INVISIBLE — nothing references it, so nobody can
+    // see it, open it or try again — while the screen says it is gone. Audit
+    // C1-S6-01; the same shape adminDeleteDocumentAction already uses.
+    if (d.storage_path) {
+      const { error: storageError } = await removeFamilyDocument(sb, d.storage_path);
+      if (storageError) { setBusy(null); return toastError(storageError); }
+    }
     const { error: err } = await sb.from('documents').delete().eq('id', id);
     setBusy(null);
     if (err) return toastError(t('filesHubModule.deleteFailed'));

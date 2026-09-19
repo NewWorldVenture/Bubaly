@@ -135,7 +135,7 @@ describe('what the admin form accepts', () => {
 describe('the cron route is fail-closed and registered', () => {
   it('refuses a request without the cron secret', () => {
     const route = readFileSync('app/api/cron/marketing-social/route.ts', 'utf8');
-    expect(route).toContain('hasCronAuthorization');
+    expect(route).toContain('hasCronAuthorization(');
     expect(route).toContain('status: 401');
   });
 

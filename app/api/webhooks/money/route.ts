@@ -20,6 +20,33 @@ import { readBoundedRequestText } from '@/lib/server/bounded-request-body';
 export const runtime = 'nodejs';
 const MAX_WEBHOOK_BODY_BYTES = 256_000;
 
+/**
+ * The event types this endpoint actually handles.
+ *
+ * It matters that this is checked BEFORE the ledger claim. `stripe_webhook_events`
+ * is shared with the billing webhook and its uniqueness is `stripe_event_id`
+ * alone — there is no column recording which endpoint claimed an event. So
+ * marking an unhandled type `processed` here did not merely ignore it: it
+ * CLAIMED it, and the billing endpoint then saw `duplicate` and returned 200
+ * having done no work. Both endpoints answer 2xx, Stripe never retries, nothing
+ * logs an error, and a subscription event is dropped for good.
+ *
+ * That needs the documented fallback configuration to be reachable
+ * (`STRIPE_MONEY_WEBHOOK_SECRET` unset, so a billing-signed event verifies
+ * here) — a misconfiguration. The finding is not the misconfiguration, it is
+ * the system's response to it. Acknowledging what we cannot handle and
+ * recording it as done are two different decisions, and the `default` branch
+ * made them as one. Audit C1-S4-01.
+ */
+const HANDLED_EVENT_TYPES = new Set<string>([
+  'issuing_authorization.request',
+  'issuing_authorization.updated',
+  'issuing_transaction.created',
+  'issuing_card.created',
+  'issuing_card.updated',
+  'account.updated',
+]);
+
 export async function POST(req: NextRequest) {
   const t = await getTranslations();
   const boundedBody = await readBoundedRequestText(req, MAX_WEBHOOK_BODY_BYTES);
@@ -38,6 +65,13 @@ export async function POST(req: NextRequest) {
 
   const supabase = createServiceClient();
   const account = (event as { account?: string }).account;
+
+  // Acknowledged, deliberately NOT claimed: 200 stops Stripe retrying an
+  // endpoint that does not handle this type, while leaving the event untouched
+  // in a ledger this route shares with the billing webhook. Audit C1-S4-01.
+  if (!HANDLED_EVENT_TYPES.has(event.type)) {
+    return NextResponse.json({ received: true, handled: false });
+  }
 
   // Authorization requests are time-critical and must run even on retried events,
   // so they bypass the idempotency short-circuit (Stripe only sends .request once
@@ -86,7 +120,10 @@ export async function POST(req: NextRequest) {
         break;
       }
       default:
-        // Unhandled event types are acknowledged (and marked processed) so Stripe stops retrying.
+        // Unreachable: HANDLED_EVENT_TYPES is checked before the claim above,
+        // and every member of it has a case here. Kept so adding a type to that
+        // set without a handler is a no-op rather than a crash — but it no
+        // longer marks anything processed, which is what made it dangerous.
         break;
     }
   } catch (e) {

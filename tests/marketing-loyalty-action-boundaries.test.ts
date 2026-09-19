@@ -5,7 +5,7 @@ const actions = readFileSync('app/(app)/admin/marketing/loyalty/actions.ts', 'ut
 
 describe('marketing loyalty action boundaries', () => {
   it('checks settings, reward, and redemption writes before audit logging', () => {
-    expect(actions).toContain('marketingActionFailure');
+    expect(actions).toContain('marketingActionFailure(');
     expect(actions).toContain(".select('singleton').single()");
     expect(actions).toContain(".select('id').maybeSingle()");
     expect(actions).toContain(".eq('status', 'pending')");

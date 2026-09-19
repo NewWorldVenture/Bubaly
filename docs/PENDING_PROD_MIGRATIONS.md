@@ -1586,3 +1586,234 @@ than by a buyer. Three assertions failed before, none after, with four controls
 both directions.
 
 Until this is applied, production can put a sold item back on the market.
+
+## Security-relevant migrations awaiting production
+
+Added after this document's inventory stopped being complete, and listed here
+because their value is zero until they are applied:
+
+- **`0318_social_tokens_service_role_only.sql`** (renumbered from `0300`, which
+  `main` took for the entitlement fix above) — drops the four
+  `can_manage_family` policies `0297` added to `public.social_account_tokens`.
+  `0034` created that table with no policy and a comment saying never to add
+  one; `0297` added them on the stated premise that "every policy was
+  is_family_member", when there were none. Until `0318` is applied, any family
+  manager can `select` the OAuth token rows through PostgREST. The columns hold
+  ciphertext and no code writes the table yet, which bounds the exposure; it
+  does not remove it. Verified locally against a full replay (313 migrations
+  applied, 0 failed) and by `docs/audit/sensitive-role-boundary-check.sql`,
+  which was amended in the same change — it previously asserted the opened
+  state as a requirement. Audit C3-S5-01.
+
+- **`0319_no_truncate_for_the_public_roles.sql`** — revokes `truncate` on every
+  table in `public` from `anon` and `authenticated`, and sets the matching
+  default privilege so a future table does not arrive with it. `truncate` is not
+  filtered by row-level security: a policy that correctly limits which rows a
+  member may `delete` says nothing about a `truncate`, which empties the table
+  for every family at once. No application path uses it. Its assertion lives in
+  `docs/audit/no-truncate-for-public-roles-check.sql` rather than a Vitest file
+  because `tests/migrations-are-additive.test.ts` forbids the bare word in a
+  migration outside a privilege list, which is exactly the rule that makes this
+  one safe to read. Audit C1-S5-04.
+
+- **`0320_household_secrets_are_not_child_readable.sql`** — replaces the single
+  `"Members manage household_info"` policy (`for all using
+  is_family_member(family_id)`) with four that add
+  `and (not is_sensitive or can_manage_family(family_id))` on select, insert,
+  update-using, update-with-check and delete. The binder carries alarm codes and
+  wifi keys behind an `is_sensitive` flag, and `components/modules/binder-module.tsx`
+  masks such a value behind an eye toggle — but the row reached the browser in
+  full, so the mask hid a value the client already held. Measured before the fix:
+  a child read `hunter2-alarm-4417` in the clear. The `with check` half matters
+  independently: without it a child clears the flag, reads the value and sets it
+  back. `docs/audit/household-binder-boundary-check.sql` asserts both, and that a
+  parent still sees the whole binder. Audit C1-S6-06.
+
+- **`0321_marketplace_parties_are_not_editable.sql`** — makes `family_id`,
+  `listing_id` and the party columns of `marketplace_orders` /
+  `marketplace_offers` immutable after insert, via a `BEFORE UPDATE` trigger that
+  fires only when `row_security_active()`, and tightens the two `with check`
+  clauses `0154` left as a bare family test. `0154` tied every marketplace UPDATE
+  to the row owner in its `using` clause only, so the ownership rule governed the
+  row you started from and not the row you produced: measured, the **buyer** on a
+  completed order could set `seller_member` to themselves, and the count that
+  `marketplace/item/[id]/page.tsx:87` and `marketplace/creators/[id]/page.tsx:58`
+  display as a seller's completed-sales record moved with it. Tightening
+  `with check` to match `using` is **not** sufficient and was tried first — the
+  predicate is symmetric, and RLS cannot see the old row. Nothing legitimate
+  loses access: every write to either table in the tree either updates `status`
+  alone or runs as `SECURITY DEFINER` / the service role.
+  `docs/audit/marketplace-ownership-update-check.sql` asserts both refusals and
+  both permitted writes. Audit C1-S6-08.
+
+- **`0322_a_review_belongs_to_whoever_wrote_it.sql`** — scopes the
+  `marketplace_reviews` / `marketplace_saves` / `marketplace_follows` UPDATE
+  policies to the row's owner, and makes the columns around the authorship
+  column immutable. `0154` pinned `reviewer_member` (resp. `member_id`) on INSERT
+  so a trust score could not be forged, and left an UPDATE policy of
+  `is_family_member(family_id)` on both clauses — not scoped to the author at
+  all. Measured: the member a review was *about* rewrote its rating, and `rating`
+  is aggregated by `reviewee_member` on four screens. Nothing in the tree updates
+  any of the three tables, so no behaviour is lost; the policies are scoped
+  rather than dropped because "edit your own review" is what they evidently meant
+  to say. Also replaces `0321`'s table-branching trigger function with
+  `columns_are_immutable()`, which takes its column list from the trigger
+  definition and raises on a column that does not exist rather than silently
+  guarding nothing. `docs/audit/marketplace-review-authorship-check.sql` asserts
+  all of it, including that typo guard. Audit C1-S6-09.
+
+- **`0323_deleting_a_review_is_rewriting_it.sql`** — scopes the DELETE policies
+  on `marketplace_reviews` / `marketplace_offers` / `marketplace_saves` /
+  `marketplace_follows`, which `0154` left family-wide. `0322` stopped a member
+  rewriting another member's review; deleting it achieves the same thing, and on
+  offers it is worse in kind — any member could remove a competing offer on a
+  listing they have nothing to do with. Offers go to the two parties their UPDATE
+  policy already names; saves and follows to the owner, which is a no-op for the
+  two toggle actions that are the only deletes in the tree; reviews to the author
+  **or** a family manager who is not the reviewee, so a parent can still moderate
+  an abusive review without any adult being able to erase one about themselves.
+  `docs/audit/marketplace-delete-authorship-check.sql` asserts both the refusals
+  and the four things that must still work. Audit C1-S6-10.
+
+- **`0324_a_social_restriction_is_not_self_service.sql`** — gives
+  `social_access_permissions_delete` the predicate its INSERT and UPDATE policies
+  already carry. `social_role_for()` falls back to a default derived from the
+  family role when no explicit row exists, so a row restricting someone *below*
+  that default could be deleted by the person it restricted, who then fell back
+  **up**: measured, an `adult` set to `read_only` deleted their own restriction
+  and became `marketing_manager`, gaining `publish_posts`, `manage_settings` and
+  `connect_accounts` on the family's connected social accounts. Nothing in the
+  tree deletes from this table — `grantAccessAction` upserts behind
+  `requireSocialPermission`, and revocation is a `status` change the UPDATE
+  policy guards — so no behaviour is lost.
+  `docs/audit/social-access-self-service-check.sql` asserts the refusal, the
+  fallback that would have followed it, and that a family admin can still revoke.
+  Audit C1-S6-11.
+
+- **`0325_where_a_child_went_is_not_theirs_to_rewrite.sql`** — replaces the two
+  `FOR ALL … is_family_member(family_id)` policies `00420` shipped on
+  `location_events` and `member_locations`. `0215` hardened the geofences
+  (`family_places`) against exactly this threat and said so in its header, but it
+  protected the INPUT to the geofence system and left the OUTPUT — the
+  arrival/departure timeline a parent reads — untouched; `location_events` is not
+  mentioned in `0215` at all. It also recorded `member_locations` as
+  "self-location", which `is_family_member` never made it. Measured as a
+  signed-in child against a replayed schema: the child DELETEd their own 02:00
+  "left home" event, moved a **sibling's** live pin, switched a **sibling's**
+  sharing off, re-pointed their own location row at another member, and filed an
+  event in a sibling's name. `00420`'s claim that "location sharing is strictly
+  opt-in (`member_locations.is_sharing`)" is only true after this migration. The
+  fix reuses `public.is_self_member()`, which `0272` added for the identical
+  shape on `event_rsvps`. No UPDATE or DELETE path is granted on
+  `location_events` — nothing in the tree uses one, and this document already
+  records what an unwired policy is worth (`call_logs`).
+  `docs/audit/location-trail-boundary-check.sql` asserts all six refusals plus
+  the four paths that must keep working: the member's own upsert,
+  `setLocationSharing(false)`, `deletePlace()`'s `ON DELETE SET NULL` against a
+  table with no UPDATE policy, and the family-delete cascade. Audit C1-S8-02.
+
+- **`0326_a_health_record_is_written_by_a_parent.sql`** — restrictive manager
+  guards on `immunizations` and `health_visits`, the two health tables `0309`
+  did not reach. `0309` gated the medication tables, named the class ("a class
+  fixed where somebody remembered and left open where nobody did") and listed
+  the neighbours it had checked — `medical_profiles`, `health_providers`,
+  `insurance_policies` — but not these two, which kept `0068`/`0069`'s
+  `FOR ALL … is_family_member`. They render on `/dashboard/medical` directly
+  beneath `MedicalRecordsModule`, so one page carried two boundaries; the
+  free-text `medical_profiles.immunizations` blob was manager-only while the
+  structured ledger `0069` wrote to replace it was not. Measured as a signed-in
+  child: rewrote a sibling's mental-health visit `outcome`, deleted that visit,
+  back-dated a sibling's MMR and cleared `next_due_date`, deleted the
+  vaccination record. Neither module carried a role check either, so this was
+  not even a hidden button — the fix ships the UI half
+  (`canEdit = isManager(role)`) with the migration.
+  Reading stays family-wide (M23 owns per-member read scoping) and
+  `medication_doses` stays open exactly as `0309` left it; the probe asserts
+  both as positive controls, plus `0309`'s own boundary and a manager's full
+  create/edit/delete. `docs/audit/health-record-boundary-check.sql`.
+  Audit C1-S8-03.
+
+- **`0327_a_paperwork_stamp_does_not_rewrite_its_siblings.sql`** — adds
+  `public.paperwork_stamp_action(uuid, int, text, text)`, a `SECURITY INVOKER`
+  function that stamps ONE element of `paperwork_items.actions` and refuses one
+  already stamped. `materializePaperworkActionAction` promised in its own doc
+  comment that "tapping twice never double-creates" and kept it with a
+  read-modify-write over the whole array, so two overlapping taps each erased
+  the other's stamp and the next tap created a second calendar event or
+  reminder. Not a rare interleaving: the module renders one button per action
+  and disables only the busy one, and its single `busyKey` re-enables the first
+  button when the second tap starts. `status` is recomputed from the row rather
+  than from the caller's copy, so a sibling stamp that lands in between counts
+  toward `done`. The function changes no authorization — the probe asserts a
+  child of the family may still stamp and a stranger may not.
+  `docs/audit/paperwork-stamp-concurrency-check.sql` reproduces the OLD
+  semantics beside the new function and fails if they stop reproducing the
+  defect. Audit C1-S8-05.
+
+- **`0328_a_private_journal_is_private.sql`** — self-scoped RLS on
+  `journal_entries`, and manager-gated writes on `family_insurance_policies`.
+  `0087` gave the journal `is_private boolean NOT NULL DEFAULT true` and a single
+  `FOR ALL … is_family_member` policy; `is_private` is referenced nowhere in
+  `app/`, `components/` or `lib/`, so the module's `.eq('member_id', memberId)`
+  was a query filter rather than a boundary. Measured as a signed-in child: read
+  a sibling's entry, rewrote it, deleted it, and wrote one in the sibling's
+  name. SELECT is now self **or** any family member when `is_private` is false,
+  so sharing an entry needs no further migration. **A parent is deliberately not
+  given a window into a child's journal** — no surface ever offered it, and the
+  probe asserts the refusal so changing it has to be deliberate.
+  `family_insurance_policies` (policy numbers, premiums, agent phones, document
+  paths) was `FOR ALL … is_family_member` while its twin `insurance_policies`
+  had manager-gated writes all along — the third instance of that twin-table
+  pattern after `0309` and `0326`. Reading stays family-wide on both, matching
+  `insurance_policies`. `insurance-module.tsx` had no role check of any kind, so
+  the UI half ships with this migration.
+  `docs/audit/journal-and-policy-boundary-check.sql` asserts six refusals, that
+  a member keeps full control of their OWN journal, that every member still
+  reads the policies, that a parent keeps the pen on them, and that a parent
+  still cannot read a child's journal. Audit C1-S8-07.
+
+- **`0329_a_record_about_you_is_not_yours_to_rewrite.sql`** — two tables whose
+  own column comments separate the subject from the author, and two DIFFERENT
+  fixes, because the reason they differ is in each table's header.
+  `behavior_logs` (`member_id … -- the child`, `logged_by`) is "per-child
+  behavior observations … Powers parenting insights" with `concern` notes and a
+  signed `points` column; measured as a child, it erased a concern logged about
+  them and inserted `points = 99` in their own favour. Manager-gated writes via
+  restrictive guards, `0254`'s mechanism and `0309`'s shape.
+  `care_log` is NOT the manager class and gating it that way would break the
+  feature — `0032` says the log exists "so the whole family can see who last
+  checked in", so family-wide reads and inserts are the intent. It gets the
+  `0322`/`0323` treatment instead: UPDATE and DELETE belong to the author or a
+  manager, and `member_id`/`logged_by` are immutable through the shared
+  `columns_are_immutable()` trigger, so not even a parent may rewrite who
+  recorded what (measured: one could).
+  READS stay family-wide on both — whether a child should see the concerns
+  logged about them is a product decision, and the probe asserts both logs stay
+  readable so changing it has to be deliberate. Both modules' controls ship with
+  the migration. `docs/audit/observation-log-boundary-check.sql`. Audit C1-S8-09.
+
+- **`0330_a_public_bucket_serves_what_you_put_in_it.sql`** — pins
+  `allowed_mime_types` on the public `family-media` bucket. Three of the four
+  public buckets have pinned theirs since creation (`00890`, `0194`, `0197`);
+  `0216` set `public = true` and a size limit and no type list, on the bucket
+  that takes the widest range of uploads (six browser paths, no server-side
+  path), so an `image/svg+xml` or `text/html` upload became a page served from
+  the project's own Supabase domain with no session. This is NOT `F-E03` again:
+  that one is deferred as `LB-009` because signed URLs need a data migration of
+  every stored URL, and an allowlist needs none — the expensive fix was covering
+  a cheap one.
+  **THIS CHANGES UPLOAD BEHAVIOUR IN PRODUCTION**, so the permitted list is
+  stated here in full and is read off the six modules' own `accept` attributes:
+  `image/jpeg|png|webp|gif|avif|heic|heif`, `video/mp4|quicktime|webm`,
+  `application/pdf`, `application/msword`, the two OOXML word/spreadsheet types,
+  `application/vnd.ms-excel`, `text/plain`. HEIC/HEIF are included although no
+  `accept` names them, because `image/*` is what the picker says and an iPhone
+  photo arrives as HEIC. Nothing the product offers is refused, and
+  `tests/a-public-bucket-allows-only-what-the-ui-offers.test.ts` fails if a file
+  picker ever gains a type the bucket would refuse.
+  It does NOT make the bucket private and does NOT touch stored objects.
+  Unlike `0216`'s `on conflict do nothing`, it UPDATEs — the production bucket
+  already exists, so an insert would no-op.
+  `docs/audit/public-bucket-mime-check.sql` asserts the general rule: every
+  public bucket pins a list, and none allows a type a browser executes.
+  Audit C1-S8-10.

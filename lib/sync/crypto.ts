@@ -15,6 +15,25 @@ import { createCipheriv, createDecipheriv, randomBytes, createHash } from 'node:
 const ALGO = 'aes-256-gcm';
 const IV_BYTES = 12; // GCM standard nonce length
 
+/**
+ * The SHA-256 fallback accepts ANY string, so `SYNC_TOKEN_KEY=changeme` used to
+ * produce a perfectly valid AES-256-GCM key with the entropy of the word
+ * "changeme" — encrypting fine, decrypting fine, warning nobody. Every defence
+ * around sync_tokens (and, since C3-S5-02, the Google Calendar token) assumes
+ * this ciphertext is not offline-crackable. A minimum length is a crude
+ * proxy for entropy, but it is the difference between a passphrase somebody
+ * chose and a placeholder somebody left. Audit C3-S5-06.
+ */
+const MIN_RAW_KEY_LENGTH = 32;
+
+function keyMaterial(raw: string): Buffer | null {
+  if (/^[0-9a-fA-F]{64}$/.test(raw)) return Buffer.from(raw, 'hex');
+  const b64 = Buffer.from(raw, 'base64');
+  if (b64.length === 32) return b64;
+  if (raw.length < MIN_RAW_KEY_LENGTH) return null;
+  return createHash('sha256').update(raw).digest();
+}
+
 function loadKey(): Buffer {
   const raw = process.env.SYNC_TOKEN_KEY;
   if (!raw) {
@@ -22,11 +41,13 @@ function loadKey(): Buffer {
       'SYNC_TOKEN_KEY is not set. Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"',
     );
   }
-  // Accept hex (64 chars) or base64; otherwise derive a stable 32-byte key via SHA-256.
-  if (/^[0-9a-fA-F]{64}$/.test(raw)) return Buffer.from(raw, 'hex');
-  const b64 = Buffer.from(raw, 'base64');
-  if (b64.length === 32) return b64;
-  return createHash('sha256').update(raw).digest();
+  const key = keyMaterial(raw);
+  if (!key) {
+    throw new Error(
+      `SYNC_TOKEN_KEY is too short to be a key (${raw.length} characters). Use 64 hex characters or 32 base64-decoded bytes: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`,
+    );
+  }
+  return key;
 }
 
 /**
@@ -64,7 +85,15 @@ export function decryptNullable(payload: string | null | undefined): string | nu
   return payload == null ? null : decryptSecret(payload);
 }
 
-/** True when a usable encryption key is configured (for capability/health checks). */
+/**
+ * True when a usable encryption key is configured (for capability/health
+ * checks). This used to test PRESENCE, so "we have a key" and "we have a key
+ * worth having" were the same question — and the OAuth callbacks that gate on
+ * it have a fail-closed path (`error=no_encryption_key`) that a placeholder
+ * value walked straight past. Now it answers the second question, and that
+ * existing path does the work. Audit C3-S5-06.
+ */
 export function hasEncryptionKey(): boolean {
-  return !!process.env.SYNC_TOKEN_KEY;
+  const raw = process.env.SYNC_TOKEN_KEY;
+  return !!raw && keyMaterial(raw) !== null;
 }

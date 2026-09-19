@@ -1,5 +1,43 @@
 # Claude-3 — Backend / API / Database / Auth / Security
 
+## STATUS (Session 4 — 2026-09-15, the server-action surface)
+
+CURRENT: Done. Round-4 dispatch: the 132 `'use server'` files, the one public
+  POST surface this audit had barely looked at (~14 mentions across all five
+  files, against 141 API routes audited thoroughly in Pass E).
+COMPLETED: 7 new findings (1 HIGH, 2 MEDIUM, 4 LOW) + 14 verified-clean items
+  + a 5-item BLOCKED list. Enumerated the surface properly for the first time:
+  **439 exported server actions** across 113 top-level action modules, with a
+  TRANSITIVE auth check (a fixpoint over 685 auth-bearing function names) so
+  actions guarded by a local `guard()`/`managerCtx()` helper are not miscounted.
+  **9 of 439 reach no auth path** — not the "8 files" a file-level grep reported
+  in the prior session's Verified-healthy item 12, and a different set; the naive
+  grep flagged 94, of which 85 authorize through a local helper. All 9 read in
+  full and accounted for.
+  Headline: **31 of 31 API routes that call the LLM carry `enforceAIRateLimit`;
+  0 of 3 server actions that call the LLM do.** Also found the marketplace
+  hand-off actions deriving a buyer/seller role by ternary with no check that
+  the caller is a party (the same feature's review action has exactly that
+  check), and a social-RBAC deadlock where the TS and SQL permission matrices
+  disagree on `manage_access` and the only role that holds it in TS is never
+  assigned to anyone.
+  Refuted nothing of another worker's; CORRECTED this file's own prior
+  server-action claim (the count and the method, not the conclusion — the three
+  public flows it named are confirmed clean, with one new note: `gift_links`
+  has an `expires_at` column the gift action never reads).
+NEXT: nothing queued. For Claude-1, in fix order: the three AI rate limits
+  (3 lines each, mechanical, and a guard test is trivially writable); then the
+  hand-off party check; then the social matrix decision (a product call).
+FILES-TOUCHED: audit/claude-3.md ONLY. No application source modified —
+  audit-only per the deviation recorded in audit/status.md.
+BLOCKERS: no local Supabase (no docker daemon, no CLI) -> **not one of the 439
+  actions was invoked**. Everything below is static + committed-SQL reading.
+  See "What I could NOT reach" at the end of Session 4 — five named limits,
+  including that Next's action-id replay premise itself was not demonstrated.
+LAST-UPDATE: 2026-09-15
+
+---
+
 ## STATUS (this run — 2026-09-14, continuation session)
 
 CURRENT: Done. A prior Claude-3 session (content preserved below, under
@@ -862,3 +900,1926 @@ recommendation instead of editing.
 ## Findings
 
 _(none yet)_
+
+---
+---
+
+# Session 3 (2026-09-14) — the pgvector replay and the marketing platform spine
+
+**Appended, not merged.** Everything above this delimiter is left exactly as the
+two earlier sessions wrote it. This section closes one named gap and, in doing
+so, **contradicts one of my own earlier "verified healthy" items** — that
+contradiction is recorded here rather than by editing the claim above.
+
+CURRENT: done — `0237` / `0239` / `0292` replayed, marketing platform spine
+  audited against the live catalogue, a sample of Pass E re-verified
+COMPLETED:
+  - pgvector is installed, so for the first time **all 310 migrations applied
+    with zero failures** (`docs/audit/verify-pg.sh up`). Every prior pass ran
+    against a schema missing the nine spine tables.
+  - Audited the nine tables `0237` creates for RLS / FORCE RLS / policies /
+    grants / SECURITY DEFINER / search_path, against `pg_policies`,
+    `information_schema.role_table_grants` and `pg_proc` — plus behavioural
+    probes as `anon` and as an ordinary `authenticated` user.
+  - Exercised the spine's trigger and job-queue machinery, which had never
+    executed anywhere before (enqueue, `0239`'s backfill suppression, stale-lock
+    recovery, dead-letter at `max_attempts`).
+  - Ran the repo's own gates against the complete schema: **18/18 boundary
+    probes pass** (including `privileged-rpc-grants-check.sql`, which could
+    never run before because `0292` never applied), and
+    `scripts/check-conflict-targets.mjs` passes at 181 targets / 491 tables.
+  - Re-verified six Pass E claims. Four confirmed, **one refuted**
+    (verified-healthy #3), **one no longer holds** (F-E04, fixed by `0297`).
+  - 4 findings: 2 MEDIUM, 2 LOW. 13 new verified-healthy items.
+NEXT: nothing queued.
+FILES-TOUCHED: `audit/claude-3.md` only. **No application source, no migration,
+  no other audit file was modified.** Scratch work under
+  `/tmp/claude-0/.../scratchpad/` and the throwaway database at
+  `/tmp/pgaudit_db` (port 54399), both outside the repo.
+BLOCKERS:
+  - **Production, still.** Every statement below is the committed migrations
+    replayed locally. `finalaudit.md` F-001/F5/F-C08 say there is no working
+    path to apply a migration to production, so production may carry none of
+    this schema. Not verifiable without operator credentials.
+LAST-UPDATE: 2026-09-14
+
+---
+
+## The replay, so the evidence below is reproducible
+
+```
+$ bash docs/audit/verify-pg.sh up
+== shims ==
+== migrations ==
+== migrations applied: 310, failed: 0 ==
+== bootstrap complete: anchor_family=00000000-0000-4000-8000-0000000000f1 ==
+== harness up: db=bubaly host=/tmp/pgaudit_db port=54399 ==
+
+$ psql -qAt -c "select extname, extversion, n.nspname from pg_extension e
+                join pg_namespace n on n.oid=e.extnamespace where extname='vector';"
+vector|0.6.0|extensions
+
+$ psql -qAt -c "select count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace
+                where n.nspname='public' and c.relkind='r';"
+491
+```
+
+**310 applied, 0 failed** — against Pass E's "308 applied, 3 failed". 491 public
+tables against 482. The nine tables that were missing are exactly the spine:
+`marketing_pages`, `marketing_page_versions`, `marketing_content_templates`,
+`marketing_brand_rules`, `marketing_generation_jobs`,
+`marketing_page_relationships`, `marketing_embeddings`,
+`marketing_provider_observations`, `marketing_provider_syncs`.
+
+I used the repository's own harness rather than a hand-rolled prelude. That is
+deliberate, and it is the reason finding C3-S3-02 below exists: Pass E built its
+own Supabase-shaped prelude, and a prelude that does not reproduce Supabase's
+default privileges produces a boundary result that is **safer than production** —
+the same defect `finalaudit.md` F-004 records against the old CI shim.
+
+---
+
+## Findings
+
+```
+[CLAUDE-3][MEDIUM][DATABASE] anon and authenticated hold TRUNCATE on all nine
+                             marketing-spine tables, and RLS does not constrain
+                             TRUNCATE
+File:     supabase/migrations/0237_marketing_platform_spine.sql:236-248 (the grant block)
+
+Problem:  0237 reasons about the grant layer explicitly — its own comment reads
+          "RLS is authorization, not table privilege. Keep the public surface
+          narrow" — and it does revoke from `authenticated` on one table:
+
+            grant select on public.marketing_page_versions to authenticated;
+            revoke insert, update, delete on public.marketing_page_versions
+              from authenticated;
+
+          It never revokes anything from `anon`, and it never revokes TRUNCATE
+          from anyone. Supabase's default privileges (`alter default privileges
+          in schema public grant all on tables to anon, authenticated,
+          service_role`) mean every table the migration creates carries
+          `arwdDxt` for `anon` from the moment it exists.
+
+          For INSERT / UPDATE / DELETE that does not matter: RLS refuses them,
+          and I verified that it does. **TRUNCATE is different — PostgreSQL does
+          not apply row-level security to TRUNCATE at all.** The grant is the
+          only thing in the way, and it is open.
+
+Evidence: 1. The grants, from the live catalogue (not the SQL text):
+
+   $ psql -c "select table_name, grantee, string_agg(privilege_type,', ' order by privilege_type)
+              from information_schema.role_table_grants
+              where table_schema='public' and grantee in ('anon','authenticated')
+                and table_name in (<the nine spine tables>)
+              group by 1,2 order by 1,2;"
+
+              table_name           |    grantee    |                          privs
+   -------------------------------+---------------+---------------------------------------------------------------
+    marketing_brand_rules         | anon          | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+    marketing_brand_rules         | authenticated | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+    marketing_content_templates   | anon          | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+    marketing_embeddings          | anon          | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+    marketing_generation_jobs     | anon          | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+    marketing_page_relationships  | anon          | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+    marketing_page_versions       | anon          | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+    marketing_page_versions       | authenticated | REFERENCES, SELECT, TRIGGER, TRUNCATE          <-- the revoke landed
+    marketing_pages               | anon          | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+    marketing_provider_observations | anon        | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+    marketing_provider_syncs      | anon          | DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE
+   (27 rows over the nine tables)
+
+   Note `marketing_page_versions`/`authenticated`: the author WAS thinking about
+   the grant layer on that one line, and still left `anon` untouched and TRUNCATE
+   in place on all nine.
+
+2. RLS holds for the DML — each statement in its own transaction, rolled back:
+
+   anon           INSERT marketing_pages             DENIED  -> ERROR: new row violates row-level security policy for table "marketing_pages"
+   anon           UPDATE marketing_pages (published) 0 rows changed (USING filtered everything)
+   anon           DELETE marketing_pages             0 rows deleted
+   anon           INSERT marketing_generation_jobs   DENIED  -> ERROR: new row violates row-level security policy
+   anon           INSERT marketing_brand_rules       DENIED  -> ERROR: new row violates row-level security policy
+   authenticated  (same five, same results — the anchor user is not a super admin)
+
+3. TRUNCATE is not filtered, and it succeeds:
+
+   begin;
+     select count(*) as pages_before from public.marketing_pages;   -- 2
+     set local role anon;
+     truncate table public.marketing_pages cascade;
+     NOTICE:  truncate cascades to table "marketing_page_versions"
+     NOTICE:  truncate cascades to table "marketing_page_relationships"
+     TRUNCATE TABLE
+     reset role;
+     select count(*) as pages_after_anon_truncate from public.marketing_pages;   -- 0
+   rollback;
+
+   The same succeeds as `anon` on all nine, and on `marketing_audit_logs`
+   (the spine's own audit trail, RLS on with zero policies).
+
+Reachability (stated plainly, because it bounds the severity):
+   This is NOT reachable through PostgREST today. PostgREST maps HTTP verbs to
+   SELECT/INSERT/UPDATE/DELETE and `rpc/`; it has no TRUNCATE verb. I checked the
+   two RPC paths that could launder one:
+
+     -- functions whose body truncates, and who may execute them
+     select p.proname, p.prosecdef, has_function_privilege('anon',p.oid,'EXECUTE')
+     from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+     where n.nspname='public' and p.prosrc ~* 'truncate';
+     (0 rows)
+
+     -- SECURITY INVOKER dynamic-SQL functions anon may call
+     select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+     where n.nspname='public' and p.prosrc ~* 'execute format'
+       and has_function_privilege('anon',p.oid,'EXECUTE')
+       and not p.prosecdef and p.prorettype <> 'trigger'::regtype;
+     0
+
+   So this is a missing layer, not a live exploit — exactly the disposition
+   `0290` took for the money tables, and for the same reason.
+
+Impact:  The entire public marketing content spine, its version history, its
+         AI job queue, its embeddings and its admin audit trail can be emptied
+         by a single statement that RLS is architecturally unable to see. Any
+         future SQL-execution primitive — an injection, a leaked `authenticator`
+         connection, a psql session opened with the anon role — destroys the
+         marketing site's content and the record of who changed it, with no row
+         to restore from because `marketing_page_versions` cascades with it.
+         `marketing_audit_logs` is the table that would otherwise say what
+         happened, and it goes too.
+
+Fix:     One migration in `0290`'s exact shape, at the end of the chain (0292's
+         lesson: a lockdown must be re-asserted where the chain ends, because a
+         later `create table if not exists` or a re-created object can hand the
+         default privileges back). For each of the nine tables plus
+         `marketing_audit_logs`:
+
+           revoke insert, update, delete, truncate on public.<t> from anon;
+           revoke truncate                          on public.<t> from authenticated;
+
+         Keep `select` on `marketing_pages` and `marketing_page_relationships`
+         for anon — those two have deliberate public-read policies and the
+         public site reads them with the anon key (lib/marketing/seo.ts,
+         lib/marketing/aeo.ts, lib/marketing/public-pages.tsx). Nothing
+         legitimate loses a write: every admin path goes through
+         `createServiceClient()` behind `requireMarketingAdmin()`, and
+         `service_role` is `bypassrls` and keeps its grants.
+
+         Close it with a verification DO block like 0290's and 0292's, asserting
+         `has_table_privilege('anon','public.<t>','TRUNCATE')` is false for all
+         ten, so the next migration that re-creates one of these is caught.
+
+         CI will not object: `tests/migrations-are-additive.test.ts:28-38`
+         already masks the TRUNCATE *privilege* inside a `revoke … on … from`
+         list precisely so 0290's shape passes the bare `\btruncate\b` scan.
+
+Status:  OPEN (VERIFIED locally — reproduced end to end against the replay)
+```
+
+```
+[CLAUDE-3][MEDIUM][DATABASE] CONTRADICTS my own Pass E verified-healthy #3:
+                             anon holds write grants on 483 of 491 tables, not zero
+File:     audit/claude-3.md:463-467 (the claim), and the platform generally
+
+Problem:  Pass E recorded, in the list explicitly written so later workers would
+          NOT re-check it:
+
+            "3. anon holds no write privilege on any table at all (not just the
+             five money tables of F-003): the role_table_grants query for
+             INSERT/UPDATE/DELETE/TRUNCATE to anon returns zero rows across all
+             482."
+
+          That is false. Re-running the same query against the complete replay
+          returns 1,931 rows. The claim was an artefact of the prelude Pass E
+          built by hand (`/var/tmp/pgaudit`, port 5599), which did not reproduce
+          Supabase's default privileges — the identical defect `finalaudit.md`
+          F-004 records against the old CI shim, made a second time in the
+          harness written to check the first one.
+
+          `finalaudit.md` F-003 names the mechanism correctly ("Supabase's
+          default privileges grant arwdDxt on every new public table to anon,
+          and no migration revoked it") but `0290` closes it for **five money
+          tables**. Nobody measured what was left. This is that measurement.
+
+Evidence: Pass E's own query, verbatim, against the 310-migration replay:
+
+   $ psql -qAt -c "select count(*) from information_schema.role_table_grants
+                   where table_schema='public' and grantee='anon'
+                     and privilege_type in ('INSERT','UPDATE','DELETE','TRUNCATE');"
+   1931
+
+   $ psql -qAt -c "select privilege_type, count(distinct table_name)
+                   from information_schema.role_table_grants
+                   where table_schema='public' and grantee='anon'
+                     and privilege_type in ('INSERT','UPDATE','DELETE','TRUNCATE')
+                   group by 1 order by 1;"
+   DELETE|483
+   INSERT|482
+   TRUNCATE|483
+   UPDATE|483
+
+   The eight tables where a migration DID revoke — the complete list:
+
+   $ psql -c "select c.relname from pg_class c join pg_namespace n on n.oid=c.relnamespace
+              where n.nspname='public' and c.relkind='r'
+                and not exists (select 1 from information_schema.role_table_grants g
+                  where g.table_schema='public' and g.table_name=c.relname
+                    and g.grantee='anon' and g.privilege_type in ('INSERT','UPDATE','DELETE'))
+              order by 1;"
+     child_wallets
+     family_wallets
+     finance_transaction_operation_receipts
+     move_date_recalculations
+     vacation_confirmation_imports
+     wallet_buckets
+     wallet_rules
+     wallet_transactions
+   (8 rows)
+
+Impact:  Two distinct harms.
+         (a) **The record is wrong in the direction that stops work.** A
+             verified-healthy entry is a licence for the next worker not to
+             look. This one licenses not looking at 483 tables.
+         (b) The substantive exposure is the same one as the finding above,
+             platform-wide: RLS covers the DML, TRUNCATE is outside RLS on 483
+             tables, and the only reason nothing burns is that no TRUNCATE path
+             is reachable through PostgREST. That is one stray permissive policy
+             `TO public` (the shape `0275` had to sweep off the money tables)
+             away from mattering for the DML too.
+
+Fix:     1. Claude-1: strike or annotate verified-healthy #3 when merging — it
+            must not read as checked-and-clean. I have not edited the claim
+            above, per the append-only rule.
+         2. Treat the residue as a sweep, not a one-off: a migration that
+            revokes `insert, update, delete, truncate` from `anon` on every
+            `public` table that has no permissive policy naming `anon`, with a
+            verification block that fails if any remain. The nine spine tables
+            and `marketing_audit_logs` are the urgent subset (finding above);
+            the rest is the same shape at lower pressure.
+         3. The durable fix is the one `0292` models: assert the end-state, not
+            the state at the migration's own moment. A
+            `docs/audit/anon-write-grants-check.sql` probe would make this a CI
+            gate instead of a thing someone has to remember.
+
+Status:  OPEN (VERIFIED — Pass E's own query, re-run, returns 1931)
+```
+
+```
+[CLAUDE-3][LOW][DATABASE] The marketing platform spine has no boundary probe,
+                          so CI cannot see it regress
+File:     docs/audit/*-check.sql (the eighteen that exist), .github/workflows/ci.yml:203
+
+Problem:  The Database CI job globs `docs/audit/*-check.sql` and every boundary
+          this repository cares about has one — the money tables, the document
+          vault, the password vault, cross-family isolation, the privileged
+          RPCs, the AI surface, the household trail. The nine spine tables have
+          none. `0237` leaves its verification as a SQL comment at the bottom of
+          the file ("Production verification (run after `supabase db push`)"),
+          which nothing runs.
+
+          That is how this gap stayed open for 55 migrations: the spine's
+          authorization has never been asserted by anything that can go red.
+
+Evidence: $ bash docs/audit/run-probes.sh
+          PASS  ai-surface-role-privacy-check.sql
+          PASS  approval-dedupe-check.sql
+          PASS  dead-letter-reconcile-check.sql
+          PASS  document-vault-boundary-check.sql
+          PASS  family-credentials-boundary-check.sql
+          PASS  family-delete-cascade-check.sql
+          PASS  family-facts-provenance-check.sql
+          PASS  family-scoped-index-check.sql
+          PASS  family-self-read-check.sql
+          PASS  household-trail-check.sql
+          PASS  money-write-boundary-check.sql
+          PASS  privileged-rpc-grants-check.sql
+          PASS  reward-redemption-decision-check.sql
+          PASS  rls-isolation-check.sql
+          PASS  sensitive-role-boundary-check.sql
+          PASS  wallet-concurrency-check.sql
+          PASS  wallet-overspend-check.sql
+          PASS  wallet-write-rls-check.sql
+          == probes: 18/18 passed ==
+
+          $ ls docs/audit/ | grep -i marketing
+          (no output)
+
+          Note `privileged-rpc-grants-check.sql` in that list: it asserts
+          `claim_marketing_generation_jobs` is service-role only, and **this is
+          the first time it has ever run**, because it needs 0292, which needs
+          0237, which needed pgvector. It passes. But it is the only line of
+          spine coverage in the whole probe suite, and it covers one function.
+
+Impact:  Every assertion in the two findings above is a thing a human ran once.
+         The next migration that re-creates one of these tables, or a policy
+         edited to `TO public`, or a grant handed back by Supabase's default
+         privileges, lands green.
+
+Fix:     Add `docs/audit/marketing-spine-boundary-check.sql` asserting, with
+         RAISE EXCEPTION so ON_ERROR_STOP makes it red:
+           - all nine tables have `relrowsecurity`;
+           - as `anon`: a draft page is invisible, a published one is visible,
+             INSERT/UPDATE/DELETE are refused on all nine;
+           - as a non-super-admin `authenticated` user: zero rows on all nine
+             except the published page;
+           - as a super admin: full read/write (the positive control, without
+             which the probe passes for the wrong reason);
+           - `has_table_privilege('anon', <t>, 'TRUNCATE')` is false for all
+             nine (this is what would have caught the finding above);
+           - `has_function_privilege('anon'|'authenticated',
+             'public.claim_marketing_generation_jobs(integer)','EXECUTE')` is
+             false.
+         Per this repo's own standard (finalaudit F-004, and Claude-1's note on
+         the board about guards that cannot fail): prove it non-vacuous by
+         breaking each assertion once and confirming it goes red.
+
+Status:  OPEN
+```
+
+```
+[CLAUDE-3][LOW][DATABASE] The regeneration-loop guard tests the column's value,
+                          not whether the statement set it
+File:     supabase/migrations/0237_marketing_platform_spine.sql:277-283, 316-320
+          supabase/migrations/0239_marketing_backfill_queue_cleanup.sql:15-38
+
+Problem:  0237 says what the guard is for: "Worker writes leave updated_by null
+          so they do not recursively enqueue themselves." Both triggers
+          implement it as `new.updated_by is not null` — the value ON THE ROW
+          after the update, not "did this statement assign updated_by".
+
+          `updated_by` is a persisted column. Once an admin has edited a page it
+          stays non-null forever. So any writer that updates a tracked column
+          and simply OMITS `updated_by` bumps the version and enqueues another
+          `regenerate_page` job — whose worker rewrites the page, which is
+          another update.
+
+          **No shipped caller does this today**, which is why this is LOW and
+          not a live defect. It holds only because every writer sets the column
+          explicitly, and the one that matters does so on purpose:
+          `lib/marketing/platform.ts:268` writes `updated_by: null` in the
+          worker's write-back. The safety of the whole queue rests on that one
+          line, and nothing states the requirement or tests it.
+
+Evidence: Faithful worker path — clean:
+
+   -- admin insert + admin edit
+   version_after_admin_edit = 2 ; jobs_after_admin_edit = 2
+   -- worker write-back, exactly as platform.ts:261-269 does it
+   update public.marketing_pages set body='ai body', updated_by=null where id=…;
+   version_after_worker_writeback   = 2      <-- no bump
+   jobs_after_worker_writeback      = 2      <-- no new job
+
+   A writer that merely omits the column, on the same already-edited row:
+
+   update public.marketing_pages set body='b2' where id=…;   -- no updated_by
+   update public.marketing_pages set body='b3' where id=…;   -- no updated_by
+   version_after_two_omitting_writes  = 4    <-- +2
+   jobs_after_two_omitting_writes     = 4    <-- +2 regenerate_page jobs
+
+   Each of those jobs is an AI generation call (`generateWithAI`,
+   lib/marketing/platform.ts:256). finalaudit F19 records that AI endpoints run
+   unmetered.
+
+Impact:  Latent. A future writer to `marketing_pages` that does not know about
+         the `updated_by` convention starts a self-feeding AI rewrite loop on
+         the public marketing site, billed per iteration. The trigger comment
+         asserts a protection the trigger does not actually provide.
+
+Fix:     Make the guard say what it means. Either compare against the old row —
+         `new.updated_by is not null and new.updated_by is distinct from
+         old.updated_by` — or, better, key the enqueue on an explicit marker the
+         worker controls rather than on an audit column that happens to be null.
+         Whichever is chosen, a comment on `platform.ts:268` saying that
+         `updated_by: null` is load-bearing, and a test that fails if it is
+         dropped, is the part that keeps it true.
+
+Status:  OPEN
+```
+
+---
+
+## Verified healthy — the marketing spine (13 items, do not re-spend effort here)
+
+Each is a query or a behavioural probe against the complete 310-migration
+replay, not a reading of the SQL. Commands are given so any can be re-opened.
+
+1. **All nine spine tables have RLS enabled**, and so do all 491 public tables —
+   Pass E's verified-healthy #1 still holds at the larger count.
+   `select relname from pg_class c join pg_namespace n on n.oid=c.relnamespace
+    where n.nspname='public' and relkind='r' and not relrowsecurity;` → **empty**.
+
+2. **The read boundary holds.** As `anon` and as an ordinary `authenticated`
+   user (the anchor account, `is_super_admin() => false`), row counts across the
+   nine tables are: `marketing_pages` 1 (the published probe row only — the
+   draft is invisible), and **0 on the other eight**. Verified for both roles
+   with `set local role … ; set local request.jwt.claims = …`.
+
+3. **Every write is refused.** INSERT on `marketing_pages`,
+   `marketing_generation_jobs` and `marketing_brand_rules` raises
+   *"new row violates row-level security policy"* for `anon` and for a
+   non-super-admin `authenticated` user; UPDATE and DELETE affect 0 rows.
+   (TRUNCATE is the exception — that is finding C3-S3-01 above.)
+
+4. **The policies are what the migration claims.** All eleven read from
+   `pg_policies`: nine `for all to authenticated using/with check
+   (is_super_admin())`, one SELECT-only admin read on
+   `marketing_page_versions`, and two deliberate public reads —
+   `marketing_pages_public_read` (`status='published' and deleted_at is null`)
+   and `marketing_page_relationships_public_read`, which requires BOTH endpoint
+   pages to be published and undeleted.
+
+5. **No `using (true)` and no policy `TO public` anywhere on the spine.**
+   `select tablename||'.'||policyname from pg_policies where schemaname='public'
+    and tablename like 'marketing_%' and roles::text like '%public%';` → empty.
+   Pass E's verified-healthy #2 is unchanged: the same four literally-true
+   policies, all SELECT-only global reference data (`badges`, `feature_flags`,
+   `meal_ideas`, `service_descriptions`).
+
+6. **`claim_marketing_generation_jobs` is service-role only, at the end of the
+   chain.** `0292` is the migration that re-asserts it and it had never run.
+   It ran, its own verification DO block passed, and the ACL confirms it:
+   `postgres=X/postgres | service_role=X/postgres`. Behaviourally,
+   `set role anon; select * from public.claim_marketing_generation_jobs(5);`
+   → `ERROR: permission denied for function claim_marketing_generation_jobs`,
+   and the same as `authenticated`. `docs/audit/privileged-rpc-grants-check.sql`
+   (A-13) passes for the first time.
+
+7. **Every SECURITY DEFINER function pins its search_path** — now 65 of them,
+   the extra one being `claim_marketing_generation_jobs`.
+   `select count(*) filter (where prosecdef) as secdef,
+           count(*) filter (where prosecdef and proconfig is null) as unpinned
+    from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public';` → **65|0**. The spine's two definer functions
+   (`claim_marketing_generation_jobs`, `enqueue_marketing_page_generation`) both
+   carry `{search_path=public}` and reference every table fully qualified, so
+   there is no unqualified-relation shadowing surface. This extends Pass E's
+   verified-healthy #10 to the tables it could not see.
+
+8. **`enqueue_marketing_page_generation` is not callable.** It is SECURITY
+   DEFINER with a default (PUBLIC-executable) ACL, but `returns trigger`, so
+   PostgreSQL refuses a direct call and PostgREST does not expose it. Same
+   disposition as Pass E's trigger functions.
+
+9. **Nothing anon-callable can truncate.** `select p.proname from pg_proc p …
+   where n.nspname='public' and p.prosrc ~* 'truncate';` → **0 rows**; and the
+   count of SECURITY INVOKER `execute format(...)` functions executable by
+   `anon` that are not trigger functions → **0**. This is what bounds finding
+   C3-S3-01 to defence-in-depth.
+
+10. **The trigger and queue machinery works.** Exercised for the first time
+    anywhere, in a rolled-back transaction:
+    - admin INSERT (`updated_by` set) → exactly one `regenerate_page` job,
+      `idempotency_key = marketing-page:<id>:v:1`, priority 50, `created_by` set;
+    - backfill INSERT (`updated_by` null **and** `content ? 'source'`) → **no**
+      job — `0239`'s suppression works, and it correctly does *not* suppress an
+      insert without the `source` marker;
+    - admin UPDATE → version 1→2 and a second job at `:v:2`;
+    - `claim_marketing_generation_jobs(10)` as `service_role` claims 4/4, sets
+      `running`, `attempts=1`, `locked_at`;
+    - a job backdated 20 minutes is recovered and re-claimed;
+    - the same job at `attempts=5, max_attempts=5` moves to `dead_letter` with
+      `"Recovered after a stale worker lock."` and is claimed 0 times.
+
+11. **Every marketing-platform server action authorizes independently.** All six
+    in `app/(app)/admin/marketing/platform/actions.ts` (`createPlatformPage`,
+    `updatePlatformPage`, `archivePlatformPage`, `saveMarketingTemplate`,
+    `saveMarketingBrandRule`, `retryMarketingJob`) open with
+    `await requireMarketingAdmin()`, which is `getUser()` then `isSuperAdmin()`
+    and only then hands back the service client
+    (`lib/marketing/admin.ts:20-24`). This matters more than usual here because
+    `page.tsx:21` reads with `createServiceClient()` — RLS is bypassed on that
+    path, so the `/admin` layout and these six guards are the whole boundary, and
+    a Next.js layout does not cover a server action.
+
+12. **The public render path is not a stored-XSS vector.** `grep -rn
+    "dangerouslySetInnerHTML" lib/marketing/ 'app/(marketing)'` → **no hits**.
+    `lib/marketing/public-pages.tsx` splits `body` on blank lines and renders
+    the parts as React text, so AI-generated page content
+    (`generateWithAI` → `marketing_pages.body`) cannot inject markup. The public
+    reads go through the anon key / user-scoped server client
+    (`seo.ts:14`, `aeo.ts:31`, `public-pages.tsx:29`), so the published-only
+    policy is genuinely the boundary on that path rather than being bypassed.
+
+13. **`ON CONFLICT` targets are inferable with the spine present.**
+    `node scripts/check-conflict-targets.mjs` → *"181 checked against 491 tables
+    in the live catalog. Every target names a unique index Postgres can infer."*
+    This gate has only ever run against 482 tables; the spine's upserts
+    (`marketing_page_versions` on `(page_id,version)`, `marketing_embeddings` on
+    `(source_type,source_id,chunk_index,content_hash)`,
+    `marketing_provider_observations` on
+    `(provider,engine,observed_for,page_path,query)`,
+    `marketing_provider_syncs` on `provider`, `marketing_pages` on `path`) are
+    covered for the first time. No 42P10 planning failure waiting in production.
+
+**Two things I checked and am deliberately NOT raising as findings**, so the
+reasoning is on the record rather than implied:
+
+- **No spine table is FORCE RLS** (`relforcerowsecurity`) — but neither is any
+  of the 491, table owner is `postgres`, and PostgREST never connects as the
+  owner (`authenticator` → `set role anon|authenticated`). `service_role` is
+  `bypassrls` by design. Nothing reachable turns on it.
+- **The spine tables carry no `family_id`.** "Readable across families" does not
+  apply to them: they are platform-global marketing content, and the only
+  boundary is super-admin versus everyone. That boundary holds (items 2 and 3).
+  Worth saying explicitly, because the brief asks about cross-family reads and
+  the honest answer is that the axis does not exist here, not that it is clean.
+
+---
+
+## Re-verification of Pass E against the complete replay
+
+Asked for as capacity allowed. Six claims re-run; **four confirmed, one refuted,
+one no longer holds.**
+
+| Pass E claim | Re-run result | Verdict |
+|---|---|---|
+| VH#1 — RLS coverage is total | tables with RLS off: **empty**, now over 491 | **CONFIRMED** |
+| VH#2 — exactly 4 literally-true policies, all reference data | same 4: `badges`, `feature_flags`, `meal_ideas`, `service_descriptions`, all SELECT | **CONFIRMED** |
+| VH#3 — anon holds no write privilege on any table | **1931** grant rows over 483 tables | **REFUTED** — see C3-S3-02 |
+| VH#11 — 57 tables with RLS on and zero policies are deliberate | **57**, unchanged (the spine adds policies to all nine of its own) | **CONFIRMED** |
+| F-E01 — child reads the family password vault | `family-credentials-boundary-check.sql` → *"0296 OK: the child is refused read, insert, update and delete; parent and adult keep the vault"* | **CONFIRMED fixed** by 0296, now proven against the complete 310-migration chain rather than a partial one |
+| F-E02 — step-up MFA is presentational | `select count(*) from pg_policies where schemaname='public' and (qual ilike '%aal%' or with_check ilike '%aal%')` → **0** | **STILL OPEN** |
+| F-E03 — `family-media` bucket is public | `select id, public from storage.buckets` → `family-media t` | **STILL OPEN** (also public: `avatars`, `feedback-attachments`, `marketplace-photos`) |
+| F-E04 — `social_account_tokens` is family-member readable | all four policies now read `can_manage_family(family_id)`, and `sensitive-role-boundary-check.sql` passes with *"0297 OK: a child is refused … the OAuth tokens"* | **NO LONGER HOLDS** — `0297_sensitive_tables_respect_role.sql` fixed it after Pass E was written. Claude-1 should mark F-E04 fixed. |
+
+```
+$ psql -c "select tablename, policyname, cmd, roles, left(coalesce(qual,with_check),40)
+           from pg_policies where schemaname='public'
+             and tablename in ('social_account_tokens','sync_tokens') order by 1,2;"
+       tablename       |          policyname          |  cmd   |  roles   |             expr
+-----------------------+------------------------------+--------+----------+------------------------------
+ social_account_tokens | social_account_tokens_delete | DELETE | {public} | can_manage_family(family_id)
+ social_account_tokens | social_account_tokens_insert | INSERT | {public} | can_manage_family(family_id)
+ social_account_tokens | social_account_tokens_select | SELECT | {public} | can_manage_family(family_id)
+ social_account_tokens | social_account_tokens_update | UPDATE | {public} | can_manage_family(family_id)
+ sync_tokens           | tokens service only          | ALL    | {public} | false
+```
+
+---
+
+## What this session still could not reach
+
+- **Production.** Unchanged and unchangeable from here: no credentials, and
+  applying migrations is human-owned (`docs/PENDING_PROD_MIGRATIONS.md`). If
+  F-001 holds, production carries none of the spine at all — in which case the
+  live risk is not finding C3-S3-01 but that `/lp/*`, `/guides/*` and the SEO
+  overlay have no table to read, which `lib/marketing/legacy-bridge.ts:63-66`
+  and `public-pages.tsx:34-37` both handle explicitly as a compatibility state.
+  That handling is evidence the team expects production to be behind.
+- **PostgREST.** There is no local Supabase (no docker daemon, no CLI), so the
+  HTTP layer was not exercised. My statement that TRUNCATE is unreachable
+  through PostgREST rests on the absence of a TRUNCATE verb and on the two
+  catalogue queries in C3-S3-01, not on a refused request.
+  `scripts/verify-marketing-public-access.mjs` is exactly the probe that would
+  settle it and it needs a running project.
+- **The other 474 tables** in finding C3-S3-02 were measured, not individually
+  reasoned about. I assert the count and the mechanism; I do not assert that
+  every one of them is as harmless as the DML result suggests.
+
+---
+
+# Session 4 (2026-09-15) — the server-action surface
+
+Dispatched to close the gap the board names: Pass E audited 141 API routes
+thoroughly; the **132 files containing `'use server'`** were mentioned ~14 times
+across all five audit files. A server action is a publicly-callable POST
+endpoint with a stable action id. The page that renders the button is not a
+control. Every action needs its own authorization, exactly like a route handler.
+
+## Method — what was actually enumerated
+
+Not a grep for `getUser`. The prior session's claim (this file, "Verified
+healthy" item 12: *"Of 132 files containing `'use server'`, 8 make no auth
+call"*) counts FILES and matches literal auth-function names. That misses two
+things: files whose actions authorize through a **local helper** (`guard()`,
+`assertSuperAdmin()`, `managerCtx()`, `ctx()`, `requireAdmin()`), and actions
+that authenticate correctly but then **authorize on a client-supplied value**.
+
+So this session built the unit of analysis properly — the exported action, not
+the file:
+
+1. `scan.mjs` → every `export async function` in a module whose first three
+   lines carry `'use server'`, plus inline `'use server'` function bodies:
+   **439 exported server actions across 113 top-level action modules**
+   (19 more files carry the string in a comment or an inline body only).
+2. `scan2.mjs` → a **transitive** auth-bearing name set. Seed on
+   `getUser(` / `requireUserContext` / `isSuperAdmin` / `supabase.auth.getUser`,
+   then iterate to a fixpoint over every function in `app/` + `lib/` that calls
+   an already-auth-bearing name. 685 names.
+3. `scan3.mjs` → re-ran (1) against (2).
+
+Result: **9 of 439 actions reach no auth path, transitively** — not the 8 files
+the prior pass reported, and a different set. All nine were read in full; all
+nine are accounted for below. The naive file-level grep had flagged **94**
+actions, i.e. 85 false positives, all authorizing through a local helper.
+
+Further passes: `scan5.mjs` (service-role use inside actions, 62 found),
+`scan6.mjs` (mutations of 30 sensitive tables vs. role gates, 60 found),
+`scan7.mjs` (actions that spend money — LLM, email, SMS, Stripe — vs. rate
+limits, 9 found), `scan8.mjs` (awaited writes whose `error` is never read).
+
+**Limits of this session, stated up front.** There is still no local Supabase
+(no docker daemon, no CLI), so **no action below was invoked**. Nothing here is
+a demonstrated exploit; each finding is read from source plus, where it decides
+the outcome, the committed RLS policy or RPC body. Where a claim rests on RLS I
+say which migration and quote it. "We could not sign in" is not "it is clean" —
+the BLOCKED list at the end says exactly which claims stay unproven.
+
+---
+
+### [CLAUDE-3][HIGH][RATE-LIMIT/COST] Three server actions are the only unmetered doors to the LLM in the product; one of them lets the caller choose most of the prompt
+
+- **File/path:**
+  - `app/(app)/marketplace/assistant-actions.ts:33` `askMarketAssistantAction` — **the HIGH**
+  - `app/(app)/dashboard/paperwork/actions.ts:167` `draftPaperworkReplyAction` — MEDIUM on its own
+  - `app/(app)/dashboard/contacts/[id]/actions.ts:67` `draftReconnectMessageAction` — MEDIUM on its own
+- **Problem:** All three call `resolveProvider()` → `provider.complete()` with
+  **no `enforceAIRateLimit`, no `assertAIAccess`, and no plan/feature gate**.
+  `askMarketAssistantAction` additionally forwards a caller-supplied `history`
+  array straight into the prompt: the turn COUNT is capped
+  (`history.slice(-MAX_TURNS)`, 8) but each entry's **`content` is never
+  measured, truncated or validated** — only `question` is (`q = question.trim()
+  .slice(0, 500)`, line 37). There is no zod schema on the parameter; a server
+  action's arguments are chosen by the caller, and TypeScript types are erased
+  at runtime. Next's default Server Actions `bodySizeLimit` (1 MB; no override
+  found — `grep -n "serverActions\|bodySizeLimit" next.config.*` returns
+  nothing) caps ONE request, so "unbounded" means unbounded relative to the
+  product's own 500-character cap, not literally infinite. With no rate limit,
+  the per-request cap is the only cap that exists.
+- **Evidence:**
+  1. The convention is uniform and this is the only place it breaks:
+
+         $ for f in $(grep -rl 'resolveProvider\|provider\.complete' app/api --include=route.ts); do
+             grep -q "enforceAIRateLimit\|rateLimit" "$f" || echo "  $f"; done
+         (no output)
+         AI routes calling the model:               31
+         ...of which rate-limited:                  31   (37 routes import it in all)
+
+     **31 of 31 API routes that reach the model carry a per-user limit. 0 of 3
+     server actions that reach the model do.** `app/api/ai/requests/route.ts`
+     and `app/(app)/dashboard/inbox/actions.ts:85-87` — the same intake, one as
+     a route and one as an action — BOTH carry
+     `enforceAIRateLimit(supabase, \`ai-requests:${ctx.user.id}\`, {limit:20,
+     windowMs:60_000})` + `assertAIAccess(ctx, ...)`. So the pattern is
+     established for actions too; these three simply skip it.
+  2. `withAiRequest` does not gate. `lib/ai/observability.ts` header:
+     *"BOOKKEEPING NEVER FAILS THE FAMILY'S WORK. If the row cannot be opened
+     the body still runs"*. It is observability only.
+  3. Nothing upstream covers it. `middleware.ts` has no rate limiter of any
+     kind (`grep -n "rateLimit" middleware.ts` → only the `matcher` line 168).
+  4. No truncation downstream either: `grep -n "slice(0,\|MAX_.*CHARS\|truncate"
+     lib/ai/provider.ts` returns only two error-message truncations (lines 189,
+     203). `messageContent()` (line 226) passes `message.content` through
+     verbatim.
+  5. One mitigation IS present and worth recording so the fix is not
+     over-scoped: `lib/ai/provider.ts:286,318,337,410` all
+     `.filter((m) => m.role === 'user' || m.role === 'assistant')`, so a caller
+     passing `role: 'system'` **cannot** inject a system message. A forged
+     `assistant` turn is still accepted, but its blast radius is the caller's
+     own reply.
+- **Impact:** Any authenticated member of any family — **including a `child` or
+  `teen` role, none of these three check role** — can POST the action id in a
+  loop. Two of the three are bounded per call (6 000 chars of paperwork text,
+  400 max_tokens). `askMarketAssistantAction` is not: 8 history entries of
+  arbitrary size each become one upstream request. That is unmetered spend on
+  the operator's API key, and the 60 s `OPENAI_TIMEOUT_MS` per call makes it a
+  cheap way to hold connections too. No cross-family data is exposed — the
+  snapshot is `.eq('family_id', ctx.active.familyId)` — so this is cost and
+  availability, not confidentiality.
+- **Fix:** In each of the three, immediately after `requireUserContext()`:
+  `const limited = await enforceAIRateLimit(supabase, \`ai-<surface>:${ctx.user.id}\`, { limit: N });`
+  (the sibling routes use 10-20/min), and `assertAIAccess(ctx, { db: supabase })`
+  where the surface is plan-gated. Separately, in `askMarketAssistantAction`,
+  bound the history the same way the question is bounded — e.g.
+  `history.slice(-MAX_TURNS).map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: String(m.content ?? '').slice(0, 2000) }))`
+  — so the cap is on bytes, not just turns. A guard test should assert that
+  every `'use server'` export reaching `resolveProvider` also reaches
+  `enforceAIRateLimit`; that is mechanically checkable and would have caught
+  all three.
+- **Status:** OPEN (static; the rate-limit absence is certain from source, the
+  cost magnitude is not measured — no provider key was exercised)
+
+---
+
+### [CLAUDE-3][MEDIUM][AUTHZ] The marketplace hand-off actions compute a party role by ternary and never check the caller IS a party — the same feature's review action has exactly the check that is missing
+
+- **File/path:** `app/(app)/marketplace/handoff/actions.ts` —
+  `loadOrderRole` (:33), `proposeHandoffAction` (:44), `confirmHandoffAction`
+  (:70), `cancelHandoffAction` (:112), `completeHandoffAction` (:125).
+- **Problem:** `loadOrderRole` scopes the order to
+  `.eq('family_id', ctx.active.familyId)` and stops there. Both writers then do:
+
+      const role = order.seller_member === ctx.active.member.id ? 'seller' : 'buyer';
+
+  A caller who is **neither** buyer nor seller falls into the `else` and is
+  silently treated as **the buyer**. Nothing anywhere in the file compares the
+  caller to `order.buyer_member`.
+- **Evidence:**
+  1. The intended contract is written down 90 lines away, in the same feature,
+     by the same convention — `app/(app)/marketplace/actions.ts:171-173`:
+
+         const isBuyer  = order.buyer_member  === memberId;
+         const isSeller = order.seller_member === memberId;
+         if (!isBuyer && !isSeller) return { ok: false, error: t('actions.onlyTheTwoPartiesCan') };
+
+     `submitMarketplaceReviewAction` refuses a non-party. The four hand-off
+     actions do not, and the file header claims only *"Family-scoped via
+     requireUserContext + RLS"* — which is true, and is the whole problem: the
+     product's boundary here is the PAIR, not the family.
+  2. The database does not backstop it. `supabase/migrations/0199_marketplace_handoff_completion.sql:34`
+     — the RPC's one authorization test is
+
+         if not public.is_family_member(v_order.family_id) then
+           return jsonb_build_object('ok', false, 'reason', 'forbidden');
+
+     Family membership only. Note the action's own string table
+     (`handoff/actions.ts:26`) renders that reason as *"You are not part of
+     this marketplace exchange."* — the UI already promises a party check the
+     code on neither side performs.
+  3. `marketplace_handoffs` RLS is the generic family-scoped loop, so RLS
+     cannot distinguish the two parties either.
+- **Impact** (intra-family; the marketplace is household-internal — listings
+  carry `family_id` + `member_id`, so the actor is a sibling or co-parent, not
+  a stranger):
+  - `proposeHandoffAction` upserts `onConflict: 'order_id'` and explicitly
+    resets `status:'proposed', confirm_code:null, confirmed_at:null,
+    calendar_event_id:null` (lines 59-60). A third party can therefore **wipe an
+    already-confirmed pickup** and rewrite its time and location.
+  - `confirmHandoffAction` guards only `if (role === handoff.proposer_role)`.
+    When the seller proposed, a third party is `'buyer'`, the guard passes, and
+    the action **returns the hand-off code to them** (`return { ok: true, data:
+    { code } }`, line 108). The real buyer never receives it.
+  - `cancelHandoffAction`'s doc comment says *"either party"*; it checks
+    nothing at all.
+  - `completeHandoffAction` + the RPC then let any family member close the
+    order with that code.
+  - **Bounded by:** no money moves. There is no escrow and no trigger on
+    `marketplace_orders` (`grep -rn "marketplace_orders" supabase/migrations/*.sql
+    | grep -i "trigger\|escrow"` → nothing; `grep -rln escrow` over migrations,
+    `lib/`, `app/` → nothing). Completion is a status change. So this is
+    integrity and disclosure-of-a-code within a household, not theft.
+- **Fix:** Have `loadOrderRole` return the party role as
+  `'seller' | 'buyer' | null` and refuse `null` in all four actions, reusing the
+  exact wording already in the catalogue
+  (`t('actions.onlyTheTwoPartiesCan')`). Mirror it in
+  `marketplace_complete_handoff` by comparing `auth.uid()`'s member id against
+  `buyer_member`/`seller_member`, so the RPC's `forbidden` reason becomes true
+  of what it says.
+- **Status:** OPEN (static; the ternary and the absent comparison are certain
+  from source, the end-to-end sequence was not executed — no session)
+
+---
+
+### [CLAUDE-3][MEDIUM][AUTHZ] The social RBAC cannot be configured by anyone: the TS matrix and the SQL matrix disagree on who holds `manage_access`, and the only role that holds it in TS is never assigned
+
+- **File/path:** `lib/social/roles.ts:45-68`, `lib/social/access.ts:26-63`,
+  `app/(app)/dashboard/social/actions.ts:307` (`grantAccessAction`),
+  `supabase/migrations/0034_social_command_center.sql:606-649, 765-771`.
+- **Problem — two defects that compound:**
+  1. **Divergence.** TS: `admin: ALL.filter((p) => p !== 'manage_access')`.
+     SQL: `when 'admin' then true`. The file's own header says *"The database
+     RLS (0024) is the real enforcement boundary; this mirrors it."* It does not
+     mirror it.
+  2. **Deadlock.** `grantAccessAction` requires `manage_access`. In TS only
+     `owner` holds it. `defaultSocialRoleForMember` (roles.ts:106) returns
+     `admin | marketing_manager | content_creator | read_only` — **never
+     `owner`**. The only writer of `social_access_permissions` anywhere in the
+     tree is `grantAccessAction` itself. So the only way to become `owner` is
+     through an action only an `owner` may call.
+- **Evidence:**
+
+      $ grep -rn "social_access_permissions" --include=*.ts --include=*.tsx app lib
+      app/(app)/dashboard/social/actions.ts:324   (the only write — an upsert)
+      app/(app)/dashboard/social/settings/page.tsx:27  (a read)
+
+  No other writer, no seeder, no migration insert, no delete path. A household
+  parent maps to `admin`; `requireSocialPermission(fid,'manage_access')` throws
+  for `admin`; `social_access_permissions` therefore stays empty for every
+  family, and every family silently runs on the member-role defaults forever.
+  Meanwhile SQL would have allowed it twice over —
+  `social_access_permissions_insert ... with check (public.is_family_admin(family_id)
+  or public.social_has_permission(family_id,'manage_access'))` (0034:765-767),
+  and `social_has_permission` returns true for `admin` unconditionally.
+- **Impact:** The divergence itself fails **closed** — I checked every row of
+  both matrices and TS never grants a permission SQL denies (`owner`, `marketing_manager`,
+  `social_manager`, `content_creator`, `approver`, `analyst`, `read_only` are
+  byte-identical; only `admin` differs, and TS is the stricter side). So this is
+  **not** a privilege-escalation hole. It is a whole authorization subsystem
+  that can never be turned on, documented as the enforcement boundary — which
+  matters because **the granular permission is the ONLY gate on most of the
+  feature**: 0034's policy loop gives every `social_*` table plain
+  `is_family_member` CRUD, and only two policies are tightened to the role
+  (`social_publish_jobs_insert`, `social_access_permissions_insert/update`).
+  For connecting accounts, creating posts, uploading media and changing
+  settings, the TS `requireSocialPermission` call IS the entire boundary. A
+  family that wanted to restrict a teen cannot; a family that wanted to promote
+  a trusted adult cannot.
+- **Secondary, same file:** `getSocialAccess` (access.ts:49) returns access when
+  `explicit` exists even with **no active `family_members` row**
+  (`if (!member && !explicit) return null;`), and an explicit row wins the role
+  resolution (line 51). SQL is stricter: `social_has_permission` is
+  `is_family_member(p_family_id) and (...)`, and `social_role_for` requires
+  `fm.is_active`. There is also **no revocation path** — no code anywhere
+  deletes a `social_access_permissions` row or sets `status` to anything but
+  `'active'`. Today RLS backstops this (every social write goes through
+  `createServer()`, the user-scoped client — verified: `grep -n
+  "createServiceClient" lib/social/*.ts` → no hits), so a deactivated member is
+  still blocked at the database. It is a defence-in-depth gap, not a live hole
+  — but it is the half of the pair that would become one if any social path
+  ever moved to the service role.
+- **Fix:** Decide which matrix is authoritative and make the other follow. The
+  likely intent is SQL's: give `admin` `manage_access` in `ROLE_PERMISSIONS`,
+  which un-deadlocks `grantAccessAction` for parents in one line. Add
+  `if (!member) return null;` to `getSocialAccess` so TS and
+  `social_has_permission` agree on deactivated members. Add a revoke path. A
+  test that asserts the TS matrix equals the SQL `case` arms (both are static
+  text) would pin all three.
+- **Status:** OPEN (matrices compared line-by-line from source; not executed)
+
+---
+
+### [CLAUDE-3][LOW][SURFACE] Three pure helpers are exported from `'use server'` modules, so each is a public POST endpoint — and this repo has already moved three others out for exactly that reason
+
+- **File/path:**
+  - `app/(app)/dashboard/paperwork/actions.ts:32` `paperworkInsertRow`
+  - `app/(app)/dashboard/inbox/actions.ts:55` `inboxRequestText`
+  - `app/(app)/marketplace/assistant-actions.ts:100` `previewMarketIntentAction`
+- **Problem:** Every export of a `'use server'` module becomes a callable action
+  id. These three touch no database and hold no session; they are helpers that
+  happen to live in an action file. Two of the three are three of the nine
+  no-auth actions `scan3.mjs` found — they are "unauthenticated" because they
+  are not actions at all.
+- **Evidence:** The codebase already knows this and says so three times, in
+  three files that did the opposite:
+
+      lib/groceries/add-summary.ts:9   "A plain module rather than an export of the action
+                                        file: everything a `'use server'` file exports becomes
+                                        a callable endpoint, and a pure string function has no
+                                        business being a network round trip."
+      lib/marketing/recurring-ads.ts:263 "Every export of a 'use server' module is a callable
+                                        endpoint, so a pure string parser has no business being one"
+      lib/library/ingest.ts:5          "This lived inside the library's `'use server'` actions
+                                        module, which made it unreachable from anywhere else"
+
+  `paperworkInsertRow` argues the other way in its own docblock — *"It exists as
+  its own exported function — async, which is all a `'use server'` module may
+  export"* — i.e. it was exported to be unit-testable, accepting an endpoint as
+  the price. The three files above show the repo's own answer: move it to a
+  plain module and test it there.
+- **Impact:** Small and worth saying plainly. None of the three reads or writes
+  anything; the caller supplies all input and gets a computed value back.
+  `paperworkInsertRow` runs `triagePaperwork()` over caller-supplied text with
+  no length cap before `raw_text` is sliced to 20 000, so it is a modest CPU
+  sink; `previewMarketIntentAction` likewise runs `routeMarketIntent()` on an
+  unbounded string. The real cost is surface-area hygiene: three endpoints that
+  need not exist, two of which will keep showing up as "unauthenticated action"
+  in every future audit.
+- **Fix:** Move `paperworkInsertRow` and `previewMarketIntentAction` to plain
+  modules (`lib/paperwork/row.ts`, alongside `lib/marketplace/assistant.ts`) and
+  import them; the existing tests import the function, not the endpoint, so they
+  keep passing. `inboxRequestText` is already trivial enough to inline.
+- **Status:** OPEN
+
+---
+
+### [CLAUDE-3][LOW][ERROR-HANDLING] Two money-surface actions discard the write error and revalidate as if it worked
+
+- **File/path:** `app/(app)/dashboard/money-timeline/actions.ts:19`
+  (`setMoneyInsightStatusAction`) and `:46` (`syncMoneyInsightsAction`).
+- **Problem:** Both `await supabase.from('money_timeline_insights').upsert({...})`
+  without destructuring `error`, then call `revalidatePath(PATH)` and return.
+  Both are typed `Promise<void>`, so there is no channel to report a failure on
+  even if one were read. A PostgREST write returns `{ error }` rather than
+  throwing, so a rejected upsert is indistinguishable from a successful one.
+- **Evidence:** `scan8.mjs` found 11 awaited writes inside server actions whose
+  result is never bound. Nine are compensating/rollback or best-effort writes
+  whose primary error IS reported (`child-login-actions.ts:68,77,78`;
+  `(auth)/actions.ts:147`; `library/actions.ts:63,101`;
+  `trip-intel/actions.ts:254`; `admin/marketing/content/actions.ts:123,124`).
+  These two are the only ones where the discarded write is **the action's whole
+  purpose**. Contrast the convention in the same tree —
+  `app/(app)/dashboard/auto/actions.ts:31-42` writes the reason out in full:
+  *"A PostgREST write returns `{ error }` without throwing, so an unchecked
+  write would let a form report success while the record was silently lost."*
+- **Impact:** A family dismisses a money insight; the row does not change; the
+  page revalidates and the insight returns on the next render with no error
+  shown. Cosmetic in isolation, but it is the repo's named second-most-common
+  defect class, on the money surface, in the two functions that define it.
+- **Fix:** Bind `const { error } = await ...`, return
+  `{ ok: false, error: describeActionError(error, ...) }` (change the signature
+  off `void`, as `trust/actions.ts` and `auto/actions.ts` already do), and log.
+- **Status:** OPEN
+
+---
+
+### [CLAUDE-3][LOW][AUTHZ] `lib/family/actions.ts`'s column whitelist admits a client-supplied `member_id` with no same-family check
+
+- **File/path:** `lib/family/actions.ts:22-33` (`WRITABLE`), used by
+  `createFamilyRecord` (:125) and `updateFamilyRecord` (:160).
+- **Problem:** `member_id` is a whitelisted writable column on seven tables
+  (`family_routines`, `family_digital_twin_profiles`,
+  `family_ai_recommendations`, `family_stress_signals`,
+  `family_knowledge_nodes`, `family_emergency_contacts`, `family_memories`,
+  `family_milestones`). `family_id` and `created_by` are correctly forced from
+  `ctx`, but `member_id` is taken from `values` and never checked against the
+  caller's family.
+- **Evidence:** The column's only constraint is a single-column FK —
+  `supabase/migrations/0022_family_os.sql:87`:
+
+      member_id uuid REFERENCES family_members(id) ON DELETE SET NULL,
+
+  There is no composite FK on `(family_id, member_id)` and no CHECK, so any
+  existing `family_members.id` is accepted, including one from another family.
+  RLS (0022's loop) constrains `family_id` only.
+- **Impact:** **No impact demonstrated, and I want that stated rather than
+  implied.** The planted row carries the caller's own `family_id`, so it is
+  readable only inside the caller's family, and the read paths I checked
+  (`lib/family/signals.ts:43,188`) filter by `family_id`. It is recorded because
+  it is precisely the shape this session was sent to find — an identifier the
+  caller controls being written into an authority column — and because this file
+  is otherwise the model the rest of the codebase should copy (table whitelist,
+  column whitelist, `MANAGER_ONLY` set, entitlement gate, forced `family_id`,
+  audit log). One missing check in the best-designed file is worth a line.
+- **Fix:** In `pick()`/`graphWrite()`, when `member_id` is present, resolve it
+  against `family_members` with `.eq('family_id', ctx.active.familyId)` and
+  refuse if absent — or add the composite FK, which fixes it for every writer at
+  once.
+- **Status:** OPEN (no exploit path found; recorded as hygiene with the
+  uncertainty named)
+
+---
+
+### [CLAUDE-3][LOW][AUTHZ] Any family member, including a child, can reassign another member's open chore
+
+- **File/path:** `app/(app)/dashboard/workload/actions.ts:15`
+  `moveAssignmentAction`.
+- **Problem:** The action verifies the TARGET member is in the caller's family
+  (:20-22) and scopes the update by `family_id` (:27) — but performs no role
+  check. `isManager` is not imported in the file.
+- **Evidence:** Compare the convention two directories away:
+  `app/(app)/dashboard/trust/actions.ts:36-40` defines `managerCtx()` and every
+  policy action opens with it; `lib/family/actions.ts:60` keeps a `MANAGER_ONLY`
+  set for exactly this decision. Rebalancing who does a chore is a parental
+  decision by the same logic.
+- **Impact:** Intra-family only, and reversible. A child can push their own open
+  chore onto a sibling; the `logAudit` call at :32 does record it, with
+  `{ rebalance: true, toMemberId }`, so it is visible after the fact. Recorded
+  as LOW, not raised higher, because the audit row exists and nothing crosses a
+  family boundary.
+- **Fix:** `if (!isManager(ctx.active.role)) return { ok: false, error: ... }`,
+  or — if a child moving their OWN chore is intended — allow it only when
+  `assignment.member_id === ctx.active.member.id`.
+- **Status:** OPEN
+
+---
+
+## Verified clean — checked against the negative case, not assumed
+
+Recorded so a later pass does not re-derive them. The first four are the exact
+actions the dispatch named as suspicious.
+
+1. **`app/gift/actions.ts:18` `submitGiftPledgeAction` — legitimately public,
+   correctly built.** Service client behind an unguessable token; `.eq('token',
+   token)` (not `ilike` — no LIKE-wildcard hole); `is_active` checked; amount
+   clamped by `clampGiftAmountCents`; every string bounded
+   (`slice(0,200)/80/500`); IP rate limit 10/window; pending pledges per link
+   capped at 25; the row lands `status:'pending'` and **no money moves until a
+   parent approves**. The notify failure is best-effort AFTER the gift is
+   recorded, which is the right order. One gap worth a line, not a finding:
+   `gift_links` has an `expires_at timestamptz` column
+   (`0088_family_wallet.sql:143`) and this action checks `is_active` but
+   **never reads `expires_at`** — an expired-but-active link still accepts
+   pledges. Whether `expires_at` is meant to be enforced is a product question I
+   cannot settle from source.
+2. **`app/reviews/new/actions.ts:14` `submitReviewAction` — legitimately
+   public.** Rating validated 1-5 and rounded; all strings bounded; IP rate
+   limit 5; auto-approve threshold read from `reputation_settings` server-side,
+   never from input. No auth needed and none missing.
+3. **`app/s/[slug]/actions.ts:14` `submitResponseAction` — legitimately
+   public.** Survey resolved by slug, `deleted_at is null`, `status === 'active'`
+   enforced, score validated against the survey's OWN `scale_min`/`scale_max`
+   (not a client-sent range), IP rate limit 10.
+4. **`app/(auth)/signup/actions.ts:12` `rememberReferralCodeAction` —
+   legitimately public.** Validates with `isPlausibleReferralCode`, normalizes,
+   writes an `httpOnly`, `sameSite:'lax'`, `secure`-in-prod cookie. Nothing to
+   authorize. Likewise `lib/i18n/actions.ts:21` `setLocale`, which validates
+   against the locale catalogue before writing — *"a crafted request can never
+   plant an arbitrary cookie value"*, and that is true as written.
+5. **`app/(auth)/actions.ts:76` `childSignInAction`.** The ILIKE fix has landed
+   and is load-bearing: `.eq('username', username)` at :125 and :46 of
+   `child-login-actions.ts`, each with the comment explaining that `_` is a LIKE
+   wildcard permitted by `USERNAME_RE`. Durable cross-instance throttle read
+   BEFORE the password is touched and checked **even for unknown usernames**, so
+   it is not a lookup oracle; IP rate limit 30; identical vague error for
+   unknown-user and wrong-PIN; throttle cleared only on success.
+6. **`app/(app)/actions.ts:37` `setActiveFamilyAction`** — the pivot of the
+   whole `ctx.active.familyId` model, and it is guarded: membership proven with
+   `.eq('family_id', familyId).eq('user_id', auth.user.id)` before the
+   `user_preferences` upsert. My scan flagged it only because it uses
+   `auth.user.id` directly rather than `ctx`.
+7. **`app/onboarding/actions.ts:326` `finalizeOnboardingAction`** — never trusts
+   a client `familyId`: it is resolved from `family_members` or minted under a
+   per-user DB lock (`onboarding_claim_family`), with
+   `verifyOnboardingOwner(supabase, auth.user.id, expectedOwner)`
+   (`lib/onboarding/verify-owner.ts`) refusing an adopted or ambiguous family
+   first. `saveFamilyDetailsAction` (:170) DOES take `input.familyId`, but the
+   write goes through the user-scoped client and
+   `0052_family_onboarding.sql:38-41` is
+   `for all to authenticated using (public.is_family_member(family_id)) with
+   check (public.is_family_member(family_id))` — so a foreign family is
+   rejected by RLS, and the service-role marketing writes that follow run
+   **only after** that upsert returns without error. The ordering is correct.
+8. **All 20 super-admin console actions.** `admin/actions.ts` (`assertSuperAdmin`
+   at :31), `admin/admins`, `admin/feedback`, `admin/tier-features`,
+   `admin/support-tickets`, `admin/marketing/social/recurring` — each opens with
+   a local `guard()`/`requireAdmin()` that is `isSuperAdmin()` (+ `getUser()`).
+   `recurring/actions.ts:5-6` states the principle the whole audit turns on:
+   *"a server action is its own endpoint: a gate in the page that renders the
+   form does not protect the function the form posts to."* These were the 85
+   false positives of the naive file-level grep.
+9. **`app/(app)/family/child-login-actions.ts`** — `isManager(ctx.active.role)`
+   first, then the target member is loaded by the SERVICE client and explicitly
+   compared: `if (!member || member.family_id !== ctx.active.familyId) return`.
+   That is the right shape for a service-role action: authorization re-proven in
+   code because RLS is bypassed. The unchecked rollback writes at :68/77/78 are
+   compensating paths whose primary error is returned; noted, not filed.
+10. **`lib/family/actions.ts`** — table whitelist, per-table column whitelist,
+    `MANAGER_ONLY` set, `refuseIfUnentitled`, forced `family_id`/`created_by`,
+    audit log, `.eq('family_id', ctx.active.familyId)` on every update and
+    delete. The one gap is the `member_id` LOW filed above.
+11. **`app/(app)/dashboard/concierge/runs/[id]/page.tsx:103` — an INLINE server
+    action inside a gated page, and it re-authorizes.** This is the classic trap
+    (the page calls `assertAIAccess` at :66; a POST to the action id does not
+    run the page) and it is handled: the action re-derives
+    `requireUserContext()`, compares `actor.active.familyId !== familyId`, and
+    the manager check is real, not just claimed — `editStepInput` →
+    `openRun(scope, runId, opts, /*requireManager*/ true)`
+    (`lib/ai/runs/controls.ts:36-53`) refuses a non-manager.
+12. **`app/(app)/marketplace/actions.ts:171`, `app/(app)/dashboard/trust/actions.ts`,
+    `app/(app)/dashboard/auto/actions.ts`, `app/(app)/dashboard/social/actions.ts`,
+    `app/(app)/account/actions.ts`, `app/(app)/settings/app-lock-actions.ts`,
+    `app/(app)/dashboard/workload/actions.ts:45`** — all scope by
+    `ctx.active.familyId` (or `ctx.user.id` for per-user rows) on every write,
+    and the first four gate on role where the product says they should
+    (`isBuyer/isSeller`, `managerCtx()`, `requireSocialPermission`, `isAdmin`).
+13. **`sendReferralEmailAction`** (`app/(app)/referrals/actions.ts:56`) — flagged
+    by `scan7.mjs` as an unmetered email sender; it is not. The throttle is
+    `recordReferralEmailInvite(... config ...)` returning `'throttled'`, counted
+    from the send timestamps on the `referrals` rows themselves
+    (`REFERRAL_EMAIL_POLICY.limit` per family per day), and a failed send is
+    rolled back (`rollbackReferralEmailInvite`). Recipient validated by
+    `emailSchema`; self-invite refused.
+14. **Prompt-injection surface of the three ungated AI actions.** The provider
+    filters every message to `role === 'user' || 'assistant'`
+    (`lib/ai/provider.ts:286,318,337,410`), so a caller cannot inject a system
+    turn; `draftPaperworkReplyAction` fences the OCR text
+    (`fenceUntrustedBlock('paperwork', source, 6000)` + `UNTRUSTED_CONTENT_RULE`)
+    and deliberately writes nothing from the document back onto the row. The
+    defence is real; only the metering is missing.
+
+---
+
+## What I could NOT reach this session — do not read these as clean
+
+1. **Nothing was executed.** No local Supabase (no docker daemon, no Supabase
+   CLI), so no session could be established and **not one of the 439 actions was
+   POSTed**. Every finding above is source + committed SQL. Specifically
+   unproven: that a third party can actually obtain the hand-off code
+   (C3-S4-02); that the ungated AI actions accept a multi-megabyte `history` in
+   practice rather than failing on Next's action-payload limit first
+   (C3-S4-01 — the Server Actions `bodySizeLimit` defaults to 1 MB, which
+   bounds but does not remove the finding, and I did not find an override in
+   `next.config`); that `family_onboarding`'s RLS actually rejects a foreign
+   `familyId` at runtime.
+2. **Next.js's own action-id protection was not tested.** The premise of this
+   whole pass — that an action id can be replayed by a caller who is not on the
+   page — is Next's documented model, but I could not build the app and read the
+   generated ids, so I could not demonstrate a replay. This does not change any
+   finding (each one is also reachable by a legitimate user of the feature,
+   which is the intra-family case I scoped them to), but it means the "anyone
+   with the id" framing is inherited from the dispatch, not verified here.
+3. **Production.** F-001 stands: if the production ledger really records only
+   `0001-0003`, the RLS I rely on in C3-S4-02 and in verified-clean items 7 and
+   the social secondary finding may not exist there. Every RLS-backstop claim
+   above is a claim about the committed migrations.
+4. **The 19 files carrying `'use server'` inside a function body or a comment**
+   were classified and the two real inline-action cases read
+   (`concierge/runs/[id]/page.tsx`, verified clean), but I did not exhaustively
+   enumerate inline actions the way I enumerated top-level exports — an inline
+   action does not match `^export async function`. If a later pass wants
+   completeness on the 439 number, that is where the remainder is.
+5. **`clientIp()` header trust** (`lib/server/rate-limit.ts:41-51`) takes the
+   first `x-forwarded-for` entry. Every public action's rate limit is keyed on
+   it. Whether the deployment's proxy makes that unspoofable is an
+   infrastructure question I cannot answer from the repo; flagging it because
+   three public actions' only defence rests on it.
+
+---
+
+# Session 5 (2026-09-15) — the integration boundary
+
+## STATUS (Session 5 — 2026-09-15, third-party integration seams)
+
+CURRENT: Done. Round-5 dispatch: the **outbound and inbound integration
+  boundary** as a class — nobody had swept it, though its pieces had been
+  touched (Pass E routes, Session 4 actions, Pass L RLS, C1-S4-01 the Stripe
+  webhook pair, C1-S4-02 the env registry).
+COMPLETED: 9 findings, numbered `C3-S5-01`…`C3-S5-09` (1 HIGH, 2 MEDIUM,
+  5 LOW, 1 OBSERVATION) + 13 verified-clean boundaries + 3 refuted hypotheses.
+  Enumerated the surface: **11 inbound provider endpoints** (9 Twilio, 1 Svix/
+  Resend, 1 Alexa, plus the shared-secret inbound-email route and the two
+  Stripe routes C1 already did), and **every outbound call site** in `app/` and
+  `lib/` classified against the three SSRF guards this repo actually has.
+  Headline: **migration 0297 opened a credential store that migration 0034's
+  own comment says must never carry a policy — and a committed probe now pins
+  the loosened state as the correct one.** Verified against a freshly replayed
+  schema (312 migrations, 0 failed).
+  Also: the Google Calendar OAuth **refresh token is stored in plaintext** in a
+  column the user's own browser can read and write, twenty files away from an
+  AES-256-GCM deny-all store built for exactly that credential.
+  REFUTED three things the dispatch brief and my own first reading suspected —
+  see "Hypotheses that died in measurement".
+NEXT: nothing queued. For Claude-1, in fix order: C3-S5-01 (a migration plus a
+  probe edit — but it is a product call first: decide whether anything is meant
+  to read that table at all), then C3-S5-02, then C3-S5-03.
+FILES-TOUCHED: audit/claude-3.md ONLY. No application source modified. One
+  transient probe file (`tests/zz-c3s5-probe.test.ts`) was created, run, and
+  deleted in the same shell command; `git status --porcelain` confirmed clean
+  afterwards. Postgres was started and migrations replayed into the harness
+  database — that is `docs/audit/verify-pg.sh`'s own scratch cluster, not the
+  repository.
+BLOCKERS: no local Supabase (no docker daemon, no CLI) → **not one inbound
+  webhook was invoked, and no forged-signature request was sent to any route.**
+  See "What I could NOT reach" at the end.
+LAST-UPDATE: 2026-09-15
+
+---
+
+## The replay, so the SQL evidence below is reproducible
+
+```
+$ bash docs/audit/verify-pg.sh up
+== migrations applied: 312, failed: 0 ==
+== harness up: db=bubaly host=/tmp/pgaudit_db port=54399 ==
+```
+
+312 of 312, zero failures (Session 4's run was 310/0; Pass E's was 308/3).
+Every `pg_policies` / `role_table_grants` result quoted below is a query against
+that live catalogue, not a grep of migration text — which matters here, because
+the repository enables RLS and creates several of these policies through
+`DO $$ … EXECUTE format(…)` loops that a text scan reads wrongly.
+
+---
+
+## The surface, enumerated
+
+**Inbound (someone else calls us).** 11 provider-facing endpoints besides the
+two Stripe routes C1-S4-01 covered:
+
+| Endpoint | Gate | Verdict |
+|---|---|---|
+| `api/guardian/inbound/{sms,voice,whatsapp}` | Twilio HMAC-SHA1 | verifies |
+| `api/guardian/{screen,status/voicemail,escalate/twiml}` | Twilio HMAC-SHA1 | verifies |
+| `api/guardian/escalate` | `GUARDIAN_INTERNAL_SECRET`/`CRON_SECRET` | fail-closed |
+| `api/contact-center/{sms,voice,voice/transcription}` | Twilio HMAC-SHA1 | verifies |
+| `api/contact-center/email` | `CONTACT_CENTER_INBOUND_SECRET` | fail-closed in prod |
+| `api/webhooks/resend` | Svix HMAC-SHA256 + 300 s window | verifies |
+| `api/assistant/alexa` | signature + cert chain + 150 s window + skill id | verifies |
+
+All 9 Twilio call sites route through one verifier, `lib/guardian/twilio.ts:130`,
+which returns `false` when `TWILIO_AUTH_TOKEN` is unset and compares with
+`timingSafeEqual`. **No endpoint bypasses its verifier.**
+
+**Outbound (we call someone else).** The raw-`fetch` census across `app/` and
+`lib/` is 15 call sites, of which 10 are client-side (`'use client'` fetches to
+our own `/api/*`) and 5 are server-side against **fixed, env-configured provider
+hosts** (`lib/health/probe.ts`, `lib/recipes/providers/themealdb.ts`,
+`lib/sync/providers/{google,microsoft}.ts`, `app/api/weekend/discover`). Every
+call taking a **user- or DB-supplied** URL goes through one of three guards.
+Those three guards are not equally strong, which is C3-S5-03.
+
+---
+
+## Findings
+
+### C3-S5-01
+
+```
+[CLAUDE-3][HIGH][DATABASE] Migration 0297 added four permissive policies to the
+social OAuth-token store that migration 0034's own comment forbids — on a false
+premise — and a committed probe now asserts the loosened state is correct
+File:     supabase/migrations/0034_social_command_center.sql:746-749  (the invariant)
+          supabase/migrations/0297_sensitive_tables_respect_role.sql:44-51 (the premise)
+          supabase/migrations/0297_sensitive_tables_respect_role.sql:74-90 (the four policies)
+          docs/audit/sensitive-role-boundary-check.sql:88-131          (the probe that pins it)
+
+Problem:  0034 creates `social_account_tokens` (access_token_enc /
+          refresh_token_enc for the family's connected social accounts) and
+          deliberately gives it NO policy. Its RLS block enables row security on
+          every `social\_%` table, then applies the generic family-scoped CRUD
+          policies to a HARD-CODED list of 22 tables — and the token table is
+          not on that list. The comment immediately after says so in terms:
+
+            -- Tokens: NO policy -> only the service-role client (which bypasses
+            -- RLS) can touch them. RLS is enabled above, so authenticated users
+            -- get zero rows. This is the deliberate "secure token storage"
+            -- boundary; never add a permissive policy here.
+
+          Migration 0297 then adds four. Its rationale reads:
+
+            -- It holds access_token_enc / refresh_token_enc for the family's
+            -- connected social accounts, and every policy was is_family_member.
+
+          **That premise is false.** There were no policies at all. 0297
+          believed it was NARROWING a table readable by every family member
+          including children. It was in fact WIDENING a table readable by
+          nobody — from deny-all to "any adult who can manage the family", for
+          SELECT, INSERT, UPDATE and DELETE alike.
+
+Evidence: The two migrations are the only ones in all 312 that mention the
+          table (`grep -n social_account_tokens supabase/migrations/*.sql`
+          returns 0034 lines 12/122 and 0297 lines 44/74-89 and nothing else),
+          so there was no intervening migration that could have created the
+          is_family_member policies 0297 says it found.
+
+          Against the replayed schema (312 applied, 0 failed):
+
+            $ psql -qAt -c "select tablename||' | '||policyname||' | '||cmd
+                            ||' | USING '||coalesce(qual,'-')
+                            ||' | CHECK '||coalesce(with_check,'-')
+                            from pg_policies where schemaname='public'
+                            and tablename in ('social_account_tokens','sync_tokens');"
+            social_account_tokens | ..._select | SELECT | USING can_manage_family(family_id) | CHECK -
+            social_account_tokens | ..._insert | INSERT | USING -                            | CHECK can_manage_family(family_id)
+            social_account_tokens | ..._update | UPDATE | USING can_manage_family(family_id) | CHECK can_manage_family(family_id)
+            social_account_tokens | ..._delete | DELETE | USING can_manage_family(family_id) | CHECK -
+            sync_tokens           | tokens service only | ALL | USING false | CHECK false
+
+          The contrast in that last row is the point. This repository has TWO
+          provider-credential stores. `sync_tokens` is `using (false) with check
+          (false)` — the shape 0034 intended for its own. `social_account_tokens`
+          is not, and is the only one of the pair a browser session can reach.
+
+          The probe is the part that makes this durable rather than a slip.
+          `docs/audit/sensitive-role-boundary-check.sql` seeds a token row and
+          then asserts, as a REQUIREMENT:
+
+            insert into public.social_account_tokens (...) values (..., 'adult-added', 'enc');
+            select count(*) into n from public.social_account_tokens where family_id = fam;
+            if n <> 2 then
+              raise exception '0297: an ADULT sees %/2 social token rows ...';
+            end if;
+
+          under the heading "the fix must not lock the grown-ups out". Run today
+          against the replayed schema it passes:
+
+            $ psql -v ON_ERROR_STOP=1 -f docs/audit/sensitive-role-boundary-check.sql
+            NOTICE:  0297 OK: a child is refused a parent licence, a sibling login
+                     and the OAuth tokens; ... parent and adult keep everything
+
+          So restoring 0034's invariant would now FAIL a committed probe. The
+          audit's own instrument has been taught that the regression is correct.
+
+          And nothing needs the access it granted. The only references to the
+          table anywhere in `app/` or `lib/` are
+          `lib/ai/context/policy.ts` (which lists it as a table the AI must
+          NEVER read) and `lib/database.types.ts` (generated). **No application
+          code reads or writes it.** The four policies serve no caller.
+
+Impact:   A family manager — a role a child can be promoted into, and a role
+          held by anyone who compromises one parent's session — can, straight
+          from the browser via PostgREST and with no server code involved:
+            • SELECT every connected social account's `access_token_enc` and
+              `refresh_token_enc`, moving the ciphertext outside the server
+              trust boundary where it can be attacked offline at leisure;
+            • DELETE them, silently disconnecting every social integration;
+            • UPDATE or INSERT arbitrary values into the credential column.
+          The tokens are AES-256-GCM ciphertext, so this is not a plaintext
+          credential leak, and that is why this is not rated CRITICAL. What it
+          is: a credential store that the codebase states in writing must be
+          unreachable, reachable — and an audit probe that certifies it.
+Fix:      Three parts, and the first is a product decision, not a migration:
+          1. Decide whether ANYTHING is meant to read this table. On today's
+             evidence nothing is, and `lib/ai/context/policy.ts` classes it
+             "Credentials and tokens — absolute, no exception".
+          2. If nothing is: a new migration dropping the four 0297 policies,
+             restoring 0034's deny-all, and matching `sync_tokens`' explicit
+             `for all using (false) with check (false)` so the intent is stated
+             rather than inferred from absence — absence is exactly what 0297
+             misread.
+          3. Amend `docs/audit/sensitive-role-boundary-check.sql`: the adult
+             INSERT/SELECT assertions must become refusal assertions. Leaving
+             them is what would make the next fix fail CI.
+          Worth noting for the writeup: 0297's other two changes (`child_logins`,
+          `driver_licenses`) are correct and well-reasoned. This is one table in
+          a three-table migration, and the error is in its research, not its
+          method.
+Status:   OPEN — policies, grants and the probe's result all read from the
+          replayed schema; the 0034/0297 contradiction read from the committed
+          SQL. NOT verified against production (see "What I could NOT reach").
+```
+
+### C3-S5-02
+
+```
+[CLAUDE-3][MEDIUM][SECURITY] The Google Calendar refresh token is stored in
+plaintext in a row the user's own browser can read AND write, while the parallel
+sync platform encrypts the same credential into a table nobody can reach
+File:     app/api/google/calendar/callback/route.ts:75-80  (the write)
+          app/api/google/calendar/sync/route.ts:26-29,71-76 (the read + rewrite)
+          lib/google.ts:95-97                               (refreshToken is in the object)
+          lib/sync/crypto.ts + supabase/migrations/0018_sync_platform.sql:110-131
+                                                            (what the other one does)
+Problem:  The callback stores the whole `GoogleToken` — `{ accessToken,
+          refreshToken, expiresAt }` — as a plain JSON value inside
+          `user_preferences.notification_prefs`:
+
+            const merged = { ...existing, googleCalendarToken: token };
+            await supabase.from('user_preferences').upsert({ user_id: userId, notification_prefs: merged }, ...)
+
+          `user_preferences` is a self-service table. Against the replayed
+          schema:
+
+            $ psql -qAt -c "select policyname||' | '||cmd||' | USING '||coalesce(qual,'-')
+                            from pg_policies where tablename='user_preferences';"
+            user_preferences_select | SELECT | USING (user_id = auth.uid())
+            user_preferences_insert | INSERT | ...
+            user_preferences_update | UPDATE | USING (user_id = auth.uid())
+            user_preferences_delete | DELETE | USING (user_id = auth.uid())
+            prefs_all               | ALL    | USING (user_id = auth.uid())
+
+          so the browser Supabase client, holding the user's own session, can
+          `select notification_prefs` and read the Google **refresh** token in
+          the clear — and can `update` it too.
+
+          Twenty files away the repository does this properly. `lib/sync/`
+          encrypts provider tokens with AES-256-GCM before they touch the
+          database (`lib/sync/crypto.ts`), stores them in `sync_tokens`, and
+          locks that table to `using (false) with check (false)`. The sync
+          platform's own Google adapter connects the SAME provider for the SAME
+          purpose. Two Google-calendar integrations, two opposite answers to
+          "where does a refresh token live".
+Evidence: `lib/google.ts:95-97` — `refreshToken: data.refresh_token ?? null` is
+          a field of the object the callback writes, so it is the long-lived
+          half that lands in the column, not just the hour-long access token.
+          `app/api/google/calendar/sync/route.ts:29` reads it straight back out
+          and `getValidAccessToken` (lib/google.ts:153-161) refreshes with it.
+          Consumer census: `grep -rn googleCalendarToken app lib` returns 7
+          hits across exactly 3 files — the callback, the sync route, and an
+          admin page that only null-checks it for a count.
+Impact:   A Google OAuth refresh token is a long-lived bearer credential. It
+          survives the user's password change, it survives Supabase session
+          revocation, and with `access_type=offline` + the `calendar.readonly`
+          scope this app requests (lib/google.ts:59-66) it reads the user's
+          calendar until they revoke it at accounts.google.com — which nothing
+          in this product tells them to do. Any XSS on an authenticated page,
+          any malicious browser extension, any leaked session, and any future
+          over-broad `select('*')` on `user_preferences` hands that token over.
+          None of those reach `sync_tokens`.
+          Second, smaller: because the column is self-WRITABLE, a user can plant
+          an arbitrary `googleCalendarToken` object. The refresh endpoint is a
+          constant (`lib/google.ts:126-136` posts to Google's fixed token URL),
+          so this is not an SSRF primitive — it is a self-inflicted integrity
+          hole only, which is why it is a footnote and not the finding.
+Fix:      Two options, in preference order:
+          1. Retire this path. The sync platform already has a Google adapter
+             with encryption, a deny-all credential table, refresh handling and
+             an audit log. Two implementations of one integration is the reason
+             they disagree.
+          2. If it must stay: encrypt with `encryptSecret()` before the upsert
+             and decrypt server-side on read — `lib/sync/crypto.ts` is already
+             importable and already has a key. That alone removes the plaintext
+             credential from a browser-readable column. Better still, move the
+             ciphertext out of `user_preferences` entirely, since a preferences
+             blob is a place `select('*')` gets written against by habit.
+Status:   OPEN — policies read from the replayed schema; the write and read
+          paths read from source. NOT demonstrated by an authenticated
+          PostgREST call (no local Supabase).
+```
+
+### C3-S5-03
+
+```
+[CLAUDE-3][MEDIUM][SECURITY] Three SSRF guards, three different strengths — and
+the weakest one (push endpoints) does no DNS resolution at all, so any public
+hostname that resolves to an internal address is accepted and POSTed to
+File:     lib/server/push-request.ts:32-50    (tier 3 — string only)
+          lib/server/public-calendar-fetch.ts:98-113 (tier 2 — resolves, then fetches by name)
+          lib/server/public-document-fetch.ts:39-72,102-115 (tier 1 — resolves and PINS the socket)
+          lib/server/push.ts:81-89            (the send, with no re-validation)
+Problem:  `isPrivateOrReservedHost()` inspects the hostname STRING. It rejects
+          `localhost`, `*.local`, `*.internal`, IPv6 loopback/ULA/link-local,
+          and dotted-quad RFC1918 / loopback / link-local / CGNAT literals. It
+          never resolves anything. So a hostname that is perfectly public as a
+          string and resolves to an internal address passes.
+
+          Real push endpoints use public DNS names (`fcm.googleapis.com`), which
+          is the guard's own stated rationale — but the guard cannot tell that
+          name from an attacker's, because it never asks DNS what either one is.
+
+          `lib/server/push.ts:81-89` then reads `endpoint` back out of
+          `push_devices` and hands it to `webpush.sendNotification` with **no
+          second check** (`grep -n isPrivateOrReservedHost lib/server/push.ts`
+          → no matches). Registration time is the only gate there is.
+Evidence: Probe run against the real guard (temporary test file, run and
+          deleted in one command):
+
+            reg('https://localtest.me/x').ok  ===  true
+
+          `localtest.me` is an ordinary public DNS name whose A record is
+          127.0.0.1. It is accepted as a push endpoint.
+
+          Compare the calendar guard on the same input class. Its
+          `validatePublicCalendarUrl` calls `dns.lookup` on any non-literal host
+          and rejects if ANY returned address is blocked
+          (public-calendar-fetch.ts:106-111), so `localtest.me` is refused.
+          And compare the document/media guard, which goes further still: it
+          resolves, then installs a `LookupFunction` returning ONLY the pinned
+          address into a per-request `Agent` with `keepAlive: false`
+          (public-document-fetch.ts:104-112), so even DNS rebinding between
+          validation and connection cannot move the socket. Its own comment
+          names the reason: "Two copies of an SSRF guard is two guards that
+          drift, and the one that drifts is always the copy."
+          Three copies exist. The push one drifted furthest.
+Impact:   An authenticated user registers a push endpoint on a domain they
+          control whose A record points at an internal address — cloud metadata,
+          an internal admin port, a service on the VPC. Every subsequent
+          notification to that user makes the server POST an encrypted Web Push
+          payload to it. The attacker does not see the response body, so this is
+          a BLIND SSRF: an internal-POST primitive plus an existence/latency
+          oracle, repeatable on the product's own notification schedule. It is
+          not a read primitive, which is why this is MEDIUM.
+Fix:      Two lines of preference:
+          1. Make the push path use `resolvePublicAddresses` +
+             `isPublicDocumentAddress` from `public-document-fetch.ts` — the
+             exported-for-reuse pair the media proxy already shares, whose
+             docstring exists precisely so a third copy is not written.
+          2. Re-check at SEND time, not only at registration. The endpoint is
+             read from a table; a row can outlive the check that admitted it,
+             and DNS can change under a row that was valid when it was written.
+          Also worth folding in: `lib/social/unfurl.ts:66-84` is a FOURTH
+          string-only host check. It is currently harmless — `addByUrlAction`
+          passes the URL to `fetchPublicText` (the tier-2 guard) regardless, so
+          `isSafePublicUrl` is only a pre-filter — but it is one refactor away
+          from being load-bearing, and it is weaker than the push one (no CGNAT,
+          no 0.0.0.0/8 beyond the exact literal).
+Status:   OPEN — the accept was demonstrated against the real guard; the
+          downstream send path was read, not executed.
+```
+
+### C3-S5-04
+
+```
+[CLAUDE-3][LOW][INTEGRATIONS] `lib/server/external-fetch.ts` is a timeout
+wrapper named like a safety boundary, and `fetchExternal` is what a developer
+reaches for when they want "the safe outbound fetch"
+File:     lib/server/external-fetch.ts (all 15 lines)
+Problem:  The whole module is:
+
+            export function fetchExternal(input, init = {}, timeoutMs = 15_000) {
+              return fetch(input, { ...init, signal: init.signal ?? AbortSignal.timeout(timeoutMs) });
+            }
+
+          It performs no URL validation, no scheme check, no DNS resolution, no
+          redirect policy and no response bounding. Its docstring is accurate
+          ("Put a deadline on fixed-provider network calls") — but the module
+          name, the function name and its position in `lib/server/` alongside
+          `public-calendar-fetch.ts`, `public-document-fetch.ts` and
+          `public-media-fetch.ts` (which ARE guards) all read the other way.
+Evidence: Censused every `fetchExternal` caller. All are fixed provider hosts or
+          env-configured endpoints: `api.twilio.com` (lib/guardian/twilio.ts:17),
+          `api.resend.com` (lib/server/email.ts:32), Google's token and calendar
+          URLs (lib/google.ts:78,127,163), Search Console / Bing / the
+          `AI_CITATION_API_URL` endpoint (lib/marketing/provider-sync.ts:74,105,130),
+          and the CalDAV base (lib/sync/providers/apple.ts:279).
+          **No current caller passes a user- or DB-supplied URL**, so this is a
+          naming and future-proofing finding, not a live hole. Recorded because
+          the dispatch brief for this session itself assumed the file was the
+          SSRF guard — if the brief misread it, a developer will.
+Impact:   The next person who needs to fetch a URL from a database row picks the
+          function called `fetchExternal` from the directory full of guards, and
+          gets a timeout.
+Fix:      Rename to `fetchWithDeadline` (or `fetchProvider`), and add one line to
+          the header: "This is a TIMEOUT wrapper. For any URL that is not a
+          compile-time constant use lib/server/public-document-fetch.ts."
+          Optionally assert `input` is one of the known provider origins, which
+          would make the constraint mechanical rather than documentary.
+Status:   OPEN — census is a grep over app/ and lib/; complete for those trees.
+```
+
+### C3-S5-05
+
+```
+[CLAUDE-3][LOW][INTEGRATIONS] The public contact form answers "sent" when no
+mail provider is configured, and its own fallback path swallows its errors
+File:     lib/server/email.ts:28-31   (ok:true on skip)
+          app/api/contact/route.ts:49-73 (the fallback, in a bare catch)
+          app/api/contact/route.ts:96-99 (the check that misses it)
+Problem:  `sendEmail` returns `{ ok: true, skipped: true }` when
+          `RESEND_API_KEY` is unset. The contact route checks only `ok`:
+
+            const result = await sendEmail({ ... });
+            if (!result.ok) return NextResponse.json({ error: ... }, { status: 502 });
+            return NextResponse.json({ ok: true });
+
+          so with the key unset the submitter is told their message was sent.
+          The route does persist a `support_tickets` row first — but that write
+          sits in a `try { … } catch { /* non-fatal: the email below is the
+          primary path */ }` whose result is never read. So the backup is
+          silent-on-failure and the primary is silent-on-absence, and both can
+          miss while the user gets `{ ok: true }`.
+Evidence: `sendEmail`'s three-state return is handled correctly ONE file away:
+          `lib/admin/digest.ts:22-26` counts `r.ok && !r.skipped` as sent and
+          `r.ok && r.skipped` as skipped, and `app/api/cron/admin-digest`
+          reports them separately. The contract is right; one of its four
+          callers reads it wrongly. (The other two — lib/feedback/notify.ts:61
+          and the contact-centre auto-reply — are explicitly best-effort.)
+          This is the same defect C1-S3 fixed under "RESEND_API_KEY unset: mail
+          never sent, rows marked delivered"; that fix reached the notification
+          path and not this route.
+Impact:   Bounded by deployment: it needs `RESEND_API_KEY` unset in production,
+          which C1-S3 records as having actually happened once. When it does,
+          the public contact form — the only channel a non-customer has —
+          silently drops messages while thanking the sender. The ticket row is
+          usually the saving grace, and its failure is invisible.
+Fix:      `if (!result.ok || result.skipped)` return the 502, or better: capture
+          the `support_tickets` insert error, and return success when EITHER
+          path demonstrably succeeded. Right now success is returned when
+          neither did.
+Status:   OPEN — read from source; not executed (would need a live Resend key
+          or its absence, and a database).
+```
+
+### C3-S5-06
+
+```
+[CLAUDE-3][LOW][SECURITY] `SYNC_TOKEN_KEY` silently accepts any string and
+hashes it into a key, so a placeholder value produces a working, low-entropy
+credential-encryption key with no warning anywhere
+File:     lib/sync/crypto.ts:18-30 (loadKey), :68-70 (hasEncryptionKey)
+Problem:  loadKey() accepts 64-hex, or base64 decoding to 32 bytes, and
+          otherwise:
+
+            return createHash('sha256').update(raw).digest();
+
+          `SYNC_TOKEN_KEY=changeme` therefore yields a perfectly valid
+          AES-256-GCM key with roughly the entropy of the word "changeme".
+          Encryption succeeds, decryption succeeds, nothing logs anything, and
+          the health/capability check is only:
+
+            export function hasEncryptionKey(): boolean { return !!process.env.SYNC_TOKEN_KEY; }
+
+          — presence, never strength. The OAuth callback gates on exactly that
+          (`app/api/sync/[provider]/callback/route.ts:39`), so "we have a key"
+          and "we have a key worth having" are the same question to this code.
+Evidence: The module header documents the intended form and gives the generator
+          command, so the SHA-256 branch is a convenience fallback, not the
+          designed path. Nothing warns when that branch is taken.
+Impact:   This is the key protecting `sync_tokens` — the one credential store
+          this audit has otherwise found to be correctly locked down (deny-all
+          RLS, verified below). Every defence around that table assumes the
+          ciphertext is strong. A weak key makes the ciphertext offline-
+          crackable, which is the assumption C3-S5-01 also leans on.
+Fix:      When the SHA-256 branch is taken, log a startup warning naming the
+          variable; and make `hasEncryptionKey()` return false for a raw value
+          under some minimum length so the fail-closed path the callback
+          already has (`error=no_encryption_key`) does the work. Neither
+          changes the happy path.
+Status:   OPEN — read from source.
+```
+
+### C3-S5-07
+
+```
+[CLAUDE-3][LOW][SECURITY] The CalDAV transport will fetch any absolute URL it is
+given and attach the Apple app-specific password to it; nothing in the transport
+enforces the normalisation that makes that safe
+File:     lib/sync/providers/apple.ts:277-291 (dav)
+          lib/sync/providers/apple.ts:74-78   (hrefPath, the normalisation)
+Problem:  `dav()` builds its target as
+
+            const url = path.startsWith('http') ? path : `${ICLOUD_CALDAV}${path}`;
+
+          and unconditionally sends `Authorization: Basic <appleId:appPassword>`.
+          Every `path` it receives originates in XML the REMOTE server returned:
+          `parsePrincipalHref`, `parseCalendarHomeHref`, `parseCalendarCollections`
+          and `parseSyncResponse` all read `<href>` out of a multistatus document.
+          The safety of the whole adapter therefore rests on every one of those
+          parsers having called `hrefPath()`, which reduces an absolute URL to
+          its pathname.
+Evidence: I checked all four, and **all four do** call `hrefPath()`
+          (apple.ts:123, 131, 144, 168). So there is no live path by which a
+          remote href reaches `dav()` as an absolute URL. This is a
+          defence-in-depth finding, not a reachable bug, and it is recorded at
+          LOW for that reason.
+          Two residuals that are real:
+          • `hrefPath` returns its input unchanged if `new URL()` throws on a
+            string that already matched `^https?://` (apple.ts:76). The only
+            such strings are malformed ones, which then fail at fetch — harmless
+            today, but it is a fall-through that returns an unnormalised value.
+          • `dav()` calls `fetchExternal`, which is plain `fetch` with a timeout
+            and therefore FOLLOWS redirects (up to 20). The CalDAV guards
+            elsewhere in this repo use `redirect: 'manual'` and revalidate each
+            hop (public-calendar-fetch.ts:166-179). Node's fetch strips
+            `Authorization` on a cross-origin redirect, so the credential does
+            not travel — but the REQUEST does, unvalidated.
+Impact:   Requires the configured CalDAV server (`APPLE_CALDAV_BASE_URL`, default
+          `caldav.icloud.com`) to be hostile or MITM'd. Both are operator- or
+          TLS-level assumptions rather than user-reachable ones. The adapter is
+          additionally dark until `APPLE_SYNC_ENABLED=true`.
+Fix:      Assert in `dav()` itself rather than trusting four callers: reject a
+          `path` that does not start with `/`, and pass `redirect: 'manual'`.
+          Four lines, and it makes the invariant local to the function that
+          depends on it.
+Status:   OPEN — all four parsers read in full; no network call made.
+```
+
+### C3-S5-08
+
+```
+[CLAUDE-3][LOW][SECURITY] The inbound-email shared secret is accepted in the
+query string and compared non-constant-time
+File:     app/api/contact-center/email/route.ts:33-38
+Problem:  authorized() reads the secret from `?key=` OR the `x-inbound-secret`
+          header, and compares with `===`:
+
+            const provided = new URL(req.url).searchParams.get('key') ?? req.headers.get('x-inbound-secret');
+            return !!provided && provided === secret;
+
+          A secret in a query string is written to access logs, proxy logs,
+          browser history and `Referer` headers in a way a header is not — and
+          the `??` puts the query parameter FIRST, so it is the encouraged form.
+          The `===` is not constant-time; `timingSafeEqual` is already imported
+          in three sibling routes in this repository.
+Impact:   Low and conditional. The endpoint is not browser-navigated, so
+          `Referer` leakage needs a redirect; the timing channel over HTTP
+          against a high-entropy secret is largely theoretical. The log exposure
+          is the real one, and it is the kind that surfaces months later in a
+          log export.
+Fix:      Prefer the header, keep `?key=` only if a provider cannot send
+          headers, and compare with `timingSafeEqual` on equal-length buffers.
+Status:   OPEN — read from source.
+```
+
+### C3-S5-09
+
+```
+[CLAUDE-3][OBSERVATION][DATABASE] Both credential stores grant TRUNCATE to anon
+and authenticated, and RLS does not constrain TRUNCATE — so `using (false)` does
+not protect `sync_tokens` against it
+File:     supabase/migrations/0018_sync_platform.sql:663,719-721
+          supabase/migrations/0034_social_command_center.sql:722-726
+Problem:  This is C3-S3-02's mechanism (recorded there against the nine
+          marketing-spine tables) reaching the two tables this session is about.
+          Neither migration revokes anything from `anon` or `authenticated`, so
+          Supabase's default privileges stand.
+Evidence: $ psql -qAt -c "select table_name||' '||grantee||' '||privilege_type
+                          from information_schema.role_table_grants
+                          where table_name in ('social_account_tokens','sync_tokens')
+                          and grantee in ('anon','authenticated','service_role');"
+          … sync_tokens anon TRUNCATE
+          … sync_tokens authenticated TRUNCATE
+          … social_account_tokens anon TRUNCATE
+          … social_account_tokens authenticated TRUNCATE
+          (plus SELECT/INSERT/UPDATE/DELETE/REFERENCES/TRIGGER on both, for all
+          three roles.)
+Impact:   Worth stating precisely so it is not overread: PostgREST does not
+          expose TRUNCATE, so this is not reachable over the REST API. It is
+          reachable by anything that executes SQL as those roles — a
+          `security invoker` function, a future RPC, a direct connection with a
+          leaked anon credential. `sync_tokens` is the repository's model
+          credential store, with a deliberate `using (false)` policy, and that
+          policy does not stop `truncate public.sync_tokens` erasing every
+          family's encrypted OAuth credentials.
+Fix:      Same as C3-S3-02: `revoke truncate on <table> from anon, authenticated`
+          as part of whatever migration addresses that finding. This entry
+          exists so the fix's table list includes the credential stores, which
+          C3-S3-02's list did not.
+Status:   OPEN (extends C3-S3-02) — grants read from the replayed schema.
+```
+
+---
+
+## Verified healthy — boundaries that are genuinely well-built
+
+Recorded so the next pass does not re-derive them. Several of these are better
+than the repository average and one is the best SSRF implementation I have seen
+in this codebase.
+
+1. **All nine Twilio endpoints verify, through one verifier.** `guardian/inbound/
+   {sms,voice,whatsapp}`, `guardian/{screen,status/voicemail,escalate/twiml}`,
+   `contact-center/{sms,voice,voice/transcription}`. The verifier
+   (`lib/guardian/twilio.ts:130-147`) returns `false` when `TWILIO_AUTH_TOKEN` is
+   unset — fail-closed, not skip — and uses `timingSafeEqual`. Each route signs
+   over the full URL including the query string where one is present
+   (screen, voicemail, escalate/twiml, transcription), which is what Twilio
+   actually signs. A length mismatch throws inside `timingSafeEqual` and is
+   caught into `false`.
+2. **`guardian/escalate` is secret-gated and fail-closed**, not signature-gated,
+   because it is an internal trigger rather than a provider callback — and the
+   committed guard test knows and states the difference.
+3. **The Resend/Svix webhook is fail-closed and replay-bounded.**
+   `app/api/webhooks/resend/route.ts:19-46`: no secret → `false`; missing any of
+   the three `svix-*` headers → `false`; timestamp outside ±300 s → `false`;
+   HMAC-SHA256 over `id.ts.body` compared with `timingSafeEqual` against every
+   `v1,<sig>` pair. Verification happens before the body is parsed.
+4. **The Alexa endpoint verifies properly and nothing bypasses it.** The route
+   reads RAW BYTES (not re-serialised JSON, which would break the signature),
+   verifies before doing anything, returns a bare 403 with no speech, and logs
+   the reason server-side only. `lib/assistant/alexa-verify.ts` contains **no
+   `NODE_ENV` branch and no environment-gated skip** — the only `process.env`
+   read in the file is `ALEXA_SKILL_ID`. The cert-chain URL is validated against
+   Amazon's published host/path policy BEFORE the fetch, which its own header
+   comment identifies as the thing that stops the verifier becoming an SSRF
+   primitive, and the chain fetch resolves through `isPublicDocumentAddress` /
+   `resolvePublicAddresses`. One residual, not a finding: step 4 (skill-id match)
+   is skipped when `ALEXA_SKILL_ID` is unset, so another Amazon-signed skill
+   could point at the endpoint and clear steps 1-3 and 5. The variable IS in the
+   environment registry and in `.env.example`.
+5. **The contact-centre inbound-email secret is fail-closed in production** —
+   this directly answers the dispatch brief's concern. `authorized()` returns
+   `process.env.NODE_ENV !== 'production'` only when the secret is UNSET, i.e.
+   with no secret configured the endpoint rejects everything in production and
+   permits only local development. The header comment says exactly this and is
+   accurate. (Its two smaller problems are C3-S5-08.)
+6. **`sync_tokens` is the model credential store.** `for all using (false) with
+   check (false)`, verified against the replayed catalogue. Service-role only.
+7. **`lib/server/public-document-fetch.ts` and `public-media-fetch.ts` are the
+   strongest SSRF guards here.** They resolve with a dedicated `Resolver`,
+   reject via a `BlockList` covering IPv4 private/reserved space, Azure's
+   `168.63.129.16`, IPv6 non-global-unicast and documentation ranges — and then
+   **pin the resolved address into the socket** through a custom `LookupFunction`
+   on a per-request `Agent` with `keepAlive: false` and `autoSelectFamily: false`,
+   so DNS rebinding between check and connect cannot move the connection.
+   Redirects are handled hop-by-hop with the same validation. The media proxy
+   imports the document module's helpers rather than copying them, and says why.
+8. **`tests/calendar-sync-ssrf-guard.test.ts` is load-bearing, not vacuous** —
+   the brief asked. It pins the call SITE: the route must import
+   `fetchPublicCalendarText` from the guarded module, must call it, and must
+   contain **zero** raw `fetch(` calls (`route.match(/[^.\w]fetch\s*\(/g)` must
+   be empty). That third assertion is the one that makes it real: it fails if a
+   refactor adds a bare `fetch` anywhere in the route, which is precisely how
+   this class of guard usually gets bypassed. The underlying guard
+   (`public-calendar-fetch.ts`) resolves DNS, rejects 13 IPv4 ranges and the
+   IPv6 equivalents, rejects credentials in the URL, revalidates every redirect
+   hop with `redirect: 'manual'`, caps at 3 hops, and bounds the body by both
+   `content-length` and a streaming byte count.
+9. **The URL-unfurl path is guarded.** `addByUrlAction` looks like it uses a
+   hand-rolled `isSafePublicUrl`, but the actual fetch goes through
+   `fetchPublicText` — the tier-2 guard. `isSafePublicUrl` is a redundant
+   pre-filter (see the note in C3-S5-03).
+10. **Apple CalDAV href parsing normalises everywhere.** All four parsers call
+    `hrefPath()`; `insertEvent` derives its href from an already-normalised
+    collection path; the packed Basic credential is separated by `\x1f` so an
+    Apple ID or password containing `:` cannot be mis-split.
+11. **`lib/marketing/provider-sync.ts` does NOT report success on failure.** I
+    expected it to — the aggregate initialises every provider to `ok: true` and
+    the per-provider functions catch their own errors. But each catch block
+    ends in `throw error` (lines 92, 117, 147) after writing `status:'error'` to
+    the DB, so the outer catch does fire and sets `ok: false`. The one cosmetic
+    edge: with no provider configured, `completed` is `true` and `ready` is
+    `false`, which is the honest pair.
+12. **`app/api/cron/admin-digest` reads `sendEmail`'s three-state return
+    correctly** — `sent`, `skipped` and `failed` counted separately, 502 when
+    any failed. It is the reference implementation C3-S5-05's fix should copy.
+13. **No secret reaches a log line or a client error body.** A grep for
+    `console.*` calls carrying `SECRET|API_KEY|_TOKEN|accessToken|refreshToken|
+    apiKey|password|authToken` returns nothing but "not set" diagnostics; no
+    integration route interpolates `error.message` into a `NextResponse`.
+    `SyncApiError` carries a `body` field for provider detail and nothing
+    renders it to a user. One note, not a finding: the Bing key travels in a
+    query string (`provider-sync.ts:104`), so it is visible to any egress proxy
+    or provider-side access log, unlike the other three which use headers.
+
+**Test coverage of the inbound boundary is better than average and one guard is
+stronger than its sibling.** `tests/public-webhook-signature-boundary.test.ts`
+enumerates `app/api/guardian/**` **from disk**, so a newly-added guardian route
+is covered automatically; it also asserts the verifier itself is fail-closed on
+a missing `TWILIO_AUTH_TOKEN`. `tests/middleware-public-api-boundary.test.ts`
+covers the four contact-centre routes — but from a **hard-coded list**
+(`['email','sms','voice','voice/transcription']`), so a fifth route added under
+that public prefix would be unguarded and untested. Making that list read from
+disk the way the guardian one does is a small, worthwhile hardening. Together
+with `tests/alexa-request-verification.test.ts` and
+`tests/resend-webhook-replay-contract.test.ts`, 10 of the 11 inbound endpoints
+have a committed authenticity guard.
+
+---
+
+## Hypotheses that died in measurement
+
+Recorded per the convention C1-S4 and Pass N established — a hypothesis that
+dies deserves the same note as one that survives, because the next pass will
+otherwise form it again.
+
+1. **"The push guard misses numeric IPv4 literals."** `isPrivateOrReservedHost`
+   only matches dotted quads, and I confirmed on this machine that
+   `dns.lookup` resolves `2130706433`, `0x7f000001`, `017700000001` and `127.1`
+   all to `127.0.0.1`. So the bypass looked certain. It is not: Node's WHATWG
+   `URL` parser **normalises all four to `127.0.0.1` before the guard ever sees
+   the hostname**, and the dotted-quad regex then catches them. My probe
+   asserted the accept and FAILED, which is how I found out. The finding that
+   survives (C3-S5-03) is narrower and rests on `localtest.me` instead. Worth
+   knowing that the guard's correctness here is inherited from `new URL()`
+   rather than written down — remove the `new URL()` step in a refactor and the
+   bypass becomes real.
+2. **"The contact-centre inbound-email secret falls back open in production."**
+   The dispatch brief flagged this from the environment registry's wording. It
+   is the opposite: an unset secret rejects everything in production and permits
+   only `NODE_ENV !== 'production'`. Fail-closed, and documented as such at the
+   top of the file.
+3. **"`lib/marketing/provider-sync.ts` reports success on failure."** The
+   aggregate's `results` map initialises every provider to `ok: true` and each
+   provider function has its own catch — the exact shape of the defect. The
+   catches re-throw. It is correct.
+
+A fourth, smaller one: I expected `lib/server/external-fetch.ts` to be the SSRF
+guard the brief described and to find callers bypassing it. It is a timeout
+wrapper with no validation at all, and every caller is a fixed provider host.
+The finding inverted into C3-S5-04.
+
+---
+
+## What I could NOT reach
+
+Stated explicitly, because "we could not look" must never read as "it is clean".
+
+1. **No local Supabase (no docker daemon, no CLI). Not one inbound webhook was
+   invoked.** No request — forged, signed, or replayed — was sent to any of the
+   11 endpoints. Every "verifies correctly" above is a reading of the verifier
+   and its call site, not a demonstration that a forged request is rejected. In
+   particular I could not show that the Twilio URL reconstruction
+   (`${BASE_URL}${pathname}${search}`) matches what Twilio actually signs behind
+   whatever proxy production runs — a mismatch there would make every callback
+   401 rather than fail open, but it would be a live outage and nothing here
+   would have caught it.
+2. **Every `NODE_ENV`-gated conclusion is conditional on production actually
+   setting `NODE_ENV=production`.** Ten endpoints (nine Twilio plus the inbound
+   email route) gate their entire authenticity check on that string. Next sets
+   it during `next build`/`next start`, so this is near-certainly fine — but I
+   could not read the deployment, and if it is ever wrong, ten endpoints open at
+   once with no other signal. There is also no test that exercises the verifying
+   branch, because the branch only exists when `NODE_ENV === 'production'`.
+3. **Production environment values are unknown.** Whether `RESEND_API_KEY`,
+   `CONTACT_CENTER_INBOUND_SECRET`, `ALEXA_SKILL_ID`, `STRIPE_MONEY_WEBHOOK_SECRET`
+   or a strong `SYNC_TOKEN_KEY` are set is not observable from here. C3-S5-05
+   and C3-S5-06 are bounded by exactly that.
+4. **Production schema is not verified.** The SQL evidence in C3-S5-01 and
+   C3-S5-09 is the committed migrations replayed locally. `finalaudit.md`
+   F-001/F5/F-C08 record that there is no working path to apply a migration to
+   production, so production may carry neither 0034's invariant nor 0297's
+   reversal of it. Confirming which needs operator credentials.
+5. **No outbound request was made to any provider.** Google, Twilio, Resend,
+   Stripe, iCloud CalDAV, FCM/APNs and the marketing providers were all read,
+   never called. The SSRF findings rest on guard logic, not on an observed
+   connection to an internal address.
+6. **`lib/server/push.ts` was read only along the endpoint path.** The FCM and
+   APNs provider branches, their credential handling, and VAPID key storage were
+   not audited. That is a real gap in this session's coverage of "push", and it
+   should be somebody's next half-hour.
+7. **`mobile/` was not swept.** The Expo app has its own integration surface
+   (push registration, deep links, OAuth redirects) and nothing in this session
+   touched it. C1-S3 looked at the mobile bundle's secret exposure; the
+   integration seams there are unexamined.
+

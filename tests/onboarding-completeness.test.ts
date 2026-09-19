@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 import { describe, it, expect } from 'vitest';
 import {
   computeCompleteness, statusFromCompleteness, type CompletenessSignals,
@@ -53,7 +54,7 @@ describe('computeCompleteness — missing pieces', () => {
     // questionnaire (25) must come before goals (15) / members (15) / pin (10),
     // and value (20) before goals.
     expect(keys[0]).toBe('questionnaire');
-    expect(keys.indexOf('value')).toBeLessThan(keys.indexOf('goals'));
+    expect(at(keys, 'value')).toBeLessThan(at(keys, 'goals'));
     // Every missing piece carries a destination.
     for (const m of r.missing) expect(m.href.length).toBeGreaterThan(0);
   });

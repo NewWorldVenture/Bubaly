@@ -6,7 +6,7 @@ import { prepareSpeechText, normalizeTtsVoice } from '@/lib/ai/voice';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 import { readBoundedResponseText } from '@/lib/server/bounded-response-body';
-import { fetchExternal } from '@/lib/server/external-fetch';
+import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
     if (!speech) return NextResponse.json({ error: t('speak.nothingToSay') }, { status: 400 });
 
     const model = process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts';
-    const res = await fetchExternal('https://api.openai.com/v1/audio/speech', {
+    const res = await fetchWithDeadline('https://api.openai.com/v1/audio/speech', {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({

@@ -77,7 +77,7 @@ describe('Marketing Customer Health fails closed on a read error (no false-empty
   it('uses the error-returning reader and renders an error state, not "no customers"', () => {
     // Previously used getMarketingCustomers (drops the error → [] on failure), so a
     // transient DB blip rendered "No customers yet" and hid every at-risk family.
-    expect(healthPage).toContain('getMarketingCustomersWithError');
+    expect(healthPage).toContain('getMarketingCustomersWithError(');
     expect(healthPage).not.toMatch(/=\s*await getMarketingCustomers\(/);
     expect(healthPage).toContain('CustomerHealthReadError');
   });

@@ -37,7 +37,12 @@ async function timezonesFor(
   return { zones: new Map((data ?? []).map((f) => [f.id, f.timezone])), error: null };
 }
 
-/** The zone for a rule's family, or null when the read failed and we must not guess. */
+/**
+ * The zone for a rule's family. Never null: a failed read is caught by the
+ * caller on `timezonesFor`'s error, which fires nothing rather than guessing —
+ * so by the time this is reached the only question left is whether the family
+ * set a zone at all. Audit C4-S4-08 is why that distinction is kept.
+ */
 function zoneFor(zones: Map<string, string>, familyId: string): string {
   // A family row that is genuinely absent or blank keeps the long-standing
   // default. Only a FAILED read is treated as unknown, above.
@@ -203,8 +208,20 @@ export async function GET(req: NextRequest) {
     } else {
       const run = await createRun(scope, { requestId: request.data.id, runType: 'routine', summary: prompt, state: 'queued' }, { db });
       await db.from('routine_runs').update({ status: 'filed', request_id: request.data.id }).eq('rule_id', rule.id).eq('due_at', dueAt);
-      if (run.ok) kickRun(run.data.id, { budgetMs: 20_000 });
-      filed += 1;
+      // `filed` is held to the standard this file already sets for `armed`
+      // ("it may only count writes that landed, so a quiet tick reads
+      // differently from a broken one"). A refused createRun leaves a request
+      // with no run to execute it: nothing is kicked, nothing runs, and the
+      // routine did not file any work. Counting that as filed while it is
+      // absent from `problems` makes a broken tick read as a clean one.
+      // Audit C1-S6-03.
+      if (!run.ok) {
+        console.error('[cron:family-routines] request created but no run to execute it', rule.id, run.error);
+        problems.push(rule.id);
+      } else {
+        kickRun(run.data.id, { budgetMs: 20_000 });
+        filed += 1;
+      }
     }
 
     // Schedule the next occurrence. A cron's is arithmetic; a relative
@@ -257,6 +274,7 @@ export async function GET(req: NextRequest) {
 }
 
 /** The next fire for a schedule of either kind, in one call. */
+
 async function nextFireAfter(
   db: DB,
   familyId: string,
@@ -277,7 +295,10 @@ async function nextFireAfter(
  * than repeatedly rewritten. Returns how many were armed, which the response
  * reports so a quiet tick is distinguishable from a broken one.
  */
-async function armPendingRoutines(db: DB, now: Date): Promise<number> {
+async function armPendingRoutines(
+  db: DB,
+  now: Date,
+): Promise<number> {
   const { data: pending, error } = await db
     .from('family_automation_rules')
     .select('id, family_id, schedule_kind, schedule_expr, anchor_key, offset_days, at_hour, said, next_run_at')

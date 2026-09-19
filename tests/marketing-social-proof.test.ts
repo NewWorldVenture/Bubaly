@@ -12,7 +12,7 @@ const en = JSON.parse(readFileSync('lib/i18n/messages/en-US.json', 'utf8')) as R
 describe('lib/marketing/reputation-server.ts', () => {
   it('is server-only and reads with the service client', () => {
     expect(reader.trimStart().startsWith("import 'server-only'")).toBe(true);
-    expect(reader).toContain('createServiceClient');
+    expect(reader).toContain('createServiceClient(');
   });
 
   it('reads only published rows, in sort order, through the pure helpers', () => {

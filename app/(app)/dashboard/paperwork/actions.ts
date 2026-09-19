@@ -5,7 +5,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import {
-  triagePaperwork, paperworkKindFields, type PaperworkAction, kindLabel, type PaperworkKind,
+  paperworkInsertRow, type PaperworkAction, kindLabel, type PaperworkKind,
 } from '@/lib/paperwork/triage';
 import { isAIConfigured, resolveProvider, describeAIError } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
@@ -14,48 +14,10 @@ import { createReminder } from '@/lib/services/reminders';
 import { fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
 import { describeActionError } from '@/lib/supabase/errors';
 import { isPaperworkExtractionPartial } from '@/lib/paperwork/extraction';
+import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 
 const PATH = '/dashboard/paperwork';
 
-/**
- * The row a captured piece of paperwork becomes.
- *
- * It exists as its own exported function — async, which is all a `'use server'`
- * module may export — because of the one mistake tsc cannot catch here: the
- * generated Insert type for `kind` is a plain `string`, while 0169's CHECK
- * admits seven values and triage now recognises nine. Writing 'receipt' or
- * 'reservation' straight from `triagePaperwork` is a 23514 at runtime that
- * loses the pasted paperwork entirely, so the mapping goes through
- * `paperworkKindFields` (admitted value on the column, finer kind kept in
- * `meta`) and a test pins the payload without needing a database.
- */
-export async function paperworkInsertRow(input: {
-  familyId: string;
-  userId: string;
-  text: string;
-  sender?: string | null;
-  now?: Date;
-}) {
-  const t = triagePaperwork(input.text, input.now ?? new Date());
-  const fields = paperworkKindFields(t.kind);
-  return {
-    family_id: input.familyId,
-    kind: fields.kind,
-    title: t.title,
-    summary: t.summary,
-    raw_text: input.text.slice(0, 20_000),
-    sender: input.sender ?? null,
-    due_on: t.due_on,
-    amount: t.amount,
-    urgency: t.urgency,
-    status: 'needs_action',
-    actions: t.actions.map((a) => ({ ...a, materialized_as: null, materialized_id: null })),
-    // What triage actually saw, so a receipt filed as a payment is still
-    // recoverable as a receipt when the column is widened.
-    meta: { ...fields.meta },
-    created_by: input.userId,
-  };
-}
 
 /** Paste/capture a piece of paperwork → triage it → drop it in the inbox. */
 export async function addPaperworkAction(formData: FormData): Promise<void> {
@@ -142,18 +104,30 @@ export async function materializePaperworkActionAction(input: {
   }
 
   if (materializedId) {
-    const next = actions.map((a, i) =>
-      i === input.actionIndex ? { ...a, materialized_as: materializedAs, materialized_id: materializedId } : a);
-    const allDone = next.every((a) => a.materialized_id);
-    // The record was already created above — if this stamp-back fails, log it so a
-    // future tap doesn't silently double-create against an un-stamped item.
-    const { error: stampError } = await supabase.from('paperwork_items')
-      .update({ actions: next as never, status: allDone ? 'done' : 'in_progress' })
-      .eq('id', item.id);
+    // 0327. This used to rewrite the WHOLE actions array from the copy read at
+    // the top of this function, so two overlapping taps — "Add to calendar"
+    // then "Remind me" on the same letter, which the module's per-action
+    // buttons invite — each erased the other's stamp, and the next tap created
+    // a second record. The function stamps one element and recomputes `status`
+    // from the row as it stands, so a sibling that landed in between counts.
+    //
+    // The record was already created above, so a failure here is logged rather
+    // than thrown: a future tap double-creating is bad, and losing the reminder
+    // the family just watched appear is worse.
+    const { data: stamped, error: stampError } = await supabase.rpc('paperwork_stamp_action', {
+      p_item_id: item.id,
+      p_index: input.actionIndex,
+      p_as: materializedAs,
+      p_id: materializedId,
+    });
     if (stampError) console.error('[paperwork] materialization stamp-back failed', { itemId: item.id, error: stampError });
+    else if (stamped === false) console.warn('[paperwork] action was already stamped by a concurrent tap', { itemId: item.id, actionIndex: input.actionIndex });
   }
   revalidatePath(PATH);
 }
+
+/** Matches the inbox intake's budget — see app/(app)/dashboard/inbox/actions.ts. */
+const AI_RATE_LIMIT = { limit: 20, windowMs: 60_000 } as const;
 
 type DraftResult = { ok: true; draft: string } | { ok: false; error: string };
 
@@ -169,6 +143,11 @@ export async function draftPaperworkReplyAction(itemId: string): Promise<DraftRe
   if (!itemId) return { ok: false, error: tr('actions.invalidItem') };
   const ctx = await requireUserContext();
   const supabase = await createServer();
+
+  // Reaches a paid provider, so it carries the same budget as every API route
+  // that does and as the inbox intake. Audit C3-S4-01.
+  const limited = await enforceAIRateLimit(supabase, `ai-requests:${ctx.user.id}`, AI_RATE_LIMIT);
+  if (!limited.ok) return { ok: false, error: tr('inboxActions.tooManyRequestsRightNow') };
 
   const { data: item } = await supabase
     .from('paperwork_items').select('*')

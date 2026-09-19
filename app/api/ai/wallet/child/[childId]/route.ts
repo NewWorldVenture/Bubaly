@@ -64,7 +64,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ childI
       }
     }
 
-    const [{ data: member }, { data: walletBuckets }, { data: txns }, { data: goals }] = await settleAll([
+    const [{ data: member }, { data: walletBuckets }, { data: txns, error: txnsError }, { data: goals }] = await settleAll([
       supabase.from('family_members').select('display_name').eq('id', cw.member_id).maybeSingle(),
       supabase.from('wallet_buckets').select('id, kind').eq('child_wallet_id', childId),
       // Money, so a quietly truncated read is a wrong balance, not a short
@@ -72,6 +72,15 @@ export async function POST(_req: Request, { params }: { params: Promise<{ childI
       readAllAsQuery((from, to) => supabase.from('wallet_transactions').select('bucket_id, status, direction, amount_cents, created_at').eq('child_wallet_id', childId).order('id').range(from, to), { max: 2000 }),
       supabase.from('wallet_goals').select('title, saved_cents, target_cents').eq('child_wallet_id', childId).neq('status', 'cancelled').limit(20),
     ]);
+
+    // Same defect as the family-level route: readAllAsQuery reports a truncated
+    // or failed read as `data: null`, and destructuring only `data` turned that
+    // into a $0.00 balance the model then wrote coaching prose about. This is a
+    // child's money — refuse rather than invent a number. Audit C4-S4-02.
+    if (txnsError) {
+      console.error('[ai/wallet/child] transaction read failed or truncated', { childId, error: txnsError });
+      return NextResponse.json({ error: tr('child.couldNotGenerateCoachingRight') }, { status: 502 });
+    }
 
     const bucketKindById = new Map((walletBuckets ?? []).map((b) => [b.id, b.kind as BucketKind]));
     const entries: LedgerEntry[] = (txns ?? []).map((t) => ({

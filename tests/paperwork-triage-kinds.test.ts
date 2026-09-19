@@ -18,7 +18,7 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: vi.fn() }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: vi.fn(), createServiceClient: vi.fn() }));
 
-import { paperworkInsertRow } from '@/app/(app)/dashboard/paperwork/actions';
+import { paperworkInsertRow } from '@/lib/paperwork/triage';
 
 const NOW = new Date('2026-03-01T12:00:00Z');
 

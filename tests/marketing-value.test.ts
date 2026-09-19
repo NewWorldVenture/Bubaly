@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
@@ -201,7 +202,7 @@ describe('pricing-content.tsx mounts the block and keeps the toggle intact', () 
     expect(priceRow).toBeGreaterThan(-1);
     expect(perDayLine).toBeGreaterThan(priceRow);
     // The billed-annually sub-line survives underneath it.
-    expect(pricing.indexOf('{priceSub}')).toBeGreaterThan(perDayLine);
+    expect(at(pricing, '{priceSub}')).toBeGreaterThan(perDayLine);
     // Only the two paid cards pass perDay; the trial card does not. The cards
     // are located by their <PlanCard boundaries: every visible name on them is
     // a catalogue key, so there is no English literal to search for.

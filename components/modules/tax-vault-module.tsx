@@ -82,7 +82,14 @@ export function TaxVaultModule() {
   async function remove(d: TaxDoc) {
     if (!confirm(t('taxVaultModule.deleteThisDocument'))) return;
     const supabase = createClient();
-    if (d.storage_path) await removeFamilyDocument(supabase, d.storage_path);
+    // The object goes first and its result is READ: deleting the row first
+    // makes a surviving file INVISIBLE — nothing references it, so nobody can
+    // see it, open it or try again — while the screen says it is gone. Audit
+    // C1-S6-01; the same shape adminDeleteDocumentAction already uses.
+    if (d.storage_path) {
+      const { error: storageError } = await removeFamilyDocument(supabase, d.storage_path);
+      if (storageError) return toastError(storageError);
+    }
     const { error } = await supabase.from('tax_documents').delete().eq('id', d.id);
     if (error) toastError(describeDbError(error)); else success(t('taxVaultModule.deleted'));
   }

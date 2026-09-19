@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { timingSafeEqual } from 'node:crypto';
 import { createServer } from '@/lib/supabase/server';
 import { exchangeGoogleCode, googleCalendarRedirectUri, type GoogleToken } from '@/lib/google';
+import { canStoreGoogleToken, encodeGoogleToken } from '@/lib/google-token-storage';
 
 // Google redirects here after the user grants calendar access. Exchanges the code
 // for tokens and stores them on the SESSION user's user_preferences.
@@ -72,8 +73,18 @@ export async function GET(req: NextRequest) {
       return redirect('error');
     }
 
+    // Encrypted before it touches the column, because this row's policies are
+    // `user_id = auth.uid()` for SELECT as well as UPDATE — the browser can
+    // read it. Fail closed if there is no key: a connection that silently
+    // stores a refresh token in the clear is worse than one that did not
+    // connect, and the failure is loud here rather than invisible forever.
+    // Audit C3-S5-02.
+    if (!canStoreGoogleToken()) {
+      console.error('Google Calendar callback: SYNC_TOKEN_KEY is not set, refusing to store a token in plaintext');
+      return redirect('error');
+    }
     const existing = (prefs?.notification_prefs as Record<string, unknown>) ?? {};
-    const merged = { ...existing, googleCalendarToken: token };
+    const merged = { ...existing, googleCalendarToken: encodeGoogleToken(token) };
 
     const { error: writeError } = await supabase
       .from('user_preferences')

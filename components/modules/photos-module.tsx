@@ -176,7 +176,20 @@ export function PhotosModule() {
     // never orphan a library row that points at an already-removed image.
     const { error } = await supabase.from('family_photos').delete().eq('id', photo.id);
     if (error) { toastError(describeDbError(error)); return; }
-    await supabase.storage.from('family-media').remove([photo.storage_path]);
+    // This module deletes the ROW first, deliberately — the comment above says
+    // why, and that reasoning is left intact. What it did not do was read this
+    // result: a file that survives after its row is gone is invisible, and
+    // "Photo deleted" was said either way. The row really is gone, so this
+    // cannot refuse; it can stop claiming, and say what is actually true.
+    // Audit C1-S6-01.
+    const { error: storageError } = await supabase.storage.from('family-media').remove([photo.storage_path]);
+    if (storageError) {
+      console.error('[photos] storage object survived its deleted row', { path: photo.storage_path }, storageError);
+      toastError(tr('photosModule.theFileCouldNotBe'));
+      void refreshPhotos();
+      if (lightboxIdx !== null) setLightboxIdx(null);
+      return;
+    }
     success(tr('photosModule.photoDeleted'));
     void refreshPhotos();
     if (lightboxIdx !== null) setLightboxIdx(null);

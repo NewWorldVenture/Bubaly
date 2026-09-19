@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 
@@ -51,6 +52,6 @@ describe('every in-app notification surface reads only what is due', () => {
     // would silently do nothing. The guard has to be part of the query.
     const bell = readFileSync('components/app/notification-bell.tsx', 'utf8');
     expect(bell).toContain("{ count: 'exact', head: true }");
-    expect(bell.indexOf(".lte('send_at'")).toBeGreaterThan(bell.indexOf("from('notifications')"));
+    expect(at(bell, ".lte('send_at'")).toBeGreaterThan(at(bell, "from('notifications')"));
   });
 });

@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
@@ -21,7 +22,7 @@ describe('A-12 shared family-place mutations require a manager', () => {
       const body = src.slice(src.indexOf(`export async function ${fn}(`));
       const scope = body.slice(0, body.indexOf('\nexport async function', 1) === -1 ? undefined : body.indexOf('\nexport async function', 1));
       expect(scope).toContain('if (!isManager(c.active.role)) return managerOnlyPlace();');
-      expect(scope.indexOf('isManager')).toBeLessThan(scope.indexOf("from('family_places')"));
+      expect(at(scope, 'isManager')).toBeLessThan(at(scope, "from('family_places')"));
     });
   }
 

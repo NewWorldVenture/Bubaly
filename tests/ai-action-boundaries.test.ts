@@ -8,9 +8,9 @@ const adminActions = readFileSync('app/(app)/admin/ai/actions.ts', 'utf8');
 describe('AI action boundaries', () => {
   it('does not return raw tool or admin configuration failures', () => {
     expect(provider).toContain('toolExecutionFailure');
-    expect(provider).toContain('describeActionError');
+    expect(provider).toContain('describeActionError(');
     expect(provider).not.toContain('error: e instanceof Error ? e.message');
-    expect(adminActions).toContain('describeActionError');
+    expect(adminActions).toContain('describeActionError(');
     expect(adminActions).not.toContain('error: e instanceof Error ? e.message');
   });
 

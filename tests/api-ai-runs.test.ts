@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 // /api/ai/runs/[id] and its controls (map P2-03).
 //
 // Pinned here: the detail read is family-scoped, a run from another family
@@ -252,8 +253,8 @@ describe('POST /api/ai/runs/[id]/answer', () => {
     expect(claim?.payload).toMatchObject({ state: 'planning' });
     const membership = db.calls.find((c) => c.table === 'family_members' && c.kind === 'select');
     expect(membership?.filters).toMatchObject({ id: 'member-2', family_id: 'fam-1' });
-    expect(db.calls.indexOf(membership as Call)).toBeLessThan(db.calls.indexOf(claim as Call));
-    expect(db.calls.indexOf(claim as Call)).toBeLessThan(db.calls.findIndex((c) => c.table === 'ai_requests' && c.kind === 'update'));
+    expect(at(db.calls, membership as Call)).toBeLessThan(at(db.calls, claim as Call));
+    expect(at(db.calls, claim as Call)).toBeLessThan(db.calls.findIndex((c) => c.table === 'ai_requests' && c.kind === 'update'));
     // …then the answer lands on the request's clarifications and the planner sees it.
     const recorded = db.calls.find((c) => c.table === 'ai_requests' && c.kind === 'update' && Array.isArray((c.payload as Record<string, unknown>).clarifications));
     expect(recorded?.payload).toMatchObject({ status: 'planning', clarifications: [{ question: 'Which weekend?', reason: 'Two weekends fit.', asked_at: '2026-09-01T00:00:00.000Z', answer: 'This one', answered_at: expect.any(String) }] });

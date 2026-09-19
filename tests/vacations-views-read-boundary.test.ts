@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 import { describe, expect, it } from 'vitest';
 import { expectSays } from './helpers/translated';
 import { readFileSync } from 'node:fs';
@@ -21,7 +22,7 @@ describe('vacations-list surfaces the primary read failure', () => {
     expectSays(list, 'vacationsList.couldNotLoadYourTrips', "Could not load your trips. Refresh and try again.");
     // the error branch must precede the empty-state JSX (anchor on the
     // component, not the comment text which also mentions "No trips yet")
-    expect(list.indexOf('readError ? (')).toBeLessThan(list.indexOf('<EmptyState icon={Plane}'));
+    expect(at(list, 'readError ? (')).toBeLessThan(at(list, '<EmptyState icon={Plane}'));
   });
 
   // The list also reads the members on each trip and the readiness score shown
