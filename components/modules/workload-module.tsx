@@ -65,9 +65,13 @@ export function WorkloadModule({
     void saveWorkloadSnapshotAction(report.loads.map(l => ({
       memberId: l.memberId, weekStart, choreMinutes: l.choreMinutes, choreCount: l.choreCount,
       taskCount: l.taskCount, eventCount: l.eventCount, loadScore: l.loadScore, sharePct: l.sharePct,
-    }))).then((res) => {
-      if (!res.ok) toastError(res.error);
-    });
+    }))).then(
+      (res) => { if (!res.ok) toastError(res.error); },
+      (err: unknown) => {
+        console.error('[workload] snapshot save failed', err);
+        toastError(err instanceof Error && err.message ? err.message : 'Could not save this week’s workload.');
+      },
+    );
   }, [report, toastError]);
 
   const trend = useMemo(() => shareTrend(

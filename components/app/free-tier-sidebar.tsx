@@ -119,6 +119,9 @@ function useSidebarNav() {
         setChildMap(clean);
         try { window.localStorage.setItem(SIDEBAR_NAV_CHILDREN_STORAGE_KEY, JSON.stringify(clean)); } catch { /* ignore */ }
       }
+    }, (err: unknown) => {
+      // Preferences degrade to the defaults; logged so it is not invisible.
+      console.error('[sidebar] preference read failed', err);
     });
     return () => { active = false; };
   }, []);

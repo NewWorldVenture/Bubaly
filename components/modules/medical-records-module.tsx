@@ -40,19 +40,34 @@ const blankProfile = { member_id: '', blood_type: '', allergies: '', conditions:
 
 /** Renders a private Storage image via a short-lived signed URL. */
 function CardImage({ path, label }: { path: string | null; label: string }) {
+  const t = useTranslations();
   const [url, setUrl] = useState<string | null>(null);
+  // A bare `.then()` had no rejection path: a failed signing left an unhandled
+  // rejection and the placeholder on screen forever, which reads exactly like
+  // "this card was never uploaded". For an insurance card those are very
+  // different facts, so a failure says so and is logged.
+  const [failed, setFailed] = useState(false);
   useEffect(() => {
     let active = true;
+    setFailed(false);
     if (!path) { setUrl(null); return; }
     const sb = createClient();
-    getDocumentSignedUrl(sb, path, 600).then(({ url }) => { if (active) setUrl(url); });
+    getDocumentSignedUrl(sb, path, 600).then(
+      ({ url }) => { if (active) setUrl(url); },
+      (err: unknown) => {
+        console.error('[medical-records] card image could not be signed', err);
+        if (active) setFailed(true);
+      },
+    );
     return () => { active = false; };
   }, [path]);
   if (!path) return null;
   return (
     <div className="overflow-hidden rounded-lg border border-border">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      {url ? <img src={url} alt={label} className="h-24 w-full object-cover" /> : <div className="grid h-24 w-full place-items-center bg-surface/40 text-xs text-muted">{label}</div>}
+      {url
+        ? <img src={url} alt={label} className="h-24 w-full object-cover" />
+        : <div className="grid h-24 w-full place-items-center bg-surface/40 text-xs text-muted">{failed ? t('installButton.unavailable') : label}</div>}
     </div>
   );
 }

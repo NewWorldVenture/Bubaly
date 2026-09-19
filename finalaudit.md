@@ -4550,9 +4550,36 @@ Deliberately **not** a toast. These components render on their own in tests with
 no `<ToastProvider>` above them, so a toast would turn a failed save into a
 crash — which is how C1-K-04's first attempt broke 38 tests.
 
+## C1-K-06 · MEDIUM · Promise chains with no rejection path
+
+`.then(onFulfilled)` with one argument and no `.catch()` cannot report a
+failure. supabase-js and the server actions REJECT on a transport failure —
+they only *resolve* `{ ok: false }` for a request that was answered — so these
+chains turned an outage into an unhandled rejection.
+
+Earlier passes fixed exactly this in `meals-module`, `event-detail-modal`,
+`quick-post` and `app-lock-settings`, each leaving a comment saying so. It had
+not reached eight more:
+
+| Where | What the silence looked like |
+| --- | --- |
+| `social-feed-module`'s shared `run()` | a rejection skipped `setBusy(null)`: control disabled, spinner spinning, nothing said — **every** control in the module goes through it |
+| `routines-panel`, `moments-view` | an **Undo** that looked done; the events were still on the calendar |
+| `ai-settings` | `{ ok: false }` handled, a rejection not — the skeleton stayed forever |
+| `medical-records`' `CardImage` | a failed signing left the placeholder, which reads exactly like "this card was never uploaded" |
+| `workload-module` | a weekly snapshot silently not saved |
+| `service-tooltip`, `free-tier-sidebar` | cosmetic, but invisible when broken |
+
+Each now has a rejection path that logs, and reports to the person wherever
+there is somewhere to report. `social-feed`'s `run()` was the highest-leverage
+of them — one helper behind every control in that module.
+
+The insurance card now says *Unavailable* rather than showing the same
+placeholder it shows for an absent card. Those are different facts.
+
 ## Verification
 
-`tsc` clean · `next lint` 0 errors · **14,008 tests / 1,230 files** ·
+`tsc` clean · `next lint` 0 errors · **14,046 tests / 1,231 files** ·
 **40/40 probes** (330 migrations replayed, 0 failed).
 
 Every fix calibrated by reverting it: removing the row checks fails 2 of the 8
