@@ -6947,3 +6947,56 @@ budget of 5.
 **Status:** FILED with a proven reproduction. Behaviour pinned by test, not
 asserted away — the test documents the defect and will fail the moment a reset
 is introduced, at which point the finding should be revisited.
+
+---
+
+[CLAUDE-1][INFO][AI-RUNTIME] Near-miss: the two idempotency comments look like they contradict each other, and do not
+
+Chased on the method that found Q40 — take a stated intent and check the code
+against it — and this time the code was right and I was wrong. Recorded because
+the apparent contradiction is real and the next reader will trip on it too.
+
+`lib/ai/tools/execute.ts:resolveIdempotencyKey` says, of its natural-key branch:
+
+> Deliberately keyed by the run/request and NOT the step: the duplicate a plan
+> actually produces is two steps creating the same thing.
+
+And `lib/ai/runs/executor.ts:920` hands `executeTool` a key that is *exactly*
+`sha256(familyId, runId, **stepId**, toolName)`. Since `resolveIdempotencyKey`
+short-circuits on a supplied key, the executor's step-scoped key always wins and
+the natural-key branch is never reached for plan execution — which looks like the
+executor defeating a documented decision on the one path the decision was
+written for.
+
+It is not. `lib/services/idempotency.ts:scopeKey` states the governing rule and
+attributes it to the migration:
+
+> composed the way migration 0250 documents: executor calls are keyed by run +
+> step so a retried step is deduplicated, while a caller-supplied
+> `scope.idempotencyKey` wins outright.
+
+So the two comments are scoped to different branches and to different duplicates.
+Step-scoping protects *a retried step*; the natural key protects *two calls in
+one request creating the same thing*, and it governs the callers that reach it —
+the assistant toolbox and the action bridge, which carry a `requestId` but no
+supplied key. Both are coherent; neither is defeating the other.
+
+Also checked while here, and clean: `ai_tool_calls.idempotency_key` is
+`text **not null**` (0250:308), so its partial unique index
+`where idempotency_key is not null` (0250:320) is total — the null hole that
+0256's partial indexes have by design cannot exist on the ledger.
+`family_automation_runs.idempotency_key` *is* nullable (0250:206) with the same
+partial index, but the side-effect protection lives at tool-call granularity, not
+run granularity, so a null run key does not reach a household table.
+
+**One question left genuinely open, not filed.** Nothing at tool-call granularity
+dedupes *two distinct steps of one plan* that create the same thing: distinct
+step ids give distinct keys through both `stepIdempotencyKey` and `scopeKey`, and
+0256's table-level keys are derived from `scopeKey` too, so they carry the step as
+well. The natural-key branch would catch it and is unreachable there. Whether a
+planner can actually emit such a plan — and whether §13's read-back catches it
+afterwards — is a further investigation I did not complete, and the prior that
+this is a defect is low given how deliberately this area is built. Named here so
+it is a known open question rather than an unexamined one.
+
+**Status:** NO DEFECT. Hypothesis refuted by the code's own documentation.
