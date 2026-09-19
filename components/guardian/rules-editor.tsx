@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Plus, Trash2, ToggleLeft, ToggleRight, ChevronDown, ChevronUp, GripVertical } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { TRUST_LABELS, TRUST_LEVELS, TRUST_ICONS, type TrustLevel } from '@/lib/guardian/trust';
@@ -8,6 +8,7 @@ import { ROUTING_MODE_LABELS, type RoutingMode } from '@/lib/guardian/pipeline';
 import { createRuleAction, toggleRuleAction, deleteRuleAction } from '@/app/(app)/guardian/actions';
 import { useToast } from '@/components/ui/toast';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useDialogBehavior } from '@/lib/a11y/use-dialog-behavior';
 
 type Rule = {
   id: string;
@@ -226,6 +227,11 @@ type NewRuleForm = {
 
 function NewRuleModal({ onSave, onClose }: { onSave: (f: NewRuleForm) => void; onClose: () => void }) {
   const tr = useTranslations();
+  // The markup below declares `aria-modal="true"`. This is what makes that true:
+  // focus enters the dialog, Tab cycles inside it, Escape closes, and focus
+  // returns to the control that opened it.
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogBehavior(dialogRef, true, { onClose });
   const [form, setForm] = useState<NewRuleForm>({
     name: '', description: '', priority: '100',
     trust_levels: [], time_start: '', time_end: '',
@@ -251,6 +257,8 @@ function NewRuleModal({ onSave, onClose }: { onSave: (f: NewRuleForm) => void; o
     <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="rules-editor-title"

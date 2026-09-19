@@ -8,6 +8,11 @@ import { readFileSync } from 'node:fs';
 // mobile safe-area/bottom-sheet layout would regress a11y everywhere at once.
 // This locks the WAI-ARIA dialog contract + the mobile layout at the source.
 const SRC = readUiSource('components/ui/modal.tsx');
+// The dialog BEHAVIOUR moved to a hook so overlays that cannot take Modal's
+// chrome can still keep the promise `aria-modal` makes. The contract did not
+// weaken — it follows the behaviour to where it lives, and this file asserts
+// both halves: that Modal delegates, and that the hook implements.
+const HOOK = readFileSync('lib/a11y/use-dialog-behavior.ts', 'utf8');
 
 describe('A-19 shared Modal keeps its a11y + mobile contract', () => {
   it('is a labelled, modal dialog', () => {
@@ -20,20 +25,36 @@ describe('A-19 shared Modal keeps its a11y + mobile contract', () => {
     expect(SRC).toMatch(/id=\{titleId\}/);
   });
 
+  it('delegates its dialog behaviour to the shared hook', () => {
+    // One implementation, not two. Modal keeping a private copy is how the
+    // behaviour became unavailable to everything that needed a different shell.
+    expect(SRC).toMatch(/useDialogBehavior\(dialogRef, open, \{ onClose \}\)/);
+    expect(SRC).toMatch(/from '@\/lib\/a11y\/use-dialog-behavior'/);
+  });
+
   it('closes on Escape and traps Tab focus within the dialog', () => {
-    expect(SRC).toMatch(/e\.key === 'Escape'/);
-    expect(SRC).toMatch(/onClose\(\)/);
-    expect(SRC).toMatch(/e\.key !== 'Tab'/);
-    expect(SRC).toMatch(/preventDefault\(\)/);
+    expect(HOOK).toMatch(/e\.key === 'Escape'/);
+    expect(HOOK).toMatch(/onClose\(\)/);
+    expect(HOOK).toMatch(/e\.key !== 'Tab'/);
+    expect(HOOK).toMatch(/preventDefault\(\)/);
     // a defined focusable set is what makes the trap real
-    expect(SRC).toMatch(/FOCUSABLE|focusables/);
+    expect(HOOK).toMatch(/FOCUSABLE|focusables/);
+    // Tab with nothing focusable inside must not walk out into the background
+    // this element claims is inert.
+    expect(HOOK).toMatch(/items\.length === 0/);
   });
 
   it('moves focus in on open and restores focus to the trigger on close', () => {
-    expect(SRC).toMatch(/previouslyFocused\s*=\s*document\.activeElement/);
-    expect(SRC).toMatch(/previouslyFocused\?\.focus\?\.\(\)/);
+    expect(HOOK).toMatch(/previouslyFocused\s*=\s*document\.activeElement/);
+    expect(HOOK).toMatch(/previouslyFocused\?\.focus\?\.\(\)/);
     // scroll-lock the background while open
-    expect(SRC).toMatch(/document\.body\.style\.overflow = 'hidden'/);
+    expect(HOOK).toMatch(/document\.body\.style\.overflow = 'hidden'/);
+  });
+
+  it('keeps the trap for a dialog that has no close (a gate is still modal)', () => {
+    // A paywall or lock screen passes no `onClose`: Escape does nothing and the
+    // trap still holds. `aria-modal` has to be true even with nothing to close.
+    expect(HOOK).toMatch(/if \(onClose\) onClose\(\)/);
   });
 
   it('gives the icon-only close control an accessible name', () => {

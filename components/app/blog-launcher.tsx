@@ -10,10 +10,11 @@
 // containing block, which would otherwise clip a `fixed` overlay) and its left
 // edge is inset to the sidebar width on desktop — so it covers and blurs ONLY
 // the main content area, leaving the left navigation crisp and usable.
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { BookOpen, ExternalLink, X } from 'lucide-react';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useDialogBehavior } from '@/lib/a11y/use-dialog-behavior';
 
 const BLOG_URL = '/blog';
 
@@ -25,24 +26,19 @@ export function BlogLauncher() {
 
   useEffect(() => { setMounted(true); }, []);
 
-  // Close on Escape + lock body scroll while the modal is up.
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
-    document.addEventListener('keydown', onKey);
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = prevOverflow;
-    };
-  }, [open]);
-
   const openModal = useCallback(() => { setLoaded(false); setOpen(true); }, []);
   const close = useCallback(() => setOpen(false), []);
 
+  // Escape, scroll lock, focus trap and focus restore — the bespoke effect this
+  // replaces did the first two and neither of the last two, while the markup
+  // below declared `aria-modal="true"`.
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogBehavior(dialogRef, open, { onClose: close });
+
   const modal = (
     <div
+      ref={dialogRef}
+      tabIndex={-1}
       className="fixed inset-0 z-[90] flex items-center justify-center p-3 sm:p-6 lg:left-[var(--sidebar-width)]"
       role="dialog"
       aria-modal="true"
