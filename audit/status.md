@@ -932,7 +932,18 @@ and every root config (tsconfig, tailwind content globs, playwright, postcss) â€
 all clean. That layer produced Q35-Q39 after app code went quiet and now looks
 exhausted.
 
-VERIFIED: 14,184 green under both timezones, tsc clean, lint 0 at 12.
+Q40 (HIGH, ai-runtime): family_automation_runs.attempt is read as a failure
+budget ("abandoned", dead-letter) and written as a claim counter - every claim
+increments it, successful ones included, and nothing resets it. max_attempts is
+5, the per-run slice budget is 25s, and a run parks whenever it needs a human, so
+five healthy slices make a run unresumable by every human path (resume, approval
+kick, step re-run) - silently, ok with claimed:false. The cron pass has no such
+ceiling, so the two claim paths disagree and that is the only thing preventing
+deadlock. Proven against the real claimRun; calibrated both directions. FILED not
+fixed: the correct reset is progress-gated, and a bare reset stops stuck runs
+dead-lettering.
+
+VERIFIED: 14,189 green under both timezones, tsc clean, lint 0 at 12.
 STILL UNVERIFIED BY CI: no ci.yml run has been created for any commit after
 b05f0b32, across thirty checks. Everything above is local only.
 LAST-UPDATE: 2026-09-19, after Q39.

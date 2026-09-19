@@ -6853,3 +6853,97 @@ workflows, `vercel.json`, the dispatcher, and every root config file. That layer
 produced five findings (Q35–Q39) after the application code went quiet; it now
 looks genuinely exhausted, which is a result worth recording as much as a defect
 is — the next reader should not have to re-derive that these were checked.
+
+---
+
+[CLAUDE-1][HIGH][AI-RUNTIME] A successful slice spends the run's abandonment budget, and five of them make a healthy run unresumable
+
+**Files:** `supabase/migrations/0250_ai_runtime_core.sql` (`claim_ai_runs`,
+`family_automation_runs.attempt`), `lib/ai/runs/store.ts` (`claimRun`),
+`lib/ai/runs/executor.ts` (`parkForContinuation`),
+`supabase/migrations/0263_dead_letter_reconcile.sql`.
+
+**Problem.** `family_automation_runs.attempt` is read as a *failure* budget and
+written as a *claim* counter. Three sites read it, and the prose is unanimous
+about what it is supposed to mean:
+
+```
+claim_ai_runs pass 1 (0250:434)  state = case when attempt >= max_attempts
+                                   then 'failed' else 'ready' end
+                                 error = 'Run abandoned after the maximum
+                                   number of attempts.'
+0263_dead_letter_reconcile:101   the same, as the dead-letter path
+store.claimRun (store.ts:629)    claimable = ... && attempt < run.max_attempts
+```
+
+"Abandoned", "dead-letter" — this is a budget for things going wrong. But every
+claim increments it (`0250:461`, `store.ts:638`), **including the claims that
+succeed**, and nothing in the codebase ever resets it.
+`parkForContinuation` (`executor.ts:661`) — the path a healthy slice takes when
+it runs out of wall clock — clears the lease, sets `run_after`, and leaves
+`attempt` exactly where the claim put it.
+
+So a run that is working perfectly spends its abandonment budget by making
+progress, and `max_attempts` defaults to **5**.
+
+**Evidence.** `tests/a-successful-slice-must-not-spend-a-retry.test.ts` drives
+the real `claimRun` against the in-memory PostgREST stand-in — real filters, the
+real compare-and-set on `attempt`. Five healthy slices, each claimed and parked
+back to `ready` the way the executor does it, leave the run in a state with
+nothing wrong with it: `state: 'ready'`, `lease_owner: null`,
+`cancel_requested_at: null`, `error: null`. The sixth claim is refused.
+
+The refusal is **silent**: `claimRun` returns `ok` with `claimed: false`, which
+`continueRun` reports as `status: 'ready'`. A caller sees a ready run that will
+not run and no reason why. Every human-initiated path goes through `claimRun` —
+the resume control, the kick after an approval answer, a step re-run — so all of
+them stop working, with no error and no state change.
+
+**Is five slices realistic? Yes.** `PER_RUN_BUDGET_MS = 25_000` inside an 85 s
+tick, and a run parks every time it needs a human. A plan with three approval
+gates is at five claims before it has done anything unusual. `kickRun` from the
+interactive intake burns the first one before the cron ever sees the run.
+
+**Two further consequences.**
+
+1. *The run is not fully dead, for the wrong reason.* `claim_ai_runs`' claiming
+   pass has **no** `attempt < max_attempts` filter — only `claimRun` does. So the
+   cron keeps advancing a run that no human can touch. The two claim paths
+   disagree about the rule, and that inconsistency is the only thing preventing
+   total deadlock. Pinned in the test against the migration text.
+2. *The eventual error message is false.* Once `attempt >= max_attempts`, the
+   first genuine worker death puts pass 1 into the dead-letter branch and the run
+   is marked `failed` with "Run abandoned after the maximum number of attempts."
+   It was not abandoned. It made progress five times and died once.
+
+**That the run-level counter was never meant to be the retry mechanism** is
+visible in the schema: per-step retries have their own column,
+`ai_plan_steps.max_retries` (default 2). `attempt` is the run's abandonment
+budget; successful slices are eating it.
+
+**Calibrated both ways.** Raising `max_attempts` to 100 makes the sixth claim
+succeed — so the refusal is the ceiling and not an artefact of the fixture.
+Adding `attempt: 0` to the park makes the run stay claimable indefinitely — so
+the absence of a reset is the cause, and a reset is the shape of the fix.
+
+**Recommended fix — filed, not applied.** Reset `attempt` in
+`parkForContinuation`, but **only when the slice actually completed a step**. A
+bare reset (what the calibration does) removes the ceiling for genuinely stuck
+runs too, and a run that parks forever without progressing would never
+dead-letter. `parkForContinuation` already receives `steps` and calls
+`summarize`, so the signal is close by, but it needs a *this-slice* delta rather
+than the run's total, and proving that a no-progress run still terminates is more
+than a unilateral change to a concurrency-critical state machine should carry —
+particularly with two other workers live in this repository. The cheaper
+half-fix, adding the same `attempt < max_attempts` filter to `claim_ai_runs`'
+claiming pass, would make the two paths agree and is therefore **worse on its
+own**: it converts a run that a human cannot resume into one nothing can resume.
+The two must be done together, in that order.
+
+Note this is also the second finding, after Q39, where `attempt` inflation is
+made worse by cadence: the cron's ~7 claims/day are ~7 attempts/day against a
+budget of 5.
+
+**Status:** FILED with a proven reproduction. Behaviour pinned by test, not
+asserted away — the test documents the defect and will fail the moment a reset
+is introduced, at which point the finding should be revisited.

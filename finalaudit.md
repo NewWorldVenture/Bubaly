@@ -6803,3 +6803,46 @@ as daily. Full evidence, per-route delivery table and the deficit table are in
 **Verified:** 14,184 tests green under both `TZ=UTC` and
 `TZ=America/Los_Angeles` (four shards each), `tsc --noEmit` clean, `npm run lint`
 exits 0 at budget 12, dispatcher still parses and workflow YAML still valid.
+
+---
+
+## Q40 — A successful slice spends the run's abandonment budget
+
+**Severity: HIGH.** `family_automation_runs.attempt` is read as a failure budget
+and written as a claim counter. `claim_ai_runs` pass 1 and
+`0263_dead_letter_reconcile` both spell it "abandoned"/"dead-letter", and
+`store.claimRun` refuses a claim at `attempt >= max_attempts`. But every claim
+increments it — the successful ones included — and nothing ever resets it.
+`parkForContinuation`, the path a healthy slice takes when it runs out of wall
+clock, clears the lease and leaves `attempt` where the claim put it.
+`max_attempts` defaults to 5.
+
+**Proven, not argued.** `tests/a-successful-slice-must-not-spend-a-retry.test.ts`
+drives the real `claimRun` against the in-memory PostgREST stand-in. Five healthy
+slices leave a run with `state: 'ready'`, no lease, no cancellation and no error
+— and the sixth claim is refused, silently: `ok` with `claimed: false`, which
+`continueRun` reports as `status: 'ready'`. Every human-initiated path (resume,
+the kick after an approval answer, a step re-run) goes through `claimRun`, so all
+of them stop working with no error and no state change. Five slices is ordinary:
+the per-run budget is 25 s inside an 85 s tick, and a run parks every time it
+needs a human.
+
+Two further consequences. The cron's claiming pass has **no** attempt ceiling —
+only `claimRun` does — so the two claim paths disagree, and that inconsistency is
+the only thing preventing total deadlock. And once the ceiling is passed, the
+first genuine worker death dead-letters the run as "abandoned after the maximum
+number of attempts", which is false: it made progress five times and died once.
+That run-level `attempt` was never the retry mechanism is visible in the schema —
+per-step retries have their own column, `ai_plan_steps.max_retries`.
+
+**Calibrated both ways:** raising `max_attempts` makes the sixth claim succeed;
+adding `attempt: 0` to the park keeps the run claimable. So the ceiling is the
+cause and a reset is the shape of the fix.
+
+**Filed, not applied.** The fix is to reset `attempt` on park *only when the
+slice completed a step* — a bare reset would stop genuinely stuck runs from ever
+dead-lettering. That needs a this-slice delta and a proof that a no-progress run
+still terminates, which is more than a unilateral change to a concurrency-critical
+state machine should carry. The cheaper half — giving `claim_ai_runs` the same
+ceiling — is worse alone, since it converts "no human can resume this" into
+"nothing can". Both together, in that order.
