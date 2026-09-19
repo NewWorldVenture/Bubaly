@@ -7088,3 +7088,50 @@ paths is more than a unilateral change should carry with two other workers live.
 
 **Status:** FILED with a proven reproduction. The test pins the current
 behaviour and names what would change it.
+
+---
+
+[CLAUDE-1][INFO][AI-RUNTIME] Two more refuted hypotheses in the trust path, both worth recording
+
+Same method, same subsystem, no defect either time. Recorded because both read
+as alarming at the call site and the reasoning that clears them lives elsewhere.
+
+**1. `skipTrust` is computed from the PRESENCE of an approval, not its status.**
+`executor.ts:923` reads:
+
+```ts
+skipTrust: approvedPayload !== null || (step.approval_required && !!step.approval_id),
+```
+
+A step carrying *any* `approval_id` appears to bypass the trust gate — including
+one pointing at a pending, rejected or expired approval. It cannot. `runToolStep`
+has exactly one call site (`executor.ts:852`), reached only after the approval
+block above it, and that block returns early on every other status: no
+`approval_id` opens a gate and returns `awaiting_approval`; `pending` returns
+`awaiting_approval`; anything that is not `approved` or `modified` cancels the
+step and returns `progressed`. So the second disjunct is only ever evaluated on a
+path where the status was verified. `approvedPayload` is initialised `null` and
+assigned only inside that block, so the first disjunct cannot precede it either.
+And a step with a stale `approval_id` but `approval_required` false skips the
+block entirely and gets `skipTrust: false` — the gate applies, which is right.
+
+**2. The trust gate never sees a human-EDITED payload.** When an approver
+modifies a request, `approvedPayload` becomes the edit and is passed as `args`
+(`executor.ts:915`) with `skipTrust` true — so the edited content is executed
+without the gate evaluating it. That would matter if an edit could turn a benign
+action into a risky one. It cannot: `lib/services/approvals/index.ts:storedEdit`
+re-derives the edit rather than trusting the column, and says why — "
+`approval_requests_decide` lets any manager write any column on a pending row".
+The stored object is re-merged over the original through the same allow-list
+`editAndApprove` uses, restricted to scalar values, and re-validated against the
+tool's schema. An edit may only change fields the card offered, to values the
+tool would have accepted; anything else falls back to what the approvers were
+shown.
+
+**Tally for this subsystem.** Two defects (Q40, Q41) and three refutations —
+this pair plus the idempotency/retry claim recorded above. Both defects are in
+the *seams*: a counter carrying two meanings, and a defence that is unreachable
+from the path it was written for. None of the defences themselves were wrong.
+That is a reasonable place to stop pushing on this subsystem.
+
+**Status:** NO DEFECT in either.
