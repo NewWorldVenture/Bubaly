@@ -31,8 +31,12 @@ insert into public.wallet_audit_logs (family_id, actor_user_id, action, entity_t
   values (:'FA', :'PARENT', 'wallet_activated', 'family_wallets', 'probe seed')
   on conflict do nothing;
 
--- The harness grants table privileges to `authenticated`; RLS is the real gate.
-grant select, insert, update, delete on all tables in schema public to authenticated;
+-- No blanket `grant ... on all tables in schema public` here. The bootstrap's
+-- `alter default privileges` already gives `authenticated` full DML on every
+-- table a migration creates, so the restatement was redundant — and once
+-- migrations began revoking DML deliberately (0300 takes the paywall columns
+-- away from the client), it stopped being redundant and started undoing them
+-- for every probe that runs after this one against the shared database.
 
 -- ── Invariant 1a: a child cannot MINT — a COMPLETE, valid $9,999.99 credit into
 --     wallet_transactions must be RLS-rejected (only RLS can block a valid row,
@@ -54,6 +58,17 @@ begin
   if not blocked then
     raise exception 'A-08 FAIL: child MINTED a completed $9,999.99 credit into wallet_transactions';
   end if;
+  -- The comment above this block claims only RLS can block a COMPLETE, VALID
+  -- row, which is what makes this the rigorous mint proof rather than a
+  -- NOT-NULL artifact. That claim has to be enforced, not just asserted: the
+  -- sqlstate was already captured and then never checked, so renaming
+  -- amount_cents made the insert raise 42703, be caught, and print
+  -- "child mint of a complete valid credit REJECTED (sqlstate 42703)" — the
+  -- probe reporting a pass while announcing the evidence it had stopped
+  -- testing anything. Verified against this file before the check was added.
+  if sqlst is distinct from '42501' then
+    raise exception 'A-08 FAIL: the child mint was refused with sqlstate % , not 42501 (RLS). The statement did not reach the policy, so this proves nothing about the mint lock', sqlst;
+  end if;
   raise notice 'A-08 OK: child mint of a complete valid credit REJECTED (sqlstate %)', sqlst;
   perform set_config('role','postgres', true);
 end $$;
@@ -68,6 +83,13 @@ begin
   perform set_config('request.jwt.claim.sub','00000000-0000-4000-8000-0000000000c8', true);
   perform set_config('request.jwt.claim.role','authenticated', true);
   foreach t in array ledger loop
+    -- A NOT NULL violation is accepted below as proof the write did not land,
+    -- which is sound — but 42P01 (table renamed or dropped) would be accepted
+    -- on the same terms, and then a money table nobody is checking any more
+    -- reads as locked. Fail loudly instead.
+    if to_regclass('public.' || t) is null then
+      raise exception 'A-08 FAIL: money table public.% does not exist — this probe has been silently skipping it', t;
+    end if;
     blocked := false;
     begin
       execute format(

@@ -17,11 +17,13 @@ const sources = Object.fromEntries([
   'lib/supabase/errors.ts', 'lib/realtime/published-tables.ts', 'lib/constants/roles.ts', 'lib/rewards/points.ts',
   'components/ui/states.tsx', 'components/ui/states-client.tsx', 'components/ui/button.tsx',
   'components/ui/input.tsx', 'components/ui/modal.tsx', 'components/app/page-header.tsx',
+  'lib/a11y/use-dialog-behavior.ts',
+  'app/(app)/dashboard/rewards/actions.ts',
 ].map(file => [`@/${file.replace(/\.tsx?$/, '')}`, ts.transpileModule(fs.readFileSync(file, 'utf8'), {
   compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React },
 }).outputText]));
 const messages = Object.fromEntries(Object.entries(JSON.parse(fs.readFileSync('lib/i18n/messages/en-US.json', 'utf8')))
-  .filter(([key]) => /^(rewards\.|rewardsModule\.|auth\.cache|states\.|modal\.)/.test(key)));
+  .filter(([key]) => /^(rewards\.|rewardsModule\.|auth\.cache|states\.|modal\.|actions\.)/.test(key)));
 const origin = 'https://rewards-readback-review-fixture.invalid';
 const provider = 'https://rewards-readback-review.supabase.co';
 const familyId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
@@ -37,6 +39,7 @@ type Fixture = {
   writes: Array<{ table: Table; method: string; body: Record<string, unknown> | null }>;
   holdMutations: boolean;
   failMutation: boolean;
+  denyMutation: boolean;
   release: (table: Table) => Promise<void>;
   releaseOne: (table: Table) => Promise<void>;
   finishWrites: () => Promise<void>;
@@ -67,14 +70,18 @@ async function fixture(page: Page): Promise<Fixture> {
   const held = new Map<Table, Array<() => Promise<void>>>(), pendingWrites: Array<() => Promise<void>> = [];
   const state: Fixture = {
     rows: { rewards: [{ ...reward }], chore_assignments: [{ ...assignment }], reward_redemptions: [{ ...spent }] },
-    mode: {}, reads: [], writes: [], holdMutations: false, failMutation: false,
+    mode: {}, reads: [], writes: [], holdMutations: false, failMutation: false, denyMutation: false,
     release: async table => { delete state.mode[table]; await Promise.all((held.get(table) ?? []).splice(0).map(release => release())); },
     releaseOne: async table => { const release = held.get(table)?.shift(); if (!release) throw new Error('No held read'); await release(); },
     finishWrites: async () => { state.holdMutations = false; await Promise.all(pendingWrites.splice(0).map(release => release())); },
   };
   const headers = { 'access-control-allow-origin': origin, 'access-control-allow-headers': '*', 'access-control-allow-methods': 'GET,POST,PATCH,DELETE,OPTIONS' };
-  const read = (route: Route, table: Table) => route.fulfill({ status: state.mode[table] === 'fail' ? 403 : 200, headers, contentType: 'application/json',
-    body: JSON.stringify(state.mode[table] === 'fail' ? { code: '42501', message: `Fixture ${table} read unavailable`, details: null, hint: null } : state.rows[table]) });
+  const read = (route: Route, table: Table) => {
+    const query = new URL(route.request().url()).searchParams;
+    const rows = state.rows[table].filter(row => [...query].every(([column, value]) => !value.startsWith('eq.') || String(row[column]) === value.slice(3)));
+    return route.fulfill({ status: state.mode[table] === 'fail' ? 403 : 200, headers, contentType: 'application/json',
+      body: JSON.stringify(state.mode[table] === 'fail' ? { code: '42501', message: `Fixture ${table} read unavailable`, details: null, hint: null } : rows) });
+  };
   await page.route('**/*', async route => {
     const request = route.request(), url = new URL(request.url());
     if (url.origin === origin) { await route.fulfill({ contentType: 'text/html', body: '<!doctype html><main id="root"></main>' }); return; }
@@ -93,11 +100,27 @@ async function fixture(page: Page): Promise<Fixture> {
     const finish = async () => {
       if (state.failMutation) { await route.fulfill({ status: 400, headers, contentType: 'application/json', body: JSON.stringify({ code: '23514', message: 'Fixture mutation rejected' }) }); return; }
       const id = url.searchParams.get('id')?.replace(/^eq\./, '');
-      if (request.method() === 'POST') state.rows[table].push({ id: `written-${state.writes.length}`, created_at: new Date().toISOString(), ...body });
-      else if (request.method() === 'PATCH') state.rows[table] = state.rows[table].map(row => row.id === id ? { ...row, ...body } : row);
-      else if (request.method() === 'DELETE') state.rows[table] = state.rows[table].filter(row => row.id !== id);
-      else throw new Error(`Unexpected fixture mutation: ${request.method()}`);
-      await route.fulfill({ status: request.method() === 'POST' ? 201 : 204, headers });
+      let affected: Row[] = [];
+      if (!state.denyMutation) {
+        if (request.method() === 'POST') {
+          affected = [{ id: `written-${state.writes.length}`, created_at: new Date().toISOString(), ...body }];
+          state.rows[table].push(...affected);
+        } else if (request.method() === 'PATCH') {
+          state.rows[table] = state.rows[table].map(row => {
+            if (row.id !== id) return row;
+            const updated = { ...row, ...body }; affected.push(updated); return updated;
+          });
+        } else if (request.method() === 'DELETE') {
+          affected = state.rows[table].filter(row => row.id === id);
+          state.rows[table] = state.rows[table].filter(row => row.id !== id);
+        } else throw new Error(`Unexpected fixture mutation: ${request.method()}`);
+      }
+      const singular = request.headers().accept?.includes('application/vnd.pgrst.object+json');
+      if (singular && affected.length !== 1) {
+        await route.fulfill({ status: 406, headers, contentType: 'application/json', body: JSON.stringify({ code: 'PGRST116', message: 'Cannot coerce the result to a single JSON object', details: 'The result contains 0 rows' }) });
+      } else if (request.headers().prefer?.includes('return=representation')) {
+        await route.fulfill({ status: request.method() === 'POST' ? 201 : 200, headers, contentType: 'application/json', body: JSON.stringify(singular ? affected[0] : affected) });
+      } else await route.fulfill({ status: request.method() === 'POST' ? 201 : 204, headers });
     };
     if (state.holdMutations) pendingWrites.push(finish); else await finish();
   });
@@ -126,6 +149,12 @@ async function fixture(page: Page): Promise<Fixture> {
       '@/lib/auth/browser-session-storage': { captureBrowserSessionSnapshot: () => { throw new Error('Cookie transport is outside this fixture'); } }, react: React, 'react-dom': ReactDOM,
       'lucide-react': new Proxy({}, { get: () => () => null }),
       '@/components/app/app-context': { useApp: app }, '@/lib/supabase/client': { createClient: () => db },
+      // Execute real action logic against the same intercepted SDK; framework
+      // request context and revalidation are the server boundary of this fixture.
+      '@/lib/supabase/server': { createServer: async () => db },
+      '@/lib/supabase/auth': { requireUserContext: async () => ({ user: session.user, active: { familyId, role, member: app().selfMember } }) },
+      '@/lib/i18n/server': { getTranslations: async () => key => messages[key] ?? key },
+      'next/cache': { revalidatePath() {} },
       '@/components/i18n/locale-provider': { useTranslations: () => key => messages[key] ?? key },
       '@/components/ui/toast': { useToast: () => ({ success: message => p.toasts.push({ kind: 'success', message }), error: message => p.toasts.push({ kind: 'error', message }) }) },
       '@/components/ui/avatar': { Avatar: () => null }, '@/components/ai/ai-insight': { AiInsight: () => null },

@@ -2,7 +2,7 @@
 
 // Shown over the whole app when the family's account is soft-closed. Nothing was
 // deleted — reopening restores everything. Parent-only reopen; anyone can log out.
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Archive, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
@@ -10,8 +10,11 @@ import { reopenAccountAction } from '@/app/(app)/account/actions';
 import { useLockBodyScroll } from '@/lib/hooks/use-lock-body-scroll';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { SignOutForm } from '@/components/auth/sign-out-form';
+import { useDialogBehavior } from '@/lib/a11y/use-dialog-behavior';
 
 export function AccountClosedGate() {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogBehavior(dialogRef, true, { lockScroll: false });
   const t = useTranslations();
   const [busy, setBusy] = useState(false);
   const { error: toastError, success } = useToast();
@@ -29,7 +32,7 @@ export function AccountClosedGate() {
   }
 
   return (
-    <div role="dialog" aria-modal="true" aria-labelledby="closed-title"
+    <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="closed-title"
       className="fixed inset-0 z-[200] grid place-items-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm">
       <div className="w-full max-w-md rounded-3xl border border-white/10 bg-surface p-6 text-center shadow-2xl sm:p-8">
         <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-elevated text-muted ring-1 ring-border">

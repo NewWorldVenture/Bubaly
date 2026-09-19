@@ -13,7 +13,12 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, normalize } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const SPECS = ['tests/e2e/medications-ledger.spec.ts', 'tests/e2e/medications-readback-review.spec.ts'];
+const SPECS = [
+  'tests/e2e/medications-ledger.spec.ts', 'tests/e2e/medications-readback-review.spec.ts',
+  'tests/e2e/rewards-ledger.spec.ts', 'tests/e2e/rewards-readback-review.spec.ts',
+  'tests/e2e/hydration-ledger.spec.ts', 'tests/e2e/quick-capture-task.spec.ts',
+  'tests/e2e/signout-form-boundaries.spec.ts',
+];
 
 /** The repo's `@/` alias and relative specifiers, to a real file or null. */
 function resolveAlias(specifier: string, importer: string): string | null {
@@ -22,7 +27,7 @@ function resolveAlias(specifier: string, importer: string): string | null {
     : specifier.startsWith('@/') ? specifier.slice(2) : null;
   if (base === null) return null;
   for (const extension of ['.ts', '.tsx', '/index.ts', '/index.tsx']) {
-    if (existsSync(`${base}${extension}`)) return `${base}${extension}`;
+    if (existsSync(`${base}${extension}`)) return `${base}${extension}`.replaceAll('\\', '/');
   }
   return null;
 }

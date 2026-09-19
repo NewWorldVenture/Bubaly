@@ -3,7 +3,12 @@
 -- A child has a real session in this product. These are the writes they could
 -- make against the household's money before this migration.
 grant usage on schema public to authenticated;
-grant select, insert, update, delete on all tables in schema public to authenticated;
+-- No blanket `grant ... on all tables in schema public` here. The bootstrap's
+-- `alter default privileges` already gives `authenticated` full DML on every
+-- table a migration creates, so the restatement was redundant — and once
+-- migrations began revoking DML deliberately (0300 takes the paywall columns
+-- away from the client), it stopped being redundant and started undoing them
+-- for every probe that runs after this one against the shared database.
 
 do $$
 declare
@@ -83,7 +88,10 @@ begin
   begin
     insert into public.transactions (family_id, account_id, name, amount)
     values (fam, acct, 'Pocket money', -50.00);
-  exception when others then blocked := true;
+  -- Only the RLS refusal proves the boundary. `when others` would report this
+  -- held after a future migration renames a column here — verified: renaming
+  -- `name` leaves the probe printing "money write boundary check passed".
+  exception when insufficient_privilege then blocked := true;
   end;
   if not blocked then raise exception 'a teen wrote a household transaction'; end if;
 

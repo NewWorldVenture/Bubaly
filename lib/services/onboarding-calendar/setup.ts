@@ -1,10 +1,11 @@
 import 'server-only';
 import { getTranslations } from '@/lib/i18n/server';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
+import { settleAll } from '@/lib/supabase/settle';
 
 export async function verifyCalendarWizard(scope: ServiceScope, options: { allowPendingActivation?: boolean } = {}): Promise<boolean> {
   if (!scope.userId || scope.actorKind !== 'member') return false;
-  const [progress, member, family, prefs] = await Promise.all([
+  const [progress, member, family, prefs] = await settleAll([
     scope.db.from('onboarding_progress').select('family_id, source, status').eq('user_id', scope.userId).maybeSingle(),
     scope.db.from('family_members').select('id, role').eq('user_id', scope.userId).eq('family_id', scope.familyId).eq('is_active', true).maybeSingle(),
     scope.db.from('families').select('created_by').eq('id', scope.familyId).maybeSingle(),
@@ -29,7 +30,7 @@ export async function verifyCalendarWizard(scope: ServiceScope, options: { allow
 export async function prepareCalendarFamily(scope: ServiceScope, input: { name: string; timezone: string; displayName: string }): Promise<ServiceResult<{ familyId: string }>> {
   try {
     if (!scope.userId || scope.actorKind !== 'member') throw new Error('Signed-in owner required');
-    const [memberships, progress, preferences] = await Promise.all([
+    const [memberships, progress, preferences] = await settleAll([
       scope.db.from('family_members').select('family_id, role').eq('user_id', scope.userId).eq('is_active', true),
       scope.db.from('onboarding_progress').select('family_id, source, status').eq('user_id', scope.userId).maybeSingle(),
       scope.db.from('user_preferences').select('user_id, active_family_id').eq('user_id', scope.userId).maybeSingle(),

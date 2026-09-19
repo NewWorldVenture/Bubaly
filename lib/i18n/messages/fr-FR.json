@@ -11103,7 +11103,6 @@
   "system.liveConnectivityChecksAndReal": "Vérifications de connectivité en direct et usage réel mesuré à l’instant.",
   "system.refreshSystemOverview": "Actualiser l’aperçu du système",
   "system.systemOverview": "Aperçu du système",
-  "tableOfContents.80px0px600px": "-80px 0px -60% 0px",
   "taskGroup.nothingOnTheList": "Rien sur la liste.",
   "taxVault.2025W2AcmeCorp": "W-2 2025 — Acme Corp",
   "taxVault.addDocument": "Ajouter un document",
@@ -13626,5 +13625,8 @@
   "contactSmsReply.undelivered": "Réponse non livrée",
   "contactSmsReply.undeliveredDetail": "Le prestataire signale un échec de livraison. La réponse ne sera pas renvoyée automatiquement.",
   "contactSmsReply.failed": "Échec de l’envoi de la réponse",
-  "contactSmsReply.failedDetail": "Le prestataire signale un échec de l’envoi. La réponse ne sera pas renvoyée automatiquement."
+  "contactSmsReply.failedDetail": "Le prestataire signale un échec de l’envoi. La réponse ne sera pas renvoyée automatiquement.",
+  "actions.unknownTimeZone": "Fuseau horaire inconnu. Utilisez un nom comme America/Chicago.",
+  "errors.thatChangeWasNotSaved": "Cette modification n'a pas été enregistrée : vous n'avez peut-être pas l'autorisation. Actualisez et réessayez.",
+  "familyModule.unknownTimeZone": "Fuseau horaire inconnu. Utilisez un nom comme America/Chicago."
 }

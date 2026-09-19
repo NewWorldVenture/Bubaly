@@ -1,5 +1,6 @@
 'use client';
 
+import { isChunkLike } from '@supabase/ssr';
 import { captureBrowserSessionSnapshot, clearBrowserSessionSnapshot, type BrowserSessionSnapshot } from './browser-session-storage';
 import { notifySessionStorageChanged } from './session-change';
 import { revokeSessionToken, type SessionRevocation } from './revoke-session';
@@ -8,7 +9,7 @@ import { createClient } from '@/lib/supabase/client';
 
 // A readable session ID survives normal token rotation. Providers without one
 // use an exact cookie comparison kept only in browser memory.
-export type SignOutIntent = { kind: 'empty' } | { kind: 'session'; userId: string; sessionId: string }
+export type SignOutIntent = { kind: 'empty' } | { kind: 'session'; userId: string; sessionId: string; pendingVerifier?: string }
   | { kind: 'snapshot'; cookies: string };
 export type BrowserSignOutResult = {
   status: 'signed-out' | 'session-changed' | 'unavailable';
@@ -17,17 +18,22 @@ export type BrowserSignOutResult = {
 
 function intentFor(session: BrowserSessionSnapshot | null): SignOutIntent {
   if (!session) return { kind: 'empty' };
-  return session.sessionId && session.userId ? { kind: 'session', userId: session.userId, sessionId: session.sessionId }
+  // Session identity survives token rotation, but a newly started signup or
+  // OAuth handoff belongs to a newer decision than the captured logout.
+  const pending = session.cookies.filter(cookie => isChunkLike(cookie.name, `${session.storageKey}-code-verifier`))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  return session.sessionId && session.userId ? { kind: 'session', userId: session.userId, sessionId: session.sessionId,
+    ...(pending.length ? { pendingVerifier: JSON.stringify(pending) } : {}) }
     : { kind: 'snapshot', cookies: JSON.stringify(session.cookies) };
 }
 
 export function captureSignOutIntent(): SignOutIntent | null {
-  try { return intentFor(captureBrowserSessionSnapshot()); }
+  try { return intentFor(captureBrowserSessionSnapshot(true)); }
   catch { return null; }
 }
 
 export function isBrowserSignedOut(): boolean {
-  try { return captureBrowserSessionSnapshot() === null; }
+  try { return captureBrowserSessionSnapshot(true) === null; }
   catch { return false; }
 }
 
@@ -37,7 +43,7 @@ export function signOutBrowserSession(
   options: { revoke?: boolean; revocation?: SessionRevocation } = {},
 ): BrowserSignOutResult {
   try {
-    const current = captureBrowserSessionSnapshot();
+    const current = captureBrowserSessionSnapshot(true);
     if (current && JSON.stringify(intentFor(current)) !== JSON.stringify(intent)) return { status: 'session-changed' };
     if (!clearBrowserSessionSnapshot(current)) return { status: 'session-changed' };
     if (!isBrowserSignedOut()) return { status: 'unavailable' };

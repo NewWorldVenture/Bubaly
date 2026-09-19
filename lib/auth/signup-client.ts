@@ -31,7 +31,8 @@ export async function signUpWithOwnedVerifier(
   const read = () => parseCookieHeader(document.cookie).map(cookie => ({ name: cookie.name, value: cookie.value ?? '' }));
   const isVerifier = (name: string) => isChunkLike(name, verifierKey);
   const isSession = (name: string) => isChunkLike(name, key) || isChunkLike(name, `${key}-user`);
-  const snapshot = () => JSON.stringify(read().filter(cookie => isSession(cookie.name) || isVerifier(cookie.name))
+  const isOwnership = (name: string) => isSession(name) || isVerifier(name) || name === `${key}-logout-generation`;
+  const snapshot = () => JSON.stringify(read().filter(cookie => isOwnership(cookie.name))
     .sort((a, b) => a.name.localeCompare(b.name)));
   const verifier = () => JSON.stringify(read().filter(cookie => isVerifier(cookie.name)).sort((a, b) => a.name.localeCompare(b.name)));
   let expected = snapshot();
@@ -42,7 +43,7 @@ export async function signUpWithOwnedVerifier(
   let adoptedSession = false;
   let activeStorage = false;
   const write = (cookies: Cookie[]) => {
-    const intended = new Map(read().filter(cookie => isSession(cookie.name) || isVerifier(cookie.name))
+    const intended = new Map(read().filter(cookie => isOwnership(cookie.name))
       .map(cookie => [cookie.name, cookie.value]));
     for (const cookie of cookies) {
       if (cookie.options.maxAge === 0) intended.delete(cookie.name);
@@ -57,7 +58,7 @@ export async function signUpWithOwnedVerifier(
   const clearOwnedVerifier = () => {
     // The SDK's getAll may predate another operation. Re-read immediately at
     // the write, without an intervening await. Missing/newer cookies stay so.
-    if (owned !== null && verifier() === owned) write(deferredClears);
+    if (owned !== null && snapshot() === expected && verifier() === owned) write(deferredClears);
     deferredClears = [];
   };
   const client = createBrowserClient(url, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {

@@ -1,7 +1,7 @@
 // Twilio inbound-SMS webhook for a family's dedicated Contact Center number.
 // Files the text into the unified inbox, runs the AI concierge (summary + intent
 // + reply), auto-replies via TwiML, and escalates genuine urgencies to the
-// family's human fallback number. Signature-validated in production.
+// family's human fallback number. Every request requires a valid signature.
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
@@ -15,6 +15,7 @@ import { runConcierge } from '@/lib/contact-center/concierge';
 import { autoReplyText, classifyIntent, summarizeInbound } from '@/lib/contact-center/routing';
 import { safeContactText } from '@/lib/contact-center/text';
 import { attachSmsReply, prepareSmsReply, reserveSmsReply, type SmsReplyReceipt } from '@/lib/contact-center/sms-reply';
+import { captureSmsIngress, readSmsIngress, readLegacySmsReplyForIngress, readLegacyUrgentForIngress, type SmsIngressReceipt } from '@/lib/contact-center/sms-ingress';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -40,11 +41,13 @@ export async function POST(req: NextRequest) {
     params[key] = value;
   }
 
-  if (process.env.NODE_ENV === 'production') {
-    const sig = req.headers.get('x-twilio-signature') ?? '';
-    if (!validateTwilioSignature(sig, `${BASE_URL}/api/contact-center/sms`, params)) {
-      return new NextResponse('Unauthorized', { status: 401 });
-    }
+  try {
+    const configuredOrigin = new URL(BASE_URL);
+    if (configuredOrigin.origin !== BASE_URL || !['http:', 'https:'].includes(configuredOrigin.protocol)) throw new Error('Invalid callback origin');
+  } catch { return new NextResponse('Contact Center temporarily unavailable', { status: 503 }); }
+  const sig = req.headers.get('x-twilio-signature') ?? '';
+  if (!validateTwilioSignature(sig, `${BASE_URL}/api/contact-center/sms`, params)) {
+    return new NextResponse('Unauthorized', { status: 401 });
   }
 
   // Advanced Opt-Out has already answered these control messages. Do not
@@ -65,37 +68,81 @@ export async function POST(req: NextRequest) {
 
   const from = params.From ?? null;
   const to = params.To ?? '';
-  const body = safeContactText(params.Body ?? '', 4096);
+  const originalBody = params.Body ?? '';
+  const body = safeContactText(originalBody, 4096);
   const sid = params.MessageSid || params.SmsSid || null;
+  const envelope = sid && /^(SM|MM)[0-9a-f]{32}$/i.test(sid)
+    ? { smsSid: sid, accountSid: accountSid ?? null, from, to, body: originalBody } : null;
 
   const admin = createServiceClient();
+  let ingress: SmsIngressReceipt | null = null;
+  let legacyReply: SmsReplyReceipt | null = null;
+  let legacyUrgent: Awaited<ReturnType<typeof readLegacyUrgentForIngress>> = null;
+  try {
+    if (envelope) {
+      ingress = await readSmsIngress(admin, envelope);
+      if (!ingress) [legacyReply, legacyUrgent] = await Promise.all([
+        readLegacySmsReplyForIngress(admin, envelope), readLegacyUrgentForIngress(admin, envelope),
+      ]);
+    }
+  } catch { return new NextResponse('Intake temporarily unavailable', { status: 503 }); }
   const routed = to ? await resolveFamilyByNumberResult(admin, to) : { familyId: null, error: null };
   if (routed.error) {
     console.error('[contact-center] SMS routing read failed', routed.error);
     return new NextResponse('Routing temporarily unavailable', { status: 503 });
   }
   const familyId = routed.familyId;
+  const originalFamilies = [ingress?.binding.familyId, legacyReply?.binding.familyId, legacyUrgent?.family_id];
+  if (originalFamilies.some(original => original && familyId !== original)) {
+    return new NextResponse('Original destination temporarily unavailable', { status: 503 });
+  }
   if (!familyId) return xml(''); // not one of our numbers
 
-  const [channelResult, familyResult] = await Promise.all([
-    getOrCreateChannelResult(admin, familyId),
-    settle(admin.from('families').select('name').eq('id', familyId).maybeSingle()),
-  ]);
-  if (channelResult.error || familyResult.error) {
-    console.error('[contact-center] SMS family context read failed', channelResult.error ?? familyResult.error);
+  const channelResult = await getOrCreateChannelResult(admin, familyId);
+  if (channelResult.error) {
+    console.error('[contact-center] SMS family context read failed', channelResult.error);
     return new NextResponse('Contact Center temporarily unavailable', { status: 503 });
   }
   const channel = channelResult.data;
+  if (envelope) {
+    if (!channel || channel.family_id !== familyId || channel.phone_number !== to) {
+      return new NextResponse('Contact Center temporarily unavailable', { status: 503 });
+    }
+    // Retain the signed original before optional context or candidate work.
+    // Older reply receipts already hold their candidate; do not invent an
+    // original-body digest for their historically normalized text.
+    if (!legacyReply && !legacyUrgent) {
+      try { ingress = await captureSmsIngress(admin, { ...envelope, familyId, channelId: channel.family_id }); }
+      catch { return new NextResponse('Intake temporarily unavailable', { status: 503 }); }
+    }
+    if (legacyUrgent && !legacyReply) {
+      // Restore historical intake before preparing a reply. Its presence must
+      // retain legacy suppression even when the old inbox projection was lost.
+      const saved = legacyUrgent.inputs;
+      try {
+        const restored = await captureInboundWithUrgency(admin, { familyId, channel: 'sms', providerRef: saved.providerRef,
+          from: saved.from ?? undefined, to: saved.to ?? undefined, body: saved.body,
+          subject: saved.subject ?? undefined, aiSummary: saved.summary, aiIntent: saved.intent });
+        if (!restored.messageId) throw new Error('Historical intake unconfirmed');
+      } catch { return new NextResponse('Inbox temporarily unavailable', { status: 503 }); }
+    }
+  }
+  const familyResult = await settle(admin.from('families').select('name').eq('id', familyId).maybeSingle());
+  if (familyResult.error) {
+    console.error('[contact-center] SMS family context read failed', familyResult.error);
+    return new NextResponse('Contact Center temporarily unavailable', { status: 503 });
+  }
   const familyLabel = familyResult.data?.name || 'the family';
+  const boundSid = legacyReply?.binding.smsSid ?? legacyUrgent?.inputs.providerRef ?? ingress?.binding.smsSid ?? sid;
 
   let replyReceipt: SmsReplyReceipt | null = null;
   let result: Pick<Awaited<ReturnType<typeof runConcierge>>, 'summary' | 'intent'>;
   try {
-    if (sid && /^(SM|MM)[0-9a-f]{32}$/i.test(sid)) {
+    if (boundSid && /^(SM|MM)[0-9a-f]{32}$/i.test(boundSid)) {
       if (!channel || channel.family_id !== familyId || channel.phone_number !== to) {
         return new NextResponse('Contact Center temporarily unavailable', { status: 503 });
       }
-      replyReceipt = await prepareSmsReply(admin, { familyId, channelId: channel.family_id, smsSid: sid, from, to, body }, async signal => {
+      replyReceipt = await prepareSmsReply(admin, { familyId, channelId: channel.family_id, smsSid: boundSid, from, to, body }, async signal => {
         signal.throwIfAborted();
         const candidate = await runConcierge({ channel: 'sms', from: from ?? undefined, text: body, familyLabel, signal });
         signal.throwIfAborted();

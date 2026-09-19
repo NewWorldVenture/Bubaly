@@ -9,6 +9,7 @@ import { useApp } from '@/components/app/app-context';
 import { useSpeechRecognition } from '@/lib/hooks/use-speech-recognition';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { settle } from '@/lib/supabase/settle';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
@@ -20,10 +21,19 @@ import { CaptureSaveError, saveCapture, undoCapture, tableForKind } from '@/lib/
 import { useJourney } from '@/lib/analytics/use-journey';
 import { classifyVoiceCommand, describeRoute } from '@/lib/voice/command-router';
 import type { CaptureKind } from '@/lib/capture/parse';
-import type { Tables } from '@/lib/database.types';
+import type { Tables, Insertable } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
 type VoiceCommand = Tables<'voice_commands'>;
+
+async function recordVoiceHistory(client: ReturnType<typeof createClient>, row: Insertable<'voice_commands'>) {
+  try {
+    const { error } = await settle(client.from('voice_commands').insert(row));
+    if (error) console.error('[voice] history write failed', { message: error.message });
+  } catch (error) {
+    console.error('[voice] history write failed', { message: describeDbError(error) });
+  }
+}
 
 const KIND_META: Record<CaptureKind, { label: string; icon: typeof Mic; cls: string }> = {
   task: { label: 'Task', icon: CheckSquare, cls: 'text-emerald-300 bg-emerald-500/10 border-emerald-500/30' },
@@ -118,12 +128,12 @@ function VoiceCaptureSession() {
       });
       if (!isCurrent()) return;
       // Log the command to the family's voice history (best-effort — a logging
-      // failure must not lose the thing we just created).
-      try { void sb.from('voice_commands').insert({
+      // failure must not lose or delay the thing we just created).
+      void recordVoiceHistory(sb, {
         family_id: familyId, member_id: selfMember?.id ?? null, transcript: route.text,
         resolved_kind: route.kind, action_table: tableForKind(route.kind),
         action_count: res.count, status: 'routed', created_by: userId,
-      }).then(() => {}, () => {}); } catch { /* capture is confirmed; history is best-effort */ }
+      });
       if (!isCurrent()) return;
       let undoState: 'ready' | 'pending' | 'done' | 'uncertain' = 'ready';
       success(
@@ -155,10 +165,10 @@ function VoiceCaptureSession() {
       }
       journey.abandon();
       // Record the failed attempt so the history is honest.
-      if (sb) try { void sb.from('voice_commands').insert({
+      if (sb) void recordVoiceHistory(sb, {
         family_id: familyId, member_id: selfMember?.id ?? null, transcript: raw,
         resolved_kind: route.kind, status: 'failed', created_by: userId,
-      }).select('id').then(() => {}, () => {}); } catch { /* preserve the original capture failure */ }
+      });
       if (isCurrent()) toastError(describeDbError(err, tr('voiceModule.couldNotRunThatCommand')));
     } finally {
       if (isCurrent()) setRunning(false);

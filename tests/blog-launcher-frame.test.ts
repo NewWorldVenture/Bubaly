@@ -6,6 +6,13 @@ import nextConfig from '../next.config.mjs';
 
 const ROOT = join(__dirname, '..');
 const read = (p: string) => readUiSource(join(ROOT, p));
+// The dialog behaviour (Escape, Tab trap, scroll lock, focus restore) moved to
+// `lib/a11y/use-dialog-behavior.ts` so overlays that cannot take the shared
+// Modal's chrome can still keep the promise `aria-modal` makes. Assertions that
+// read it out of a component's own source now read it from the hook, and the
+// component is asserted to DELEGATE. The contract did not weaken.
+const DIALOG_HOOK = readFileSync('lib/a11y/use-dialog-behavior.ts', 'utf8');
+
 
 type HeaderRule = { source: string; headers: { key: string; value: string }[] };
 const xfo = (r: HeaderRule) => r.headers.find((h) => h.key === 'X-Frame-Options')?.value;
@@ -56,7 +63,8 @@ describe('blog launcher — header button + embedded modal', () => {
   it('is an accessible dialog that closes on Escape', () => {
     expect(launcher).toMatch(/role="dialog"/);
     expect(launcher).toMatch(/aria-modal="true"/);
-    expect(launcher).toMatch(/e\.key === 'Escape'/);
+    expect(launcher).toMatch(/useDialogBehavior\(dialogRef, open, \{ onClose: close \}\)/);
+    expect(DIALOG_HOOK).toMatch(/e\.key === 'Escape'/);
   });
 
   it('portals to <body> so the header backdrop-blur cannot clip the overlay', () => {

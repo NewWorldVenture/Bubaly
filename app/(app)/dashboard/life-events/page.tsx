@@ -3,6 +3,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { LifeEventsModule } from '@/components/modules/life-events-module';
 import { detectLifeEvents, SCHOOL_START_WINDOW_DAYS, type LifeEventSuggestion } from '@/lib/life-events/detect';
+import { settleAll } from '@/lib/supabase/settle';
 
 export const metadata: Metadata = { title: 'Life & Milestones | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -30,7 +31,7 @@ export default async function LifeEventsPage() {
   const termHorizon = dayKey(new Date(now.getTime() + SCHOOL_START_WINDOW_DAYS * 86_400_000));
   const petSince = dayKey(new Date(now.getTime() - 8 * 86_400_000));
 
-  const [termsRes, petsRes, projectsRes, factsRes, plansRes] = await Promise.all([
+  const [termsRes, petsRes, projectsRes, factsRes, plansRes] = await settleAll([
     supabase.from('school_events').select('title, starts_at').eq('family_id', familyId)
       .gte('starts_at', `${todayKey}T00:00:00Z`).lte('starts_at', `${termHorizon}T23:59:59Z`).limit(50),
     supabase.from('pets').select('name, created_at').eq('family_id', familyId)

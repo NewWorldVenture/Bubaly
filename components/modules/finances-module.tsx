@@ -24,6 +24,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import type { Tables, TransactionType, AccountType } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { todayInZone } from '@/lib/schedule/zoned';
 
 type Account = Tables<'financial_accounts'>;
 type Txn = Tables<'transactions'>;
@@ -540,6 +541,7 @@ function AddTransactionModal({ familyId, userId, selfId, accounts, members, onCl
   members: ReturnType<typeof useApp>['members']; onClose: () => void; onSaved: () => void; onError: (m: string) => void;
 }) {
   const tr = useTranslations();
+  const { family } = useApp();
   const [loading, setLoading] = useState(false);
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
@@ -554,7 +556,7 @@ function AddTransactionModal({ familyId, userId, selfId, accounts, members, onCl
       name, amount,
       type: String(f.get('type') ?? 'expense') as TransactionType,
       category: String(f.get('category') ?? '') || null,
-      date: String(f.get('date') ?? '') || new Date().toISOString().slice(0, 10),
+      date: String(f.get('date') ?? '') || todayInZone(family?.timezone ?? 'UTC'),
       accountId: String(f.get('account_id') ?? '') || null,
       memberId: String(f.get('member_id') ?? '') || null,
     });
@@ -573,7 +575,7 @@ function AddTransactionModal({ familyId, userId, selfId, accounts, members, onCl
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('finances.category')}>{(id) => <Select id={id} name="category"><option value="">—</option>{CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}</Select>}</Field>
-          <Field label={tr('finances.date')}>{(id) => <Input id={id} name="date" type="date" defaultValue={new Date().toISOString().slice(0, 10)} />}</Field>
+          <Field label={tr('finances.date')}>{(id) => <Input id={id} name="date" type="date" defaultValue={todayInZone(family?.timezone ?? 'UTC')} />}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('finances.account')}>{(id) => <Select id={id} name="account_id"><option value="">—</option>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</Select>}</Field>

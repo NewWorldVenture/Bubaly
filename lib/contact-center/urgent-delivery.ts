@@ -55,7 +55,7 @@ function identity(input: Pick<Inputs, 'familyId' | 'channel' | 'providerRef'>) {
   const key = `${PREFIX}${digest(JSON.stringify([input.familyId, input.channel, input.providerRef]))}`;
   return { id: uuid(key), key };
 }
-function validate(row: Tables<'ai_tool_calls'>, familyId: string): Receipt {
+export function validateUrgentDeliveryReceipt(row: Tables<'ai_tool_calls'>, familyId: string): Receipt {
   const inputs = inputSchema.parse(row.inputs), outputs = outputSchema.parse(row.outputs);
   const expected = identity(inputs);
   if (row.id !== expected.id || row.idempotency_key !== expected.key || row.family_id !== familyId || inputs.familyId !== familyId ||
@@ -68,7 +68,7 @@ function validate(row: Tables<'ai_tool_calls'>, familyId: string): Receipt {
 async function readReceipt(admin: Admin, id: string, familyId: string, signal?: AbortSignal): Promise<Receipt | null> {
   const result = await admin.from('ai_tool_calls').select('*').eq('id', id).abortSignal(signal ?? AbortSignal.timeout(5000)).maybeSingle();
   if (result.error) throw new Error('Urgent receipt read failed');
-  return result.data ? validate(result.data, familyId) : null;
+  return result.data ? validateUrgentDeliveryReceipt(result.data, familyId) : null;
 }
 function asIntake(input: Inputs): Intake {
   return { familyId: input.familyId, channel: input.channel, providerRef: input.providerRef, from: input.from ?? undefined,
@@ -118,7 +118,7 @@ async function transition(admin: Admin, receipt: Receipt, outputs: Outputs, opti
     .eq('state', receipt.state).contains('outputs', { revision: receipt.outputs.revision })
     .abortSignal(signal).select('*').maybeSingle();
   if (result.error) throw new Error('Urgent receipt update failed');
-  return result.data ? validate(result.data, receipt.family_id) : null;
+  return result.data ? validateUrgentDeliveryReceipt(result.data, receipt.family_id) : null;
 }
 
 async function ensureNotification(admin: Admin, receipt: Receipt, messageId: string, signal: AbortSignal): Promise<void> {

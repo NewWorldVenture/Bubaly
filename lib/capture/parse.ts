@@ -45,23 +45,72 @@ function parseTime(input: string): { minutes: number; match: string } | null {
   return null;
 }
 
+/**
+ * Which set of Date fields the parser does its arithmetic in.
+ *
+ * This file is right in a browser, where the runtime zone IS the family's zone,
+ * and it was wrong on a server. lib/time/zoned.ts bridges the gap by handing it
+ * a Date whose fields spell the family's wall clock — but a Date built from
+ * LOCAL fields is normalised by the runtime's own DST rules. On the morning a
+ * runtime in America/Los_Angeles jumps 02:00 -> 03:00, `setMinutes(150)` on
+ * local midnight lands at 03:30, not 02:30, and the wall-clock time the family
+ * asked for is destroyed before the caller can resolve it in THEIR zone:
+ *
+ *   TZ=America/Los_Angeles  new Date(2026, 2, 8, 2, 30)  ->  03:30
+ *   TZ=UTC                  new Date(2026, 2, 8, 2, 30)  ->  02:30
+ *
+ * UTC observes no DST, so arithmetic in UTC fields cannot be normalised. The
+ * server bridge passes a UTC-anchored wall clock and reads UTC fields back; the
+ * browser keeps local, where local is the correct answer.
+ */
+type DateOps = {
+  startOfDay(d: Date): Date;
+  addDays(d: Date, n: number): Date;
+  weekday(d: Date): number;
+  setMinutesOfDay(d: Date, minutes: number): Date;
+  setTimeOfDay(d: Date, hour: number, minute: number): Date;
+  ymd(d: Date): string;
+};
+
+const LOCAL_OPS: DateOps = {
+  startOfDay: (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; },
+  addDays: (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; },
+  weekday: (d) => d.getDay(),
+  setMinutesOfDay: (d, minutes) => { const x = new Date(d); x.setMinutes(minutes); return x; },
+  setTimeOfDay: (d, hour, minute) => { const x = new Date(d); x.setHours(hour, minute, 0, 0); return x; },
+  ymd: (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
+};
+
+const UTC_OPS: DateOps = {
+  startOfDay: (d) => { const x = new Date(d); x.setUTCHours(0, 0, 0, 0); return x; },
+  addDays: (d, n) => { const x = new Date(d); x.setUTCDate(x.getUTCDate() + n); return x; },
+  weekday: (d) => d.getUTCDay(),
+  setMinutesOfDay: (d, minutes) => { const x = new Date(d); x.setUTCMinutes(minutes); return x; },
+  setTimeOfDay: (d, hour, minute) => { const x = new Date(d); x.setUTCHours(hour, minute, 0, 0); return x; },
+  ymd: (d) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`,
+};
+
+/** Options every parser takes; `utc` is set only by the server wall-clock bridge. */
+export type ParseOptions = { utc?: boolean };
+const opsFor = (opts?: ParseOptions): DateOps => (opts?.utc ? UTC_OPS : LOCAL_OPS);
+
 /** Parse a day reference: today/tonight/tomorrow, weekday names, "in N days/weeks". */
-function parseDay(input: string, now: Date): { date: Date; match: string; eveningHint: boolean } | null {
-  const base = new Date(now);
-  base.setHours(0, 0, 0, 0);
+function parseDay(
+  input: string, now: Date, ops: DateOps = LOCAL_OPS,
+): { date: Date; match: string; eveningHint: boolean } | null {
+  const base = ops.startOfDay(now);
 
   if (/\btoday\b/i.test(input)) return { date: base, match: input.match(/\btoday\b/i)![0], eveningHint: false };
   if (/\btonight\b/i.test(input)) return { date: base, match: input.match(/\btonight\b/i)![0], eveningHint: true };
   if (/\b(tomorrow|tmrw|tmr)\b/i.test(input)) {
-    const d = new Date(base); d.setDate(d.getDate() + 1);
+    const d = ops.addDays(base, 1);
     return { date: d, match: input.match(/\b(tomorrow|tmrw|tmr)\b/i)![0], eveningHint: false };
   }
 
   const inN = input.match(/\bin\s+(\d{1,3})\s+(day|days|week|weeks)\b/i);
   if (inN) {
     const n = parseInt(inN[1], 10);
-    const d = new Date(base);
-    d.setDate(d.getDate() + (/week/i.test(inN[2]) ? n * 7 : n));
+    const d = ops.addDays(base, /week/i.test(inN[2]) ? n * 7 : n);
     return { date: d, match: inN[0], eveningHint: false };
   }
 
@@ -70,11 +119,10 @@ function parseDay(input: string, now: Date): { date: Date; match: string; evenin
   if (wd) {
     const isNext = /next/i.test(wd[1] ?? '');
     const target = WEEKDAYS.indexOf(wd[2].toLowerCase());
-    const d = new Date(base);
-    let delta = (target - d.getDay() + 7) % 7;
+    let delta = (target - ops.weekday(base) + 7) % 7;
     if (delta === 0) delta = 7;           // a bare/“this” weekday that is today → the coming one
     if (isNext) delta += 7;               // “next” pushes a further week out
-    d.setDate(d.getDate() + delta);
+    const d = ops.addDays(base, delta);
     return { date: d, match: wd[0].trim(), eveningHint: false };
   }
   return null;
@@ -93,9 +141,10 @@ function stripPhrase(text: string, phrase: string | null): string {
  * If nothing is recognized, returns `{ startsAt: now, allDay: false, matched: false }`
  * so callers keep the legacy "starts now" behavior.
  */
-export function parseEvent(input: string, now: Date = new Date()): ParsedEvent {
+export function parseEvent(input: string, now: Date = new Date(), opts?: ParseOptions): ParsedEvent {
+  const ops = opsFor(opts);
   const raw = input.trim();
-  const day = parseDay(raw, now);
+  const day = parseDay(raw, now, ops);
   const time = parseTime(raw);
 
   let title = raw;
@@ -106,31 +155,21 @@ export function parseEvent(input: string, now: Date = new Date()): ParsedEvent {
   let startsAt: Date;
   let allDay: boolean;
   if (time) {
-    const d = day ? new Date(day.date) : (() => { const t = new Date(now); t.setHours(0, 0, 0, 0); return t; })();
-    d.setMinutes(time.minutes);
+    const base = day ? day.date : ops.startOfDay(now);
+    let d = ops.setMinutesOfDay(base, time.minutes);
     // No explicit day + a time already past today → assume tomorrow.
-    if (!day && d.getTime() <= now.getTime()) d.setDate(d.getDate() + 1);
+    if (!day && d.getTime() <= now.getTime()) d = ops.addDays(d, 1);
     startsAt = d;
     allDay = false;
   } else if (day) {
-    const d = new Date(day.date);
-    if (day.eveningHint) { d.setHours(19, 0, 0, 0); allDay = false; }
-    else { allDay = true; }
-    startsAt = d;
+    if (day.eveningHint) { startsAt = ops.setTimeOfDay(day.date, 19, 0); allDay = false; }
+    else { startsAt = new Date(day.date); allDay = true; }
   } else {
     startsAt = new Date(now);
     allDay = false;
   }
 
   return { title: title || raw, startsAt, allDay, matched: Boolean(day || time) };
-}
-
-/** Local YYYY-MM-DD (date-only, no timezone shift). */
-function toYMD(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
 }
 
 export type ParsedTask = {
@@ -146,20 +185,21 @@ export type ParsedTask = {
  * time alone does not, since `todo_items.due_date` is date-only. The recognized
  * phrase is stripped from the title.
  */
-export function parseDueDate(input: string, now: Date = new Date()): ParsedTask {
+export function parseDueDate(input: string, now: Date = new Date(), opts?: ParseOptions): ParsedTask {
+  const ops = opsFor(opts);
   const raw = input.trim();
-  const day = parseDay(raw, now);
+  const day = parseDay(raw, now, ops);
   if (!day) return { title: raw, dueDate: null };
   // "Pack lunches for tomorrow" / "Prep slides for monday": a day introduced by
   // "for" says what the task is about, not just when it is due — stripping it
   // would leave a dangling "for" and change the meaning, so the title stays as
   // typed while the due date is still inferred.
   const dayAt = raw.toLowerCase().indexOf(day.match.toLowerCase());
-  if (dayAt > 0 && /\bfor\s+$/i.test(raw.slice(0, dayAt))) return { title: raw, dueDate: toYMD(day.date) };
+  if (dayAt > 0 && /\bfor\s+$/i.test(raw.slice(0, dayAt))) return { title: raw, dueDate: ops.ymd(day.date) };
   const time = parseTime(raw);
   let title = stripPhrase(raw, day.match);
   if (time) title = stripPhrase(title, time.match);
-  return { title: title || raw, dueDate: toYMD(day.date) };
+  return { title: title || raw, dueDate: ops.ymd(day.date) };
 }
 
 /**
@@ -224,7 +264,7 @@ export type CaptureKind = 'task' | 'note' | 'event' | 'shopping';
  * a recognized date/time (event) → other shopping cues → long/labelled note →
  * task (default). Deliberately conservative; the user can always override.
  */
-export function suggestKind(input: string, now: Date = new Date()): CaptureKind {
+export function suggestKind(input: string, now: Date = new Date(), opts?: ParseOptions): CaptureKind {
   const t = input.trim().toLowerCase();
   if (!t) return 'task';
 
@@ -232,7 +272,7 @@ export function suggestKind(input: string, now: Date = new Date()): CaptureKind 
   if (/^(buy|purchase)\b/.test(t) || /\b(grocer(y|ies)|shopping list)\b/.test(t)) return 'shopping';
 
   // A concrete date/time is a strong event signal.
-  if (parseEvent(input, now).matched) return 'event';
+  if (parseEvent(input, now, opts).matched) return 'event';
 
   // Softer shopping cues (no time present at this point).
   if (/^(pick up|grab|get)\b/.test(t)) return 'shopping';

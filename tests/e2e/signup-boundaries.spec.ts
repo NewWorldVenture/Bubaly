@@ -39,7 +39,7 @@ function collect(filename: string): string {
   return id;
 }
 const entries = Object.fromEntries(['components/auth/signup-form.tsx', 'components/ui/toast.tsx', 'components/i18n/locale-provider.tsx',
-  'lib/i18n/locales.ts', 'lib/supabase/client.ts'].map(file => [file, collect(file)]));
+  'lib/i18n/locales.ts', 'lib/supabase/client.ts', 'lib/auth/browser-signout.ts'].map(file => [file, collect(file)]));
 const origin = 'https://signup-boundaries-fixture.invalid';
 const provider = 'https://signup-provider.invalid';
 const existingUser = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -56,6 +56,7 @@ type Probe = {
   signOut: () => Promise<void>; recover: () => Promise<void>; oauth: () => Promise<string>;
   exchange: () => Promise<void>; refreshSession: () => Promise<void>; seedSession: (padding: number, expired?: boolean) => Promise<void>;
   storedUser: () => Promise<string | null>; events: Array<{ event: string; user: string | null }>;
+  captureLogout: () => void; appLogout: (captured?: boolean) => string;
 };
 declare global { interface Window { __signupBoundaries: Probe } }
 test.use({ trace: 'off', screenshot: 'off', video: 'off' });
@@ -147,6 +148,10 @@ async function fixture(page: Page, options: { mode?: Mode; hold?: boolean; query
     const LocaleProvider = load(entries['components/i18n/locale-provider.tsx']).LocaleProvider;
     const locale = load(entries['lib/i18n/locales.ts']).localeOrDefault(${JSON.stringify(locale)});
     const db = load(entries['lib/supabase/client.ts']).createClient();
+    const logout = load(entries['lib/auth/browser-signout.ts']);
+    let logoutIntent;
+    p.captureLogout = () => { logoutIntent = logout.captureSignOutIntent(); };
+    p.appLogout = captured => logout.signOutBrowserSession(captured ? logoutIntent : logout.captureSignOutIntent(), { revoke: false }).status;
     db.auth.onAuthStateChange((event, session) => p.events.push({ event, user: session?.user.id ?? null }));
     function render() {
       root ??= ReactDOM.createRoot(document.getElementById('root'));
@@ -519,4 +524,76 @@ test('blocked session cookie adoption cannot publish SIGNED_IN or claim confirme
   expect(await page.evaluate(() => window.__signupBoundaries.events.filter(item => item.event === 'SIGNED_IN'))).toEqual([]);
   expect(await page.evaluate(() => window.__signupBoundaries.navigations)).toEqual([]);
   await expect(page.getByRole('heading', { name: 'Check your signup request' })).toBeVisible();
+});
+
+for (const mode of ['lost', 'confirm', 'session'] as const) {
+  test(`application logout retires a pending ${mode} signup without an ambient session`, async ({ page }) => {
+    const state = await fixture(page, { mode, hold: true }); await emailForm(page); await retained(page);
+    await expect.poll(() => state.signups.length).toBe(1);
+    expect(await page.evaluate(() => window.__signupBoundaries.pkce())).toBeTruthy();
+    expect(await page.evaluate(() => window.__signupBoundaries.appLogout())).toBe('signed-out');
+    await state.release(); await page.evaluate(() => window.__signupBoundaries.settleSubmits());
+    expect(await page.evaluate(() => window.__signupBoundaries.pkce())).toBeNull();
+    expect(await page.evaluate(() => window.__signupBoundaries.storedUser())).toBeNull();
+    expect(await page.evaluate(() => window.__signupBoundaries.events.filter(item => item.event === 'SIGNED_IN'))).toEqual([]);
+    expect(await page.evaluate(() => window.__signupBoundaries.navigations)).toEqual([]);
+  });
+}
+
+test('an old empty logout intent cannot consume a newer pending signup', async ({ page }) => {
+  const state = await fixture(page, { mode: 'confirm', hold: true });
+  await page.evaluate(() => window.__signupBoundaries.captureLogout());
+  await emailForm(page); await retained(page); await expect.poll(() => state.signups.length).toBe(1);
+  const verifier = await page.evaluate(() => window.__signupBoundaries.pkce());
+  expect(await page.evaluate(() => window.__signupBoundaries.appLogout(true))).toBe('session-changed');
+  await state.release(); await page.evaluate(() => window.__signupBoundaries.settleSubmits());
+  expect(await page.evaluate(() => window.__signupBoundaries.pkce())).toBe(verifier);
+  await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible();
+});
+
+test('an old session logout preserves a newer signup until a fresh logout retires both', async ({ page }) => {
+  const state = await fixture(page, { mode: 'session', hold: true });
+  await page.evaluate(async () => { await window.__signupBoundaries.signIn(); window.__signupBoundaries.captureLogout(); });
+  await emailForm(page); await retained(page); await expect.poll(() => state.signups.length).toBe(1);
+  const verifier = await page.evaluate(() => window.__signupBoundaries.pkce());
+  expect(verifier).toBeTruthy();
+  expect(await page.evaluate(() => window.__signupBoundaries.appLogout(true))).toBe('session-changed');
+  expect(await page.evaluate(() => window.__signupBoundaries.storedUser())).toBe(existingUser);
+  expect(await page.evaluate(() => window.__signupBoundaries.pkce())).toBe(verifier);
+  expect(await page.evaluate(() => window.__signupBoundaries.appLogout())).toBe('signed-out');
+  expect(await page.evaluate(() => window.__signupBoundaries.storedUser())).toBeNull();
+  expect(await page.evaluate(() => window.__signupBoundaries.pkce())).toBeNull();
+  await state.release(); await page.evaluate(() => window.__signupBoundaries.settleSubmits());
+  expect(await page.evaluate(() => window.__signupBoundaries.storedUser())).toBeNull();
+  expect(await page.evaluate(() => window.__signupBoundaries.events.filter(item => item.event === 'SIGNED_IN' && item.user === 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'))).toEqual([]);
+  expect(await page.evaluate(() => window.__signupBoundaries.navigations)).toEqual([]);
+});
+
+test('a captured session logout still accepts ordinary refresh rotation without a pending handoff', async ({ page }) => {
+  const state = await fixture(page);
+  await page.evaluate(async () => {
+    await window.__signupBoundaries.seedSession(7000);
+    window.__signupBoundaries.captureLogout();
+    await window.__signupBoundaries.refreshSession();
+  });
+  expect(state.calls.some(call => call.includes('grant_type=refresh_token'))).toBe(true);
+  expect(await page.evaluate(() => window.__signupBoundaries.appLogout(true))).toBe('signed-out');
+  expect(await page.evaluate(() => window.__signupBoundaries.storedUser())).toBeNull();
+});
+
+test('a logout generation fences pending signup even when verifier deletion is refused', async ({ page }) => {
+  const state = await fixture(page, { mode: 'session', hold: true }); await emailForm(page); await retained(page);
+  await expect.poll(() => state.signups.length).toBe(1);
+  await page.evaluate(() => {
+    const cookie = Object.getOwnPropertyDescriptor(Document.prototype, 'cookie')!;
+    Object.defineProperty(document, 'cookie', {
+      get: () => cookie.get!.call(document),
+      set: value => { if (!String(value).includes('-code-verifier=')) cookie.set!.call(document, value); },
+    });
+  });
+  expect(await page.evaluate(() => window.__signupBoundaries.appLogout())).toBe('unavailable');
+  await state.release(); await page.evaluate(() => window.__signupBoundaries.settleSubmits());
+  expect(await page.evaluate(() => window.__signupBoundaries.storedUser())).toBeNull();
+  expect(await page.evaluate(() => window.__signupBoundaries.events.filter(item => item.event === 'SIGNED_IN'))).toEqual([]);
+  expect(await page.evaluate(() => window.__signupBoundaries.navigations)).toEqual([]);
 });

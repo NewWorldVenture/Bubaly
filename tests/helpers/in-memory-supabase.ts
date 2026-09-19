@@ -37,6 +37,18 @@ export type InMemoryOptions = {
   rpc?: Record<string, (args: Record<string, unknown>, db: InMemorySupabase) => unknown | Promise<unknown>>;
   /** Auth user id for `auth.getUser()`. */
   userId?: string | null;
+  /**
+   * PostgREST's `db-max-rows` — the server's own ceiling on ONE response,
+   * 1,000 on a default Supabase project.
+   *
+   * The real server applies it silently: no error, no short-read signal, just
+   * fewer rows than the table holds. Without it here, a fake answers every
+   * unbounded select with the whole table and a job that reads the first
+   * 1,000 households looks identical to one that reads them all. Set it and
+   * the difference becomes visible. Unset means no cap, which is what every
+   * existing test assumes.
+   */
+  maxRows?: number;
 };
 
 function pgError(code: string, message: string): PostgrestError {
@@ -346,6 +358,11 @@ class QueryBuilder implements PromiseLike<Reply> {
     const total = out.length;
     if (this.rangeBounds) out = out.slice(this.rangeBounds.from, this.rangeBounds.to + 1);
     if (this.limitCount !== null) out = out.slice(0, this.limitCount);
+    // Applied LAST and to every read alike: `db-max-rows` caps the response the
+    // server is about to send, so it truncates a `.limit(5000)` exactly as
+    // readily as an unbounded select. That is why `.limit()` is not a bound.
+    const cap = this.db.maxRows;
+    if (this.op === 'select' && cap !== undefined && out.length > cap) out = out.slice(0, cap);
     const projected = this.selectList ? out.map((row) => project(this.db, row, this.selectList as string)) : out.map((row) => ({ ...row }));
     const count = this.countMode ? total : null;
     if (this.headOnly) return { data: null, error: null, count, status: 200, statusText: 'OK' };
@@ -435,6 +452,9 @@ export class InMemorySupabase {
   readonly log: { table: string }[] = [];
 
   constructor(private readonly options: InMemoryOptions = {}) {}
+
+  /** The server's per-response row ceiling, or undefined for no cap. */
+  get maxRows(): number | undefined { return this.options.maxRows; }
 
   from(table: string): QueryBuilder {
     this.log.push({ table });

@@ -49,6 +49,26 @@ describe('explicit logout belongs to the intended browser session', () => {
     expect(signOutBrowserSession(intent).status).toBe('signed-out');
     expect(mock.revoke).toHaveBeenCalledWith('rotated-A-token');
   });
+  it.each(['', '.0'])('leaves a newer pending verifier%s beside the intended session untouched', chunk => {
+    const intent = captureSignOutIntent()!;
+    current = { ...A, cookies: [...A.cookies, { name: `${A.storageKey}-code-verifier${chunk}`, value: 'newer-signup' }] };
+    expect(signOutBrowserSession(intent).status).toBe('session-changed');
+    expect(mock.clear).not.toHaveBeenCalled(); expect(mock.revoke).not.toHaveBeenCalled();
+    expect(mock.purge).not.toHaveBeenCalled(); expect(mock.notify).not.toHaveBeenCalled();
+    expect(signOutBrowserSession(captureSignOutIntent()!).status).toBe('signed-out');
+    expect(mock.clear).toHaveBeenCalledOnce();
+  });
+  it('rejects replacing a pending verifier while allowing rotation with the exact same handoff', () => {
+    const verifier = { name: `${A.storageKey}-code-verifier`, value: 'pending-A' };
+    current = { ...A, cookies: [...A.cookies, verifier] };
+    const intent = captureSignOutIntent()!;
+    current = { ...A, cookies: [...A.cookies, { ...verifier, value: 'pending-B' }] };
+    expect(signOutBrowserSession(intent).status).toBe('session-changed');
+    expect(mock.clear).not.toHaveBeenCalled();
+    current = { ...A, accessToken: 'rotated-A-token', cookies: [{ name: A.storageKey, value: 'rotated-A-cookie' }, verifier] };
+    expect(signOutBrowserSession(intent).status).toBe('signed-out');
+    expect(mock.revoke).toHaveBeenCalledWith('rotated-A-token');
+  });
   it.each([{ userId: 'user-B' }, { sessionId: 'new-session-A' }])('leaves a replacement intact: %s', change => {
     const intent = captureSignOutIntent()!;
     current = { ...A, ...change };

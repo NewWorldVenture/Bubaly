@@ -22,10 +22,23 @@ const STALE_EVENT_MS = 10 * 60 * 1000;
 /**
  * Record the event for idempotency, replay-safely (audit PAY-2). Inserts the id
  * with status 'processing'. Returns 'fresh' for the first delivery, a failed
- * delivery, or a stale abandoned claim. An active concurrent delivery and a
- * fully 'processed' event both return 'duplicate'.
+ * delivery, or a stale abandoned claim.
+ *
+ * 'duplicate' means FINISHED — the event reached status 'processed' — and is the
+ * only outcome a caller may acknowledge with a 2xx.
+ *
+ * 'in_flight' means someone else holds the claim and has not finished. That is
+ * NOT the same thing, and conflating the two loses money: an event whose handler
+ * threw, and whose markEventError call then also failed, stays 'processing'. The
+ * provider's next retry — inside STALE_EVENT_MS, so not yet reclaimable — used to
+ * be answered 200, at which point the provider considers the event delivered and
+ * stops retrying. The transaction it carried is then never applied, and the row
+ * sits in 'processing' with nothing left to reprocess it. A caller must answer
+ * 'in_flight' with a non-2xx so the retry keeps coming: if the holder succeeds
+ * the next one sees 'processed' and is acknowledged, and if the holder died the
+ * claim goes stale and is reclaimed.
  */
-export type StripeEventClaim = { outcome: 'fresh' | 'duplicate'; claimToken?: string };
+export type StripeEventClaim = { outcome: 'fresh' | 'duplicate' | 'in_flight'; claimToken?: string };
 
 export async function recordEvent(supabase: DB, event: Stripe.Event): Promise<StripeEventClaim> {
   const now = new Date().toISOString();
@@ -59,7 +72,7 @@ export async function recordEvent(supabase: DB, event: Stripe.Event): Promise<St
       .select('stripe_event_id')
       .maybeSingle();
     if (claimError) throw new Error('Stripe webhook event ledger unavailable');
-    return claimed ? { outcome: 'fresh', claimToken } : { outcome: 'duplicate' };
+    return claimed ? { outcome: 'fresh', claimToken } : { outcome: 'in_flight' };
   }
 
   if (prior.status === 'processing') {
@@ -81,11 +94,11 @@ export async function recordEvent(supabase: DB, event: Stripe.Event): Promise<St
         .select('stripe_event_id')
         .maybeSingle();
       if (reclaimError) throw new Error('Stripe webhook event ledger unavailable');
-      return reclaimed ? { outcome: 'fresh', claimToken } : { outcome: 'duplicate' };
+      return reclaimed ? { outcome: 'fresh', claimToken } : { outcome: 'in_flight' };
     }
   }
 
-  return { outcome: 'duplicate' };
+  return { outcome: 'in_flight' };
 }
 
 /** Mark an event as fully processed (so future deliveries short-circuit). */
@@ -249,6 +262,80 @@ export async function handleTransactionCreated(
   }
   // The captured debit now represents the spend; drop the pending hold.
   if (authId) await releaseCardHold(supabase, authId);
+}
+
+/**
+ * PURE: the mirror row a Stripe card implies. Separated from the write so the
+ * mapping is testable without a database or a Stripe account.
+ *
+ * `is_frozen` is derived rather than mirrored: Stripe has three statuses and the
+ * product has a boolean, and every status that is not `active` means the card
+ * cannot spend. Reading it as `status === 'inactive'` would leave a CANCELED
+ * card displayed as spendable, which is the failure this whole reconciler
+ * exists to prevent.
+ */
+export function cardMirrorFromStripe(card: Stripe.Issuing.Card): {
+  status: 'active' | 'inactive' | 'canceled';
+  is_frozen: boolean;
+  spend_limit_cents: number | null;
+  spend_window: string;
+  blocked_categories: string[];
+} {
+  const limit = card.spending_controls?.spending_limits?.[0] ?? null;
+  return {
+    status: card.status,
+    is_frozen: card.status !== 'active',
+    // No limit at Stripe is no limit here. `?? null` rather than `|| null` so a
+    // deliberate zero-amount limit is not silently read as "unlimited".
+    spend_limit_cents: limit ? limit.amount : null,
+    spend_window: limit?.interval ?? 'per_authorization',
+    blocked_categories: (card.spending_controls?.blocked_categories ?? []) as string[],
+  };
+}
+
+/**
+ * Handle issuing_card.updated / .created — reconcile our mirror of the card with
+ * what Stripe actually holds.
+ *
+ * lib/stripe/issuing.ts changes a card in two steps: the Stripe update, which is
+ * awaited and whose failure reaches the caller, and then the local mirror write,
+ * whose result was discarded. Nothing reconciled the two, because this event was
+ * not handled — so a refused mirror write left /wallet showing a spend limit the
+ * card no longer had, or a freeze state it no longer had, permanently, while the
+ * toast the parent had just seen said otherwise.
+ *
+ * Stripe is the authority for card state: it is what actually declines a
+ * purchase. This makes that true of our copy too, on every change, whatever
+ * caused it — including a change made in the Stripe dashboard, which the product
+ * previously could not see at all.
+ *
+ * Idempotent: the same event applied twice writes the same row. A card we do not
+ * know about is not an error — a family may have cards this deployment never
+ * issued — so it is logged and skipped rather than thrown, which would make
+ * Stripe retry an event that can never succeed.
+ */
+export async function handleIssuingCardUpdated(supabase: DB, card: Stripe.Issuing.Card): Promise<void> {
+  const { data: existing, error: lookupError } = await supabase
+    .from('stripe_issuing_cards')
+    .select('id')
+    .eq('stripe_card_id', card.id)
+    .maybeSingle();
+  // A failed LOOKUP is not an absent card, and the difference decides whether
+  // Stripe retries. Throwing here is right: the event is still applicable.
+  if (lookupError) throw new Error('Stripe card mapping lookup failed');
+  if (!existing) {
+    console.warn('[money] issuing card event for a card this deployment does not mirror', { stripeCardId: card.id });
+    return;
+  }
+
+  const { error } = await supabase
+    .from('stripe_issuing_cards')
+    .update(cardMirrorFromStripe(card))
+    .eq('id', existing.id);
+  // Reported, not swallowed — this handler exists BECAUSE a discarded write
+  // error left the mirror wrong. Throwing returns 500 and Stripe retries, which
+  // is exactly what a reconciler should do when it could not reconcile.
+  if (error) throw new Error('Stripe card mirror update failed');
 }
 
 /**

@@ -242,8 +242,12 @@ export async function runPublishNow(
     .eq('id', postId).eq('family_id', familyId).is('deleted_at', null)
     .eq('status', post.status).eq('updated_at', post.updated_at)
     .select('id').maybeSingle();
-  if (publishingPostError || !publishingPost) {
+  if (publishingPostError) {
     return abortJob(supabase, familyId, job.id, userId, 'post publishing claim unavailable', publishingPostError);
+  }
+  if (!publishingPost) {
+    return abortJob(supabase, familyId, job.id, userId, 'post publishing claim lost', null,
+      'This post is already being published.');
   }
 
   const outcomes: PublishOutcome['targets'] = [];

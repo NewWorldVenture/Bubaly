@@ -2,6 +2,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { decideStitch, shouldCarryConsent, type StitchDecision } from './identity-core';
+import { escapeLike } from '@/lib/supabase/escape-like';
 
 type Admin = SupabaseClient<Database>;
 
@@ -32,12 +33,15 @@ export async function stitchVisitorIdentity(
   let contactId: string;
   try {
     const { data: existing } = await admin
-      .from('crm_contacts').select('id, owner_id').ilike('email', email).limit(1);
+      .from('crm_contacts').select('id, owner_id').ilike('email', escapeLike(email)).limit(1);
     if (existing?.[0]?.id) {
       contactId = existing[0].id;
       const patch: Record<string, unknown> = { lifecycle_stage: 'customer' };
       if (existing[0].owner_id == null) patch.owner_id = params.userId;
-      await admin.from('crm_contacts').update(patch as never).eq('id', contactId);
+      const { error: patchError } = await admin.from('crm_contacts').update(patch as never).eq('id', contactId);
+      // Read, because the catch below cannot see a resolved PostgREST error and
+      // its message claims otherwise.
+      if (patchError) console.error('[identity] contact patch failed', { contactId, error: patchError });
     } else {
       const { data: created } = await admin.from('crm_contacts').insert({
         email, owner_id: params.userId,
@@ -62,7 +66,8 @@ export async function stitchVisitorIdentity(
       targetContactId: contactId,
     });
     if (decision === 'link' && visitor) {
-      await admin.from('mkt_visitors').update({ contact_id: contactId }).eq('id', visitor.id);
+      const { error: stitchError } = await admin.from('mkt_visitors').update({ contact_id: contactId }).eq('id', visitor.id);
+      if (stitchError) console.error('[identity] visitor stitch failed', { visitorId: visitor.id, error: stitchError });
     }
   } catch (e) {
     console.error('[identity] visitor stitch failed (mkt_visitors applied?)', e);
@@ -72,9 +77,13 @@ export async function stitchVisitorIdentity(
   //    only the anon's not-yet-attributed rows). Never on a fork.
   if (shouldCarryConsent(decision)) {
     try {
-      await admin.from('mkt_consent_events')
+      const { error: carryError } = await admin.from('mkt_consent_events')
         .update({ contact_id: contactId } as never)
         .eq('anonymous_id', anonymousId).is('contact_id', null);
+      // Failing here leaves consent rows unattributed, which is the SAFE
+      // direction — consent is never claimed for a contact it was not given
+      // for. Worth seeing anyway: the ledger is what /api/privacy/export cites.
+      if (carryError) console.error('[identity] consent carry-forward failed', { contactId, error: carryError });
     } catch (e) {
       console.error('[identity] consent carry-forward failed', e);
     }

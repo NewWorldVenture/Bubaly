@@ -26,6 +26,7 @@ import {
 } from '@/lib/messages/overview';
 import type { Tables, MemberRole } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { familyMediaPath } from '@/lib/storage/family-media';
 
 type Conversation = Tables<'family_conversations'>;
 type Message = Tables<'family_messages'>;
@@ -384,8 +385,7 @@ export function MessagesModule() {
     setUploadingFile(true);
     try {
       const supabase = createClient();
-      const ext = file.name.split('.').pop();
-      const path = `${familyId}/messages/${Date.now()}.${ext}`;
+      const path = familyMediaPath(familyId, 'messages', file.name);
       const { data: stored, error: upErr } = await supabase.storage.from('family-media').upload(path, file, { upsert: false });
       if (upErr || !stored) { toastError(describeDbError(upErr)); return; }
       const { data: { publicUrl } } = supabase.storage.from('family-media').getPublicUrl(stored.path);

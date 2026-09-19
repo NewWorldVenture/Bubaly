@@ -33,6 +33,7 @@ import { recordActivitySafely } from '../activity';
 import { isDayKey, parseIngredients, type Ingredient } from '../meals';
 import { dayKeyInTz, scopeNow } from '../scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
+import { escapeLike } from '@/lib/supabase/escape-like';
 
 export type GroceryList = Tables<'grocery_lists'>;
 export type GroceryItem = Tables<'grocery_items'>;
@@ -496,7 +497,7 @@ export async function addFromMealPlan(scope: ServiceScope, input: MealPlanGrocer
   // FAIL CLOSED. A read that errors here is not "no allergies"; putting peanut
   // butter on the list because `medical_profiles` was unreachable is exactly
   // the failure this rule exists to prevent.
-  const [profilesRes, factsRes] = await Promise.all([
+  const [profilesRes, factsRes] = await settleAll([
     scope.db.from('medical_profiles').select('allergies').eq('family_id', scope.familyId),
     scope.db.from('family_facts').select('category, label, value').eq('family_id', scope.familyId)
       .in('category', ['medical', 'preference', 'important']),
@@ -552,8 +553,11 @@ export async function pantryList(
     .order('name', { ascending: true })
     .limit(Math.min(Math.max(input.limit ?? 300, 1), 1000));
   if (isPantryLocation(input.location)) q = q.eq('location', input.location);
-  const term = input.query?.trim().replace(/[%_]/g, (m) => `\\${m}`);
-  if (term) q = q.ilike('name', `%${term}%`);
+  // Escaped once, at the call site. Escaping here too produced `50\\\%`, which
+  // LIKE reads as a literal backslash then a literal percent, so a row actually
+  // named "50% off" stopped matching.
+  const term = input.query?.trim();
+  if (term) q = q.ilike('name', `%${escapeLike(term)}%`);
 
   const { data, error } = await q;
   if (error) {
@@ -613,7 +617,7 @@ export async function pantryAdjust(scope: ServiceScope, input: PantryAdjustInput
     if (!data) return fail('That pantry item could not be found.', { code: SERVICE_CODES.notFound });
     existing = data;
   } else {
-    const { data, error } = await scope.db.from('pantry_items').select('*').eq('family_id', scope.familyId).ilike('name', `%${name.replace(/[%_]/g, (m) => `\\${m}`)}%`).limit(20);
+    const { data, error } = await scope.db.from('pantry_items').select('*').eq('family_id', scope.familyId).ilike('name', `%${escapeLike(name)}%`).limit(20);
     if (error) {
       console.error('[service:groceries] pantry lookup failed', error);
       return fail(describeDbError(error, 'Could not look up the pantry.'), { code: SERVICE_CODES.db });

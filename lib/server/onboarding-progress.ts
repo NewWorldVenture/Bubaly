@@ -63,7 +63,8 @@ export async function recordOnboardingProgress(admin: DB, p: RecordProgressInput
     if (p.status === 'completed') row.completed_at = new Date().toISOString();
     if (p.status === 'reset') row.reset_at = new Date().toISOString();
 
-    await admin.from('onboarding_progress').upsert(row as never, { onConflict: 'user_id' });
+    const { error } = await admin.from('onboarding_progress').upsert(row as never, { onConflict: 'user_id' });
+    if (error) console.error('[onboarding] progress record failed', { userId: p.userId, error });
   } catch (e) {
     console.error('[onboarding] progress record failed', e);
   }

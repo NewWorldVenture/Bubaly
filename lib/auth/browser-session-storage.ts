@@ -47,11 +47,11 @@ function payload(cookies: Cookie[], key: string): Record<string, unknown> | null
   return value as Record<string, unknown>;
 }
 
-/** Null means absent; a failed cookie read throws. Malformed bytes stay clearable. */
-export function captureBrowserSessionSnapshot(): BrowserSessionSnapshot | null {
+/** Null means absent; logout may also select a pending sign-in for retirement. */
+export function captureBrowserSessionSnapshot(includePending = false): BrowserSessionSnapshot | null {
   const key = storageKey();
   const cookies = read();
-  if (!cookies.some(cookie => isChunkLike(cookie.name, key))) return null;
+  if (!cookies.some(cookie => includePending ? isOwned(cookie.name, key) : isChunkLike(cookie.name, key))) return null;
   let session: Record<string, unknown> | null = null;
   try { session = payload(cookies, key); } catch { /* Explicit logout can clear malformed cookie bytes too. */ }
   const user = session?.user as Record<string, unknown> | undefined;
@@ -73,7 +73,7 @@ export function clearBrowserSessionSnapshot(snapshot: BrowserSessionSnapshot | n
   if (snapshot) {
     if (snapshot.storageKey !== key || generation(current, key) !== snapshot.generation
       || JSON.stringify(owned(current, key)) !== JSON.stringify(snapshot.cookies)) return false;
-  } else if (current.some(cookie => isChunkLike(cookie.name, key))) return false;
+  } else if (owned(current, key).length) return false;
   const options = durableCookieOptions(isSecureOrigin(window.location.origin));
   // getRandomValues also works in a plain HTTP LAN shell where randomUUID is
   // unavailable. This value is a freshness marker, never a credential.
@@ -82,7 +82,7 @@ export function clearBrowserSessionSnapshot(snapshot: BrowserSessionSnapshot | n
   if (generation(read(), key) !== nextGeneration) throw new Error('Logout state could not be persisted');
   for (const cookie of snapshot?.cookies ?? []) document.cookie = serializeCookieHeader(cookie.name, '', { ...options, maxAge: 0 });
   const remaining = read();
-  if (snapshot ? owned(remaining, key).length : remaining.some(cookie => isChunkLike(cookie.name, key))) {
+  if (owned(remaining, key).length) {
     throw new Error('Session cookies could not be cleared');
   }
   return true;

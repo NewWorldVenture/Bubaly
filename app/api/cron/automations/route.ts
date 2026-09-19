@@ -16,7 +16,11 @@ export async function GET(req: NextRequest) {
   }
   try {
     const summary = await runAutomations(createServiceClient());
-    return NextResponse.json({ ok: true, ...summary });
+  // A failed run must be visible in the status code: nothing in this directory
+  // writes a durable run record, so Vercel Cron's status is the only signal, and
+  // a 200 with a non-zero failure count reads as a clean run.
+    const ok = summary.failures === 0;
+    return NextResponse.json({ ...summary, ok }, { status: ok ? 200 : 502 });
   } catch (err) {
     console.error('Automation runner error:', err);
     return NextResponse.json({ error: t('automations.automationRunFailed') }, { status: 500 });

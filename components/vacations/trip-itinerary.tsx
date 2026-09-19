@@ -190,7 +190,7 @@ export function TripItinerary({ vacationId }: { vacationId: string }) {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <Field label={t('tripItinerary.location')}>{(id) => <Input id={id} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />}</Field>
-              <Field label={t('tripItinerary.cost')}>{(id) => <Input id={id} type="number" step="0.01" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} />}</Field>
+              <Field label={t('tripItinerary.cost')}>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} />}</Field>
             </div>
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.booked} onChange={(e) => setForm({ ...form, booked: e.target.checked })} className="h-4 w-4 rounded border-border" /> {t('tripItinerary.booked')}</label>
             <Field label={t('tripItinerary.notes')}>{(id) => <Textarea id={id} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} />}</Field>

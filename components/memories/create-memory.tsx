@@ -18,7 +18,7 @@ import { CameraCapture } from '@/components/ui/camera-capture';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useJourney } from '@/lib/analytics/use-journey';
-import { partitionBySize, oversizeMessage } from '@/lib/storage/family-media';
+import { partitionBySize, oversizeMessage, familyMediaPath } from '@/lib/storage/family-media';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Pick = { file: File; preview: string };
@@ -91,11 +91,7 @@ export function CreateMemory() {
     let saved = 0;
     for (let i = 0; i < picks.length; i++) {
       const { file } = picks[i];
-      const ext = file.name.split('.').pop() || 'jpg';
-      const unique = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      const path = `${familyId}/photos/${unique}.${ext}`;
+      const path = familyMediaPath(familyId, 'photos', file.name);
       const { data: stored, error: upErr } = await supabase.storage
         .from('family-media')
         .upload(path, file, { upsert: false, cacheControl: '31536000' });

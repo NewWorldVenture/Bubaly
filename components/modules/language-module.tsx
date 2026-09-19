@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Languages, Plus, Check, Pencil, Trash2, Flame, Layers, Timer, Sparkles, RotateCcw, Wand2, PauseCircle, PlayCircle, Target, ChevronRight } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
@@ -43,7 +44,13 @@ export function LanguageModule() {
   });
   const cards = useRealtimeQuery<Card>({
     table: 'vocab_cards', familyId,
-    fetcher: (s) => s.from('vocab_cards').select('*').eq('family_id', familyId).order('due_on').limit(2000),
+    // `.limit(2000)` was not a bound — PostgREST caps at `db-max-rows` (1,000),
+    // so a deck past that silently lost its tail and every count drawn from it
+    // (due today, total cards, mastery) was computed over a prefix. `due_on` is
+    // not a total order either, so `id` breaks the ties that paging would
+    // otherwise repeat or skip.
+    fetcher: (s) => readAllAsQuery<Card>((from, to) => s.from('vocab_cards').select('*')
+      .eq('family_id', familyId).order('due_on').order('id').range(from, to), { max: 2000 }),
     deps: [familyId],
   });
 

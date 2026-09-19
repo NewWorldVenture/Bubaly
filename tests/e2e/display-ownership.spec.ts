@@ -16,6 +16,7 @@ const sources = Object.fromEntries([
   'lib/i18n/locales.ts',
   'components/display/setup-card.tsx', 'components/display/display-grid.tsx',
   'components/display/display-shell-client.tsx',
+  'components/ui/widget-boundary.tsx',
 ].map((file) => [file, ts.transpileModule(fs.readFileSync(file, 'utf8'), {
   compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React },
 }).outputText]));
@@ -103,6 +104,7 @@ test.beforeEach(async ({ page }) => {
         if (id === '@/lib/onboarding/ics-time') return load('lib/onboarding/ics-time.ts');
         if (id === '@/lib/display/tiles') return load('lib/display/tiles.ts');
         if (id === './setup-card') return load('components/display/setup-card.tsx');
+        if (id === '@/components/ui/widget-boundary') return load('components/ui/widget-boundary.tsx');
         if (Object.prototype.hasOwnProperty.call(requires, id)) return requires[id];
         throw new Error('Unexpected import ' + id);
       };

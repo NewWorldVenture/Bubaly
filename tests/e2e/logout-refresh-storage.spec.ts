@@ -35,7 +35,7 @@ const key = 'sb-logout-storage-auth-token';
 const ids = { a: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', b: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' };
 type Probe = {
   signIn: (who: 'a' | 'b') => Promise<void>;
-  snapshot: () => BrowserSessionSnapshot | null;
+  snapshot: (includePending?: boolean) => BrowserSessionSnapshot | null;
   clear: (snapshot: BrowserSessionSnapshot | null) => boolean;
   refresh: () => Promise<string | null>;
   user: () => Promise<string | null>;
@@ -182,6 +182,32 @@ test('snapshot distinguishes absent storage from malformed bytes that remain exp
     expect(await page.evaluate(() => window.__logoutStorage.clear(window.__logoutStorage.snapshot()!))).toBe(true);
     expect(await page.evaluate(() => window.__logoutStorage.snapshot())).toBeNull();
   }
+});
+
+test('logout can retire pending verifier chunks without treating them as an authenticated session', async ({ context, page }) => {
+  await install(context); await load(page);
+  await context.addCookies([
+    { name: `${key}-code-verifier.0`, value: 'synthetic-pending-0', url: origin },
+    { name: `${key}-code-verifier.1`, value: 'synthetic-pending-1', url: origin },
+    { name: 'sb-other-project-auth-token-code-verifier', value: 'synthetic-unrelated', url: origin },
+  ]);
+  expect(await page.evaluate(() => window.__logoutStorage.snapshot())).toBeNull();
+  expect(await page.evaluate(() => window.__logoutStorage.clear(null))).toBe(false);
+  const pending = await page.evaluate(() => window.__logoutStorage.snapshot(true));
+  expect(pending).toMatchObject({ accessToken: null, userId: null, sessionId: null });
+  expect(pending?.cookies).toHaveLength(2);
+  expect(await page.evaluate(snapshot => window.__logoutStorage.clear(snapshot), pending)).toBe(true);
+  expect(await page.evaluate(() => window.__logoutStorage.snapshot(true))).toBeNull();
+  expect((await context.cookies()).find(cookie => cookie.name === 'sb-other-project-auth-token-code-verifier')?.value).toBe('synthetic-unrelated');
+});
+
+test('a saved pending logout snapshot cannot erase a newer handoff', async ({ context, page }) => {
+  await install(context); await load(page);
+  await context.addCookies([{ name: `${key}-code-verifier`, value: 'synthetic-old-handoff', url: origin }]);
+  const pending = await page.evaluate(() => window.__logoutStorage.snapshot(true));
+  await context.addCookies([{ name: `${key}-code-verifier`, value: 'synthetic-new-handoff', url: origin }]);
+  expect(await page.evaluate(snapshot => window.__logoutStorage.clear(snapshot), pending)).toBe(false);
+  expect((await context.cookies()).find(cookie => cookie.name === `${key}-code-verifier`)?.value).toBe('synthetic-new-handoff');
 });
 
 test('explicit compare-and-clear removes every large session chunk and only configured project auxiliary cookies', async ({ context, page }) => {

@@ -154,15 +154,15 @@ export function RewardsModule() {
     if (form.cost_points < 0) { toastError(t('rewardsModule.costMustBe0Or')); return; }
     const fields = { title: form.title.trim(), description: form.description.trim() || null, cost_points: Math.round(form.cost_points) };
     await mutate('catalog', () => form.id
-      ? createClient().from('rewards').update(fields).eq('id', form.id)
-      : createClient().from('rewards').insert({ ...fields, family_id: familyId, created_by: userId }),
+      ? createClient().from('rewards').update(fields).eq('id', form.id).eq('family_id', familyId).select('id').single()
+      : createClient().from('rewards').insert({ ...fields, family_id: familyId, created_by: userId }).select('id').single(),
     refreshRewards, form.id ? 'Reward updated' : 'Reward added', retireForm);
   }
 
   async function remove(r: Reward) {
     if (!canManage || !canWrite()) return;
     if (!confirm(`Delete the reward "${r.title}"?`)) return;
-    await mutate(r.id, () => createClient().from('rewards').delete().eq('id', r.id), refreshRewards, t('rewardsModule.rewardDeleted'));
+    await mutate(r.id, () => createClient().from('rewards').delete().eq('id', r.id).eq('family_id', familyId).select('id').single(), refreshRewards, t('rewardsModule.rewardDeleted'));
   }
 
   // ── Redemption flow ───────────────────────────────────────
@@ -171,20 +171,27 @@ export function RewardsModule() {
   // let the CLIENT decide `status`, `decided_by` and `cost_points` — so anyone
   // who could edit the request could grant themselves a reward at any price.
   async function requestReward(r: Reward, forMemberId: string) {
-    setBusy(r.id);
-    const result = await requestRedemptionAction({ rewardId: r.id, forMemberId });
-    setBusy(null);
-    if (!result.ok) { toastError(result.error); return; }
+    if (!canWrite() || (!canManage && forMemberId !== selfMember?.id)) return;
+    const reward = current.current.rewards.find(row => row.id === r.id);
+    if (!reward || !canAfford(current.current.balanceByMember.get(forMemberId), reward.cost_points)) return;
     const instant = canManage && forMemberId === selfMember?.id;
-    success(instant ? 'Reward redeemed' : 'Redemption requested');
+    await mutate(reward.id, async () => {
+      const result = await requestRedemptionAction({ rewardId: reward.id, forMemberId });
+      return { error: result.ok ? null : new Error(result.error) };
+    }, refreshLedger, instant ? 'Reward redeemed' : 'Redemption requested');
   }
 
   async function decide(red: Redemption, status: RedemptionDecision) {
-    setBusy(red.id);
-    const result = await decideRedemptionAction({ id: red.id, decision: status });
-    setBusy(null);
-    if (!result.ok) { toastError(result.error); return; }
-    success(status === 'approved' ? 'Approved' : status === 'rejected' ? 'Rejected' : 'Marked fulfilled');
+    if (!canManage || !canWrite()) return;
+    const redemption = current.current.redemptions.find(row => row.id === red.id);
+    if (!redemption) return;
+    if (status === 'fulfilled' ? redemption.status !== 'approved'
+      : redemption.status !== 'requested' || (status !== 'approved' && status !== 'rejected')) return;
+    if (status === 'approved' && !canAfford(current.current.balanceByMember.get(redemption.member_id), redemption.cost_points)) return;
+    await mutate(redemption.id, async () => {
+      const result = await decideRedemptionAction({ id: redemption.id, decision: status });
+      return { error: result.ok ? null : new Error(result.error) };
+    }, refreshLedger, status === 'approved' ? 'Approved' : status === 'rejected' ? 'Rejected' : 'Marked fulfilled');
   }
 
   if (readError || readbackBlocked) return <ErrorState message={readError || t('rewardsModule.dataUnavailable')} onRetry={retry} />;

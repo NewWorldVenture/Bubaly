@@ -11103,7 +11103,6 @@
   "system.liveConnectivityChecksAndReal": "Live connectivity checks and real usage measured just now.",
   "system.refreshSystemOverview": "Refresh system overview",
   "system.systemOverview": "System Overview",
-  "tableOfContents.80px0px600px": "-80px 0px -60% 0px",
   "taskGroup.nothingOnTheList": "Nothing on the list.",
   "taxVault.2025W2AcmeCorp": "2025 W-2 — Acme Corp",
   "taxVault.addDocument": "Add document",
@@ -13626,5 +13625,8 @@
   "contactSmsReply.undelivered": "Reply not delivered",
   "contactSmsReply.undeliveredDetail": "The provider reports that delivery failed. The reply will not be repeated automatically.",
   "contactSmsReply.failed": "Reply failed to send",
-  "contactSmsReply.failedDetail": "The provider reports that sending failed. The reply will not be repeated automatically."
+  "contactSmsReply.failedDetail": "The provider reports that sending failed. The reply will not be repeated automatically.",
+  "actions.unknownTimeZone": "Unknown time zone. Use a name like America/Chicago.",
+  "errors.thatChangeWasNotSaved": "That change wasn't saved — you may not have permission. Refresh and try again.",
+  "familyModule.unknownTimeZone": "Unknown time zone. Use a name like America/Chicago."
 }

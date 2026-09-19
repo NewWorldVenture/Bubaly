@@ -11103,7 +11103,6 @@
   "system.liveConnectivityChecksAndReal": "Verificações de ligação ao vivo e utilização real medida agora mesmo.",
   "system.refreshSystemOverview": "Atualizar a visão geral do sistema",
   "system.systemOverview": "Resumo do sistema",
-  "tableOfContents.80px0px600px": "-80px 0px -60% 0px",
   "taskGroup.nothingOnTheList": "Nada na lista.",
   "taxVault.2025W2AcmeCorp": "W-2 de 2025 — Acme Corp",
   "taxVault.addDocument": "Adicionar documento",
@@ -13626,5 +13625,8 @@
   "contactSmsReply.undelivered": "Resposta não entregue",
   "contactSmsReply.undeliveredDetail": "O fornecedor comunica uma falha na entrega. A resposta não será reenviada automaticamente.",
   "contactSmsReply.failed": "Falha no envio da resposta",
-  "contactSmsReply.failedDetail": "O fornecedor comunica uma falha no envio. A resposta não será reenviada automaticamente."
+  "contactSmsReply.failedDetail": "O fornecedor comunica uma falha no envio. A resposta não será reenviada automaticamente.",
+  "actions.unknownTimeZone": "Fuso horário desconhecido. Use um nome como America/Chicago.",
+  "errors.thatChangeWasNotSaved": "Essa alteração não foi guardada — poderá não ter permissão. Atualize e tente novamente.",
+  "familyModule.unknownTimeZone": "Fuso horário desconhecido. Use um nome como America/Chicago."
 }

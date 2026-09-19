@@ -102,7 +102,15 @@ describe('doseStatusCounts', () => {
 describe('doseSlotInstant', () => {
   it('resolves a slot in the given zone, not the runtime one', () => {
     expect(doseSlotInstant('2026-06-21T08:00', 'America/New_York')).toBe('2026-06-21T12:00:00.000Z');
-    expect(doseSlotInstant('2026-06-21T08:00')).toBe('2026-06-21T08:00:00.000Z'); // runner is UTC
+    expect(doseSlotInstant('2026-06-21T08:00', 'UTC')).toBe('2026-06-21T08:00:00.000Z');
+  });
+
+  it('preserves browser-local wall time when no family zone is supplied', () => {
+    const slot = doseSlotInstant('2026-06-21T08:00');
+    expect(slot).not.toBeNull();
+    const local = new Date(slot!);
+    expect([local.getFullYear(), local.getMonth() + 1, local.getDate(), local.getHours(), local.getMinutes()])
+      .toEqual([2026, 6, 21, 8, 0]);
   });
 
   it('refuses a slot that does not exist in that zone rather than moving it', () => {

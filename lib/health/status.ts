@@ -9,10 +9,14 @@
  * missing one surfaces as an opaque runtime crash — this guard turns that into an
  * explicit, greppable readiness failure instead).
  *
- * Optional integrations (Stripe, Anthropic/OpenAI, push, email, cron secret) are
- * deliberately NOT listed: every one of those code paths is already feature-gated
- * and fails closed with an honest 503 when unset, so their absence is a disabled
- * feature, not an unhealthy deployment.
+ * Optional integrations (Stripe, Anthropic/OpenAI, push, email) are deliberately
+ * NOT listed: their code paths are feature-gated, so absence is a disabled
+ * feature, not an unhealthy deployment, and a 503 would wrongly pull the
+ * instance from rotation.
+ *
+ * That reasoning is right about the 503 and was wrong about the reporting. See
+ * FEATURE_ENV below: some of those "disabled features" are entire subsystems
+ * that go silent, and this endpoint used to say `ok` while they were dead.
  */
 export const REQUIRED_ENV = [
   'NEXT_PUBLIC_SUPABASE_URL',
@@ -21,6 +25,72 @@ export const REQUIRED_ENV = [
 ] as const;
 
 export type EnvCheck = { ok: boolean; missing: string[] };
+
+/**
+ * Secrets whose absence silently disables a WHOLE shipped subsystem.
+ *
+ * These are not hard dependencies — the app boots and serves every page without
+ * them — so they must not produce a 503. But they were not reported anywhere
+ * either, and the failure they cause is invisible from the outside:
+ *
+ * - `CRON_SECRET` gates all 24 scheduled jobs declared in `vercel.json`.
+ *   `hasCronAuthorization` is correctly fail-closed, so with the secret unset
+ *   every one of them answers **401** — not 503, and not logged as an error.
+ *   Nightly notifications, wallet allowance, chore reminders, the weekly digest,
+ *   autopilot scan, return reminders and calendar feeds all just stop, and
+ *   `/api/health` reported `ok` throughout.
+ * - `CHILD_LOGIN_SECRET` gates child sign-in end to end: `childSignInAction`
+ *   returns "kid sign-in isn't set up" before reading anything, so no child in
+ *   any family can log in.
+ * - The remaining four gate provider ingress and signed links; each fails closed
+ *   in its own handler, which is correct, and equally invisible.
+ *
+ * Reported as `degraded` + **200**, which is what that status was built for:
+ * signal it in the body for alerting without yanking healthy instances out of
+ * rotation. A preview deployment that legitimately runs no crons will show
+ * degraded with the names listed, which is accurate rather than noisy.
+ */
+/**
+ * The inclusion rule, because the obvious extension of this list is wrong.
+ *
+ * A name belongs here only if the environment is the ONLY place it can come
+ * from. The AI provider keys look like they qualify and do not:
+ * `resolveAiSettings` reads admin-saved values from the database FIRST and falls
+ * back to env (`stored.anthropicKey || process.env.ANTHROPIC_API_KEY`). A
+ * deployment that configures its key in the admin console has no such env var
+ * and a perfectly working assistant — listing it here would report that healthy
+ * deployment as degraded forever, which trains operators to ignore the field.
+ *
+ * Same test for anything added later: if an admin can set it in the product,
+ * absence from the environment proves nothing. Every name below is read only as
+ * `process.env.X`, with no stored fallback.
+ */
+export const FEATURE_ENV = [
+  'CRON_SECRET',
+  // Every outbound email: notification digests, family invites, marketing sends.
+  // Worse than merely silent — `lib/email.ts` reports success when it is unset,
+  // so notification rows are marked delivered for mail that was never sent, and
+  // the dedupe then suppresses the retry. Env-only across five read sites, no
+  // stored fallback, so absence here does prove it is unconfigured.
+  'RESEND_API_KEY',
+  'CHILD_LOGIN_SECRET',
+  'INTERNAL_SECRET',
+  'CONTACT_CENTER_INBOUND_SECRET',
+  'MARKETING_UNSUB_SECRET',
+  'GUARDIAN_INTERNAL_SECRET',
+] as const;
+
+/**
+ * Which feature-gating secrets are absent. Presence only — no value is ever read
+ * into the response, exactly as `checkRequiredEnv` guarantees.
+ */
+export function checkFeatureEnv(env: Record<string, string | undefined>): EnvCheck {
+  const missing = FEATURE_ENV.filter((name) => {
+    const value = env[name];
+    return value === undefined || value.trim() === '';
+  });
+  return { ok: missing.length === 0, missing };
+}
 
 /**
  * Reports which required env vars are absent/blank. Only presence is inspected —
@@ -49,6 +119,7 @@ export type HealthReport = {
     env: EnvCheck;
     database: ProbeCheck;
     auth: ProbeCheck;
+    features?: EnvCheck;
     // Optional: only reported when the caller supplied a service-role probe.
     // Absent means "not checked", which is different from "checked and fine".
     serviceRole?: ProbeCheck;
@@ -76,6 +147,7 @@ export function summarizeHealth(
   database: ProbeCheck,
   auth: ProbeCheck,
   serviceRole?: ProbeCheck,
+  features?: EnvCheck,
 ): HealthStatus {
   if (!env.ok) return 'error';
   if (!database.ok) return 'error';
@@ -84,6 +156,10 @@ export function summarizeHealth(
   // it only tests presence — so without this branch the endpoint reports `ok`
   // while every admin page, webhook and cron job reads nothing at all.
   if (serviceRole && !serviceRole.ok) return 'degraded';
+  // Same shape, one level out: a missing feature secret leaves the deployment
+  // able to serve every page while a whole subsystem is dead. Reported, never
+  // a 503 — see FEATURE_ENV.
+  if (features && !features.ok) return 'degraded';
   return 'ok';
 }
 
@@ -93,12 +169,19 @@ export function buildHealthReport(
   auth: ProbeCheck,
   now: Date = new Date(),
   serviceRole?: ProbeCheck,
+  features?: EnvCheck,
 ): HealthReport {
-  const status = summarizeHealth(env, database, auth, serviceRole);
+  const status = summarizeHealth(env, database, auth, serviceRole, features);
   return {
     status,
     httpStatus: status === 'error' ? 503 : 200,
     timestamp: now.toISOString(),
-    checks: { env, database, auth, ...(serviceRole ? { serviceRole } : {}) },
+    checks: {
+      env,
+      database,
+      auth,
+      ...(serviceRole ? { serviceRole } : {}),
+      ...(features ? { features } : {}),
+    },
   };
 }

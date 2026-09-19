@@ -18,18 +18,36 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(home);
   }
 
+  // Both results are read. Discarding either turns a database failure into a
+  // confident lie on a page the recipient reached from an email they asked to
+  // stop: a refused SELECT rendered "that link doesn't look right" at a real
+  // subscriber holding a real link, and a refused UPDATE rendered "you've been
+  // unsubscribed" over a row that still said subscribed — so the mail kept
+  // coming, and they had been told it would not. Consent is the one thing this
+  // endpoint exists to record.
   const supabase = createServiceClient();
-  const { data } = await supabase
+  const { data, error: readError } = await supabase
     .from('blog_subscribers')
     .select('id, status')
     .eq('unsubscribe_token', token)
     .maybeSingle();
 
+  if (readError) {
+    console.error('[blog] unsubscribe lookup failed', readError);
+    home.searchParams.set('unsubscribed', 'error');
+    return NextResponse.redirect(home);
+  }
+
   if (data && data.status !== 'unsubscribed') {
-    await supabase
+    const { error: writeError } = await supabase
       .from('blog_subscribers')
       .update({ status: 'unsubscribed', unsubscribed_at: new Date().toISOString() })
       .eq('id', data.id);
+    if (writeError) {
+      console.error('[blog] unsubscribe write failed', writeError);
+      home.searchParams.set('unsubscribed', 'error');
+      return NextResponse.redirect(home);
+    }
   }
 
   home.searchParams.set('unsubscribed', data ? '1' : 'invalid');

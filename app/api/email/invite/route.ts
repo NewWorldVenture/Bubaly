@@ -6,6 +6,7 @@ import { sendReactEmail } from '@/lib/email';
 import { InviteEmail } from '@/lib/emails/invite';
 import * as React from 'react';
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
+import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 
 const MAX_EMAIL_REQUEST_BYTES = 4_096;
 
@@ -28,6 +29,28 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (!invite) return NextResponse.json({ error: t('invite.inviteNotFound') }, { status: 404 });
+
+    // The recipient of this mail is a free-text address the inviter chose —
+    // components/family/invite-form.tsx inserts the row straight from the
+    // browser — and this route re-sends on every call, with no dedupe and no
+    // count. So one invite row could be turned into unlimited mail from
+    // Bubaly's own sender to an address of the caller's choosing.
+    //
+    // Every sibling endpoint with an outbound side effect already carries this
+    // guard (billing, sync, gift, contact, forms, push, blog subscribe), and
+    // the referral path — which mails a caller-chosen address for the same
+    // reason — has a dedicated per-family policy of its own. This was the one
+    // that had neither. Keyed per FAMILY, because the thing to bound is that
+    // household's total outbound, not one member's share of it.
+    const limited = await enforceRequestRateLimit(
+      supabase, `email:invite:${ctx.active.familyId}`, { limit: 20, windowMs: 3_600_000 },
+    );
+    if (!limited.ok) {
+      return NextResponse.json(
+        { error: t('requests.tooManyRequestsPleaseTry') },
+        { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+      );
+    }
 
     const inviterName = ctx.active.member.display_name;
     const familyName = ctx.active.family.name;

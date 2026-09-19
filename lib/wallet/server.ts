@@ -108,32 +108,32 @@ export async function fundGoal(supabase: DB, params: {
   return { ok: true, txnId: result.transaction_id };
 }
 
-export type CreditResult = { ok: boolean; error?: string; credited: number };
+export type CreditResult = {
+  ok: boolean;
+  error?: string;
+  credited: number;
+  /**
+   * The ledger already holds this exact credit. Set when the insert hits a
+   * unique violation — today that is `uq_wallet_txn_chore_payout` (0316),
+   * which is what stops two simultaneous "Pay" clicks from crediting a chore
+   * twice. A caller that has its own "already paid?" read should report this
+   * the same way it reports that read finding a row, not as a failure.
+   */
+  duplicate?: boolean;
+};
 
-/**
- * Spendable balance for a child = the live balance of their SPEND bucket, derived
- * from the immutable ledger (credits − debits). This is what a card authorization
- * is checked against in real time. Returns 0 when the bucket/wallet is unknown.
- */
-export async function childSpendableCents(supabase: DB, familyId: string, childWalletId: string): Promise<number> {
-  const { data: bucket, error: bucketError } = await supabase
-    .from('wallet_buckets').select('id')
-    .eq('family_id', familyId).eq('child_wallet_id', childWalletId).eq('kind', 'spend').maybeSingle();
-  if (bucketError) throw new Error(walletFailure(bucketError, 'Could not load the wallet Spend bucket.'));
-  if (!bucket) return 0;
-
-  const { data: txns, error: transactionError } = await supabase
-    .from('wallet_transactions')
-    .select('direction, amount_cents, status')
-    .eq('family_id', familyId).eq('bucket_id', bucket.id)
-    .in('status', ['completed', 'processing']);
-  if (transactionError) throw new Error(walletFailure(transactionError, 'Could not load the wallet balance.'));
-
-  return (txns ?? []).reduce((sum, t) => {
-    if (t.status !== 'completed' && t.status !== 'processing') return sum;
-    return sum + (t.direction === 'credit' ? t.amount_cents : -t.amount_cents);
-  }, 0);
-}
+// `childSpendableCents` used to live here. It summed the SPEND bucket's ledger
+// in TypeScript and its doc comment said "this is what a card authorization is
+// checked against in real time" — which was not true of it, and had not been
+// since 0155. The live check is `wallet_reserve_card_auth`, which sums in SQL
+// under `for update` on the bucket, so it reads every row and serialises
+// concurrent authorizations. This one had no callers anywhere in the repository.
+//
+// It was removed rather than fixed because leaving it was the hazard: an
+// unbounded `select` is answered with at most `db-max-rows` (1,000), so a child
+// past a thousand ledger rows would have been given a balance summed over an
+// arbitrary subset — and the comment invited the next author to wire it into
+// exactly the decision that must not use it.
 
 /**
  * Atomically reserve a hold for a card authorization. Under a per-child lock the
@@ -265,7 +265,21 @@ export async function creditChildWallet(supabase: DB, params: {
   if (rows.length === 0) return { ok: false, error: 'Nothing to allocate', credited: 0 };
 
   const { error } = await supabase.from('wallet_transactions').insert(rows);
-  if (error) return { ok: false, error: walletFailure(error, 'Could not credit that wallet.'), credited: 0 };
+  if (error) {
+    // A unique violation here means the ledger already carries this credit —
+    // the other half of a race the caller's own "already paid?" read cannot
+    // win on its own. The rows of one credit go in as a single multi-row
+    // INSERT, so this refuses all of them together: no half-credited wallet.
+    const duplicate = (error as { code?: string }).code === '23505';
+    return {
+      ok: false,
+      error: duplicate
+        ? 'That reward has already been paid.'
+        : walletFailure(error, 'Could not credit that wallet.'),
+      credited: 0,
+      duplicate,
+    };
+  }
 
   await logWalletAudit(supabase, {
     family_id: params.familyId, actor_user_id: params.createdBy, action: `credit_${params.type}`,

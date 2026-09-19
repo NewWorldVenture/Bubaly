@@ -76,7 +76,7 @@ export function ServiceClient({ records, assets }: { records: ServiceRecord[]; a
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Field label={t('serviceClient.provider')}><Input name="provider" placeholder={t('serviceClient.acmeHeating')} /></Field>
-            <Field label={t('serviceClient.cost')}><Input type="number" step="0.01" name="cost" /></Field>
+            <Field label={t('serviceClient.cost')}><Input type="number" inputMode="decimal" step="0.01" name="cost" /></Field>
           </div>
           <Field label={t('serviceClient.nextDueOptional')}><Input type="date" name="next_due_on" /></Field>
           <Field label={t('serviceClient.notes')}><Textarea name="description" rows={2} /></Field>

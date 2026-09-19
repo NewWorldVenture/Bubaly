@@ -21,16 +21,17 @@ import {
 } from '@/lib/finance/splits';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { todayInZone } from '@/lib/schedule/zoned';
 
 type SplitRow = Tables<'expense_splits'>;
 type Share = Tables<'expense_split_shares'>;
 
 const CATEGORIES = ['Groceries', 'Dining', 'Travel', 'Utilities', 'Entertainment', 'Household', 'Gifts', 'Other'];
-const blank = () => ({ description: '', amount: '', category: 'Groceries', paid_by: '', spent_on: new Date().toISOString().slice(0, 10), participants: [] as string[] });
+const blank = (tz: string) => ({ description: '', amount: '', category: 'Groceries', paid_by: '', spent_on: todayInZone(tz), participants: [] as string[] });
 
 export function ExpensesModule() {
   const tr = useTranslations();
-  const { familyId, userId, members } = useApp();
+  const { familyId, userId, members, family } = useApp();
   const { success, error: toastError } = useToast();
   const { run, isPending } = useAction({ onError: (e) => toastError(describeDbError(e)) });
   const [saving, setSaving] = useState(false);
@@ -100,7 +101,11 @@ export function ExpensesModule() {
       const { error: sErr } = await supabase.from('expense_split_shares').insert(rows);
       if (sErr) {
         // Roll back the orphaned split so we never leave a parent without shares.
-        await supabase.from('expense_splits').delete().eq('id', split.id);
+        // The delete's result is read, because that sentence is a promise this
+        // code could not keep: a refused rollback leaves exactly the split with
+        // no shares it says never happens, and said nothing.
+        const { error: rollbackError } = await supabase.from('expense_splits').delete().eq('id', split.id);
+        if (rollbackError) console.error('[expenses] split rollback failed; a split without shares remains', { splitId: split.id, error: rollbackError });
         toastError(describeDbError(sErr));
         return;
       }
@@ -146,7 +151,7 @@ export function ExpensesModule() {
         <h3 className="flex items-center gap-2 text-base font-semibold"><Split className="h-4 w-4 text-brand-text" /> {tr('expenses.expenseSplitting')}</h3>
         <div className="flex items-center gap-2">
           <AiInsight kind="expenses" />
-          <Button onClick={() => setForm(blank())}><Plus className="h-4 w-4" /> {tr('expenses.splitAnExpense')}</Button>
+          <Button onClick={() => setForm(blank(family?.timezone ?? 'UTC'))}><Plus className="h-4 w-4" /> {tr('expenses.splitAnExpense')}</Button>
         </div>
       </div>
 

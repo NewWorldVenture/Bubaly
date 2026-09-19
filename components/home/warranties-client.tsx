@@ -139,7 +139,7 @@ export function WarrantiesClient({ warranties, assets }: { warranties: Warranty[
             <Field label={t('warrantiesClient.expires')}><Input type="date" name="expires_on" defaultValue={editing?.expires_on ?? ''} /></Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Field label={t('warrantiesClient.cost')}><Input type="number" step="0.01" name="cost" defaultValue={editing?.cost ?? ''} /></Field>
+            <Field label={t('warrantiesClient.cost')}><Input type="number" inputMode="decimal" step="0.01" name="cost" defaultValue={editing?.cost ?? ''} /></Field>
             <Field label={t('warrantiesClient.billing')}>
               <Select name="premium_period" defaultValue={editing?.premium_period ?? 'one_time'}>
                 <option value="one_time">One-time</option>

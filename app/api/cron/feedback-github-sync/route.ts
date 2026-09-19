@@ -39,5 +39,13 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  return NextResponse.json({ ok: true, ...result });
+  // Every other cron route in this directory answers 502 when its work failed,
+  // which is what makes a failed run visible: Vercel Cron records the status, so
+  // a hardcoded 200 is indistinguishable from a clean run. `result.errors` was
+  // already counted and already alerted on — it just never reached the response.
+  //
+  // `configured: false` is NOT a failure. The bot is deliberately dark until
+  // GITHUB_* is set, errors stays 0, and that run is a genuine 200.
+  const ok = result.errors === 0;
+  return NextResponse.json({ ...result, ok }, { status: ok ? 200 : 502 });
 }

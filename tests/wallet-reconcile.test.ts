@@ -131,3 +131,87 @@ describe('anomalyLabel', () => {
     expect(anomalyLabel('orphan_reversal')).toBe('Orphan reversal');
   });
 });
+
+// ── Money that belongs to no bucket ──────────────────────────────────────────
+//
+// These replace the "bucket sum drift" check, which could not fire: it compared
+// Σ(bucket balances) against the wallet total, but both were accumulated from
+// the same signed value in the same loop, so they agreed for every possible
+// input. The tests below are the ones that could not be written against it.
+describe('reconcileLedger — unattributed money', () => {
+  it('flags a completed entry whose bucket is unknown', () => {
+    const txns: ReconTxn[] = [
+      txn({ id: 'a', direction: 'credit', amount_cents: 5000, bucket_kind: 'spend' }),
+      txn({ id: 'b', direction: 'credit', amount_cents: 2500, bucket_kind: null }),
+    ];
+    const r = reconcileLedger(txns, NOW);
+    const found = r.anomalies.filter((a) => a.kind === 'unattributed_bucket');
+    expect(found).toHaveLength(1);
+    expect(found[0].amountCents).toBe(2500);
+    expect(found[0].childWalletId).toBe('w1');
+    expect(r.unattributedCents).toBe(2500);
+  });
+
+  it('does not hide unbucketed money inside the spend bucket', () => {
+    // The whole point: 2500¢ in no bucket must not read as 2500¢ of spend, and
+    // must not mask a genuinely negative spend bucket sitting underneath it.
+    const txns: ReconTxn[] = [
+      txn({ id: 'a', direction: 'debit', amount_cents: 400, bucket_kind: 'spend', type: 'card_spend' }),
+      txn({ id: 'b', direction: 'credit', amount_cents: 2500, bucket_kind: null }),
+    ];
+    const r = reconcileLedger(txns, NOW);
+    expect(r.anomalies.some((a) => a.kind === 'negative_bucket')).toBe(true);
+    expect(r.anomalies.some((a) => a.kind === 'unattributed_bucket')).toBe(true);
+    expect(r.unattributedCents).toBe(2500);
+  });
+
+  it('reports it per wallet, not once for the whole ledger', () => {
+    const txns: ReconTxn[] = [
+      txn({ id: 'a', child_wallet_id: 'w1', amount_cents: 100, bucket_kind: null }),
+      txn({ id: 'b', child_wallet_id: 'w2', amount_cents: 700, bucket_kind: null }),
+    ];
+    const r = reconcileLedger(txns, NOW);
+    const found = r.anomalies.filter((a) => a.kind === 'unattributed_bucket');
+    expect(found.map((a) => a.childWalletId).sort()).toEqual(['w1', 'w2']);
+    expect(r.unattributedCents).toBe(800);
+  });
+
+  it('stays silent for a pending unbucketed row — that is the stuck-pending check', () => {
+    const txns: ReconTxn[] = [
+      txn({ id: 'a', amount_cents: 2500, bucket_kind: null, status: 'pending', created_at: NOW.toISOString() }),
+    ];
+    const r = reconcileLedger(txns, NOW);
+    expect(r.anomalies.some((a) => a.kind === 'unattributed_bucket')).toBe(false);
+    expect(r.unattributedCents).toBe(0);
+  });
+
+  it('is a warning, not a critical — the total is right, the attribution is not', () => {
+    const txns: ReconTxn[] = [txn({ id: 'a', amount_cents: 2500, bucket_kind: null })];
+    const r = reconcileLedger(txns, NOW);
+    expect(r.anomalies.find((a) => a.kind === 'unattributed_bucket')?.severity).toBe('medium');
+    expect(r.healthy).toBe(true);
+  });
+
+  it('keeps the wallet total whole: Σ(buckets) + unattributed = total', () => {
+    const txns: ReconTxn[] = [
+      txn({ id: 'a', direction: 'credit', amount_cents: 5000, bucket_kind: 'save' }),
+      txn({ id: 'b', direction: 'debit', amount_cents: 1200, bucket_kind: 'save', type: 'card_spend' }),
+      txn({ id: 'c', direction: 'credit', amount_cents: 2500, bucket_kind: null }),
+    ];
+    const r = reconcileLedger(txns, NOW);
+    // No negative anywhere, so the only anomaly is the attribution gap.
+    expect(r.anomalies.map((a) => a.kind)).toEqual(['unattributed_bucket']);
+    expect(r.creditVolumeCents - r.debitVolumeCents).toBe(6300);
+    expect(r.unattributedCents).toBe(2500);
+  });
+
+  it('a fully bucketed ledger reports nothing and zero unattributed', () => {
+    const txns: ReconTxn[] = [
+      txn({ id: 'a', direction: 'credit', amount_cents: 5000, bucket_kind: 'spend' }),
+      txn({ id: 'b', direction: 'credit', amount_cents: 900, bucket_kind: 'give' }),
+    ];
+    const r = reconcileLedger(txns, NOW);
+    expect(r.anomalies).toHaveLength(0);
+    expect(r.unattributedCents).toBe(0);
+  });
+});

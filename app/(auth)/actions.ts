@@ -117,7 +117,16 @@ export async function childSignInAction(input: { username: string; pin: string }
     return !error;
   };
 
-  const { data: rows, error: loginLookupError } = await admin.from('child_logins').select('username,user_id').ilike('username', username).limit(1);
+  // `eq`, not `ilike`. Both sides are already lowercased by `normalizeUsername`,
+  // so the case-insensitive match bought nothing — and it cost the throttle
+  // above its whole purpose. `_` is a single-character WILDCARD in LIKE, and
+  // `USERNAME_RE` permits it between the first and last characters, so `a_ice`
+  // matched `alice` and signed in as `row.username` — the real account. The
+  // throttle is keyed on what was TYPED, so every wildcard spelling was a
+  // separate key with its own five attempts: 7 spellings for a five-character
+  // name, 63 for an eight-character one, each resetting a budget that exists
+  // because a 4-digit PIN is only 10,000 combinations.
+  const { data: rows, error: loginLookupError } = await admin.from('child_logins').select('username,user_id').eq('username', username).limit(1);
   if (loginLookupError) {
     console.error('[child-login] login lookup failed', loginLookupError);
     return { ok: false, error: t('actions.kidSignInIsTemporarily') };

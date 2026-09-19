@@ -11103,7 +11103,6 @@
   "system.liveConnectivityChecksAndReal": "Live-Verbindungsprüfungen und tatsächliche Nutzung, gerade eben gemessen.",
   "system.refreshSystemOverview": "Systemübersicht aktualisieren",
   "system.systemOverview": "Systemübersicht",
-  "tableOfContents.80px0px600px": "-80px 0px -60% 0px",
   "taskGroup.nothingOnTheList": "Nichts auf der Liste.",
   "taxVault.2025W2AcmeCorp": "W-2 2025 – Acme Corp",
   "taxVault.addDocument": "Dokument hinzufügen",
@@ -13626,5 +13625,8 @@
   "contactSmsReply.undelivered": "Antwort nicht zugestellt",
   "contactSmsReply.undeliveredDetail": "Der Anbieter meldet eine fehlgeschlagene Zustellung. Die Antwort wird nicht automatisch erneut gesendet.",
   "contactSmsReply.failed": "Antwort konnte nicht gesendet werden",
-  "contactSmsReply.failedDetail": "Der Anbieter meldet einen Sendefehler. Die Antwort wird nicht automatisch erneut gesendet."
+  "contactSmsReply.failedDetail": "Der Anbieter meldet einen Sendefehler. Die Antwort wird nicht automatisch erneut gesendet.",
+  "actions.unknownTimeZone": "Unbekannte Zeitzone. Verwende einen Namen wie America/Chicago.",
+  "errors.thatChangeWasNotSaved": "Diese Änderung wurde nicht gespeichert – möglicherweise fehlt dir die Berechtigung. Aktualisiere die Seite und versuche es erneut.",
+  "familyModule.unknownTimeZone": "Unbekannte Zeitzone. Verwende einen Namen wie America/Chicago."
 }

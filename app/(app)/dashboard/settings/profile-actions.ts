@@ -7,6 +7,7 @@ import type { Database } from '@/lib/database.types';
 import {
   normalizeAnswer, type ProfileField, type KnownProfile,
 } from '@/lib/marketing/progressive-profile';
+import { escapeLike } from '@/lib/supabase/escape-like';
 
 type Admin = SupabaseClient<Database>;
 
@@ -21,7 +22,7 @@ async function resolveContactId(admin: Admin, userId: string, email: string | nu
 
   const e = (email ?? '').trim().toLowerCase();
   if (e) {
-    const { data: byEmail } = await admin.from('crm_contacts').select('id, owner_id').ilike('email', e).limit(1);
+    const { data: byEmail } = await admin.from('crm_contacts').select('id, owner_id').ilike('email', escapeLike(e)).limit(1);
     if (byEmail?.[0]?.id) {
       if (byEmail[0].owner_id == null) await admin.from('crm_contacts').update({ owner_id: userId }).eq('id', byEmail[0].id);
       return byEmail[0].id;

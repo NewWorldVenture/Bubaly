@@ -73,5 +73,12 @@ export async function GET(req: NextRequest) {
   // 200 even with failures: one unreachable publisher is a normal day, and a
   // 502 here would make the dispatcher log every run as broken. The counts are
   // the signal.
-  return NextResponse.json({ ok: true, feeds: (feeds ?? []).length, refreshed, added, failed, skipped });
+  // A failed run must be visible in the status code: nothing in this directory
+  // writes a durable run record, so Vercel Cron's status is the only signal, and
+  // a 200 with a non-zero failure count reads as a clean run.
+  const ok = failed === 0;
+  return NextResponse.json(
+    { ok, feeds: (feeds ?? []).length, refreshed, added, failed, skipped },
+    { status: ok ? 200 : 502 },
+  );
 }

@@ -2,15 +2,19 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-13T11:30:00.000Z
-- Total Audit Items: 13868
+- Last Updated: 2026-09-19T18:50:54.201Z
+- Total Audit Items: 13985
 - Not Started: 13796
-- In Progress: 63
-- Passed: 4
-- Fixed + Passed: 2
+- In Progress: 186
+- Passed: 0
+- Fixed + Passed: 0
 - Blocked: 0
 - Failed: 3
-- Overall Completion: 0.04%
+- Overall Completion: 0.00%
+
+Current integration: upstream 57f22c0b is reconciled with audit dcbccaa1, including preserved weekly planning, pending-signup logout protection, signed SMS ingress retention and portable audit guards. Frozen pre-final-evidence tree 4ac44596e1f91234ee9822b9ca2027d0fd62fdb2 passes all 16,360 unit checks across 1,294 files, production build (251 pages), and lint with three existing warnings. Final strict types pass. The full DST-zone rerun passes 16,361/16,361 across 1,294 files after a medication test-only timezone correction; corrected medication checks pass 16/16 in UTC. No application source changed after the frozen build/types. Current evidence and remaining boundaries are recorded in [the integration cycle](docs/final-audit/main-integration-cycle-20260919.md). Previous full-suite runs remain historical evidence. Production readiness remains NO. Counts cover permanent master-ledger rows, including provenance-qualified references to upstream findings, rather than product development completion.
+
+Historical update retained below (2026-09-13); its claimed status transitions are superseded by the current summary and detailed records.
 
 Changes in this update (2026-09-13, against production build f9c4d7a1 and branch
 head 92340315):
@@ -47,16 +51,16 @@ head 92340315):
 PRODUCTION READY: NO
 
 ## Critical Blockers
-- API-387E2B30BCD7: Text source a61804db requires hosted acceptance. Signed delivery publication 0d68bdbb passed all 1,064 hosted cases. Real provider delivery, controlled old-handler cutover, durable pre-candidate intake and production configuration remain open.
+- API-387E2B30BCD7: Current signed ingress retention passes focused tests, including deterministic filing after candidate failure. New integrated ingress hosted acceptance, real provider delivery, controlled old-handler cutover and production configuration remain open; see main-integration-cycle-20260919.md.
 - API-BBD0A5DB630F: Real provider delivery, production scheduler configuration and nontransactional cross-table/payload changes remain open; Guardian role authorization is tracked under AUTHZ-005.
 - LIBRARY-10D7AA8F3175: claimGuardianCallback cannot distinguish "already handled" from "the claim could not be written", so a database outage makes all six Guardian callbacks acknowledge 200 and lose the event — two of them hang up on the caller while doing it.
 - LIBRARY-5BA7FEA22007: Family timezone, existing rule/time/regex semantics, emergency-versus-block precedence and deployed policy behavior remain unverified.
 - FLOW-DDE6E8974B46: Real provider delivery, production scheduler configuration and nontransactional cross-table/payload changes remain open; Guardian role authorization is tracked under AUTHZ-005.
 - DB-TBL-161: Existing rows do not establish service-authored Guardian decisions; AUTHZ-004 records the signed-route replay consequence.
-- CALLBACK-24807E48E6E6: Text source a61804db requires hosted acceptance. Signed delivery publication 0d68bdbb passed all 1,064 hosted cases. Real provider delivery, controlled old-handler cutover, durable pre-candidate intake and production configuration remain open.
+- CALLBACK-24807E48E6E6: Current signed ingress retention passes focused tests, including deterministic filing after candidate failure. New integrated ingress hosted acceptance, real provider delivery, controlled old-handler cutover and production configuration remain open; see main-integration-cycle-20260919.md.
 - CALLBACK-07F1FB3AED21: Real provider delivery, production scheduler configuration and nontransactional cross-table/payload changes remain open; Guardian role authorization is tracked under AUTHZ-005.
-- DEPLOY-001: New text hosted acceptance, deployed session/provider configuration, production database/provider workflows, physical devices, local startup approval limitation and second full regression remain open.
-- AUTH-001: Verify actual signup confirmation, invalid/expired/replayed links, phone/OAuth signup and deployed mail/redirect policy. A later ordinary singleton refresh can still delete a pending standard PKCE verifier; cross-process cookie compare/write is not atomic. UI review lock is scoped to the current form instance.
+- DEPLOY-001: Current integrated source and new SMS ingress hosted acceptance, deployed session/provider configuration, production database/provider workflows, physical devices and second full regression remain open.
+- AUTH-001: Verify actual signup confirmation, invalid/expired/replayed links, phone/OAuth signup and deployed mail/redirect policy. Ordinary browser and SSR refresh still delete a pending standard PKCE verifier; cross-process cookie compare/write is not atomic. UI review lock is scoped to the current form instance.
 - AUTH-002: Production session time-box/inactivity/single-session settings, physical mobile reopening and production child configuration remain unverified. Browser cookie writes are not atomic; ordinary OAuth/phone adoption and unrelated server responses remain separate audit obligations.
 - INT-001: Callback routing, planner replay and 204 defects repaired locally. Deployed callback→database→provider→inbox workflow still unverified; outbound durability tracked INT-002.
 - PUSH-001: Failure retention, preferences, queue starvation and false-success status defects repaired locally. Live provider/device workflow remains unverified; distributed worker claims and partial-delivery receipts tracked in PUSH-003.
@@ -90,7 +94,7 @@ PRODUCTION READY: NO
 - DATA-007: Global CommandBar caller retry/lifetime remains outside shared-navigation boundary. Cross-client default-list uniqueness, reload-persistent idempotency, live RLS, microphone/device behavior and complete capture workflows remain separate.
 - SEC-004: Targeted action/render protection and pinned combined regression pass. Live direct-database/RLS workflow and broader URL surfaces remain separate. No active-content browser execution was attempted or claimed.
 - AUTH-003: Live email delivery, provider URL allowlists/templates, deployed password/reauthentication policy and real recipient-to-password workflow remain unverified. Local form/grant ownership is not distributed exactly-once mutation control. Successful server responses can still race later browser account changes; this repair specifically covers pre-verification failures and ambient action/middleware refresh writes. A failed post-exchange check cannot undo provider code consumption. Supabase may revoke sessions for account security changes.
-- SMS-001: Text source a61804db requires hosted acceptance. Signed delivery publication 0d68bdbb passed all 1,064 hosted cases. Real provider delivery, controlled old-handler cutover, durable pre-candidate intake and production configuration remain open.
+- SMS-001: Current signed ingress retention passes focused tests, including deterministic filing after candidate failure. New integrated ingress hosted acceptance, real provider delivery, controlled old-handler cutover and production configuration remain open; see main-integration-cycle-20260919.md.
 - AUTHZ-004: Guardian contact/profile role authorization remains AUTHZ-005; cross-table operations remain non-atomic.
 - AUTHZ-005: Verify deployed policy state, child contact/profile mutations and the contact-deletion cascade into routing rules. Independent member/family foreign keys require separate integrity verification.
 - SMS-002: Production scheduler configuration/execution and real provider delivery remain unverified; cross-table operations are not transactions.
@@ -8792,7 +8796,7 @@ PRODUCTION READY: NO
 | API-80142EB1C3FC | API | GET /api/concierge-calls/place | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | API-1B0FCD08C0B2 | API | POST /api/contact | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | API-0EB76703163C | API | POST /api/contact-center/email | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| API-387E2B30BCD7 | API | POST /api/contact-center/sms | 🔄 IN PROGRESS | High | Full application source a61804db passes 15,011 unit tests across 1,202 files with zero failures/skips. Focused helper checks pass 223 cases, concierge checks pass 38, and signed ingress/authorized reader cover new Unicode replay and legacy boundaries. New disposable signed HTTP/PostgreSQL text case is discovered; hosted execution pending. | Freeze the first reply candidate before intake; exact one-time final emission reservation; held legacy/uncertain replies; verified deterministic projection. Signed delivery callbacks bind token, account and first provider SID, advance status monotonically and expose safe provider progress in the authorized inbox. New text uses scalar-safe PostgreSQL/XML bounds before candidate fingerprinting; bounded family labels preserve useful fallbacks; old oversized queued replies are held without rewriting stored content. Provider completion receives the candidate cancellation signal. | Application a61804db passes all 15,011 unit tests in 1,202 files, zero failed/skipped, in 43.60 seconds. The exact frozen source was committed without changes during execution. Application a61804db builds 252 pages (44-second compilation). Strict types, lint with four baseline warnings, localization and query audit (491 tables, 77 functions, 144 routes) PASS. See contact-center-text-bounds-cycle.md. Signed delivery publication 0d68bdbb passes CI 34718960420: 1,064 scheduled E2E cases and 1,064 passes in 8.0 minutes, with both authenticated/durable flags enabled; identical tested tree becff049. Web, database, mobile, finance and Vercel PASS. New text source a61804db requires its own hosted execution. See guardian-hosted-acceptance.md. | Private checks and synthetic hosted callbacks are separate from real provider delivery. No SQL, dependency or shared navigation changes; exact source inventory preserved. |
+| API-387E2B30BCD7 | API | POST /api/contact-center/sms | 🔄 IN PROGRESS | High | Current 2026-09-19 integration: signed canonical ingress is retained before optional candidate work; timeout/locale failures preserve deterministic filing without a reply, and a late ignored-abort candidate cannot emit. Contact Center, marketing push and social publication regression passes 875 checks across 32 suites. Hosted acceptance of the new ingress fixture and real provider delivery remain pending. Historical evidence: Full application source a61804db passes 15,011 unit tests across 1,202 files with zero failures/skips. Focused helper checks pass 223 cases, concierge checks pass 38, and signed ingress/authorized reader cover new Unicode replay and legacy boundaries. New disposable signed HTTP/PostgreSQL text case is discovered; hosted execution pending. | Retain the signed original ingress before optional context and candidate work; freeze the first reply candidate before any automatic emission; exact one-time final emission reservation; held legacy/uncertain replies; verified deterministic projection. Candidate timeout or locale failure retains deterministic summary/classification and files without an automatic reply. Signed delivery callbacks bind token, account and first provider SID, advance status monotonically and expose safe provider progress in the authorized inbox. New text uses scalar-safe PostgreSQL/XML bounds before candidate fingerprinting; bounded family labels preserve useful fallbacks; old oversized queued replies are held without rewriting stored content. Provider completion receives the candidate cancellation signal. | Application a61804db passes all 15,011 unit tests in 1,202 files, zero failed/skipped, in 43.60 seconds. The exact frozen source was committed without changes during execution. Application a61804db builds 252 pages (44-second compilation). Strict types, lint with four baseline warnings, localization and query audit (491 tables, 77 functions, 144 routes) PASS. See contact-center-text-bounds-cycle.md. Signed delivery publication 0d68bdbb passes CI 34718960420: 1,064 scheduled E2E cases and 1,064 passes in 8.0 minutes, with both authenticated/durable flags enabled; identical tested tree becff049. Web, database, mobile, finance and Vercel PASS. New text source a61804db requires its own hosted execution. See guardian-hosted-acceptance.md. | Private checks and synthetic hosted callbacks are separate from real provider delivery. No SQL, dependency or shared navigation changes; exact source inventory preserved. See docs/final-audit/main-integration-cycle-20260919.md; new hosted ingress acceptance remains pending. |
 | API-97ED864085E2 | API | POST /api/contact-center/voice | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | API-B4E47347CDDF | API | POST /api/contact-center/voice/transcription | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | API-96040DFB5635 | API | GET /api/cron/admin-digest | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -11334,7 +11338,7 @@ PRODUCTION READY: NO
 | JOB-65B62EEA3CA1 | JOB | /api/cron/ai-runs | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | JOB-905AB0CFE100 | JOB | /api/cron/family-routines | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CALLBACK-145967CDCF24 | CALLBACK | /api/contact-center/email | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
-| CALLBACK-24807E48E6E6 | CALLBACK | /api/contact-center/sms | 🔄 IN PROGRESS | High | Full application source a61804db passes 15,011 unit tests across 1,202 files with zero failures/skips. Focused helper checks pass 223 cases, concierge checks pass 38, and signed ingress/authorized reader cover new Unicode replay and legacy boundaries. New disposable signed HTTP/PostgreSQL text case is discovered; hosted execution pending. | Freeze the first reply candidate before intake; exact one-time final emission reservation; held legacy/uncertain replies; verified deterministic projection. Signed delivery callbacks bind token, account and first provider SID, advance status monotonically and expose safe provider progress in the authorized inbox. New text uses scalar-safe PostgreSQL/XML bounds before candidate fingerprinting; bounded family labels preserve useful fallbacks; old oversized queued replies are held without rewriting stored content. Provider completion receives the candidate cancellation signal. | Application a61804db passes all 15,011 unit tests in 1,202 files, zero failed/skipped, in 43.60 seconds. The exact frozen source was committed without changes during execution. Application a61804db builds 252 pages (44-second compilation). Strict types, lint with four baseline warnings, localization and query audit (491 tables, 77 functions, 144 routes) PASS. See contact-center-text-bounds-cycle.md. Signed delivery publication 0d68bdbb passes CI 34718960420: 1,064 scheduled E2E cases and 1,064 passes in 8.0 minutes, with both authenticated/durable flags enabled; identical tested tree becff049. Web, database, mobile, finance and Vercel PASS. New text source a61804db requires its own hosted execution. See guardian-hosted-acceptance.md. | Private checks and synthetic hosted callbacks are separate from real provider delivery. No SQL, dependency or shared navigation changes; exact source inventory preserved. |
+| CALLBACK-24807E48E6E6 | CALLBACK | /api/contact-center/sms | 🔄 IN PROGRESS | High | Current 2026-09-19 integration: signed canonical ingress is retained before optional candidate work; timeout/locale failures preserve deterministic filing without a reply, and a late ignored-abort candidate cannot emit. Contact Center, marketing push and social publication regression passes 875 checks across 32 suites. Hosted acceptance of the new ingress fixture and real provider delivery remain pending. Historical evidence: Full application source a61804db passes 15,011 unit tests across 1,202 files with zero failures/skips. Focused helper checks pass 223 cases, concierge checks pass 38, and signed ingress/authorized reader cover new Unicode replay and legacy boundaries. New disposable signed HTTP/PostgreSQL text case is discovered; hosted execution pending. | Retain the signed original ingress before optional context and candidate work; freeze the first reply candidate before any automatic emission; exact one-time final emission reservation; held legacy/uncertain replies; verified deterministic projection. Candidate timeout or locale failure retains deterministic summary/classification and files without an automatic reply. Signed delivery callbacks bind token, account and first provider SID, advance status monotonically and expose safe provider progress in the authorized inbox. New text uses scalar-safe PostgreSQL/XML bounds before candidate fingerprinting; bounded family labels preserve useful fallbacks; old oversized queued replies are held without rewriting stored content. Provider completion receives the candidate cancellation signal. | Application a61804db passes all 15,011 unit tests in 1,202 files, zero failed/skipped, in 43.60 seconds. The exact frozen source was committed without changes during execution. Application a61804db builds 252 pages (44-second compilation). Strict types, lint with four baseline warnings, localization and query audit (491 tables, 77 functions, 144 routes) PASS. See contact-center-text-bounds-cycle.md. Signed delivery publication 0d68bdbb passes CI 34718960420: 1,064 scheduled E2E cases and 1,064 passes in 8.0 minutes, with both authenticated/durable flags enabled; identical tested tree becff049. Web, database, mobile, finance and Vercel PASS. New text source a61804db requires its own hosted execution. See guardian-hosted-acceptance.md. | Private checks and synthetic hosted callbacks are separate from real provider delivery. No SQL, dependency or shared navigation changes; exact source inventory preserved. See docs/final-audit/main-integration-cycle-20260919.md; new hosted ingress acceptance remains pending. |
 | CALLBACK-A55C76501924 | CALLBACK | /api/contact-center/voice | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CALLBACK-5653FF7DBBF5 | CALLBACK | /api/contact-center/voice/transcription | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | CALLBACK-FD4E5305F4FF | CALLBACK | /api/google/calendar/callback | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
@@ -13348,10 +13352,10 @@ PRODUCTION READY: NO
 | SUPPORT-A3265310F552 | SUPPORT | vercel.json | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | SUPPORT-2EE894BF23AA | SUPPORT | vitest.config.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending |  |
 | ARCH-001 | ARCH | Repository architecture and dependency boundaries | 🔄 IN PROGRESS | High | AST and tracked-file discovery: 4,059 files, 392 web pages, 7 Expo pages, 6,514 interaction sites, 145 API methods, 482 server actions, 484 table names, 77 function names, 22 cron routes. | None | Pending |  |
-| DEPLOY-001 | DEPLOY | Clean install, build, types, lint and production startup | 🔄 IN PROGRESS | High | Application a61804db passes all 15,011 unit tests in 1,202 files, zero failed/skipped, in 43.60 seconds. The exact frozen source was committed without changes during execution. Application a61804db builds 252 pages (44-second compilation). Strict types, lint with four baseline warnings, localization and query audit (491 tables, 77 functions, 144 routes) PASS. See contact-center-text-bounds-cycle.md. | Service-owned exact-input/communication/decision receipts authorize replay. Missing proof triggers fresh screening; neutral input survives ledger-read failure. Full conditional decision updates and verified readback precede notification. | Signed delivery publication 0d68bdbb passes CI 34718960420: 1,064 scheduled E2E cases and 1,064 passes in 8.0 minutes, with both authenticated/durable flags enabled; identical tested tree becff049. Web, database, mobile, finance and Vercel PASS. New text source a61804db requires its own hosted execution. See guardian-hosted-acceptance.md. | Hosted priorcc-triggered merge40eb05d4 passes14312 units and1055 browser cases plus1child readiness flake, whose retry passes. Newsource1aa4d6fb is ready for hosted execution. See hosted-merge-evidence.md and child-login-readiness-cycle.md. |
-| TEST-001 | TEST | Current baseline full automated unit suite | ✅ PASS | High | Application a61804db passes all 15,011 unit tests in 1,202 files, zero failed/skipped, in 43.60 seconds. The exact frozen source was committed without changes during execution. | The full suite includes Guardian autonomous recovery, finite sweep fairness, receipt completion, prior persistent login and meal-planning repairs. | Application a61804db builds 252 pages (44-second compilation). Strict types, lint with four baseline warnings, localization and query audit (491 tables, 77 functions, 144 routes) PASS. See contact-center-text-bounds-cycle.md. | PASS covers the current complete automated unit suite only; workflow/provider/production acceptance remains in the separate audit records. |
-| AUTH-001 | AUTH | Registration, verification, OAuth and recovery | 🔄 IN PROGRESS | High | Existing13unitfiles200PASS and2syntheticChromiumfiles34PASS under isolatedNode24. Actual signup/login handler tests use mockedReact/SDK; actualcallback tests mockcodeexchange. InstalledSDK suites cover preexisting session refresh/cache, not signup confirmation or password recovery. See auth-recovery-test-inventory.md. | Committed a02e82fb: synchronous form ownership and single-submit guards, honest accepted/uncertain signup receipts, retired callback fencing and handled auxiliary write failures. Recovery continuation is tracked under AUTH-003. Current repair: per-attempt signup client owns verifier cleanup, stages session adoption against current browser cookies and active form intent, and validates cookie write-back before publishing authentication. | 21 actual React/browser/installed-SDK signup cases pass; 30 original selection cases pass. Root combined five-suite Chromium auth gate passes 82 cases on bc22dbc9. One signup case deliberately retains the unresolved SDK verifier-loss characterization. Whole signup/email-confirmation workflow remains unverified. Exact source bc22dbc9ca7bb16535dbb7d2df788cf0eb3e1bcf in the private clean installation: 1162 files / 13537 unit tests PASS (122.55s), production build PASS (247 pages), post-build strict types PASS, lint PASS with four baseline warnings, i18n/query gates PASS, 82 focused Chromium checks PASS (13.3s). See docs/final-audit/persistent-login-renewal-cycle.md. New signup-verifier cycle: 46 actual React/Chromium/installed-SDK checks PASS; selection/persistence fixture integration 56 unit checks PASS. See signup-verifier-cycle.md. Combined source gate now passes; latest result below. Exact combined source effe6a2edddba707d2bbc5b11cd790071080822a, including main d8cd6be1, passes all private clean-install gates: 1168 files / 13679 unit tests (123.92s), 247-page production build, strict post-build non-incremental types, lint with four baseline warnings, locale/query audits and 107 controlled Chromium checks (17.7s). No installs or provider operations. See docs/final-audit/auth-cookie-checkpoint.md. | Isolated signup verifier repair implemented; ordinary singleton remains unchanged. Main d8cd6be1 integrated in effe6a2e. New upstream signup fixture now models current hooks, typed receipts and uncertain outcomes; duplicate-email anti-enumeration assertions retained. Seven related suites / 196 tests PASS. |
-| AUTH-002 | AUTH | Persistent sessions through refresh, navigation and restart until explicit sign-out | 🔄 IN PROGRESS | High | Password/child source16f0f41c passed its full private gates. Hosted integration674f7a24 passed1,013 browser checks. Later1956a9e0 passed all1,056, including five real disposable GoTrue journeys. See password-adoption-checkpoint.md and weekly-meal-checkpoint.md. Actual server rendering and delayed hydration reproduce the early-input mismatch; repaired readiness plus existing child browser boundaries pass 19 cases, with 18 related action tests. | Definitive auth changes purge offline data. Subscribed cache generations and synchronous request/setter checks prevent stale work from refilling it, even before a React rerender. Failed physical deletion cannot hydrate pre-purge rows in the current module lifetime. Native listener cleanup contains synchronous/asynchronous removal failures. A central stable user/session/family/access namespace now isolates durable v2 envelopes across restart, and an authenticated subtree boundary retires copied rows/forms on confirmed account/session/access changes. Same-session rotation and agreeing initial bootstrap preserve drafts. Stale SDK INITIAL_SESSION and malformed-owner/read-error races are fenced. Committed bc22dbc9: malformed successful refresh responses become retryable before SDK deletion; saved session survives and later rotates. Valid payloads and definitive rejection/sign-out remain unchanged. Current logout cycle: six controls now clear the intended project session locally before token-specific provider revocation. Cross-tab reread signals invalidate older work, validate cookie absence and reconcile exact current Realtime tokens. Compatibility POST writes only a short-lived intent receipt; browser completion compares ownership, and exact logout middleware paths skip ambient refresh. Ordinary browser storage fences both successful and rejected old renewal writes by logout generation; exported processLock prevents the SDK coalesced-caller cleanup hang. Password cycle16f0f41c isolates normal/child session adoption before first await, validates JWT expiry/subject and cookie readback, preserves PKCE verifier, fences deadline/disposal, and binds child token renewal to supplied user/session. Child server action writes no auth cookies; exact action middleware exemption prevents ambient refresh. Both forms fence duplicate/stale navigation and preserve modified-link behavior. Integrated child readiness fix 48e7e9e1 prevents edits before React can receive the values; validation and session ownership guards are preserved. | Frozen source 48e7e9e1 passes 1,188 files / 14,442 units, production build (251 static pages), strict post-build types, lint, locale and query audits. Hosted child journey is pending; the historical flaky attempt has no retained DOM evidence proving its sole cause. | See child-login-readiness-cycle.md. Current behavior is verified in controlled SSR/browser execution; production session settings and physical devices remain unverified. |
+| DEPLOY-001 | DEPLOY | Clean install, build, types, lint and production startup | 🔄 IN PROGRESS | High | Application a61804db passes all 15,011 unit tests in 1,202 files, zero failed/skipped, in 43.60 seconds. The exact frozen source was committed without changes during execution. Application a61804db builds 252 pages (44-second compilation). Strict types, lint with four baseline warnings, localization and query audit (491 tables, 77 functions, 144 routes) PASS. See contact-center-text-bounds-cycle.md. | Service-owned exact-input/communication/decision receipts authorize replay. Missing proof triggers fresh screening; neutral input survives ledger-read failure. Full conditional decision updates and verified readback precede notification. | Signed delivery publication 0d68bdbb passes CI 34718960420: 1,064 scheduled E2E cases and 1,064 passes in 8.0 minutes, with both authenticated/durable flags enabled; identical tested tree becff049. Web, database, mobile, finance and Vercel PASS. New text source a61804db requires its own hosted execution. See guardian-hosted-acceptance.md. | Current 2026-09-19 pre-final-evidence tree 4ac44596e1f91234ee9822b9ca2027d0fd62fdb2: 16,360/16,360 unit checks across 1,294 files, zero failed/skipped; production build 251 pages; lint passes with three existing warnings. Final strict types pass. The full DST-zone rerun passes 16,361/16,361 across 1,294 files after a medication test-only timezone correction; corrected medication checks pass 16/16 in UTC. No application source changed after the frozen build/types. Hosted discovery lists 1,078 tests across 47 files; hosted execution remains pending. See docs/final-audit/main-integration-cycle-20260919.md. Historical full-suite/build results remain evidence for their named sources only. |
+| TEST-001 | TEST | Current baseline full automated unit suite | 🔄 IN PROGRESS | High | Application a61804db passes all 15,011 unit tests in 1,202 files, zero failed/skipped, in 43.60 seconds. The exact frozen source was committed without changes during execution. | The full suite includes Guardian autonomous recovery, finite sweep fairness, receipt completion, prior persistent login and meal-planning repairs. | Application a61804db builds 252 pages (44-second compilation). Strict types, lint with four baseline warnings, localization and query audit (491 tables, 77 functions, 144 routes) PASS. See contact-center-text-bounds-cycle.md. | Current 2026-09-19 pre-final-evidence tree 4ac44596e1f91234ee9822b9ca2027d0fd62fdb2: 16,360/16,360 unit checks across 1,294 files, zero failed/skipped; production build 251 pages; lint passes with three existing warnings. Final strict types pass. The full DST-zone rerun passes 16,361/16,361 across 1,294 files after a medication test-only timezone correction; corrected medication checks pass 16/16 in UTC. No application source changed after the frozen build/types. Hosted discovery lists 1,078 tests across 47 files; hosted execution remains pending. See docs/final-audit/main-integration-cycle-20260919.md. Historical full-suite/build results remain evidence for their named sources only. |
+| AUTH-001 | AUTH | Registration, verification, OAuth and recovery | 🔄 IN PROGRESS | High | Existing13unitfiles200PASS and2syntheticChromiumfiles34PASS under isolatedNode24. Actual signup/login handler tests use mockedReact/SDK; actualcallback tests mockcodeexchange. InstalledSDK suites cover preexisting session refresh/cache, not signup confirmation or password recovery. See auth-recovery-test-inventory.md. | Committed a02e82fb: synchronous form ownership and single-submit guards, honest accepted/uncertain signup receipts, retired callback fencing and handled auxiliary write failures. Recovery continuation is tracked under AUTH-003. Current repair: per-attempt signup client owns verifier cleanup, stages session adoption against current browser cookies and active form intent, and validates cookie write-back before publishing authentication. | Current 2026-09-19 integration: application logout retires pending signup with or without an ambient session, and stale session intents preserve newer handoffs. Six controlled Chromium suites pass 138 checks, including ordinary token rotation; latest logout/bridge units pass 36 checks. The earlier seven-suite run passed 150 before the final ownership repair. Frozen integrated tree 4ac44596e1f91234ee9822b9ca2027d0fd62fdb2 passes all 16,360 unit checks across 1,294 files. Ordinary browser and SSR refresh still delete a pending standard PKCE verifier while retaining the signed-in user; that separate handoff defect remains open. See auth-pending-signup-logout-cycle.md. Historical evidence: 21 actual React/browser/installed-SDK signup cases pass; 30 original selection cases pass. Root combined five-suite Chromium auth gate passes 82 cases on bc22dbc9. One signup case deliberately retains the unresolved SDK verifier-loss characterization. Whole signup/email-confirmation workflow remains unverified. Exact source bc22dbc9ca7bb16535dbb7d2df788cf0eb3e1bcf in the private clean installation: 1162 files / 13537 unit tests PASS (122.55s), production build PASS (247 pages), post-build strict types PASS, lint PASS with four baseline warnings, i18n/query gates PASS, 82 focused Chromium checks PASS (13.3s). See docs/final-audit/persistent-login-renewal-cycle.md. New signup-verifier cycle: 46 actual React/Chromium/installed-SDK checks PASS; selection/persistence fixture integration 56 unit checks PASS. See signup-verifier-cycle.md. Combined source gate now passes; latest result below. Exact combined source effe6a2edddba707d2bbc5b11cd790071080822a, including main d8cd6be1, passes all private clean-install gates: 1168 files / 13679 unit tests (123.92s), 247-page production build, strict post-build non-incremental types, lint with four baseline warnings, locale/query audits and 107 controlled Chromium checks (17.7s). No installs or provider operations. See docs/final-audit/auth-cookie-checkpoint.md. | Isolated signup verifier repair implemented; ordinary singleton remains unchanged. Main d8cd6be1 integrated in effe6a2e. New upstream signup fixture now models current hooks, typed receipts and uncertain outcomes; duplicate-email anti-enumeration assertions retained. Seven related suites / 196 tests PASS. Current integrated source passes local gates; hosted and complete feature acceptance remain pending. See docs/final-audit/main-integration-cycle-20260919.md. |
+| AUTH-002 | AUTH | Persistent sessions through refresh, navigation and restart until explicit sign-out | 🔄 IN PROGRESS | High | Password/child source16f0f41c passed its full private gates. Hosted integration674f7a24 passed1,013 browser checks. Later1956a9e0 passed all1,056, including five real disposable GoTrue journeys. See password-adoption-checkpoint.md and weekly-meal-checkpoint.md. Actual server rendering and delayed hydration reproduce the early-input mismatch; repaired readiness plus existing child browser boundaries pass 19 cases, with 18 related action tests. | Definitive auth changes purge offline data. Subscribed cache generations and synchronous request/setter checks prevent stale work from refilling it, even before a React rerender. Failed physical deletion cannot hydrate pre-purge rows in the current module lifetime. Native listener cleanup contains synchronous/asynchronous removal failures. A central stable user/session/family/access namespace now isolates durable v2 envelopes across restart, and an authenticated subtree boundary retires copied rows/forms on confirmed account/session/access changes. Same-session rotation and agreeing initial bootstrap preserve drafts. Stale SDK INITIAL_SESSION and malformed-owner/read-error races are fenced. Committed bc22dbc9: malformed successful refresh responses become retryable before SDK deletion; saved session survives and later rotates. Valid payloads and definitive rejection/sign-out remain unchanged. Current logout cycle: six controls now clear the intended project session locally before token-specific provider revocation. Cross-tab reread signals invalidate older work, validate cookie absence and reconcile exact current Realtime tokens. Compatibility POST writes only a short-lived intent receipt; browser completion compares ownership, and exact logout middleware paths skip ambient refresh. Ordinary browser storage fences both successful and rejected old renewal writes by logout generation; exported processLock prevents the SDK coalesced-caller cleanup hang. Password cycle16f0f41c isolates normal/child session adoption before first await, validates JWT expiry/subject and cookie readback, preserves PKCE verifier, fences deadline/disposal, and binds child token renewal to supplied user/session. Child server action writes no auth cookies; exact action middleware exemption prevents ambient refresh. Both forms fence duplicate/stale navigation and preserve modified-link behavior. Integrated child readiness fix 48e7e9e1 prevents edits before React can receive the values; validation and session ownership guards are preserved. | Current 2026-09-19 integration: application logout retires pending signup with or without an ambient session, and stale session intents preserve newer handoffs. Six controlled Chromium suites pass 138 checks, including ordinary token rotation; latest logout/bridge units pass 36 checks. The earlier seven-suite run passed 150 before the final ownership repair. Frozen integrated tree 4ac44596e1f91234ee9822b9ca2027d0fd62fdb2 passes all 16,360 unit checks across 1,294 files. Ordinary browser and SSR refresh still delete a pending standard PKCE verifier while retaining the signed-in user; that separate handoff defect remains open. See auth-pending-signup-logout-cycle.md. Historical evidence: Frozen source 48e7e9e1 passes 1,188 files / 14,442 units, production build (251 static pages), strict post-build types, lint, locale and query audits. Hosted child journey is pending; the historical flaky attempt has no retained DOM evidence proving its sole cause. | See child-login-readiness-cycle.md. Current behavior is verified in controlled SSR/browser execution; production session settings and physical devices remain unverified. Current integrated source passes local gates; hosted and complete feature acceptance remain pending. See docs/final-audit/main-integration-cycle-20260919.md. |
 | AUTHZ-001 | AUTHZ | Tenant and role authorization through pages, actions, APIs and database | ⬜ NOT STARTED | High | Pending | None | Pending |  |
 | INT-001 | INT | Contact Center authenticated provider callbacks and durable intake replay | 🔄 IN PROGRESS | High | docs/final-audit/contact-center-cycle.md | Exact four callback paths reach existing signature checks; persisted unhandled intake retries; bodyless 204; first urgency occurs before planner failure return. | 10 suites / 121 tests PASS; strict project types and scoped lint passed before final urgency tests. Production/deployed provider/database flow remains unverified; outbound durability tracked INT-002. |  |
 | PUSH-001 | PUSH | Notification push delivery, failure retention and acknowledgement | 🔄 IN PROGRESS | High | docs/final-audit/push-cycle.md; docs/final-audit/push-cursor-cycle.md; actual cron/provider-boundary and stateful cursor execution tests | Delivery/device/prune failures stay pending; required family/parental/user-preference reads fail before delivery; push_enabled respected; acknowledgement failures count as failures. Saved service-only global/family keyset cursors traverse and wrap pending due rows without starvation; cursor writes are verified before sending. Both cron handlers report unconfigured skipped delivery as unsuccessful. | 12 related suites / 121 tests, strict TypeScript, scoped lint and diff check PASS. Healthy row 201 is delivered on scan 2; microsecond ordering, tied timestamps, separate scope, wrap, deleted cursor and failed cursor writes exercised. Live provider/physical-device workflow pending. | Existing single pushed_at cannot guarantee per-device exactly-once delivery or prevent concurrent worker double-send. Schema-level investigation remains. |
@@ -13518,7 +13522,7 @@ PRODUCTION READY: NO
 | SUPPORT-0BB0813F7C43 | SUPPORT | tests/e2e/auth-cache-partition.spec.ts | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
 | SUPPORT-F6DEEF1D5B71 | SUPPORT | tests/e2e/finance-read-states.spec.ts | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
 | SUPPORT-F7738D1E34C3 | SUPPORT | tests/marketing-push-audience-execution.test.ts | ⬜ NOT STARTED | Unassessed | See current auth/cache, audience and finance cycle reports for related evidence; this individual scope is not yet signed off. | None | Pending | Incremental discovery after 9d238e0c; retained permanent identity convention. |
-| DATA-004 | DATA | Rewards ledger read failures must not permit unaffordable requests or decisions | 🔄 IN PROGRESS | High | Actual React, production hook/points helpers and installed SDK execution: 100 earned/100 fulfilled control shows zero available and disables Redeem; changing only redemption-history GET to 403 yields 100 earned/0 spent, enables Redeem and submits a cost-100 request with a success toast. Local intercepted browser transport only; not proof of live database acceptance. | Required catalogue and both ledger reads gate balances, controls and retained mutation handlers; loading/error/stale reads cannot authorize rewards. Retry, explicit mutation readback, duplicate fencing and pending-save/unmount guards are implemented. Followup refreshAndConfirm/recoverygate/deferredcompletion and per-opening formepoch prevents superseded reads or retired submit callbacks from reauthorizing writes. | 30 actual rewards Chromium cases PASS (23 core plus7 independent readback/form-lifetime review); related points tests PASS. Pinned608c9307: full1151-file/13003-test suite PASS (124.53s, zero unhandled errors), 265 Chromium checks PASS, production245page build PASS, final strict types/lint/query/i18n PASS under isolated Node24.21.0. Browser/build runtime-identical3effbf41; exact provenance and limits in care-verification-checkpoint.md. | No SQL, live reward approval/provider actions or pricing changes. Separate database authorization/atomic balance policy remains unresolved. |
+| DATA-004 | DATA | Rewards ledger read failures must not permit unaffordable requests or decisions | 🔄 IN PROGRESS | High | Actual React, production hook/points helpers and installed SDK execution: 100 earned/100 fulfilled control shows zero available and disables Redeem; changing only redemption-history GET to 403 yields 100 earned/0 spent, enables Redeem and submits a cost-100 request with a success toast. Local intercepted browser transport only; not proof of live database acceptance. | Required catalogue and both ledger reads gate balances, controls and retained mutation handlers; loading/error/stale reads cannot authorize rewards. Retry, explicit mutation readback, duplicate fencing and pending-save/unmount guards are implemented. Followup refreshAndConfirm/recoverygate/deferredcompletion and per-opening formepoch prevents superseded reads or retired submit callbacks from reauthorizing writes. | Current 2026-09-19 integration reproduced eight rewards browser failures in baseline dcbccaa1: server-action adoption bypassed the existing client pending/readback/lifetime guards. Requests and decisions now call the real server actions through mutate and confirmed refreshLedger after checking current reward, balance and status. Catalogue writes use family-scoped returning single-row queries. All 32 rewards Chromium cases pass (4.3s), including the eight regressions; final combined rerun pending. Server/database affordability, atomic reservation, expected-status concurrency and deployed policy remain open. See main-integration-cycle-20260919.md. Historical evidence: 30 actual rewards Chromium cases PASS (23 core plus7 independent readback/form-lifetime review); related points tests PASS. Pinned608c9307: full1151-file/13003-test suite PASS (124.53s, zero unhandled errors), 265 Chromium checks PASS, production245page build PASS, final strict types/lint/query/i18n PASS under isolated Node24.21.0. Browser/build runtime-identical3effbf41; exact provenance and limits in care-verification-checkpoint.md. | No SQL, live reward approval/provider actions or pricing changes. Separate database authorization/atomic balance policy remains unresolved. |
 | SOCIAL-002 | SOCIAL | Claim social publish targets and preserve confirmed or uncertain outcomes | 🔄 IN PROGRESS | High | Actual pipeline with InMemorySupabase and a confirming provider fixture: concurrent calls produce two provider submissions and two published results for one target. Existing target update lacks a conditional status claim. Post status is derived only from this attempt, omitting prior target successes. | Exclusive post and per-target conditional claims; required bounded complete reads; preserved provider receipts before guarded target writes; uncertain acceptance never becomes an ordinary retry; all persisted targets determine aggregate status and earlier publication dates are preserved. Duplicate account target rows are rejected before dispatch. Studio synchronously prevents another create after a known/uncertain attempt, retains persisted post identity for review, and detail/retry/history present uncertain outcomes honestly. Stale parent no-op responses reflect observed targets. | 28 actual pipeline tests +17content tests PASS.12 actual Chromium consumer cases PASS, including real French LocaleProvider. Full combined6094eb04 gates PASS; see social-publish-cycle.md, social-publishing-consumer-cycle.md and social-verification-checkpoint.md. | Required before enabling any live connector. No schema change or live provider publication. |
 | AUTHZ-002 | AUTHZ | Social permissions must require successful active membership and explicit permission reads | 🔄 IN PROGRESS | Critical | Executed real access/roles/settle code with controlled database responses: active parent + explicit read_only denies publish/connect; changing permission read to returned error or thrown transport error grants admin publish/connect. Explicit admin + failed/absent membership also grants access. | Successful authentication, active membership and explicit permission reads are required. Validate returned user/family/status; clean absent membership denies and only clean absent override permits existing role fallback. Errors are sanitized. | Installed Supabase/actual resolver regression: 17 failing cases before repair, 34/34 passing after. Related 4 files/49 tests and scoped lint/diff PASS. See docs/final-audit/social-access-cycle.md. Combined6094eb04 gates PASS; current source proof is recorded in social-verification-checkpoint.md. | No SQL changes. Required before implementing service-role social token reads. |
 | AUTHZ-003 | AUTHZ | Deleting a restrictive social role must not restore broader household permissions | ❌ FAIL | Critical | Source-backed policy and role helper analysis, independently cross-checked by security reviewer. No live unauthorized request or SQL mutation was performed. Exact policy locations and role example are documented in docs/final-audit/social-access-cycle.md. | None. Standing no-SQL boundary prevents changing the database policy in this cycle. | Pending database policy repair and isolated role/tenant execution. | Release blocker; no production-readiness claim. Continue independent repository repairs. |
@@ -13642,7 +13646,7 @@ PRODUCTION READY: NO
 | SERVICE-A75CB6CAC8B3 | SERVICE | releaseGuardianSms | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/text-messaging-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-322C46B32414 | SUPPORT | tests/guardian-sms-intake-execution.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/text-messaging-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-F988DE7EA482 | SUPPORT | tests/guardian-sms-intake.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/text-messaging-inventory.json. Full workflow verification remains separate. |
-| SMS-001 | SMS | Automatic SMS reply reservation, safe text and verified delivery status | 🔄 IN PROGRESS | High | Full application source a61804db passes 15,011 unit tests across 1,202 files with zero failures/skips. Focused helper checks pass 223 cases, concierge checks pass 38, and signed ingress/authorized reader cover new Unicode replay and legacy boundaries. New disposable signed HTTP/PostgreSQL text case is discovered; hosted execution pending. | Freeze the first reply candidate before intake; exact one-time final emission reservation; held legacy/uncertain replies; verified deterministic projection. Signed delivery callbacks bind token, account and first provider SID, advance status monotonically and expose safe provider progress in the authorized inbox. New text uses scalar-safe PostgreSQL/XML bounds before candidate fingerprinting; bounded family labels preserve useful fallbacks; old oversized queued replies are held without rewriting stored content. Provider completion receives the candidate cancellation signal. | Application a61804db passes all 15,011 unit tests in 1,202 files, zero failed/skipped, in 43.60 seconds. The exact frozen source was committed without changes during execution. Application a61804db builds 252 pages (44-second compilation). Strict types, lint with four baseline warnings, localization and query audit (491 tables, 77 functions, 144 routes) PASS. See contact-center-text-bounds-cycle.md. Signed delivery publication 0d68bdbb passes CI 34718960420: 1,064 scheduled E2E cases and 1,064 passes in 8.0 minutes, with both authenticated/durable flags enabled; identical tested tree becff049. Web, database, mobile, finance and Vercel PASS. New text source a61804db requires its own hosted execution. See guardian-hosted-acceptance.md. | Private checks and synthetic hosted callbacks are separate from real provider delivery. No SQL, dependency or shared navigation changes; exact source inventory preserved. |
+| SMS-001 | SMS | Automatic SMS reply reservation, safe text and verified delivery status | 🔄 IN PROGRESS | High | Current 2026-09-19 integration: signed canonical ingress is retained before optional candidate work; timeout/locale failures preserve deterministic filing without a reply, and a late ignored-abort candidate cannot emit. Contact Center, marketing push and social publication regression passes 875 checks across 32 suites. Hosted acceptance of the new ingress fixture and real provider delivery remain pending. Historical evidence: Full application source a61804db passes 15,011 unit tests across 1,202 files with zero failures/skips. Focused helper checks pass 223 cases, concierge checks pass 38, and signed ingress/authorized reader cover new Unicode replay and legacy boundaries. New disposable signed HTTP/PostgreSQL text case is discovered; hosted execution pending. | Retain the signed original ingress before optional context and candidate work; freeze the first reply candidate before any automatic emission; exact one-time final emission reservation; held legacy/uncertain replies; verified deterministic projection. Candidate timeout or locale failure retains deterministic summary/classification and files without an automatic reply. Signed delivery callbacks bind token, account and first provider SID, advance status monotonically and expose safe provider progress in the authorized inbox. New text uses scalar-safe PostgreSQL/XML bounds before candidate fingerprinting; bounded family labels preserve useful fallbacks; old oversized queued replies are held without rewriting stored content. Provider completion receives the candidate cancellation signal. | Application a61804db passes all 15,011 unit tests in 1,202 files, zero failed/skipped, in 43.60 seconds. The exact frozen source was committed without changes during execution. Application a61804db builds 252 pages (44-second compilation). Strict types, lint with four baseline warnings, localization and query audit (491 tables, 77 functions, 144 routes) PASS. See contact-center-text-bounds-cycle.md. Signed delivery publication 0d68bdbb passes CI 34718960420: 1,064 scheduled E2E cases and 1,064 passes in 8.0 minutes, with both authenticated/durable flags enabled; identical tested tree becff049. Web, database, mobile, finance and Vercel PASS. New text source a61804db requires its own hosted execution. See guardian-hosted-acceptance.md. | Private checks and synthetic hosted callbacks are separate from real provider delivery. No SQL, dependency or shared navigation changes; exact source inventory preserved. See docs/final-audit/main-integration-cycle-20260919.md; new hosted ingress acceptance remains pending. |
 | SUPPORT-5B00CA3C214D | SUPPORT | app/(auth)/auth/recovery/actions.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/auth-session-inventory.json. Full workflow verification remains separate. |
 | SERVICE-616ECD0B139E | SERVICE | prepareRecoveryAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/auth-session-inventory.json. Full workflow verification remains separate. |
 | SERVICE-C837852680A0 | SERVICE | consumeRecoveryAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/auth-session-inventory.json. Full workflow verification remains separate. |
@@ -13724,7 +13728,7 @@ PRODUCTION READY: NO
 | SUPPORT-C30241E58095 | SUPPORT | tests/e2e/password-login-boundaries.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/password-adoption-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-AF285E96F2C7 | SUPPORT | tests/e2e/password-session-ownership.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/password-adoption-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-63EAA3373812 | SUPPORT | tests/password-middleware.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/password-adoption-inventory.json. Full workflow verification remains separate. |
-| MEAL-001 | MEAL | Choose seven dinners and build a grocery list from persisted ingredients | 🔄 IN PROGRESS | High | 42 actual React/browser meal cases PASS; 169 related service/action cases PASS; 80 planner/date/substitution cases PASS; 55 catalogue cases PASS. Full private source21bbfae1: 14,021 units and496 browser cases PASS. Hosted1956a9e0: all1,056 browser cases PASS, including the complete real Next/PostgREST meal journey. See weekly-meal-checkpoint.md. | Seven household-local dinners; searchable saved meals/recipes; custom ingredients; exact replacement/removal and saved readback; stale request guards; explicit pantry skipping; repeated quantity preservation; AI shares verified sparse-slot persistence. | Hosted checkpoint 1956a9e0074b81c348eaa865d29d1366d16813a7: CI34713478585 and E2E job103606352274 PASS, 1,056 browser tests in 7.9 minutes; completed 2026-09-12 19:27:20 UTC. All selected tests passed with E2E_DURABLE_SESSION=1, including real login, recipe/custom saves, replacement, reload, exact groceries, retry equality and selected-slot removal. Quality, database, mobile, finance and Vercel PASS. | Requested manual weekly dinner and grocery workflow is implemented and accepted against the disposable hosted backend. Production RLS, external AI, physical devices, other recipe/voting/nutrition workflows and database atomicity remain separate audit obligations. |
+| MEAL-001 | MEAL | Choose seven dinners and build a grocery list from persisted ingredients | 🔄 IN PROGRESS | High | 42 actual React/browser meal cases PASS; 169 related service/action cases PASS; 80 planner/date/substitution cases PASS; 55 catalogue cases PASS. Full private source21bbfae1: 14,021 units and496 browser cases PASS. Hosted1956a9e0: all1,056 browser cases PASS, including the complete real Next/PostgREST meal journey. See weekly-meal-checkpoint.md. | Seven household-local dinners; searchable saved meals/recipes; custom ingredients; exact replacement/removal and saved readback; stale request guards; explicit pantry skipping; repeated quantity preservation; AI shares verified sparse-slot persistence. | Hosted checkpoint 1956a9e0074b81c348eaa865d29d1366d16813a7: CI34713478585 and E2E job103606352274 PASS, 1,056 browser tests in 7.9 minutes; completed 2026-09-12 19:27:20 UTC. All selected tests passed with E2E_DURABLE_SESSION=1, including real login, recipe/custom saves, replacement, reload, exact groceries, retry equality and selected-slot removal. Quality, database, mobile, finance and Vercel PASS. | Requested manual weekly dinner and grocery workflow is implemented and accepted against the disposable hosted backend. Production RLS, external AI, physical devices, other recipe/voting/nutrition workflows and database atomicity remain separate audit obligations. Current main integration preserves family/user/week ownership, exact saved readback, planner controls and pantry-aware groceries while adopting checked vote clearing. Current-source local gates pass; complete integrated hosted workflow verification remains pending. See docs/final-audit/main-integration-cycle-20260919.md. |
 | DB-TBL-DD6A3A7E1AC0 | DB-TBL | marketing_recurring_ads | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental discovery at21bbfae1; see weekly-meal-checkpoint.md. Existing IDs preserved. |
 | DB-TBL-B85388536AE7 | DB-TBL | marketing_recurring_ad_runs | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental discovery at21bbfae1; see weekly-meal-checkpoint.md. Existing IDs preserved. |
 | CONTROL-E44C4826F5CE | CONTROL | Choose or replace a dinner for the selected household day | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Incremental discovery at21bbfae1; see weekly-meal-checkpoint.md. Existing IDs preserved. |
@@ -13781,8 +13785,8 @@ PRODUCTION READY: NO
 | AUTHZ-004 | AUTHZ | Guardian replay must verify stored decision authorship | 🔄 IN PROGRESS | High | Two signed-route bypasses reproduced before repair. Hosted CI 34715644176 on the exact tree of publication 0b190659 passes all 1,061 scheduled browser cases, including three PostgreSQL and HTTP Guardian authority cases. See guardian-hosted-acceptance.md. | Service-owned exact-input/communication/decision receipts authorize replay. Missing proof triggers fresh screening; neutral input survives ledger-read failure. Full conditional decision updates and verified readback precede notification. | Publication fae35e90: CI 34717274616, tested checkout 62d8a325 with tree bb838fce equal to publication; 14,636 units, 252-page build, all 1,062 scheduled browser cases PASS. Database: 300 migrations, zero failures, eleven probes; finance: 66 assertions, mobile and Vercel PASS. See guardian-hosted-acceptance.md. | Four Guardian hosted cases pass including the completion/recovery extension. No production provider, policy configuration or scheduler claim. |
 | SUPPORT-91A56D6A297E | SUPPORT | tests/guardian-policy-callers.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-policy-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-370A0FE646C3 | SUPPORT | tests/guardian-policy-execution.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-policy-inventory.json. Full workflow verification remains separate. |
-| API-C8B72ACE022A | API | POST /api/assistant | ✅ PASS | High | Exact POST-only middleware exemption verified in source and against production; tests/middleware-public-api-boundary.test.ts pins the class. | Named the two exact paths in the middleware and gated them to POST; the namespace was not opened. | unauthenticated production probes against www.bubaly.com on 2026-09-13 (build f9c4d7a1): POST answers 401 from the handler; GET on the same path answers 307 to /login, and both /api/assistant/link and /api/assistant/other answer 307 on GET and POST — the exemption did not widen to neighbours. | Resolved. Full assistant feature workflow remains separate. |
-| API-A2C5302CAE88 | API | POST /api/assistant/alexa | ✅ PASS | High | Exact POST-only middleware exemption verified in source and against production; tests/middleware-public-api-boundary.test.ts pins the class. | Named the two exact paths in the middleware and gated them to POST; the namespace was not opened. | unauthenticated production probes against www.bubaly.com on 2026-09-13 (build f9c4d7a1): POST answers 403 from Amazon signature verification; GET on the same path answers 307 to /login, and both /api/assistant/link and /api/assistant/other answer 307 on GET and POST — the exemption did not widen to neighbours. | Resolved. Full assistant feature workflow remains separate. |
+| API-C8B72ACE022A | API | POST /api/assistant | 🔄 IN PROGRESS | High | Exact POST-only middleware exemption verified in source and against production; tests/middleware-public-api-boundary.test.ts pins the class. | Named the two exact paths in the middleware and gated them to POST; the namespace was not opened. | unauthenticated production probes against www.bubaly.com on 2026-09-13 (build f9c4d7a1): POST answers 401 from the handler; GET on the same path answers 307 to /login, and both /api/assistant/link and /api/assistant/other answer 307 on GET and POST — the exemption did not widen to neighbours. | Resolved. Full assistant feature workflow remains separate. Historical scoped evidence retained; current merged-source verification and remaining workflow obligations are pending. |
+| API-A2C5302CAE88 | API | POST /api/assistant/alexa | 🔄 IN PROGRESS | High | Exact POST-only middleware exemption verified in source and against production; tests/middleware-public-api-boundary.test.ts pins the class. | Named the two exact paths in the middleware and gated them to POST; the namespace was not opened. | unauthenticated production probes against www.bubaly.com on 2026-09-13 (build f9c4d7a1): POST answers 403 from Amazon signature verification; GET on the same path answers 307 to /login, and both /api/assistant/link and /api/assistant/other answer 307 on GET and POST — the exemption did not widen to neighbours. | Resolved. Full assistant feature workflow remains separate. Historical scoped evidence retained; current merged-source verification and remaining workflow obligations are pending. |
 | AUTHZ-005 | AUTHZ | Guardian contact trust and member profiles require database manager write authority | ❌ FAIL | High | Independent complete named/dynamic policy-source trace confirms the repository boundary at incoming217c7be4. No live or disposable child-write execution has yet been performed. | Pending database policy repair; additional action checks alone cannot prevent direct database writes. Existing no-new-SQL constraint remains in force. | Pending disposable role-boundary reproduction and authorized schema repair. | Do not claim a deployed exploit, foreign-row read/write, or runtime cascade proof. Guardian SMS receipt authorship repairs AUTHZ-004 but does not authenticate changes to the routing policy itself. |
 | MIGRATION-828B29F5735B | MIGRATION | supabase/migrations/0282_marketing_recurring_ads.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/weekly-meal-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-EBD58C8E93F0 | SUPPORT | app/(app)/dashboard/assistants/actions.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-replay-inventory.json. Full workflow verification remains separate. |
@@ -13939,7 +13943,7 @@ PRODUCTION READY: NO
 | SUPPORT-7E6D5F8A63A6 | SUPPORT | tests/guardian-sms-completion.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-E389EACB2379 | SUPPORT | tests/guardian-sms-recovery-route.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-71F9B43410F2 | SUPPORT | tests/guardian-sms-recovery.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-sms-recovery-inventory.json. Full workflow verification remains separate. |
-| FLOW-FC0B97223986 | FLOW | Pull-request CI startup | ✅ PASS | High | Full seven-check CI run on head 92340315. | Main merged into the branch and the email reply block conflict resolved. | All seven checks pass (Typecheck · Lint · Test · Build, E2E, Database, Mobile Expo, finance-operation-sql, Vercel Preview Comments; Supabase Preview skipped); mergeable_state is clean. | Resolved. |
+| FLOW-FC0B97223986 | FLOW | Contact Center replies use the resolved family email address | 🔄 IN PROGRESS | High | Frozen 9be771a8: 266 tests across 17 files PASS, including 8 lookup, 23 sender and 7 actual-route cases. Strict types/lint/i18n/query audits PASS. Baseline lookup reproduced 5 failures. | Exact escaped local-part lookup and ownership readback; family From constrained to configured domain; correct Reply-To; safely formatted display names/HTML; outbound history only after accepted non-skipped send. Prior intake/planner/attachment/urgent recovery preserved. | Publication fae35e90: CI 34717274616, tested checkout 62d8a325 with tree bb838fce equal to publication; 14,636 units, 252-page build, all 1,062 scheduled browser cases PASS. Database: 300 migrations, zero failures, eleven probes; finance: 66 assertions, mobile and Vercel PASS. See guardian-hosted-acceptance.md. | Provider delivery and sender-domain verification remain open. Database SDK uses intercepted HTTP and modeled LIKE; actual PostgreSQL identity workflow not established. Best-effort auto-reply has no durable emission receipt. Identity restored during integration: this permanent ID names family email replies, not pull-request CI startup. |
 | SERVICE-B716F647333E | SERVICE | familyReplySender | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/incoming-family-reply-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-D10B8AAF95B2 | SUPPORT | tests/contact-center-email-lookup.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/incoming-family-reply-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-35A63EB97E7D | SUPPORT | tests/contact-center-email-reply-execution.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/incoming-family-reply-inventory.json. Full workflow verification remains separate. |
@@ -13973,8 +13977,129 @@ PRODUCTION READY: NO
 | SUPPORT-0E5B951B2868 | SUPPORT | tests/contact-center-sms-text-receipt.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/contact-center-text-bounds-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-EDF6E2E3A930 | SUPPORT | tests/contact-center-text.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/contact-center-text-bounds-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-3A89EF217014 | SUPPORT | tests/e2e/contact-center-sms-text.spec.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/contact-center-text-bounds-inventory.json. Full workflow verification remains separate. |
+| SEO-001 | SEO | Social preview images reachable by an unauthenticated crawler | 🔄 IN PROGRESS | High | Historical scoped tests and findings retained in the SEO-001 detailed record. | Source repair retained through the merge. | Integrated workflow retest pending; historical tests do not close this full record. | Added to the summary after discovering that the existing detailed record was missing from counts. |
+| SEO-002 | SEO | Open Graph card survives the marketing metadata resolver | 🔄 IN PROGRESS | High | Historical scoped tests and findings retained in the SEO-002 detailed record. | Source repair retained through the merge. | Integrated workflow retest pending; historical tests do not close this full record. | Added to the summary after discovering that the existing detailed record was missing from counts. |
+| SEO-003 | SEO | Published marketing page families reachable without a session | 🔄 IN PROGRESS | High | Historical scoped tests and findings retained in the SEO-003 detailed record. | Source repair retained through the merge. | Integrated workflow retest pending; historical tests do not close this full record. | Added to the summary after discovering that the existing detailed record was missing from counts. |
+| SEO-004 | SEO | Public Pay-ID resolver reachable without a session | 🔄 IN PROGRESS | High | Historical scoped tests and findings retained in the SEO-004 detailed record. | Source repair retained through the merge. | Integrated workflow retest pending; historical tests do not close this full record. | Added to the summary after discovering that the existing detailed record was missing from counts. |
+| DATA-008 | DATA | A failed read must not render as an empty one | 🔄 IN PROGRESS | High | Historical scoped tests and findings retained in the DATA-008 detailed record. | Source repair retained through the merge. | Integrated workflow retest pending; historical tests do not close this full record. | Added to the summary after discovering that the existing detailed record was missing from counts. |
+| DATA-009 | DATA | An audit write that did not land must be noticeable | 🔄 IN PROGRESS | High | Historical scoped tests and findings retained in the DATA-009 detailed record. | Source repair retained through the merge. | Integrated workflow retest pending; historical tests do not close this full record. | Added to the summary after discovering that the existing detailed record was missing from counts. |
+| MAIN-F-E01 | UPSTREAM | F-E01: Every child can read, edit and delete the family password vault (CRITICAL — fixed by 0296, unapplied) | 🔄 IN PROGRESS | CRITICAL | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3363). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-C08 | UPSTREAM | F-C08: The forward-release mechanism is pinned 38 migrations in the past (High, open) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3138). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-E02 | UPSTREAM | F-E02: Step-up MFA is presentational (High) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3419). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-E03 | UPSTREAM | F-E03: The family-media bucket is public (High) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3436). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-F01 | UPSTREAM | F-F01: A capped read reports success while dropping rows (High, money) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3477). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-F02 | UPSTREAM | F-F02: F-017's timezone bug is still live on eleven server-rendered surfaces (High) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3492). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-F03 | UPSTREAM | F-F03: /missions issues up to 240 sequential storage round trips (High, perf) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3504). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-D01 | UPSTREAM | F-D01: The photo lightbox strands keyboard users (High) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3281). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F21 | UPSTREAM | F21: A child could grant themselves a reward (High; half fixed and live, half awaiting the operator) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 1662). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-E04 | UPSTREAM | F-E04: OAuth tokens in social_account_tokens are family-member readable, while the equivalent sync_tokens is service-only | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3453). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-E05 | UPSTREAM | F-E05: feedback-attachments is a public bucket holding user-uploaded screenshots | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3454). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-E06 | UPSTREAM | F-E06: The Contact Center inbound-email secret is accepted in the query string, where it lands in logs and referrers | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3455). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-E07 | UPSTREAM | F-E07: Twilio signature verification is off outside production and depends on NEXT_PUBLIC_APP_URL being exactly right | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3456). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-E08 | UPSTREAM | F-E08: Shared-secret comparisons are not constant time | 🔄 IN PROGRESS | Low | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3457). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-020 | UPSTREAM | F-020: The documented production-recovery procedure did not work | 🔄 IN PROGRESS | Unassessed | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 2803). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F15 | UPSTREAM | F15: Family Autopilot ran for every family on the platform (High, fixed) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 1298). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F16 | UPSTREAM | F16: Paid features enforced only by the sidebar padlock (High, fixed) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 1363). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F18 | UPSTREAM | F18: Endpoints behind gated pages had no gate (High, fixed) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 1466). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F20 | UPSTREAM | F20: A child could clear the chore board (High, fixed) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 1578). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F22 | UPSTREAM | F22: A child's username was matched as a pattern (High, fixed) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 1748). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F1 | UPSTREAM | F1: The sitemap advertised 435 dead URLs (High, fixed) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 785). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F9 | UPSTREAM | F9: The entire i18n catalogue ships on every page (High — perf; closed as a decision) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 1013). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F10 | UPSTREAM | F10: Seeded records presented as real customer stories (High, fixed) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 1119). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-003 | UPSTREAM | F-003: anon held INSERT/UPDATE/DELETE on all five money tables | 🔄 IN PROGRESS | Unassessed | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 2097). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-005 | UPSTREAM | F-005: Every blog post not baked in at build time returned 500 | 🔄 IN PROGRESS | Unassessed | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 2149). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-006 | UPSTREAM | F-006: Any signed-in user could claim another household's AI jobs | 🔄 IN PROGRESS | Unassessed | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 2174). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-008 | UPSTREAM | F-008: Six nightly jobs silently stopped at 1,000 rows | 🔄 IN PROGRESS | Unassessed | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 2221). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-010 | UPSTREAM | F-010: Notification generation failed outright for affected households | 🔄 IN PROGRESS | Unassessed | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 2296). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-011 | UPSTREAM | F-011: The fix for F-008 had the same defect it was written to fix | 🔄 IN PROGRESS | Unassessed | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 2337). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-012 | UPSTREAM | F-012: The sitemap search engines read was six days stale, and would have stayed stale for a year | 🔄 IN PROGRESS | Unassessed | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 2376). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-013 | UPSTREAM | F-013: Fifty-nine reads asked for more rows than the server would ever return | 🔄 IN PROGRESS | Unassessed | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 2446). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-014 | UPSTREAM | F-014: Notification dedupe failed on every run, so every run re-notified | 🔄 IN PROGRESS | Unassessed | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 2491). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-017 | UPSTREAM | F-017: A family's "today" was Greenwich's today, on every surface that shows a day | 🔄 IN PROGRESS | Unassessed | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 2612). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-018 | UPSTREAM | F-018: Nine family-scoped reads were sequential scans of whole tables | 🔄 IN PROGRESS | Unassessed | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 2699). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-019 | UPSTREAM | F-019: The money-safety probe asserted concurrency it never tested | 🔄 IN PROGRESS | Unassessed | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 2754). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F6 | UPSTREAM | F6: Family email is built but not routed (Medium, operator — config) | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 919). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F19 | UPSTREAM | F19: Most AI endpoints run unmetered (Medium, open — a pricing decision) | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 1542). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F2 | UPSTREAM | F2: robots.txt omitted 20 authenticated surfaces (Medium, fixed) | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 830). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F4 | UPSTREAM | F4: The test named for F1's property could not observe it (Medium, fixed) | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 870). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F7 | UPSTREAM | F7: The family email gate existed only on the screen (Medium, fixed) | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 933). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F11 | UPSTREAM | F11: Five public pages had no <h1> (Medium, fixed) | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 1161). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F17 | UPSTREAM | F17: The documented tier map disagreed with the enforced one (Medium, fixed) | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 1441). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-004 | UPSTREAM | F-004: The money-boundary probe could not catch F-003 in CI | 🔄 IN PROGRESS | Unassessed | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 2131). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-007 | UPSTREAM | F-007: The additive-migrations guard flagged a revoke as destructive | 🔄 IN PROGRESS | Unassessed | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 2209). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-009 | UPSTREAM | F-009: A provider error in the mailer took down the whole cron run | 🔄 IN PROGRESS | Unassessed | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 2280). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-015 | UPSTREAM | F-015: A probe granted itself privileges and left them, poisoning the suite | 🔄 IN PROGRESS | Unassessed | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 2535). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-016 | UPSTREAM | F-016: The documented crawl workflow drops a live session cookie into the working tree | 🔄 IN PROGRESS | Unassessed | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 2586). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F3 | UPSTREAM | F3: The homepage was published twice (Low, fixed) | 🔄 IN PROGRESS | Low | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 862). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F8 | UPSTREAM | F8: Page titles doubled the brand (Low, fixed) | 🔄 IN PROGRESS | Low | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 987). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F12 | UPSTREAM | F12: The 404 page ships no server-rendered markup (Low, closed — recorded) | 🔄 IN PROGRESS | Low | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 1190). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F14 | UPSTREAM | F14: Nine sitemap URLs declare themselves non-canonical (Low, fixed on main by #526) | 🔄 IN PROGRESS | Low | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 1255). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F13 | UPSTREAM | F13: Unknown top-level paths redirect to login (Superseded — main #544 fixed it a third way) | 🔄 IN PROGRESS | Low | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 1216). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F5 | UPSTREAM | F5: Production migrations cannot be applied (High, operator — credentials) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 886). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-001 | UPSTREAM | F-001: Production migration ledger records only 0001–0003 — owner action | 🔄 IN PROGRESS | Unassessed | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 2016). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-002 | UPSTREAM | F-002: Unbounded reads — the survey, and the reasoning in it that was wrong | 🔄 IN PROGRESS | Unassessed | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 2071). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-C01 | UPSTREAM | F-C01: The sitemap dated 24 URLs with the time the file ran (High, fixed) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3016). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-C02 | UPSTREAM | F-C02: 445 of 1,508 sitemap URLs were not indexable (High, fixed) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3031). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-C03 | UPSTREAM | F-C03: The whole message catalogue shipped on every public page (High, fixed — supersedes F9) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3049). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-C04 | UPSTREAM | F-C04: /blog shipped its entire search corpus to the browser (Medium, fixed) | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3073). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-C05 | UPSTREAM | F-C05: Every unrouted path answered a login form (Medium, fixed — supersedes F13) | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3085). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-C06 | UPSTREAM | F-C06: A CSS margin lived in the message catalogue (Low, fixed) | 🔄 IN PROGRESS | Low | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3109). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-C07 | UPSTREAM | F-C07: Nineteen environment variables are undocumented (Medium, open) | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3124). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-C09 | UPSTREAM | F-C09: Supabase credentials fail at first use, not at boot (Low, open) | 🔄 IN PROGRESS | Low | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3213). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-C10 | UPSTREAM | F-C10: The mobile app has no tests, and CI barely checks it (Medium, open) | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3223). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-D02 | UPSTREAM | F-D02: Controls with no programmatic name (High) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3293). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-D03 | UPSTREAM | F-D03: Controls with no programmatic name (High) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3293). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-D10 | UPSTREAM | F-D10: The lint config enables none of the rules that would have caught them (Medium — and the root cause) | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3305). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-D04 | UPSTREAM | F-D04: Four hand-rolled dialogs claim aria-modal="true" but never trap focus or handle Escape | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3320). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-D05 | UPSTREAM | F-D05: 19 authenticated pages render no <h1>; 11 render no heading at all | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3321). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-D06 | UPSTREAM | F-D06: Primary content rows across seven modules are clickable but not keyboard reachable | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3322). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-D07 | UPSTREAM | F-D07: 92 destructive actions are guarded only by native window.confirm() | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3323). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-D08 | UPSTREAM | F-D08: All 354 authenticated pages share one route-group loading skeleton | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3324). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-D09 | UPSTREAM | F-D09: Ten client components set state from an un-cancelled async effect | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3325). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-D11 | UPSTREAM | F-D11: Two icon-only buttons in the guardian contact list have no accessible name | 🔄 IN PROGRESS | Low | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3326). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-D12 | UPSTREAM | F-D12: Two admin links point at routes that exist only at runtime | 🔄 IN PROGRESS | Low | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3327). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-D13 | UPSTREAM | F-D13: 172 index-derived React keys; the reorderable cases are worth a second look | 🔄 IN PROGRESS | Low | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3328). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-D14 | UPSTREAM | F-D14: Three exhaustive-deps warnings, one a genuine ref-in-cleanup bug | 🔄 IN PROGRESS | Low | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3329). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-E09 | UPSTREAM | F-E09: An authorization failure in the marketing AI route answers 500, not 403 | 🔄 IN PROGRESS | Low | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3458). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-F04 | UPSTREAM | F-F04: A requested local time that does not exist (DST spring-forward) is mishandled — a genuine production bug, found by running the suite under TZ=America/Los_Angeles, reproduced in two lines of node, and the suite pins no TZ at all | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3515). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-F05 | UPSTREAM | F-F05: 96 tests across 12 files share the exact shape of the known api-ai-runs 5-second timeout — a cold await import('@/app/…') inside a default-timeout test — and no testTimeout is configured anywhere | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3516). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-F06 | UPSTREAM | F-F06: tests/seed-failure-safety.test.ts, named "fails closed", asserts only the absence of two bad shapes, so deleting the error check makes it greener | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3517). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-F07 | UPSTREAM | F-F07: 37 of 51 money, kids, economy and missions server actions have no test | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3518). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-F08 | UPSTREAM | F-F08: addFundsAction is the one money mutator that writes the balance directly | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3519). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-F09 | UPSTREAM | F-F09: Unbounded concurrent fan-out to an external drive-time API | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3520). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-F10 | UPSTREAM | F-F10: Two buttons in the message header exist only to say the feature is unavailable | 🔄 IN PROGRESS | Low | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3521). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-F11 | UPSTREAM | F-F11: The proof-photo signing error is discarded, so a parent sees a blank frame rather than a reason | 🔄 IN PROGRESS | Low | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3522). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-F12 | UPSTREAM | F-F12: The vitest config's JSX block is dead under vitest 4 | 🔄 IN PROGRESS | Low | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3523). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-F13 | UPSTREAM | F-F13: Sixty-nine test blocks assert only the absence of a pattern | 🔄 IN PROGRESS | Low | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3524). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-G1 | UPSTREAM | G1: Three boundary probes passed while testing nothing | 🔄 IN PROGRESS | Unassessed | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3541). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-G2 | UPSTREAM | G2: 58 of the 66 tables the code calls sensitive are readable by children | 🔄 IN PROGRESS | Unassessed | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3558). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-J01-WALLET | UPSTREAM | F-J01: bucket_drift could not fire for any input (wallet reconciliation). | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3851). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-K01-STRIPE | UPSTREAM | F-K01: a lost Stripe money event, answered 200 and never retried. | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3916). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-L01 | UPSTREAM | F-L01: privilege escalation: guest → parent, and into families never invited to. | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3982). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-M01 | UPSTREAM | F-M01: a stranger's crm_contacts row could be taken over and overwritten. | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 4070). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-M02 | UPSTREAM | F-M02: a double-escape shipped 40 minutes earlier, and a guard that could not see it. | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 4142). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-N01 | UPSTREAM | F-N01: feedback screenshots behind 31 bits of non-cryptographic randomness. | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 4192). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-J01-GUARD | UPSTREAM | F-J01: Nine forms wrote Greenwich's day into a DATE column | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 4283). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-J02 | UPSTREAM | F-J02: Two reads capped at 1,000 rows in components/, one also dropping its error and lacking a rejection path | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 4284). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-J03 | UPSTREAM | F-J03: Twenty-six money inputs could not take a decimal point on iOS | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 4285). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-J04 | UPSTREAM | F-J04: Five reads handled every database failure and no network one — including App Lock presenting a configured lock as never set up | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 4286). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-J05 | UPSTREAM | F-J05: The admin console reported the first thousand of everything | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 4287). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-J06 | UPSTREAM | F-J06: Est. MRR, and the unpaid accounts the billing page could not see | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 4288). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-J07 | UPSTREAM | F-J07: Two wallet balances summed from a capped read | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 4289). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-J08 | UPSTREAM | F-J08: A member could vote twice in the family meal vote | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 4290). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-K01-CLIENT | UPSTREAM | F-K01: Thirty-nine writes reported success for a change the database refused (High, fixed) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 4373). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-K02 | UPSTREAM | F-K02: The guard list was too narrow by 2.7× (High, fixed — my own) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 4418). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-K03 | UPSTREAM | F-K03: locator-module (verified healthy, no action) | 🔄 IN PROGRESS | Unassessed | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 4434). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-K04 | UPSTREAM | F-K04: Five access writes on the trust page (High, fixed) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 4449). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-K05 | UPSTREAM | F-K05: Two medical tables are member-writable while their neighbours are manager-only (Medium, OPEN — owner decision) | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 4466). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-PASS-H-AUTH-USERS | UPSTREAM | PASS-H-AUTH-USERS: Complete auth-user traversal; follow-up to the 50-user ceiling | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3679). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-PASS-H-MANAGER | UPSTREAM | PASS-H-MANAGER: Keep the manager-role contract aligned with the database | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3722). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-I-01 | UPSTREAM | I-01: Social access DELETE policy; historical main release reference | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 280). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| AUDIT-INTEGRATION-001 | AUDIT | Integrate current upstream repairs without losing audit identities or workflow guarantees | 🔄 IN PROGRESS | High | Merge from dcbccaa1 and 57f22c0b; final frozen tree 4ac44596e1f91234ee9822b9ca2027d0fd62fdb2 passes 16,360 unit checks across 1,294 files and a 251-page build. Focused auth 138 browser / 36 latest logout units, 875 Contact Center/push/social checks, and 15 portable/SSRF guard checks pass. See docs/final-audit/main-integration-cycle-20260919.md. | Preserved upstream repairs and weekly planner; fixed pending-signup logout ownership; retained signed SMS ingress before optional candidate work; normalized portable guards without broad exemptions; restored all audit identities. | Frozen-source full units/build/lint pass; strict types pass; DST-zone units pass 16,361/16,361 after one test-only timezone correction, with the corrected medication suite passing 16/16 in UTC. Hosted discovery finds 1,078 tests across 47 files; execution of new ingress and integrated production workflows remains open. | Own draft branch only. No new SQL, shared dependency installation, production migration, or production-readiness claim. |
 
 ## Inventory and evidence rules
+
+Current persistent authority is this Markdown master ledger and its detailed records. The archived JSON registry remains historical discovery evidence; restoring it and running render-audit.cjs would overwrite later human edits and status corrections. Do not rebuild from the archived state without first reconciling all current rows, details, and upstream findings. The historical retrieval instructions below are for inspection, not a current regeneration procedure.
 
 Baseline: c7b56eff89de1054e41a8d206bf03b6541ea3848. Discovery covered 4059 tracked files. IDs persist in `docs/final-audit/audit-state.json`; additions never remove or renumber existing records. That registry and the four discovery dumps below are no longer carried in the working tree — see the retrieval note under the mappings paragraph.
 
@@ -14061,7 +14186,9 @@ Earlier checkpoints recorded a catalogue timeout, a flaky authenticated toast as
 Service-owned exact-input/communication/decision receipts authorize replay. Missing proof triggers fresh screening; neutral input survives ledger-read failure. Full conditional decision updates and verified readback precede notification.
 
 #### Retest Results
-Signed delivery publication 0d68bdbb passes CI 34718960420: 1,064 scheduled E2E cases and 1,064 passes in 8.0 minutes, with both authenticated/durable flags enabled; identical tested tree becff049. Web, database, mobile, finance and Vercel PASS. New text source a61804db requires its own hosted execution. See guardian-hosted-acceptance.md.
+Current 2026-09-19 pre-final-evidence tree 4ac44596e1f91234ee9822b9ca2027d0fd62fdb2: 16,360/16,360 unit checks across 1,294 files, zero failed/skipped; production build 251 pages; lint passes with three existing warnings. Final strict types pass. The full DST-zone rerun passes 16,361/16,361 across 1,294 files after a medication test-only timezone correction; corrected medication checks pass 16/16 in UTC. No application source changed after the frozen build/types. Hosted discovery lists 1,078 tests across 47 files; hosted execution remains pending. See docs/final-audit/main-integration-cycle-20260919.md.
+
+Historical evidence: Signed delivery publication 0d68bdbb passes CI 34718960420: 1,064 scheduled E2E cases and 1,064 passes in 8.0 minutes, with both authenticated/durable flags enabled; identical tested tree becff049. Web, database, mobile, finance and Vercel PASS. New text source a61804db requires its own hosted execution. See guardian-hosted-acceptance.md.
 
 #### Evidence
 Application a61804db passes all 15,011 unit tests in 1,202 files, zero failed/skipped, in 43.60 seconds. The exact frozen source was committed without changes during execution. Application a61804db builds 252 pages (44-second compilation). Strict types, lint with four baseline warnings, localization and query audit (491 tables, 77 functions, 144 routes) PASS. See contact-center-text-bounds-cycle.md.
@@ -14071,7 +14198,7 @@ Application a61804db passes all 15,011 unit tests in 1,202 files, zero failed/sk
 
 ### TEST-001 — Current baseline full automated unit suite
 
-Status: ✅ PASS
+Status: 🔄 IN PROGRESS
 Severity: High
 Route(s), components, actions, tables and providers: Trace using linked discovery inventory; record exact exercised chain before passing.
 
@@ -14093,13 +14220,15 @@ No complete workflow finding yet; investigation pending.
 The full suite includes Guardian autonomous recovery, finite sweep fairness, receipt completion, prior persistent login and meal-planning repairs.
 
 #### Retest Results
-Application a61804db builds 252 pages (44-second compilation). Strict types, lint with four baseline warnings, localization and query audit (491 tables, 77 functions, 144 routes) PASS. See contact-center-text-bounds-cycle.md.
+Current 2026-09-19 pre-final-evidence tree 4ac44596e1f91234ee9822b9ca2027d0fd62fdb2: 16,360/16,360 unit checks across 1,294 files, zero failed/skipped; production build 251 pages; lint passes with three existing warnings. Final strict types pass. The full DST-zone rerun passes 16,361/16,361 across 1,294 files after a medication test-only timezone correction; corrected medication checks pass 16/16 in UTC. No application source changed after the frozen build/types. Hosted discovery lists 1,078 tests across 47 files; hosted execution remains pending. See docs/final-audit/main-integration-cycle-20260919.md.
+
+Historical evidence: Application a61804db builds 252 pages (44-second compilation). Strict types, lint with four baseline warnings, localization and query audit (491 tables, 77 functions, 144 routes) PASS. See contact-center-text-bounds-cycle.md.
 
 #### Evidence
 Application a61804db passes all 15,011 unit tests in 1,202 files, zero failed/skipped, in 43.60 seconds. The exact frozen source was committed without changes during execution.
 
 #### Final Status
-✅ PASS
+🔄 IN PROGRESS — current frozen full units pass; strict types and the full DST-zone unit rerun pass; integrated hosted and complete feature acceptance remain pending.
 
 ### AUTH-001 — Registration, verification, OAuth and recovery
 
@@ -14125,6 +14254,9 @@ Actual SignupForm/productionbrowser/installedSDK characterization:14cases,5healt
 Committed a02e82fb: synchronous form ownership and single-submit guards, honest accepted/uncertain signup receipts, retired callback fencing and handled auxiliary write failures. Recovery continuation is tracked under AUTH-003. Current repair: per-attempt signup client owns verifier cleanup, stages session adoption against current browser cookies and active form intent, and validates cookie write-back before publishing authentication.
 
 #### Retest Results
+Current 2026-09-19 integration: application logout retires pending signup with or without an ambient session, and stale session intents preserve newer handoffs. Six controlled Chromium suites pass 138 checks, including ordinary token rotation; latest logout/bridge units pass 36 checks. The earlier seven-suite run passed 150 before the final ownership repair. Frozen integrated tree 4ac44596e1f91234ee9822b9ca2027d0fd62fdb2 passes all 16,360 unit checks across 1,294 files. Ordinary browser and SSR refresh still delete a pending standard PKCE verifier while retaining the signed-in user; that separate handoff defect remains open. See auth-pending-signup-logout-cycle.md. Current local gates pass; integrated hosted and complete feature acceptance remain pending. See [the integration cycle](docs/final-audit/main-integration-cycle-20260919.md).
+
+Historical source evidence:
 21 actual React/browser/installed-SDK signup cases pass; 30 original selection cases pass. Root combined five-suite Chromium auth gate passes 82 cases on bc22dbc9. One signup case deliberately retains the unresolved SDK verifier-loss characterization. Whole signup/email-confirmation workflow remains unverified. Exact source bc22dbc9ca7bb16535dbb7d2df788cf0eb3e1bcf in the private clean installation: 1162 files / 13537 unit tests PASS (122.55s), production build PASS (247 pages), post-build strict types PASS, lint PASS with four baseline warnings, i18n/query gates PASS, 82 focused Chromium checks PASS (13.3s). See docs/final-audit/persistent-login-renewal-cycle.md. New signup-verifier cycle: 46 actual React/Chromium/installed-SDK checks PASS; selection/persistence fixture integration 56 unit checks PASS. See signup-verifier-cycle.md. Combined source gate now passes; latest result below. Exact combined source effe6a2edddba707d2bbc5b11cd790071080822a, including main d8cd6be1, passes all private clean-install gates: 1168 files / 13679 unit tests (123.92s), 247-page production build, strict post-build non-incremental types, lint with four baseline warnings, locale/query audits and 107 controlled Chromium checks (17.7s). No installs or provider operations. See docs/final-audit/auth-cookie-checkpoint.md.
 
 #### Evidence
@@ -14157,6 +14289,9 @@ Definitive sign-out/account replacement leaves prior-user offline rows, and late
 Definitive auth changes purge offline data. Subscribed cache generations and synchronous request/setter checks prevent stale work from refilling it, even before a React rerender. Failed physical deletion cannot hydrate pre-purge rows in the current module lifetime. Native listener cleanup contains synchronous/asynchronous removal failures. A central stable user/session/family/access namespace now isolates durable v2 envelopes across restart, and an authenticated subtree boundary retires copied rows/forms on confirmed account/session/access changes. Same-session rotation and agreeing initial bootstrap preserve drafts. Stale SDK INITIAL_SESSION and malformed-owner/read-error races are fenced. Committed bc22dbc9: malformed successful refresh responses become retryable before SDK deletion; saved session survives and later rotates. Valid payloads and definitive rejection/sign-out remain unchanged. Current logout cycle: six controls now clear the intended project session locally before token-specific provider revocation. Cross-tab reread signals invalidate older work, validate cookie absence and reconcile exact current Realtime tokens. Compatibility POST writes only a short-lived intent receipt; browser completion compares ownership, and exact logout middleware paths skip ambient refresh. Ordinary browser storage fences both successful and rejected old renewal writes by logout generation; exported processLock prevents the SDK coalesced-caller cleanup hang. Password cycle16f0f41c isolates normal/child session adoption before first await, validates JWT expiry/subject and cookie readback, preserves PKCE verifier, fences deadline/disposal, and binds child token renewal to supplied user/session. Child server action writes no auth cookies; exact action middleware exemption prevents ambient refresh. Both forms fence duplicate/stale navigation and preserve modified-link behavior. Integrated child readiness fix 48e7e9e1 prevents edits before React can receive the values; validation and session ownership guards are preserved.
 
 #### Retest Results
+Current 2026-09-19 integration: application logout retires pending signup with or without an ambient session, and stale session intents preserve newer handoffs. Six controlled Chromium suites pass 138 checks, including ordinary token rotation; latest logout/bridge units pass 36 checks. The earlier seven-suite run passed 150 before the final ownership repair. Frozen integrated tree 4ac44596e1f91234ee9822b9ca2027d0fd62fdb2 passes all 16,360 unit checks across 1,294 files. Ordinary browser and SSR refresh still delete a pending standard PKCE verifier while retaining the signed-in user; that separate handoff defect remains open. See auth-pending-signup-logout-cycle.md. Current local gates pass; integrated hosted and complete feature acceptance remain pending. See [the integration cycle](docs/final-audit/main-integration-cycle-20260919.md).
+
+Historical source evidence:
 Frozen source 48e7e9e1 passes 1,188 files / 14,442 units, production build (251 static pages), strict post-build types, lint, locale and query audits. Hosted child journey is pending; the historical flaky attempt has no retained DOM evidence proving its sole cause.
 
 #### Evidence
@@ -14759,12 +14894,15 @@ The complete supported workflow performs authorized actions, persists intended s
 - [ ] Console and network inspection; related regression
 
 #### Issues Found
-Duplicate emission and signed delivery-status behavior pass real disposable HTTP/PostgreSQL/browser verification. Overlong fallback replies and emoji-splitting boundaries are repaired and pass private tests. Real provider delivery, controlled cutover and durable pre-candidate capture remain open.
+Duplicate emission and signed delivery-status behavior pass real disposable HTTP/PostgreSQL/browser verification. Overlong fallback replies and emoji-splitting boundaries are repaired and pass private tests. Signed pre-candidate ingress capture is now implemented and passes focused checks. Its hosted acceptance, real provider delivery and controlled deployment cutover remain open.
 
 #### Fixes Applied
-Freeze the first reply candidate before intake; exact one-time final emission reservation; held legacy/uncertain replies; verified deterministic projection. Signed delivery callbacks bind token, account and first provider SID, advance status monotonically and expose safe provider progress in the authorized inbox. New text uses scalar-safe PostgreSQL/XML bounds before candidate fingerprinting; bounded family labels preserve useful fallbacks; old oversized queued replies are held without rewriting stored content. Provider completion receives the candidate cancellation signal.
+Retain the signed original ingress before optional context and candidate work; freeze the first reply candidate before any automatic emission; exact one-time final emission reservation; held legacy/uncertain replies; verified deterministic projection. Candidate timeout or locale failure retains deterministic summary/classification and files without an automatic reply. Signed delivery callbacks bind token, account and first provider SID, advance status monotonically and expose safe provider progress in the authorized inbox. New text uses scalar-safe PostgreSQL/XML bounds before candidate fingerprinting; bounded family labels preserve useful fallbacks; old oversized queued replies are held without rewriting stored content. Provider completion receives the candidate cancellation signal.
 
 #### Retest Results
+Current 2026-09-19 integration: signed canonical ingress is retained before optional candidate work; timeout/locale failures preserve deterministic filing without a reply, and a late ignored-abort candidate cannot emit. Contact Center, marketing push and social publication regression passes 875 checks across 32 suites. Hosted acceptance of the new ingress fixture and real provider delivery remain pending. Current local gates pass; integrated hosted and complete feature acceptance remain pending. See [the integration cycle](docs/final-audit/main-integration-cycle-20260919.md).
+
+Historical source evidence:
 Application a61804db passes all 15,011 unit tests in 1,202 files, zero failed/skipped, in 43.60 seconds. The exact frozen source was committed without changes during execution. Application a61804db builds 252 pages (44-second compilation). Strict types, lint with four baseline warnings, localization and query audit (491 tables, 77 functions, 144 routes) PASS. See contact-center-text-bounds-cycle.md. Signed delivery publication 0d68bdbb passes CI 34718960420: 1,064 scheduled E2E cases and 1,064 passes in 8.0 minutes, with both authenticated/durable flags enabled; identical tested tree becff049. Web, database, mobile, finance and Vercel PASS. New text source a61804db requires its own hosted execution. See guardian-hosted-acceptance.md.
 
 #### Evidence
@@ -14993,12 +15131,15 @@ The complete supported workflow performs authorized actions, persists intended s
 - [ ] Console and network inspection; related regression
 
 #### Issues Found
-Duplicate emission and signed delivery-status behavior pass real disposable HTTP/PostgreSQL/browser verification. Overlong fallback replies and emoji-splitting boundaries are repaired and pass private tests. Real provider delivery, controlled cutover and durable pre-candidate capture remain open.
+Duplicate emission and signed delivery-status behavior pass real disposable HTTP/PostgreSQL/browser verification. Overlong fallback replies and emoji-splitting boundaries are repaired and pass private tests. Signed pre-candidate ingress capture is now implemented and passes focused checks. Its hosted acceptance, real provider delivery and controlled deployment cutover remain open.
 
 #### Fixes Applied
-Freeze the first reply candidate before intake; exact one-time final emission reservation; held legacy/uncertain replies; verified deterministic projection. Signed delivery callbacks bind token, account and first provider SID, advance status monotonically and expose safe provider progress in the authorized inbox. New text uses scalar-safe PostgreSQL/XML bounds before candidate fingerprinting; bounded family labels preserve useful fallbacks; old oversized queued replies are held without rewriting stored content. Provider completion receives the candidate cancellation signal.
+Retain the signed original ingress before optional context and candidate work; freeze the first reply candidate before any automatic emission; exact one-time final emission reservation; held legacy/uncertain replies; verified deterministic projection. Candidate timeout or locale failure retains deterministic summary/classification and files without an automatic reply. Signed delivery callbacks bind token, account and first provider SID, advance status monotonically and expose safe provider progress in the authorized inbox. New text uses scalar-safe PostgreSQL/XML bounds before candidate fingerprinting; bounded family labels preserve useful fallbacks; old oversized queued replies are held without rewriting stored content. Provider completion receives the candidate cancellation signal.
 
 #### Retest Results
+Current 2026-09-19 integration: signed canonical ingress is retained before optional candidate work; timeout/locale failures preserve deterministic filing without a reply, and a late ignored-abort candidate cannot emit. Contact Center, marketing push and social publication regression passes 875 checks across 32 suites. Hosted acceptance of the new ingress fixture and real provider delivery remain pending. Current local gates pass; integrated hosted and complete feature acceptance remain pending. See [the integration cycle](docs/final-audit/main-integration-cycle-20260919.md).
+
+Historical source evidence:
 Application a61804db passes all 15,011 unit tests in 1,202 files, zero failed/skipped, in 43.60 seconds. The exact frozen source was committed without changes during execution. Application a61804db builds 252 pages (44-second compilation). Strict types, lint with four baseline warnings, localization and query audit (491 tables, 77 functions, 144 routes) PASS. See contact-center-text-bounds-cycle.md. Signed delivery publication 0d68bdbb passes CI 34718960420: 1,064 scheduled E2E cases and 1,064 passes in 8.0 minutes, with both authenticated/durable flags enabled; identical tested tree becff049. Web, database, mobile, finance and Vercel PASS. New text source a61804db requires its own hosted execution. See guardian-hosted-acceptance.md.
 
 #### Evidence
@@ -15534,6 +15675,9 @@ Two required ledger reads discard error/loading state; a failed history read bec
 Required catalogue and both ledger reads gate balances, controls and retained mutation handlers; loading/error/stale reads cannot authorize rewards. Retry, explicit mutation readback, duplicate fencing and pending-save/unmount guards are implemented. Followup refreshAndConfirm/recoverygate/deferredcompletion and per-opening formepoch prevents superseded reads or retired submit callbacks from reauthorizing writes.
 
 #### Retest Results
+Current 2026-09-19 integration reproduced eight rewards browser failures in baseline dcbccaa1: server-action adoption bypassed the existing client pending/readback/lifetime guards. Requests and decisions now call the real server actions through mutate and confirmed refreshLedger after checking current reward, balance and status. Catalogue writes use family-scoped returning single-row queries. All 32 rewards Chromium cases pass (4.3s), including the eight regressions; final combined rerun pending. Server/database affordability, atomic reservation, expected-status concurrency and deployed policy remain open. See main-integration-cycle-20260919.md.
+
+Historical evidence:
 30 actual rewards Chromium cases PASS (23 core plus7 independent readback/form-lifetime review); related points tests PASS. Pinned608c9307: full1151-file/13003-test suite PASS (124.53s, zero unhandled errors), 265 Chromium checks PASS, production245page build PASS, final strict types/lint/query/i18n PASS under isolated Node24.21.0. Browser/build runtime-identical3effbf41; exact provenance and limits in care-verification-checkpoint.md.
 
 #### Evidence
@@ -15976,12 +16120,15 @@ The complete supported workflow performs authorized actions, persists intended s
 - [ ] Console and network inspection; related regression
 
 #### Issues Found
-Duplicate emission and signed delivery-status behavior pass real disposable HTTP/PostgreSQL/browser verification. Overlong fallback replies and emoji-splitting boundaries are repaired and pass private tests. Real provider delivery, controlled cutover and durable pre-candidate capture remain open.
+Duplicate emission and signed delivery-status behavior pass real disposable HTTP/PostgreSQL/browser verification. Overlong fallback replies and emoji-splitting boundaries are repaired and pass private tests. Signed pre-candidate ingress capture is now implemented and passes focused checks. Its hosted acceptance, real provider delivery and controlled deployment cutover remain open.
 
 #### Fixes Applied
-Freeze the first reply candidate before intake; exact one-time final emission reservation; held legacy/uncertain replies; verified deterministic projection. Signed delivery callbacks bind token, account and first provider SID, advance status monotonically and expose safe provider progress in the authorized inbox. New text uses scalar-safe PostgreSQL/XML bounds before candidate fingerprinting; bounded family labels preserve useful fallbacks; old oversized queued replies are held without rewriting stored content. Provider completion receives the candidate cancellation signal.
+Retain the signed original ingress before optional context and candidate work; freeze the first reply candidate before any automatic emission; exact one-time final emission reservation; held legacy/uncertain replies; verified deterministic projection. Candidate timeout or locale failure retains deterministic summary/classification and files without an automatic reply. Signed delivery callbacks bind token, account and first provider SID, advance status monotonically and expose safe provider progress in the authorized inbox. New text uses scalar-safe PostgreSQL/XML bounds before candidate fingerprinting; bounded family labels preserve useful fallbacks; old oversized queued replies are held without rewriting stored content. Provider completion receives the candidate cancellation signal.
 
 #### Retest Results
+Current 2026-09-19 integration: signed canonical ingress is retained before optional candidate work; timeout/locale failures preserve deterministic filing without a reply, and a late ignored-abort candidate cannot emit. Contact Center, marketing push and social publication regression passes 875 checks across 32 suites. Hosted acceptance of the new ingress fixture and real provider delivery remain pending. Current local gates pass; integrated hosted and complete feature acceptance remain pending. See [the integration cycle](docs/final-audit/main-integration-cycle-20260919.md).
+
+Historical source evidence:
 Application a61804db passes all 15,011 unit tests in 1,202 files, zero failed/skipped, in 43.60 seconds. The exact frozen source was committed without changes during execution. Application a61804db builds 252 pages (44-second compilation). Strict types, lint with four baseline warnings, localization and query audit (491 tables, 77 functions, 144 routes) PASS. See contact-center-text-bounds-cycle.md. Signed delivery publication 0d68bdbb passes CI 34718960420: 1,064 scheduled E2E cases and 1,064 passes in 8.0 minutes, with both authenticated/durable flags enabled; identical tested tree becff049. Web, database, mobile, finance and Vercel PASS. New text source a61804db requires its own hosted execution. See guardian-hosted-acceptance.md.
 
 #### Evidence
@@ -20078,7 +20225,7 @@ Pending
 
 ### SEO-001 — Social preview images reachable by an unauthenticated crawler
 
-Status: 🛠 FIXED + PASS
+Status: 🔄 IN PROGRESS
 Severity: High
 Route(s), components, actions, tables and providers: middleware.ts PUBLIC list; app/opengraph-image.tsx; app/twitter-image.tsx; lib/og/social-image.tsx
 
@@ -20111,11 +20258,11 @@ All five cases in tests/social-preview-reachability.test.ts pass, and all five f
 tests/social-preview-reachability.test.ts; unauthenticated production probes against www.bubaly.com on 2026-09-13 (build f9c4d7a1).
 
 #### Final Status
-🛠 FIXED + PASS — deployed re-probe pending.
+🔄 IN PROGRESS — scoped source checks are historical evidence; complete workflow and current integrated verification remain pending.
 
 ### SEO-002 — Open Graph card survives the marketing metadata resolver
 
-Status: 🛠 FIXED + PASS
+Status: 🔄 IN PROGRESS
 Severity: High
 Route(s), components, actions, tables and providers: lib/marketing/seo.ts resolveMarketingMetadata; app/layout.tsx metadata.openGraph; every app/(marketing) page that calls the resolver
 
@@ -20153,11 +20300,11 @@ tests/social-preview-reachability.test.ts covers the image, the site identity, a
 tests/social-preview-reachability.test.ts; `og:` tag census of /, /pricing, /login, /welcome, /kid-login on www.bubaly.com, 2026-09-13.
 
 #### Final Status
-🛠 FIXED + PASS — deployed re-probe pending.
+🔄 IN PROGRESS — scoped source checks are historical evidence; complete workflow and current integrated verification remain pending.
 
 ### SEO-003 — Published marketing page families reachable without a session
 
-Status: 🛠 FIXED + PASS
+Status: 🔄 IN PROGRESS
 Severity: Critical
 Route(s), components, actions, tables and providers: middleware.ts PUBLIC list; lib/marketing/platform.ts PAGE_TYPES; lib/marketing/public-pages.tsx; app/(marketing)/{questions,guides,compare,alternatives,audiences,resources,glossary,p}/[slug]/page.tsx; marketing_pages
 
@@ -20248,11 +20395,11 @@ that a later "the marketing pages still get no traffic" is not mistaken for a
 regression of this fix.
 
 #### Final Status
-🛠 FIXED + PASS — deployed re-probe pending.
+🔄 IN PROGRESS — scoped source checks are historical evidence; complete workflow and current integrated verification remain pending.
 
 ### SEO-004 — Public Pay-ID resolver reachable without a session
 
-Status: 🛠 FIXED + PASS
+Status: 🔄 IN PROGRESS
 Severity: Critical
 Route(s), components, actions, tables and providers: middleware.ts PUBLIC list; app/pay/[handle]/page.tsx; lib/wallet/pay-handle.ts; pay_handles; gift_links
 
@@ -20326,11 +20473,11 @@ tests/public-pages-reachable.test.ts; unauthenticated production probes of
 2026-09-13 (build 0a472a5a).
 
 #### Final Status
-🛠 FIXED + PASS — deployed re-probe pending.
+🔄 IN PROGRESS — scoped source checks are historical evidence; complete workflow and current integrated verification remain pending.
 
 ### DATA-008 — A failed read must not render as an empty one
 
-Status: 🛠 FIXED + PASS
+Status: 🔄 IN PROGRESS
 Severity: High
 Route(s), components, actions, tables and providers: lib/hooks/use-realtime-query.ts consumers — components/finance/{bills,budgets,payments,savings}-view.tsx; components/dashboard/calendar-sync-panel.tsx; components/marketplace/listing-questions.tsx; components/moments/moments-view.tsx; components/modules/{rewards,meals,habits,chores,inbox,closet,projects,relationship,marketplace}-module.tsx; components/vacations/vacations-list.tsx
 
@@ -20407,11 +20554,11 @@ tests/finance-views-read-boundary.test.ts; tests/read-boundary-empty-vs-failed.t
 tests/read-error-surfaced.test.ts; tests/vacations-views-read-boundary.test.ts
 
 #### Final Status
-🛠 FIXED + PASS — deployed re-probe pending.
+🔄 IN PROGRESS — scoped source checks are historical evidence; complete workflow and current integrated verification remain pending.
 
 ### DATA-009 — An audit write that did not land must be noticeable
 
-Status: 🛠 FIXED + PASS
+Status: 🔄 IN PROGRESS
 Severity: High
 Route(s), components, actions, tables and providers: lib/server/audit.ts; lib/wallet/server.ts; app/(app)/wallet/actions.ts; app/(app)/money/actions.ts; app/api/ai/wallet/route.ts; app/api/ai/wallet/child/[childId]/route.ts; app/api/ai/invest/route.ts; audit_logs; wallet_audit_logs
 
@@ -20520,9 +20667,11 @@ change on Guardian emergency paths that this pass could not exercise end to
 end. Making the failure visible is the part that should not wait behind it.
 
 #### Final Status
-🛠 FIXED + PASS — deployed re-probe not applicable; the failure is observable in server logs rather than over HTTP.
+🔄 IN PROGRESS — scoped source checks are historical evidence; complete workflow and current integrated verification remain pending.
 
-# Final Regression
+# Historical Regression — 2026-09-13 evidence
+
+These results describe their stated historical sources. The current integration regression is tracked at the bottom of this file and has not passed.
 
 ## Build
 Status: ✅ PASS — `npm run build` on Node 24.15.0 (the engine package.json declares) exits 0 against branch head 92340315. Middleware bundle 92.6 kB. Run 2026-09-13.
@@ -20634,16 +20783,16 @@ Brotli is applied: / is 1,156,328 bytes uncompressed and 287,625 bytes on the wi
 Full verification remains incomplete. Confirmed defects appear above; no dependency is classified BLOCKED before all local work is exhausted.
 
 ## Remaining Issues
-- API-387E2B30BCD7: Text source a61804db requires hosted acceptance. Signed delivery publication 0d68bdbb passed all 1,064 hosted cases. Real provider delivery, controlled old-handler cutover, durable pre-candidate intake and production configuration remain open.
+- API-387E2B30BCD7: Current signed ingress retention passes focused tests, including deterministic filing after candidate failure. New integrated ingress hosted acceptance, real provider delivery, controlled old-handler cutover and production configuration remain open; see main-integration-cycle-20260919.md.
 - API-BBD0A5DB630F: Real provider delivery, production scheduler configuration and nontransactional cross-table/payload changes remain open; Guardian role authorization is tracked under AUTHZ-005.
 - LIBRARY-10D7AA8F3175: claimGuardianCallback cannot distinguish "already handled" from "the claim could not be written", so a database outage makes all six Guardian callbacks acknowledge 200 and lose the event — two of them hang up on the caller while doing it.
 - LIBRARY-5BA7FEA22007: Family timezone, existing rule/time/regex semantics, emergency-versus-block precedence and deployed policy behavior remain unverified.
 - FLOW-DDE6E8974B46: Real provider delivery, production scheduler configuration and nontransactional cross-table/payload changes remain open; Guardian role authorization is tracked under AUTHZ-005.
 - DB-TBL-161: Existing rows do not establish service-authored Guardian decisions; AUTHZ-004 records the signed-route replay consequence.
-- CALLBACK-24807E48E6E6: Text source a61804db requires hosted acceptance. Signed delivery publication 0d68bdbb passed all 1,064 hosted cases. Real provider delivery, controlled old-handler cutover, durable pre-candidate intake and production configuration remain open.
+- CALLBACK-24807E48E6E6: Current signed ingress retention passes focused tests, including deterministic filing after candidate failure. New integrated ingress hosted acceptance, real provider delivery, controlled old-handler cutover and production configuration remain open; see main-integration-cycle-20260919.md.
 - CALLBACK-07F1FB3AED21: Real provider delivery, production scheduler configuration and nontransactional cross-table/payload changes remain open; Guardian role authorization is tracked under AUTHZ-005.
-- DEPLOY-001: New text hosted acceptance, deployed session/provider configuration, production database/provider workflows, physical devices, local startup approval limitation and second full regression remain open.
-- AUTH-001: Verify actual signup confirmation, invalid/expired/replayed links, phone/OAuth signup and deployed mail/redirect policy. A later ordinary singleton refresh can still delete a pending standard PKCE verifier; cross-process cookie compare/write is not atomic. UI review lock is scoped to the current form instance.
+- DEPLOY-001: Current integrated source and new SMS ingress hosted acceptance, deployed session/provider configuration, production database/provider workflows, physical devices and second full regression remain open.
+- AUTH-001: Verify actual signup confirmation, invalid/expired/replayed links, phone/OAuth signup and deployed mail/redirect policy. Ordinary browser and SSR refresh still delete a pending standard PKCE verifier; cross-process cookie compare/write is not atomic. UI review lock is scoped to the current form instance.
 - AUTH-002: Production session time-box/inactivity/single-session settings, physical mobile reopening and production child configuration remain unverified. Browser cookie writes are not atomic; ordinary OAuth/phone adoption and unrelated server responses remain separate audit obligations.
 - INT-001: Callback routing, planner replay and 204 defects repaired locally. Deployed callback→database→provider→inbox workflow still unverified; outbound durability tracked INT-002.
 - PUSH-001: Failure retention, preferences, queue starvation and false-success status defects repaired locally. Live provider/device workflow remains unverified; distributed worker claims and partial-delivery receipts tracked in PUSH-003.
@@ -20677,7 +20826,7 @@ Full verification remains incomplete. Confirmed defects appear above; no depende
 - DATA-007: Global CommandBar caller retry/lifetime remains outside shared-navigation boundary. Cross-client default-list uniqueness, reload-persistent idempotency, live RLS, microphone/device behavior and complete capture workflows remain separate.
 - SEC-004: Targeted action/render protection and pinned combined regression pass. Live direct-database/RLS workflow and broader URL surfaces remain separate. No active-content browser execution was attempted or claimed.
 - AUTH-003: Live email delivery, provider URL allowlists/templates, deployed password/reauthentication policy and real recipient-to-password workflow remain unverified. Local form/grant ownership is not distributed exactly-once mutation control. Successful server responses can still race later browser account changes; this repair specifically covers pre-verification failures and ambient action/middleware refresh writes. A failed post-exchange check cannot undo provider code consumption. Supabase may revoke sessions for account security changes.
-- SMS-001: Text source a61804db requires hosted acceptance. Signed delivery publication 0d68bdbb passed all 1,064 hosted cases. Real provider delivery, controlled old-handler cutover, durable pre-candidate intake and production configuration remain open.
+- SMS-001: Current signed ingress retention passes focused tests, including deterministic filing after candidate failure. New integrated ingress hosted acceptance, real provider delivery, controlled old-handler cutover and production configuration remain open; see main-integration-cycle-20260919.md.
 - AUTHZ-004: Guardian contact/profile role authorization remains AUTHZ-005; cross-table operations remain non-atomic.
 - AUTHZ-005: Verify deployed policy state, child contact/profile mutations and the contact-deletion cascade into routing rules. Independent member/family foreign keys require separate integrity verification.
 - SMS-002: Production scheduler configuration/execution and real provider delivery remain unverified; cross-table operations are not transactions.
@@ -20696,75 +20845,755 @@ NO
 Pending
 
 
-# Appendix — the bubaly.com audit merged from main (#524)
+## Integration record — 2026-09-19
 
-`main` carries a second document under this same file name: a separate,
-concise audit of the public site, F1 through F14, written by a different pass
-and merged as #524. Two different audits under one name is a trap — whichever
-merges second silently replaces the other — so it is preserved here verbatim
-rather than overwritten, and the collision is recorded for the owner to settle.
+AUDIT-INTEGRATION-001 is IN PROGRESS. Current focused results and full-gate placeholders are recorded in [main-integration-cycle-20260919.md](docs/final-audit/main-integration-cycle-20260919.md). Pending-signup logout passes 138 controlled browser checks and 36 latest logout/bridge unit checks; the earlier related seven-suite unit run passed 150 before the final ownership repair. Contact Center/push/social passes 875 checks; 15 guard checks pass. An additional 32 rewards browser checks pass after restoring the real server-action lifecycle; the earlier combined UI run had eight failures and is not accepted as a passing gate. Frozen pre-final-evidence tree 4ac44596e1f91234ee9822b9ca2027d0fd62fdb2 passes 16,360 units across 1,294 files, production build (251 pages), and lint with three existing warnings. Final strict types pass. The full DST-zone rerun passes 16,361/16,361 across 1,294 files after a medication test-only timezone correction; corrected medication checks pass 16/16 in UTC. No application source changed after the frozen build/types. Hosted discovery lists 1,078 tests across 47 files, but hosted execution remains pending. Scope: the owned draft branch merges upstream 57f22c0b61e25afa471eb9e997e3480592a22248; no other worker claim is replaced. The July coordination board is historical. The newer audit/status.md and its individual worker notes are preserved. This entry records integration ownership only, not a claim over all upstream feature lanes.
 
-Two of its findings bear directly on this document. **F13** concluded that
-unknown top-level paths redirecting to /login is the correct fail-closed
-posture and should not be weakened; SEO-004 does not contradict it, because
-/pay is not an unknown path but a page whose own code serves signed-out
-visitors — and F13 names the /api/contact-center and assistant-bridge history
-as the same class this audit has now found five times. **F14** and the
-sitemap findings landed on main via #526, which is the sitemap implementation
-the note under SEO-003 was checked against.
+- All 13866 pre-merge summary IDs survive, with no duplicates or renumbering. FLOW-FC0B97223986 again names the family-email identity workflow. Historical pull-request CI startup evidence is retained in the historical update and this integration record, rather than replacing that workflow.
+- Six existing SEO/DATA detailed records are now counted in the summary. Their scoped source evidence is retained, but FIXED + PASS is withdrawn while their complete listed workflow and current integrated verification are unfinished.
+- 112 upstream findings receive permanent master-ledger references prefixed MAIN-. Original labels and the complete upstream narrative are retained unchanged below. Two labels were already reused by upstream: F-J01 names both wallet reconciliation and a timezone guard finding; F-K01 names both unfinished Stripe claims and refused client writes. The master references qualify those collisions with WALLET/GUARD and STRIPE/CLIENT without altering their original reports. Overlapping scope is cross-referenced, not claimed as new passing functionality.
+- Each of the seven merged translation catalogues has 13,630 keys. Three-way comparison found no competing translation values; 13,627 values from the audit branch and all 13,459 values from main survive unchanged, with independent additions preserved. Main intentionally removed the non-language tableOfContents.80px0px600px key after moving that CSS constant into its component; that repair is retained.
+- The current snapshot still contains source-confirmed open work at kids/page.tsx (server-local midnight) and missions/page.tsx (sequential photo signing and ignored signing errors). Upstream's stale summary still calls readAll max truncation, invite-success handling, and family-code guidance open, although its current source already repairs them. Their integrated workflow status awaits fresh verification.
 
-Everything below this line is #524's document, unchanged.
+# Appendix — upstream audit preserved at 57f22c0b
+
+The following upstream document is preserved verbatim. It contains historical claims, overlapping scopes, superseded fix orders and the duplicate labels described above. It is evidence from its recorded sources, not the current master status or production sign-off. MAIN-prefixed rows in the summary make those discoveries part of this persistent audit.
 
 ---
 
 # Bubaly — Final Audit
 
-Two audits of bubaly.com, kept in one file because one file is the record.
+> **Two audit sessions ran against this repository at the same time**, and both
+> consolidated into this file. Git merged them cleanly, which is why there are
+> two `# Executive Summary
 
-They ran over **different surfaces** and neither supersedes the other:
+**All four workers have completed their passes.** Coverage is recorded in the
+table above, and the one area no instrument could reach is named rather than
+counted as clean: browser-executed accessibility.
 
-| Pass | Surface | Findings | Numbering |
-|---|---|---|---|
-| **A — Public surface** | marketing pages, SEO and crawler contract, robots/sitemap, headers, titles, i18n payload, plan entitlement, role entitlement | 21 | `F1`–`F21` |
-| **B — Data layer** | Supabase reads and writes, RLS and grant boundaries, nightly jobs, the build/data-cache boundary, calendar-day correctness, query plans, money concurrency, and the audit's own probes | 19 | `F-001`–`F-019` |
+Across every pass, **three findings remain blocking-or-owner and the rest are
+engineering work with an owner named** in Recommended Fix Order. The single
+blocker is unchanged: production carries the full schema against a three-row
+ledger, so every release touching `supabase/` halts at the baseline guard. It
+needs a credentialed operator; agents must not and did not.
 
-**Where they touch, stated plainly.** Only two places:
+**What changed most this round** is that the procedure for clearing that blocker
+was found not to work. **F-020**: replayed against production's actual condition,
+`supabase db push` stopped on the *first* file and left the guard unclearable.
+It had never been tested, and the two guards cited as proof could not observe the
+property they were cited for. It is now fixed, rehearsed end to end, and enforced
+on every pull request.
 
-- **The production migration ledger** is the same blocker in both — Pass A's
-  **F5** and Pass B's **F-001**. A reaches it from the CI workflow (the access
-  token cannot link the project), B from the database (the ledger records only
-  `0001–0003`, so the baseline guard halts the push). Both are true, both are
-  the same wall, and both need the same credentialed operator.
+**The pattern worth carrying forward** is that this repository's characteristic
+defect is not a broken feature but **a guard that cannot fail**. Pass J separates
+it into three distinct shapes — a scope gap, a premise gap, and an enumerated
+list with no scan behind it — and finds eight defects by hunting the shape rather
+than the bug; the sharpest is a guard that RAN on every CI job and passed
+honestly, because its own coverage assertion was satisfied by the single
+directory it read. Eleven independent instances are now on record — a money probe that could not catch the
+hole it was written for (F-004); a fix carrying the defect it fixed (F-011); a
+probe that granted itself privileges (F-015); a concurrency check that ran two
+statements sequentially (F-019); a replay that only ever ran against an empty
+database (F-020); a sweep that read one line at a time (Pass C); an index test
+blind to `UNIQUE` declarations; a digest guard asserting that identifiers are
+*spelled* rather than that digests are *sent*; and — the purest form — `i18n:gate`,
+which called itself a CI gate and ran in **no workflow at all**.
 
-  Three findings in this file are still open, and only this one is a blocker:
-  the ledger (A's **F5** / B's **F-001**) and A's **F6** both need a
-  credentialed operator, and A's **F19** is a pricing decision for the owner
-  rather than a defect.
-- **The sitemap** appears in both, and they are *different defects*. Pass A's
-  **F1**/**F3**/**F14** are about which URLs it listed — 435 that answered 404,
-  the homepage twice, nine that canonicalise elsewhere — fixed on `main` by
-  #526. Pass B's **F-012** is about the file being *stale*: correct URLs, but a
-  six-day-old copy of the blog served from Next's build Data Cache, and frozen
-  for a year. #526's URL work and F-012's freshness fix are both in the current
-  file, and neither pass would have found the other's defect.
+Two of those were mine, found by auditing my own work: a `server-only` guard I
+added that closed a hole which was never open, and a test I wrote that asserted
+the very defect it was named for. Both were caught by the same discipline, which
+is the one recommendation this audit would make above all others: **break what a
+guard protects and confirm it goes red.**
 
-Everything else is disjoint.
+**Second most frequent, and newly prominent:** a call whose error is discarded,
+followed by success reported to the user. Five nightly jobs answered HTTP 200
+while counting their own failures; blog unsubscribe confirmed consent it had not
+recorded; the Google Calendar callback reported "connected" with no token stored;
+`readAll` returned a truncated ledger as a complete one. All fixed this round.
+The invite toast and two Home widgets remain.
+
+# Critical Issues
+
+| | Finding | Status |
+|---|---|---|
+| **F-E01** | Every child can read, edit and delete the family password vault; `secret` is plaintext | **Fixed by `0296` + a CI probe — cannot reach production until F5/F-C08** |
 
 ---
 
-# Pass A — Public surface (F1–F21)
+# High Priority
+
+| | Finding | Status |
+|---|---|---|
+| F5 / F-001 | Production migrations cannot be applied — the ledger records only `0001–0003` | **BLOCKED — operator** |
+| F-C08 | The forward-release mechanism is pinned to `0240–0254`; the repo is 38 migrations past it | **Code half fixed — re-pinning is now a manifest change; the release itself is still owner/operator** |
+| F-E02 | Step-up MFA is presentational; no policy references `aal`, and guarded pages fetch straight from PostgREST | OPEN |
+| F-E03 | The `family-media` bucket is public; photos and attachments are served with no session | OPEN (known, tracked as LB-009) |
+| F-F01 | A caller-supplied `max` truncates a money read and reports success; reconciliation renders "Everything reconciles" from a prefix | OPEN |
+| F-F02 | F-017's timezone bug still live on eleven server-rendered surfaces, including the kids page | OPEN |
+| F-F03 | `/missions` issues up to 240 sequential storage round trips on the parent approval queue | OPEN |
+| F-D01 | The photo lightbox strands keyboard users: no `role="dialog"`, no Escape, no focus trap | OPEN |
+| F-D02 / F-D03 | 55 labels detached from their control; 65 `<select>` with no accessible name | OPEN |
+| F21 | A child could grant themselves a reward | Half fixed and live, half awaiting the operator |
+| F1, F9, F10, F15, F16, F18, F20 | sitemap dead URLs; whole i18n catalogue per page; seeded records shown as real customer stories; Autopilot running for every family; paid features enforced by a padlock; ungated endpoints; a child clearing the chore board | **all fixed** |
+| F-C01, F-C02, F-C03 | sitemap dated by generation time; 445 non-indexable URLs; the catalogue on every public page | **all fixed and verified in production** |
+
+---
+
+# Medium Priority
+
+F2, F4, F6, F7, F11, F17, F19 (Pass A) · F-002, F-004, F-005, F-007, F-008,
+F-009, F-010, F-011, F-012, F-013, F-014, F-015, F-016, F-018, F-019, F-020
+(Pass B) · F-C04, F-C07, F-C10 (Pass C) · F-D04–F-D10 (Pass D) · F-E04–F-E07
+(Pass E) · F-F04–F-F09 (Pass F).
+
+Still open among them: **F-C07** (19 undocumented env vars, including one whose
+absence silently rejects every inbound email), **F-C10** (the Expo app has no
+tests), **F19** (unmetered AI endpoints — a pricing decision), **F6** (family
+email built but not routed), and the Pass D/E/F entries listed in their own
+sections below.
+
+---
+
+# Low Priority
+
+F3, F8, F12, F13, F14 (Pass A) · F-C06, F-C09 (Pass C) · F-D11–F-D14 (Pass D) ·
+F-E08, F-E09 (Pass E) · F-F10–F-F13 (Pass F).
+
+---
+
+# Architecture
+
+- **F-C09** — Supabase credentials fail at first use, not at boot; a
+  misconfigured deploy degrades into scattered 500s. OPEN.
+- **Verified clean**: the server/client boundary holds (no client module
+  imports `createServiceClient` or the service-role key); the CSP matches every
+  host the browser actually calls; `npm audit --production` reports zero
+  advisories at every severity.
+
+---
+
+# Frontend
+
+Pass D in full. The root cause is **F-D10**: `.eslintrc.json` is
+`next/core-web-vitals` alone, which enables none of the `jsx-a11y` rules that
+describe F-D02, F-D03 and F-D06 — so `next lint` runs clean over ~1,000 files
+and the gap reads as a green light. Fixing the config is worth more than fixing
+any single finding beneath it.
+
+Also here: **F-D05** (19 authenticated pages render no `<h1>`; 11 render no
+heading at all), **F-D08** (all 354 authenticated pages share one loading
+skeleton), **F-D09** (ten components set state from an un-cancelled async
+effect), **F-D12** (two admin links point at routes that exist only at runtime).
+
+---
+
+# Backend
+
+**F-F01** (a capped read reporting success) is the most consequential, because
+it produces a *confidently wrong* answer about money rather than an error.
+**F-E09** (an authorization failure answering 500 rather than 403) and
+**F-F08** (`addFundsAction` writing the balance directly) sit alongside it.
+
+Pass B's twenty findings are the bulk of this area and are almost entirely
+closed.
+
+---
+
+# Database
+
+- **F-001 / F5** — the production ledger. The blocker everything else waits on.
+- **F-E01** — the vault policies. Fixed by `0296`.
+- **F-003** (`anon` held write grants on all five money tables), **F-006**
+  (cross-household AI job claiming), **F-018** (nine sequential scans),
+  **F-013** (fifty-nine over-sized reads) — all fixed.
+- **Verified**: no table is actually missing RLS once the catalogue is read
+  rather than grepped. A text scan claims 216 are; the catalogue says none.
+  Recorded because the grep result is a trap a later pass would fall into.
+
+---
+
+# Security/Auth
+
+| | Finding | Status |
+|---|---|---|
+| F-E01 | The family password vault, open to children, secrets in plaintext | Fixed by `0296`, unapplied |
+| F-E02 | Step-up MFA is a redirect; no policy knows `aal` | OPEN |
+| F-E03 | `family-media` is a public bucket | OPEN |
+| F-E04 | OAuth tokens family-member readable, while `sync_tokens` is service-only | OPEN |
+| F-E05 | `feedback-attachments` is a public bucket | OPEN |
+| F-E06 | The Contact Center secret is accepted in the query string, where it lands in logs | OPEN |
+| F-E07 | Twilio signature verification is off outside production | OPEN |
+| F-E08 | Shared-secret comparisons are not constant time | OPEN |
+| F16, F18, F20, F21, F-003, F-006 | authorization drawn on screen rather than in the database | fixed |
+
+---
+
+# UX/Accessibility
+
+Pass D. **F-D01** (the lightbox) is the one a keyboard user hits first.
+**F-D07** — 92 destructive actions guarded only by `window.confirm()` — is the
+one with the widest blast radius. **F-F11** (a discarded signing error showing a
+parent a blank frame rather than a reason) belongs here too.
+
+**Unverified, not clean**: contrast, tab order and screen-reader output.
+
+---
+
+# Performance
+
+- **F-C03** — the i18n catalogue on every public page. Fixed: `/cookies`
+  266 KB → 20 KB gzipped, `/` 291 → 45 KB.
+- **F-C04** — `/blog` shipped all 1,048 posts to the browser. Fixed:
+  89 → 40 KB gzipped, verified in production.
+- **F-F03** — up to 240 sequential storage round trips on `/missions`. OPEN.
+- **F-F09** — unbounded concurrent fan-out to an external drive-time API. OPEN.
+- **F-018** — nine family-scoped reads doing sequential scans. Fixed.
+
+---
+
+# Mobile/Responsive
+
+**F-C10** — the Expo app is 42 TypeScript files with **zero** tests, behind a CI
+job that installs, typechecks and validates config. No lint, no unit tests, no
+build. Nothing audits its dependency tree either: `npm audit` there reports 14
+moderate advisories while the web tree reports none.
+
+Responsive behaviour of the web app was checked by reading source only; the
+device matrix in CI covers the public routes.
+
+---
+
+# Integrations
+
+- **F-C07** — 19 undocumented environment variables. `CONTACT_CENTER_INBOUND_SECRET`
+  is the sharpest: the endpoint is correctly fail-closed, so unset it silently
+  rejects every inbound email. Apple calendar sync is configured by two
+  undocumented variables and is simply off until someone reads the source.
+- **F6** — family email is built but not routed. Operator config.
+- **F-E07** — Twilio signature verification depends on `NEXT_PUBLIC_APP_URL`
+  being exactly right.
+- **Workflow health**: `cron-dispatch`, `supabase-schema-audit`,
+  `finance-transaction-operation-runtime` and `travel-confirmation-runtime` are
+  all healthy. `supabase-forward-release` and `supabase-production-migrations`
+  are not — see F-C08 and F5.
+
+---
+
+# Testing/QA
+
+Audited by **Claude-4** (Pass F, plus follow-on passes G–K) and by Claude-1 on
+the audit's own instruments.
+
+- **HIGH** three production paths read only the first 50 auth users, and one of
+  them marks work complete on that basis. **OPEN.**
+- **MEDIUM** the only guard on the two digest crons asserts that identifiers are
+  *spelled*, not that the digests are *sent* — a guard that cannot fail. **OPEN.**
+- Claude-1 closed the purest instance found anywhere in this audit: `i18n:gate`
+  called itself a CI gate and ran in **no workflow**. **Fixed.**
+- Claude-1 verified the SQL probe suite: all 18 `*-check.sql` genuinely assert
+  (15 raises down to 1); the four files outside the runner's glob are report-only
+  by design and none has an assertion parked in it; `run-probes.sh` already
+  refuses an empty glob. A guard now stops a future probe from asserting nothing.
+- **Three independent vacuous-test sweeps** (Claude-4, differing heuristics) and
+  a fourth on the instruments converged on the same small set, all already fixed.
+  `pg-bootstrap.sh` seeds the database before CI's probes run, so the
+  "probe against an empty DB" class — this repository's worst defect, F-020 —
+  stays closed for the whole suite.
+
+**Scale:** 13,669 unit tests across 1,192 files; 18 SQL boundary probes; E2E with
+a mobile device matrix; and the migration re-apply gate added this pass.
+
+# Broken/Incomplete Features
+
+- **A family can be left with zero managers, and nothing can restore one**
+  (Claude-4, HIGH). No `family_members` trigger guards the last manager.
+  **OPEN** — the remedy is a migration, so it is behind F-001.
+- **The Family screen tells users to share a family code, and nothing redeems it**
+  (Claude-4, MEDIUM). Zero redemption call sites — a dead affordance in the
+  product's own onboarding copy. **OPEN.**
+- **Three paths read only the first 50 auth users** (Claude-4, HIGH), one marking
+  work complete on that basis. **OPEN.**
+- **The invite email result is discarded and the success toast is unconditional**
+  (Claude-4, MEDIUM) — the same shape as the four fixed this pass. **OPEN.**
+- **Family email** (F6) — built, not routed. Operator config.
+- **AI metering** (F19) — most AI endpoints run unmetered. Owner decision.
+- **`endEmergencyAction` writes no audit row at all** — recorded in Pass C.
+- Five migrations authored but not applied to production (see Database).
+
+# Technical Debt
+
+- **F-D10** — the lint config that permits the whole accessibility class.
+- **F-F12** — the vitest config's JSX block is dead under vitest 4.
+- **F-F13** — sixty-nine test blocks assert only the absence of a pattern.
+- **F-D13** — 172 index-derived React keys.
+- **F-C09** — no central environment validation.
+- **The release process itself** — two mechanisms, both non-functional, one
+  pinned to a release 38 migrations old. This is debt that has become a blocker.
+
+---
+
+# Recommended Fix Order
+
+**Owner / operator — nothing below this line can ship without it:**
+
+1. **Repair the production ledger** (F-001 / F5) via `docs/runbooks/LB-016-…md`
+   §4 — now rehearsed end to end and enforced by CI. Unblocks everything under it.
+2. **Apply the held migrations** — `0290` money grants, `0292` privileged RPC,
+   `0293` `related_id` type, `0295` reward redemption, `0296` social-access
+   delete. Until then F-003, F-006, F-010, F21 and I-01 are only half-live.
+3. **Route family email** (F6). **Decide AI metering** (F19).
+
+**Engineering, highest consequence first:**
+
+4. The **zero-managers lockout** — a household that cannot be administered at
+   all. Needs a migration, so it queues behind step 1.
+5. The **50-user ceiling** on three production paths, one of which marks work
+   complete on a partial read.
+6. **Propagate the ILIKE escaping** to the 5 remaining sibling call sites.
+7. The **unbounded weekly-digest loop** and its spelling-only guard.
+8. The **dead family-code affordance** — either implement redemption or remove
+   the instruction telling users to use it.
+9. The **unconditional invite-success toast**; the **two Home widgets** that
+   swallow read errors; **component-level error boundaries** for Home.
+10. Pin or guard the Node-sensitive runtime test; wire `verify:oauth` where the
+    OAuth environment actually exists.
+
+**Not in this list on purpose:** `verify:oauth` in the PR job. It would be a
+green check with nothing to inspect — see Medium Priority.
+
+# Verification Checklist
+
+Commands, with what a good answer looks like. Everything ticked was run.
+
+- [x] `npx tsc --noEmit` → clean
+- [x] `npm run lint` → 0 errors (4 baseline warnings)
+- [x] `npx vitest run` → 13,669 pass across 1,192 files
+- [x] `npm run build` → exits 0
+- [x] `npm run db:audit:migrations` / `db:audit:queries` → no collisions; every
+      table, column, function and route resolves
+- [x] `npm run i18n:gate` → 8 surfaces clean — **and now runs in CI**
+- [x] `bash docs/audit/verify-pg.sh up` → all migrations applied, 0 failed
+- [x] `bash docs/audit/rehearse-ledger-repair.sh` → **FAILED: 0**, `0004` recorded
+- [x] `bash docs/audit/run-probes.sh` → all probes pass
+- [x] `node scripts/check-conflict-targets.mjs` → every target inferable
+- [x] Frontend / accessibility pass (Claude-2, Pass D — 18 findings)
+- [x] API authorization sweep over all 146 routes (Claude-3, Pass E)
+- [x] End-to-end flow + edge-case pass (Claude-4, Pass F and follow-ons)
+- [ ] **Browser-executed** accessibility: colour contrast, tab order,
+      screen-reader output, live overlap at 360–400px — *no browser was available
+      to any worker; reasoned from source, which is not the same thing*
+- [ ] Production: ledger repaired and five migrations applied (operator)
+
+**The check that matters most here, and the one to repeat on anything new:**
+break what a guard protects and confirm it goes red. Every fix in this pass was
+verified that way, and it is what caught a "fix" of mine that closed a hole which
+was never open, and a test of mine that asserted the defect it was named for.
+
+# Part 0 — Consolidated view
+
+Maintained by **Claude-1** (coordinator). This part is a roll-up **over** the
+detailed passes below, not a replacement for them: every entry points at the
+finding that carries the evidence. Nothing below Part 0 is rewritten or removed
+when this view is rebuilt.
+
+Worker findings live in `audit/claude-1.md` … `audit/claude-4.md`; `audit/status.md`
+is the board. Only Claude-1 edits this file.
+
+**Honesty rule for this part:** a heading with no findings says so. An area no
+worker has audited yet is recorded as *not yet audited*, never as "clean" —
+*"we checked"* and *"we could not see"* must not read the same on the page.
+
+## Coverage as of this rebuild
+
+| Area | Audited by | Depth |
+|---|---|---|
+| Public surface, SEO, entitlement, child sign-in | Pass A (F1–F22) | deep |
+| Data layer, RLS, grants, cron, query plans, money concurrency | Pass B (F-001–F-020) | deep |
+| Architecture / integration seams | Claude-1 | in progress — config contract, cron auth, service-role boundary done |
+| Frontend / UI / responsive / accessibility | Claude-2 | deep — `audit/claude-2.md`, consolidated as Pass D |
+| Backend / API / auth / security | Claude-3 | deep — `audit/claude-3.md`, consolidated as Pass E |
+| QA / flows / performance / edge cases | Claude-4 | deep — `audit/claude-4.md`, consolidated as Pass F |
+
+**Correction.** An earlier revision of this table said all three were "not
+audited — worker hit the account session limit". One dispatch of those workers did
+hit a 429, but other parallel sessions had already completed those passes and
+pushed them; this document carries them as Passes C–K. The stale line is recorded
+here rather than silently replaced, because a wrong coverage claim in an audit is
+the same defect as F13 — a reader trusts it and stops looking.
+
+# Executive Summary
+
+Two deep passes are complete (41 findings, `F1`–`F22` and `F-001`–`F-020`), and
+a coordinator pass on architecture and integration is in progress. **Three
+findings remain open, and exactly one is a release blocker.**
+
+The blocker is the production migration ledger (A's **F5** / B's **F-001**):
+production carries the full schema but a three-row ledger, so every release
+touching `supabase/` halts at the baseline guard. It needs a credentialed
+operator; agents must not apply it.
+
+The most consequential finding of this pass is **F-020**, because of what it
+says about the others: the documented procedure for clearing that blocker
+**did not work**, and had never been tested. It cited two guards as proof and
+neither could observe the property it claimed. Replayed against production's
+actual condition it stopped on the first file. That is now fixed, rehearsed,
+and enforced by CI on every pull request.
+
+The pattern worth carrying into the remaining passes: **the failures here are
+mostly guards that could not see what they were named for** — a sweep that read
+one line at a time (Pass C), a probe that granted itself privileges (F-015), a
+concurrency check that never ran two things at once (F-019), an index test that
+could not see `UNIQUE` declarations, a replay that ran only against an empty
+database (F-020). Verifying that a guard fails when it should is the single
+highest-yield check in this repository.
+
+# Critical Issues
+
+| # | Finding | Status |
+|---|---|---|
+| **F-020** | The documented production-recovery procedure did not work — `db push` stopped on `0004` and left the guard unclearable | **FIXED** + CI gate |
+
+# High Priority
+
+| # | Finding | Status |
+|---|---|---|
+| **F5 / F-001** | Production migration ledger records only `0001`–`0003`; every schema release is blocked | **BLOCKED — operator** |
+| F15 | Family Autopilot ran for every family on the platform | fixed |
+| F16 | Paid features enforced only by the sidebar padlock | fixed |
+| F18 | Endpoints behind gated pages had no gate | fixed |
+| F20 | A child could clear the chore board | fixed |
+| F21 | A child could grant themselves a reward | fixed (app) · `0295` awaiting operator |
+| F22 | A child's username was matched as a pattern | fixed |
+| F1 | The sitemap advertised 435 dead URLs | fixed |
+| F9 | The entire i18n catalogue ships on every page | closed as a decision |
+| F10 | Seeded records presented as real customer stories | fixed |
+| F-003 | `anon` held INSERT/UPDATE/DELETE on all five money tables | fixed · `0290` awaiting operator |
+| F-005 | Every blog post not baked in at build time returned 500 | fixed |
+| F-006 | Any signed-in user could claim another household's AI jobs | fixed · `0292` awaiting operator |
+| F-008 | Six nightly jobs silently stopped at 1,000 rows | fixed |
+| F-010 | Notification generation failed outright for affected households | fixed · `0293` awaiting operator |
+| F-011 | The fix for F-008 had the same defect it was written to fix | fixed |
+| F-012 | The sitemap was six days stale and would have stayed stale for a year | fixed |
+| F-013 | 59 reads asked for more rows than the server would ever return | fixed |
+| F-014 | Notification dedupe failed on every run | fixed |
+| F-017 | A family's "today" was Greenwich's today | fixed |
+| F-018 | Nine family-scoped reads were sequential scans | fixed |
+| F-019 | The money-safety probe asserted concurrency it never tested | fixed |
+| CLAUDE-1 | Nothing enforced migration idempotency, so it could regress silently | fixed (CI gate) |
+| CLAUDE-1 | Two branches independently claimed migration version `0295` | fixed (renumbered `0296`) |
+| CLAUDE-1 | A merge would have reopened the child-self-approval hole | fixed |
+| CLAUDE-1 | `/api/health` reported `ok` while a missing `CRON_SECRET` silently 401'd all 24 scheduled jobs, and a missing `CHILD_LOGIN_SECRET` disabled child sign-in | fixed |
+| CLAUDE-1 | Five nightly jobs answered HTTP 200 while counting their own failures; no cron route writes a durable run record | fixed |
+| CLAUDE-1 | `i18n:gate` calls itself a CI gate and ran in no workflow, while this document listed it as a passing check | fixed |
+| CLAUDE-3 → CLAUDE-1 | Inbound email routed by an unescaped ILIKE wildcard from the sender's own `To` header, reaching another family's Contact Center | **fixed** |
+| CLAUDE-4 → CLAUDE-1 | `readAll` returned a truncated ledger with `error: null`; the wallet reconciliation page would report that a partly-read ledger balanced | **fixed** |
+| CLAUDE-2 → CLAUDE-1 | Google Calendar callback discarded both its read and write errors — reported "connected" with no token stored, and could wipe every other notification preference | **fixed** |
+| CLAUDE-2 → CLAUDE-1 | Blog unsubscribe confirmed consent it had not recorded, and told real subscribers their valid link was wrong | **fixed** |
+
+# Medium Priority
+
+| # | Finding | Status |
+|---|---|---|
+| **F6** | Family email is built but not routed | **OPEN — operator config** |
+| **F19** | Most AI endpoints run unmetered | **OPEN — pricing decision for the owner** |
+| F2 | `robots.txt` omitted 20 authenticated surfaces | fixed |
+| F4 | The test named for F1's property could not observe it | fixed |
+| F7 | The family email gate existed only on the screen | fixed |
+| F11 | Five public pages had no `<h1>` | fixed |
+| F17 | The documented tier map disagreed with the enforced one | fixed |
+| F-004 | The money-boundary probe could not catch F-003 in CI | fixed |
+| F-007 | The additive-migrations guard flagged a revoke as destructive | fixed |
+| F-009 | A provider error in the mailer took down the whole cron run | fixed |
+| F-015 | A probe granted itself privileges and left them, poisoning the suite | fixed |
+| F-016 | The documented crawl workflow drops a live session cookie into the tree | fixed |
+| CLAUDE-1 | `/api/contact-center` was public as a prefix, not as exact paths | fixed |
+| CLAUDE-1 | A runtime gate fails on this Node and passes on CI's | **OPEN — worker collision** |
+| CLAUDE-1 | `verify:oauth` is also unwired — but wiring it to the PR job would make it vacuous, so the obvious fix is refused | **OPEN — recommended** |
+
+# Low Priority
+
+| # | Finding | Status |
+|---|---|---|
+| F3 | The homepage was published twice | fixed |
+| F8 | Page titles doubled the brand | fixed |
+| F12 | The 404 page ships no server-rendered markup | closed — recorded |
+| F14 | Nine sitemap URLs declare themselves non-canonical | fixed by #526 |
+| **F13** | Unknown top-level paths redirect to login | **SUPERSEDED — see below** |
+| CLAUDE-1 | The service-role boundary was real but inherited from an incidental `next/headers` import rather than declared | fixed (hardening) |
+| CLAUDE-1 | Mobile imported from a folder Metro does not watch; safe only because the import is type-only, and no CI job bundles the app | fixed (guard added) |
+| CLAUDE-1 | `generateStaticParams` read the whole blog table on every build while `force-dynamic` made it incapable of prerendering anything | fixed |
+
+# Architecture
+
+Claude-1's scope. Detail in `audit/claude-1.md`.
+
+- **F-020** and its CI gate are the substantive architectural findings of this
+  pass: the repository's recovery story depended on a property (migration
+  idempotency) that nothing enforced and one guard actively misrepresented.
+- **Migration numbering is a cross-branch race.** `schema_migrations` has a
+  PRIMARY KEY on `version`, but the guard that protects it
+  (`tests/migration-version-safety.test.ts`) can only see one branch at a time.
+  Two branches took `0295` simultaneously. The guard did its job *after* the
+  merge, which is the only moment it can — worth knowing when several sessions
+  author migrations in parallel, as they are now.
+- **Merge direction carries security weight.** Resolving a conflict toward the
+  branch rather than toward `main` silently reverted a fix in one case
+  (rewards) and would have widened an auth boundary in another (contact-center).
+  On this repository a merge conflict in an auth or money path deserves the same
+  scrutiny as the original change.
+
+# Frontend
+
+Audited by **Claude-2** — 18 findings in `audit/claude-2.md` (C2-01–C2-18),
+consolidated as **Pass D**. Distribution: 5 HIGH, 9 MEDIUM, 4 LOW, 0 critical.
+
+The defining result is that this surface carries the same defect shape the
+backend does — **success reported after a write whose error was never read**:
+
+- **C2-16** `/api/blog/unsubscribe` confirmed consent it had not recorded, and
+  told real subscribers holding valid links that the link was wrong. **Fixed.**
+- **C2-17** the Google Calendar callback reported "connected" with no token
+  stored, and a refused *read* would overwrite every other notification
+  preference. **Fixed.**
+- **C2-15** two Home widgets drop `useRealtimeQuery`'s `error`, so a failed read
+  is indistinguishable from "nothing today". Confirmed to be the **only two
+  exceptions across all 113 consumers** — the contract holds everywhere else.
+- **C2-18** no component-level error boundary exists anywhere (0 `ErrorBoundary`,
+  6 `<Suspense>` app-wide, none on Home), so a throw in any one of Home's 13
+  widgets takes the whole dashboard to `error.tsx`.
+
+**Examined and sound:** the `useRealtimeQuery` failed-read contract across every
+`components/` subdirectory; raw-i18n-key regression tests built from two real
+incidents (both run, both pass); non-English catalogues confirmed absent from
+client bundles; alt text clean in the authenticated app (0/57 `<img>`, 0/6
+`<Image>`).
+
+# Backend
+
+Covered by Pass B (data layer) and Pass E (**Claude-3**, `audit/claude-3.md`),
+with Pass A covering entitlement on gated endpoints. The 146-route
+authentication mapping is **done** — every route authenticates, and the public
+set in `lib/auth/route-access.ts` was confirmed to authenticate internally or to
+need none.
+
+Claude-3's marginal pass went past "is there a guard" to "does the guard check
+that THIS row belongs to the caller":
+
+- **HIGH** inbound email routing matched families by an unescaped ILIKE wildcard
+  drawn from the sender's own `To` header. **Fixed** — see Security/Auth.
+- **MEDIUM** the child-sign-in ILIKE-escaping fix did not propagate to 5 sibling
+  call sites, three of which are AI-assistant-driven writes that mutate "the
+  first ILIKE match" — a title containing `%` can complete or reschedule the
+  wrong reminder. All family-scoped, so no cross-tenant leak. **OPEN.**
+- **LOW/VERIFIED** two moment actions trust a client-supplied `familyId`; checked
+  the negative case rather than assuming — `0004_rls.sql` puts those tables under
+  `is_family_member(family_id)`, so it is not exploitable. Recorded as
+  defence-in-depth, not a vulnerability.
+
+**Examined and sound:** the `ServiceScope`/`scopeFromUserContext` abstraction
+across all 45 call sites (none exercises the unsafe `extra` override); money,
+chore, inbox, billing and sync paths all derive `familyId` from session context
+rather than the request body.
+
+# Database
+
+Pass B's core surface, plus Claude-1's F-020 work.
+
+- 308 migrations, replay 0 → 308 clean, and now **re-appliable** onto a populated
+  schema (the F-020 gate).
+- 19 boundary probes under `docs/audit/`, globbed by `run-probes.sh`, all passing.
+- Open: the production ledger (F-001). Five migrations (`0290`, `0292`, `0293`,
+  `0295`, and #541's `0296`) are authored, tested, and **not in production**.
+
+# Security/Auth
+
+- Pass A found and closed four privilege-escalation classes (F15, F16, F18, F20,
+  F21, F22) — all but F21's migration half are live.
+- Pass B closed the money-table grant hole (F-003) and cross-household AI job
+  claiming (F-006).
+- Claude-1 this pass: prevented a merge from reopening F21's app half, and
+  narrowed `/api/contact-center` from a public prefix to five exact paths.
+- Claude-1 verified the **service-role boundary** by planting a `'use client'`
+  page that imports `createServiceClient`: the build fails, and the key's value
+  is absent from every emitted client chunk. It failed *before* the change too
+  (via `next/headers`), so the boundary was sound and the fix is hardening — the
+  protection is now declared rather than inherited. Recorded that way rather than
+  as a closed vulnerability.
+- All 24 cron routes enforce `hasCronAuthorization`, which is correctly
+  fail-closed (`!!secret &&`, so an unset secret cannot become a matchable
+  `Bearer undefined`). Now asserted per-route by a test rather than by grep.
+- **The 146-route sweep is done** (Claude-3, Pass E). Every route authenticates;
+  the public set was confirmed to authenticate internally or to need none. The
+  residue was authorization rather than authentication — see Backend, and the
+  inbound-email wildcard below.
+- **Inbound email routing** matched families by an unescaped ILIKE wildcard taken
+  from the sender's own `To` header. `_` is both a legal local-part character and
+  LIKE's single-character wildcard, so `smit_@bubaly.com` resolved to the family
+  owning `smith`. Verified in PostgreSQL 16 — `'smith' ilike 'smit_'` is true,
+  `'smith' ilike 'smit\_'` is false, and `'smit_h' ilike 'smit\_h'` stays true,
+  which is why the fix escapes rather than switching to `.eq`. **Fixed.**
+- **Still open:** the same escaping is missing at 5 sibling call sites, three of
+  them AI-driven writes that mutate the first ILIKE match. All family-scoped, so
+  no cross-tenant leak — a wrong-row write, not a boundary breach.
+
+# UX/Accessibility
+
+Audited by **Claude-2** (Pass D). Accessibility findings are recorded in
+`audit/claude-2.md`; alt-text coverage in the authenticated app is clean, the
+hand-rolled `Modal` sizes correctly at small viewports (bottom sheet,
+`max-h-[85dvh]`, safe-area padding), and icon-only button labelling was counted
+with a brace-aware parser rather than a regex.
+
+**Honest limit, stated rather than papered over:** no browser was available to
+the worker, so **colour contrast, real tab order, screen-reader output and live
+overlap at 360–400px remain unverified by execution.** They were reasoned about
+from source, which is not the same thing. This is the one area of the audit where
+the instrument could not reach the property.
+
+# Performance
+
+Covered by Pass F (**Claude-4**) plus F-009/F-018 and the row-ceiling work in
+Pass B.
+
+- **MEDIUM** the weekly digest is an unbounded per-family serial loop on a route
+  with no `maxDuration` — it degrades as the platform grows rather than failing
+  outright. **OPEN.**
+- **HIGH** three production paths read only the first 50 auth users, and one
+  marks work complete on that basis. **Recorded; see Broken/Incomplete Features.**
+- Nine family-scoped sequential scans became index scans, measured at 700k rows
+  (F-018).
+
+**Examined and sound:** `lib/server/push.ts` (memoised per-family lookup, not
+N+1); the messages module's per-row fallback (RPC-first, capped at 100, only on
+RPC failure); guardian history (real `.range()`); admin audit (bounded window);
+~15 average/percentage calculators checked for the single-member and no-data
+division-by-zero edge — every site guarded.
+
+# Mobile/Responsive
+
+Two independent results.
+
+**Claude-1 (architecture):** the mobile app's bundle boundary was holding by
+accident — `mobile/src` imports from `lib`, which Metro does not watch, safe only
+because the import is type-only and the target has no runtime exports. No CI job
+bundles the app, so a regression would have been invisible until a real build.
+Now guarded by a test that reads the watch list out of `metro.config.js`.
+
+**Claude-2 (responsive):** CI already gates no-horizontal-overflow and no
+sub-16px inputs across iphone-se / iphone / pixel / ipad. Beyond that gate,
+modals and sheets were reviewed from source and size correctly. As under
+UX/Accessibility, live viewport behaviour at 360–400px is **not** confirmed by
+execution — no browser was available.
+
+# Integrations
+
+Claude-1's scope, in progress.
+
+- CI (`ci.yml`): five jobs; the Database job now carries the idempotency gate.
+- Supabase: service-role vs anon client split; production ledger blocked (F-001).
+- Vercel: deploys on merge to `main`; code fixes reach production, schema does not.
+- Provider webhooks: Twilio (contact centre, Guardian), email inbound — each
+  authenticates in its own handler; middleware must let them through, which is
+  the exact-path narrowing above.
+- **Cron observability:** 0 of 24 routes write a durable run record, so the HTTP
+  status is the only signal a run failed. Five routes answered 200 while counting
+  failures; all five now answer 502, matching the other 19.
+- **Config contract:** 79 distinct env vars, no central schema. `/api/health` now
+  reports a `FEATURE_ENV` tier as `degraded`/200 — the six secrets whose absence
+  silently disables a whole subsystem. Previously invisible; see High Priority.
+- **Email:** `RESEND_API_KEY` is env-only across five read sites. Unset, every
+  send reports success and notification rows are marked delivered, so the dedupe
+  suppresses the retry — mail that was never sent, recorded as delivered. Now in
+  the `FEATURE_ENV` tier, so `/api/health` reports it.
+- **Not exhaustively audited:** push/APNs delivery internals and calendar-feed
+  subscriber behaviour were reviewed for silent-failure shape but not traced
+  end to end against a live provider.
+
+# Testing/QA
+
+- 13,641 unit tests across 1,187 files on #541's merged tree; 15,806 on #510's.
+- 19 SQL boundary probes; E2E with a mobile device matrix.
+- **The recurring defect class is vacuous guards** — see the Executive Summary. Its
+  purest form turned up this pass: `i18n:gate` could not fail because no workflow
+  invoked it. When auditing a guard, check first that something runs it.
+  Claude-4 should treat "revert the fix and confirm the test fails" as the
+  standard for any guard it reviews, not an optional extra.
+- Open: `tests/stream-cancellation-runtime.test.ts` is Node-patch-sensitive.
+
+# Broken/Incomplete Features
+
+- **Family email** (F6) — built, not routed. Operator config.
+- **AI metering** (F19) — most AI endpoints run unmetered. Owner decision.
+- **`endEmergencyAction` writes no audit row at all** — recorded in Pass C as a
+  missing feature rather than a discarded result.
+- Five migrations authored but not applied to production (see Database).
+
+# Technical Debt
+
+- `docs/PENDING_PROD_MIGRATIONS.md` describes a baseline that is 70+ migrations
+  behind; the range sentence has been corrected twice by the range simply growing.
+- 17 historical duplicate migration versions were renamed; `ci-dedupe-migration-versions.mjs`
+  remains as a no-op safety net.
+- Four baseline `react-hooks/exhaustive-deps` lint warnings.
+- `finalaudit.md` is now large enough that three concurrent sessions conflict in
+  it on nearly every merge. Part 0 exists partly to give a stable place to read
+  the state without diffing the whole file.
+
+# Recommended Fix Order
+
+1. **Operator: repair the production ledger** (F-001 / F5), following
+   `docs/runbooks/LB-016-…md` §4 — now rehearsed end to end. This unblocks
+   everything below it.
+2. **Operator: apply the five held migrations** — `0290` (money grants),
+   `0292` (privileged RPC), `0293` (`related_id` type), `0295` (reward
+   redemption), `0296` (social-access delete). Until then F-003, F-006, F-010,
+   F21 and I-01 are only half-live.
+3. **Operator: route family email** (F6).
+4. **Owner: decide AI metering** (F19).
+5. Pin or guard the Node-sensitive runtime test.
+6. Run the three unstarted worker passes (Claude-2, -3, -4).
+
+# Verification Checklist
+
+Commands, with what a good answer looks like. Everything here was run this pass
+unless marked.
+
+- [x] `npx tsc --noEmit` → clean
+- [x] `npm run lint` → 0 errors (4 baseline warnings)
+- [x] `npx vitest run` → all pass (13,641 on #541's tree)
+- [x] `npm run build` → exits 0
+- [x] `npm run db:audit:migrations` → no collisions
+- [x] `npm run db:audit:queries` → every table, column, function, route resolves
+- [x] `bash docs/audit/verify-pg.sh up` → all migrations applied, 0 failed
+- [x] `bash docs/audit/rehearse-ledger-repair.sh` → **FAILED: 0**, `0004` recorded
+- [x] `bash docs/audit/run-probes.sh` → 19/19
+- [x] `node scripts/check-conflict-targets.mjs` → every target inferable
+- [x] Gate proven load-bearing: plant an unguarded `create policy`, confirm the
+      rehearsal fails **and** the from-scratch replay does not
+- [x] Service-role boundary: plant a `'use client'` importer, confirm the build
+      fails **and** confirm the control (guard removed) fails too — otherwise you
+      are reporting a hole that was never open
+- [x] `/api/health` degraded tier proved load-bearing by reverting the branch
+- [ ] Frontend / accessibility pass (Claude-2)
+- [ ] API authorization sweep over all 146 routes (Claude-3)
+- [ ] End-to-end flow + edge-case pass (Claude-4)
+- [ ] Production: ledger repaired and five migrations applied (operator)
+
+---
+
+# Pass A — Public surface (F1–F22)
 
 Full audit of bubaly.com: what was checked, what was found, what was fixed, and
 what remains — with an owner for every remaining item. Every finding here was
 reproduced against the live site or the real code path before being written
 down; nothing is inferred from a filename or a comment.
 
-**Audit status: reopened, then complete again.** Twenty-one findings, and the
+**Audit status: reopened, then complete again.** Twenty-two findings, and the
 arithmetic stated exactly rather than approximately:
 
 | | |
 |---|---|
-| **Fixed in code** | **14** — F2, F4, F7, F8, F10, F11, F15, F16, F17, F18, F20 from this audit; F1, F3, F14 on `main` via #526, whose sitemap implementation superseded mine and which I withdrew in its favour |
+| **Fixed in code** | **15** — F2, F4, F7, F8, F10, F11, F15, F16, F17, F18, F20, F22 from this audit; F1, F3, F14 on `main` via #526, whose sitemap implementation superseded mine and which I withdrew in its favour |
 | **Written, proven, not yet live** | **1** — F21's durable half. The trigger can only land as a migration, and the migration workflow is F5's blocker; CI replays and probes it on every pull request. Its client-side half — the app no longer deciding status, decider or price — *is* live |
 | **Closed without a code change** | **4** — F9 (a decision, with the design and the numbers recorded), F12 (recorded; the fix is not worth its risk), F13 (correct as built — fail-closed routing), F19 (a pricing decision the owner has to make; the numbers are below) |
 | **Blocked on credentials** | **2** — F5 (Supabase access token *and* the ledger baseline gate) and F6 (`CONTACT_CENTER_INBOUND_SECRET` + MX records) |
@@ -20812,6 +21641,7 @@ Nothing is left unexamined or unassigned.
 | F19 | `AI_MONTHLY_ALLOWANCE` is enforced on 4 of the 39 AI routes; 35 run unmetered | Medium | **Open — a pricing decision, recorded** |
 | F20 | A child could delete any chore on the family's board, and mint chores for a sibling | High | **Fixed** |
 | F21 | A child could self-approve a reward redemption — the third decision forgery, and the only one left unguarded | High | **Half fixed and live; the durable half awaits the F5 operator** |
+| F22 | A child's username was matched as a LIKE **pattern**, so every wildcard spelling was a fresh brute-force budget against their PIN | High | **Fixed** |
 
 ---
 
@@ -21246,7 +22076,7 @@ nothing at all without JS. Recorded with evidence rather than fixed, because the
 fix touches how `not-found.tsx` resolves translations and the payoff is small;
 worth doing deliberately rather than as a drive-by.
 
-## F13 — Unknown top-level paths redirect to login *(By design — no change)*
+## F13 — Unknown top-level paths redirect to login *(Superseded — main #544 fixed it a third way)*
 
 `/nope` answers **307 → `/login?redirect=%2Fnope`** rather than 404. Paths under
 a known public prefix behave correctly: `/blog/nope`, `/features/nope` and
@@ -21259,9 +22089,29 @@ assistant-bridge history on this codebase is about routes that were *missing*
 from an allowlist. The cost is that a typo'd marketing URL lands on a login page
 and search engines see a soft 404 instead of a hard one.
 
-Deliberately **not changed**: trading fail-closed routing for a nicer typo
-experience is a bad exchange, and weakening auth routing is off-limits. Recorded
-so the trade-off is known rather than rediscovered.
+Deliberately **not changed** at the time: trading fail-closed routing for a nicer
+typo experience is a bad exchange, and weakening auth routing is off-limits.
+Recorded so the trade-off is known rather than rediscovered.
+
+> **Superseded on 2026-09-13 by main #544** — and the reasoning above is why this
+> note matters rather than a quiet edit. This entry told a future reader the
+> change was off-limits. It is not, because #544 did not take either side of the
+> trade-off as stated. It added an explicit **`PROTECTED`** list alongside
+> `PUBLIC` in `lib/auth/route-access.ts`, so a path is now one of three things
+> rather than two:
+>
+>     isPublic    -> serve it
+>     isProtected -> require a session      (fail-closed, unchanged)
+>     neither     -> fall through to the router, which 404s
+>
+> An unlisted app route is still protected, because app routes live under
+> prefixes that are in `PROTECTED`. `/nope` is under neither list, so it is a
+> path with no route and answers 404. Fail-closed routing is preserved exactly;
+> the soft 404 is gone.
+>
+> The general lesson is worth more than the fix: a finding closed as "an
+> unavoidable trade-off" is a finding that stopped looking for a third option.
+> **Do not revert #544 on the strength of the paragraph above it.**
 
 ---
 
@@ -21758,6 +22608,72 @@ visible rather than inferred from the absence of a row.
 
 This is the one finding in this audit whose fix I could write but not land.
 
+## F22 — A child's username was matched as a pattern *(High, fixed)*
+
+`lib/auth/child-throttle.ts` states the stakes in its own header: *"a 4-digit
+PIN is only 10,000 combinations and kid usernames are guessable (suggested from
+the display name), so unthrottled sign-in is a real account-takeover risk."* The
+throttle it implements is the control that makes a 4-digit PIN survivable — five
+failures per username per fifteen minutes, then an escalating lockout.
+
+Sign-in resolved the account with `.ilike('username', username)`. In SQL LIKE,
+**`_` matches any single character**. `USERNAME_RE` anchors both ends to
+`[a-z0-9]`, so `%` and an edge underscore are refused — but it permits `_` in
+between:
+
+| Typed | Valid username? | `ILIKE` matches |
+|---|---|---|
+| `a%ice` | no | — |
+| `alic_` | no | — |
+| `a_ice` | **yes** | `alice` |
+| `a___e` | **yes** | `alice` |
+
+Verified against PostgreSQL 16 rather than reasoned about: `where username ilike
+'a_ice'` returns `alice`; `where username = 'a_ice'` returns nothing.
+
+### Why that broke the throttle rather than the password
+
+On its own a wildcard match is not a bypass — the attacker still needs the PIN,
+and sign-in proceeds as `row.username`, the real account. What it broke is the
+budget.
+
+The throttle is keyed on the username **as typed** (`child_login_throttle.username`),
+while the lookup treated that same string as a **pattern**. So every wildcard
+spelling was a different throttle key pointing at one real account:
+
+```
+alice → a_ice  al_ce  ali_e  a__ce  a_i_e  al__e  a___e      (7 spellings)
+```
+
+Eight keys × five failures = **40 attempts per fifteen minutes instead of 5**. An
+eight-character username yields 63 spellings — **320 per window**. The per-IP
+limiter (30/min) is then the only remaining bound, and it is per-IP, not
+per-account, so it does not constrain an attacker with addresses to spend.
+
+### The fix
+
+`eq`, not an escape. Both sides are already lowercased by `normalizeUsername` —
+the create path normalizes before inserting and sign-in normalizes before looking
+up — so the case-insensitive match was buying nothing and costing the throttle
+its purpose. `eq` removes the metacharacter class rather than escaping it.
+
+The same change is applied to the "is this username free?" check in
+`child-login-actions.ts`, which had the same `ilike` and was therefore answering
+about a *different* login than the one being created. Over-strict rather than
+under-strict, but wrong either way.
+
+**This is consistent with the repository, not a new idea in it.** `escapeLike`
+and inline `%_` escaping already appear in a dozen service queries — home, trips,
+inventory, groceries, meals, finances. The two lookups that did not escape were
+the two on the authentication path.
+
+### What was left alone
+
+Roughly a dozen `ilike('…', '%term%')` search queries do not escape. In a search
+box an unescaped `_` makes the match slightly fuzzier and nothing more — there is
+no throttle keyed on the term and no credential behind it. Widening this change
+to cover them would have buried a security fix inside a refactor.
+
 ## Reconciliation with #526 — how the sitemap findings actually landed
 
 #526 merged to `main` as `61ad4bb0` while this branch was open, and it rewrote
@@ -21821,6 +22737,22 @@ That coupling introduced one hazard worth pinning: the matcher is `=== p` or
 | Unresolved work markers | 38 `TODO`/`FIXME` in source; the substantive ones are migration-gated and explicitly marked "owner approval required", i.e. blocked behind F5. None independently closeable |
 | Health endpoint | `status: ok` — env, database ~98ms, auth ~90ms, serviceRole ~508ms |
 | Auth gating | All 20 authenticated segments answer 307 to `/login` when signed out |
+
+### Checked during the entitlement sweeps, and sound
+
+These were examined because they were the *next plausible instance* of a shape
+this audit kept finding. None of them was one. Recording that matters: an audit
+that lists only defects says nothing about what was actually looked at, and the
+next person needs to know which stones were already turned.
+
+| Area | What was checked | Why it is sound |
+|---|---|---|
+| **Payment webhooks** | `/api/webhooks/stripe`, `/money`, `/resend` | All three verify signatures before touching anything — Stripe via `constructEvent`, Resend via HMAC with `timingSafeEqual`. All fail **closed** when the secret is unset (503, not "allow"). Stripe additionally bounds the body and dedupes by event id under a claim token. This matters more than it looks: every plan gate in F15–F18 rests on `subscriptions`, and this is what writes it |
+| **SSRF on user-supplied URLs** | `public-calendar-fetch`, `public-document-fetch`, `public-media-fetch` | Textbook-correct, including the case most implementations miss. Private/loopback/link-local CIDRs blocked; DNS resolved once and the address **pinned** into a per-request agent, so neither a rebinding race nor a pooled connection nor an environment proxy can reach an address that was never validated; `autoSelectFamily: false` so Happy Eyeballs cannot pick an unchecked one; https only |
+| **Public write surface** | 15 unauthenticated API routes | Every one that accepts a body bounds it and rate-limits by IP, most through `enforceRequestRateLimit` (durable, cross-instance) rather than memory alone. The two without a limiter are a token-keyed idempotent GET and a small CDN-cached read — neither has anything to abuse |
+| **AI memory read privacy** | "what Bubaly worked out about each person" | The panel tells a non-manager *"Only a parent or adult can see…"*, and for once the claim is kept where it should be: `listMemoryProfile` returns `traits: []` to anyone who is not a manager, so the empty state is the only state they can reach. Its comment reasons about the exact harm — *"A reliability score about a sibling is not a child's business"* |
+| **Notification recipients** | `notify()` → `resolveRecipients` | Scoped to `family_id = scope.familyId` and `is_active`, so no member can address a notification outside their own family |
+| **Role checks that looked missing** | `setLocationSharing`, `saveAISettingsAction`, the locator's place writes | All correct. The first writes only the caller's own row; the second is refused a layer down in `updateAISettings`; the third was already `isManager`-gated. Three of the four candidates in that sweep were already right — only the chore board (F20) was not |
 
 ## What remains, and who owns it
 
@@ -21924,7 +22856,7 @@ F-002 records reasoning that was wrong and what replaced it.
 | Migration names | `db:audit:migrations` | ✅ 307 files, no collisions |
 | Migration replay | fresh DB, 0 → 307 | ✅ all applied, 0 failed |
 | Migration **re**-apply | populated DB, replay from `0004` | ✅ 0 failed (was 18 — F-020) |
-| i18n | `i18n:gate` | ✅ all declared surfaces clean |
+| i18n | `i18n:gate` | ✅ 8 surfaces clean — **and now actually runs in CI**; it was wired to no workflow (CLAUDE-1) |
 | RLS boundaries | 15 probes, fresh 307-migration replay, run 2× | ✅ 15/15 each time (F-015 made it repeatable) |
 | Authenticated routes | 353-route crawl | ✅ 351 ok, 1 gate redirect, 0 failures |
 | Public content routes | unknown-slug probe | ✅ 404s (was one 500 — see F-005) |
@@ -22932,3 +23864,1580 @@ reproduction of production's condition, instead of being asserted.
 | 2 overlapping $8 auths vs a $10 wallet | 1 approved, $8 held — the lock serializes them |
 | the same race with `FOR UPDATE` removed | 2 of 2 approved ($16 of $10) — the probe catches it |
 | `run-probes.sh`, pristine replay and used DB | 15/15, and 15/15 twice in a row |
+
+
+---
+
+# Pass C — Delivery and integration (F-C01–F-C10)
+
+Ran 2026-09-13 against the live site and the real code paths. Every finding
+here was reproduced before it was written, and every fix was verified in
+production after deploy rather than assumed from a green build.
+
+Full working notes, with the commands and outputs, are in `audit/claude-1.md`.
+
+## F-C01 — The sitemap dated 24 URLs with the time the file ran *(High, fixed)*
+
+`app/sitemap.ts` opened with `const now = new Date()` and applied it to all 15
+static routes and 9 category tabs. Every regeneration told crawlers those URLs
+had just changed.
+
+Evidence: the live sitemap carried `2026-09-13T11:51:45.957Z` on 24 entries,
+identical to the millisecond — the build's own transaction time.
+
+Fixed by #526. Each source now answers from its own real date; anything with no
+real date omits `lastmod` rather than inventing one.
+`tests/sitemap-lastmod-is-content-dated.test.ts` generates the sitemap twice
+with the clock moved a year between and requires every date to be identical, so
+a `new Date()` reintroduced anywhere in the pipeline fails immediately.
+
+## F-C02 — 445 of 1,508 sitemap URLs were not indexable *(High, fixed)*
+
+435 answered `404` with `noindex`, 9 canonicalised to `/blog`, and the homepage
+was listed twice.
+
+The 435 were `marketing_pages` registry rows for `/blog/Seed <uuid>` slugs.
+That table is a path *overlay* — a row supplies a page's title and description,
+not proof the path resolves — and `/blog/<slug>` is served from `blog_posts`,
+which hides synthetic seed rows. They were also unparseable as URLs: the slug
+was interpolated raw, putting a literal space inside `<loc>`.
+
+Fixed by #526. `canonicalUrl()` in `lib/marketing/sitemap-urls.ts` is now the
+only thing that may mint a `<loc>`. Production verified: 1,063 URLs, none
+returning 404, none `noindex`, none canonicalising elsewhere.
+
+*Overlaps Pass A's F1/F3/F14, which found the same URL set from the crawler
+side. Same defect, independently reproduced.*
+
+## F-C03 — The whole message catalogue shipped on every public page *(High, fixed — supersedes F9)*
+
+`LocaleProvider` is a client component, so the catalogue handed to it in the
+root layout was serialised into the RSC payload of every route beneath — which
+is every route.
+
+Measured on production: `/cookies`, a legal page of a few hundred words, was
+949,769 bytes raw and 265,651 gzipped, of which **246,126 gzipped was the
+catalogue** — 93% — carrying wallet errors, marketplace copy and the admin
+studio's capability matrix onto a cookie policy.
+
+Fixed by #540. Each surface declares the namespaces its own client components
+use; marketing needs 26 of 13,449 keys. The authenticated app keeps the whole
+catalogue deliberately: 3,791 keys across 368 namespaces with 96 non-literal
+`t()` calls, where no static subset is provable and there is no crawler or
+first-visit cost to pay for it.
+
+Production, gzipped: `/cookies` 266→20 KB, `/faq` 276→31 KB, `/terms` 269→24 KB,
+`/` 291→45 KB.
+
+`tests/i18n-client-scope.test.ts` walks the import graph from every page and
+fails, naming the key and file, if a scope does not cover what its client
+components ask for.
+
+## F-C04 — /blog shipped its entire search corpus to the browser *(Medium, fixed)*
+
+All 1,048 published posts were passed to the client search component as a prop,
+so React serialised the corpus into the HTML of a page that renders 25 cards:
+446 KB of a 597 KB response, paid by every visitor so the minority who type in
+the box could filter locally.
+
+Fixed by #543. The index loads on first interaction from
+`/api/blog/search-index`, edge-cached, so the corpus is fetched per publish
+rather than per visitor. Production: 88,907 → 40,098 gzipped (−54.9%),
+occurrences of the corpus in the HTML 1,048 → 0, 25 cards still rendered.
+
+## F-C05 — Every unrouted path answered a login form *(Medium, fixed — supersedes F13)*
+
+`/nope`, `/some-random-thing` and `/.env` all answered `307` to
+`/login?redirect=…`. Middleware had one list, `PUBLIC`, and redirected
+everything else — right for a real app route, wrong for a path with no route.
+
+A person following a stale link met a sign-in form instead of "page not found",
+and after signing in would have landed on a 404 anyway. A crawler saw a
+redirect to an irrelevant page, which Google counts as a **soft 404**.
+
+Fixed by #544. `PROTECTED` now names the paths that require a session; a path
+on neither list falls through to `app/not-found.tsx`.
+
+**This inverted a safety property** — forgetting to classify a route used to
+leave it protected and now leaves it reachable — so
+`tests/route-access-is-total.test.ts` walks `app/` and fails if any routable
+top-level path is on neither list. It earned itself immediately, catching
+`/display` (the signed-in kiosk), `/account`, `/money` and `/settings` missing
+from the first `PROTECTED` list.
+
+Verified in production: unrouted paths answer 404 with `noindex`; all twenty
+protected segments still 307 to `/login`; public pages still 200;
+`/dashboard/not-a-page` still redirects rather than revealing which pages exist.
+
+## F-C06 — A CSS margin lived in the message catalogue *(Low, fixed)*
+
+`tableOfContents.80px0px600px` held `-80px 0px -60% 0px`, the `rootMargin` of
+the blog table of contents' `IntersectionObserver`, duplicated across all seven
+full catalogues. A translator or tool altering it produces a value
+`IntersectionObserver` rejects; it throws at construction and the table of
+contents disappears for that locale on every article while the English build
+stays green.
+
+Fixed by #546. `tests/catalogue-holds-language-only.test.ts` sweeps for CSS
+lengths, hex colours, URLs and CSS keywords. It deliberately does not catch
+`profileQuestions.householdThree` (`'3'` — numerals differ by script) or
+`network.bandNone` (`'none'` — a word a reader sees); both are pinned so the
+rule cannot widen onto them.
+
+## F-C07 — Nineteen environment variables are undocumented *(Medium, open)*
+
+`.env.example` documents 75; app code reads 89. Nineteen are absent.
+
+The sharpest is `CONTACT_CENTER_INBOUND_SECRET`. The inbound email endpoint is
+correctly fail-closed in production, so with the secret unset it rejects
+**every** inbound message, silently, and nothing says why. Apple calendar sync
+is configured by two undocumented variables (`APPLE_SYNC_ENABLED`,
+`APPLE_CALDAV_BASE_URL`) and is simply off until someone reads the source.
+
+Fix: add the operator-facing variables with a line each saying what breaks when
+unset; group the test-only ones (`PW_*`, `PLAYWRIGHT_*`, `AI_PROVIDER_STUB_DIR`)
+under their own heading.
+
+## F-C08 — The forward-release mechanism is pinned 38 migrations in the past *(High, open)*
+
+`.github/workflows/supabase-forward-release.yml` failed on its most recent run
+(34781290560, 2026-09-13T20:36Z) and the one before it. The cause is now
+established, not guessed.
+
+The failing step is #4, "Release preview, read-only proof, or atomic apply",
+which runs `scripts/apply-production-forward-release.mjs` in preview mode. That
+script opens with:
+
+```js
+export function assertNoNewerMigrations(migrationNames) {
+  const latestReviewedVersion = Number(RELEASE_VERSIONS.at(-1));   // 0254
+  const newer = migrationNames.filter(…);
+  if (newer.length) {
+    throw new Error('Production forward release is held: repository migrations '
+      + 'outside the pinned 0240-0254 release: ' + newer.join(', '));
+  }
+}
+```
+
+The repository now carries **38 migrations past 0254** — `0255_ai_runtime_lockdown`
+through `0295_reward_redemption_decision_guard`. The guard fires every time.
+
+Two things follow, and the second is the one that matters:
+
+1. **The workflow is not broken; it is correctly refusing.** It is a
+   deliberately pinned, checksum-reviewed release of exactly `0240`–`0254`, and
+   it holds the moment the repository moves past that. Step 6 ("Capture
+   metadata after release attempt") succeeded in the same run and uploaded its
+   artifact, which proves the credentials reach production — so this is a
+   verdict, not a connectivity failure, and it is a *different* wall from F5.
+
+2. **There is now no working path to apply a migration to production.** The
+   migrations workflow cannot authenticate (F5), and the forward-release
+   mechanism is pinned 38 migrations behind (this finding). Every migration
+   from `0255` onward — including `0286`, the `blog_posts.updated_at` backfill
+   merged today — is written, reviewed, merged, and unapplied.
+
+Fix: re-pin the release to the current head with fresh checksums, or retire the
+pinned-release mechanism in favour of the ledger-based one. Either is an owner
+decision about release process, not a code defect.
+
+**Update — the code half is now done; the release itself remains the owner's.**
+
+There *was* a code defect underneath, and it is what made re-pinning expensive:
+the pinned range was stated **twice**. Authoritatively in
+`supabase/production-forward-release.json`, and again as three hardcoded
+literals in `scripts/apply-production-forward-release.mjs` — `RELEASE_VERSIONS`,
+the filename regex `^0(?:24\d|25[0-4])_…`, and two error strings. Re-pinning
+therefore meant editing code *and* regenerating the manifest, and if the two
+disagreed `readReleaseFiles` refused with "Only the pinned 0240-0254 production
+release is supported."
+
+The manifest is now the only statement of the range. Re-pinning is a reviewed
+data change. Nothing was relaxed: every sha256 is still verified, the project
+ref is still checked, the filename still cannot escape `supabase/migrations/`,
+and the range must now additionally be **contiguous and duplicate-free** — a
+property the hand-written list could only assert by being written out correctly.
+The held-release error now names the range it is actually pinned to and points
+at the manifest. Proved by a test that feeds the script a manifest re-pinned to
+`0240-0255`, with the real checksum of `0255`, and asserts it is accepted with
+no code change and still rejects a corrupted read.
+
+**What remains is not code.** A re-pinned manifest also carries `boundary` —
+a snapshot of production's live catalogue — and `newTables`, which
+`assertPreflight` requires to be *absent* from production. Both need a
+credentialed read of production, which this session does not have and must not
+have. And the runbook is explicit that an apply needs "a new successful preview,
+review evidence … and explicit parent authorization", and that the baseline
+block "must not be bypassed or treated as a missing-credentials failure".
+
+So F-C08's code half is closed and F-C08's release half, like F5, is the
+operator's.
+
+## F-C09 — Supabase credentials fail at first use, not at boot *(Low, open)*
+
+`NEXT_PUBLIC_SUPABASE_URL` (7 sites) and `NEXT_PUBLIC_SUPABASE_ANON_KEY` (6) are
+read with a non-null assertion, and there is no central env validation module.
+
+Reproduced: starting the built app with those unset made `/pricing` answer 500
+with `Error: supabaseUrl is required` while `/terms` and `/cookies` rendered
+fine. A misconfigured deploy degrades into scattered 500s on whichever pages
+happen to read the database, instead of refusing to start.
+
+## F-C10 — The mobile app has no tests, and CI barely checks it *(Medium, open)*
+
+`mobile/` is a real Expo app of 42 TypeScript files with **zero** test files.
+Its CI job has three steps: install, `npm run typecheck`, and
+`npx expo config --type public`. No lint, no unit tests, no build.
+
+The web app is gated on 13,500 tests and a mobile device matrix; the mobile app
+is gated on "it compiles and its config parses". Separately, nothing audits the
+mobile dependency tree — `npm audit --package-lock-only` there reports 14
+moderate advisories, while the root tree reports zero of any severity.
+
+## Verified clean in Pass C
+
+Recorded so no later pass re-derives them:
+
+- **Security headers** — full CSP with `frame-ancestors 'none'`, HSTS
+  `max-age=63072000; includeSubDomains`, `X-Frame-Options: DENY`, `nosniff`,
+  `strict-origin-when-cross-origin`, a scoped permissions policy.
+- **The CSP matches reality** — every `fetch()` inside a `"use client"` module
+  targets a host in `connect-src`. Google, OpenAI, Resend and the grocery and
+  recipe integrations are all server-side.
+- **The server/client boundary holds** — no client module imports
+  `lib/supabase/server`, `createServiceClient` or `SUPABASE_SERVICE_ROLE_KEY`.
+- **Redirects** — `http→https` and apex→www are clean 308s.
+- **Images** — 69 `<img>` on the public pages, every one with non-empty alt;
+  35 lazy-loaded, the above-fold ones correctly not.
+- **Structured data** — 33 JSON-LD blocks, all parse, one schema type per page,
+  no duplicates.
+- **Page metadata** — no duplicate titles or descriptions across the 15 static
+  routes; each has exactly one `<h1>`, a description and an `og:image`.
+- **Web dependencies** — `npm audit --production` reports zero advisories at
+  every severity.
+
+
+---
+
+# Pass D — Frontend and accessibility (F-D01–F-D14)
+
+Ran 2026-09-13 over `app/(app)/` (354 pages) and `components/` (456 files) —
+the authenticated surface, which Passes A and B examined from the data side and
+barely touched on the frontend. Working notes, with every file:line and the
+quoted code, are in `audit/claude-2.md`.
+
+**No browser was run.** Colour contrast, real tab order and screen-reader output
+are therefore *unverified* and are marked as such rather than asserted. Every
+finding below is from reading the source.
+
+**A note on method that changes how to read the counts.** The first scan used a
+regex of the shape `<input[^>]*>`, which terminates on the `>` of an inline
+arrow function (`onChange={(e) => …}`) and silently mis-reports attributes. That
+produced wrong numbers, was caught, and every count below comes from a
+brace-aware parser tracking label open/close depth. The `<h1>` scan likewise
+over-matched by following imports into a conditional heading in
+`trial-paywall-gate.tsx`; all 19 pages were confirmed by hand and 11 false
+positives dropped.
+
+## The three that matter most
+
+### F-D01 — The photo lightbox strands keyboard users *(High)*
+
+`components/modules/photos-module.tsx:407`. A hand-rolled full-screen overlay
+with no `role="dialog"`, no Escape handler (`grep -c Escape` → 0), no focus
+trap and no scroll lock. Its only dismissal is an `onClick` on a `<div>`.
+
+A keyboard user who opens a photo is stranded behind an opaque `bg-black/95`
+layer, operating UI they cannot see.
+
+The same file already imports the project's `<Modal>` component and uses it
+correctly elsewhere, so the fix is to use it here too.
+
+### F-D02 / F-D03 — Controls with no programmatic name *(High)*
+
+- **55 visible labels are detached from their control** across 22 files: a
+  sibling `<label>` with no `htmlFor`, a control with no `id`. Includes the
+  *public* survey form at `app/s/[slug]/survey-form.tsx:79`.
+- **65 of 145 `<select>` elements have no accessible name at all** — among them
+  the select that chooses *which child* a reward is redeemed for
+  (`rewards-module.tsx:324`, `economy-view.tsx:190`) and the one that sets a
+  member's role during onboarding.
+
+A screen-reader user hears "combo box" and must infer the rest from position.
+
+### F-D10 — The lint config enables none of the rules that would have caught them *(Medium — and the root cause)*
+
+`.eslintrc.json` is `next/core-web-vitals` alone, which enables none of
+`label-has-associated-control`, `click-events-have-key-events`,
+`no-static-element-interactions` or `control-has-associated-label` — precisely
+the rules describing F-D02, F-D03 and F-D06.
+
+`npx next lint` runs clean over ~1,000 files with 3 warnings, so the gap reads
+as a green light. **This is why the other findings accumulated**, and fixing it
+is worth more than fixing any single one of them.
+
+## The rest
+
+| | Finding | Severity |
+|---|---|---|
+| F-D04 | Four hand-rolled dialogs claim `aria-modal="true"` but never trap focus or handle Escape | Medium |
+| F-D05 | 19 authenticated pages render no `<h1>`; 11 render no heading at all | Medium |
+| F-D06 | Primary content rows across seven modules are clickable but not keyboard reachable | Medium |
+| F-D07 | 92 destructive actions are guarded only by native `window.confirm()` | Medium |
+| F-D08 | All 354 authenticated pages share one route-group loading skeleton | Medium |
+| F-D09 | Ten client components set state from an un-cancelled async effect | Medium |
+| F-D11 | Two icon-only buttons in the guardian contact list have no accessible name | Low |
+| F-D12 | Two admin links point at routes that exist only at runtime | Low |
+| F-D13 | 172 index-derived React keys; the reorderable cases are worth a second look | Low |
+| F-D14 | Three `exhaustive-deps` warnings, one a genuine ref-in-cleanup bug | Low |
+
+## Verified clean in Pass D
+
+Eight areas were checked and found sound; they are listed in `audit/claude-2.md`
+so a later pass does not re-derive them.
+
+
+---
+
+# Pass E — Backend, auth and security (F-E01–F-E09)
+
+Ran 2026-09-13. Working notes in `audit/claude-3.md`.
+
+**Method, and why it found things greps do not.** All 308 migrations were
+replayed into a local Postgres 16 and then RLS, grants, policies and
+`SECURITY DEFINER` functions were audited **against the live catalogue**, not
+by text search. That distinction is load-bearing: this repo enables RLS through
+`DO $$ … EXECUTE format('alter table public.%I enable row level security')`
+loops, so a text scan reports 216 tables "missing RLS" while the catalogue
+reports zero missing. All 141 `app/api` routes were mapped to their guard and
+all 61 entries of the public carve-out list were read individually.
+
+**Two caveats that bound every finding below.**
+
+1. These describe the **committed migrations as replayed locally**. If F-001
+   still holds and production's ledger is stuck at `0001–0003`, production may
+   not carry even the policies verified here as correct. That cuts both ways,
+   and F-C08 makes it likely: there is currently no working path to apply a
+   migration to production.
+2. Migrations `0237`, `0239` and `0292` did not replay locally — the `vector`
+   extension was absent — so the **marketing platform spine tables were not
+   checked**. That is a known gap, not a clean bill.
+
+## F-E01 — Every child can read, edit and delete the family password vault *(CRITICAL — fixed by 0296, unapplied)*
+
+`public.family_credentials` holds Wi-Fi passwords, account logins, PINs and card
+details, with `secret` stored as **plaintext `text`**.
+
+All four of its policies are written as `is_family_member(family_id)`, which
+answers "is this user in the family" and **ignores role entirely** — unlike
+`can_manage_family()`, and unlike the `documents` table, which correctly ANDs in
+`can_manage_family` for its sensitive rows.
+
+Children are real auth users with `family_members.user_id` set
+(`app/(app)/family/child-login-actions.ts:49-60`). The page carries no role
+check; `requireAal2` is a no-op for children (`lib/auth/mfa.ts:103`); and the
+module reads through the browser client anyway, so **RLS is the only boundary
+and it does not hold**.
+
+A child signed into the family app can read every stored password, change them,
+or delete them.
+
+### Independently reproduced, then fixed
+
+Every link was verified by hand before anything was changed: `secret` is
+plaintext `text`; all four policies call `is_family_member`; that function
+checks only `user_id = auth.uid() and is_active`; `child-login-actions.ts`
+creates a real auth user and sets `family_members.user_id` to it, its own
+comment reading *"Link the member to the new auth user so they ARE this member
+on sign-in"*; and no migration after `0119` ever touched the table.
+
+**Migration `0296_family_credentials_manager_only.sql`** swaps all four policies
+to `can_manage_family`, which is `role in ('parent','adult') and is_active` —
+so no adult loses access and only children do, which is the point. `0266` did
+exactly this for the document vault; this is the same fix for the table that
+holds the passwords.
+
+**`docs/audit/family-credentials-boundary-check.sql`** proves it behaviourally,
+and CI globs `docs/audit/*-check.sql`, so it runs on every PR. Against a real
+Postgres 16:
+
+- against the **original** policies it fails with
+  `0296: a child can READ 1 credential row(s); the vault is open`
+- against the **fixed** policies it passes, asserting the child is refused
+  read, insert, update *and* delete, while both a parent and an adult keep the
+  vault and can still write to it
+
+The probe was itself defective on first write — it inserted a row per run, so a
+second run tripped its own count assertion and looked like the fix had locked
+out a parent. It now clears its family's rows first and asserts on the row it
+created; verified re-runnable three times.
+
+**This cannot reach production yet.** See F5 and F-C08: authentication blocks
+one release path and a stale pin blocks the other. The fix is merged-ready and
+inert until an operator unblocks them.
+
+*If the owner wants the vault narrowed further — parents only, not adults —
+that is a second and additive decision, deliberately not made here.*
+
+## F-E02 — Step-up MFA is presentational *(High)*
+
+`requireAal2` guards 19 pages by redirect, but the data on those pages is
+fetched by client components straight from PostgREST
+(`components/finance/bills-view.tsx:54,63`), and
+
+```sql
+select count(*) from pg_policies where qual/with_check ilike '%aal%'  -->  0
+```
+
+No policy knows what `aal` is. `aal2Verdict` — which exists precisely so route
+handlers can answer `403 step_up_required` — is wired into 3 routes, none of
+them money.
+
+A stolen `aal1` session reads and writes bills, expenses, autopay and both
+vaults without ever being asked for a code.
+
+## F-E03 — The `family-media` bucket is public *(High)*
+
+`supabase/migrations/0216_family_media_bucket.sql:22-24` creates the bucket with
+`public = true`, so family photos, videos, message attachments and reminder
+attachments are served from `/storage/v1/object/public/…` **with no session**.
+The four family-scoped SELECT policies the same migration creates never run on
+that path.
+
+The migration documents this as a tracked follow-up (LB-009), so it is a known
+decision rather than an oversight — but it is a live exposure, and one that
+survives both row deletion and membership revocation, because the object URL
+keeps working.
+
+## The rest
+
+| | Finding | Severity |
+|---|---|---|
+| F-E04 | OAuth tokens in `social_account_tokens` are family-member readable, while the equivalent `sync_tokens` is service-only | Medium |
+| F-E05 | `feedback-attachments` is a public bucket holding user-uploaded screenshots | Medium |
+| F-E06 | The Contact Center inbound-email secret is accepted in the query string, where it lands in logs and referrers | Medium |
+| F-E07 | Twilio signature verification is off outside production and depends on `NEXT_PUBLIC_APP_URL` being exactly right | Medium |
+| F-E08 | Shared-secret comparisons are not constant time | Low |
+| F-E09 | An authorization failure in the marketing AI route answers 500, not 403 | Low |
+
+F-E06 is the same variable as **F-C07**, reached from the other side: Pass C
+found it undocumented, Pass E found it accepted in a query string.
+
+## Verified healthy in Pass E
+
+Twelve items, listed in `audit/claude-3.md`, including that no table is
+actually missing RLS once the catalogue is read rather than grepped.
+
+
+---
+
+# Pass F — QA, flows, performance and edge cases (F-F01–F-F13)
+
+Ran 2026-09-13. Working notes in `audit/claude-4.md`.
+
+## The three that matter most
+
+### F-F01 — A capped read reports success while dropping rows *(High, money)*
+
+`lib/supabase/read-all.ts:93` returns `error: null` when a read stops at a
+**caller-supplied** `max`; only the default ceiling raises.
+
+So `app/(app)/admin/wallet/reconciliation/page.tsx` reads the platform-wide
+ledger with `{ max: 20000 }` ordered `created_at DESC`, silently drops every
+row past that, and renders **"Everything reconciles"** from a prefix — the
+exact failure its own comment says the helper was fixed to prevent. Same shape
+at `economy/page.tsx` with `{ max: 5000 }`, where the comment reads *"a capped
+read is a wrong balance."*
+
+*Related to F-008/F-011/F-013, which fixed the default ceiling. This is the
+caller-supplied path the fix did not cover.*
+
+### F-F02 — F-017's timezone bug is still live on eleven server-rendered surfaces *(High)*
+
+`setHours(0,0,0,0)` — server midnight — remains on eleven surfaces including
+`app/(app)/kids/page.tsx:22` and the "today"/"tomorrow" text of every
+notification.
+
+F-017's guard cannot see them: it flags `toISOString().slice(0,10)` next to a
+**DATE** column, and these are `setHours` against **timestamptz**. On a UTC host
+a Californian child's "today" runs 17:00 → 17:00.
+
+*This is F-017 incompletely closed, found by a different detector.*
+
+### F-F03 — /missions issues up to 240 sequential storage round trips *(High, perf)*
+
+`app/(app)/missions/page.tsx:70-77` nests two loops around
+`await createSignedUrl`. The batch call `createSignedUrls` is already used
+correctly at `app/(app)/admin/marketing/assets/page.tsx:53`. This is the parent
+approval queue — the page a parent opens most.
+
+## The rest
+
+| | Finding | Severity |
+|---|---|---|
+| F-F04 | A requested local time that does not exist (DST spring-forward) is mishandled — **a genuine production bug**, found by running the suite under `TZ=America/Los_Angeles`, reproduced in two lines of node, and the suite pins no `TZ` at all | Medium |
+| F-F05 | 96 tests across 12 files share the exact shape of the known `api-ai-runs` 5-second timeout — a cold `await import('@/app/…')` inside a default-timeout test — and no `testTimeout` is configured anywhere | Medium |
+| F-F06 | `tests/seed-failure-safety.test.ts`, named "fails closed", asserts only the *absence* of two bad shapes, so deleting the error check makes it greener | Medium |
+| F-F07 | 37 of 51 money, kids, economy and missions server actions have no test | Medium |
+| F-F08 | `addFundsAction` is the one money mutator that writes the balance directly | Medium |
+| F-F09 | Unbounded concurrent fan-out to an external drive-time API | Medium |
+| F-F10 | Two buttons in the message header exist only to say the feature is unavailable | Low |
+| F-F11 | The proof-photo signing error is discarded, so a parent sees a blank frame rather than a reason | Low |
+| F-F12 | The vitest config's JSX block is dead under vitest 4 | Low |
+| F-F13 | Sixty-nine test blocks assert only the absence of a pattern | Low |
+
+## On the hunt for tests that cannot fail
+
+This was the highest-priority sweep and it came back **mostly clean** — one
+genuine instance (F-F06). That is worth recording as a positive: this suite's
+grep-style guards mostly carry explicit non-vacuity blocks, which is unusual
+and means the earlier findings (F4, F-004, F-015, F-019) were the exception
+rather than the pattern.
+
+---
+
+# Pass G — the audit's own instruments, and the list the database ignores
+
+Two findings, one shape: a boundary that is stated somewhere and enforced
+nowhere.
+
+## G1 — Three boundary probes passed while testing nothing
+
+`document-vault-boundary-check.sql`, `money-write-boundary-check.sql` and
+`wallet-write-rls-check.sql` each guarded a security boundary with
+`when others`, so ANY error counted as "the boundary held". Renaming one column
+in each guarded statement left all three printing a pass; the wallet probe
+printed `sqlstate 42703` (undefined_column) inside a message claiming RLS had
+rejected a valid $9,999.99 credit.
+
+**Status: fixed.** Narrowed to `insufficient_privilege`; the wallet probe now
+asserts the sqlstate it was already capturing; a renamed money table now fails
+loudly instead of reading as locked.
+
+This is the same defect that made the `0296` vault probe vacuous in CI, which
+is why the whole `docs/audit` suite was swept for it. `approval-dedupe`,
+`family-scoped-index` and `rls-isolation` were checked and are correct.
+
+## G2 — 58 of the 66 tables the code calls sensitive are readable by children
+
+`lib/ai/context/policy.ts` carries `SENSITIVE_TABLES`: 66 tables, curated and
+reasoned, under a header stating *"§4 says a child must not inspect household
+finances or confidential documents"*. It governs what an AI context slice may
+read. **It does not govern the database.**
+
+Measured against the RLS catalogue of a replayed database: **58 of the 66** are
+readable by any family member, children included, because their read policies
+gate on `is_family_member`, which ignores role. `0297` fixes three
+(`child_logins`, `social_account_tokens`, `driver_licenses`); **55 remain**.
+
+These are NOT all defects. A child should see their own wallet, their own
+medications, their own sleep log. That is exactly why they are recorded here
+rather than swept: each needs a decision of the form *"none", "own row only"
+(`is_self_member`), or "managers only"* (`can_manage_family`) — the three
+shapes this repository already uses (`0272`, `0266`, `0296`).
+
+The count is the finding. A 66-table list that the database honours on 8 of
+them is a policy that exists in one layer only.
+
+**Two checks were run before publishing this list, because a catalogue reading
+is not a measurement.**
+
+*Is the permissive union really the whole gate?* A RESTRICTIVE policy ANDs with
+the permissive ones, so a manager-gated restrictive read policy would make the
+entry wrong. **Zero** of the 55 carry one: the permissive union is the gate.
+
+*Does a child actually get the rows?* Spot-checked behaviourally against a
+replayed database, as a real child auth user with the impersonation asserted:
+
+```
+child sees 1 financial_accounts row(s)   [policy.ts: "account numbers"]
+child sees 1 member_locations row(s) for a PARENT   [policy.ts: "live location"]
+```
+
+That is the household's bank account with its balance, and a parent's
+location-sharing row, read by a child.
+
+| Table | policy.ts reason |
+|---|---|
+| `ai_messages` | other conversations |
+| `auto_insurance_policies` | policy numbers |
+| `babysitter_payments` | payment detail |
+| `behavior_logs` | behaviour notes about children |
+| `billing_customers` | billing identity |
+| `care_log` | care notes |
+| `checkout_sessions` | payment sessions |
+| `child_wallets` | child balances |
+| `driving_trips` | driving telemetry |
+| `family_emergency_contacts` | emergency contacts |
+| `family_emergency_plans` | emergency plans |
+| `family_inbox_messages` | inbound mail bodies |
+| `family_insurance_policies` | policy numbers |
+| `family_wallets` | wallet balances |
+| `financial_accounts` | account numbers |
+| `gift_payments` | payment detail |
+| `health_goals` | health targets |
+| `health_metrics` | measurements |
+| `health_providers` | clinicians |
+| `health_visits` | visit notes |
+| `home_warranties` | warranty account numbers |
+| `household_info` | rows flagged is_sensitive (alarm codes, wifi keys) |
+| `immunizations` | vaccination records |
+| `insurance_policies` | policy numbers |
+| `invest_holdings` | investment positions |
+| `invest_orders` | investment orders |
+| `journal_entries` | private journals |
+| `location_events` | location history |
+| `medical_profiles` | conditions, physicians, emergency contacts |
+| `medication_doses` | prescriptions |
+| `medication_schedules` | prescriptions |
+| `medications` | prescriptions |
+| `member_locations` | live location |
+| `nutrition_logs` | per-person intake |
+| `paperwork_items` | scanned paperwork bodies |
+| `pay_handles` | payment handles |
+| `rides` | ride locations |
+| `safety_check_ins` | check-in locations |
+| `sleep_checkins` | sleep tracking |
+| `sleep_logs` | sleep tracking |
+| `stripe_authorizations` | card authorisations |
+| `stripe_cardholders` | cardholder identity |
+| `stripe_connected_accounts` | payout accounts |
+| `stripe_financial_accounts` | account numbers |
+| `stripe_issuing_cards` | card numbers |
+| `symptom_logs` | symptoms |
+| `tax_documents` | tax filings |
+| `vacation_documents` | passport and ticket scans |
+| `vacation_emergency_contacts` | emergency contacts |
+| `vacation_medical_information` | travel medical detail |
+| `vehicle_registrations` | registration numbers |
+| `wallet_cards` | card details |
+| `wallet_passes` | stored passes |
+| `wallet_transactions` | per-child card activity |
+| `weather_locations` | stored coordinates |
+
+**Suggested triage**, for an owner to confirm rather than for an agent to
+assume:
+
+* **Managers only** — the money instruments and account numbers
+  (`financial_accounts`, the `stripe_*` group, `pay_handles`, `invest_*`,
+  `wallet_cards`, `home_warranties`, the `*insurance_policies` group,
+  `tax_documents`, `paperwork_items`, `vacation_documents`).
+* **Own row only** — the per-person health and telemetry tables, which have a
+  member column and a real first-person use (`medications`,
+  `medication_schedules`, `medication_doses`, `health_*`, `immunizations`,
+  `symptom_logs`, `sleep_*`, `nutrition_logs`, `journal_entries`,
+  `member_locations`, `location_events`, `safety_check_ins`, `driving_trips`,
+  `rides`, `child_wallets`, `wallet_transactions`).
+* **Needs a column-aware rule**, as `0266` did for documents —
+  `household_info`, whose own reason names only the rows "flagged
+  is_sensitive (alarm codes, wifi keys)".
+
+**Status: 3 fixed by `0297` and proved by
+`docs/audit/sensitive-role-boundary-check.sql`; 55 OPEN, owner decision.**
+Like every migration since `0255`, `0297` is inert in production until F5 and
+F-C08 are cleared.
+
+---
+
+# Pass H — the auth-user ceiling, closed
+
+`[CLAUDE-4][HIGH][EDGE CASE]` recorded that three production paths read only the
+first 50 auth users and that one of them marked the rest delivered. It was
+recorded and never fixed. It is fixed now.
+
+`supabase.auth.admin.listUsers()` with no arguments sends an empty `per_page`,
+so GoTrue applies its own default of 50 and answers with the first page — no
+error, no short-read signal. Three callers did exactly that:
+
+| Caller | What truncation did |
+|---|---|
+| `lib/server/notification-emails.ts` | **Permanent loss.** A recipient past the 50th had no metadata, so `!meta?.email` matched the "no email on file" branch, their notification ids went into `resolvedIds`, and `sent_at` was stamped. Marked delivered, never sent, never retried. |
+| `app/api/cron/weekly-digest/route.ts` | Families are read with `readAll`, so the family list is complete — and then the digest is dropped for every family whose members sit past the first page. |
+| `app/api/cron/chore-reminders/route.ts` | The reminder is skipped for any member past the first page. The `userIds` filter can only narrow what was read. |
+
+The notification one is the severe case: a truncated lookup was
+indistinguishable from a user who genuinely has no address, and the code's
+response to "no address" is to settle the notification rather than retry it.
+
+**Fixed** by `lib/server/list-all-auth-users.ts`, which pages explicitly and
+returns `{ users, error }` where any error means the list is NOT complete, so a
+caller can never read a partial list as an absent user.
+
+Two details that are the whole difficulty:
+
+* It terminates on an **empty** page, not a short one — mirroring
+  `lib/supabase/read-all.ts`. Stopping on a page shorter than the one requested
+  rebuilds the bug: GoTrue may clamp `per_page` below what the client asks for,
+  and then the first page is "short" and the read ends at the server's cap.
+  **I wrote the short-page version first**; the test that models a clamping
+  server caught it before it was committed.
+* It does not use the client's `nextPage`. That value is parsed out of the Link
+  header with `.substring(0, 1)` — one character — so page 10 reads as page 1.
+  Measured against `@supabase/auth-js` 2.108.2.
+
+`tests/auth-user-list-is-complete.test.ts` is behavioural, not source-reading: a
+fake GoTrue that clamps `per_page` to 50 exactly as the real one does. Verified
+non-vacuous — reintroducing the short-page termination fails 4 of its 10 tests.
+
+**Status: FIXED**, and unlike `0296`/`0297` this one needs no migration, so it
+reaches production with the deploy.
+
+## Also fixed in Pass H — nothing pinned "manager" to the database
+
+"Manager" was stated three times and nothing tied them together:
+
+```
+lib/constants/roles.ts   MANAGER_ROLES = ['parent', 'adult']
+lib/constants/roles.ts   isManager = role === 'parent' || role === 'adult'
+0003_functions_triggers  can_manage_family: role in ('parent','adult')
+```
+
+All three agree today, and `MANAGER_ROLES` appeared in **zero** tests. This is
+the source of the class that dominates this audit — F16, F18, F20, F21, F-003,
+F-006, F-E01, F-E02, *one mistake in eight places*: authorization drawn on the
+screen rather than in the database. `roles.ts` says so itself: *"Used for UI
+gating; the database RLS is the real enforcement boundary."*
+
+`tests/manager-role-agrees-with-the-database.test.ts` reads the roles out of the
+migration that defines each function and asserts the sets match, and that
+`can_manage_family` stays strictly narrower than membership — never `child` or
+`teen`, the equivalence `0296`/`0297` had to undo. Non-vacuous against all three
+drift directions (array 3/6, predicate 2/6, SQL 2/6).
+
+## Swept and found clean in Pass H
+
+Recorded so a later pass does not re-derive them.
+
+**The service-role surface** (it bypasses RLS entirely, so it is the one place
+where every database boundary in this audit is irrelevant):
+
+* 71 service-role API routes and 30 service-role server-action files — all gated.
+* 24/24 cron routes call `hasCronAuthorization`, which fails closed on a missing
+  secret.
+* 9 Twilio webhooks validate `x-twilio-signature` through a validator that fails
+  closed on a missing token and uses `timingSafeEqual`.
+* The three ungated public actions (`gift`, `reviews/new`, `s/[slug]`) are IP
+  rate-limited and scoped by an unguessable token or a public slug.
+* 0/24 cron routes contain an unbounded `select()` — the PostgREST 1,000-row cap
+  class is closed there.
+
+**The child sign-in path**, which is the most attackable surface in the product
+(guessable username, 4-digit PIN, real auth users):
+
+* A wrong PIN records a failure and a success clears the counter — the throttle
+  is not decorative.
+* The `ilike` wildcard hole is fixed and documented in place.
+* `child_login_throttle` is RLS-on-with-no-policies, so it is deny-all to every
+  client role and cannot be reset by the account being throttled.
+* `resetChildPinAction` checks `isManager` **and** that the member belongs to the
+  caller's own family, so it is not a cross-family takeover.
+
+**The rate limiter**: `rate_limit_hit` is a single atomic
+`insert … on conflict do update … returning count`, so there is no read-then-write
+race; execute is revoked from `public`/`anon`; and an authenticated caller may
+only use a key containing their own `auth.uid()`, so one user cannot exhaust
+another's bucket. `rateLimitDb` fails closed by default.
+
+---
+
+# Pass I — F-F04, the DST bug, fixed
+
+`F-F04` was recorded as *"a genuine production bug"*, VERIFIED, with a diagnosis
+and a proposed fix — and then left. It is fixed now.
+
+**Reproduced first, not taken on trust:**
+
+```
+TZ=UTC                  tests/assistant-capture-fidelity  38 passed
+TZ=America/Los_Angeles  × moves an appointment to the first minute that exists
+                        AssertionError: expected '03:30' to be '03:00'
+```
+
+**The mechanism.** `lib/capture/parse.ts` does its arithmetic on Date *fields*,
+which is right in a browser, where the runtime zone IS the family's zone. The
+server bridged to it with `asWallClockIn`, a Date whose LOCAL fields spell the
+family's wall clock — and a Date built from local fields is normalised by the
+runtime's own DST rules:
+
+```
+TZ=America/Los_Angeles  new Date(2026, 2, 8, 2, 30)  ->  03:30
+TZ=UTC                  new Date(2026, 2, 8, 2, 30)  ->  02:30
+```
+
+So on the spring-forward morning the parser's `setMinutes(150)` on local
+midnight landed at 03:30, and the 02:30 the family asked for was destroyed
+*before* `instantForLocalTime` could move it to 03:00, the first minute that
+exists. The appointment shifted an hour instead of to the top of the hour.
+
+**The fix.** UTC observes no DST, so arithmetic in UTC fields cannot be
+normalised. `parse.ts` gained a `DateOps` pair — local and UTC — selected by an
+optional `{ utc }`; `asWallClockUtc` is the UTC twin of the bridge; the voice
+router uses both and reads UTC fields back. **The browser path is untouched**:
+`utc` defaults false, and local is the correct answer there.
+
+**The guard, which is the half that matters.** Production runs UTC, so the whole
+suite passed on every run while the bridge was host-dependent. Nothing would
+have caught the next one:
+
+* `vitest.config.ts` pins `TZ` so a run is hermetic — but as
+  `process.env.TZ ?? 'UTC'`, never a bare literal, so an explicit TZ still wins.
+  A hard-coded value would have silently overridden the CI job below and made it
+  prove nothing.
+* CI now runs the suite a **second time under `TZ=America/Los_Angeles`**.
+
+Verified from inside a test worker rather than from the reporter, which runs in
+the main process and never sees `test.env`:
+
+| Invocation | Worker resolves |
+|---|---|
+| pin only, no shell `TZ` | `ENV=UTC RESOLVED=UTC OFFSET=0` |
+| `TZ=America/Los_Angeles` | `ENV=America/Los_Angeles RESOLVED=America/Los_Angeles OFFSET=420` |
+
+**Result:** the full suite, 13,643 tests, passes under UTC *and* under
+America/Los_Angeles. Before the fix it failed under the latter. Also spot-checked
+green under Australia/Sydney (southern-hemisphere DST) and Asia/Kolkata (a
+half-hour offset). Non-vacuous: restoring the old bridge fails LA again with the
+same `'03:30' to be '03:00'`.
+
+**Not fixed, and not claimed:** `classifyVoiceCommand` still calls `suggestKind`
+with the raw `now` rather than the family's wall clock. It only chooses a KIND —
+`withDates` re-parses with the correct clock — so the blast radius is a
+misclassification near a family's midnight, not a wrong time. Left alone rather
+than widened into.
+
+**Status: FIXED.** No migration, so it reaches production with the deploy.
+
+---
+
+## Pass J — a reconciliation check that reconciled nothing
+
+**F-J01 — `bucket_drift` could not fire for any input (wallet reconciliation).**
+
+`lib/wallet/reconcile.ts` documents six integrity checks and is the module behind
+`/admin/wallet/reconciliation`, the page whose stated job is to *prove* the
+Family Wallet ledger is internally consistent. Check 6 — "Bucket sum drift —
+Σ(bucket balances) ≠ wallet total (rounding leak)" — was structurally incapable
+of detecting anything.
+
+**The mechanism.** Both sides of the comparison were accumulated from the same
+value, in the same loop, for every row:
+
+```js
+const v = signedValue({ ... });
+walletTotals.set(id, (walletTotals.get(id) ?? 0) + v);   // the total
+buckets[t.bucket_kind ?? 'spend'] += v;                  // exactly one bucket
+```
+
+Every entry adds `v` to exactly one bucket **and** to the total, so
+`bucketSum !== total` is unreachable. The check reported a clean ledger *by
+construction* rather than by reconciliation — the same vacuity class as the
+0296 probe in Pass F, this time in production code rather than in a probe.
+
+**Proved before changing anything**, not argued:
+
+| Sweep | Result |
+|---|---|
+| Exhaustive single-txn (6 bucket kinds × 2 directions × 4 statuses × 7 amounts) | **0** drift / 240 cases |
+| Randomised multi-txn, 1–6 rows, mixed wallets/kinds/statuses/signs | **0** drift / 4,000 ledgers |
+
+Corroborating evidence it was never real: `tests/wallet-reconcile.test.ts` had
+**no** case for `bucket_drift`. Nobody could write one.
+
+**The real defect underneath it.** `wallet_transactions.bucket_id` is
+`ON DELETE SET NULL`, and the allocation writer stores
+`bucketByKind.get(k) ?? null` (`lib/wallet/server.ts:253`,
+`app/(app)/wallet/actions.ts:157`), so completed money can legitimately end up
+attached to no bucket. The reconciler silently folded it into `spend` — so the
+one screen built to surface unreconciled money *hid* it, and corrupted the spend
+figure at the same time (unattributed money could mask a genuinely negative
+spend bucket, or manufacture one).
+
+**The fix.** `bucket_drift` is replaced by `unattributed_bucket`, which counts
+unbucketed completed money apart from the five real buckets and reports it per
+wallet. The wallet total still includes it, so `Σ(buckets) + unattributed =
+total`. Severity is **medium**, not high: the money is present and the total is
+right — it is the attribution that is missing — so it does not flip the ledger
+to unhealthy, which stays reserved for figures that are actually wrong.
+
+`bucketBalances` in `lib/wallet/ledger.ts` still folds unbucketed entries into
+`spend` and is deliberately **left alone**: that is the display path, the
+behaviour is documented there, and a child's bucket view is a different contract
+from an operator's reconciliation view.
+
+**Verification.** 7 new tests, all of which **fail against the old module** and
+pass against the new one — including the two the old check could never have
+supported: that unbucketed money is not hidden inside `spend`, and that it does
+not mask a negative spend bucket. Full suite **13,650 / 13,650** under pinned UTC
+and again under `TZ=America/Los_Angeles`. `npx tsc --noEmit` and eslint clean.
+
+**Status: FIXED.** No migration, so it reaches production with the deploy.
+
+---
+
+## Pass K — acknowledging an event nobody finished
+
+**F-K01 — a lost Stripe money event, answered 200 and never retried.**
+
+Stripe stops retrying an event the moment one delivery answers 2xx. `recordEvent`
+in `lib/stripe/webhook.ts` returned `'duplicate'` — which both webhook routes
+answer **200** — for two different situations: an event that reached status
+`processed`, and an event another delivery merely *holds* at status `processing`.
+Those are not the same thing, and conflating them loses money.
+
+**The sequence.**
+
+1. A handler throws — `handleTransactionCreated`, say, on a transient database failure.
+2. `markEventError`, hitting the same failure, throws too. It is the only thing
+   that moves the row to `error`, so the row stays `processing`.
+3. Stripe retries a minute later — inside `STALE_EVENT_MS` (10 min), so the claim
+   is not yet reclaimable.
+4. `recordEvent` falls through to `return { outcome: 'duplicate' }`. The route
+   answers **200**.
+5. Stripe considers the event delivered and **stops**. The card debit is never
+   applied, and the row sits in `processing` with nothing left to reprocess it.
+
+**Proved behaviourally** against `tests/helpers/in-memory-supabase.ts` (the
+Postgres-faithful fake), not from reading:
+
+| After | A Stripe retry saw |
+|---|---|
+| `markEventError` **succeeded** | `fresh` — reprocessed ✅ |
+| `markEventError` **failed** | `duplicate` → **200** → retries stop ❌ |
+
+**A second, unconditional defect in the same path.** The money route called
+`markEventError` *unguarded*, unlike the billing route which wraps it:
+
+```js
+await markEventError(supabase, event.id, message, claimToken);  // can throw
+console.error('[money webhook] handler error', event.type, e);  // never reached
+```
+
+So whenever recording the error state failed, the throw escaped the catch block
+and took the **original money error with it**. The operator saw only the
+secondary failure — "error state was not recorded" — and never the debit failure
+that actually happened. `markEventProcessed` was unguarded there too.
+
+**The fix.** `recordEvent` now distinguishes `'duplicate'` (FINISHED — the only
+outcome a route may acknowledge) from `'in_flight'` (held, unfinished). Both
+routes answer `in_flight` with **409**, so the retry keeps coming: if the holder
+succeeds the next delivery sees `processed` and is acknowledged; if the holder
+died the claim goes stale and is reclaimed. The money route now logs the handler
+error **before** the write that can throw, and guards both `markEventError` and
+`markEventProcessed` the way the billing route already did.
+
+Not changed: `issuing_authorization.request` still bypasses the claim entirely —
+that is deliberate and correct (Stripe's real-time window, and
+`wallet_reserve_card_auth` is idempotent on `p_auth_id` under a row lock, which
+was verified rather than assumed).
+
+**Verification.** 8 new behavioural tests; **5 fail against the original code**
+and the other 3 are regression guards for behaviour that was already right
+(finished ⇒ duplicate, stale reclaim, error reclaim). Full suite **13,658 /
+13,658** under pinned UTC and again under `TZ=America/Los_Angeles`.
+`npx tsc --noEmit` and eslint clean.
+
+**Status: FIXED.** No migration, so it reaches production with the deploy.
+
+---
+
+## Pass L — an invitee could rewrite the invite they were about to accept
+
+**F-L01 — privilege escalation: `guest` → `parent`, and into families never invited to.**
+
+`accept_invite` copies the invite's `role` straight into `family_members`. So
+whoever controls that column controls the role. `invites_update`, as 0118 left
+it, handed that control to the invitee:
+
+```sql
+create policy invites_update on public.invites for update
+  using (public.can_manage_family(family_id)
+         or lower(email) = lower(coalesce(auth.jwt()->>'email','')));
+```
+
+Two faults compound. The second arm gives the **invitee** update rights over
+their own invite row, with nothing constraining which columns. And because the
+policy declares `USING` with **no `WITH CHECK`**, Postgres reuses the USING
+expression as the check on the NEW row — an expression still satisfied by "the
+email is mine", so `family_id` and `expires_at` are unconstrained too.
+
+**Measured**, not argued: on a database replayed from these migrations, as
+`authenticated`, with controls proving RLS was live throughout.
+
+| | |
+|---|---|
+| invite role after the invitee's own UPDATE | **parent** |
+| `family_members.role` they ended up with | **parent** |
+| `can_manage_family` afterwards | **true** |
+| rows repointed to an **unrelated** family | **1** |
+| role obtained in that unrelated family | **parent** |
+
+The controls that make those numbers mean something — each run in the same
+session, as the same impersonated invitee:
+
+| Control | Result |
+|---|---|
+| `current_user` | `authenticated` (not the table owner) |
+| another person's invite visible | 0 rows — SELECT policy holding |
+| direct `family_members` insert | refused, 42501 |
+| updating someone else's invite | 0 rows — USING holding |
+| **updating my own invite** | **1 row — the hole** |
+
+So a person invited at the product's *lowest* privilege promotes themselves to
+family manager; and anyone holding a single pending invite can repoint it at any
+family id and become a manager of a household that never invited them.
+
+**The fix — 0298.** The invitee arm is not needed by anything: `accept_invite`
+is SECURITY DEFINER and writes `status`/`accepted_by` itself, and the only other
+update in the product is the admin revoke, which runs as the service role. So
+the policy now says what was meant, with an explicit `WITH CHECK` so a manager
+cannot push an invite into a family they do not manage either:
+
+```sql
+create policy invites_update on public.invites for update
+  using (public.can_manage_family(family_id))
+  with check (public.can_manage_family(family_id));
+```
+
+SELECT is deliberately unchanged — seeing an invite addressed to your own email
+is the invite flow working, not a leak.
+
+**Verification.** After 0298, on the same database: role rewrite **0 rows**,
+family pivot **0 rows**, expiry extension **0 rows**, while the invitee still
+reads their own invite, `accept_invite` still lands them at the **granted**
+role (`guest`), and re-accepting is still idempotent (0136 intact). Managers
+still revoke and amend their own invites and are refused (42501) when moving one
+out of their family.
+
+`docs/audit/invite-role-escalation-check.sql` makes it permanent and is
+**non-vacuous in both directions**: restoring the 0118 policy fails it with
+`INVITE-ESC FAIL: the invitee rewrote their own invite role (1 rows)`, and it
+passes again once 0298 is re-applied. 0298 applied twice is clean (LB-016 §4).
+
+No regression: the probe suite fails the same 6 probes with and without this
+change on this local harness — a pre-existing local-only artefact of the 3
+migrations that need pgvector, which CI has and this container does not.
+
+Full suite **13,658 / 13,658** under pinned UTC and `TZ=America/Los_Angeles`
+(one run in each zone hit **F-F05**, the known `api-ai-runs` 5s-timeout flake,
+which passes in isolation and on re-run — it is also, retroactively, the
+unidentified single failure reported in Pass J).
+
+**Status: FIXED IN CODE, NOT YET IN PRODUCTION.** This is a migration, so like
+0296 and 0297 it is inert until the F5 ledger blocker is cleared. **The
+escalation is live in production until then.**
+
+---
+
+## Pass M — a CRM identity decided by a column its subject can rewrite
+
+**F-M01 — a stranger's `crm_contacts` row could be taken over and overwritten.**
+
+Generalised the ILIKE-wildcard class that `f462cc7e` had just fixed in inbound
+email routing ("the fix had not reached this call site"), and swept all 27
+`.ilike`/`.like` call sites. Most are family-scoped searches where a wildcard
+only broadens your *own* search — not a boundary. Three were not: identity
+lookups against `crm_contacts`, run through the **service role**, past
+admin-only RLS, where the matched row is the row that then gets **overwritten**.
+
+Two independent faults, each sufficient on its own:
+
+1. **The identity key was user-writable.** Both `upsertOnboardingContact`
+   callers resolved `email: profile?.email ?? auth.user.email`. `profiles.email`
+   is a plain `text` column, and `profiles_update_self` constrains *which row*
+   you may update, not *which columns* — so its owner sets it to anything,
+   including a stranger's exact address. No wildcard needed.
+2. **The pattern was unescaped.** That value went straight into
+   `.ilike('email', email)`, so `%` matched every contact and `.limit(1)` picked
+   one.
+
+**Measured** on a database replayed from the migrations, as `authenticated`:
+
+| Step | Result |
+|---|---|
+| attacker rewrites their own `profiles.email` to `%` | **1 row** |
+| server reads `profiles.email` (preferred over the verified address) | `%` |
+| `.ilike` matches a contact they never owned | **yes** |
+| service-role `update` overwrites the victim's row | **1 row** — `first_name=Attacker` |
+
+Controls, same session, proving `crm_contacts` stayed shut to ordinary users
+throughout — so the only way in is the service-role path the app itself takes:
+
+| Control | Result |
+|---|---|
+| rows an ordinary user can read | **0** |
+| rows changed by a direct write | **0** (value verified untouched afterwards) |
+
+A correction worth recording: my first version of that second control tested for
+an `insufficient_privilege` exception and reported "blocked: f". That was
+**wrong** — an UPDATE matching no RLS-visible row changes 0 rows and raises
+nothing. Re-measured on `ROW_COUNT`.
+
+**A third consequence, same root cause.** `fireAutomationEvent` took the same
+writable column, and `runSteps` sends `to: recipient.email` through Resend from
+the product's own `FROM_EMAIL` — so it also chose who receives branded mail on
+the product's behalf.
+
+**The fix.**
+- All three identity lookups now call the shared `escapeLike` from
+  `lib/supabase/escape-like.ts`. I had written my own copy first; while I was
+  working, a parallel session landed `a50433ce`, which consolidates the four
+  private copies into exactly that module and enforces uniqueness by test. Mine
+  was deleted and its call sites repointed rather than shipping a fifth.
+- The verified `auth.user.email` now wins at all four call sites (two contact
+  upserts, two automation events). `saveUserProfile`'s own `email: profile.email`
+  is untouched — that is the user writing their own row, which is the point.
+
+Escaping alone would **not** have been enough: the exact-address takeover needs
+no wildcard. The preference change is the load-bearing half.
+
+**Verification.** 9 new tests; **4 fail against the original code**. Escaping
+behaviour checked against Postgres 16 directly, including that a *real*
+underscore still matches (`'j_hn@…' ilike E'j\\_hn@…'` → true), so legitimate
+addresses keep resolving. Full suite **13,678 / 13,678** under pinned UTC and
+`TZ=America/Los_Angeles`. `tsc`, eslint and the Supabase query audit clean.
+
+One run of the suite reported a single failure I did not capture before it
+scrolled; three subsequent full runs were green. Recorded as unidentified rather
+than assumed to be the known `api-ai-runs` flake.
+
+**Status: FIXED.** No migration, so it reaches production with the deploy.
+
+**F-M02 — a double-escape shipped 40 minutes earlier, and a guard that could not see it.**
+
+`a50433ce` consolidated `escapeLike` and added `tests/ilike-patterns-are-escaped.test.ts`
+to enforce it. Its matcher requires a **template literal**
+(`` /\.(i?like)\(…,\s*`[^`]*\$\{[^`]*`\)/ ``), so two shapes were invisible to it.
+
+*Bare-value call sites.* `.ilike('email', email)` has no backticks. Four were
+left raw — the three `crm_contacts` identity lookups above, plus
+`.ilike('category', b.category)` in the digital twin and raw search terms in
+meals and finances.
+
+*Values escaped twice.* Four sites already escaped by hand upstream then got
+`escapeLike()` added at the call site:
+
+```js
+const term = title.trim().replace(/[%_]/g, (m) => `\\${m}`);  // once
+... .ilike('title', `%${escapeLike(term)}%`)                   // twice
+```
+
+`50%` becomes `50\\\%`, which LIKE reads as a literal backslash then a literal
+percent. Measured in Postgres 16:
+
+| pattern | matches `50% off groceries` |
+|---|---|
+| `%50\% off groceries%` (once) | **t** |
+| `%50\\\% off groceries%` (twice) | **f** |
+
+So on `main` the assistant's `findReminder`, the task search, and the grocery and
+meal searches stopped finding any row whose name contains `%` or `_`. Not
+hypothetical and not mine — live on `main` for the ~40 minutes before this.
+
+**Fix.** The redundant upstream escapes are removed (escaping stays at the call
+site, which is that commit's own stated convention), the four raw sites now
+escape, and the guard gains two rules: one for bare-value patterns, one
+forbidding a hand-rolled `[%_]` escape anywhere outside the helper. Both **fail
+against `main`** and pass here.
+
+**Two of those double-escapes were mine**, introduced minutes earlier when a
+scripted inline→helper conversion overlapped a scripted raw-site fix and each
+added an escape. Caught by typecheck and a follow-up scan for
+`const x = escapeLike(...)` feeding `escapeLike(x)`, then fixed — recorded
+because the guard now makes that class impossible to reintroduce quietly.
+
+**Verification.** Full suite **13,682 / 13,682** under pinned UTC and
+`TZ=America/Los_Angeles`. `tsc`, eslint and the Supabase query audit clean.
+
+---
+
+## Pass N — a public bucket named its objects with Math.random, and my own guard said that was fine
+
+**F-N01 — feedback screenshots behind 31 bits of non-cryptographic randomness.**
+
+Swept the storage boundary this pass: 6 buckets, 22 `storage.objects` policies. Per
+bucket the command coverage is complete (`chore-proof` and `feedback-attachments`
+have no UPDATE policy, which fails closed and is right for immutable objects), and
+only three policies carry no family or owner scope — all three the deliberate
+`FOR SELECT USING (bucket_id = '…')` public reads on `avatars`,
+`feedback-attachments` and `marketplace-photos`.
+
+For a publicly-readable bucket the object NAME is the whole boundary, and the first
+path segment is the user id, which is not secret. `feedback-attachments` named its
+objects:
+
+```js
+const path = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+```
+
+**Measured**, not estimated: the random part is always **6** base36 characters —
+**31 bits**, a **2.18e9** keyspace — against a UUID's 122. `Date.now()` is not
+secret, and `Math.random()` is not a CSPRNG. These are screenshots *of the product*,
+so they carry names, schedules and balances.
+
+**This one is mine.** Pass H added
+`tests/public-bucket-objects-are-unguessable.test.ts`, and when its first version
+flagged every `Date.now()` I narrowed it to CLOCK-ONLY — writing, in the test
+itself, that *"a name that also mixes in Math.random still has real entropy
+(feedback-attachments does this)"*. The narrowing was right to avoid false
+positives on the helper's own fallback; the blessing of `Math.random` was not, and
+it is exactly why this call site survived a guard written to catch it.
+
+**Fix.** Both public-bucket uploads now build their path through the shared
+`unguessableObjectName` (crypto.randomUUID). `marketplace-photos` already used
+`crypto.randomUUID` directly but kept the six-character string as its fallback and
+was a fourth private copy of the same idea — the shape that let the escapeLike
+defect reach four call sites with two still wrong.
+
+The guard gains two rules, replacing the comment that blessed the weakness:
+every upload into a publicly-readable bucket must name its object with the shared
+helper, and no public-bucket path may take its entropy from `Math.random` (the
+helper's own fallback is the single permitted use). **Both fail against the
+previous code**, naming both files.
+
+**Verification.** Full suite **13,729 / 13,729**. `tsc` and eslint clean.
+
+**Status: FIXED.** No migration, so it reaches production with the deploy.
+
+---
+
+# Pass J — the guard shapes, and eight findings behind them (F-J01–F-J08)
+
+This pass found nothing by looking for another instance of a known bug. Every
+finding came from asking a different question: **why did the guard that exists
+for this not catch it?** The answer turned out to have three distinct forms, and
+separating them is the substance of this pass, because the remedy for each
+differs.
+
+## The three ways a guard fails
+
+**1. Scope gap — the rule is right, the walk is too small.**
+`family-day-not-greenwich-day` and `no-limit-above-the-row-cap` scanned `app` and
+`lib`, never `components`. `mobile-numeric-inputmode` read **one flat directory**
+with `readdirSync` — not even its subdirectories.
+
+The last one is the most instructive defect in this pass, because it is the
+"guard that cannot fail" in its softest and most convincing form. It **ran**, on
+every CI job, and passed **honestly**. What made it useless is that its own
+coverage assertion — "more than 20 money inputs scanned" — was satisfied by the
+single directory it read. *A coverage assertion calibrated to the scanned subset
+cannot detect that the subset is the problem.* Twenty-six money inputs sat
+outside it with no `inputMode="decimal"`: every wallet balance, available and
+limit, bill and budget amounts, savings targets, trip budgets, itinerary costs.
+On iOS none of it could take a decimal point.
+
+**2. Premise gap — the guard covers the blessed helper, not the bypass.**
+`read-error-surfaced` is a good guard that checks every `useRealtimeQuery` call
+site for a dropped error. Five reads dropped theirs anyway, because each had
+**hand-rolled a fetch instead of using the hook** — outside its premise entirely.
+*A guard on the safe path does not cover the path taken to avoid it.*
+
+**3. Enumerated, with no scan behind it.** Three sightings:
+`whole-table-reads-are-not-capped` pins four named jobs against a capped fake;
+the i18n gate lists named surfaces; `claimed-writes-that-did-not-land` watches
+twelve named tables. None can be *wrong* about what it checks. None ever grew.
+
+Every guard widened in this pass got a bound past what its old scope could
+satisfy, plus a case asserting the walk still reaches past it.
+
+## The findings
+
+| | Finding | Severity |
+|---|---|---|
+| F-J01 | Nine forms wrote Greenwich's day into a DATE column | High |
+| F-J02 | Two reads capped at 1,000 rows in `components/`, one also dropping its error and lacking a rejection path | High |
+| F-J03 | Twenty-six money inputs could not take a decimal point on iOS | High |
+| F-J04 | Five reads handled every database failure and no network one — including App Lock presenting a configured lock as never set up | High |
+| F-J05 | The admin console reported the first thousand of everything | High |
+| F-J06 | Est. MRR, and the unpaid accounts the billing page could not see | High |
+| F-J07 | Two wallet balances summed from a capped read | High |
+| F-J08 | A member could vote twice in the family meal vote | High |
+
+Plus: the routine cron read each family's clock once per rule and guessed it on
+failure; the medication reminder's UTC fallback; and an i18n ratchet. Full
+evidence for each is in `audit/claude-1.md`.
+
+## Three that deserve naming
+
+**F-J04, App Lock.** The component's own comment defines three states:
+`undefined` = loading, `null` = no PIN ever set, otherwise the config. A failed
+read is a **fourth** meaning and was given the second. So a transient error
+presented a configured App Lock as never set up and offered "Set up PIN" — and
+setting one there overwrites the real config of a lock the user still has.
+
+**F-J05/F-J06, the admin console.** These convince because they are *half right*.
+`{ count: 'exact', head: true }` is uncapped and was used for the family, user
+and subscription tiles. Beside them, the Documents tile rendered `docs.length`
+— pinned at exactly 1,000 forever — and MRR, growth buckets, the revenue trend
+and "Past Due / Unpaid" were each reduced over a truncated prefix. Exact counts
+sat next to charts built from a sample, with nothing saying they disagreed. On
+billing the read also carried no `.order()`, so *which* thousand was arbitrary:
+measured against a capped fake with every overdue account past the cap, the page
+showed **zero** past-due accounts.
+
+**F-J08, the meal vote.** `castVote` clears the prior pick then inserts the new
+one; the insert's error was checked and the delete's discarded. The database does
+not backstop it, and the reason is exact: `meal_vote_ballots_once` is
+`UNIQUE (option_id, member_id)` — one ballot per member per **option**, not per
+**vote** — so switching from A to B inserts a different key and the constraint
+never fires. A failed clear left the member holding both ballots while the toast
+said "Vote recorded", and the tally counts each and divides by `ballots.length`:
+one person deciding a family's dinner twice, for two different dinners.
+
+## What this pass got wrong, twice
+
+Recorded because both were one step from being reported as findings.
+
+**The i18n number.** The count of hardcoded strings in the ungated surface reads
+2,812 today against a recorded 2,343 — apparently 469 strings of drift. Measured
+with **one scanner held fixed** across both trees: 2,903 then, 2,812 now. The
+surface has **improved by 91**; the apparent rise was the scanner getting better
+at seeing strings. *Two numbers from two different scanners say nothing about the
+code, and the obvious reading of them was backwards.*
+
+**Three counts, each too large.** The Greenwich-day write scan returned 57 files
+with a loose detector (over-reporting 4.4× on type annotations and unrelated
+literals), then 13 with a comma-terminated one (under-reporting, because
+`str(fd, 'service_date')` ends the value early), and finally **14** with a
+depth-aware property-value extractor — every one verified by eye. The loose
+number would have put 43 phantom findings on the board.
+
+The same discipline cleared four candidates that looked serious and were not:
+`resolveEntitlement`'s fail-open is documented and deliberate; `?? 100` on an AI
+score is reached only in a parent-approval path that already returns early on a
+failed read; the child-login uniqueness check fails open but is backstopped by a
+unique index *and* a synthetic-email collision; and `childSpendableCents`'
+capped sum could not affect a card authorization, because the authoritative
+check sums in SQL under `for update`. That last one was removed anyway — it had
+**zero callers**, and its comment claimed to be the live check, which is an
+invitation to the next author.
+
+## Verification
+
+Every fix in this pass was proved load-bearing the same way: revert it, watch the
+guard go red, restore. Three new guards added
+(`query-builders-have-a-rejection-path`, `aggregates-read-past-the-row-cap`,
+`i18n-ungated-surface-ratchet`), five existing guards widened. Full suite
+**13,899 / 13,899**, `tsc` clean, `next build` compiles, lint unchanged at its
+three pre-existing warnings. CI green on `b0bacc54`.
+
+**Still the one recommendation this audit would make above all others: break
+what a guard protects and confirm it goes red.** This pass adds a corollary —
+**and check that it was looking there at all.**
+
+---
+
+# Pass K — the client code paths behind the swept tables (F-K01–F-K03)
+
+Pass T swept the **RLS layer** on the sensitive tables. This pass audits what
+was explicitly left: the **client code paths** — the modules' reads, writes,
+delete handling and error reporting. It began with the health and location
+modules, as the data the product treats as most sensitive.
+
+## F-K01 — Thirty-nine writes reported success for a change the database refused *(High, fixed)*
+
+**The finding is a consequence of a previous pass's fix, which is what makes it
+interesting.** Migrations 0254, 0275, 0306, 0308, 0309 and 0310 added
+manager-only write policies across forty-four tables. 0309's header states the
+problem it was solving exactly:
+
+> components/modules/medications-module.tsx declares `canEdit = isManager(role)`
+> and then writes `medications` … STRAIGHT FROM THE BROWSER with the viewer's
+> own JWT. … `canEdit` only decides whether a button renders, and a hidden
+> button is not a boundary.
+
+The boundary was added. **The UI in front of it was never told.**
+
+**Measured on Postgres 16**, with that exact policy shape, as a non-manager:
+
+```
+update medications set dosage = '40 mg' where id = 1;   UPDATE 0   dosage still 10 mg
+delete from medications where id = 1;                   DELETE 0   row still present
+insert into medications values (…);                     ERROR  42501
+```
+
+That asymmetry is the defect. `with check` (INSERT) **raises** and the client
+sees it. `using` (UPDATE/DELETE) **filters**, and the client sees
+`{ error: null }`. PostgREST returns affected rows only when asked — `.select()`
+is what appends `Prefer: return=representation` — so without it `data` is null
+whether one row changed or none did, and the call site could not tell **even in
+principle**.
+
+Thirty-nine call sites checked `error`, saw null, and said "Medication deleted",
+"Bill marked as paid", "Entry deleted", "Trip updated". All thirty-nine now ask
+for their rows and treat zero as a refusal.
+
+Three deserve naming:
+
+- **`medications.is_active`** decides whether `lib/server/notifications.ts`
+  raises the "dose due today" reminder at all. A toggle that silently did
+  nothing is a parent believing they stopped — or started — a reminder that
+  never moved.
+- **`passwords-module.remove` is a SOFT delete** (`update({ deleted_at })`), so
+  a refused one leaves the credential in the vault while the toast says it is
+  gone.
+- **The three document deletes remove the storage object BEFORE the row**, so a
+  refused row delete leaves a row pointing at a file that no longer exists.
+
+## F-K02 — The guard list was too narrow by 2.7× *(High, fixed — my own)*
+
+The first version of the guard drew its tables from policies declared
+`as restrictive`: nineteen. A **permissive** policy whose `using` clause
+requires `can_manage_family` filters a non-manager's update exactly as
+silently. Re-derived properly: **forty-four**. Fourteen call sites were sitting
+behind the difference — the health providers, the insurance policies, the
+password vault, three document surfaces and the family name.
+
+**`family_members` and `notifications` are deliberately excluded.** Their
+policies are "own row OR manager" (`user_id = auth.uid() or …`), so a member's
+own write succeeds and **zero rows is a normal outcome** — "mark all read" with
+nothing unread affects no rows, and reporting that as a refusal would be a new
+bug rather than a fix. Separating those two from the forty-four is why this pass
+re-derived the list rather than widening it by pattern.
+
+## F-K03 — locator-module *(verified healthy, no action)*
+
+The highest-value module named as never audited, and it is **sound**:
+
+- writes go through **server actions** that enforce `isManager` server-side
+  (`savePlace`, `deletePlace`, `setGeofenceEnabled`) — the browser-direct
+  pattern 0309 was written about does not appear here;
+- `updateMyLocation` and `setLocationSharing` take `member_id` from the
+  **session**, never from client input;
+- all three reads are error-checked, and `location_events` carries
+  `.limit(120)` — a real bound under the row cap;
+- `updateMyLocation` setting `is_sharing: true` unconditionally looked like a
+  privacy defect (sharing re-enabling itself) and is not: its only caller is the
+  "Share now" button, so it matches intent.
+
+## F-K04 — Five access writes on the trust page *(High, fixed)*
+
+The same shape, on the surface where the sentence is about **access**. Every
+write there is `.eq('id', …).eq('family_id', …)`, which matches nothing for a
+stale or foreign id — and a write that matches nothing succeeds. These are
+server actions, so the manager check has already run; RLS is not what refuses
+them. The zero-row case is exactly what a revoke button on a list rendered a
+moment ago produces:
+
+| write | what it said | what was true |
+|---|---|---|
+| `trust_policies` update / toggle / delete | "policy disabled" | still enabled |
+| `trust_delegations` revoke | **"access revoked"** | still granting access |
+| `emergency_sessions` end | **"emergency ended"** | still elevating access |
+
+All five now ask for their rows and refuse rather than claim.
+
+## F-K05 — Two medical tables are member-writable while their neighbours are manager-only *(Medium, OPEN — owner decision)*
+
+`immunizations` (0069) and `health_visits` (0068) carry
+`FOR ALL … USING (is_family_member(family_id))`. On the **same page**,
+`medical_profiles`, `health_providers` and `insurance_policies` are
+manager-only, and 0309 made `medications` manager-only. The page gate is
+`requireFeature` — a **subscription** check, not a role check.
+
+So a child on a qualifying plan can edit or delete a sibling's vaccination
+record and medical visit history, while the same child cannot touch a
+medication or an insurance policy.
+
+**This is not the 0309 shape.** Neither module gates its UI on `isManager`, so
+the interface and the database agree — there is no hidden button making a
+promise the database does not keep. It is an asymmetry, not a lie, which is why
+it is recorded for an owner rather than changed: whether a teenager may log
+their own vaccine is a product judgement, and closing it needs a migration that
+two other workers are actively holding.
+
+It is nonetheless the shape 0309's own header named — *"a class fixed where
+somebody remembered and left open where nobody did."*
+
+## Verified healthy in this pass, recorded so it is not re-derived
+
+- **locator-module**, the highest-value module named as never audited: server
+  actions enforce `isManager` server-side, `member_id` comes from the session,
+  reads are bounded and error-checked.
+- **paperwork-module**: server actions only.
+- **trust actions**: ten of eleven call `managerCtx()`; the eleventh delegates
+  to one that does, deliberately.
+- **RLS is enabled on every health table checked.** A plain grep for
+  `ENABLE ROW LEVEL SECURITY` returns **zero** for `symptom_logs`,
+  `health_goals`, `appointments`, `health_metrics` and `workout_logs` — because
+  every one is enabled through dynamic SQL. That zero is not a finding, and is
+  recorded here because it reads exactly like one.
+
+## Method notes
+
+Two mistakes made and corrected in this pass, recorded because both were close
+to shipping:
+
+- The narrow table list above — caught by auditing the guard against the
+  migrations rather than trusting the pattern that produced it.
+- `open(p, 'w').write(transform(s))` truncates the file **before** evaluating
+  the argument, so a raise inside the transform left a module empty. Restored
+  from git; the helper now computes first and refuses to write a suspiciously
+  small file.
+
+A test double had to learn `.select()` after `.update().eq()` — it answered only
+the old shape, which exercises a client the code no longer uses. Second sighting
+in this audit, after the cron double.
+
+**Verification.** 13,923 tests across 1,222 files; `tsc` clean; `next build`
+compiles; lint unchanged at its three pre-existing warnings; i18n gate clean
+with one new string added to all seven populated catalogues. The new guard is
+verified load-bearing in both directions — removing one `.select('id')` turns it
+red with file, line, table and operation.
+
+# Final Regression
+
+Current integrated source passes the local gates below; integrated hosted and complete feature verification remain open. Focused auth, messaging and guard results pass with the boundaries recorded in [the current integration cycle](docs/final-audit/main-integration-cycle-20260919.md). Verification uses pre-final-evidence staged tree 4ac44596e1f91234ee9822b9ca2027d0fd62fdb2. Application code remains unchanged; one subsequent medication test correction makes UTC explicit and separately checks browser-local wall time. Strict types and the full DST-zone rerun pass; historical passing gates above do not establish this merge.
+
+## Build
+Status: ✅ PASS — current frozen production build exits 0, generating 251 pages. Log: Temp/bubaly-integration-build-final-20260919.log. This build gate does not establish complete workflow or hosted acceptance.
+
+## Type Check
+Status: ✅ PASS — strict post-build types exit 0 for the frozen source. Log: Temp/bubaly-integration-types-frozen-20260919.log.
+
+## Lint
+Status: ✅ PASS — current frozen lint exits 0 with three existing warnings: document-capture generation ref and two messages-module toastError dependencies. Log: Temp/bubaly-integration-lint-final-20260919.log.
+
+## Automated Tests
+Status: 🔄 IN PROGRESS — current frozen full UTC unit gate passes 16,360/16,360 checks across 1,294 files, zero failed/skipped (Temp/bubaly-integration-units-final-20260919.json). The first full DST-zone run passed 16,359/16,360; its sole failure assumed omitted medication timezone meant UTC. With that test corrected and a separate browser-local assertion added, the full DST-zone rerun passes 16,361/16,361 across 1,294 files with zero failed/skipped (Temp/bubaly-integration-units-dst-final-20260919.json). The corrected medication suite also passes 16/16 in UTC (Temp/bubaly-integration-dose-zone-utc-20260919.log). No application code changed after the passing frozen build/types. Hosted execution remains pending. Hosted discovery passes 1,078 tests across 47 files; discovery is not execution. Focused auth passes 138/138 browser checks. Prior combined UI run passed 248 and failed eight rewards cases; the repaired rewards run separately passes 32/32, with two negative catalogue controls failing as expected before restoring the source hash.
+
+## Authentication
+Status: 🔄 IN PROGRESS — combined source and full workflow verification pending.
+
+## Authorization
+Status: 🔄 IN PROGRESS — combined source and full workflow verification pending.
+
+## Core User Journeys
+Status: 🔄 IN PROGRESS — combined source and full workflow verification pending.
+
+## APIs
+Status: 🔄 IN PROGRESS — combined source and full workflow verification pending.
+
+## Database
+Status: 🔄 IN PROGRESS — combined source and full workflow verification pending.
+
+## Integrations
+Status: 🔄 IN PROGRESS — combined source and full workflow verification pending.
+
+## Mobile / Responsive
+Status: 🔄 IN PROGRESS — combined source and full workflow verification pending.
+
+## Accessibility
+Status: 🔄 IN PROGRESS — combined source and full workflow verification pending.
+
+## Security
+Status: 🔄 IN PROGRESS — combined source and full workflow verification pending.
+
+## Performance
+Status: 🔄 IN PROGRESS — combined source and full workflow verification pending.
+
+## Known Blockers
+Production migration ledger and service/device configuration remain external verification obligations. No new BLOCKED status is counted without a completed dependency investigation.
+
+## Remaining Issues
+Open permanent records and newly incorporated upstream findings remain listed above. The second complete regression follows individual feature verification.
+
+## Production Readiness
+NO
+
+## Final Sign-Off
+Pending

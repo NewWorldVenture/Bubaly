@@ -116,7 +116,8 @@ describe('contact center persistence boundaries', () => {
   it('fails Twilio routing closed when family lookup fails', () => {
     expect(smsRoute).toContain('Routing temporarily unavailable');
     expect(voiceRoute).toContain('Routing temporarily unavailable');
-    expect(smsRoute).toContain('channelResult.error || familyResult.error');
+    expect(smsRoute).toContain('if (channelResult.error)');
+    expect(smsRoute).toContain('if (familyResult.error)');
     expect(voiceRoute).toContain('channelResult.error || familyResult.error');
   });
 

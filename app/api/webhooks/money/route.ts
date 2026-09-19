@@ -12,6 +12,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import {
   recordEvent, markEventProcessed, markEventError,
   handleAuthorizationRequest, handleTransactionCreated, handleAuthorizationUpdated,
+  handleIssuingCardUpdated,
 } from '@/lib/stripe/webhook';
 import { syncConnectedAccount } from '@/lib/stripe/connect';
 import { readBoundedRequestText } from '@/lib/server/bounded-request-body';
@@ -46,12 +47,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ received: true });
   }
 
-  // Everything else is deduped. Failed or abandoned claims can be retried, while
-  // an active concurrent delivery is acknowledged without repeating side effects.
+  // Everything else is deduped. Only a FINISHED event is acknowledged; one that
+  // another delivery still holds gets a 409 so Stripe keeps retrying, because an
+  // unfinished claim is not a completed one — see recordEvent.
   let claimToken = '';
   try {
     const claim = await recordEvent(supabase, event);
     if (claim.outcome === 'duplicate') return NextResponse.json({ received: true, duplicate: true });
+    if (claim.outcome === 'in_flight') return NextResponse.json({ error: 'event_in_flight' }, { status: 409 });
     claimToken = claim.claimToken ?? '';
   } catch {
     return NextResponse.json({ error: t('money.webhookStorageUnavailable') }, { status: 503 });
@@ -66,6 +69,16 @@ export async function POST(req: NextRequest) {
       case 'issuing_authorization.updated':
         await handleAuthorizationUpdated(supabase, event.data.object as Stripe.Issuing.Authorization);
         break;
+      // The card's own state. lib/stripe/issuing.ts writes our mirror after the
+      // Stripe update and used to discard that write's result, and nothing
+      // reconciled the two because this event fell through to `default` — so a
+      // refused mirror write left /wallet showing a limit or a freeze state the
+      // card no longer had, permanently. `.created` is here too: a card issued
+      // while the mirror insert failed is the same divergence on its first day.
+      case 'issuing_card.created':
+      case 'issuing_card.updated':
+        await handleIssuingCardUpdated(supabase, event.data.object as Stripe.Issuing.Card);
+        break;
       case 'account.updated': {
         const acct = event.data.object as Stripe.Account;
         const familyId = acct.metadata?.family_id;
@@ -78,13 +91,28 @@ export async function POST(req: NextRequest) {
     }
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
-    await markEventError(supabase, event.id, message, claimToken);
+    // The handler failure is the one an operator needs, so log it even when
+    // recording the error state fails. Unguarded, markEventError's own throw
+    // escaped this block and took the money error with it, leaving only the
+    // secondary failure in the logs.
     console.error('[money webhook] handler error', event.type, e);
+    try {
+      await markEventError(supabase, event.id, message, claimToken);
+    } catch (markError) {
+      console.error('[money webhook] failed to record handler error', markError);
+    }
     // Return 500 so Stripe retries; recordEvent keeps errored events reprocessable
     // and the money handlers are idempotent, so the retry settles correctly.
     return NextResponse.json({ error: 'handler_failed' }, { status: 500 });
   }
 
-  await markEventProcessed(supabase, event.id, claimToken);
+  try {
+    await markEventProcessed(supabase, event.id, claimToken);
+  } catch (err) {
+    // The side effects landed but the claim did not close. Answering 2xx here
+    // would strand the row in 'processing'; a non-2xx lets the retry settle it.
+    console.error('[money webhook] failed to finalize event', err);
+    return NextResponse.json({ error: t('money.webhookStorageUnavailable') }, { status: 503 });
+  }
   return NextResponse.json({ received: true });
 }

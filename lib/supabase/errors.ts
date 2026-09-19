@@ -111,3 +111,29 @@ export function isMissingRelationError(error: unknown): boolean {
     msg.includes('does not exist')
   );
 }
+
+/**
+ * Did a write actually change a row?
+ *
+ * A browser-direct UPDATE or DELETE that row-level security filters out is NOT
+ * an error. Postgres applies a restrictive policy's `using` clause as a FILTER,
+ * so the statement matches nothing and succeeds. Measured on Postgres 16 with
+ * the exact policy shape migration 0309 installs, as a non-manager:
+ *
+ *     update medications set dosage = '40 mg' where id = 1;  -> UPDATE 0   (dosage unchanged)
+ *     delete from medications where id = 1;                  -> DELETE 0   (row still present)
+ *     insert into medications values (…);                    -> ERROR 42501
+ *
+ * That asymmetry is the whole problem: `with check` (INSERT) raises, `using`
+ * (UPDATE/DELETE) filters silently. So the RLS hardening those migrations added
+ * is correct AND invisible to the client, and every call site that checked only
+ * `error` went on to report success for a write that never happened.
+ *
+ * PostgREST only returns the affected rows when the request asks for them —
+ * `.select()` is what appends `Prefer: return=representation`. Without it
+ * `data` is null whether one row changed or none did, so a call site cannot
+ * tell even in principle. Hence: add `.select('id')`, then use this.
+ */
+export function wroteNoRows(rows: unknown[] | null | undefined): boolean {
+  return !rows || rows.length === 0;
+}

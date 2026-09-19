@@ -15,7 +15,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select, Textarea } from '@/components/ui/input';
@@ -120,27 +120,36 @@ export function PasswordsModule() {
       url: form.url.trim() || null, notes: form.notes.trim() || null,
       member_id: form.member_id || null, is_favorite: form.is_favorite,
     };
-    const { error: err } = form.id
-      ? await sb.from('family_credentials').update(payload).eq('id', form.id)
-      : await sb.from('family_credentials').insert({ ...payload, family_id: familyId, created_by: userId });
+    // A refused write is not an error: a manager-only RLS policy FILTERS the
+    // update/delete, so it matches nothing and succeeds. `.select('id')` asks
+    // for the rows back, which is the only way to tell.
+    const { data: rows, error: err } = form.id
+      ? await sb.from('family_credentials').update(payload).eq('id', form.id).select('id')
+      : await sb.from('family_credentials').insert({ ...payload, family_id: familyId, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(form.id ? 'Entry updated' : 'Entry saved');
     setEditOpen(false); refresh();
   }
 
   async function toggleFavorite(c: Credential) {
     const sb = createClient();
-    const { error: err } = await sb.from('family_credentials').update({ is_favorite: !c.is_favorite }).eq('id', c.id);
+    const { data: rows, error: err } = await sb.from('family_credentials').update({ is_favorite: !c.is_favorite }).eq('id', c.id).select('id');
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     refresh();
   }
 
   async function remove(c: Credential) {
     setConfirmDel(null);
     const sb = createClient();
-    const { error: err } = await sb.from('family_credentials').update({ deleted_at: new Date().toISOString() }).eq('id', c.id);
+    // A SOFT delete: a refused one leaves the credential in the vault while the
+    // toast says it is gone, which is the worst version of this for a password.
+    const { data: rows, error: err } = await sb.from('family_credentials')
+      .update({ deleted_at: new Date().toISOString() }).eq('id', c.id).select('id');
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('passwordsModule.entryDeleted')); refresh();
   }
 

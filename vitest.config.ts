@@ -19,6 +19,17 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['tests/**/*.test.ts'],
+    // Pin the host zone so a run is HERMETIC: date arithmetic that reads the
+    // runtime's zone otherwise passes or fails depending on whose laptop it is.
+    // A real DST bug hid here — lib/capture/parse.ts did its arithmetic in local
+    // fields, so on a host in a DST-observing zone the spring-forward morning
+    // moved a 02:30 appointment to 03:30 instead of 03:00, and every run on a
+    // UTC machine said it was fine.
+    //
+    // `process.env.TZ ?? 'UTC'` rather than a bare 'UTC': CI runs this suite a
+    // second time under TZ=America/Los_Angeles, and a hard-coded value here
+    // would silently override that and make the DST job prove nothing.
+    env: { TZ: process.env.TZ ?? 'UTC' },
   },
   resolve: {
     alias: {

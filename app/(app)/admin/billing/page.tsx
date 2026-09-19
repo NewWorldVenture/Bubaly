@@ -2,7 +2,9 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { DollarSign, CreditCard, Users, RefreshCw, AlertCircle } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
-import { settleAll } from '@/lib/supabase/settle';
+import { settle, settleAll } from '@/lib/supabase/settle';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
+import type { Tables } from '@/lib/database.types';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
@@ -21,16 +23,35 @@ const STATUS_TONE: Record<string, 'success' | 'warning' | 'danger' | 'neutral'> 
 
 const PLAN_COLORS = ['#7c5dff', '#22c55e', '#60a5fa', '#fbbf24', '#f87171', '#64748b'];
 
+/** Exactly the columns the select below asks for, taken from the generated row. */
+type SubscriptionRow = Pick<
+  Tables<'subscriptions'>,
+  'family_id' | 'plan' | 'status' | 'created_at' | 'current_period_end'
+>;
+
 export default async function AdminBillingPage() {
   const tr = await getTranslations();
   const supabase = createServiceClient();
-  const [subscriptionsResult, billingCustomersResult, familiesResult] = await settleAll([
-    supabase.from('subscriptions').select('family_id, plan, status, created_at, current_period_end'),
+  // Every figure on this page — Est. MRR, Active, Past Due, the plan donut, the
+  // six-month trend and the recent list — is reduced from this ONE read, on a
+  // page subtitled "live subscription revenue across every family". It was
+  // unbounded, so PostgREST answered it with at most `db-max-rows` (1,000) and
+  // said nothing, and it carried no `.order()`, so which thousand was arbitrary.
+  // Past that, MRR was understated, "Past Due / Unpaid" could omit unpaid
+  // accounts outright, and "recent" sorted an arbitrary thousand by created_at
+  // and took ten — which need not contain a single genuinely recent row.
+  //
+  // Reaching the ceiling returns an error, which this page already turns into a
+  // read-error state. On a revenue page, refusing to show a number beats showing
+  // a smaller one with no way to tell.
+  const [subscriptionsResult, billingCustomersResult] = await settleAll([
+    readAllAsQuery<SubscriptionRow>((from, to) => supabase.from('subscriptions')
+      .select('family_id, plan, status, created_at, current_period_end')
+      .order('id').range(from, to), { max: 50_000 }),
     supabase.from('billing_customers').select('id', { count: 'exact', head: true }),
-    supabase.from('families').select('id, name'),
   ]);
 
-  const readError = subscriptionsResult.error ?? billingCustomersResult.error ?? familiesResult.error;
+  const readError = subscriptionsResult.error ?? billingCustomersResult.error;
   if (readError) {
     console.error('[admin-billing] billing read failed', readError);
     return <AdminBillingReadError />;
@@ -38,10 +59,8 @@ export default async function AdminBillingPage() {
 
   const { data: subs } = subscriptionsResult;
   const { count: billingCustomers } = billingCustomersResult;
-  const { data: families } = familiesResult;
 
   const rows = subs ?? [];
-  const familyName = new Map((families ?? []).map((f) => [f.id, f.name]));
   const active = rows.filter((s) => s.status === 'active' || s.status === 'trialing');
   const mrrCents = active.reduce((sum, s) => sum + planMonthlyCents(s.plan), 0);
   const pastDue = rows.filter((s) => s.status === 'past_due' || s.status === 'unpaid');
@@ -63,6 +82,18 @@ export default async function AdminBillingPage() {
   const maxTrend = Math.max(...trend.map((t) => t.value), 1);
 
   const recent = [...rows].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 10);
+
+  // Only the families the recent table actually names. Reading every family to
+  // build this map was both capped at a thousand — so a row past it rendered
+  // "—" for a family that exists — and far more rows than ten names need.
+  const recentFamilyIds = [...new Set(recent.map((s) => s.family_id).filter((id): id is string => !!id))];
+  const familiesResult = recentFamilyIds.length
+    ? await settle(supabase.from('families').select('id, name').in('id', recentFamilyIds))
+    : { data: [] as { id: string; name: string }[], error: null };
+  if (familiesResult.error) {
+    console.error('[admin-billing] family name read failed', familiesResult.error);
+  }
+  const familyName = new Map((familiesResult.data ?? []).map((f) => [f.id, f.name]));
 
   const stats = [
     { label: 'Est. MRR', value: fmtMoney(mrrCents), icon: DollarSign, tint: 'text-amber-400 bg-amber-500/15' },

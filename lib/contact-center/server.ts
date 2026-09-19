@@ -10,6 +10,7 @@ import { paperworkKindFields, triagePaperwork, type PaperworkKind } from '@/lib/
 import { systemScopeForFamily } from '@/lib/services/scope';
 import { enrichPaperworkEntities, PaperworkEnrichmentError } from '@/lib/services/paperwork';
 import { classifyIntent, summarizeInbound, shouldNotifyFamily, shouldPlanInbound, type InboundChannel } from './routing';
+import { escapeLike } from '@/lib/supabase/escape-like';
 
 type Admin = ReturnType<typeof createServiceClient>;
 export type ContactChannel = Tables<'family_contact_channels'>;
@@ -60,6 +61,28 @@ export async function resolveFamilyByNumber(admin: Admin, toNumber: string): Pro
   return result.familyId;
 }
 
+/**
+ * `_` is a legal character in a local-part AND the single-character wildcard in
+ * LIKE/ILIKE. `local` here comes from the inbound message's `To` header, which
+ * is attacker-controlled: without escaping, mail addressed to `smit_@bubaly.com`
+ * resolves to the family that owns `smith`.
+ *
+ * Measured in Postgres 16 rather than reasoned about:
+ *
+ *   'smith'  ilike 'smit_'    -> t     <- another family's inbox
+ *   'smith'  ilike 'smit\_'   -> f     <- escaped
+ *   'smith'  ilike 's%'       -> t     <- one message reaches any family
+ *   'smit_h' ilike 'smit\_h'  -> t     <- a real underscore still matches
+ *
+ * That last row is why this escapes rather than switching to `.eq`: addresses
+ * containing an underscore are valid (see LOCAL_RE in ./address) and must keep
+ * routing. `.eq` would also change the match from case-insensitive to
+ * case-sensitive, and the unique index is on `lower(email_local)`.
+ *
+ * This is the defect class the child sign-in fix closed on the auth path; the
+ * fix had not reached this call site, where the input is not merely guessable
+ * but supplied by the sender.
+ */
 /** Resolve the family that owns a bubaly.com local-part (inbound email routing). */
 export async function resolveFamilyByEmailLocalResult(admin: Admin, local: string): Promise<{
   familyId: string | null;
@@ -70,7 +93,7 @@ export async function resolveFamilyByEmailLocalResult(admin: Admin, local: strin
     .select('family_id,email_local')
     // Keep legacy mixed-case addresses, but treat the local-part literally:
     // an allowed underscore must not select another family's address.
-    .ilike('email_local', local.replace(/[\\%_]/g, '\\$&'))
+    .ilike('email_local', escapeLike(local))
     .limit(2)
     .maybeSingle();
   if (error) return { familyId: null, error };

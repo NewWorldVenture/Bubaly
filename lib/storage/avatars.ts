@@ -4,6 +4,7 @@
 //   INSERT: auth.uid() = (storage.foldername(name))[1]::uuid
 //   SELECT: true (public read)
 import type { SupabaseBrowser } from '@/lib/supabase/types';
+import { unguessableObjectName } from './object-name';
 
 const BUCKET = 'avatars';
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -19,8 +20,10 @@ export async function uploadAvatar(
     return { url: null, error: 'Only JPEG, PNG, WebP, GIF, and AVIF images are allowed' };
   }
 
-  const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg';
-  const path = `${userId}/${Date.now()}.${ext}`;
+  // Public bucket: the object name carries the entropy, not the folder. A
+  // timestamp name left every avatar a user ever uploaded enumerable, and they
+  // are never deleted.
+  const path = `${userId}/${unguessableObjectName(file.name.toLowerCase())}`;
 
   const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
     contentType: file.type,

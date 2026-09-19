@@ -11103,7 +11103,6 @@
   "system.liveConnectivityChecksAndReal": "Comprobaciones de conectividad en vivo y uso real medido ahora mismo.",
   "system.refreshSystemOverview": "Actualizar el resumen del sistema",
   "system.systemOverview": "Resumen del sistema",
-  "tableOfContents.80px0px600px": "-80px 0px -60% 0px",
   "taskGroup.nothingOnTheList": "No hay nada en la lista.",
   "taxVault.2025W2AcmeCorp": "W-2 de 2025 — Acme Corp",
   "taxVault.addDocument": "Añadir documento",
@@ -13626,5 +13625,8 @@
   "contactSmsReply.undelivered": "Respuesta no entregada",
   "contactSmsReply.undeliveredDetail": "El proveedor indica que la entrega ha fallado. La respuesta no se volverá a enviar automáticamente.",
   "contactSmsReply.failed": "Error al enviar la respuesta",
-  "contactSmsReply.failedDetail": "El proveedor indica que el envío ha fallado. La respuesta no se volverá a enviar automáticamente."
+  "contactSmsReply.failedDetail": "El proveedor indica que el envío ha fallado. La respuesta no se volverá a enviar automáticamente.",
+  "actions.unknownTimeZone": "Zona horaria desconocida. Usa un nombre como America/Chicago.",
+  "errors.thatChangeWasNotSaved": "Ese cambio no se guardó: puede que no tengas permiso. Actualiza e inténtalo de nuevo.",
+  "familyModule.unknownTimeZone": "Zona horaria desconocida. Usa un nombre como America/Chicago."
 }

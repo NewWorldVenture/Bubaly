@@ -17,9 +17,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Keep CI and local verification on the same declared Node release.
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version-file: .nvmrc
           cache: npm
 
       - name: Install dependencies
@@ -44,8 +45,36 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # scripts/i18n-gate.mjs describes itself as "CI gate for surfaces declared
+      # translated", and ends "Nothing else in the build would notice, so this
+      # does." It was in no workflow, so nothing ran it — the guard that cannot
+      # fail, in its purest form: a check that cannot fail because it is never
+      # invoked. finalaudit.md meanwhile listed it as a passing check.
+      #
+      # It is load-bearing, verified rather than assumed: a JSX text node planted
+      # in components/marketing/site-header.tsx is caught by name, file and line
+      # across both surfaces that cover it, exit 1. Removed, exit 0 across all
+      # eight declared surfaces.
+      #
+      # Cheap (a static scan, no network, no database), so it runs beside lint
+      # rather than in the slower jobs.
+      - name: i18n gate (declared surfaces carry no hardcoded copy)
+        run: npm run i18n:gate
+
       - name: Unit tests
         run: npm test
+
+      # The same suite on a DST-OBSERVING host. lib/capture/parse.ts does its
+      # date arithmetic on Date fields, and a Date built from LOCAL fields is
+      # normalised by the runtime's own DST rules: on the spring-forward morning
+      # a 02:30 appointment became 03:30 instead of moving to 03:00, the first
+      # minute that exists. Production runs UTC, so the whole suite passed on
+      # every run while the bridge was host-dependent — this job is the only
+      # thing that would have caught it, and is what keeps it caught.
+      - name: Unit tests (DST-observing host)
+        run: npm test
+        env:
+          TZ: America/Los_Angeles
 
       # Build BEFORE Typecheck, deliberately. next.config.mjs turns off the
       # type-check and lint passes inside `next build` — they were a duplicate
@@ -89,7 +118,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: mobile/package-lock.json
 
@@ -226,7 +255,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version-file: .nvmrc
           cache: npm
 
       - name: Install dependencies

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { listAllAuthUsers } from '@/lib/server/list-all-auth-users';
 import { readAll } from '@/lib/supabase/read-all';
+import { readInChunks } from '@/lib/supabase/chunked-in';
 import { sendReactEmail } from '@/lib/email';
 import { ChoreReminderEmail } from '@/lib/emails/chore-reminder';
 import * as React from 'react';
@@ -9,6 +11,20 @@ import { hasCronAuthorization } from '@/lib/server/cron-auth';
 
 // Runs every Sunday at 18:00 UTC via Vercel Cron.
 // Finds every family member who has open chore assignments due this week and emails them.
+//
+// Budgeted and bounded, for the same reason as weekly-digest: the send loop is
+// serial and one email API call deep per recipient, `byMember` preserves the
+// order the assignments came back in, and there is no cursor. A run killed
+// mid-loop therefore serves the same prefix of members every week and never
+// reaches the tail — the members in it simply stop getting reminders, and the
+// 200 says everything went fine.
+export const runtime = 'nodejs';
+export const maxDuration = 300;
+
+// Below maxDuration with room to finish the sends already in flight.
+const BUDGET_MS = 260_000;
+// Concurrency against provider latency, not CPU.
+const CONCURRENCY = 8;
 export async function GET(req: NextRequest) {
   const t = await getTranslations();
   if (!hasCronAuthorization(req)) {
@@ -84,13 +100,22 @@ export async function GET(req: NextRequest) {
   }
 
   // Fetch family names
+  // Batched: the assignments read above is paged and unbounded, so this id list
+  // is every family with an open chore. One `.in()` carrying a thousand uuids
+  // builds a URL of roughly 40 KB — past the gateway's request-line limit the
+  // read fails outright, and the branch below turns that into a 500 for the
+  // whole run, so nobody gets a chore reminder rather than one family losing
+  // its name from the copy.
   const familyIds = [...new Set((assignments ?? []).map((a) => a.family_id))];
-  const { data: families, error: familiesError } = await supabase.from('families').select('id, name').in('id', familyIds);
+  const { data: families, error: familiesError } = await readInChunks<{ id: string; name: string }, { message: string }>(
+    familyIds,
+    (chunk) => supabase.from('families').select('id, name').in('id', chunk),
+  );
   if (familiesError) {
     console.error('Cron chore family read error:', familiesError);
     return NextResponse.json({ error: t('choreReminders.choreReminderProcessingFailed') }, { status: 500 });
   }
-  const familyNameById = new Map((families ?? []).map((f) => [f.id, f.name]));
+  const familyNameById = new Map(families.map((f) => [f.id, f.name]));
 
   // Patch family names back in
   for (const a of assignments ?? []) {
@@ -100,22 +125,28 @@ export async function GET(req: NextRequest) {
 
   // Fetch emails
   const userIds = [...byMember.values()].map((v) => v.userId);
-  const { data: authUsers, error: authUsersError } = await supabase.auth.admin.listUsers();
+  // Every auth user, not GoTrue's default first 50. The filter below narrows to
+  // the members who have a reminder due, but it can only narrow what was read:
+  // a member past the first page has no email here and is skipped silently.
+  const { users: allAuthUsers, error: authUsersError } = await listAllAuthUsers(supabase);
   if (authUsersError) {
     console.error('Cron chore user read error:', authUsersError);
     return NextResponse.json({ error: t('choreReminders.choreReminderProcessingFailed') }, { status: 500 });
   }
   const emailByUserId = new Map(
-    (authUsers?.users ?? [])
+    allAuthUsers
       .filter((u) => userIds.includes(u.id))
       .map((u) => [u.id, u.email ?? null]),
   );
 
   let sent = 0;
   let failed = 0;
-  for (const [, { userId, memberName, familyName, chores }] of byMember) {
+  let skipped = 0;
+  const startedAt = Date.now();
+
+  const remind = async ({ userId, memberName, familyName, chores }: MemberBucket) => {
     const email = emailByUserId.get(userId);
-    if (!email) continue;
+    if (!email) return;
     const { ok } = await sendReactEmail({
       to: email,
       subject: `${chores.length} chore${chores.length !== 1 ? 's' : ''} coming up this week`,
@@ -123,7 +154,20 @@ export async function GET(req: NextRequest) {
     });
     if (ok) sent++;
     else failed++;
+  };
+
+  const recipients = [...byMember.values()];
+  for (let i = 0; i < recipients.length; i += CONCURRENCY) {
+    if (Date.now() - startedAt > BUDGET_MS) {
+      skipped = recipients.length - i;
+      console.error(`[chore-reminders] budget reached with ${skipped} recipients unreminded`);
+      break;
+    }
+    await Promise.all(recipients.slice(i, i + CONCURRENCY).map(remind));
   }
 
-  return NextResponse.json({ sent, failed }, { status: failed === 0 ? 200 : 502 });
+  // `skipped` counts recipients this run never attempted. A 200 here would make
+  // an unreminded tail look like a clean run.
+  const ok = failed === 0 && skipped === 0;
+  return NextResponse.json({ sent, failed, skipped }, { status: ok ? 200 : 502 });
 }

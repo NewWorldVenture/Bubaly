@@ -11103,7 +11103,6 @@
   "system.liveConnectivityChecksAndReal": "Live connectiviteitscontroles en echt gebruik, zojuist gemeten.",
   "system.refreshSystemOverview": "Systeemoverzicht verversen",
   "system.systemOverview": "Systeemoverzicht",
-  "tableOfContents.80px0px600px": "-80px 0px -60% 0px",
   "taskGroup.nothingOnTheList": "Niets op de lijst.",
   "taxVault.2025W2AcmeCorp": "W-2 2025 — Acme Corp",
   "taxVault.addDocument": "Document toevoegen",
@@ -13626,5 +13625,8 @@
   "contactSmsReply.undelivered": "Antwoord niet bezorgd",
   "contactSmsReply.undeliveredDetail": "De provider meldt dat de bezorging is mislukt. Het antwoord wordt niet automatisch opnieuw verzonden.",
   "contactSmsReply.failed": "Verzenden van antwoord mislukt",
-  "contactSmsReply.failedDetail": "De provider meldt dat het verzenden is mislukt. Het antwoord wordt niet automatisch opnieuw verzonden."
+  "contactSmsReply.failedDetail": "De provider meldt dat het verzenden is mislukt. Het antwoord wordt niet automatisch opnieuw verzonden.",
+  "actions.unknownTimeZone": "Onbekende tijdzone. Gebruik een naam zoals America/Chicago.",
+  "errors.thatChangeWasNotSaved": "Die wijziging is niet opgeslagen — je hebt mogelijk geen toestemming. Ververs de pagina en probeer het opnieuw.",
+  "familyModule.unknownTimeZone": "Onbekende tijdzone. Gebruik een naam zoals America/Chicago."
 }

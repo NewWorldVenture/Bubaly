@@ -46,6 +46,7 @@ const DOC_KINDS: VacDocKind[] = ['passport', 'id', 'visa', 'ticket', 'boarding_p
 // Vault, and a rule the client cannot see is a rule it cannot obey.
 export { SENSITIVE_CATEGORIES, isSensitiveCategory, isSensitiveDocument } from '@/lib/documents/sensitivity';
 import { isSensitiveDocument } from '@/lib/documents/sensitivity';
+import { escapeLike } from '@/lib/supabase/escape-like';
 
 /** Parents and adults may hold sensitive files; a cron with no human behind it may not. */
 function canReadSensitive(scope: ServiceScope): boolean {
@@ -102,9 +103,9 @@ export async function listDocuments(scope: ServiceScope, input: ListDocumentsInp
     .eq('family_id', scope.familyId)
     .order('created_at', { ascending: false })
     .limit(Math.min(Math.max(input.limit ?? 100, 1), MAX_ROWS));
-  if (input.category?.trim()) query = query.ilike('category', input.category.trim().replace(/[%_]/g, (m) => `\\${m}`));
+  if (input.category?.trim()) query = query.ilike('category', escapeLike(input.category.trim()));
   if (input.memberId) query = query.eq('member_id', input.memberId);
-  if (input.query?.trim()) query = query.ilike('title', `%${input.query.trim().replace(/[%_]/g, (m) => `\\${m}`)}%`);
+  if (input.query?.trim()) query = query.ilike('title', `%${escapeLike(input.query.trim())}%`);
   const { data, error } = await query;
   if (error) {
     console.error('[service:documents] list failed', error);

@@ -292,8 +292,8 @@ describe('SMS automatic reply reservation (not provider delivery verification)',
     const response = await deliver(SMS);
     expect(response.status).toBe(503);
     expect(await response.text()).not.toContain('<Message');
-    const saved = db.table('ai_tool_calls').find(row => row.tool_name === 'contact_center.sms_reply')!;
-    expect(saved.outputs).toMatchObject({ phase: 'queued', emissionToken: null });
+    expect(mocks.admin).not.toHaveBeenCalled();
+    expect(db.table('ai_tool_calls')).toHaveLength(0);
     expect(db.table('family_inbox_messages').filter(row => row.direction === 'outbound')).toHaveLength(0);
   });
 

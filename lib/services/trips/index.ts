@@ -44,6 +44,7 @@ import { dayKeyInTz, scopeNow, zonedDayBoundsMs, zonedTimeMs } from '../scope';
 import { listPracticesBetween, type SportsEventRow } from '../sports';
 import { createTodo } from '../tasks';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
+import { escapeLike } from '@/lib/supabase/escape-like';
 
 export type VacationRow = Tables<'vacations'>;
 export type VacationMemberRow = Tables<'vacation_members'>;
@@ -59,10 +60,6 @@ const DAY_PARTS = ['morning', 'afternoon', 'evening', 'all_day'] as const;
 const ITEM_KINDS = ['activity', 'meal', 'travel', 'reservation', 'free_time', 'note', 'reminder'] as const;
 /** Passports must usually be valid this long past the return date. */
 const PASSPORT_VALIDITY_DAYS = 183;
-
-function escapeLike(value: string): string {
-  return value.replace(/[%_]/g, (m) => `\\${m}`);
-}
 
 // ── snapshot ──────────────────────────────────────────────────────────────────
 

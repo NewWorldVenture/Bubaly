@@ -25,7 +25,7 @@ const sdk = fs.readFileSync(path.join(path.dirname(require.resolve('@supabase/su
 const SOURCE_FILES = [
   'components/modules/voice-module.tsx', 'lib/capture/save.ts', 'lib/capture/parse.ts',
   'lib/voice/command-router.ts', 'lib/voice/transcript.ts', 'lib/supabase/errors.ts',
-  'lib/time/zoned.ts',
+  'lib/time/zoned.ts', 'lib/supabase/settle.ts',
 ];
 const MOCKED = [
   '@/components/app/app-context', '@/lib/supabase/client', '@/components/ui/toast',
@@ -47,7 +47,7 @@ function resolveAlias(specifier: string, importer: string): string | null {
     : specifier.startsWith('@/') ? specifier.slice(2) : null;
   if (relative === null) return null;
   for (const extension of ['.ts', '.tsx', '/index.ts', '/index.tsx']) {
-    if (fs.existsSync(`${relative}${extension}`)) return `${relative}${extension}`;
+    if (fs.existsSync(`${relative}${extension}`)) return `${relative}${extension}`.replaceAll('\\', '/');
   }
   return null;
 }

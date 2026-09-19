@@ -20,12 +20,16 @@ export default async function GuardianSettingsPage() {
   const supabase = await createServer();
   const db = withGuardianTables(supabase);
 
+  // Both settled: the guardian-tables read was not, so a transport failure —
+  // DNS, TCP, TLS, a timed-out fetch — rejected the batch and took the page to
+  // the error boundary rather than degrading. See lib/supabase/settle.ts.
   const [{ data: profile }, { data: member }] = await Promise.all([
-    (db.from('guardian_member_profiles') as ReturnType<typeof supabase.from>)
+    // Same cast, same erasure — see the note in guardian/contacts.
+    settle<{ data: Record<string, unknown> | null }>((db.from('guardian_member_profiles') as ReturnType<typeof supabase.from>)
       .select('*')
       .eq('family_id', familyId)
       .eq('member_id', memberId)
-      .maybeSingle(),
+      .maybeSingle()),
 
     settle(supabase
       .from('family_members')
