@@ -58,6 +58,20 @@ function schemaTables(): Set<string> {
   return tables;
 }
 
+function walk(...dirs: string[]): string[] {
+  const out: string[] = [];
+  const visit = (rel: string) => {
+    for (const e of readdirSync(path.join(ROOT, rel), { withFileTypes: true })) {
+      if (e.name === 'node_modules' || e.name.startsWith('.')) continue;
+      const child = `${rel}/${e.name}`;
+      if (e.isDirectory()) visit(child);
+      else out.push(child);
+    }
+  };
+  for (const d of dirs) visit(d);
+  return out;
+}
+
 /** Table names the insights route queries. */
 function queriedTables(): string[] {
   const src = readFileSync(path.join(ROOT, ROUTE), 'utf8');
@@ -65,6 +79,54 @@ function queriedTables(): string[] {
   for (const m of src.matchAll(/eq\(sb,\s*'([a-z_]+)'/g)) names.add(m[1]);
   for (const m of src.matchAll(/\.from\('([a-z_]+)'\)/g)) names.add(m[1]);
   return [...names].sort();
+}
+
+function sourceFiles(): string[] {
+  return walk('app', 'lib', 'components').filter((rel) => /\.tsx?$/.test(rel));
+}
+
+/**
+ * Every `.from('table')` in the tree, with its file and line.
+ *
+ * `.storage.from('bucket')` names a storage bucket, not a table, and is
+ * excluded — including it would report all seven buckets as missing tables.
+ */
+function everyFromCall(): { table: string; where: string }[] {
+  const out: { table: string; where: string }[] = [];
+  for (const rel of sourceFiles()) {
+    readFileSync(path.join(ROOT, rel), 'utf8').split('\n').forEach((line, i) => {
+      if (/storage\s*\.?\s*from\(/.test(line)) return;
+      for (const m of line.matchAll(/(?<!storage)\.from\('([a-z_][a-z0-9_]*)'\)/g)) {
+        out.push({ table: m[1], where: `${rel}:${i + 1}` });
+      }
+    });
+  }
+  return out;
+}
+
+/**
+ * Helpers that take a TABLE NAME as their second argument. Curated, not
+ * inferred: a sweep that assumed every `helper(db, 'x', …)` passed a table
+ * reported eleven phantom misses, because `writeSyncState(db, provider, …)`
+ * takes a provider, `claimGuardianCallback(client, callbackType, …)` takes a
+ * callback type, and `childrenBlockedOn(db, 'push'|'email')` takes a channel.
+ * That was the fourth census in this audit to cry wolf the same way.
+ */
+const TABLE_ARG_HELPERS: { fn: string; file: string }[] = [
+  { fn: 'eq', file: ROUTE },
+  { fn: 'saveRow', file: 'app/(app)/dashboard/auto/actions.ts' },
+  { fn: 'softDelete', file: 'app/(app)/dashboard/auto/actions.ts' },
+];
+
+function helperTables(): { table: string; where: string }[] {
+  const out: { table: string; where: string }[] = [];
+  for (const { fn, file } of TABLE_ARG_HELPERS) {
+    const pattern = new RegExp(`\\b${fn}\\((?:sb|supabase|db|client)\\s*,\\s*'([a-z_][a-z0-9_]*)'`, 'g');
+    readFileSync(path.join(ROOT, file), 'utf8').split('\n').forEach((line, i) => {
+      for (const m of line.matchAll(pattern)) out.push({ table: m[1], where: `${file}:${i + 1} via ${fn}()` });
+    });
+  }
+  return out;
 }
 
 /** Bundle keys the prompt builders read back out of `InsightData.rows`. */
@@ -88,6 +150,25 @@ describe('an insight queries a table that exists', () => {
   it('every table the route queries exists in the schema', () => {
     const missing = queriedTables().filter((t) => !tables.has(t));
     expect(missing, 'the insight will return [] and the model will be told there is no data').toEqual([]);
+  });
+
+  it('no .from() call anywhere names a table that does not exist', () => {
+    // The insights bug reached production because it used a HELPER; the
+    // `.from('x')` form was already clean everywhere. This ratchets that clean
+    // state rather than assuming it holds.
+    const calls = everyFromCall();
+    expect(calls.length, 'the .from() scan found nothing — it is not scanning').toBeGreaterThan(500);
+    const missing = calls.filter((c) => !tables.has(c.table))
+      .map((c) => `${c.where}: ${c.table}`);
+    expect(missing, 'a .from() names a table the migrations never create').toEqual([]);
+  });
+
+  it('no table-name helper names a table that does not exist', () => {
+    const calls = helperTables();
+    expect(calls.length, 'the helper scan found nothing — it is not scanning').toBeGreaterThan(50);
+    const missing = calls.filter((c) => !tables.has(c.table))
+      .map((c) => `${c.where}: ${c.table}`);
+    expect(missing, 'a helper is passed a table the migrations never create').toEqual([]);
   });
 
   it('every key a prompt reads is a key the route actually returns', () => {

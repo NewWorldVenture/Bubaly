@@ -897,3 +897,25 @@ FOUND: `C1-S8-12` [HIGH][CORRECTNESS] — 9 table names in app/api/ai/insights/
   give 491 tables. Proved red 3x incl. the orphan-key direction.
 SUITE: 1,253 files / 14,089 tests, 0 failures.
 LAST-UPDATE: 2026-09-19
+
+## Claude-1 — Session 8, Pass AD (cont.): the same question, asked of the tree
+WIDENED the C1-S8-12 census past the insights route, since that bug reached
+  production through a HELPER and the `.from('x')` form was never the problem:
+  - every `.from('x')` in app/ lib/ components/ (500+ sites): 0 bad.
+  - table-name helpers (eq, saveRow, softDelete — 102 sites): 0 bad after the fix.
+  Both are now RATCHETED by the same test, so the clean state is held rather
+  than assumed. Proved red on a typo'd .from() in a component, a typo'd
+  saveRow(), and a near-miss softDelete() (driver_licenses → driver_license).
+FOURTH FALSE POSITIVE, recorded because it keeps happening: the first helper
+  sweep assumed any `helper(db,'x',…)` passes a table name and reported ELEVEN
+  misses. All phantoms — writeSyncState takes a provider, claimGuardianCallback
+  takes a callback type, childrenBlockedOn takes a notification channel. The
+  helper list in the test is CURATED, not inferred, with that reason beside it.
+  The recurring error: assuming a string in an argument position means what I
+  expect. Caught each time by checking hits against the source before filing.
+ALSO: the first saveRow mutation came back GREEN and the tempting conclusion was
+  "the helper scan doesn't work". It did — the mutation had replaced a
+  'vehicles' occurrence that wasn't the call site. A mutation that fails to kill
+  is a claim about the MUTATION first, and only then about the guard.
+SUITE: 1,253 files / 14,091 tests, 0 failures.
+LAST-UPDATE: 2026-09-19

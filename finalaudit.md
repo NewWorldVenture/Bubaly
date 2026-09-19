@@ -8795,4 +8795,39 @@ the boundary that was built to notice. **The defensive default was the thing
 that hid the defect.** This is the same shape as `C1-S8-06`'s voice handler
 and `C1-S8-04`'s discarded ledger error, arriving a third way.
 
-Suite: **1,253 files / 14,089 tests, 0 failures.**
+### Then the same question, asked of the whole tree
+
+The insights bug reached production because it used a **helper** — the
+`.from('table')` form was never the problem. So the census was widened:
+
+| form | non-existent tables |
+|---|---|
+| every `.from('x')` in `app/`, `lib/`, `components/` (500+ call sites) | **0** |
+| table-name helpers (`eq`, `saveRow`, `softDelete` — 102 call sites) | **0**, after this fix |
+
+Both are now ratcheted by the same test, so the clean state is held rather than
+assumed. Proved red on a typo'd `.from()` in a component, a typo'd `saveRow()`,
+and a near-miss `softDelete()` (`driver_licenses` → `driver_license`).
+
+### The fourth false positive, recorded because it keeps happening
+
+A first pass at the helper sweep assumed any `helper(db, 'x', …)` passed a table
+name, and reported **eleven** misses. All eleven were phantoms:
+`writeSyncState(db, provider, …)` takes a provider,
+`claimGuardianCallback(client, callbackType, …)` takes a callback type, and
+`childrenBlockedOn(db, 'push' | 'email')` takes a notification channel. The
+helper list in the test is therefore **curated, not inferred**, with that
+reasoning written beside it.
+
+That is the fourth census in this audit to cry wolf in the same way — and the
+fourth to be caught by checking the hits against the source before filing. The
+recurring error is assuming a string in a given argument position means what I
+expect it to mean.
+
+A second one is worth recording too: the first `saveRow` mutation came back
+**green**, and the temptation was to conclude the helper scan did not work. It
+did — the mutation had replaced an occurrence of `'vehicles'` that was not the
+call site. Re-run against the exact call, it went red. A mutation that fails to
+kill is a claim about the mutation first, and only then about the guard.
+
+Suite: **1,253 files / 14,091 tests, 0 failures.**
