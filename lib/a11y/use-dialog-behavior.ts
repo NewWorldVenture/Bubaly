@@ -31,6 +31,17 @@ const FOCUSABLE = 'a[href],button:not([disabled]),textarea:not([disabled]),input
  * A gate that must not be dismissed (a paywall, a lock screen) passes no
  * `onClose` and keeps the trap without an exit, which is the correct shape for
  * it: `aria-modal` still has to be true even when there is nothing to close.
+ *
+ * PASS THE REAL CONDITION as `open`, not a literal `true`. The effect keys on
+ * it, and bails when the ref is not attached yet. A component that returns
+ * early while closed — `if (!enabled || unlocked) return <>{children}</>` —
+ * would therefore run this once on mount, find no dialog, and NEVER RE-RUN,
+ * so a dialog that opens after mount would silently have no trap at all.
+ * `true` is only correct when the element is rendered on every pass (a modal
+ * whose parent mounts it only while open).
+ *
+ * That is not hypothetical: the app-lock gate was adopted with `true` and had
+ * exactly this hole until the condition was threaded through.
  */
 export function useDialogBehavior(
   ref: RefObject<HTMLElement | null>,

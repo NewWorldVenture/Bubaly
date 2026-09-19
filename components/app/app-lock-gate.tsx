@@ -22,8 +22,6 @@ export function AppLockGate({
   userId: string;
   children: React.ReactNode;
 }) {
-  const dialogRef = useRef<HTMLDivElement>(null);
-  useDialogBehavior(dialogRef, true, {});
   const tr = useTranslations();
   const [mounted, setMounted] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
@@ -104,6 +102,14 @@ export function AppLockGate({
   // While the lock screen covers the app, lock the page behind it so mobile
   // touch-scroll can't drag the protected content out from under the overlay.
   useLockBodyScroll(enabled && !unlocked);
+
+  // Same condition as the scroll lock above, and it has to be: passing a literal
+  // `true` here would run the effect once on mount, find no dialog (this
+  // component returns `children` while unlocked), and never re-run — so a gate
+  // that locks AFTER mount would have had no focus trap at all. No `onClose`:
+  // a lock screen is not dismissible, and the trap holds without an exit.
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogBehavior(dialogRef, enabled && !unlocked, { lockScroll: false });
 
   // Not locked → render the app normally.
   if (!enabled || unlocked) return <>{children}</>;
