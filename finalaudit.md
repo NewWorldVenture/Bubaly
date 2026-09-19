@@ -8700,3 +8700,99 @@ a table that is merely readable is a query someone has to make, while a table
 that is readable *and* published is a push.
 
 Probes: **52/52**.
+
+
+---
+
+# Pass AD — eight AI insights that had never worked
+
+## C1-S8-12 [HIGH][CORRECTNESS] — nine table names that name no table, each failing into a confident wrong answer
+
+**Files:** `app/api/ai/insights/route.ts` (`fetchRows`) · `lib/ai/insights.ts`
+**Status:** FIXED · `tests/an-insight-queries-a-table-that-exists.test.ts`
+
+### Problem
+
+Nine of the table names in the AI insights route name tables that do not exist:
+
+```
+care_logs · contacts · family_goals · sports_teams · announcements
+medical_records · photos · photo_albums · recipes
+```
+
+Each query returns a PostgREST *"relation does not exist"*, and every one is
+swallowed by the same two lines:
+
+```ts
+const logs = await eq(sb, 'care_logs', familyId)…;
+return { care_logs: logs.data ?? [] };     // the error is discarded here
+```
+
+`.data ?? []` does not throw, so the route's own `try/catch` — which exists
+precisely to catch a failed data load and answer 500 — never sees it. The empty
+array reaches a prompt builder whose fallback is **a sentence**:
+
+```ts
+… .join('\n') || 'No care entries logged.'
+```
+
+So the model is told, as fact, that the family has logged no care at all, and
+writes a confident *"AI Care Log Summary"* on that basis. Not an error, not an
+empty state — **a wrong answer delivered with the same confidence as a right
+one**. Eight insight kinds had never worked, and nothing anywhere said so.
+
+This is the class `lib/realtime/published-tables.ts` names in its own header —
+*"a dead channel and a quiet table are indistinguishable to the client"* — one
+layer up, where the consumer is a language model that will not notice either.
+
+### It was worse than a name, every time
+
+Correcting the table alone would have shipped a fix that returns rows and
+renders them as blanks — the trap this finding is about:
+
+| kind | table | and the columns |
+|---|---|---|
+| `care` | `care_logs` → `care_log` | read `care_type`/`notes`; the table has `log_type`/`note` |
+| `goals` | `family_goals` → `goals` | read `status`; the table has `is_complete` — so the route's own `.neq('status','completed')` **filter** would have errored against the right table too |
+| `sports` | `sports_teams` → `teams` | read `name`, `wins`, `losses`; the table has `team_name` and **no win/loss columns at all**, so every team printed `W:0 L:0` — which reads as a record, not as no data |
+| `announcements` | `announcements` → `family_announcements` | read `content`; the table has `body` |
+| `medical` | `medical_records` → `health_visits` | **both halves were wrong**: `appointments` exists, but stores `title`/`provider`/`starts_at`, not `appointment_type`/`provider_name`/`appointment_date` — so its query errored on the filter and the order |
+| `contacts` | `contacts` → `family_contacts` | columns already correct |
+| `photos` | `photos`/`photo_albums` → `family_photos`/`family_albums` | only `.length` was read |
+| `recipes` | `recipes` → `family_recipes` | columns already correct |
+
+Every corrected pair was then verified against the replayed schema: **all 29
+`table.column` references the fixed code uses exist.**
+
+### The guard
+
+`tests/an-insight-queries-a-table-that-exists.test.ts` holds **both ends of the
+seam**, because a correct query stored under a key nothing reads is exactly as
+silent as a query against a table that is not there:
+
+1. every table the route queries exists in the schema;
+2. every bundle key a prompt reads back is a key the route actually returns.
+
+The schema index is derived from the migrations rather than a live database, so
+it runs in the unit suite — and it was checked against the replayed schema when
+written: **both give 491 tables.** The test asserts its own inputs are non-empty
+first, so neither parse can pass by matching nothing.
+
+Proved red three times:
+
+| mutation | guard |
+|---|---|
+| route queries `care_logs` again | **RED** — *"the insight will return [] and the model will be told there is no data"* |
+| route queries `recipes` again | **RED** |
+| a prompt reads `announcements` while the route returns `family_announcements` | **RED** — *"a prompt reads a bundle key the route never returns"* |
+
+### Why the error was invisible, stated plainly
+
+The route does handle failure — it wraps `fetchRows` in `try/catch` and answers
+500 with *"Could not load data for…"*. That handler is correct and it never
+fires, because `?? []` converts the failure into a success with no rows before
+the boundary that was built to notice. **The defensive default was the thing
+that hid the defect.** This is the same shape as `C1-S8-06`'s voice handler
+and `C1-S8-04`'s discarded ledger error, arriving a third way.
+
+Suite: **1,253 files / 14,089 tests, 0 failures.**

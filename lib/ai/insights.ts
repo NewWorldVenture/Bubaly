@@ -564,7 +564,7 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
     system:
       'You are a creative family chef assistant. Suggest recipes that use available ingredients, match dietary preferences, and the family will enjoy. Prioritize quick weeknight dinners and one fun weekend project. ' + SHARED_RULES,
     buildUser: (d) => {
-      const recipes = r(d, 'recipes').slice(0, 15);
+      const recipes = r(d, 'family_recipes').slice(0, 15);
       const pantry = r(d, 'pantry_items').slice(0, 20);
       const recipeNames = recipes.map((r) => r.name).filter(Boolean).join(', ') || 'none saved';
       const ingredients = pantry.map((p) => p.name).filter(Boolean).join(', ') || 'none tracked';
@@ -596,8 +596,8 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
     system:
       'You are a compassionate family care assistant. Review care log entries and help the family track patterns, identify care gaps, and plan upcoming care activities. Be empathetic and practical. ' + SHARED_RULES,
     buildUser: (d) => {
-      const entries = r(d, 'care_logs').slice(0, 15);
-      const list = entries.map((e) => `- ${e.care_type || 'General'}: ${e.notes || 'no notes'} (${String(e.occurred_at || e.created_at || '').slice(0, 10)})`).join('\n') || 'No care entries logged.';
+      const entries = r(d, 'care_log').slice(0, 15);
+      const list = entries.map((e) => `- ${e.log_type || 'General'}: ${e.note || 'no notes'}${e.wellbeing ? ` (wellbeing ${e.wellbeing}/5)` : ''} (${String(e.occurred_at || e.created_at || '').slice(0, 10)})`).join('\n') || 'No care entries logged.';
       return `Family: ${d.familyName}. Now: ${d.now}.\n\nCare log entries:\n${list}\n\nGive: (1) a brief summary of care activities, (2) any patterns or gaps in care, (3) one care task to schedule soon.${q(d)}`;
     },
   },
@@ -611,7 +611,7 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
     system:
       'You are a family contacts and relationship assistant. Help organize contacts, identify who to follow up with, and suggest ways to strengthen important relationships. ' + SHARED_RULES,
     buildUser: (d) => {
-      const contacts = r(d, 'contacts').slice(0, 20);
+      const contacts = r(d, 'family_contacts').slice(0, 20);
       const list = contacts.slice(0, 12).map((c) => `- ${c.name || 'Unknown'} (${c.category || 'general'})`).join('\n') || 'No contacts saved.';
       return `Family: ${d.familyName}. Now: ${d.now}.\n\nContacts (${contacts.length} total):\n${list}\n\nGive: (1) categories that could be better organized, (2) 1-2 contact types the family should add, (3) one relationship to nurture this week.${q(d)}`;
     },
@@ -643,8 +643,8 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
     system:
       'You are a family goal-setting coach. Review active goals, celebrate progress, and give practical next steps. Encourage without overwhelming. Keep focus on the 1-2 most impactful goals. ' + SHARED_RULES,
     buildUser: (d) => {
-      const goals = r(d, 'family_goals').slice(0, 10);
-      const list = goals.map((g) => `- ${g.title || 'Goal'}: ${g.progress || 0}% complete (${g.status || 'active'})`).join('\n') || 'No goals set yet.';
+      const goals = r(d, 'goals').slice(0, 10);
+      const list = goals.map((g) => `- ${g.title || 'Goal'}: ${g.progress || 0}% complete (${g.is_complete ? 'complete' : 'active'})`).join('\n') || 'No goals set yet.';
       return `Family: ${d.familyName}. Now: ${d.now}.\n\nGoals:\n${list}\n\nGive: (1) congratulate any recent progress, (2) the 1 goal to focus on this week and why, (3) one small action to take today toward it.${q(d)}`;
     },
   },
@@ -928,9 +928,11 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
       'You are an enthusiastic family sports assistant. Review upcoming games, team results, and schedules. Give practical tips for game-day preparation, encourage young athletes, and suggest training ideas. ' + SHARED_RULES,
     buildUser: (d) => {
       const events = r(d, 'sports_events').slice(0, 10);
-      const teams = r(d, 'sports_teams').slice(0, 5);
+      const teams = r(d, 'teams').slice(0, 5);
       const eList = events.map((e) => `- ${e.title || 'Game'} (${String(e.starts_at || e.event_date || '').slice(0, 10)}, ${e.home_away || ''} at ${e.location || 'TBD'})`).join('\n') || 'No events.';
-      const tList = teams.map((t) => `- ${t.name || 'Team'} (${t.sport || 'sport'}, W:${t.wins || 0} L:${t.losses || 0})`).join('\n') || 'No teams.';
+      // `teams` keeps no win/loss columns — asking for them produced "W:0 L:0"
+      // for every team, which reads as a record rather than as no data.
+      const tList = teams.map((t) => `- ${t.team_name || 'Team'} (${t.sport || 'sport'}${t.season ? `, ${t.season}` : ''}${t.coach ? `, coach ${t.coach}` : ''})`).join('\n') || 'No teams.';
       return `Family: ${d.familyName}. Now: ${d.now}.\n\nTeams:\n${tList}\n\nUpcoming events:\n${eList}\n\nGive: (1) next game to prepare for, (2) one game-day tip, (3) one training idea for this week.${q(d)}`;
     },
   },
@@ -961,8 +963,8 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
     system:
       'You are a warm, friendly family communications assistant. Help draft announcements, summarize recent family news, or suggest what to share with the family. Keep tone positive and appropriate for all ages. ' + SHARED_RULES,
     buildUser: (d) => {
-      const posts = r(d, 'announcements').slice(0, 8);
-      const list = posts.map((p) => `- "${p.title || 'Post'}": ${String(p.content || '').slice(0, 80)}`).join('\n') || 'No announcements yet.';
+      const posts = r(d, 'family_announcements').slice(0, 8);
+      const list = posts.map((p) => `- "${p.title || 'Post'}": ${String(p.body || '').slice(0, 80)}`).join('\n') || 'No announcements yet.';
       return `Family: ${d.familyName}. Now: ${d.now}.\n\nRecent announcements:\n${list}\n\nGive: (1) a summary of recent family news, (2) one suggested announcement to make this week, (3) one question to spark family conversation.${q(d)}`;
     },
   },
@@ -976,10 +978,10 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
     system:
       'You are a helpful family health records assistant (NOT a doctor). You help families organize and understand their health records, flag upcoming appointments, and identify gaps in care. Always recommend consulting a healthcare provider for medical decisions. ' + SHARED_RULES,
     buildUser: (d) => {
-      const records = r(d, 'medical_records').slice(0, 15);
+      const records = r(d, 'health_visits').slice(0, 15);
       const appointments = r(d, 'appointments').slice(0, 10);
-      const rList = records.slice(0, 8).map((r) => `- ${r.type || 'Record'}: ${r.provider || ''} (${String(r.date || r.created_at || '').slice(0, 10)})`).join('\n') || 'No records.';
-      const aList = appointments.slice(0, 5).map((a) => `- ${a.appointment_type || 'Appt'} with ${a.provider_name || '?'} on ${String(a.appointment_date || '').slice(0, 10)}`).join('\n') || 'No appointments.';
+      const rList = records.slice(0, 8).map((r) => `- ${r.kind || 'Record'}: ${r.title || ''}${r.provider_name ? ` with ${r.provider_name}` : ''} (${String(r.visit_date || r.created_at || '').slice(0, 10)})`).join('\n') || 'No records.';
+      const aList = appointments.slice(0, 5).map((a) => `- ${a.title || 'Appt'} with ${a.provider || '?'} on ${String(a.starts_at || '').slice(0, 10)}`).join('\n') || 'No appointments.';
       return `Family: ${d.familyName}. Now: ${d.now}.\n\nMedical records:\n${rList}\n\nAppointments:\n${aList}\n\nGive: (1) upcoming appointments to prepare for, (2) any records that look like they need follow-up, (3) one preventive care action to take.${q(d)}`;
     },
   },
@@ -1026,8 +1028,8 @@ export const INSIGHTS: Record<InsightKind, InsightDef> = {
     system:
       'You are a warm family memory keeper. Help families organize their photo collection, create albums, and capture meaningful moments. Suggest creative ways to preserve and share family memories. ' + SHARED_RULES,
     buildUser: (d) => {
-      const photos = r(d, 'photos').slice(0, 20);
-      const albums = r(d, 'photo_albums').slice(0, 10);
+      const photos = r(d, 'family_photos').slice(0, 20);
+      const albums = r(d, 'family_albums').slice(0, 10);
       return `Family: ${d.familyName}. Now: ${d.now}.\n\nPhotos: ${photos.length} total. Albums: ${albums.length}.\n\nGive: (1) a memory-keeping idea for this week, (2) one album to create from recent photos, (3) one creative way to share memories with family.${q(d)}`;
     },
   },

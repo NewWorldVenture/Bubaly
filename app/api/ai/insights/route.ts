@@ -409,22 +409,22 @@ async function fetchRows(
     }
     case 'recipes': {
       const [recipes, pantry] = await Promise.all([
-        eq(sb, 'recipes', familyId).order('created_at', { ascending: false }).limit(15),
+        eq(sb, 'family_recipes', familyId).order('created_at', { ascending: false }).limit(15),
         eq(sb, 'pantry_items', familyId).eq('is_out_of_stock', false).limit(20),
       ]);
-      return { recipes: recipes.data ?? [], pantry_items: pantry.data ?? [] };
+      return { family_recipes: recipes.data ?? [], pantry_items: pantry.data ?? [] };
     }
     case 'documents': {
       const docs = await eq(sb, 'documents', familyId).order('created_at', { ascending: false }).limit(20);
       return { documents: docs.data ?? [] };
     }
     case 'care': {
-      const logs = await eq(sb, 'care_logs', familyId).order('occurred_at', { ascending: false, nullsFirst: false }).limit(20);
-      return { care_logs: logs.data ?? [] };
+      const logs = await eq(sb, 'care_log', familyId).order('occurred_at', { ascending: false, nullsFirst: false }).limit(20);
+      return { care_log: logs.data ?? [] };
     }
     case 'contacts': {
-      const contacts = await eq(sb, 'contacts', familyId).order('name').limit(30);
-      return { contacts: contacts.data ?? [] };
+      const contacts = await eq(sb, 'family_contacts', familyId).order('name').limit(30);
+      return { family_contacts: contacts.data ?? [] };
     }
     case 'billing': {
       const [subs, expenses] = await Promise.all([
@@ -434,8 +434,8 @@ async function fetchRows(
       return { subscriptions: subs.data ?? [], expenses: expenses.data ?? [] };
     }
     case 'goals': {
-      const goals = await eq(sb, 'family_goals', familyId).neq('status', 'completed').order('created_at', { ascending: false }).limit(15);
-      return { family_goals: goals.data ?? [] };
+      const goals = await eq(sb, 'goals', familyId).eq('is_complete', false).order('created_at', { ascending: false }).limit(15);
+      return { goals: goals.data ?? [] };
     }
     case 'pets': {
       const pets = await eq(sb, 'pets', familyId).eq('is_active', true).limit(10);
@@ -455,24 +455,24 @@ async function fetchRows(
     case 'sports': {
       const [events, teams] = await Promise.all([
         eq(sb, 'sports_events', familyId).order('starts_at', { ascending: true, nullsFirst: false }).limit(15),
-        eq(sb, 'sports_teams', familyId).limit(10),
+        eq(sb, 'teams', familyId).eq('is_active', true).limit(10),
       ]);
-      return { sports_events: events.data ?? [], sports_teams: teams.data ?? [] };
+      return { sports_events: events.data ?? [], teams: teams.data ?? [] };
     }
     case 'pantry': {
       const items = await eq(sb, 'pantry_items', familyId).limit(40);
       return { pantry_items: items.data ?? [] };
     }
     case 'announcements': {
-      const posts = await eq(sb, 'announcements', familyId).order('created_at', { ascending: false }).limit(10);
-      return { announcements: posts.data ?? [] };
+      const posts = await eq(sb, 'family_announcements', familyId).order('created_at', { ascending: false }).limit(10);
+      return { family_announcements: posts.data ?? [] };
     }
     case 'medical': {
       const [records, appointments] = await Promise.all([
-        eq(sb, 'medical_records', familyId).order('date', { ascending: false, nullsFirst: false }).limit(15),
-        eq(sb, 'appointments', familyId).gte('appointment_date', nowIso.slice(0, 10)).order('appointment_date').limit(10),
+        eq(sb, 'health_visits', familyId).order('visit_date', { ascending: false, nullsFirst: false }).limit(15),
+        eq(sb, 'appointments', familyId).gte('starts_at', nowIso).order('starts_at').limit(10),
       ]);
-      return { medical_records: records.data ?? [], appointments: appointments.data ?? [] };
+      return { health_visits: records.data ?? [], appointments: appointments.data ?? [] };
     }
     case 'insurance': {
       const policies = await eq(sb, 'insurance_policies', familyId).order('renewal_date', { ascending: true, nullsFirst: false }).limit(15);
@@ -487,10 +487,10 @@ async function fetchRows(
     }
     case 'photos': {
       const [photos, albums] = await Promise.all([
-        eq(sb, 'photos', familyId).order('created_at', { ascending: false }).limit(20),
-        eq(sb, 'photo_albums', familyId).order('created_at', { ascending: false }).limit(10),
+        eq(sb, 'family_photos', familyId).order('created_at', { ascending: false }).limit(20),
+        eq(sb, 'family_albums', familyId).order('created_at', { ascending: false }).limit(10),
       ]);
-      return { photos: photos.data ?? [], photo_albums: albums.data ?? [] };
+      return { family_photos: photos.data ?? [], family_albums: albums.data ?? [] };
     }
     case 'celebrations': {
       const dates = await eq(sb, 'family_dates', familyId).order('date').limit(30);

@@ -868,3 +868,32 @@ VERIFIED HEALTHY (`C1-S8-11`): 61 tables are in the `supabase_realtime`
 PROBES: 52/52.
 DISCIPLINE NOTE: held the push again while CI ran on 97a50e49.
 LAST-UPDATE: 2026-09-19
+
+## Claude-1 — Session 8, Pass AD (eight AI insights that had never worked)
+FOUND: `C1-S8-12` [HIGH][CORRECTNESS] — 9 table names in app/api/ai/insights/
+  route.ts name tables that DO NOT EXIST: care_logs, contacts, family_goals,
+  sports_teams, announcements, medical_records, photos, photo_albums, recipes.
+  Each query returns "relation does not exist" and each error is swallowed by
+  `.data ?? []`, which does not throw — so the route's own try/catch (built to
+  answer 500 on a failed load) never fires. The empty array reaches a prompt
+  builder whose fallback is a SENTENCE ("No care entries logged."), so the model
+  is told as FACT that the family has no data and writes a confident summary on
+  that basis. Eight insight kinds had never worked and nothing said so.
+  THE DEFENSIVE DEFAULT WAS THE THING THAT HID THE DEFECT. Same shape as
+  C1-S8-06 (voice) and C1-S8-04 (ledger), arriving a third way.
+  It was worse than a name every time — fixing only the table would have shipped
+  rows that render as blanks: care_log has log_type/note not care_type/notes;
+  goals has is_complete not status (so the route's own .neq('status',...) filter
+  would have errored against the RIGHT table); teams has team_name and NO
+  win/loss columns, so every team printed "W:0 L:0" — which reads as a record,
+  not as no data; family_announcements has body not content; and BOTH halves of
+  `medical` were wrong because appointments stores title/provider/starts_at.
+  FIXED all 9 tables + 8 column groups. Verified against the replayed schema:
+  all 29 table.column pairs the corrected code uses exist.
+  GUARD holds BOTH ends of the seam — every table the route queries exists, AND
+  every bundle key a prompt reads is one the route returns (a correct query
+  under an unread key is just as silent). Schema index derived from migrations
+  so it runs in the unit suite; cross-checked against the replayed DB — both
+  give 491 tables. Proved red 3x incl. the orphan-key direction.
+SUITE: 1,253 files / 14,089 tests, 0 failures.
+LAST-UPDATE: 2026-09-19
