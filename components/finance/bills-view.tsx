@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { usd, billDueStatus, DUE_META, fmtDueDate } from '@/lib/finance/hub';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { wroteNoRows } from '@/lib/supabase/errors';
 import { todayInZone } from '@/lib/schedule/zoned';
 
 type Bill = Tables<'bills'>;
@@ -52,17 +53,26 @@ export function BillsView({ mode }: { mode: BillsMode }) {
 
   async function markPaid(b: Bill) {
     const next = b.status === 'paid' ? 'upcoming' : 'paid';
-    const { error } = await createClient().from('bills').update({ status: next }).eq('id', b.id);
-    if (error) toastError(error.message); else success(next === 'paid' ? 'Marked paid' : 'Reopened');
+    // A restrictive RLS policy FILTERS an update/delete rather than raising, so
+    // a refused write returns zero rows and no error. `.select('id')` is what
+    // makes the difference visible — without it `data` is null either way.
+    const { data: rows, error } = await createClient().from('bills').update({ status: next }).eq('id', b.id).select('id');
+    if (error) { toastError(error.message); return; }
+    if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
+    success(next === 'paid' ? 'Marked paid' : 'Reopened');
   }
   async function toggleAutopay(b: Bill) {
-    const { error } = await createClient().from('bills').update({ autopay: !b.autopay }).eq('id', b.id);
-    if (error) toastError(error.message); else success(b.autopay ? 'Auto Pay off' : 'Auto Pay on');
+    const { data: rows, error } = await createClient().from('bills').update({ autopay: !b.autopay }).eq('id', b.id).select('id');
+    if (error) { toastError(error.message); return; }
+    if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
+    success(b.autopay ? 'Auto Pay off' : 'Auto Pay on');
   }
   async function remove(id: string) {
     if (!confirm(t('billsView.deleteThisBill'))) return;
-    const { error } = await createClient().from('bills').delete().eq('id', id);
-    if (error) toastError(error.message); else success(t('billsView.deleted'));
+    const { data: rows, error } = await createClient().from('bills').delete().eq('id', id).select('id');
+    if (error) { toastError(error.message); return; }
+    if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
+    success(t('billsView.deleted'));
   }
 
   const Row = ({ b }: { b: Bill }) => {

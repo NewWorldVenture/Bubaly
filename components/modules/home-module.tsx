@@ -6,7 +6,7 @@ import { ArrowRight, Home, Plus, Trash2, Wrench, Package, Check, Shield, FileTex
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -445,21 +445,26 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
   async function removeFile(doc: WarrantyDoc) {
     setRemovingId(doc.id);
     const supabase = createClient();
-    // The object goes first and its result is READ. Deleting the row first is
-    // what would make a surviving object invisible: nothing in the product
-    // references it any more, so the family cannot see it, open it or remove
-    // it — while the screen says "File removed". A warranty or a manual is
-    // plausibly being deleted BECAUSE it carries a serial or policy number, so
-    // telling someone it is gone when it is not is the defect, not the leak.
-    // Audit C4-S4-09.
+    // Two halves of the same defect, both kept.
+    //
+    // The OBJECT goes first and its result is READ (C1-S6-01 / C4-S4-09):
+    // deleting the row first makes a surviving file INVISIBLE — nothing
+    // references it, so nobody can see it, open it or try again — while the
+    // screen says it is gone. A warranty or a manual is plausibly being deleted
+    // BECAUSE it carries a serial or a policy number.
+    //
+    // And the row delete is VERIFIED with `.select('id')` (main's F-K series):
+    // an UPDATE or DELETE that matches nothing succeeds with zero rows and no
+    // error, so a delete RLS refused would otherwise report success too.
     const { error: storageError } = await removeFamilyDocument(supabase, doc.storage_path);
     if (storageError) {
       setRemovingId(null);
       return toastError(storageError);
     }
-    const { error } = await supabase.from('documents').delete().eq('id', doc.id);
+    const { data: rows, error } = await supabase.from('documents').delete().eq('id', doc.id).select('id');
     setRemovingId(null);
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(rows)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('homeModule.fileRemoved'));
     onChanged();
   }

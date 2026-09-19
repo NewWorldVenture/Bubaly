@@ -970,3 +970,44 @@ by "the database system is shutting down"; any failure resets the count, so the
 restart window cannot be straddled.
 NOT A FLAKE RE-RUN: the race is real and would have recurred. Fixed at source.
 LAST-UPDATE: 2026-09-19
+
+## Claude-1 — Merge 5 with main (the parallel session's Pass J/K)
+MAIN ADVANCED with 15 commits of Pass J/K — and they had been auditing THE SAME
+SURFACE: "the client code paths behind the swept tables", "the trust-surface
+writes and the medical asymmetry", "twenty-five writes that reported success for
+a change RLS had refused". No new migrations on main, so no number collision.
+ID UNION VERIFIED: 158 mine + 87 theirs = 169 union = 169 merged. None lost.
+SEVEN CONFLICTED FILES. Every one turned out to be COMPLEMENTARY, not competing —
+both sessions found the same class and fixed different halves:
+  - trust/actions.ts: theirs adds `changedNothing(rows)` (a write RLS refused
+    reported success); mine adds `recordTrustChange` (the ledger never recorded
+    rule changes). ORDER MATTERS and the merge had to get it right: the guard
+    goes FIRST, because logging a change the database refused would be worse
+    than not logging it at all. 4 hunks, resolved guard-then-ledger.
+  - documents/files-hub/home modules: mine READS the storage result and aborts
+    (a surviving file goes invisible while the screen says deleted); theirs adds
+    `.select('id')` so a refused row-delete is visible. Both kept.
+  - voice-module: mine moved toastError FIRST and added a non-rejecting helper;
+    theirs wrapped the write in `settle`. Kept my ordering (strictly stronger —
+    two independent reasons the user is told) and adopted THEIR house idiom
+    inside my helper, per the charter's "prefer existing abstractions".
+  - finalaudit.md / audit/claude-1.md: both sides appended; both kept in full.
+THREE BEHAVIOURAL CONFLICTS GIT COULD NOT SEE, all caught by the full suite:
+  1. A stranded `}));` from main's hunk left voice-module unparseable — tsc
+     caught it, not the tests.
+  2. Adopting `settle()` SILENTLY WEAKENED my own contract: settle converts a
+     REJECTION to { error }, but a builder that throws SYNCHRONOUSLY throws
+     before settle is called. My own test ("resolves when the insert throws
+     synchronously") went red and caught it. Restored with an async thunk.
+     THE LESSON: adopting a shared abstraction is a behaviour change, not a
+     refactor, and the contract has to be re-checked against it.
+  3. Main's SSRF test exempts `lib/server/external-fetch.ts`, which THIS BRANCH
+     renamed to `fetch-with-deadline.ts` (C3-S5-04 — it sat among real SSRF
+     guards under a name that read like one and only adds a deadline). Two of
+     main's tests then contradicted each other. Before re-pointing the exemption
+     I re-verified it is still DESERVED: every caller passes a literal provider
+     host, and the one computed caller (app/api/gif/search) builds a constant
+     Giphy URL with an encoded query. Guard was right, filename was stale.
+GATE AFTER MERGE: tsc clean; suite 1,258 files / 14,119 tests / 0 failures;
+replay 343 migrations / 0 failed; probes 52/52.
+LAST-UPDATE: 2026-09-19

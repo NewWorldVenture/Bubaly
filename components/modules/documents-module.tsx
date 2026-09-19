@@ -10,7 +10,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { uploadFamilyDocument, getDocumentSignedUrl, removeFamilyDocument, DOCUMENT_MAX_BYTES, DOCUMENT_MAX_MB } from '@/lib/storage/documents';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -227,10 +227,10 @@ export function DocumentsModule() {
     const next = !isFav(doc);
     setFavPending((p) => ({ ...p, [doc.id]: next }));
     const sb = createClient();
-    const { error: err } = await sb.from('documents').update({ is_favorite: next }).eq('id', doc.id);
-    if (err) {
+    const { data: rows, error: err } = await sb.from('documents').update({ is_favorite: next }).eq('id', doc.id).select('id');
+    if (err || wroteNoRows(rows)) {
       setFavPending((p) => { const { [doc.id]: _drop, ...rest } = p; return rest; });
-      toastError(describeDbError(err));
+      toastError(err ? describeDbError(err) : tr('errors.thatChangeWasNotSaved'));
       return;
     }
     refresh();
@@ -249,16 +249,24 @@ export function DocumentsModule() {
   async function remove(doc: Document) {
     setConfirmDoc(null);
     const sb = createClient();
-    // The object goes first and its result is READ: deleting the row first
-    // makes a surviving file INVISIBLE — nothing references it, so nobody can
-    // see it, open it or try again — while the screen says it is gone. Audit
-    // C1-S6-01; the same shape adminDeleteDocumentAction already uses.
+    // Two halves of the same defect, both kept.
+    //
+    // The OBJECT goes first and its result is READ (C1-S6-01 / C4-S4-09):
+    // deleting the row first makes a surviving file INVISIBLE — nothing
+    // references it, so nobody can see it, open it or try again — while the
+    // screen says it is gone. A warranty or a manual is plausibly being deleted
+    // BECAUSE it carries a serial or a policy number.
+    //
+    // And the row delete is VERIFIED with `.select('id')` (main's F-K series):
+    // an UPDATE or DELETE that matches nothing succeeds with zero rows and no
+    // error, so a delete RLS refused would otherwise report success too.
     if (doc.storage_path) {
       const { error: storageError } = await removeFamilyDocument(sb, doc.storage_path);
       if (storageError) return toastError(storageError);
     }
-    const { error: err } = await sb.from('documents').delete().eq('id', doc.id);
+    const { data: rows, error: err } = await sb.from('documents').delete().eq('id', doc.id).select('id');
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(rows)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }
     success(tr('documentsModule.fileDeleted')); refresh();
   }
 

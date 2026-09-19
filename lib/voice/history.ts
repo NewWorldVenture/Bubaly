@@ -16,6 +16,7 @@
 // it cannot reject, so it cannot swallow anything after it. Audit C1-S8-06.
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Insertable } from '@/lib/database.types';
+import { settle } from '@/lib/supabase/settle';
 
 export type VoiceHistoryRow = Insertable<'voice_commands'>;
 
@@ -32,10 +33,15 @@ export async function recordVoiceCommand(
   sb: SupabaseClient<Database>,
   row: VoiceHistoryRow,
 ): Promise<void> {
-  try {
-    const { error } = await sb.from('voice_commands').insert(row);
-    if (error) console.error('[voice] command history write failed', { status: row.status, error });
-  } catch (err) {
-    console.error('[voice] command history write threw', { status: row.status, err });
-  }
+  // `settle` is the repository's own answer to this: a Supabase builder REJECTS
+  // on a transport failure and RESOLVES with { error } for everything the
+  // database answers, and settle turns the first into the second. Using it here
+  // rather than a local try/catch keeps one description of that behaviour in
+  // the tree instead of two.
+  // The async thunk matters: `settle` converts a REJECTION into `{ error }`,
+  // but a builder that throws SYNCHRONOUSLY throws before settle is called at
+  // all. Adopting settle without this lost half the contract, and the test for
+  // "resolves when the insert throws synchronously" caught it immediately.
+  const { error } = await settle((async () => sb.from('voice_commands').insert(row))());
+  if (error) console.error('[voice] command history write failed', { status: row.status, message: error.message });
 }

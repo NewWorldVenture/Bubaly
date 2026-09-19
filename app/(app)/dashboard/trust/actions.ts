@@ -44,6 +44,23 @@ function isDomain(d: string) { return d === 'all' || (TRUST_DOMAINS as readonly 
 function isCapability(c: string) { return c === 'all' || (CAPABILITIES as readonly string[]).includes(c); }
 
 // ─── Policies ────────────────────────────────────────────────────────────────
+/**
+ * On this surface a write that changed nothing must not report success.
+ *
+ * `.eq('id', …).eq('family_id', …)` matches nothing for a stale id or one
+ * belonging to another family, and an UPDATE or DELETE that matches nothing
+ * SUCCEEDS — zero rows, no error. Everywhere else that is a stale-list
+ * annoyance. Here the sentence the manager reads is about access: "policy
+ * disabled", "access revoked", "emergency ended". Saying that of a delegation
+ * still granting access, or an emergency session still elevating it, is the
+ * one lie this page must not tell.
+ *
+ * `.select('id')` is what makes PostgREST return the affected rows at all.
+ */
+function changedNothing(rows: unknown[] | null): boolean {
+  return !rows || rows.length === 0;
+}
+
 export async function savePolicyAction(input: {
   id?: string;
   name: string;
@@ -94,8 +111,10 @@ export async function savePolicyAction(input: {
   };
 
   if (input.id) {
-    const { error: e } = await supabase.from('trust_policies').update(base).eq('id', input.id).eq('family_id', ctx.active.familyId);
+    const { data: rows, error: e } = await supabase.from('trust_policies').update(base)
+      .eq('id', input.id).eq('family_id', ctx.active.familyId).select('id');
     if (e) return actionFailure(e, t('actions.couldNotUpdateThatPolicy'));
+    if (changedNothing(rows)) return { ok: false, error: t('actions.couldNotUpdateThatPolicy') };
   } else {
     const { error: e } = await supabase.from('trust_policies').insert({ ...base, family_id: ctx.active.familyId, created_by: ctx.user.id });
     if (e) return actionFailure(e, t('actions.couldNotCreateThatPolicy'));
@@ -118,8 +137,10 @@ export async function togglePolicyAction(input: { id: string; enabled: boolean }
   const { ctx, error } = await managerCtx();
   if (!ctx) return { ok: false, error };
   const supabase = await createServer();
-  const { error: e } = await supabase.from('trust_policies').update({ enabled: input.enabled }).eq('id', input.id).eq('family_id', ctx.active.familyId);
+  const { data: rows, error: e } = await supabase.from('trust_policies').update({ enabled: input.enabled })
+    .eq('id', input.id).eq('family_id', ctx.active.familyId).select('id');
   if (e) return actionFailure(e, t('actions.couldNotUpdateThatPolicy'));
+  if (changedNothing(rows)) return { ok: false, error: t('actions.couldNotUpdateThatPolicy') };
   await recordTrustChange(supabase, {
     familyId: ctx.active.familyId, actorMemberId: ctx.active.member.id,
     decision: 'policy_changed',
@@ -135,8 +156,10 @@ export async function deletePolicyAction(input: { id: string }): Promise<Result>
   const { ctx, error } = await managerCtx();
   if (!ctx) return { ok: false, error };
   const supabase = await createServer();
-  const { error: e } = await supabase.from('trust_policies').delete().eq('id', input.id).eq('family_id', ctx.active.familyId);
+  const { data: rows, error: e } = await supabase.from('trust_policies').delete()
+    .eq('id', input.id).eq('family_id', ctx.active.familyId).select('id');
   if (e) return actionFailure(e, t('actions.couldNotDeleteThatPolicy'));
+  if (changedNothing(rows)) return { ok: false, error: t('actions.couldNotDeleteThatPolicy') };
   // A deleted policy leaves no row behind, so without this the strongest kind
   // of permission change is the one the ledger can say least about.
   await recordTrustChange(supabase, {
@@ -328,9 +351,12 @@ export async function revokeDelegationAction(input: { id: string }): Promise<Res
   const { ctx, error } = await managerCtx();
   if (!ctx) return { ok: false, error };
   const supabase = await createServer();
-  const { error: e } = await supabase.from('trust_delegations').update({ revoked_at: new Date().toISOString() })
-    .eq('id', input.id).eq('family_id', ctx.active.familyId);
+  // "Access revoked" over a delegation that is still granting access is the
+  // sharpest form of this on the whole surface.
+  const { data: rows, error: e } = await supabase.from('trust_delegations').update({ revoked_at: new Date().toISOString() })
+    .eq('id', input.id).eq('family_id', ctx.active.familyId).select('id');
   if (e) return actionFailure(e, t('actions.couldNotRevokeThatDelegation'));
+  if (changedNothing(rows)) return { ok: false, error: t('actions.couldNotRevokeThatDelegation') };
   await recordTrustChange(supabase, {
     familyId: ctx.active.familyId, actorMemberId: ctx.active.member.id,
     decision: 'delegation_changed', reason: 'Delegation revoked',
@@ -411,10 +437,12 @@ export async function endEmergencyAction(input: { id: string }): Promise<Result>
   const { ctx, error } = await managerCtx();
   if (!ctx) return { ok: false, error };
   const supabase = await createServer();
-  const { error: e } = await supabase.from('emergency_sessions')
+  // An emergency session that did not end is one still elevating access.
+  const { data: rows, error: e } = await supabase.from('emergency_sessions')
     .update({ ended_at: new Date().toISOString(), ended_by: ctx.active.member.id })
-    .eq('id', input.id).eq('family_id', ctx.active.familyId);
+    .eq('id', input.id).eq('family_id', ctx.active.familyId).select('id');
   if (e) return actionFailure(e, t('actions.couldNotEndEmergencyMode'));
+  if (changedNothing(rows)) return { ok: false, error: t('actions.couldNotEndEmergencyMode') };
   // Activation was recorded and the end was not, so the ledger could show an
   // override that outranks every deny with no sign of it ever stopping. The
   // schema has reserved `emergency_ended` since the table shipped.

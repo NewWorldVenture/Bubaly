@@ -9,6 +9,7 @@ import { useApp } from '@/components/app/app-context';
 import { useSpeechRecognition } from '@/lib/hooks/use-speech-recognition';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { settle } from '@/lib/supabase/settle';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
@@ -98,9 +99,10 @@ export function VoiceModule() {
       const res = await saveCapture(sb, {
         kind: route.kind, text: route.text, familyId, userId, memberId: selfMember?.id ?? null,
       });
-      // Best-effort, and now audible: a dropped history row is logged rather
-       // than discarded, so a history that stopped recording is distinguishable
-       // from a family that stopped speaking.
+      // Log the command to the family's voice history. Best-effort, but not
+      // SILENT: a history that quietly stops recording looks identical to a
+      // family that stopped using voice. (main's wording, kept — it says it
+      // better.) `recordVoiceCommand` cannot reject and logs a dropped row.
       await recordVoiceCommand(sb, {
         family_id: familyId, member_id: selfMember?.id ?? null, transcript: route.text,
         resolved_kind: route.kind, action_table: tableForKind(route.kind),
@@ -120,8 +122,11 @@ export function VoiceModule() {
       // TELL THE USER FIRST. This used to run after the history write, and
       // supabase-js rejects when the fetch fails — so with the network down,
       // which is the usual reason a command fails at all, the rejection escaped
-      // this catch and the user was told nothing whatsoever. The report must
-      // not sit downstream of a call that fails for the same reason.
+      // this catch and the user was told nothing whatsoever. main reached the
+      // same defect from the other side, making the write non-rejecting with
+      // `settle`; both halves are kept, because the report should not sit
+      // downstream of a call that fails for the same reason EVEN IF that call
+      // is safe today.
       toastError(describeDbError(err, tr('voiceModule.couldNotRunThatCommand')));
       // Record the failed attempt so the history is honest. recordVoiceCommand
       // cannot reject, so nothing below it can be lost either.

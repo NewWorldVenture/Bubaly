@@ -8,7 +8,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -99,11 +99,15 @@ export function RenewalsModule() {
       status: form.status,
       notes: form.notes.trim() || null,
     };
-    const { error: err } = form.id
-      ? await sb.from('renewals').update(fields).eq('id', form.id)
-      : await sb.from('renewals').insert({ ...fields, family_id: familyId, created_by: userId });
+    // A restrictive RLS policy FILTERS an update/delete rather than raising, so
+    // a refused write returns zero rows and no error. `.select('id')` is what
+    // makes the difference visible — without it `data` is null either way.
+    const { data: rows, error: err } = form.id
+      ? await sb.from('renewals').update(fields).eq('id', form.id).select('id')
+      : await sb.from('renewals').insert({ ...fields, family_id: familyId, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(form.id ? 'Renewal updated' : 'Renewal added');
     setModalOpen(false);
   }
@@ -111,18 +115,20 @@ export function RenewalsModule() {
   // Mark renewed → roll the expiry forward a year and keep it active.
   async function markRenewed(r: Renewal) {
     const sb = createClient();
-    const { error: err } = await sb.from('renewals').update({
+    const { data: rows, error: err } = await sb.from('renewals').update({
       expires_at: rollForward(r.expires_at, 12), status: 'active',
-    }).eq('id', r.id);
+    }).eq('id', r.id).select('id');
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('renewalsModule.renewedForAnotherYear'));
   }
 
   async function remove(r: Renewal) {
     if (!confirm(`Delete "${r.title}"?`)) return;
     const sb = createClient();
-    const { error: err } = await sb.from('renewals').delete().eq('id', r.id);
+    const { data: rows, error: err } = await sb.from('renewals').delete().eq('id', r.id).select('id');
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('renewalsModule.renewalDeleted'));
   }
 

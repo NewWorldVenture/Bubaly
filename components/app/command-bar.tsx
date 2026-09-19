@@ -37,6 +37,7 @@ import { moduleFromPathname } from '@/lib/concierge/suggested-prompts';
 import { MicButton } from '@/components/voice/mic-button';
 import { useLockBodyScroll } from '@/lib/hooks/use-lock-body-scroll';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useDialogBehavior } from '@/lib/a11y/use-dialog-behavior';
 
 const NAV_ITEMS = NAV_CATALOG.map((n) => ({ href: n.href, label: n.label }));
 
@@ -181,8 +182,15 @@ export function CommandBar() {
     inputRef.current?.focus();
   }, []);
 
+  // Escape, the Tab trap and focus restore. The palette already moved focus to
+  // its input on open, but Tab walked straight out into the page behind it —
+  // which the markup below tells assistive technology is inert. Escape moves to
+  // the document listener so it still fires once focus has left the input.
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeBar = useCallback(() => setOpen(false), []);
+  useDialogBehavior(dialogRef, open, { onClose: closeBar });
+
   function onKeyDown(e: React.KeyboardEvent) {
-    if (e.key === 'Escape') { setOpen(false); return; }
     if (e.key === 'ArrowDown') { e.preventDefault(); setActive((i) => Math.min(i + 1, results.length - 1)); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((i) => Math.max(i - 1, 0)); }
     else if (e.key === 'Enter') { e.preventDefault(); void run(results[active]); }
@@ -194,6 +202,8 @@ export function CommandBar() {
     <div className="fixed inset-0 z-[95] flex items-start justify-center p-4 pt-[12vh]">
       <div className="overlay-scrim absolute inset-0 backdrop-blur-sm animate-fade-in" onClick={() => setOpen(false)} aria-hidden />
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-label={t('commandBar.commandBar')}

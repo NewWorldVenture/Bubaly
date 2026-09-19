@@ -333,8 +333,12 @@ property they were cited for. It is now fixed, rehearsed end to end, and enforce
 on every pull request.
 
 **The pattern worth carrying forward** is that this repository's characteristic
-defect is not a broken feature but **a guard that cannot fail**. Eleven
-independent instances are now on record — a money probe that could not catch the
+defect is not a broken feature but **a guard that cannot fail**. Pass J separates
+it into three distinct shapes — a scope gap, a premise gap, and an enumerated
+list with no scan behind it — and finds eight defects by hunting the shape rather
+than the bug; the sharpest is a guard that RAN on every CI job and passed
+honestly, because its own coverage assertion was satisfied by the single
+directory it read. Eleven independent instances are now on record — a money probe that could not catch the
 hole it was written for (F-004); a fix carrying the defect it fixed (F-011); a
 probe that granted itself privileges (F-015); a concurrency check that ran two
 statements sequentially (F-019); a replay that only ever ran against an empty
@@ -5310,6 +5314,292 @@ previous code**, naming both files.
 **Verification.** Full suite **13,729 / 13,729**. `tsc` and eslint clean.
 
 **Status: FIXED.** No migration, so it reaches production with the deploy.
+
+---
+
+# Pass J — the guard shapes, and eight findings behind them (F-J01–F-J08)
+
+This pass found nothing by looking for another instance of a known bug. Every
+finding came from asking a different question: **why did the guard that exists
+for this not catch it?** The answer turned out to have three distinct forms, and
+separating them is the substance of this pass, because the remedy for each
+differs.
+
+## The three ways a guard fails
+
+**1. Scope gap — the rule is right, the walk is too small.**
+`family-day-not-greenwich-day` and `no-limit-above-the-row-cap` scanned `app` and
+`lib`, never `components`. `mobile-numeric-inputmode` read **one flat directory**
+with `readdirSync` — not even its subdirectories.
+
+The last one is the most instructive defect in this pass, because it is the
+"guard that cannot fail" in its softest and most convincing form. It **ran**, on
+every CI job, and passed **honestly**. What made it useless is that its own
+coverage assertion — "more than 20 money inputs scanned" — was satisfied by the
+single directory it read. *A coverage assertion calibrated to the scanned subset
+cannot detect that the subset is the problem.* Twenty-six money inputs sat
+outside it with no `inputMode="decimal"`: every wallet balance, available and
+limit, bill and budget amounts, savings targets, trip budgets, itinerary costs.
+On iOS none of it could take a decimal point.
+
+**2. Premise gap — the guard covers the blessed helper, not the bypass.**
+`read-error-surfaced` is a good guard that checks every `useRealtimeQuery` call
+site for a dropped error. Five reads dropped theirs anyway, because each had
+**hand-rolled a fetch instead of using the hook** — outside its premise entirely.
+*A guard on the safe path does not cover the path taken to avoid it.*
+
+**3. Enumerated, with no scan behind it.** Three sightings:
+`whole-table-reads-are-not-capped` pins four named jobs against a capped fake;
+the i18n gate lists named surfaces; `claimed-writes-that-did-not-land` watches
+twelve named tables. None can be *wrong* about what it checks. None ever grew.
+
+Every guard widened in this pass got a bound past what its old scope could
+satisfy, plus a case asserting the walk still reaches past it.
+
+## The findings
+
+| | Finding | Severity |
+|---|---|---|
+| F-J01 | Nine forms wrote Greenwich's day into a DATE column | High |
+| F-J02 | Two reads capped at 1,000 rows in `components/`, one also dropping its error and lacking a rejection path | High |
+| F-J03 | Twenty-six money inputs could not take a decimal point on iOS | High |
+| F-J04 | Five reads handled every database failure and no network one — including App Lock presenting a configured lock as never set up | High |
+| F-J05 | The admin console reported the first thousand of everything | High |
+| F-J06 | Est. MRR, and the unpaid accounts the billing page could not see | High |
+| F-J07 | Two wallet balances summed from a capped read | High |
+| F-J08 | A member could vote twice in the family meal vote | High |
+
+Plus: the routine cron read each family's clock once per rule and guessed it on
+failure; the medication reminder's UTC fallback; and an i18n ratchet. Full
+evidence for each is in `audit/claude-1.md`.
+
+## Three that deserve naming
+
+**F-J04, App Lock.** The component's own comment defines three states:
+`undefined` = loading, `null` = no PIN ever set, otherwise the config. A failed
+read is a **fourth** meaning and was given the second. So a transient error
+presented a configured App Lock as never set up and offered "Set up PIN" — and
+setting one there overwrites the real config of a lock the user still has.
+
+**F-J05/F-J06, the admin console.** These convince because they are *half right*.
+`{ count: 'exact', head: true }` is uncapped and was used for the family, user
+and subscription tiles. Beside them, the Documents tile rendered `docs.length`
+— pinned at exactly 1,000 forever — and MRR, growth buckets, the revenue trend
+and "Past Due / Unpaid" were each reduced over a truncated prefix. Exact counts
+sat next to charts built from a sample, with nothing saying they disagreed. On
+billing the read also carried no `.order()`, so *which* thousand was arbitrary:
+measured against a capped fake with every overdue account past the cap, the page
+showed **zero** past-due accounts.
+
+**F-J08, the meal vote.** `castVote` clears the prior pick then inserts the new
+one; the insert's error was checked and the delete's discarded. The database does
+not backstop it, and the reason is exact: `meal_vote_ballots_once` is
+`UNIQUE (option_id, member_id)` — one ballot per member per **option**, not per
+**vote** — so switching from A to B inserts a different key and the constraint
+never fires. A failed clear left the member holding both ballots while the toast
+said "Vote recorded", and the tally counts each and divides by `ballots.length`:
+one person deciding a family's dinner twice, for two different dinners.
+
+## What this pass got wrong, twice
+
+Recorded because both were one step from being reported as findings.
+
+**The i18n number.** The count of hardcoded strings in the ungated surface reads
+2,812 today against a recorded 2,343 — apparently 469 strings of drift. Measured
+with **one scanner held fixed** across both trees: 2,903 then, 2,812 now. The
+surface has **improved by 91**; the apparent rise was the scanner getting better
+at seeing strings. *Two numbers from two different scanners say nothing about the
+code, and the obvious reading of them was backwards.*
+
+**Three counts, each too large.** The Greenwich-day write scan returned 57 files
+with a loose detector (over-reporting 4.4× on type annotations and unrelated
+literals), then 13 with a comma-terminated one (under-reporting, because
+`str(fd, 'service_date')` ends the value early), and finally **14** with a
+depth-aware property-value extractor — every one verified by eye. The loose
+number would have put 43 phantom findings on the board.
+
+The same discipline cleared four candidates that looked serious and were not:
+`resolveEntitlement`'s fail-open is documented and deliberate; `?? 100` on an AI
+score is reached only in a parent-approval path that already returns early on a
+failed read; the child-login uniqueness check fails open but is backstopped by a
+unique index *and* a synthetic-email collision; and `childSpendableCents`'
+capped sum could not affect a card authorization, because the authoritative
+check sums in SQL under `for update`. That last one was removed anyway — it had
+**zero callers**, and its comment claimed to be the live check, which is an
+invitation to the next author.
+
+## Verification
+
+Every fix in this pass was proved load-bearing the same way: revert it, watch the
+guard go red, restore. Three new guards added
+(`query-builders-have-a-rejection-path`, `aggregates-read-past-the-row-cap`,
+`i18n-ungated-surface-ratchet`), five existing guards widened. Full suite
+**13,899 / 13,899**, `tsc` clean, `next build` compiles, lint unchanged at its
+three pre-existing warnings. CI green on `b0bacc54`.
+
+**Still the one recommendation this audit would make above all others: break
+what a guard protects and confirm it goes red.** This pass adds a corollary —
+**and check that it was looking there at all.**
+
+---
+
+# Pass K — the client code paths behind the swept tables (F-K01–F-K03)
+
+Pass T swept the **RLS layer** on the sensitive tables. This pass audits what
+was explicitly left: the **client code paths** — the modules' reads, writes,
+delete handling and error reporting. It began with the health and location
+modules, as the data the product treats as most sensitive.
+
+## F-K01 — Thirty-nine writes reported success for a change the database refused *(High, fixed)*
+
+**The finding is a consequence of a previous pass's fix, which is what makes it
+interesting.** Migrations 0254, 0275, 0306, 0308, 0309 and 0310 added
+manager-only write policies across forty-four tables. 0309's header states the
+problem it was solving exactly:
+
+> components/modules/medications-module.tsx declares `canEdit = isManager(role)`
+> and then writes `medications` … STRAIGHT FROM THE BROWSER with the viewer's
+> own JWT. … `canEdit` only decides whether a button renders, and a hidden
+> button is not a boundary.
+
+The boundary was added. **The UI in front of it was never told.**
+
+**Measured on Postgres 16**, with that exact policy shape, as a non-manager:
+
+```
+update medications set dosage = '40 mg' where id = 1;   UPDATE 0   dosage still 10 mg
+delete from medications where id = 1;                   DELETE 0   row still present
+insert into medications values (…);                     ERROR  42501
+```
+
+That asymmetry is the defect. `with check` (INSERT) **raises** and the client
+sees it. `using` (UPDATE/DELETE) **filters**, and the client sees
+`{ error: null }`. PostgREST returns affected rows only when asked — `.select()`
+is what appends `Prefer: return=representation` — so without it `data` is null
+whether one row changed or none did, and the call site could not tell **even in
+principle**.
+
+Thirty-nine call sites checked `error`, saw null, and said "Medication deleted",
+"Bill marked as paid", "Entry deleted", "Trip updated". All thirty-nine now ask
+for their rows and treat zero as a refusal.
+
+Three deserve naming:
+
+- **`medications.is_active`** decides whether `lib/server/notifications.ts`
+  raises the "dose due today" reminder at all. A toggle that silently did
+  nothing is a parent believing they stopped — or started — a reminder that
+  never moved.
+- **`passwords-module.remove` is a SOFT delete** (`update({ deleted_at })`), so
+  a refused one leaves the credential in the vault while the toast says it is
+  gone.
+- **The three document deletes remove the storage object BEFORE the row**, so a
+  refused row delete leaves a row pointing at a file that no longer exists.
+
+## F-K02 — The guard list was too narrow by 2.7× *(High, fixed — my own)*
+
+The first version of the guard drew its tables from policies declared
+`as restrictive`: nineteen. A **permissive** policy whose `using` clause
+requires `can_manage_family` filters a non-manager's update exactly as
+silently. Re-derived properly: **forty-four**. Fourteen call sites were sitting
+behind the difference — the health providers, the insurance policies, the
+password vault, three document surfaces and the family name.
+
+**`family_members` and `notifications` are deliberately excluded.** Their
+policies are "own row OR manager" (`user_id = auth.uid() or …`), so a member's
+own write succeeds and **zero rows is a normal outcome** — "mark all read" with
+nothing unread affects no rows, and reporting that as a refusal would be a new
+bug rather than a fix. Separating those two from the forty-four is why this pass
+re-derived the list rather than widening it by pattern.
+
+## F-K03 — locator-module *(verified healthy, no action)*
+
+The highest-value module named as never audited, and it is **sound**:
+
+- writes go through **server actions** that enforce `isManager` server-side
+  (`savePlace`, `deletePlace`, `setGeofenceEnabled`) — the browser-direct
+  pattern 0309 was written about does not appear here;
+- `updateMyLocation` and `setLocationSharing` take `member_id` from the
+  **session**, never from client input;
+- all three reads are error-checked, and `location_events` carries
+  `.limit(120)` — a real bound under the row cap;
+- `updateMyLocation` setting `is_sharing: true` unconditionally looked like a
+  privacy defect (sharing re-enabling itself) and is not: its only caller is the
+  "Share now" button, so it matches intent.
+
+## F-K04 — Five access writes on the trust page *(High, fixed)*
+
+The same shape, on the surface where the sentence is about **access**. Every
+write there is `.eq('id', …).eq('family_id', …)`, which matches nothing for a
+stale or foreign id — and a write that matches nothing succeeds. These are
+server actions, so the manager check has already run; RLS is not what refuses
+them. The zero-row case is exactly what a revoke button on a list rendered a
+moment ago produces:
+
+| write | what it said | what was true |
+|---|---|---|
+| `trust_policies` update / toggle / delete | "policy disabled" | still enabled |
+| `trust_delegations` revoke | **"access revoked"** | still granting access |
+| `emergency_sessions` end | **"emergency ended"** | still elevating access |
+
+All five now ask for their rows and refuse rather than claim.
+
+## F-K05 — Two medical tables are member-writable while their neighbours are manager-only *(Medium, OPEN — owner decision)*
+
+`immunizations` (0069) and `health_visits` (0068) carry
+`FOR ALL … USING (is_family_member(family_id))`. On the **same page**,
+`medical_profiles`, `health_providers` and `insurance_policies` are
+manager-only, and 0309 made `medications` manager-only. The page gate is
+`requireFeature` — a **subscription** check, not a role check.
+
+So a child on a qualifying plan can edit or delete a sibling's vaccination
+record and medical visit history, while the same child cannot touch a
+medication or an insurance policy.
+
+**This is not the 0309 shape.** Neither module gates its UI on `isManager`, so
+the interface and the database agree — there is no hidden button making a
+promise the database does not keep. It is an asymmetry, not a lie, which is why
+it is recorded for an owner rather than changed: whether a teenager may log
+their own vaccine is a product judgement, and closing it needs a migration that
+two other workers are actively holding.
+
+It is nonetheless the shape 0309's own header named — *"a class fixed where
+somebody remembered and left open where nobody did."*
+
+## Verified healthy in this pass, recorded so it is not re-derived
+
+- **locator-module**, the highest-value module named as never audited: server
+  actions enforce `isManager` server-side, `member_id` comes from the session,
+  reads are bounded and error-checked.
+- **paperwork-module**: server actions only.
+- **trust actions**: ten of eleven call `managerCtx()`; the eleventh delegates
+  to one that does, deliberately.
+- **RLS is enabled on every health table checked.** A plain grep for
+  `ENABLE ROW LEVEL SECURITY` returns **zero** for `symptom_logs`,
+  `health_goals`, `appointments`, `health_metrics` and `workout_logs` — because
+  every one is enabled through dynamic SQL. That zero is not a finding, and is
+  recorded here because it reads exactly like one.
+
+## Method notes
+
+Two mistakes made and corrected in this pass, recorded because both were close
+to shipping:
+
+- The narrow table list above — caught by auditing the guard against the
+  migrations rather than trusting the pattern that produced it.
+- `open(p, 'w').write(transform(s))` truncates the file **before** evaluating
+  the argument, so a raise inside the transform left a module empty. Restored
+  from git; the helper now computes first and refuses to write a suspiciously
+  small file.
+
+A test double had to learn `.select()` after `.update().eq()` — it answered only
+the old shape, which exercises a client the code no longer uses. Second sighting
+in this audit, after the cron double.
+
+**Verification.** 13,923 tests across 1,222 files; `tsc` clean; `next build`
+compiles; lint unchanged at its three pre-existing warnings; i18n gate clean
+with one new string added to all seven populated catalogues. The new guard is
+verified load-bearing in both directions — removing one `.select('id')` turns it
+red with file, line, table and operation.
 
 # Pass P — three surfaces nobody had audited, and the fixes they demanded
 

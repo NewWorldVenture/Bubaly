@@ -8,7 +8,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -114,11 +114,15 @@ export function RidesModule() {
       status: form.status,
       notes: form.notes.trim() || null,
     };
-    const { error: err } = form.id
-      ? await sb.from('rides').update(fields).eq('id', form.id)
-      : await sb.from('rides').insert({ ...fields, family_id: familyId, created_by: userId });
+    // A restrictive RLS policy FILTERS an update/delete rather than raising, so
+    // a refused write returns zero rows and no error. `.select('id')` is what
+    // makes the difference visible — without it `data` is null either way.
+    const { data: rows, error: err } = form.id
+      ? await sb.from('rides').update(fields).eq('id', form.id).select('id')
+      : await sb.from('rides').insert({ ...fields, family_id: familyId, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(rows)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }
     success(form.id ? 'Ride updated' : 'Ride added');
     setModalOpen(false);
   }
@@ -126,15 +130,17 @@ export function RidesModule() {
   async function remove(r: Ride) {
     if (!confirm(`Delete the ride "${r.title}"?`)) return;
     const sb = createClient();
-    const { error: err } = await sb.from('rides').delete().eq('id', r.id);
+    const { data: rows, error: err } = await sb.from('rides').delete().eq('id', r.id).select('id');
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(rows)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }
     success(tr('ridesModule.rideDeleted'));
   }
 
   async function setStatus(r: Ride, status: RideStatus) {
     const sb = createClient();
-    const { error: err } = await sb.from('rides').update({ status }).eq('id', r.id);
-    if (err) toastError(describeDbError(err));
+    const { data: rows, error: err } = await sb.from('rides').update({ status }).eq('id', r.id).select('id');
+    if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(rows)) toastError(tr('errors.thatChangeWasNotSaved'));
   }
 
   function toggleRider(id: string) {
