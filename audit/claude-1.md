@@ -6598,3 +6598,177 @@ here as a near-miss: "the number looks old" is not evidence.
 gap is FIXED. **Verified:** 14,179 tests green under both `TZ=UTC` and
 `TZ=America/Los_Angeles` (four shards each), tsc clean, `npm run lint` exits 0 at
 budget 12. Both quoting styles proven to bite.
+
+---
+
+[CLAUDE-1][CRITICAL][INFRASTRUCTURE] Every sub-daily cron cadence in the system is fiction: the dispatcher that supplies them runs 2.4% of the time
+
+**Files:** `.github/workflows/cron-dispatch.yml`, `scripts/cron-dispatch.mjs`,
+`vercel.json`, and the fourteen routes under `app/api/cron/` whose real cadence
+is sub-daily.
+
+**Problem.** The scheduling architecture rests on a documented split: Vercel
+Hobby refuses anything more frequent than daily, so `vercel.json` carries
+daily-safe schedules "so production deploys on any plan", and the dispatcher's
+own header says "the real cadences live here", driven by a workflow that "ticks
+every five minutes". The second half of that sentence is not true, and nothing
+in the repository was in a position to notice, because no test can observe
+whether GitHub delivered a scheduled event.
+
+**Evidence.** Measured against the workflow's entire run history rather than
+inferred. `cron-dispatch.yml` has produced 95 runs, numbered 1 through 95, from
+2026-09-05T08:35:40Z to 2026-09-18T23:23:18Z. The run numbers are contiguous and
+`max(run_number) == total_count == 95`, so nothing was pruned by retention — 95
+is every run that has ever existed.
+
+That is 13.62 days, in which a `*/5 * * * *` schedule requests 3,922 ticks.
+
+| | |
+|---|---|
+| requested ticks | 3,922 |
+| delivered | 95 |
+| **delivery rate** | **2.4%** |
+| mean interval | 209 min (requested: 5) |
+| **minimum** gap observed, 83 consecutive pairs | **104 min** |
+| median gap | 209 min |
+| maximum gap | 396 min |
+| pairs at the requested 5 minutes | **0 of 83** |
+
+Not once, in the workflow's whole life, has it ticked at anything close to the
+rate it asks for. The workflow file is byte-identical on `main` (scheduled runs
+fire only from the default branch) and `scripts/cron-dispatch.mjs` and
+`vercel.json` are identical to `main` too, so these are production numbers, not
+branch artefacts.
+
+Replaying each route's schedule against the 85 real tick timestamps I hold:
+
+| route | cadence | intended | delivered | rate |
+|---|---|---|---|---|
+| `/api/cron/ai-runs` | every 5 min | 3,922 | 85 | 2.2% |
+| `/api/cron/close-auctions` | every 5 min | 3,922 | 85 | 2.2% |
+| `/api/cron/marketing` | every 5 min | 3,922 | 85 | 2.2% |
+| `/api/cron/family-routines` | every 15 min | 1,307 | 29 | 2.2% |
+| `/api/cron/marketing-social` | every 15 min | 1,307 | 29 | 2.2% |
+| `/api/cron/feedback-github-sync` | hourly | 327 | 9 | 2.8% |
+| `/api/cron/push-scan` | every 2 h | 163 | 3 | 1.8% |
+| `/api/cron/provider-sync` | every 4 h | 81 | 1 | 1.2% |
+| `/api/cron/autopilot-scan` | 06:30 + 18:30 | 27 | 0 | 0% |
+| `/api/cron/model-refresh` | 04:00 + 16:00 | 27 | 0 | 0% |
+
+**Impact.** The once-daily routes are fine — `vercel.json` mirrors all 24 and
+Vercel's scheduler does fire, which is why the zeros above are mostly harmless.
+The damage is confined to the fourteen routes whose real cadence is sub-daily
+and therefore has no Vercel equivalent. For those, the only guarantee in the
+system is the single daily firing, and the shortfall against the advertised
+cadence runs from 2× to 288×:
+
+- `close-auctions` is written `*/5` and guaranteed `0 10 * * *`. An auction that
+  ends at 10:05 can stay open almost a full day. Bids land after close.
+- `family-routines` is written `*/15`, and its own comment says fifteen minutes
+  is "the coarsest cadence that still keeps a minute-precise schedule inside its
+  own quarter hour" so that "a 17:00 schedule fires at 17:00 and not at whatever
+  hour a daily tick happens to land on". It fires at whatever hour a daily tick
+  happens to land on — the exact outcome the comment says the design prevents.
+- `marketing-social`: "15 minutes is the granularity an operator gets when they
+  pick 09:00". An operator who picks 09:00 gets the next day's 06:00 Vercel run.
+- `ai-runs` parks runs on a time budget and relies on the next 5-minute tick to
+  resume them; resumption is ~24 h away, not ~5 min.
+- `marketing`'s durable job queue (SKIP LOCKED, backoff, dead-letter) drains
+  about once a day.
+- `autopilot-scan`'s 18:30 pass and `model-refresh`'s 16:00 pass have no Vercel
+  schedule at all and, across 13.6 days, fired zero times.
+
+**Root cause.** Two independent things compound. GitHub's `schedule` event is
+best-effort and, at this frequency, is being delivered at ~2%. And
+`dueRoutes(now, SCHEDULES, TICK_MINUTES)` searches a fixed five-minute window
+anchored to *when the dispatcher ran*, so everything due during a 104–396 minute
+absence falls outside every window that is ever evaluated. Nothing errors; the
+window is simply empty. The first is not fixable in this repository; the second
+is what converts a missing tick into a permanently lost firing.
+
+**A correction to my own earlier work.** `tests/a-late-tick-drops-a-cron.test.ts`
+identified this mechanism correctly and then got its severity backwards, because
+I modelled a seven-minute delay instead of measuring one. It said most routes
+"do not care" since a frequent route "has another occurrence inside the late
+window, so it fires anyway and the lost slot costs minutes", and that the ones
+that matter are the SPARSE ones. Both halves are inverted. The frequent routes
+lose ~98% of their firings and wait hours; the sparse daily ones are the
+protected ones, because Vercel mirrors them. Its fourth assertion —
+"the frequent routes really do self-heal" — asserted `gh.size > 100`, which
+measures the *table*, not what runs, and so was a true statement about a
+constant presented as evidence about production. Header and assertion are
+corrected in place, with the refuted reasoning left visible rather than deleted.
+
+**Recommended fix — owner decision, deliberately not taken here.** No clean
+in-repo fix exists, and I am not changing production scheduling unilaterally.
+The options, with their costs:
+
+1. **Vercel Pro.** Native sub-daily crons; move `SCHEDULES` back into
+   `vercel.json` and delete the workflow. This is the end state the dispatcher's
+   own header already names, and the only one that restores every cadence.
+2. **Widen the look-back window** to cover the observed gap (~6 h). Cheap, and
+   safe for 23 of 24 routes because they are already required to be idempotent
+   — but it fires each route several times per tick, and it doubles down on
+   `admin-digest`, which Q32/Q36 established is *not* idempotent and needs its
+   high-water-mark migration first. It restores coverage of specific missed
+   slots (`autopilot-scan` 18:30, `model-refresh` 16:00) but not cadence: a
+   `*/5` route still runs ~7×/day.
+3. **Persisted catch-up state** — a high-water mark the dispatcher reads and
+   writes, so the window is "since the last successful tick". Correct, and the
+   most work; the dispatcher is currently stateless by design (the workflow
+   sparse-checks-out one file and holds `contents: read`).
+
+Until one is chosen, the fourteen routes should be read as daily.
+
+**Guard added.** `tests/a-cron-cadence-is-a-promise-nothing-keeps.test.ts`
+computes each route's advertised cadence from `SCHEDULES` and its guaranteed one
+from `vercel.json`, pins the fourteen deficits *by size* (2×–288×, not merely by
+existence), asserts the complement is a real partition, and states the
+worst-case wait each dependent route actually guarantees. It is a ratchet:
+giving a route a scheduler that keeps its word removes it from the list, and
+adding a route that needs sub-daily cadence without one fails with the deficit
+named. Calibrated three ways — granting `close-auctions` a sub-daily Vercel
+schedule, and slowing `marketing` in `SCHEDULES` — each caught with a message
+that names the route and the number.
+
+**A process note.** I walked into the `*/5`-inside-a-JSDoc-block trap a second
+time; the sequence terminates the comment and the file fails to parse. I had
+recorded that exact failure when it happened in Q37 and still repeated it.
+Separately, `a-mirrored-cron-must-be-idempotent` failed on my header rewrite
+because it pins the dispatcher's idempotency claim verbatim and my rewrap split
+"The routes are idempotent" across two lines. The guard was right; I restored
+the sentence unbroken rather than relaxing the assertion.
+
+**A second defect this one is currently hiding.** `callRoute` aborts every
+route at a hardcoded `120_000` ms and counts the abort as a failure
+(`process.exit(1)`). Six dispatched routes declare `export const maxDuration =
+300`, and three of them deliberately box their own work *just below that*:
+`library-feeds` at `BUDGET_MS = 240_000`, `chore-reminders` and `weekly-digest`
+at `260_000`. Those budgets are 2× the deadline the only caller that drives them
+will wait. `weekly-digest` in particular answers 502 when its budget is reached,
+with the comment "the tail being unserved is exactly the thing that must not
+look like a clean run" — a signal the dispatcher hung up on 140 seconds before
+it could arrive. `/api/cron/ai-runs` is the one route that boxes against the
+right number (85 s, with the reason in its source); nothing enforces that for
+the rest.
+
+This is almost never exercised *because* of the delivery failure above —
+`provider-sync` was dispatched once in 13.6 days and `library-feeds` three
+times. Fixing delivery would expose it immediately, so the two must be resolved
+together: option 1 removes the dispatcher entirely and with it the abort;
+options 2 and 3 need the six routes' budgets and the dispatcher's deadline
+reconciled first. Recorded here rather than filed separately because on its own
+the mismatch is latent, and "fix the cadence" is the change that arms it.
+
+**Status:** FILED, mechanism guarded, remediation is an owner decision.
+**Verified:** `tsc --noEmit` clean; `npm run lint` exits 0 at budget 12 (12
+warnings, unchanged); **14,184 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles`**, four shards each.
+
+One test file failed on the first concurrent shard run and did not reproduce in
+four subsequent runs — one isolated, three concurrent, all green on this exact
+commit. I cannot name it: I had piped that run through `tail -4`, which kept the
+summary line and discarded the `FAIL` line above it. Recorded as an unidentified
+failure rather than an infrastructure flake, because I have no evidence for the
+latter; the process error was mine, and the fix is to grep for `FAIL` rather
+than tail the summary.

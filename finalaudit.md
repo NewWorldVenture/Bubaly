@@ -6727,3 +6727,79 @@ would quietly stop being about production.
 **Verified:** 14,177 tests green under both `TZ=UTC` and
 `TZ=America/Los_Angeles` (four shards each), `tsc --noEmit` clean, `npm run lint`
 exits 0 at budget 12, workflow YAML still parses.
+
+---
+
+## Q39 — Every sub-daily cron cadence is an intention nothing keeps
+
+**Severity: CRITICAL.** The scheduling architecture splits into two tables:
+`vercel.json` carries daily-safe schedules so production deploys on Hobby, and
+`scripts/cron-dispatch.mjs` `SCHEDULES` holds what its own header calls "the
+real cadences", driven by a workflow that "ticks every five minutes". The
+workflow does not tick every five minutes, and no test in the repository could
+have noticed, because none can observe whether GitHub delivered a scheduled
+event.
+
+**Measured, not inferred.** `cron-dispatch.yml` has produced 95 runs in its
+entire life — numbered 1 to 95, contiguous, `max(run_number) == total_count`, so
+nothing was pruned — from 2026-09-05T08:35:40Z to 2026-09-18T23:23:18Z. Over
+those 13.62 days a `*/5` schedule requests **3,922** ticks and received **95**:
+a **2.4% delivery rate**, a mean interval of **209 minutes** against the 5
+requested, a **minimum** observed gap of **104 minutes**, and **zero** of 83
+consecutive pairs at the requested cadence. The workflow, the dispatcher and
+`vercel.json` are byte-identical on `main`, and scheduled runs fire only from the
+default branch, so these are production numbers.
+
+**What breaks.** The daily routes are safe: `vercel.json` mirrors all 24 and
+Vercel's scheduler fires. The damage is the fourteen routes whose real cadence
+is sub-daily and so has no Vercel equivalent, where the advertised cadence
+exceeds the guaranteed one by 2× to 288×. `close-auctions` is written every five
+minutes and guaranteed once a day, so an auction ending at 10:05 can stay open
+almost 24 hours. `family-routines` promises in its own comment that "a 17:00
+schedule fires at 17:00 and not at whatever hour a daily tick happens to land
+on", and fires at whatever hour a daily tick lands on. `ai-runs` parks work on a
+time budget expecting a 5-minute resume and gets ~24 hours. `autopilot-scan`'s
+18:30 pass and `model-refresh`'s 16:00 pass have no Vercel schedule at all and
+fired zero times in 13.6 days.
+
+**Mechanism.** Two things compound: GitHub's `schedule` event is best-effort and
+is being delivered at ~2%, and `dueRoutes` searches a fixed five-minute window
+anchored to when the dispatcher *ran*, so everything due during a 104–396 minute
+absence falls outside every window ever evaluated. Nothing errors — the window is
+empty. The first is not fixable here; the second is what turns a missing tick
+into a permanently lost firing.
+
+**Correction to earlier work in this audit.** `a-late-tick-drops-a-cron` found
+the mechanism and got the severity backwards, because it modelled a seven-minute
+delay rather than measuring one: it claimed frequent routes "self-heal in
+minutes" and that the sparse ones are what matter. Both are inverted. Corrected
+in place, with the refuted reasoning left visible.
+
+**Guard.** `a-cron-cadence-is-a-promise-nothing-keeps` computes each route's
+advertised cadence from `SCHEDULES` and its guarantee from `vercel.json`, pins
+all fourteen deficits *by size* rather than existence, proves the complement is a
+real partition, and names the worst-case wait each dependent route guarantees.
+Adding a route that needs sub-daily cadence without a scheduler that delivers one
+fails with the deficit named; giving a route a real scheduler removes it.
+Calibrated by perturbing each table in turn.
+
+**Coupled and currently hidden.** `callRoute` aborts every route at a hardcoded
+120 s and treats the abort as a failure, while six dispatched routes declare
+`maxDuration = 300` and three box their own work at 240–260 s. Those budgets are
+twice the deadline their only caller will wait. It is almost never exercised
+*because* delivery is broken — `provider-sync` was dispatched once in 13.6 days
+— so fixing the cadence arms it. The two must be resolved together.
+
+**Not fixed here, deliberately.** Remediation changes production scheduling and
+is an owner decision: Vercel Pro's native sub-daily crons (the end state the
+dispatcher's own header already names, and the only one that restores cadence);
+or a widened look-back window (cheap, safe for 23 of 24 routes since they are
+required to be idempotent, but it doubles down on `admin-digest`, which Q32/Q36
+established is not, and it restores coverage without restoring cadence); or
+persisted catch-up state. Until one is chosen, the fourteen routes should be read
+as daily. Full evidence, per-route delivery table and the deficit table are in
+`audit/claude-1.md`.
+
+**Verified:** 14,184 tests green under both `TZ=UTC` and
+`TZ=America/Los_Angeles` (four shards each), `tsc --noEmit` clean, `npm run lint`
+exits 0 at budget 12, dispatcher still parses and workflow YAML still valid.

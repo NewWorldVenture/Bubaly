@@ -912,7 +912,17 @@ outbound fetch timeouts; the mobile↔web contract and the /api/ai bearer carve-
 PUBLIC and is Claude-3's); CSP and security headers; and database.types.ts
 against the migrations — 488 tables, 47 RPCs, zero drift in either direction.
 
-VERIFIED: 14,162 green under both timezones, tsc clean, lint 0 at 12, build 0.
+Q39 (CRITICAL, infrastructure): the GitHub dispatcher that supplies every
+sub-daily cron cadence has delivered 95 of 3,922 requested ticks over its entire
+life — 2.4%, minimum gap 104 minutes, never once the 5 minutes it asks for.
+Fourteen routes run at 2%-of-advertised plus one daily Vercel firing; an auction
+can stay open ~24h. Measured against the workflow's full run history, verified
+identical on main. Mechanism guarded; remediation is an owner decision (Vercel
+Pro / widened window / persisted catch-up). A coupled latent defect — a 120s
+dispatcher abort against routes budgeting 240-260s — is armed by fixing it.
+Corrected my own a-late-tick-drops-a-cron, whose severity model this refutes.
+
+VERIFIED: 14,184 green under both timezones, tsc clean, lint 0 at 12.
 STILL UNVERIFIED BY CI: no ci.yml run has been created for any commit after
-b05f0b32, across sixteen pushes. Everything above is local only.
-LAST-UPDATE: 2026-09-18, after Q35.
+b05f0b32, across thirty checks. Everything above is local only.
+LAST-UPDATE: 2026-09-19, after Q39.
