@@ -1854,3 +1854,63 @@ no warning, just a dialog that quietly is not modal.
 This is the third defect in this audit found by auditing my own work, after the
 `server-only` guard that closed a hole which was never open and the test that
 asserted the defect it was named for.
+
+---
+
+## [CLAUDE-1][HIGH][DATABASE / BACKEND] The family timezone was free text, and a typo put the household on UTC
+
+- **Where:** `lib/validation.ts` (`createFamilySchema`), `components/modules/family-module.tsx`,
+  `app/(app)/admin/actions.ts`
+- **Problem:** `families.timezone` is the zone every wall-clock answer the app
+  gives a family is computed from. The column is `text not null default 'UTC'`
+  **with no CHECK**; the family settings field is a free-text `<Input>` with
+  placeholder "America/Chicago"; the onboarding schema accepted any non-empty
+  string; the admin create action validated the owner's **email** and not the
+  zone.
+- **Evidence, measured:**
+
+  ```
+  instant 2026-09-19T01:30Z
+  America/Los_Angeles   day 2026-09-18   offset -420 min
+  Mars/Olympus_Mons     day 2026-09-19   offset    0 min   ← identical to UTC
+  ```
+
+  Every reader goes through `Intl.DateTimeFormat`, which throws on an unknown
+  zone — and every call site catches and degrades to UTC **deliberately**, so a
+  bad zone cannot crash a page. The two together make a bad zone
+  **indistinguishable from UTC, silently and permanently.**
+- **Impact:** a parent typing "Central", or fat-fingering "Amercia/Chicago",
+  moved their whole household onto Greenwich time: routines on the wrong local
+  day, "today" wrong, and the medication-reminder day bounds wrong — the exact
+  failure the fix two findings earlier in this file was about. The form said
+  "Family profile updated".
+- **Recommended fix:** applied to all three write paths, through
+  `isValidTimezone` — **which already existed** in `lib/time/zoned.ts` and was
+  used in exactly one place, the marketing recurring-ads schema. *Sixth instance
+  in this audit of "the correct implementation existed and had not reached this
+  call site."*
+- **Status:** FIXED. 13,913 tests pass, build compiles, i18n gate clean (two new
+  strings added to all seven populated catalogues).
+- **Proved load-bearing:** reverting the schema refine fails two cases.
+
+**The asymmetry.** `previewCalendarImportSchema` in the same file has validated
+its timezone all along — its comment reads *"malformed supplied input must not
+guess"* — on a value that is **presentation-only and never stored**. The
+stricter rule was on the throwaway copy and the looser one on the durable
+record. Its inline `try { new Intl.DateTimeFormat(...) }` is now the shared
+helper too, so there is one definition rather than two.
+
+**A correction to the obvious reading, measured rather than assumed.** I began
+by writing that "CST" would fall back to UTC. It does not: `Intl` **accepts**
+"CST", "EST" and "US/Central" as legacy fixed-offset aliases. They resolve to
+zones that **never observe DST**, which is a different and subtler
+wrong-wall-clock outcome for a family that meant `America/Chicago`. They are not
+rejected — they are real zones, and refusing a string `Intl` accepts would break
+anyone using one deliberately — and the guard states this rather than leaving
+the next reader to assume it is covered.
+
+**OPEN:** a `CHECK` constraint on `families.timezone` is the durable fix, since
+the settings form writes to PostgREST directly from the browser and client-side
+validation is defence in depth rather than enforcement. That needs a migration,
+and two other workers are actively on the ledger, so it is recorded for whoever
+owns it next rather than raced for a version number.
