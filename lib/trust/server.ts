@@ -281,7 +281,14 @@ export async function evaluateTrust(supabase: DB, familyId: string, req: Evaluat
   //
   // A deny is left exactly as it is. Losing rules can only ever have made the
   // engine more permissive, so a deny reached without them is still a deny.
+  //
+  // An EMERGENCY allow is left alone. `evaluateAction` resolves emergency
+  // elevation in step 1, before a policy or grant is read at all, so a failed
+  // read cannot have produced it — and putting an approval in front of
+  // Emergency Operations Mode is the one place where asking is worse than
+  // acting.
   const decision: Decision = inputs.degraded && engineDecision.effect === 'allow'
+    && engineDecision.basis !== 'emergency'
     ? {
       effect: 'require_approval',
       reason: 'Bubaly could not read this family’s permission rules, so it is asking rather than assuming.',

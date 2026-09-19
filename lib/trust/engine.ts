@@ -199,6 +199,31 @@ export type Decision = {
   policyScope?: 'specific' | 'broad';
 };
 
+/**
+ * How the risk tier relates to a decision, by the basis that produced it.
+ *
+ * This lives here, once, because it was three copies of
+ * `basis === 'role_default' || basis === 'fallback'` — in the executor gate,
+ * the planner validator and the AI gate. Adding a basis meant remembering all
+ * three, and `degraded` was added without them: a decision reached WITHOUT the
+ * family's rules skipped the tier entirely, so an action the tier denies
+ * outright became merely approvable.
+ *
+ *   'speaks'       — the answer came from the generic role matrix, so the tier
+ *                    is the more specific rule and replaces it outright.
+ *   'tighten_only' — the decision is real but was not made ABOUT this action
+ *                    (a blanket domain=all allow), or was made without the
+ *                    rules at all (`degraded`). The tier may make it stricter
+ *                    and must never make it looser.
+ *   'silent'       — a rule about this action decided it; the tier stays out.
+ */
+export function riskTierStance(decision: Decision): 'speaks' | 'tighten_only' | 'silent' {
+  if (decision.basis === 'role_default' || decision.basis === 'fallback') return 'speaks';
+  if (decision.basis === 'degraded') return 'tighten_only';
+  if (decision.basis === 'policy' && decision.effect === 'allow' && decision.policyScope === 'broad') return 'tighten_only';
+  return 'silent';
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function timeToMinutes(hhmm: string): number | null {
   const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm);

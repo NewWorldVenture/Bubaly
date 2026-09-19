@@ -153,3 +153,34 @@ describe('a rule that could not be read is not permission', () => {
     expect(audit?.decision).toBe('require_approval');
   });
 });
+
+describe('degrading must not loosen what it was meant to tighten', () => {
+  // Reviewing the first version of this fix found two ways the downgrade made
+  // things WORSE than the fail-open it replaced. Both are asserted here.
+
+  it('leaves an emergency elevation alone', async () => {
+    // `evaluateAction` resolves emergency in step 1, BEFORE a policy or grant is
+    // read, so a failed read cannot have produced the allow. Downgrading it put
+    // a human approval in front of Emergency Operations Mode — the one place
+    // where asking is worse than acting.
+    const { db } = store(
+      { trust_policies: [], permission_grants: [], trust_delegations: [], emergency_sessions: [{ elevated_domains: ['finances'] }] },
+      new Set(['trust_policies']),
+    );
+    const { decision } = await evaluateTrust(db, FAMILY, REQUEST);
+    expect(decision.effect).toBe('allow');
+    expect(decision.basis).toBe('emergency');
+  });
+
+  it('still downgrades a non-emergency allow when the read failed', async () => {
+    // The control for the case above: excluding emergency must not exclude
+    // everything else with it.
+    const { db } = store(
+      { trust_policies: [], permission_grants: [], trust_delegations: [], emergency_sessions: [] },
+      new Set(['trust_policies']),
+    );
+    const { decision } = await evaluateTrust(db, FAMILY, REQUEST);
+    expect(decision.effect).toBe('require_approval');
+    expect(decision.basis).toBe('degraded');
+  });
+});

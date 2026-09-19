@@ -828,16 +828,24 @@ export async function decide(
       reviewed_by: memberId,
       review_note: cleanNote,
     };
-  // A vote that does not decide leaves the status pending, so `status` alone
-  // cannot tell this write apart from the other parent's. Pin the version too.
-  const flipped = await flipStatus(scope, approvalId, patch, finalStatus === 'pending' ? row.updated_at : undefined);
+  // Pin the version on EVERY vote, deciding or not. `status = 'pending'` cannot
+  // tell this write apart from another parent's: it is still true when their
+  // vote has landed and ours was computed before it. A rejection is always
+  // deciding, so guarding only the non-deciding path left the very case that
+  // loses a vote — B's approval lands, C's concurrent rejection replaces
+  // [A, B] with [A, C], and B's yes is gone from the audit trail although
+  // `decide` told B it was recorded.
+  const flipped = await flipStatus(scope, approvalId, patch, row.updated_at);
   if (!flipped.ok) return flipped;
   if (!flipped.data) {
     // Zero rows means either the request was decided while we were deciding,
     // or another vote landed between our read and our write. Re-reading tells
     // the two apart and re-appends onto the array that actually won, so a
     // simultaneous vote is delayed rather than lost.
-    if (finalStatus === 'pending' && attempt < VOTE_RETRIES) {
+    // Retry whatever this vote would have decided: openForDecision re-reads
+    // and says "already decided" on its own if someone truly finished it, so
+    // the retry cannot turn a settled request back into an open one.
+    if (attempt < VOTE_RETRIES) {
       return decide(scope, approvalId, decision, note, attempt + 1);
     }
     return fail('This request was already decided.', { code: SERVICE_CODES.invalidInput });

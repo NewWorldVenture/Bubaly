@@ -17,7 +17,7 @@ import type { Database, Json } from '@/lib/database.types';
 import { behaviorForDomain, effectiveRisk } from '@/lib/ai/family-settings';
 import { getTool } from '@/lib/ai/tools/registry';
 import { readAISettings } from '@/lib/services/ai-settings';
-import { riskToDecision, toolTags, type Capability, type Decision, type TrustRole } from '@/lib/trust/engine';
+import { riskToDecision, riskTierStance, toolTags, type Capability, type Decision, type TrustRole } from '@/lib/trust/engine';
 import { evaluateTrust, openApprovalRequest } from '@/lib/trust/server';
 
 type DB = SupabaseClient<Database>;
@@ -106,10 +106,9 @@ export async function gateAiAction(supabase: DB, familyId: string, req: AiGateRe
 
   // Same rule as the executor's gate: the tier speaks over the generic role
   // matrix, and over a policy that names no domain — where it may only tighten.
-  const fromGenericRule = engineDecision.basis === 'role_default' || engineDecision.basis === 'fallback';
-  const blanketAllow = engineDecision.basis === 'policy' && engineDecision.effect === 'allow' && engineDecision.policyScope === 'broad';
+  const stance = riskTierStance(engineDecision);
   let decision: Decision = engineDecision;
-  if (fromGenericRule || blanketAllow) {
+  if (stance !== 'silent') {
     const risked = riskToDecision({
       risk,
       actor: { kind: 'ai_agent', id: req.actorId, role: req.actorRole },
@@ -118,7 +117,7 @@ export async function gateAiAction(supabase: DB, familyId: string, req: AiGateRe
       behavior: behaviorForDomain(settings, req.domain),
       explicitAllow: false,
     });
-    if (risked && !(engineApprovalId && risked.effect === 'allow') && (fromGenericRule || risked.effect !== 'allow')) {
+    if (risked && !(engineApprovalId && risked.effect === 'allow') && (stance === 'speaks' || risked.effect !== 'allow')) {
       decision = risked;
     }
   }

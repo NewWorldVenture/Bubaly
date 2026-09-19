@@ -52,7 +52,7 @@ import type { ToolDefinition } from '@/lib/ai/tools/types';
 import type { AiStepType } from '@/lib/database.types';
 import { zonedTimeMs } from '@/lib/services/scope';
 import {
-  evaluateAction, HIGH_STAKES_AI_DOMAINS, riskToDecision,
+  evaluateAction, HIGH_STAKES_AI_DOMAINS, riskToDecision, riskTierStance,
   type AutonomyBehavior, type Capability, type Decision, type Delegation, type Grant, type Policy, type TrustRole,
 } from '@/lib/trust/engine';
 import {
@@ -247,9 +247,8 @@ export function dryRunGate(tool: ToolDefinition, input: unknown, inputs: Validat
   // where the answer came from the generic role matrix, and also over a
   // blanket `domain=all/capability=all` allow, which is not a decision about
   // this action. Over a blanket it may only tighten.
-  const fromGenericRule = decision.basis === 'role_default' || decision.basis === 'fallback';
-  const blanketAllow = decision.basis === 'policy' && decision.effect === 'allow' && decision.policyScope === 'broad';
-  if (fromGenericRule || blanketAllow) {
+  const stance = riskTierStance(decision);
+  if (stance !== 'silent') {
     const risked = riskToDecision({
       risk: tool.risk,
       actor,
@@ -258,7 +257,7 @@ export function dryRunGate(tool: ToolDefinition, input: unknown, inputs: Validat
       explicitAllow: false,
       ...(behavior ? { behavior } : {}),
     });
-    if (risked && (fromGenericRule || risked.effect !== 'allow')) decision = risked;
+    if (risked && (stance === 'speaks' || risked.effect !== 'allow')) decision = risked;
   }
   return { ...decision, capability, skipped: false };
 }

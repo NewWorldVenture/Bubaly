@@ -102,6 +102,7 @@ const NOW = new Date('2026-09-05T12:00:00Z');
 const MEMBERS: Row[] = [
   { id: 'mum', family_id: 'fam-1', display_name: 'Mum', role: 'parent', is_active: true },
   { id: 'dad', family_id: 'fam-1', display_name: 'Dad', role: 'parent', is_active: true },
+  { id: 'gran', family_id: 'fam-1', display_name: 'Gran', role: 'parent', is_active: true },
 ];
 
 function scopeWith(db: SupabaseClient<Database>, memberId: string): ServiceScope {
@@ -122,6 +123,20 @@ function twoParentRow(): Row {
     request_id: null, run_id: null, plan_step_id: null, plan_step_ids: [], consequences: [], evidence: null,
     edited_payload: null, reviewed_by: null, review_note: null,
     created_at: '2026-09-05T10:00:00Z', updated_at: '2026-09-05T10:00:00Z',
+  };
+}
+
+/**
+ * Three approvals required, one already recorded. This is the shape that tells
+ * a DECIDING vote apart from a non-deciding one: a second approval leaves the
+ * request pending, while a rejection decides it immediately.
+ */
+function threeApprovalRow(): Row {
+  return {
+    ...twoParentRow(),
+    approval_model: 'consensus',
+    required_approvals: 3,
+    approvals: [{ member_id: 'gran', decision: 'approved', note: null, at: '2026-09-05T11:00:00Z', role: 'parent' }],
   };
 }
 
@@ -173,5 +188,47 @@ describe('two parents approving at once both count', () => {
     await decide(scopeWith(db, 'mum'), 'appr-1', 'approved');
     const again = await decide(scopeWith(db, 'mum'), 'appr-1', 'approved');
     expect(again.ok).toBe(false);
+  });
+});
+
+describe('a deciding vote does not clobber one cast beside it', () => {
+  // The deciding write guards on `status = 'pending'` like the others, and that
+  // is still TRUE when another parent's non-deciding vote has just landed. So
+  // pinning the version only on the non-deciding path left the exact case that
+  // loses a vote: a rejection is always deciding.
+  it('keeps an approval that landed while a rejection was being computed', async () => {
+    let held: null | (() => void) = null;
+    const release = () => { held?.(); };
+    let first = true;
+    const gate = async () => {
+      if (!first) return;
+      first = false;
+      await new Promise<void>((resolve) => { held = resolve as () => void; });
+    };
+    const { db, tables } = makeStore({ approval_requests: [threeApprovalRow()], family_members: MEMBERS }, gate);
+
+    // Dad's rejection reaches its write and parks (it DECIDES: status→rejected).
+    const dad = decide(scopeWith(db, 'dad'), 'appr-1', 'rejected');
+    await new Promise((r) => setTimeout(r, 0));
+    // Mum's approval reads and writes behind it (non-deciding: 2 of 3).
+    const mum = decide(scopeWith(db, 'mum'), 'appr-1', 'approved');
+    await new Promise((r) => setTimeout(r, 0));
+    release();
+    await Promise.all([dad, mum]);
+
+    const row = tables.approval_requests[0] as unknown as { approvals: { member_id: string }[]; status: string };
+    const voters = (row.approvals ?? []).map((v) => v.member_id).sort();
+    expect(voters, 'a vote was dropped by the deciding write').toEqual(['dad', 'gran', 'mum']);
+    expect(row.status, 'one rejection still stops the request').toBe('rejected');
+  });
+
+  // Control: the deciding write must still be exclusive — two rejections at
+  // once must not both be recorded as the decision.
+  it('still refuses a second decision once one has landed', async () => {
+    const { db } = makeStore({ approval_requests: [threeApprovalRow()], family_members: MEMBERS });
+    const first = await decide(scopeWith(db, 'dad'), 'appr-1', 'rejected');
+    expect(first.ok).toBe(true);
+    const second = await decide(scopeWith(db, 'mum'), 'appr-1', 'rejected');
+    expect(second.ok).toBe(false);
   });
 });
