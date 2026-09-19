@@ -5,6 +5,7 @@
 // this guarantees a sensible answer even when AI is unconfigured.
 
 import { frontDeskDomain } from '@/lib/front-desk/school-sports';
+import { safeContactText } from './text';
 
 export type InboundChannel = 'email' | 'sms' | 'voice';
 
@@ -103,12 +104,15 @@ export function shouldNotifyFamily(intent: InboundIntent): boolean {
 /** A short, single-line summary for the inbox row (deterministic fallback). */
 export function summarizeInbound(text: string | null | undefined, max = 140): string {
   const clean = (text ?? '').replace(/\s+/g, ' ').trim();
-  if (!clean) return 'No message content.';
-  return clean.length <= max ? clean : `${clean.slice(0, max - 1).trimEnd()}…`;
+  if (!clean) return safeContactText('No message content.', max);
+  const bounded = safeContactText(clean, max);
+  return clean.length <= max ? bounded : max === 0 ? '' : `${safeContactText(clean, max - 1).trimEnd()}…`;
 }
 
 /** A courteous concierge auto-reply appropriate to the intent (SMS/email). */
 export function autoReplyText(intent: InboundIntent, familyLabel = 'the family'): string {
+  // Leave space for the complete fixed reply, including its meaningful suffix.
+  familyLabel = safeContactText(familyLabel, 200);
   switch (intent) {
     case 'urgent':
       return `Thanks for reaching ${familyLabel}. This looks urgent — I’m notifying them right now and someone will get back to you shortly.`;

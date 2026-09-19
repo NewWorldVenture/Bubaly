@@ -1,14 +1,25 @@
 import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js';
+import { createHash, randomUUID } from 'node:crypto';
 import { expect, test } from '@playwright/test';
 
 const enabled = process.env.E2E_AUTHENTICATED === '1';
-const email = process.env.E2E_AUTH_EMAIL ?? '';
+const baseEmail = process.env.E2E_AUTH_EMAIL ?? '';
 const password = process.env.E2E_AUTH_PASSWORD ?? '';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
 
 let admin: SupabaseClient | null = null;
 let testUser: User | null = null;
+let email = '';
+
+// Projects/workers/retries may overlap. Never clean up the shared base email
+// or reuse another attempt's account while its requests are still in flight.
+function allocateFixtureEmail(project: string, parallelIndex: number): string {
+  const match = /^([^@\s]+)@([^@\s]+)$/.exec(baseEmail);
+  if (!match) throw new Error('Authenticated E2E requires a valid E2E_AUTH_EMAIL.');
+  const identity = createHash('sha256').update(JSON.stringify([baseEmail, project, parallelIndex, randomUUID()])).digest('hex').slice(0, 40);
+  return `e2e-auth-${identity}@${match[2]}`;
+}
 
 function requireSafeEnvironment(): SupabaseClient {
   if (!email || !password || !supabaseUrl || !serviceRoleKey) {
@@ -38,8 +49,10 @@ async function findUser(client: SupabaseClient): Promise<User | null> {
 }
 
 async function removeTestAccount(client: SupabaseClient): Promise<void> {
+  if (!email) return;
   const user = testUser ?? await findUser(client);
   if (!user) return;
+  if (user.email?.toLowerCase() !== email.toLowerCase()) throw new Error('Refusing to delete an account outside this E2E fixture');
 
   const { data: memberships, error: membershipError } = await client
     .from('family_members')
@@ -62,7 +75,8 @@ test.describe('authenticated first-value journey', () => {
   test.skip(!enabled, 'Set E2E_AUTHENTICATED=1 to run the isolated Supabase journey.');
   test.describe.configure({ mode: 'serial' });
 
-  test.beforeEach(async () => {
+  test.beforeEach(async ({}, testInfo) => {
+    email = allocateFixtureEmail(testInfo.project.name, testInfo.parallelIndex);
     admin = requireSafeEnvironment();
     await removeTestAccount(admin);
     const { data, error } = await admin.auth.admin.createUser({
@@ -76,8 +90,8 @@ test.describe('authenticated first-value journey', () => {
   });
 
   test.afterEach(async () => {
-    if (admin) await removeTestAccount(admin);
-    admin = null;
+    try { if (admin) await removeTestAccount(admin); }
+    finally { admin = null; testUser = null; email = ''; }
   });
 
   test('signs in, completes onboarding, and persists a first task', async ({ page }) => {

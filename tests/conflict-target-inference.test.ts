@@ -125,7 +125,11 @@ describe('the call sites this check is meant to cover', () => {
     ['lib/library/ingest.ts', 'library_items'],
     ['lib/server/calendar-feeds.ts', 'calendar_events'],
     ['lib/marketing/automation-events.ts', 'marketing_automation_runs'],
-    ['lib/contact-center/server.ts', 'family_inbox_messages'],
+    // lib/contact-center/server.ts used to be the fourth. The Contact Center
+    // audit replaced its family_inbox_messages upsert with a lookup and an
+    // insert, so there is no ON CONFLICT target there to see any more — and a
+    // row asserting one would be pinning a call site that no longer exists
+    // rather than checking the collector.
   ])('still sees the upsert in %s', (file, table) => {
     expect(sites.some((site) => site.file === file && site.table === table)).toBe(true);
   });

@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { MessageSquare, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { MessageSquare } from 'lucide-react';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settleAll } from '@/lib/supabase/settle';
 import { Card } from '@/components/ui/card';
@@ -8,7 +8,6 @@ import { Badge } from '@/components/ui/badge';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { createSmsDraft } from '../actions';
-import { isTwilioConfigured } from '@/lib/guardian/twilio';
 import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Marketing · SMS', robots: { index: false } };
@@ -30,15 +29,12 @@ export default async function SmsPage() {
   }
   const { data: sms } = smsResult;
   const { data: segments } = segmentsResult;
-  const ready = isTwilioConfigured();
 
   return (
     <div className="space-y-4">
-      <div className={`flex items-center gap-3 rounded-2xl border p-4 text-sm ${ready ? 'border-success/30 bg-success/10' : 'border-warning/30 bg-warning/10'}`}>
-        {ready ? <CheckCircle2 className="h-5 w-5 text-success" /> : <AlertTriangle className="h-5 w-5 text-warning" />}
-        {ready
-          ? <span>{t('adminMarketingSms.smsProviderConnectedOnlySmsConsented')}</span>
-          : <span><strong>{t('adminMarketingSms.noSmsProviderConfigured')}</strong> Set <code>TWILIO_AUTH_TOKEN</code> {t('adminMarketingSms.toEnableSendingDraftNowSends')}</span>}
+      <div className="flex items-center gap-3 rounded-2xl border border-border p-4 text-sm text-muted">
+        <MessageSquare className="h-5 w-5 shrink-0" />
+        <span>{t('sms.draftsOnly')}</span>
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[1fr_340px]">

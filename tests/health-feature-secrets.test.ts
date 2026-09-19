@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   FEATURE_ENV, REQUIRED_ENV, checkFeatureEnv, summarizeHealth, buildHealthReport,
@@ -64,13 +65,8 @@ describe('health reports the secrets whose absence silently kills a subsystem', 
 
   it('every listed secret is actually read by the codebase (no stale entries)', () => {
     // A name that nothing reads would make this check decorative.
-    const sources = ['app', 'lib'];
     for (const name of FEATURE_ENV) {
-      const found = sources.some((dir) => {
-        try {
-          return execSyncGrep(dir, name);
-        } catch { return false; }
-      });
+      const found = envReadLines(name).length > 0;
       expect(found, `${name} is in FEATURE_ENV but nothing reads it`).toBe(true);
     }
   });
@@ -90,12 +86,8 @@ describe('health reports the secrets whose absence silently kills a subsystem', 
   it('every listed secret is env-only, with no stored fallback', () => {
     // The property that makes absence meaningful. If any of these gained a
     // database fallback, its absence from env would stop proving anything.
-    const { execSync } = require('node:child_process') as typeof import('node:child_process');
     for (const name of FEATURE_ENV) {
-      const hits = execSync(
-        `grep -rn "process.env.${name}" app lib --include=*.ts --include=*.tsx || true`,
-        { encoding: 'utf8' },
-      );
+      const hits = envReadLines(name).join('\n');
       expect(hits.trim().length, `${name} is read nowhere`).toBeGreaterThan(0);
       // A stored-value fallback looks like `stored.x || process.env.NAME`.
       expect(hits, `${name} has a stored fallback — absence from env no longer proves it is unconfigured`)
@@ -117,8 +109,15 @@ describe('health reports the secrets whose absence silently kills a subsystem', 
   });
 });
 
-function execSyncGrep(dir: string, name: string): boolean {
-  const { execSync } = require('node:child_process') as typeof import('node:child_process');
-  const out = execSync(`grep -rl "process.env.${name}" ${dir} --include=*.ts --include=*.tsx || true`, { encoding: 'utf8' });
-  return out.trim().length > 0;
+function sourceText(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+    const file = join(dir, entry.name);
+    return entry.isDirectory() ? sourceText(file)
+      : /\.tsx?$/.test(entry.name) ? [readFileSync(file, 'utf8')] : [];
+  });
+}
+
+const lines = ['app', 'lib'].flatMap(sourceText).flatMap(source => source.split(/\r?\n/));
+function envReadLines(name: string): string[] {
+  return lines.filter(line => line.includes(`process.env.${name}`));
 }

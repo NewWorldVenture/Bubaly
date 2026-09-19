@@ -112,9 +112,11 @@ Bundle (`.aab`) → upload to Play Console.
 
 ## Push notifications
 
-Push is fully wired to Supabase. Each device registers into `push_devices`
-(own‑row RLS), and the notification engine delivers to every registered device,
-marking each notification `sent_at` so nothing is pushed twice.
+Each device registers into `push_devices` (own-row RLS). The notification engine
+honors recipient and parental preferences, and uses `pushed_at` separately from
+email's `sent_at`. Failed or unconfigured delivery remains pending. Partial
+delivery or overlapping workers can repeat a successful device send; the current
+notification-level timestamp is not an exactly-once delivery receipt.
 
 ### Web Push (installed PWA)
 1. Generate VAPID keys: `npx web-push generate-vapid-keys`
@@ -124,13 +126,21 @@ marking each notification `sent_at` so nothing is pushed twice.
    handler in `public/sw.js`).
 
 ### Native Push (iOS/Android)
-1. Create a Firebase project; add iOS + Android apps.
-2. iOS: upload your APNs key to Firebase (Firebase routes APNs).
-3. Android: drop `google-services.json` into `android/app/`; iOS: add
-   `GoogleService-Info.plist` in Xcode.
-4. Set `FCM_SERVER_KEY` so `lib/server/push.ts` delivers to native tokens.
-   `PushRegistrar` requests permission and stores the device token automatically
-   on first launch.
+1. Android: register the Android app in Firebase and place its
+   `google-services.json` in `android/app/`. Enable the Cloud Messaging API and
+   authorize a service account to send messages for that project.
+2. Set server-only `FCM_PROJECT_ID`, `FCM_CLIENT_EMAIL`, and `FCM_PRIVATE_KEY`.
+   The sender uses the [FCM HTTP v1 API](https://firebase.google.com/docs/cloud-messaging/migrate-v1)
+   with short-lived OAuth tokens. The retired `FCM_SERVER_KEY` is not used.
+3. iOS: enable Push Notifications for the app's matching provisioning profile,
+   and set server-only `APNS_TEAM_ID`, `APNS_KEY_ID`, `APNS_PRIVATE_KEY`, and
+   `APNS_TOPIC` (the bundle identifier, normally `com.bubaly.bubaly`). Set
+   `APNS_ENVIRONMENT` to `sandbox` for development provisioning or `production`
+   for the corresponding distribution profile. The sender calls APNs directly;
+   a Capacitor iOS registration is an APNs device token, not an FCM token.
+4. `PushRegistrar` requests permission and stores the provider-specific device
+   token. Verify an opted-in physical device using the test-push action and
+   scheduled delivery. Provider acceptance alone does not prove device receipt.
 
 Without these credentials the system is honest: web/native sends are **skipped
 and reported**, never silently dropped or faked.

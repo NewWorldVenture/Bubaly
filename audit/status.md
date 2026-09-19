@@ -1,5 +1,34 @@
 # Audit status board
 
+## Pull request 510 integration — 2026-09-19
+
+CURRENT: AUTH-001/AUTH-002/AUTH-003 request-admission witness cycle IN PROGRESS
+on published baseline dc99dc83. All prior 14,006 IDs/statuses remain preserved.
+WORKSPACE: Separate bubaly-final-production-audit-20260912 worktree, existing
+PR 510. Main remains 57f22c0b; the main checkout is untouched.
+SCOPE: Original callback request ownership reaches completion without recapturing
+newer cookies. Both entrypoints preserve supplied witnesses; duplicate cookie
+names remain visible for rejection. The witness is comparison metadata only.
+LOCAL FINAL: Application ee003898 passes UTC and DST 16,543/16,543 in 1,303 files
+each, build 252, strict types, lint with three existing warnings and i18n/query
+(491 tables / 86 functions / 146 routes). Focused browser ownership 81 and
+completion/recovery 82 pass; server/routing 147 and shared/server/page 77 overlap.
+TEST INFRASTRUCTURE: New actual HTTP/Mailpit fixture and disposable localhost
+redirect configuration are pinned at d0adca17; four cases pass discovery/types/lint
+but have not executed. Final discovery is 1,183 cases / 49 files. No new runtime PASS.
+HOSTED BASELINE: Exact dc99dc83 CI 35464679043 has Web, Database and Mobile SUCCESS;
+Finance 35464679048 has 66 explicit 0274 PASS notices. Web passes both 16,495-test
+unit runs, build 252 and strict types. Database passes 330 migrations, 38 probes
+and 327 reapplications. E2E passes 1,150/1,150 with auth/durable enabled. No restarts.
+NEXT: Publish the authorized updates to main/production and verify the new runtime.
+OPEN: Attempt-owned initiation, non-atomic cookie compare/write, successful hosted
+recipient/PKCE recovery, real provider delivery and production configuration.
+CURRENT RECORD: docs/final-audit/auth-callback-admission-witness-cycle.md.
+REFERENCES: docs/final-audit/auth-callback-browser-ownership-cycle.md and finalaudit.md.
+RELEASE: NO. Twelve new structural rows are NOT STARTED; total 14,018. No complete
+workflow PASS or existing status promotion.
+LAST-UPDATE: 2026-09-19T19:49:04.860Z
+
 Four workers audit this repository in parallel. Each worker maintains ONLY its
 own section below. Read this file before touching any source file: if another
 worker lists it under FILES-TOUCHED, audit it and record a recommendation in
@@ -158,4 +187,3 @@ NEXT: nothing outstanding for this round. Claude-1 has applied the HIGH findings
 FILES-TOUCHED: audit/claude-4.md only. Audit-only — no source file was modified by this worker.
 BLOCKERS: none.
 LAST-UPDATE: 2026-09-14
-

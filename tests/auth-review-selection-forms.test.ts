@@ -14,9 +14,19 @@ const mock = vi.hoisted(() => ({
   query: new URLSearchParams(), locale: 'en-US' as LocaleCode,
   push: vi.fn(), refresh: vi.fn(), toast: vi.fn(), stitch: vi.fn(), landing: vi.fn(), referral: vi.fn(),
   signUp: vi.fn(), password: vi.fn(), oauth: vi.fn(), otp: vi.fn(), verify: vi.fn(), fetch: vi.fn(),
+  passwordCurrent: vi.fn(), passwordGuards: [] as Array<() => boolean>,
 }));
-vi.mock('react', async (original) => ({
-  ...await original<typeof import('react')>(),
+vi.mock('react', async (original) => {
+  const actual = await original<typeof import('react')>();
+  function effectSlot(effect: () => void | (() => void), deps: readonly unknown[] = []) {
+    const index = mock.cursor++;
+    const previous = mock.slots[index] as readonly unknown[] | undefined;
+    if (previous && previous.length === deps.length && deps.every((item, i) => Object.is(item, previous[i]))) return;
+    mock.slots[index] = deps;
+    mock.effects.push(() => { const cleanup = effect(); if (typeof cleanup === 'function') mock.cleanups.push(cleanup); });
+  }
+  return {
+  ...actual,
   useState: (initial: unknown) => {
     const index = mock.cursor++;
     if (!(index in mock.slots)) mock.slots[index] = typeof initial === 'function' ? initial() : initial;
@@ -29,14 +39,16 @@ vi.mock('react', async (original) => ({
     if (!(index in mock.slots)) mock.slots[index] = { current: initial };
     return mock.slots[index];
   },
-  useEffect: (effect: () => void | (() => void), deps: readonly unknown[] = []) => {
+  useMemo: (factory: () => unknown, deps: readonly unknown[]) => {
     const index = mock.cursor++;
-    const previous = mock.slots[index] as readonly unknown[] | undefined;
-    if (previous && deps.every((item, i) => Object.is(item, previous[i]))) return;
-    mock.slots[index] = deps;
-    mock.effects.push(() => { const cleanup = effect(); if (typeof cleanup === 'function') mock.cleanups.push(cleanup); });
+    const previous = mock.slots[index] as { deps: readonly unknown[]; value: unknown } | undefined;
+    if (previous && previous.deps.length === deps.length && deps.every((item, i) => Object.is(item, previous.deps[i]))) return previous.value;
+    const value = factory(); mock.slots[index] = { deps, value }; return value;
   },
-}));
+  useEffect: effectSlot,
+  useLayoutEffect: effectSlot,
+  };
+});
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mock.push, refresh: mock.refresh }), useSearchParams: () => mock.query }));
 vi.mock('next/link', () => ({ default: ({ children, ...props }: { children: ReactNode }) => ({ type: 'a', props: { ...props, children }, $$typeof: Symbol.for('react.element') }) }));
 vi.mock('@/components/ui/toast', () => ({ useToast: () => ({ error: mock.toast, success: mock.toast }) }));
@@ -46,10 +58,18 @@ vi.mock('@/components/i18n/locale-provider', async () => {
     .reduce((text, [name, value]) => text.replace(`{${name}}`, value), getMessages(mock.locale)[key] ?? key) };
 });
 vi.mock('@/components/auth/legal-consent', () => ({ LegalConsent: () => null }));
+vi.mock('@/components/auth/recovery-form', () => ({ RecoveryForm: () => null }));
 vi.mock('@/lib/supabase/client', () => ({ createClient: () => ({ auth: {
   signUp: mock.signUp, signInWithPassword: mock.password, signInWithOAuth: mock.oauth,
   signInWithOtp: mock.otp, verifyOtp: mock.verify,
 } }) }));
+vi.mock('@/lib/auth/signup-client', () => ({
+  signUpWithOwnedVerifier: (_client: unknown, credentials: unknown) => mock.signUp(credentials),
+}));
+vi.mock('@/lib/auth/password-client', () => ({
+  signInWithOwnedSession: (credentials: unknown, canCommit: () => boolean) => { mock.passwordGuards.push(canCommit); return mock.password(credentials); },
+  isPasswordSessionCurrent: mock.passwordCurrent,
+}));
 vi.mock('@/app/(auth)/actions', () => ({ resolveLandingPathAction: mock.landing, stitchIdentityAction: mock.stitch }));
 vi.mock('@/app/(auth)/signup/actions', () => ({ rememberReferralCodeAction: mock.referral }));
 
@@ -88,17 +108,27 @@ const choices: [string, ReviewPlan][] = [
   ['plan=basic&billing=monthly', 'basic_monthly'], ['plan=basic&billing=yearly', 'basic_annual'],
   ['plan=plus&billing=monthly', 'plus_monthly'], ['plan=plus&billing=yearly', 'plus_annual'],
 ];
+const signupUser = { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', email: 'taylor@example.test', aud: 'authenticated',
+  app_metadata: {}, user_metadata: {}, created_at: '2026-09-12T00:00:00Z' };
+const passwordReceipt = () => ({ data: { user: signupUser, session: { user: signupUser,
+  access_token: 'synthetic-access-token', refresh_token: 'synthetic-refresh-token', token_type: 'bearer', expires_in: 3600 } }, error: null });
+function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(finish => { resolve = finish; }); return { promise, resolve }; }
 
 beforeEach(() => {
   resetHooks(); vi.clearAllMocks();
   mock.query = new URLSearchParams(); mock.locale = 'en-US';
-  mock.signUp.mockReset().mockResolvedValue({ data: { session: { user: { id: 'fixture-user' } } }, error: null });
-  mock.password.mockReset().mockResolvedValue({ error: null });
+  mock.signUp.mockReset().mockResolvedValue({ data: { user: signupUser, session: { user: signupUser,
+    access_token: 'synthetic-access-token', refresh_token: 'synthetic-refresh-token', token_type: 'bearer', expires_in: 3600 } }, error: null });
+  mock.stitch.mockReset().mockResolvedValue(undefined);
+  mock.referral.mockReset().mockResolvedValue(undefined);
+  mock.password.mockReset().mockResolvedValue({ data: { user: signupUser, session: { user: signupUser,
+    access_token: 'synthetic-access-token', refresh_token: 'synthetic-refresh-token', token_type: 'bearer', expires_in: 3600 } }, error: null });
+  mock.passwordCurrent.mockReset().mockReturnValue(true); mock.passwordGuards = [];
   mock.oauth.mockReset().mockResolvedValue({ error: null });
   mock.otp.mockReset().mockResolvedValue({ error: null });
   mock.verify.mockReset().mockResolvedValue({ error: null });
   mock.landing.mockReset().mockResolvedValue('/home');
-  vi.stubGlobal('window', { location: { origin: 'https://bubaly.test' } });
+  vi.stubGlobal('window', { location: { origin: 'https://bubaly.test', hash: '', href: 'https://bubaly.test/login' } });
   vi.stubGlobal('FormData', class { constructor(private fields: Record<string, string>) {} get(name: string) { return this.fields[name]; } });
   vi.stubGlobal('fetch', mock.fetch);
 });
@@ -124,7 +154,7 @@ describe.each(choices)('auth handoff for %s', (query, plan) => {
 
   it('preserves confirmation and check-email login links without navigating before a session exists', async () => {
     mock.query = new URLSearchParams(query);
-    mock.signUp.mockResolvedValueOnce({ data: { session: null }, error: null });
+    mock.signUp.mockResolvedValueOnce({ data: { user: signupUser, session: null }, error: null });
     click(render(SignupForm), getMessages('en-US')['signup.continueWithEmail']);
     await submit(render(SignupForm));
     expect(links(render(SignupForm))).toEqual([`/login?reviewPlan=${plan}`]);
@@ -190,7 +220,7 @@ describe('explicit destinations, failures and defaults', () => {
 
   it('retains the annual choice after failed email, password, and Google attempts', async () => {
     mock.query = new URLSearchParams({ reviewPlan: 'plus_annual' });
-    mock.signUp.mockResolvedValueOnce({ error: new Error('try again') });
+    mock.signUp.mockResolvedValueOnce({ data: { user: null, session: null }, error: { name: 'AuthApiError', status: 400, message: 'try again' } });
     click(render(SignupForm), getMessages('en-US')['signup.continueWithEmail']);
     await submit(render(SignupForm));
     expect(mock.push).not.toHaveBeenCalled();
@@ -243,5 +273,109 @@ describe('explicit destinations, failures and defaults', () => {
     const invalid = renderToStaticMarkup(render(SignupForm));
     expect(invalid).not.toContain('RAW_UNTRUSTED_TIER');
     expect(textOf(render(SignupForm))).toContain(getRawMessages(locale)['signup.freeToStartNoCreditCard']);
+  });
+});
+
+describe('password login submission lifetime', () => {
+  it('one same-turn submission owns the pending request and completion blocks repeat dispatch', async () => {
+    const held = deferred<ReturnType<typeof passwordReceipt>>(); mock.password.mockReturnValue(held.promise);
+    const tree = render(LoginForm), first = submit(tree), duplicate = submit(tree);
+    expect(mock.password).toHaveBeenCalledTimes(1); expect(mock.passwordGuards[0]()).toBe(true);
+    held.resolve(passwordReceipt()); await Promise.all([first, duplicate]);
+    await submit(render(LoginForm));
+    expect(mock.password).toHaveBeenCalledTimes(1);
+    expect(mock.push).toHaveBeenCalledTimes(1); expect(mock.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('changing destination invalidates the issued request and old retained callbacks', async () => {
+    const held = deferred<ReturnType<typeof passwordReceipt>>(); mock.password.mockReturnValueOnce(held.promise);
+    mock.query = new URLSearchParams({ redirect: '/join?token=A' });
+    const tree = render(LoginForm), first = submit(tree);
+    mock.query = new URLSearchParams({ redirect: '/join?token=B' }); render(LoginForm);
+    expect(mock.passwordGuards[0]()).toBe(false);
+    await submit(tree); expect(mock.password).toHaveBeenCalledTimes(1);
+    held.resolve(passwordReceipt()); await first;
+    expect(mock.push).not.toHaveBeenCalled(); expect(mock.stitch).not.toHaveBeenCalled(); expect(mock.toast).not.toHaveBeenCalled();
+    await submit(render(LoginForm)); expect(mock.push).toHaveBeenCalledWith('/join?token=B');
+  });
+
+  it.each(['phone', 'oauth', 'recovery', 'signup', 'kid'] as const)('switching to %s invalidates an issued password request synchronously', async method => {
+    const held = deferred<ReturnType<typeof passwordReceipt>>(); mock.password.mockReturnValue(held.promise);
+    const tree = render(LoginForm), first = submit(tree);
+    if (method === 'phone') click(tree, getMessages('en-US')['login.continueWithPhone']);
+    else if (method === 'oauth') (nodes(tree).find(node => node.props.onClickCapture)?.props.onClickCapture as (event: unknown) => void)({
+      target: { closest: () => ({ disabled: false }) }, currentTarget: { contains: () => true }, defaultPrevented: false,
+    });
+    else {
+      const href = method === 'recovery' ? '/login?reset=1' : method === 'signup' ? '/signup' : '/kid-login';
+      (nodes(tree).find(node => node.props.href === href)?.props.onClick as (event: unknown) => void)({ defaultPrevented: false, button: 0 });
+    }
+    expect(mock.passwordGuards[0]()).toBe(false);
+    held.resolve(passwordReceipt()); await first;
+    expect(mock.push).not.toHaveBeenCalled(); expect(mock.stitch).not.toHaveBeenCalled(); expect(mock.toast).not.toHaveBeenCalled();
+  });
+
+  it('unmounting invalidates the helper and prevents the retained form from dispatching again', async () => {
+    const held = deferred<ReturnType<typeof passwordReceipt>>(); mock.password.mockReturnValue(held.promise);
+    const tree = render(LoginForm), first = submit(tree); resetHooks();
+    expect(mock.passwordGuards[0]()).toBe(false);
+    await submit(tree); held.resolve(passwordReceipt()); await first;
+    expect(mock.password).toHaveBeenCalledTimes(1);
+    expect(mock.push).not.toHaveBeenCalled(); expect(mock.stitch).not.toHaveBeenCalled(); expect(mock.toast).not.toHaveBeenCalled();
+  });
+
+  it('a replaced session cannot resolve a landing path or navigate', async () => {
+    mock.passwordCurrent.mockReturnValue(false);
+    await submit(render(LoginForm));
+    expect(mock.landing).not.toHaveBeenCalled(); expect(mock.stitch).not.toHaveBeenCalled(); expect(mock.push).not.toHaveBeenCalled();
+  });
+
+  it('replacement during landing resolution suppresses its later navigation and stale error', async () => {
+    const held = deferred<string>(); mock.landing.mockReturnValue(held.promise);
+    const first = submit(render(LoginForm)); await settle(); expect(mock.landing).toHaveBeenCalledTimes(1);
+    mock.passwordCurrent.mockReturnValue(false); held.resolve('/admin'); await first;
+    expect(mock.push).not.toHaveBeenCalled(); expect(mock.refresh).not.toHaveBeenCalled(); expect(mock.toast).not.toHaveBeenCalled();
+  });
+
+  it('a new destination during landing lookup cannot be overwritten by the old result', async () => {
+    const held = deferred<string>(); mock.landing.mockReturnValue(held.promise);
+    const first = submit(render(LoginForm)); await settle();
+    mock.query = new URLSearchParams({ redirect: '/join?token=new' }); render(LoginForm);
+    held.resolve('/admin'); await first;
+    expect(mock.push).not.toHaveBeenCalled();
+  });
+
+  it.each(['throw', 'reject'] as const)('optional stitching can %s without failing login or leaking a rejected promise', async mode => {
+    if (mode === 'throw') mock.stitch.mockImplementation(() => { throw new Error('fixture optional stitch'); });
+    else mock.stitch.mockRejectedValue(new Error('fixture optional stitch'));
+    await submit(render(LoginForm)); await settle();
+    expect(mock.push).toHaveBeenCalledWith('/home'); expect(mock.toast).not.toHaveBeenCalled();
+  });
+
+  it.each(['session', 'user', 'mismatched-user', 'access-token', 'refresh-token'] as const)('rejects a malformed %s receipt without resolving or navigating', async malformed => {
+    const value = passwordReceipt();
+    const data = value.data as { user: unknown; session: null | Record<string, unknown> };
+    if (malformed === 'session') data.session = null;
+    else if (malformed === 'user') data.user = null;
+    else if (malformed === 'mismatched-user') data.session!.user = { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' };
+    else data.session![malformed === 'access-token' ? 'access_token' : 'refresh_token'] = '   ';
+    mock.password.mockResolvedValue(value); await submit(render(LoginForm));
+    expect(mock.landing).not.toHaveBeenCalled(); expect(mock.stitch).not.toHaveBeenCalled(); expect(mock.push).not.toHaveBeenCalled();
+    expect(mock.toast).toHaveBeenCalledWith(getMessages('en-US')['loginForm.couldNotSignIn']);
+  });
+
+  it('a current provider rejection permits a deliberate retry', async () => {
+    mock.password.mockResolvedValueOnce({ data: { user: null, session: null }, error: { message: 'Fixture invalid credentials' } });
+    await submit(render(LoginForm)); await submit(render(LoginForm));
+    expect(mock.password).toHaveBeenCalledTimes(2); expect(mock.push).toHaveBeenCalledTimes(1);
+    expect(mock.toast).toHaveBeenCalledExactlyOnceWith('Fixture invalid credentials');
+  });
+
+  it.each<LocaleCode>(['en-US', 'de-DE', 'fr-FR', 'pt-PT', 'es-ES', 'it-IT', 'nl-NL'])('uses existing translated retry copy in %s', async locale => {
+    mock.locale = locale;
+    mock.password.mockRejectedValue({ name: 'AuthRetryableFetchError', message: 'Internal ownership transport detail', status: 0 });
+    await submit(render(LoginForm));
+    expect(mock.toast).toHaveBeenCalledExactlyOnceWith(getMessages(locale)['loginForm.couldNotSignIn']);
+    expect(mock.push).not.toHaveBeenCalled();
   });
 });

@@ -6,9 +6,19 @@ import { safeInternalRedirect } from '@/lib/auth/redirect';
 import { PROTECTED, PUBLIC, matchesPrefix } from '@/lib/auth/route-access';
 import {
   durableCookieOptions, hasAuthCookies, isRetryableAuthError, isSecureRequest,
-  shouldForwardAuthCode,
+  shouldForwardAuthCode, preservePendingPkceVerifier,
 } from '@/lib/auth/session';
 
+
+// Provider callbacks authenticate inside their handlers. Keep this list exact:
+// future Contact Center settings or data endpoints still require a user session.
+const PUBLIC_CONTACT_CALLBACKS = new Set([
+  '/api/contact-center/email',
+  '/api/contact-center/sms',
+  '/api/contact-center/sms/status',
+  '/api/contact-center/voice',
+  '/api/contact-center/voice/transcription',
+]);
 
 // The assistant bridge's two entry points.
 //
@@ -41,6 +51,18 @@ export async function middleware(req: NextRequest) {
   // This exact public path exposes only the artifact's revision. Do not refresh
   // sessions or interpret OAuth query parameters for this read-only response.
   if (path === '/api/build-info') return NextResponse.next({ request: req });
+  // Logout replies must never carry stale authentication cookie mutations.
+  // The browser performs its own guarded local deletion after explicit intent.
+  if (path === '/auth/signout' || path === '/auth/signout/complete') return NextResponse.next({ request: req });
+  // Completion carries a code to a guarded browser-owned action. It must not
+  // loop through misplaced-code rescue or refresh an ambient account.
+  if (path === '/auth/complete') return NextResponse.next({ request: req });
+  // Child credentials are verified by this public action, then the browser
+  // adopts its receipt conditionally. A delayed action response must not carry
+  // an unrelated ambient session refresh that bypasses that ownership check.
+  if (path === '/kid-login' && req.method === 'POST' && req.headers.has('next-action')) return NextResponse.next({ request: req });
+  const recoveryPage = path === '/auth/recovery'
+    || (path === '/login' && req.nextUrl.searchParams.get('reset') === '1');
 
   // A Supabase OAuth code that landed on the wrong path gets forwarded to
   // /auth/callback — but ONLY when it is ours to exchange. `code` is the
@@ -56,10 +78,19 @@ export async function middleware(req: NextRequest) {
   })) {
     const url = req.nextUrl.clone();
     url.pathname = '/auth/callback';
+    if (recoveryPage) url.searchParams.set('next', '/auth/recovery');
     return NextResponse.redirect(url);
   }
 
-  const isPublic = (req.method === 'POST' && PUBLIC_ASSISTANT_CALLBACKS.has(path))
+  // Recovery verifies the exact candidate token in its own action/callback.
+  // Ambient refresh here would attach session A cookies to a delayed response
+  // and could overwrite a newer browser session B before UI guards can act.
+  if (recoveryPage || path === '/auth/callback') {
+    return NextResponse.next({ request: req });
+  }
+
+  const isPublic = PUBLIC_CONTACT_CALLBACKS.has(path)
+    || (req.method === 'POST' && PUBLIC_ASSISTANT_CALLBACKS.has(path))
     || matchesPrefix(path, PUBLIC);
 
   // Whether this path requires a session AT ALL. Public wins first, so a
@@ -113,6 +144,7 @@ export async function middleware(req: NextRequest) {
       cookies: {
         getAll: () => req.cookies.getAll(),
         setAll: (toSet: { name: string; value: string; options: CookieOptions }[], headers: Record<string, string> = {}) => {
+          toSet = preservePendingPkceVerifier(toSet, supabaseUrl);
           toSet.forEach(({ name, value }) => req.cookies.set(name, value));
           res = NextResponse.next({ request: req });
           toSet.forEach(({ name, value, options }) => res.cookies.set(name, value, options));
