@@ -709,3 +709,52 @@ LEFT FOR A DECISION, not inherited: whether "sharing off" should hide location
   creating (stuck-claim trade); `role_changed` until member editing has a server
   action.
 LAST-UPDATE: 2026-09-19
+
+## Claude-1 — Session 8, Pass Z (measuring the pattern, not guessing the module)
+METHOD: two of this session's findings came from one structure — a sensitive
+  table written straight from the browser, RLS the whole authorization model. So
+  I measured it instead of picking a sixth module by intuition. Cross-referenced
+  policy.ts's 67 sensitive tables against all 439 'use client' components:
+  30 are browser-written; 16 of those have NO role check and NO self check on
+  writes. Sorted into three groups in finalaudit.md; only one group is
+  unambiguously wrong, and the self-logging group is family-wide BY DESIGN
+  (0309's stated reason for leaving medication_doses open).
+FOUND: `C1-S8-07` [HIGH][SECURITY/RLS] — `journal_entries` has
+  `is_private boolean NOT NULL DEFAULT true` and ONE `FOR ALL is_family_member`
+  policy, and `is_private` appears NOWHERE in app/, components/ or lib/. Four
+  statements of intent (product name, module header, `.eq('member_id')` fetcher,
+  the column) and none of them a boundary. Measured as a child: read, rewrote,
+  deleted a sibling's entry, and wrote one in the sibling's name.
+  Same finding covers `family_insurance_policies` (policy numbers, premiums,
+  agent phones) — `FOR ALL is_family_member` while its twin `insurance_policies`
+  has been manager-gated all along. THIRD instance of that twin-table pattern
+  (0309, 0326, now this).
+  FIXED by `0328` + insurance-module's role gate. SELECT on the journal is self
+  OR is_private=false, so the column is finally load-bearing and "share this
+  entry" needs no migration. A PARENT IS DELIBERATELY NOT GIVEN A WINDOW into a
+  child's journal — no surface ever offered it; the probe asserts the refusal so
+  changing it must be deliberate.
+FOUND: `C1-S8-08` [LOW][UX] — 42 tables are manager-only for writes; 9 browser
+  writers of them carry no role check (passwords vault, household binder,
+  document library, bills, financial accounts, family members, invites). NOT a
+  security hole — the DB holds and describeDbError turns 42501 into a polite
+  refusal — but a control that can never succeed. /dashboard/passwords gates on
+  AAL2, NOT role, so a child with 2FA sees an empty vault and a dead Add button.
+  Not fixed (9 modules outside this pass, each with its own copy to decide);
+  RATCHETED instead — the guard carries them as a named exception list that may
+  shrink and never grow, and a fifth test fails when an entry goes STALE, so a
+  fix must remove its own exception.
+  GUARD rewritten to cover all 42 manager-only tables (was 7). Proved red 4x
+  incl. the stale-exception direction.
+TWO INSTRUMENT ERRORS, caught before they became findings:
+  - the writer census flagged family-module.tsx as ungated; it uses
+    `MANAGER_ROLES.includes(role)` not `isManager()`. THIRD census this audit to
+    cry wolf by looking for one spelling. Guard now accepts both idioms.
+  - the manager-only table query gave 31 or 7 depending on which branch was
+    written — a RESTRICTIVE guard ANDs over the permissive policies, so
+    `medications` is manager-only while its permissive policies still read
+    is_family_member. Both branches needed; union is 42. Derivation SQL is
+    written into the test beside the pin.
+REPLAY: 341 migrations, 0 failed. PROBES: 49/49.
+SUITE: 1,251 files / 14,081 tests, 0 failures. nextVersion ratcheted to 0329.
+LAST-UPDATE: 2026-09-19

@@ -8224,3 +8224,170 @@ where you have been (`C1-S8-02`'s observation), and whether a second tap on the
 trades a rare double-create for a claim that can get stuck (`C1-S8-05`).
 `role_changed` stays unwritten because there is nowhere to write it from until
 member editing gets a server action (`C1-S8-04`).
+
+
+---
+
+# Pass Z — measuring the pattern instead of guessing the next module
+
+Two of Session 8's findings came from the same structure: **a sensitive table
+written directly from the browser, where RLS is the whole of the authorization
+model.** Rather than keep choosing modules by intuition, this pass measured that
+structure across the product.
+
+## The census
+
+`lib/ai/context/policy.ts` is the repository's own definition of sensitive — 67
+tables it forbids any AI slice from reading, with a reason written beside each.
+Cross-referenced against every `'use client'` component (439 of them):
+
+| | |
+|---|---|
+| sensitive tables in `policy.ts` | 67 |
+| **written directly from the browser** | **30** |
+| of those, with **no role check and no self check** on writes | **16** |
+
+The 16 sort into three groups, and only the first is unambiguously wrong:
+
+| group | tables |
+|---|---|
+| **the record is ABOUT one person and writable by anyone** | `journal_entries` · `behavior_logs` · `care_log` · `driving_trips` · `safety_check_ins` |
+| **shared family admin, plausibly collaborative** | `tax_documents` · `family_insurance_policies` · `weather_locations` |
+| **self-logging, family-wide by design** (`0309` left `medication_doses` open for exactly this reason) | `health_metrics` · `health_goals` · `symptom_logs` · `sleep_logs` · `sleep_checkins` · `nutrition_logs` · `medication_doses` · `voice_commands` |
+
+Two of these were clear enough to fix without a product decision. The rest are
+listed in full so the next pass starts from a measurement rather than a hunch.
+
+## C1-S8-07 [HIGH][SECURITY/RLS] — a column called `is_private`, referenced nowhere
+
+**Files:** `supabase/migrations/0087_journal.sql:22,32-34` ·
+`components/modules/journal-module.tsx` ·
+`components/modules/insurance-module.tsx`
+**Status:** FIXED by `0328_a_private_journal_is_private.sql` + the insurance
+module's role gate (**migration not yet applied to production**) ·
+`docs/audit/journal-and-policy-boundary-check.sql`
+
+### The journal
+
+Four statements of intent, in four places:
+
+1. the product calls it *"Personal Journal — private reflection"*;
+2. the module's header says *"scoped to the signed-in member"*;
+3. its fetcher says `.eq('member_id', memberId)`;
+4. `0087` gave the table `is_private boolean NOT NULL DEFAULT true`.
+
+And one policy:
+
+```sql
+CREATE POLICY "Members manage journal_entries" ON public.journal_entries
+  FOR ALL TO authenticated USING (public.is_family_member(family_id))
+                           WITH CHECK (public.is_family_member(family_id));
+```
+
+`is_private` appears **nowhere** in `app/`, `components/` or `lib/` — not a
+query, not a filter, not a control. Every row is marked private by default and
+nothing honours it. The member scoping is a **query filter, not a boundary**.
+
+Measured as a signed-in child against a replayed schema:
+
+```
+NOTICE:  child read 1 of a SIBLING's private journal entries
+NOTICE:  child rewrote a SIBLING's journal entry
+NOTICE:  child deleted a SIBLING's journal entry
+NOTICE:  child wrote a journal entry in a SIBLING's name
+```
+
+`0328` makes the column mean what it says: SELECT is self, **or** any family
+member when `is_private` is false — so the "share this entry" the column was
+obviously put there for needs no further migration, and until something sets it,
+the effective rule is self-only, which is exactly what the UI has always shown.
+
+**A parent is deliberately not given a window.** No surface in this product has
+ever offered a parent their child's journal, so granting it here would be a new
+capability wearing a security fix's clothes. Whether a guardian should be able to
+read a child's journal is a real question about a real family and it belongs to
+whoever owns the product. **The probe asserts the parent is refused**, so
+changing that has to be deliberate.
+
+### The insurance twin
+
+`family_insurance_policies` holds `policy_number`, `premium_amount`,
+`agent_phone`, `claim_phone` and `document_path`, and was `FOR ALL …
+is_family_member`. Its twin `insurance_policies` — the same class of data, named
+on the same deny-list line — has had manager-gated writes all along.
+
+```
+NOTICE:  child rewrote the family's insurance policy number
+NOTICE:  child deactivated the family's insurance policy
+```
+
+This is the **third** time this series has found that exact pattern —
+`0309` (medications vs. its neighbours), `0326` (the structured immunization
+ledger vs. the free-text blob it replaced), now this — and the fix is the same
+each time: make the twins agree, in the direction of the one already guarded.
+`insurance-module.tsx` carried no role check of any kind, so the UI half ships
+with the migration.
+
+## C1-S8-08 [LOW][UX] — nine controls that can never succeed
+
+The same census, run the other way: **42 tables are manager-only for writes**
+(derived from the replayed schema, counting both all-permissive-policies-require-manager
+*and* restrictive `*_manager_*_guard` tables — the first draft of that query had
+only one branch and lost seven tables). Nine browser writers of those tables
+carry no role check at all:
+
+| component | table |
+|---|---|
+| `components/modules/passwords-module.tsx` | `family_credentials` |
+| `components/modules/binder-module.tsx` | `household_info` |
+| `components/modules/documents-module.tsx` | `documents` |
+| `components/modules/billing-module.tsx` | `bills`, `financial_accounts` |
+| `components/modules/finances-module.tsx` | `financial_accounts` |
+| `components/finance/bills-view.tsx` | `bills` |
+| `components/modules/settings-module.tsx` | `family_members` |
+| `components/family/invite-form.tsx` | `invites` |
+
+**This is not a security hole** and is filed LOW on purpose: the database holds
+in every case, and `describeDbError` turns `42501` into *"You don't have
+permission to do that. Ask a family admin…"* rather than a raw Postgres string.
+It is a control that can never succeed, on the password vault, the household
+binder and the document library. `/dashboard/passwords` gates on **AAL2, not
+role**, so a child with a second factor reaches an empty vault and an Add button
+that always fails.
+
+Not fixed here — nine modules outside this pass's scope, each with its own empty
+state and copy to decide. Instead the class is **ratcheted**: the guard carries
+the nine as a named exception list that may shrink and never grow, and a fifth
+test fails if an entry becomes stale, so a fix must remove its own exception.
+
+### The guard
+
+`tests/a-manager-gated-table-is-manager-gated-on-screen.test.ts`, rewritten to
+cover all 42 manager-only tables rather than the 7 restrictive-guard ones.
+Proved red four times:
+
+| mutation | guard |
+|---|---|
+| remove `isManager` from `insurance-module.tsx` | **RED** — names file and table |
+| remove it from `immunizations-module.tsx` | **RED** |
+| a new client component writing `family_credentials` with no role check | **RED** |
+| give a `KNOWN_UNGATED` entry a role check (a stale exception) | **RED** |
+
+The last one is what stops the exception list rotting into an amnesty.
+
+### Two instrument errors, caught before they reached a finding
+
+Recorded because both are the shape this audit keeps hitting:
+
+- The writer census first flagged `components/modules/family-module.tsx` as
+  ungated. It is not — it reaches `MANAGER_ROLES.includes(role)` directly rather
+  than calling `isManager()`. **Third census in this audit to cry wolf by
+  looking for one spelling.** The guard now accepts both idioms.
+- The manager-only table query first returned 31 tables, then 7, depending on
+  which branch was written — a `RESTRICTIVE` manager guard ANDs over the
+  permissive policies, so `medications` is manager-only while every permissive
+  policy on it still reads `is_family_member`. Both branches are needed; the
+  union is 42, and the derivation is written into the test beside the pin.
+
+Replay: **341 migrations, 0 failed.** Probes: **49/49**.
+Suite: **1,251 files / 14,081 tests, 0 failures.**

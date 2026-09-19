@@ -1749,3 +1749,25 @@ because their value is zero until they are applied:
   `docs/audit/paperwork-stamp-concurrency-check.sql` reproduces the OLD
   semantics beside the new function and fails if they stop reproducing the
   defect. Audit C1-S8-05.
+
+- **`0328_a_private_journal_is_private.sql`** — self-scoped RLS on
+  `journal_entries`, and manager-gated writes on `family_insurance_policies`.
+  `0087` gave the journal `is_private boolean NOT NULL DEFAULT true` and a single
+  `FOR ALL … is_family_member` policy; `is_private` is referenced nowhere in
+  `app/`, `components/` or `lib/`, so the module's `.eq('member_id', memberId)`
+  was a query filter rather than a boundary. Measured as a signed-in child: read
+  a sibling's entry, rewrote it, deleted it, and wrote one in the sibling's
+  name. SELECT is now self **or** any family member when `is_private` is false,
+  so sharing an entry needs no further migration. **A parent is deliberately not
+  given a window into a child's journal** — no surface ever offered it, and the
+  probe asserts the refusal so changing it has to be deliberate.
+  `family_insurance_policies` (policy numbers, premiums, agent phones, document
+  paths) was `FOR ALL … is_family_member` while its twin `insurance_policies`
+  had manager-gated writes all along — the third instance of that twin-table
+  pattern after `0309` and `0326`. Reading stays family-wide on both, matching
+  `insurance_policies`. `insurance-module.tsx` had no role check of any kind, so
+  the UI half ships with this migration.
+  `docs/audit/journal-and-policy-boundary-check.sql` asserts six refusals, that
+  a member keeps full control of their OWN journal, that every member still
+  reads the policies, that a parent keeps the pen on them, and that a parent
+  still cannot read a child's journal. Audit C1-S8-07.
