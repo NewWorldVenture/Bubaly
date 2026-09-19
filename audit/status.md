@@ -927,6 +927,11 @@ only; .next is mkdir'd; enforcement correctly lives in the production-migrations
 workflow, which passes --enforce-history and is pinned by tests). All 8 workflows
 have now been read.
 
+Config/infra layer now FULLY SWEPT: all 8 workflows, vercel.json, the dispatcher,
+and every root config (tsconfig, tailwind content globs, playwright, postcss) —
+all clean. That layer produced Q35-Q39 after app code went quiet and now looks
+exhausted.
+
 VERIFIED: 14,184 green under both timezones, tsc clean, lint 0 at 12.
 STILL UNVERIFIED BY CI: no ci.yml run has been created for any commit after
 b05f0b32, across thirty checks. Everything above is local only.

@@ -6812,3 +6812,44 @@ the repository is private. Noted for completeness, not as a concern.
 
 **Status:** NO DEFECT. This closes the last workflow I had not examined — all 8
 of `.github/workflows/` have now been read.
+
+---
+
+[CLAUDE-1][INFO][CONFIG] The four remaining unexamined root configs — all clean
+
+Swept after `supabase-schema-audit.yml`, to finish the config/infra layer rather
+than leave four files nobody had opened. Each had a plausible failure mode; none
+had it.
+
+**`tsconfig.json`** excludes `supabase`, `mobile` and `vitest.config.ts`, which
+would matter if TypeScript were hiding there. `supabase/` contains **zero** `.ts`
+files — the exclusion covers SQL and config. `mobile/` has 42, and its own
+`tsconfig.json`, and its own CI job (`ci.yml:111-133`, `working-directory:
+mobile`, `npm run typecheck`). Root `strict: true`. Nothing untypechecked.
+
+**`tailwind.config.ts`** globs `./app`, `./components`, `./lib`. A directory
+missing from `content` is the quiet kind of defect — classes are purged at build
+time, so the UI is correct in dev and unstyled only in production. Checked
+exhaustively: the only directories in the repo containing `className` are
+`app` (278 files), `components` (441), `lib` (3) and `tests` (11). The first
+three are globbed; `tests` correctly is not, since test files do not ship. The
+globs are exactly right.
+
+**`playwright.config.ts`** — 8 projects, matching the "multiplies everything by
+8" claim in its own comment. `forbidOnly` under CI, `retries: 1` under CI,
+`trace: 'on-first-retry'`. The `chromium` project carries no `testMatch` and so
+runs every spec; the device matrix narrows to the viewport-relevant ones, and
+`iphone` alone adds `authenticated` — already pinned by
+`tests/mobile-e2e-matrix.test.ts`. `webServer.env` supplies four defaults with
+`??`, so real CI values win; Playwright inherits `process.env` for that block, so
+it is additive rather than a replacement.
+
+**`postcss.config.mjs`** — tailwindcss + autoprefixer, eight lines, nothing to
+get wrong.
+
+**Status:** NO DEFECT in any of the four. With these and
+`supabase-schema-audit.yml`, the config/infra layer is fully swept: all 8
+workflows, `vercel.json`, the dispatcher, and every root config file. That layer
+produced five findings (Q35–Q39) after the application code went quiet; it now
+looks genuinely exhausted, which is a result worth recording as much as a defect
+is — the next reader should not have to re-derive that these were checked.
