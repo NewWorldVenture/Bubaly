@@ -3,8 +3,12 @@
 // Access control for the Social Media Command Center. A social role is granted
 // per family via social_access_permissions; it is INDEPENDENT of (and additive
 // to) the household MemberRole. The matrix below is the single source of truth
-// used by the UI to hide controls and by server actions to reject calls. The
-// database RLS (0024) is the real enforcement boundary; this mirrors it.
+// used by the UI to hide controls and by server actions to reject calls.
+//
+// It is also, for most permissions, the ONLY enforcement: the social tables get
+// plain is_family_member RLS in migration 0034 (public.social_has_permission is
+// consulted by exactly one policy, social_publish_jobs_insert). An earlier note
+// here credited migration 0024 with enforcing this; 0024 is weather_locations.
 
 export type SocialRole =
   | 'owner'
