@@ -181,6 +181,7 @@ export async function runPublishNow(
   const variantByPlatform = new Map((variants ?? []).map((v) => [v.platform, v.body]));
   const outcomes: PublishOutcome['targets'] = [];
   const finalStatuses: TargetStatus[] = [];
+  let lostToAnotherRun = 0;
 
   for (const target of targets ?? []) {
     const platform = target.platform as SocialPlatform;
@@ -199,16 +200,32 @@ export async function runPublishNow(
       providerAccountId = acct?.provider_account_id ?? null;
     }
 
+    // Claim the target before calling the provider. This UPDATE carries the
+    // same `['pending','failed']` filter the SELECT above it used, which is
+    // what makes it exclusive: a second run racing this one finds the row
+    // already moved and gets no row back. Without the filter the update always
+    // matched, both runs reached the connector, and the family's post went out
+    // twice — public, and not something they can take back.
+    //
+    // `.maybeSingle()` is load-bearing. Zero rows is now the EXPECTED outcome
+    // of losing the race, not an error: `.single()` would turn a correctly
+    // refused claim into an aborted job.
     const { data: publishingTarget, error: publishingTargetError } = await supabase
       .from('social_post_targets')
       .update({ status: 'publishing', updated_by: userId })
       .eq('id', target.id)
       .eq('family_id', familyId)
+      .in('status', ['pending', 'failed'])
       .select('id')
-      .single();
-    if (publishingTargetError || !publishingTarget) {
-      return abortJob(supabase, familyId, job.id, userId, 'target publishing-state update failed', publishingTargetError ?? new Error('Missing target row'));
+      .maybeSingle();
+    if (publishingTargetError) {
+      return abortJob(supabase, familyId, job.id, userId, 'target publishing-state update failed', publishingTargetError);
     }
+    // Somebody else is publishing this target. Leave it to them, and remember
+    // that we did not do it — a run that claims nothing must not go on to
+    // report a successful publish of no targets, or to roll an empty outcome
+    // over the post status the winning run is about to write.
+    if (!publishingTarget) { lostToAnotherRun += 1; continue; }
 
     const connector = getConnector(platform);
     let result;
@@ -271,6 +288,22 @@ export async function runPublishNow(
       errorCode: result.errorCode ?? null,
       errorMessage: result.errorMessage ?? null,
     });
+  }
+
+  // Every target this run saw was claimed by another run. That is the same
+  // situation the "no pending targets" branch above reports when the other run
+  // got there a moment earlier, so answer it the same way rather than returning
+  // a successful publish of nothing.
+  if (finalStatuses.length === 0 && lostToAnotherRun > 0) {
+    return abortJob(
+      supabase,
+      familyId,
+      job.id,
+      userId,
+      'publish raced another run for every target',
+      new Error('All targets claimed by a concurrent publish'),
+      'This post is already being published.',
+    );
   }
 
   const postStatus = derivePostStatus(finalStatuses);

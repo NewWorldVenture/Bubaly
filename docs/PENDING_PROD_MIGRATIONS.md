@@ -514,8 +514,8 @@ passed; production application of the atomic `0240-0254` release remains pending
 ## Migrations added since this document's stated baseline (2026-09-12)
 
 The status line at the top of this file is dated **2026-09-05** against main
-`01881fb2`. **53** migration files have landed since, `0255` through
-`0310`, and none of them appear anywhere above. (This read "thirty-one, `0255`
+`01881fb2`. **60** migration files have landed since, `0255` through
+`0317`, and none of them appear anywhere above. (This read "thirty-one, `0255`
 through `0285`" until 2026-09-13, "seventy-one, `0255` through `0295`" until
 2026-09-15, and "forty-five, `0255` through `0302`", "46, `0255` through `0303`"
 and "49, `0255` through `0306`" until 2026-09-16; the range
@@ -1155,17 +1155,449 @@ states — which is what matters for anyone calling PostgREST directly.
 
 Until this is applied, production carries all nine as measured above.
 
+### `0311` keeps a row's references inside its own family — unapplied
+
+Every family-scoped INSERT policy in this schema checks the row's **own**
+`family_id` and nothing else, and the foreign keys beside them name `parent(id)`
+alone, because that is the parent's primary key. So a member may write a row
+carrying *their* `family_id` and a reference into *somebody else's* family, and
+both the policy and the constraint are satisfied.
+
+The repo already knows the class — `lib/services/tasks/index.ts` guards one
+instance by hand:
+
+> "Confirm the chore belongs to this family before writing an assignment that
+> would otherwise carry a foreign family's chore_id under our family_id."
+
+Application code is not a boundary for anyone calling PostgREST. Measured,
+acting as a manager of family A who is not a member of family B, all three
+landed: a chore assignment under A **pointing at B's chore**, one **assigned to
+B's member**, and an allowance rule under A **pointing at B's child wallet**.
+Five breaches counting the re-point and the integrity check,
+`docs/audit/cross-family-reference-check.sql`.
+
+**Reads were never the hole**, and the probe asserts that in both directions: A
+still cannot `SELECT` B's chore, with or without the guard. What this reaches is
+the code that *acts* on the reference.
+
+#### The half that is live on merge
+
+The nightly cron credits `rule.child_wallet_id`. `creditChildWallet` resolves
+buckets by `(family_id, child_wallet_id)`, so a foreign wallet matches none and
+the credit fails "not fully provisioned" — it does **not** pay another family.
+The damage was what the route did with that failure:
+
+```ts
+if (!res.ok) { …rollback…; throw new Error(`Allowance credit failed: ${res.error}`); }
+```
+
+The outer catch turned that into a 500. Because the rollback restores
+`next_run_on`, the same rule was due again the next night and threw at the same
+point — and the rules are read `.order('id')`, so every rule after it was never
+reached. **One row stopped allowances for every family after it, permanently**,
+with nothing in the response naming the cause. Reaching that state is ordinary:
+any wallet missing a bucket does it, no cross-family reference required.
+
+The route now counts the failure, logs it, leaves the rule retryable and returns
+502 — the contract the repo's other four batch crons already follow, and which
+`tests/cron-batch-failure-status.test.ts` already pinned for them. The money one
+simply was not on its list.
+
+The **schedule-claim** error in the same loop (`if (scheduleError) throw
+scheduleError;`) was the other half of the identical defect and was missed by the
+first pass of this fix. A scan of all 24 cron routes for a `throw` inside a
+per-item loop found it — `wallet-allowance` was the only route in the repo with
+one, and it had two. Nothing is written when the claim fails, so that rule stays
+due and retries on its own; it now takes the same isolated path instead of ending
+the run. `if (subscriptionsError) throw subscriptionsError;` is deliberately left
+alone: it sits *before* the loop, and if plan gating cannot be read then every
+rule would be mis-gated, so failing the run is correct there. `wallet-allowance` is now on it, and
+`tests/allowance-cron-isolates-one-bad-rule.test.ts` asserts the behaviour
+itself: the rule ordered *after* the failing one is paid. That test was
+calibrated against the old route — three of its four cases fail there.
+
+`tests/cron-wallet-allowance-persistence.test.ts` asserted the `throw` as its
+proxy for "the failure is not swallowed". The assertion was retargeted rather
+than deleted: the failure must still be recorded and surfaced, it just must not
+end the run.
+
+#### Scope
+
+Deliberately narrow — the three references measured above, guarded by trigger.
+A composite foreign key would need a `(family_id, id)` unique constraint on every
+parent table and a rewrite of **454** constraints; that is a schema project for
+when the ledger is healthy, not a boundary fix. The shared
+`public.reference_shares_family()` helper takes the column and parent table as
+trigger arguments, so the next reference costs one line — which is what `0275`'s
+header asks for, "by shape rather than by name".
+
+Each wired reference is **validated where it is wired**, because the failure mode
+of a mis-wired one is quiet in exactly the place it matters. The helper
+early-returns for the trusted server, so a parent table with no `family_id`
+column installs happily during a migration replay — which runs with no JWT, so
+`auth.uid()` is null and the guard never reaches its query — and then raises
+`42703` on **every authenticated write** to that table in production. Measured
+both ways: as `postgres` the mis-wired insert succeeds silently, as an
+authenticated user it fails `42703`. The wiring loop now asserts that the child
+has `family_id` and the named column and that the parent has `family_id`, so the
+mistake fails during replay, where CI catches it.
+
+Until this is applied, production carries the cross-family writes as measured
+above. The allowance-run outage is fixed in the route and takes effect on merge.
+
+### The manual allowance run could pay twice — fixed in the app, live on merge
+
+`tests/allowance-cron-idempotency.test.ts` locks the nightly cron's schedule
+claim so it *"can't regress to a blind (double-crediting) update"*. The manual
+**Run due allowances** button — `runDueAllowancesAction` in
+`app/(app)/wallet/actions.ts` — is the sibling path that test does not cover, and
+it was exactly that blind update:
+
+```ts
+.update({ next_run_on: next, last_run_on: today })
+.eq('id', rule.id).eq('family_id', familyId).select('id').single()
+```
+
+No `.lte('next_run_on', today)` predicate, so the update always matched. Both
+paths select due rules the same way, so two overlapping runs — a double-click, or
+a click racing the cron, whose own claim *is* predicated — both read the rule as
+due, both advanced it, and **both credited the child's wallet**.
+
+The claim now carries the predicate and reads with `.maybeSingle()`, and a rule
+that matched no row is skipped rather than treated as an error — the cron's
+pattern exactly. `tests/manual-allowance-run-claims-like-the-cron.test.ts`
+asserts it and was calibrated against the old code, where three of its four cases
+fail.
+
+`tests/wallet-allowance-persistence.test.ts` pinned the old statement verbatim,
+including `.single()`. Its intent — the advance is checked before the credit and
+rolled back if the credit fails — is kept and strengthened rather than deleted:
+it is now a claim.
+
+This needs no migration and takes effect on merge.
+
+### `0312` makes the sensitive-document rule match what people type — unapplied
+
+`documents.category` is a **free-text folder name** the person types
+(`components/modules/documents-module.tsx` sets
+`category: form.category.trim() || 'general'`), and that upload path never sets
+`is_secure`. So for anything filed through Documents, the category *is* the
+whole boundary.
+
+`0266`'s classifier tested **exact membership** of a seventeen-word list.
+Measured on a replayed database against the folder names a parent actually
+types:
+
+| filed as | sensitive? |
+| --- | --- |
+| `medical` | yes |
+| **`Medical Records`** | **no** |
+| **`Tax Returns`** | **no** |
+| **`Bank Statements`** | **no** |
+| **`Passports & IDs`** | **no** |
+| **`Wills & Estate`** | **no** |
+| **`Health Insurance`** | **no** |
+
+The last two show it was a matching bug rather than a vocabulary gap: every word
+in them was already on the list. A plural or a second word was enough to turn
+the guard off.
+
+This reaches further than one predicate. `documents_select/insert/update/delete`
+(`0266`) and `document_object_is_restricted` (`0303`, the storage-bytes guard)
+all decide through this function — so a passport scan filed under "Passports &
+IDs" was readable by every child in the family, **bytes included**, which is
+exactly what `0303` was written to stop.
+
+Measured consequence, acting as a child with both controls passing: **12
+assertions failed** under the old rule, including *"a child can read 11
+documents filed under sensitive folder names"*. Zero after `0312`.
+`docs/audit/document-category-classifier-check.sql`.
+
+**The change.** Match per **word** rather than on the whole string: lowercase,
+split on non-alphanumerics, test each word against the list, also trying it with
+one trailing `s` removed. Stripping the `s` is what lets "Wills" reach "will";
+doing it on *words* rather than substrings is what keeps "Kids Art", "Videos"
+and "Ideas" ordinary — a substring match on the bare `id` would have hidden all
+three from the family that filed them. A short phrase list carries what no
+single word does, and the vocabulary gains the terms a family vault obviously
+holds.
+
+Over-classification is the safe direction and is chosen deliberately: a gym
+membership filed under "Health Club" becoming adults-only is a smaller harm than
+a child reading a diagnosis.
+
+It remains a list, and a list is what let this through. What changed is that it
+now matches the language people write in.
+
+**A test that was guarding a ghost.** `tests/document-vault-boundary.test.ts`
+held the SQL and TypeScript copies in parity by reading
+`supabase/migrations/0266_…sql` *by name*. The moment a newer migration
+redefined the function, it would have compared TypeScript against a definition
+the database had already replaced. It now resolves the newest migration that
+defines the classifier, and asserts the phrase list too.
+
+Until this is applied, production carries the classifier gap as measured above.
+
+### `0313` keeps the meal-plan grocery RPC inside one family — unapplied
+
+`public.grocery_from_meal_plan(p_family_id, p_from, p_to, p_list_id)` from
+`0005` is `SECURITY DEFINER` and granted `execute` to `authenticated`. It
+checked `is_family_member(p_family_id)` on the way in and then trusted
+everything else it was handed.
+
+**The join.** `join public.meals m on m.id = mp.meal_id` — the `where` scoped
+the *plan*, nothing scoped the *meal*. `0311` established that a member may
+write a row carrying their own `family_id` beside a reference into another
+family, so a `meal_plans` row planted under family A pointing at family B's
+meal made the RPC copy B's ingredient names onto A's own grocery list, where A
+can read them. Measured on a replayed database, acting as a parent of A who is
+not a member of B and who provably cannot `select` B's meals:
+
+```
+control: A member of B?                     f
+control: rows A can SELECT from B's meals:  0
+meal_plan under A pointing at B's meal:     1 row
+items A can now READ on their own list:     2 -> PRIVATE-kosher-brisket,
+                                                 PRIVATE-insulin-syringes
+```
+
+Ingredient lists carry religious practice, allergies and medical supplies.
+
+`0311`'s own header said of this class: *"Reads still hold — A cannot SELECT
+B's chore, so this is not a read leak. What it reaches is the code that ACTS on
+the reference."* This function is that code, and acting on the reference made
+it a read leak after all. A `SECURITY DEFINER` routine is where a plantable
+reference stops being harmless, because it is the one place RLS is not looking.
+
+**The list.** `p_list_id` was used as given, so rows landed on another family's
+list (measured: rows carrying A's `family_id` sitting on B's list). B cannot
+see them — `grocery_items` RLS is family-scoped — so this is corruption rather
+than an injection B would read.
+
+`0313` fixes both levels: the function validates every id it is handed, and
+`meal_plans.meal_id → meals` and `grocery_items.list_id → grocery_lists` join
+`0311`'s validated trigger loop, which `0311` said would cost one line each.
+
+Held by `docs/audit/meal-plan-grocery-boundary-check.sql`: four assertions
+failed before, none after, with both controls — A's own meal plan still fills
+A's own list, and A can still add to it — passing in both directions.
+
+Until this is applied, production carries both holes as measured above.
+
+### `0314` makes circle join codes typeable — unapplied
+
+`marketplace_create_circle` builds the 8-character code a family shares with
+the neighbours they lend things to, and says what it is for:
+
+```sql
+-- 8-char human-friendly code (no 0/O/1/I), retried on the rare collision.
+v_code := upper(substr(translate(
+  encode(gen_random_bytes(8), 'base64'), '0O1Il+/=', 'ABCDEFGH'), 1, 8));
+```
+
+`translate` runs **before** `upper`, and the from-set names only the uppercase
+`O` and `I`. base64 emits lowercase letters too, so a lowercase `o` or `i`
+passes through untouched and `upper()` turns it back into exactly the character
+the line exists to remove.
+
+Measured over 20,000 generated codes:
+
+```
+codes containing 0 or 1 : 0        (the digits really are excluded)
+codes containing O or I : 4,568    -- 22.8%
+
+OWSBVEFD   YYEQDIBA   THOLKTVA   TNEIEAWB
+```
+
+The asymmetry is what makes it a dead end rather than a coin flip: because a
+stored code can never contain a digit `0` or `1`, a parent who reads
+`OWSBVEFD` off a screen and types a zero gets *"no circle with that code"*
+every time, with nothing telling them they are one character away.
+
+`0314` fixes both halves. The generator's from-set now names both cases of
+every ambiguous letter — the alphabet becomes
+`23456789ABCDEFGHJKLMNPQRSTUVWXYZ`, verified over 50,000 codes with zero `0`,
+`1`, `O` or `I`. And the lookup reads a typed `0` as `O` and a typed `1` as
+`I`, which is unconditionally safe *because* no stored code contains those
+digits — so the 22.8% of codes already issued stay joinable rather than being
+rotated out from under the families who wrote them down.
+
+`lib/marketplace/community.ts` carries the browser-side copy of the same
+normalisation and was updated to match; the two are pinned to each other in
+`tests/marketplace-community.test.ts`, which reads the rule out of this
+migration by name rather than restating it.
+
+Held by `docs/audit/circle-join-code-check.sql`: three assertions failed
+before, none after, with the controls — an unknown code is still rejected, and
+a member of one family still cannot join on behalf of another — passing in
+both directions.
+
+Until this is applied, production keeps minting codes that one family in four
+cannot read aloud.
+
+### `0315` sells one item once — unapplied
+
+`marketplace_accept_offer` is `SECURITY DEFINER` and checked two things: that
+the caller owns the listing, and that the **offer** is still open.
+
+```sql
+if v_offer.status <> 'open' then raise exception 'Offer is no longer open'; end if;
+```
+
+It never checked the **listing**. The guard was on the piece of paper, not on
+the thing being sold.
+
+Nothing stops a second offer against a claimed listing — `marketplace_offers_insert`
+requires only family membership and that the offer is made in the member's own
+name — and a backup offer is a reasonable thing for a family to make. Accepting
+one, though, sold the item twice. Measured on a replayed database with **no
+concurrency at all**, acting as the listing's own owner:
+
+```
+accepted buyer one -> listing=claimed, orders=1
+buyer two could place an offer on a CLAIMED listing: t
+accepted buyer two -> listing=claimed, orders=2
+                      (Buyer one @40, Buyer two @45)
+```
+
+Two confirmed orders for one balance bike, two families each told it is theirs,
+and `claimed_by` silently rewritten from the first buyer to the second while the
+first keeps a confirmed order. `marketplace_orders` carries no unique index on
+`listing_id`, so the schema does not catch it either.
+
+`0315` puts the precondition **in the UPDATE** that claims the listing rather
+than in an `if` above it. An `if` would fix only the sequential case; carrying
+the condition in the write makes the row lock do the work, so two genuinely
+concurrent accepts serialise and the second matches zero rows. Same shape as
+the allowance rule the cron re-credited and the social target that published
+twice: the write that is supposed to be the claim has to be the thing that is
+exclusive.
+
+Offers are deliberately left alone — a family may still register interest in
+something already claimed; what changes is that accepting it cannot sell the
+item a second time. That is asserted as a control, so the fix is not quietly
+widened.
+
+Held by `docs/audit/listing-claimed-once-check.sql`: two assertions failed
+before, none after, with three controls — the first sale still works, a backup
+offer is still accepted, and a different available listing still sells — passing
+in both directions.
+
+Until this is applied, production can sell one item to two families.
+
+### `0316` pays a chore once — unapplied
+
+`payChoreRewardAction` states the invariant in its own comment:
+
+```ts
+// Already paid? (one wallet credit per assignment)
+const { data: existing } = await supabase.from('wallet_transactions').select('id')
+  .eq('family_id', familyId).eq('related_type', 'chore_assignments').eq('related_id', assignment.id).limit(1);
+if ((existing ?? []).length > 0) return { ok: false, error: '…already paid' };
+```
+
+and then enforced it with a SELECT followed by an INSERT. Nothing in the schema
+backed it — `wallet_transactions` carried no unique index on those columns at
+all. Two "Pay" clicks arriving together both read zero rows and both credited
+the child's wallet. Real money, minted twice.
+
+**The obvious key is wrong twice over**, and both were found by reading the
+writers rather than the guard:
+
+1. `related_type = 'allowance_rules'` is **recurring** — a rule credits every
+   week carrying the same `related_id`. A unique index on
+   `(family_id, related_type, related_id)` would break allowances on the second
+   payment.
+2. `creditChildWallet` writes **one row per bucket** for a single credit, all
+   sharing `related_id`. Measured, for a 4,000¢ payout under the default
+   40/40/10/10 split:
+
+   ```
+   parts: {"spend":1600,"save":1600,"give":400,"invest":400}
+   ledger rows written: 4
+   ```
+
+   So even scoped to `chore_assignments`, a three-column index would reject the
+   **first** payout, not the second.
+
+`0316` therefore creates a partial unique index on
+`(family_id, related_id, bucket_id)` where `related_type = 'chore_assignments'`.
+The rows of one payout go in as a single multi-row INSERT, so a second payout
+collides on its first bucket and the whole statement is refused — there is no
+half-credited wallet. The migration counts pre-existing violations first and
+raises with the count rather than repairing a money ledger on its own; on a
+replay from zero there are none.
+
+`creditChildWallet` now returns `duplicate: true` for a `23505`, and
+`payChoreRewardAction` reports it with the same "already paid" message its own
+read uses, so the loser of the race sees that rather than a constraint name.
+
+Held by `docs/audit/chore-paid-once-check.sql`: two assertions failed before,
+none after, with four controls passing in both directions — the first
+multi-bucket payout still lands, a different assignment still pays, **a weekly
+allowance still credits the same rule repeatedly**, and `spend_request` debits
+carrying no `related_id` are untouched. The middle two are the ones that would
+have caught the wrong index.
+
+Until this is applied, production can pay one chore twice.
+
+### `0317` makes the listing state machine decide from a locked row — unapplied
+
+`marketplace_set_listing_status` is the seller's state machine: withdraw,
+complete, relist, mark pending. It read the listing with **no lock** and wrote
+with **no predicate**, so the transition was judged against a row another
+transaction may already have changed.
+
+Of the twenty-two `SECURITY DEFINER` functions in this schema that read a row
+and then update it, this was the **only** one with neither mechanism — every
+other one takes `for update`, predicates its write, or both. `marketplace_buy_now`,
+its immediate neighbour, does all three.
+
+**Measured with two real concurrent sessions.** The transition that exposes it
+is one the state machine forbids (`pending` is legal only from `available`):
+
+```
+before:  seller: (no error — the forbidden transition was accepted)
+         listing=pending  claimed_by=<buyer>  confirmed_orders=1
+
+after:   seller: ERROR: Cannot move listing from claimed to pending
+         listing=claimed  claimed_by=<buyer>  confirmed_orders=1
+```
+
+The seller read `available`, decided `available → pending` was legal against
+that stale value, then blocked on the buyer's row lock and wrote anyway. The
+listing goes back on the market as `pending` while carrying a confirmed order
+and the buyer's `claimed_by` — a second buyer can be pointed at an item that is
+already sold.
+
+**What this is not:** `claimed → withdrawn` is legal from both the stale and the
+fresh read, so a seller withdrawing a just-claimed listing is not this defect —
+it is the product working as designed, and the probe asserts it still does. Only
+a transition the state machine rejects from the true status shows the stale read.
+The first scenario tried here was that one, and it demonstrated nothing; it is
+recorded because the distinction is the whole point.
+
+Held by `docs/audit/listing-status-machine-check.sql`, which reads the mechanism
+out of `pg_get_functiondef` rather than a file (so it cannot pass against a
+definition a later migration replaced) and **re-runs the sweep that found this
+one**, so the next function to drop both mechanisms is caught at replay rather
+than by a buyer. Three assertions failed before, none after, with four controls
+— the two legal transitions, the forbidden one, and the non-owner — passing in
+both directions.
+
+Until this is applied, production can put a sold item back on the market.
+
 ## Security-relevant migrations awaiting production
 
 Added after this document's inventory stopped being complete, and listed here
 because their value is zero until they are applied:
 
-- **`0311_social_tokens_service_role_only.sql`** (renumbered from `0300`, which
+- **`0318_social_tokens_service_role_only.sql`** (renumbered from `0300`, which
   `main` took for the entitlement fix above) — drops the four
   `can_manage_family` policies `0297` added to `public.social_account_tokens`.
   `0034` created that table with no policy and a comment saying never to add
   one; `0297` added them on the stated premise that "every policy was
-  is_family_member", when there were none. Until `0311` is applied, any family
+  is_family_member", when there were none. Until `0318` is applied, any family
   manager can `select` the OAuth token rows through PostgREST. The columns hold
   ciphertext and no code writes the table yet, which bounds the exposure; it
   does not remove it. Verified locally against a full replay (313 migrations
@@ -1173,7 +1605,7 @@ because their value is zero until they are applied:
   which was amended in the same change — it previously asserted the opened
   state as a requirement. Audit C3-S5-01.
 
-- **`0312_no_truncate_for_the_public_roles.sql`** — revokes `truncate` on every
+- **`0319_no_truncate_for_the_public_roles.sql`** — revokes `truncate` on every
   table in `public` from `anon` and `authenticated`, and sets the matching
   default privilege so a future table does not arrive with it. `truncate` is not
   filtered by row-level security: a policy that correctly limits which rows a
@@ -1184,7 +1616,7 @@ because their value is zero until they are applied:
   migration outside a privilege list, which is exactly the rule that makes this
   one safe to read. Audit C1-S5-04.
 
-- **`0313_household_secrets_are_not_child_readable.sql`** — replaces the single
+- **`0320_household_secrets_are_not_child_readable.sql`** — replaces the single
   `"Members manage household_info"` policy (`for all using
   is_family_member(family_id)`) with four that add
   `and (not is_sensitive or can_manage_family(family_id))` on select, insert,
@@ -1197,7 +1629,7 @@ because their value is zero until they are applied:
   back. `docs/audit/household-binder-boundary-check.sql` asserts both, and that a
   parent still sees the whole binder. Audit C1-S6-06.
 
-- **`0314_marketplace_parties_are_not_editable.sql`** — makes `family_id`,
+- **`0321_marketplace_parties_are_not_editable.sql`** — makes `family_id`,
   `listing_id` and the party columns of `marketplace_orders` /
   `marketplace_offers` immutable after insert, via a `BEFORE UPDATE` trigger that
   fires only when `row_security_active()`, and tightens the two `with check`
@@ -1214,7 +1646,7 @@ because their value is zero until they are applied:
   `docs/audit/marketplace-ownership-update-check.sql` asserts both refusals and
   both permitted writes. Audit C1-S6-08.
 
-- **`0315_a_review_belongs_to_whoever_wrote_it.sql`** — scopes the
+- **`0322_a_review_belongs_to_whoever_wrote_it.sql`** — scopes the
   `marketplace_reviews` / `marketplace_saves` / `marketplace_follows` UPDATE
   policies to the row's owner, and makes the columns around the authorship
   column immutable. `0154` pinned `reviewer_member` (resp. `member_id`) on INSERT
@@ -1224,15 +1656,15 @@ because their value is zero until they are applied:
   is aggregated by `reviewee_member` on four screens. Nothing in the tree updates
   any of the three tables, so no behaviour is lost; the policies are scoped
   rather than dropped because "edit your own review" is what they evidently meant
-  to say. Also replaces `0314`'s table-branching trigger function with
+  to say. Also replaces `0321`'s table-branching trigger function with
   `columns_are_immutable()`, which takes its column list from the trigger
   definition and raises on a column that does not exist rather than silently
   guarding nothing. `docs/audit/marketplace-review-authorship-check.sql` asserts
   all of it, including that typo guard. Audit C1-S6-09.
 
-- **`0316_deleting_a_review_is_rewriting_it.sql`** — scopes the DELETE policies
+- **`0323_deleting_a_review_is_rewriting_it.sql`** — scopes the DELETE policies
   on `marketplace_reviews` / `marketplace_offers` / `marketplace_saves` /
-  `marketplace_follows`, which `0154` left family-wide. `0315` stopped a member
+  `marketplace_follows`, which `0154` left family-wide. `0322` stopped a member
   rewriting another member's review; deleting it achieves the same thing, and on
   offers it is worse in kind — any member could remove a competing offer on a
   listing they have nothing to do with. Offers go to the two parties their UPDATE
@@ -1243,7 +1675,7 @@ because their value is zero until they are applied:
   `docs/audit/marketplace-delete-authorship-check.sql` asserts both the refusals
   and the four things that must still work. Audit C1-S6-10.
 
-- **`0317_a_social_restriction_is_not_self_service.sql`** — gives
+- **`0324_a_social_restriction_is_not_self_service.sql`** — gives
   `social_access_permissions_delete` the predicate its INSERT and UPDATE policies
   already carry. `social_role_for()` falls back to a default derived from the
   family role when no explicit row exists, so a row restricting someone *below*

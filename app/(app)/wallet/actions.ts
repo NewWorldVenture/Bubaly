@@ -207,6 +207,13 @@ export async function payChoreRewardAction(input: { choreAssignmentId: string })
   if (amount <= 0) return { ok: false, error: t('actions.thisChoreHasNoCash') };
 
   // Already paid? (one wallet credit per assignment)
+  //
+  // This read catches the ordinary case — a parent opening the page on an
+  // assignment that was paid yesterday. It cannot catch two "Pay" clicks that
+  // arrive together: both read zero rows and both credit. What makes the
+  // invariant true rather than likely is `uq_wallet_txn_chore_payout` (0316);
+  // the loser of that race comes back as `duplicate` below and is reported
+  // here as what it is, not as a failure.
   const { data: existing, error: existingError } = await supabase
     .from('wallet_transactions').select('id')
     .eq('family_id', familyId).eq('related_type', 'chore_assignments').eq('related_id', assignment.id).limit(1);
@@ -231,6 +238,10 @@ export async function payChoreRewardAction(input: { choreAssignmentId: string })
     description: `Chore: ${chore?.title ?? 'completed'}`, createdBy: ctx.user.id,
     relatedType: 'chore_assignments', relatedId: assignment.id,
   });
+  // The index refused it because the credit is already in the ledger. Say the
+  // same thing the read above says, so a parent who double-clicks sees "already
+  // paid" rather than a database error.
+  if (res.duplicate) return { ok: false, error: t('actions.thisChoreWasAlreadyPaid') };
   if (!res.ok) return { ok: false, error: res.error };
 
   revalidatePath('/wallet');
@@ -323,9 +334,25 @@ export async function runDueAllowancesAction(): Promise<Result & { ranCount?: nu
   let paidCents = 0;
   for (const rule of rules ?? []) {
     const { runs, next } = rollForward(rule.next_run_on ?? today, rule.cadence as Cadence, today, 1);
+    // CLAIM the schedule, don't just advance it. `.lte('next_run_on', today)` is
+    // the exclusivity guard: two overlapping runs both read the rule as due, but
+    // only ONE update matches a row — the first flips next_run_on into the
+    // future, and the loser matches none and skips. Without the predicate this
+    // update always matched, so a double-click here (or a click racing the
+    // nightly cron, whose own claim IS predicated) credited the allowance twice.
+    //
+    // This is the exact regression tests/allowance-cron-idempotency.test.ts was
+    // written to prevent — "so the claim can't regress to a blind
+    // (double-crediting) update" — on the sibling path that test does not cover.
     const { data: advancedRule, error: advanceError } = await supabase.from('allowance_rules')
-      .update({ next_run_on: next, last_run_on: today }).eq('id', rule.id).eq('family_id', familyId).select('id').single();
-    if (advanceError || !advancedRule) return actionFailure(advanceError ?? new Error(t('actions.allowanceScheduleWasNotUpdated')), t('wallet.couldNotUpdateAnAllowanceSchedule'));
+      .update({ next_run_on: next, last_run_on: today })
+      .eq('id', rule.id).eq('family_id', familyId)
+      .lte('next_run_on', today)
+      .select('id').maybeSingle();
+    if (advanceError) return actionFailure(advanceError, t('wallet.couldNotUpdateAnAllowanceSchedule'));
+    // Not an error: another run already claimed this rule. Skipping is what
+    // stops the second credit.
+    if (!advancedRule) continue;
 
     if (runs > 0) {
       const res = await creditChildWallet(supabase, {

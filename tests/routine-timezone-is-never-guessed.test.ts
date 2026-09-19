@@ -38,6 +38,10 @@ vi.mock('@/lib/supabase/server', () => ({
       const rows = () => {
         if (table === 'families') {
           state.familyReads += 1;
+          // The worker now reads every family for the tick in one `.in('id', …)`
+          // rather than one `.eq('id', …)` per rule, so the fake answers both.
+          const ids = filters['in:id'] as string[] | undefined;
+          if (ids) return state.families.filter((r) => ids.includes(r.id as string));
           return state.families.filter((r) => r.id === filters.id);
         }
         if (table === 'family_automation_rules') {
@@ -55,6 +59,7 @@ vi.mock('@/lib/supabase/server', () => ({
         select: () => b, order: () => b, limit: () => b,
         eq: (c: string, v: unknown) => { filters[c] = v; return b; },
         lte: () => b, not: () => b, is: () => b,
+        in: (c: string, v: unknown) => { filters[`in:${c}`] = v; return b; },
         insert: () => b, update: () => b,
         single: async () => { const r = result(); return { data: Array.isArray(r.data) ? r.data[0] ?? null : r.data, error: r.error }; },
         maybeSingle: async () => { const r = result(); return { data: Array.isArray(r.data) ? r.data[0] ?? null : r.data, error: r.error }; },
@@ -90,21 +95,40 @@ describe('a routine is never fired against a guessed clock (C4-S4-08)', () => {
     mocks.getAISettings.mockResolvedValue({ paused: true });
   });
 
-  it('reads each family timezone ONCE per tick, not once per rule', async () => {
+  it('does not read a family timezone once per rule', async () => {
+    // The invariant is that the read does not SCALE with the rules, which is
+    // what the N+1 did. Pinning an absolute count instead pins an
+    // implementation: this asserted `<= 1` when one cached reader was shared
+    // across both loops, and went red when the worker moved to one batched
+    // read per loop — a change that made the defect no less fixed. Tripling
+    // the rules and requiring the count not to move survives both shapes and
+    // still fails the thing it is named for.
     state.rules = [DUE_RULE('r1'), DUE_RULE('r2'), DUE_RULE('r3')];
     await call();
-    // Three rules, one family. The N+1 read three times.
-    expect(state.familyReads, 'expected one timezone read per FAMILY, not per rule').toBeLessThanOrEqual(1);
+    const readsForThree = state.familyReads;
+
+    state.familyReads = 0;
+    state.rules = ['r4', 'r5', 'r6', 'r7', 'r8', 'r9', 'r10', 'r11', 'r12'].map(DUE_RULE);
+    await call();
+    const readsForNine = state.familyReads;
+
+    expect(readsForNine, 'three times the rules must not mean more timezone reads')
+      .toBe(readsForThree);
+    expect(readsForThree, 'a tick must not read one family a dozen times').toBeLessThanOrEqual(3);
   });
 
-  it('counts a rule as a problem instead of firing it when the timezone read fails', async () => {
+  it('fires nothing and reports the failure when the timezone read fails', async () => {
+    // The CONTRACT changed under this test and the intent had to survive it.
+    // It used to assert `{ ok: false, problems > 0, filed: 0 }`, because the
+    // zone was read per rule and an unplaceable rule was counted as a problem
+    // while the tick carried on. The read is now batched for the whole tick, so
+    // its failure is not one rule's problem — it is every rule's, and the
+    // worker answers 500 and fires nothing. What must not change is the thing
+    // the test is named for: nothing is filed against a guessed clock.
     state.rules = [DUE_RULE('r1')];
     state.failFamilyRead = true;
     const res = await call();
-    const body = await res.json();
-    // The tick must not report itself healthy over a rule it could not place in time.
-    expect(body.ok, 'a tick that could not establish a clock is not ok').toBe(false);
-    expect(body.problems, 'the unplaceable rule must be counted').toBeGreaterThan(0);
-    expect(body.filed, 'nothing may be filed against a guessed clock').toBe(0);
+    expect(res.status, 'a tick that could not establish a clock must not report success').toBe(500);
+    expect(mocks.createRequest, 'nothing may be filed against a guessed clock').not.toHaveBeenCalled();
   });
 });

@@ -38,11 +38,19 @@ function walk(dir: string, out: string[]): string[] {
  *   1. inline        `const [{ data, error }] = await settleAll([...])`
  *   2. result object `const [aRes, bRes] = ...; const e = aRes.error ?? bRes.error`
  *   3. array search  `const e = [aRes, bRes].find((r) => r.error)?.error`
+ *   4. labelled table `([['families', aRes], …]).filter(([, res]) => res.error)`
  *
  * So the rule is: a bound name that appears on any nearby line mentioning
  * `error` is consuming it. Deliberately permissive — a guard that cries wolf
  * gets weakened until it means nothing, which is the failure mode this
  * repository is most prone to.
+ *
+ * Shape 4 arrived from the other audit session and this matcher called all five
+ * of its reads defects. It is the idiom where the RESULT and the word `error`
+ * are never on one line: the results go into a table of [label, result] pairs
+ * and the error is read through an element alias, `([, res]) => res.error`. The
+ * fourth false-positive set, and the reason the window below is generous: the
+ * sweep sat thirty lines past the call.
  */
 function unconsumedSites(source: string): string[] {
   const hits: string[] = [];
@@ -56,9 +64,14 @@ function unconsumedSites(source: string): string[] {
     const bound = destructure[1] ?? destructure[2] ?? '';
     if (/\berror\b/.test(bound)) return;                       // shape 1
     const names = bound.match(/[A-Za-z_$][\w$]*/g) ?? [];
-    const after = lines.slice(i, i + 25);
+    const after = lines.slice(i, i + 40);
     const consumed = names.some((n) =>
-      after.some((l) => l.toLowerCase().includes('error') && new RegExp(`\\b${n}\\b`).test(l)));
+      after.some((l) => l.toLowerCase().includes('error') && new RegExp(`\\b${n}\\b`).test(l)))
+      // Shape 4: the name is carried into a structure whose elements are swept
+      // for `.error`. Both halves are required — a name that is merely used, in
+      // a region where no error is examined at all, is still the defect.
+      || (names.some((n) => after.some((l) => new RegExp(`\\b${n}\\b`).test(l)))
+          && after.some((l) => /\.\s*error\b/.test(l)));
     if (!consumed) hits.push(`${i + 1}: ${line.trim().slice(0, 90)}`);  // shapes 2 & 3
   });
   return hits;

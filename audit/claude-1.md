@@ -1736,11 +1736,11 @@ Impact:   Both pages above count
           over rows they are legitimately a party to. Same forgery 0154 closed on
           INSERT, reopened on UPDATE. The offers policy has the same shape, and
           there the listing owner may touch every offer on their listing.
-Fix:      0314_marketplace_parties_are_not_editable.sql. The obvious repair —
+Fix:      0321_marketplace_parties_are_not_editable.sql. The obvious repair —
           `with check` = `using` — was tried FIRST and stayed red: the predicate
           is symmetric, so C setting `seller_member = C` produces a row on which
           C is a party. RLS cannot see the old row, so no `with check` can say
-          "you may not change who the parties are". 0314 makes the four identity
+          "you may not change who the parties are". 0321 makes the four identity
           columns immutable with a BEFORE UPDATE trigger gated on
           `row_security_active()`, leaving the definer RPCs and the service role
           — the paths that legitimately create and close these rows — untouched.
@@ -1753,8 +1753,8 @@ Fix:      0314_marketplace_parties_are_not_editable.sql. The obvious repair —
           docs/audit/marketplace-ownership-update-check.sql asserts both refusals
           AND both permitted writes — a party may still advance their own order,
           an author may still withdraw their own offer. 27/27 probes pass.
-Status:   FIXED — inert until an operator applies 0314
-          (docs/PENDING_PROD_MIGRATIONS.md, which also gained the 0312 and 0313
+Status:   FIXED — inert until an operator applies 0321
+          (docs/PENDING_PROD_MIGRATIONS.md, which also gained the 0319 and 0320
           rows it was missing).
 ```
 
@@ -1808,21 +1808,21 @@ Problem:  Censusing for C1-S6-08's shape — authorship pinned on INSERT, editab
           `reviewer_member = marketplace_member_id(family_id)` and
           `member_id = marketplace_member_id(family_id)`.
 Evidence: Replayed schema, as the member the review was ABOUT:
-            ERROR: 0315: the SUBJECT of a review rewrote its rating (1 row(s))
+            ERROR: 0322: the SUBJECT of a review rewrote its rating (1 row(s))
 Impact:   `rating` is aggregated by `reviewee_member` on four screens. Any member
           could turn another member's one-star review of them into five stars, or
           re-point `reviewee_member` so the bad rating lands on someone else.
           C1-S6-08 needed the attacker to be a party to the row; this does not.
-Fix:      0315_a_review_belongs_to_whoever_wrote_it.sql. Scoped to the owner
+Fix:      0322_a_review_belongs_to_whoever_wrote_it.sql. Scoped to the owner
           rather than dropped — nothing in the tree updates any of the three
           (leaveReviewAction only inserts; saves and follows are insert/delete
           only), but "edit your own review" is plausible product behaviour and
           the policies evidently meant to say it. The surrounding columns are
           made immutable so an author may revise their rating and comment and may
           not move the review to a different subject.
-          0314's table-branching trigger function is replaced by
+          0321's table-branching trigger function is replaced by
           columns_are_immutable(), which takes its column list from the trigger
-          definition; 0314's two triggers are re-pointed at it. That generality
+          definition; 0321's two triggers are re-pointed at it. That generality
           has its own failure mode — a typo'd column name compares NULL to NULL
           and guards nothing — so the helper raises on a column that does not
           exist, and the probe measures THAT by attaching a trigger on
@@ -1831,14 +1831,14 @@ Fix:      0315_a_review_belongs_to_whoever_wrote_it.sql. Scoped to the owner
           Three assertions proved red independently: the family-wide policy
           restored, the reviews trigger dropped alone, follows loosened alone.
           28/28 probes pass against a full 320-migration replay.
-Status:   FIXED — inert until an operator applies 0315
+Status:   FIXED — inert until an operator applies 0322
           (docs/PENDING_PROD_MIGRATIONS.md).
 ```
 
 ```
 [CLAUDE-1][HIGH][SECURITY] and deleting a marketplace review does the same thing
 File:     supabase/migrations/0154_marketplace_ownership.sql (4 DELETE policies)
-Problem:  0315 stopped a member REWRITING another member's review. The DELETE
+Problem:  0322 stopped a member REWRITING another member's review. The DELETE
           policies beside it were still family-wide:
             marketplace_reviews_delete   using (is_family_member(family_id))
             marketplace_offers_delete    "
@@ -1848,7 +1848,7 @@ Problem:  0315 stopped a member REWRITING another member's review. The DELETE
           same act with the same result. I fixed one verb and did not check the
           next in the same pass; the identical census over INSERT-vs-DELETE took
           one query.
-Evidence: Replayed schema, before 0316:
+Evidence: Replayed schema, before 0323:
             the SUBJECT of a review deleted it (1 row)
             a member with no stake in a listing deleted a competing offer (1 row)
 Impact:   The reviews half is C1-S6-09's impact by another route. The offers half
@@ -1858,7 +1858,7 @@ Impact:   The reviews half is C1-S6-09's impact by another route. The offers hal
           family_communications, family_automation_runs) and are NOT findings —
           each is gated on can_manage_family or is_family_admin, a deliberate
           adults-delete boundary rather than a missing one.
-Fix:      0316_deleting_a_review_is_rewriting_it.sql. Offers scoped to the two
+Fix:      0323_deleting_a_review_is_rewriting_it.sql. Offers scoped to the two
           parties its UPDATE policy already names; saves and follows to the owner
           (a no-op for toggleSaveAction/toggleFollowAction, which delete the row
           they read back by their own member_id); reviews to the author OR a
@@ -1874,7 +1874,7 @@ Fix:      0316_deleting_a_review_is_rewriting_it.sql. Offers scoped to the two
           loosened back, and the moderation half removed (which fails the other
           way, "the fix went too far"). 29/29 probes pass against a full
           321-migration replay.
-Status:   FIXED — inert until an operator applies 0316
+Status:   FIXED — inert until an operator applies 0323
           (docs/PENDING_PROD_MIGRATIONS.md).
 ```
 
@@ -1900,7 +1900,7 @@ Impact:   publish_posts on a CONNECTED account writes to the family's real
           audience under their name; manage_settings and connect_accounts come
           with the same role. The demotion the adults performed was undone by the
           demoted party, from the browser, with the anon key.
-Fix:      0317_a_social_restriction_is_not_self_service.sql — DELETE carries the
+Fix:      0324_a_social_restriction_is_not_self_service.sql — DELETE carries the
           same predicate as INSERT and UPDATE, so the three verbs agree about who
           decides. Nothing in the tree deletes from this table: grantAccessAction
           upserts behind requireSocialPermission(fid,'manage_access'), and
@@ -1914,7 +1914,7 @@ Found by: one query — tables whose INSERT policy requires can_manage_family or
           is_family_admin while some write verb does not. It returned exactly one
           row, which is the argument for censuses over reading policies one at a
           time.
-Status:   FIXED — inert until an operator applies 0317
+Status:   FIXED — inert until an operator applies 0324
           (docs/PENDING_PROD_MIGRATIONS.md).
 ```
 
@@ -1961,8 +1961,8 @@ Evidence: 320 orders / 500 offers / 380 reviews / 300 saves / 10 binder rows.
             saves the owner removed:         300/300
             seller_member immutable across 320 seeded orders: refused
 Impact:   None — confirms the fixes permit every legitimate write at volume and
-          still refuse the forgery. 0314's trigger does not block the one client
-          update path; 0315/0316 did not close the two toggle actions.
+          still refuse the forgery. 0321's trigger does not block the one client
+          update path; 0322/0323 did not close the two toggle actions.
 Fix:      No change. NOT added as a probe: it depends on the seed, the seed is
           best-effort (two marketplace blocks already fail here because the
           anchor family has one member), and a probe that passes vacuously when
@@ -2046,3 +2046,732 @@ Fix:      inboxRequestText un-exported; paperworkInsertRow moved to
           helper) must be credited. Both proved red alone.
 Status:   FIXED
 ```
+
+### [CLAUDE-1][HIGH][ARCHITECTURE] Mixed read batches: some queries settled, one not, so the page still dies
+
+- **File/path:** `app/(app)/guardian/contacts/page.tsx`,
+  `app/(app)/guardian/settings/page.tsx`, `app/(app)/missions/page.tsx`,
+  `app/(app)/display/page.tsx`
+- **Problem:** A Supabase query builder resolves with `{ data, error }` for
+  anything the database answers and **rejects** only when the request never
+  completed — DNS, TCP, TLS, a timed-out fetch. Inside `Promise.all` one
+  rejection rejects the batch, so a page that handles `res.error` for every read
+  still dies on an unhandled rejection and renders the error boundary.
+  `lib/supabase/settle.ts` records that this is what took out `/dashboard` while
+  production was reporting `CONNECT_TIMEOUT`.
+  These four batches had **some** elements wrapped in `settle(...)` and at least
+  one not — the same failure, with none of the protection the surrounding code
+  appears to have.
+- **Evidence:** proved rather than cited — `Promise.all([ok, reject])` rejects and
+  loses the result it already had; `settleAll` returns
+  `{ data: null, count: null, error: { message } }` for the failed one and keeps
+  the other. Two cases in the test file assert exactly that.
+- **Impact:** Guardian is a child-safety surface and `display` is the always-on
+  kiosk; both went to an error boundary on a transport blip that the neighbouring
+  reads in the same batch were written to survive.
+- **Recommended fix:** applied to these four. The conditional ones settle the
+  **branch**, not the ternary: `settle(cond ? a : b)` does not typecheck, since
+  `Promise<A> | Promise<B>` is not `PromiseLike<A | B>`.
+- **Status:** FIXED (4 files) · the remainder OPEN, see below.
+
+**Why there is no repository-wide guard here, which is itself the finding.**
+I tried three times to write one and each attempt was wrong in a different way:
+
+1. A blanket `Promise.all` → `settleAll` rewrite produced **137 type errors** —
+   many batches hold helper calls returning their own result shapes, not
+   `{ data, error }`, and `SettledFallback` is not a substitute for those.
+2. Wrapping every unsettled element produced **syntax errors in 40 files**: my
+   transformer re-joined array elements and put a comma after a trailing `//`
+   comment.
+3. The counting scans over-reported three separate times — 86, then 47, then 37 —
+   because a ternary whose query branch is already settled reads as unsettled, a
+   local `try/catch` wrapper (`marketplace`'s `safe`) settles but is
+   unrecognisable by name, and a generic call `settle<T>(…)` breaks naive bracket
+   tracking, so files I had already fixed kept reappearing.
+
+A guard with false positives is worse than none: it trains people to add
+exemptions. So the test asserts only the four files verified by hand, and the
+~20 remaining batches are recorded here for a pass that reads them rather than
+pattern-matches them: `admin/marketing/visitor-intelligence`,
+`admin/marketplace/reports`, `dashboard/agents`, `dashboard/readiness`,
+`marketplace/store`, four `api/ai/*` routes, `api/blog/{like,save}`, and about
+ten modules under `lib/` (`briefing/deliver`, `metric/strategy-server`,
+`schedule/intelligence-server`, `twin/completeness-server`, `ai/runs/*`,
+`graph/resolve-server`, `autopilot/policy-scan`).
+
+**And the test I wrote to hold the four was itself vacuous on first draft.** It
+asserted `expect(src).toMatch(/\? settle\(supabase\.from\(/)`, which passes as
+long as ONE branch is settled — so unsettling one of missions' three left it
+green. Caught by running exactly that regression. It counts both sides now, and
+the same regression fails it by name.
+
+### [CLAUDE-1][MEDIUM][EDGE CASE] Every once-a-day routine fires twice on the autumn DST night — FIXED
+
+- **File/path:** `app/api/cron/family-routines/route.ts`,
+  `lib/services/routines/schedule.ts`, `supabase/migrations/0259_routine_schedules.sql`
+- **Problem:** The autumn transition repeats an hour, so a once-a-day routine's
+  wall clock arrives **twice**. The scheduler fires whatever has
+  `next_run_at <= now` and then recomputes from `now`, which lands on the second
+  arrival. The family gets the routine twice, an hour apart, both showing the
+  same local time.
+- **Evidence — measured against real `Intl` data, not reasoned about.**
+  `America/New_York`, 2026-11-01 (02:00 EDT → 01:00 EST), expression
+  `30 1 * * *`:
+
+  ```
+  first  = 2026-11-01T05:30:00.000Z   -> 11/1/2026, 01:30:00
+  second = 2026-11-01T06:30:00.000Z   -> 11/1/2026, 01:30:00
+  gap    = 1 hour, identical wall clock
+  ```
+
+  The occurrence key `uq_routine_runs_occurrence (rule_id, due_at)` does not stop
+  it, and that is the subtle part: those are two genuinely different instants, so
+  the reservation is not a duplicate. The idempotency that exists is real and
+  simply does not apply.
+- **Impact:** Once a year, per DST-observing family, every routine with a fixed
+  hour runs twice — a duplicate notification at best, a duplicated action at
+  worst. Spring-forward was checked too and behaves acceptably: a `30 2 * * *`
+  rule on the skipped hour moves to the next day rather than firing at a time
+  that did not exist.
+- **Recommended fix:** applied. On rescheduling, a candidate whose local
+  wall-clock minute equals the occurrence just fired is skipped.
+- **Why it is gated on a fixed hour, which is the whole subtlety:** `0 * * * *`
+  *also* repeats its wall clock across the transition and **must** run in both
+  halves, because two real hours pass — the family asked for every hour, not for
+  a time of day. `firesOncePerDay` is true only when the hour field names a
+  single hour, so `0 1,13 * * *` and `0 */4 * * *` are left alone as well.
+- **Status:** FIXED.
+- **Proved load-bearing twice over:** removing the guard fails the route case;
+  widening the gate to every expression *also* fails it. The behavioural cases
+  assert the two instants, their one-hour gap and their identical wall clock,
+  and that an ordinary June night is still exactly 24 hours apart.
+
+### [CLAUDE-1][HIGH][EDGE CASE] Relative routines fired on the wrong DAY, every day of the year — FIXED
+
+- **File/path:** `lib/services/routines/schedule.ts` (`nextRelativeRun`),
+  `lib/services/scope.ts` (`zonedTimeMs`)
+- **Problem:** A relative routine fires an offset from an anchor date at the
+  family's hour — "the night before the trip, at 22:00". Placing that hour
+  measured the zone offset at the UTC instant `<key>T<atHour>:00Z` and subtracted
+  it. That reads the offset on whichever local **day** that instant falls on,
+  which is not always the target day; when it is not, the hour difference wraps
+  and the correction moves a whole day.
+- **Evidence — measured, and note the dates: plain summer days, so this is not a
+  DST edge case but every day of the year.** All with `offsetDays: 0`:
+
+  ```
+  America/New_York, anchor 2026-06-15, atHour  1  -> fired 06-14 01:00   a day EARLY
+  America/New_York, anchor 2026-06-15, atHour  2  -> fired 06-14 02:00   a day EARLY
+  America/New_York, anchor 2026-06-15, atHour  9  -> fired 06-15 09:00   correct
+  Asia/Tokyo,       anchor 2026-06-15, atHour 22  -> fired 06-16 22:00   a day LATE
+  Asia/Tokyo,       anchor 2026-06-15, atHour 23  -> fired 06-16 23:00   a day LATE
+  Asia/Tokyo,       anchor 2026-06-15, atHour  9  -> fired 06-15 09:00   correct
+  ```
+
+  The pattern is the giveaway: a zone **behind** UTC breaks early-morning
+  routines, a zone **ahead** of it breaks late-evening ones, and the middle of
+  the day is fine in both — which is exactly what an offset misread on the wrong
+  local day produces.
+- **Impact:** Every US family's early-morning relative routine and every
+  Asia-Pacific family's evening one fired a day out. "The night before the trip"
+  arrived two nights before. This sat behind the hours most likely to be chosen
+  for a *reminder*, and the hours a developer is least likely to test.
+- **Recommended fix:** applied — `zonedTimeMs(key, atHour, 0, tz)`, the
+  repository's own helper, which resolves the offset twice (at the guess, then at
+  the corrected instant) so it lands on the right local day and survives both DST
+  transitions. **The correct implementation already existed and had not reached
+  this call site** — the fourth instance of that shape this audit has found,
+  after `escapeLike`, the kiosk's error boundary and the accessible `Modal`.
+- **Status:** FIXED. `tsc` clean, build exits 0, 13,858 tests pass.
+- **Proved load-bearing:** restoring the old drift arithmetic fails **8 of 11**
+  cases, naming the zone, the hour and the day it landed on. Four cases exist to
+  stop the fix over-reaching — the correct mid-day hours, the offset arithmetic,
+  both DST transition days, and the already-passed case returning null.
+
+**Also recorded:** `zonedTimeMs` exists twice — `lib/services/scope.ts` (129
+importers) and `lib/schedule/zoned.ts` (3). They differ only in whether
+`tzOffsetMs` takes a `Date` or a number. Not merged here because both are
+correct and a third session is active in this tree, but it is the same
+duplication that let this call site drift in the first place. OPEN.
+
+---
+
+## [CLAUDE-1][HIGH][FRONTEND / DATABASE] Nine forms wrote Greenwich's day into a DATE column
+
+- **Where:** `components/modules/{school,expenses,trip-memories,health-visits,finances,pets,subscriptions}-module.tsx`,
+  `components/finance/bills-view.tsx`, `components/wallet/wallet-hub.tsx`
+- **Problem:** each defaulted a date field to `new Date().toISOString().slice(0, 10)`
+  (school-module used the `.split('T')[0]` spelling) — the day at Greenwich, not
+  the day on the family's wall. This is the default a parent gets when they leave
+  the date blank, and it lands in a DATE column.
+- **Evidence:** measured, not reasoned:
+
+  ```
+  2026-09-18T01:30Z   Greenwich 2026-09-18
+      America/Los_Angeles  2026-09-17   DIFFERS
+      America/New_York     2026-09-17   DIFFERS
+  2026-09-18T23:30Z   Greenwich 2026-09-18
+      Pacific/Auckland     2026-09-19   DIFFERS
+      Asia/Tokyo           2026-09-19   DIFFERS
+  ```
+
+  7h/day wrong in Los Angeles, 10h/day in Sydney.
+- **Impact:** a parent in Los Angeles adding a grade at 18:30 Sunday filed it
+  against Monday; one in Auckland logging an expense before 13:00 filed it
+  against yesterday. A wrong read renders one wrong screen; a wrong **write**
+  persists, and every later read of that row is wrong too. In `finances` and
+  `pets` the prefilled value and the submit-time fallback were *both* Greenwich,
+  so the form and its fallback could also disagree with each other.
+- **Recommended fix:** applied. New `todayInZone(tz, now?)` in
+  `lib/schedule/zoned.ts` (client-safe — no `server-only`, unlike
+  `lib/services/scope.ts`). All nine sites are client components with the family
+  row already in scope, so each resolves through `family?.timezone ?? 'UTC'` —
+  the defensive form the repo already uses at `family-module.tsx:393`, and
+  necessary because many test mocks return a `useApp()` object with no `family`.
+- **Status:** FIXED. `tsc` clean, `next build` exits 0, 13,866 tests pass.
+
+### Why the existing guard missed all nine
+
+`tests/family-day-not-greenwich-day.test.ts` is a good guard aimed at exactly
+this bug, and it could not see any of them, for three independent reasons:
+
+1. `UTC_DAY_KEY` matched only `.slice(0, 10)`, never `.split('T')[0]` — the
+   spelling school-module used, making that file invisible to it entirely.
+2. Its detector matched only PostgREST **filter** operators
+   (`gte|lte|gt|lt|eq|neq`). The whole **write** side was uncovered.
+3. `ROOTS = ['app', 'lib']`. All nine are in `components`.
+
+Extended with a write-side check over all three roots. The write side can be
+asked *precisely* — is the value assigned to a DATE column a Greenwich key? — so
+unlike the read check it needs no whole-file `ZONE_AWARE` blind spot.
+
+**Measuring this honestly took three attempts, and the first two were wrong:**
+
+| detector | files | verdict |
+|---|---|---|
+| any `col:` key anywhere in a file that also builds a Greenwich key | 57 | over-reports 4.4× — matches type annotations, unrelated literals, chart config |
+| `col:` with `[^,]*` up to the key | 13 | under-reports — a comma inside `str(fd, 'service_date')` ends the value early |
+| depth-aware property-value extraction | **14** | every one verified by eye |
+
+The loose number would have put 43 phantom findings on the board. Recorded
+because the temptation to ship the first count is the failure mode, not the regex.
+
+- **Proved load-bearing:** restoring the school-module line turns the guard red,
+  naming the file and column — in the spelling *and* the directory that were both
+  invisible before.
+
+**Five server-side writes remain, allowlisted with reasons rather than silently
+skipped:** `app/(app)/dashboard/{auto,home}/actions.ts` and
+`app/(app)/wallet/hub-actions.ts` need a zone threaded through their `ctx()`;
+`lib/planning/prep-server.ts` through its signature;
+`lib/reasoning/engine-server.ts` writes `as_of_date`, which is an **upsert key**
+(`onConflict: 'family_id,as_of_date'`) — changing it changes what "already
+snapshotted today" means, so it wants its own change with the idempotency
+thought through, not a drive-by. OPEN.
+
+---
+
+## [CLAUDE-1][HIGH][PERFORMANCE / FRONTEND] Two reads capped at 1,000 rows in the directory the guard skipped
+
+- **Where:** `components/calendar/busyness-heatmap.tsx`, `components/modules/language-module.tsx`
+- **Problem:** both wrote `.limit(2000)`. PostgREST caps a response at
+  `db-max-rows` (1,000) whatever the client asked for, so neither was a bound —
+  each was a silent truncation wearing the costume of a deliberate choice. This
+  is the exact defect `tests/no-limit-above-the-row-cap.test.ts` was written to
+  end across 26 call sites; these two survived because its roots were `app` and
+  `lib`, and a client component reaches PostgREST through the same browser
+  client and the same cap.
+- **Evidence:** `busyness-heatmap` orders by `starts_at` **ascending**, so the
+  1,000 rows it kept were the *oldest* in the window — an eight-week busyness
+  strip that silently dropped the most recent weeks. `language-module` reads
+  `vocab_cards` ordered by `due_on`, so a deck past 1,000 lost its tail and
+  every count drawn from it (due today, total, mastery) was over a prefix.
+- **Impact:** the heatmap turned out to have **three** defects, and the limit was
+  the least of them:
+  1. the truncation above;
+  2. the fetch destructured `{ data }` and dropped `error` — a failed read left
+     rows empty and rendered eight calm weeks *with a rebalancing tip under
+     them*, telling a family they are not busy because the query broke;
+  3. a raw `.then()` on a query builder with no `.catch()`, so a transport
+     failure (DNS/TCP/TLS) became an unhandled rejection rather than an error
+     the component could show.
+  All three came from hand-rolling a `useEffect` fetch instead of using
+  `useRealtimeQuery`, which already carries the error, the offline fallback and
+  the missing-table degrade. **The correct implementation already existed and
+  had not reached this call site** — the fifth instance of that shape this audit
+  has found.
+- **Recommended fix:** applied. Both now page through `readAllAsQuery(…, { max: 2000 })`,
+  and the heatmap uses `useRealtimeQuery` with an `ErrorState` branch. Both
+  pagers add `.order('id')` after the intended sort: `starts_at` and `due_on`
+  are not total orders, and paging a non-total order repeats and skips rows
+  across page boundaries.
+- **Status:** FIXED. `tsc` clean, build compiles, 13,873 tests pass.
+- **Proved load-bearing:** restoring either `.limit(2000)` turns the extended
+  guard red, naming the file and line.
+
+**The gap, not the instances.** Both were found by asking which *guards* scan
+only part of the tree, rather than by hunting another over-cap limit. Surveying
+every guard with a literal `ROOTS`:
+
+| guard | roots | gap |
+|---|---|---|
+| `family-day-not-greenwich-day` | `app`, `lib` | **yes** — 9 writes in `components` |
+| `no-limit-above-the-row-cap` | `app`, `lib` | **yes** — 2 over-cap limits |
+| `no-dev-markers-in-shipping-code` | `app`, `lib` | clean today (0 hits), included anyway |
+| `no-hardcoded-secrets` | `app`, `lib`, `components` | none |
+| `no-injection-vectors` | `app`, `lib`, `components` | none |
+
+Two of five guards were blind to `components`, and both had real findings behind
+the blind spot. `no-dev-markers` is included now rather than after the first
+marker arrives.
+
+---
+
+## [CLAUDE-1][HIGH][MOBILE / UX] Twenty-six money inputs could not take a decimal point on iOS
+
+- **Where:** `components/wallet/wallet-hub.tsx` (6), `components/finance/savings-view.tsx` (3),
+  `components/meals/nutrition-view.tsx` (3), and one each in
+  `components/finance/{bills,budgets}-view.tsx`, `components/wallet/invest-view.tsx`,
+  `components/vacations/{trip-budget,trip-itinerary,vacations-list}.tsx`,
+  `components/home/{service,warranties}-client.tsx`,
+  `components/family/driving-safety-view.tsx`,
+  `components/billing/family-value-comparison.tsx`,
+  `components/admin/stripe-setup-form.tsx`,
+  `app/(app)/admin/marketing/{pipeline,proposals,loyalty}/page.tsx`
+- **Problem:** `type="number"` alone does not reliably surface the "." on the iOS
+  Safari keypad. A decimal field without `inputMode="decimal"` cannot accept
+  cents on an iPhone.
+- **Evidence:** `tests/mobile-numeric-inputmode.test.ts` was written to prevent
+  exactly this, and reported **zero** offenders. It read `components/modules`
+  with `readdirSync` — one flat directory, not even its subdirectories.
+- **Impact:** this is the money-entry surface of the app — every wallet balance,
+  available and limit, bill and budget amounts, savings targets and
+  contributions, trip budgets and itinerary costs, investment share counts,
+  service and warranty costs. On an iPhone, none of it could take a decimal.
+- **Recommended fix:** applied to all 26. The guard now walks `app` and
+  `components` whole.
+- **Status:** FIXED. `tsc` clean, 13,875 tests pass, lint unchanged (same 3
+  pre-existing warnings).
+- **Proved load-bearing:** removing one `inputMode` turns it red with file and line.
+
+**This is the guard-that-cannot-fail class in its softest and most convincing
+form.** The `i18n:gate` instance was obvious once seen — it ran in no workflow.
+This one *ran*, on every CI job, and passed honestly. What made it useless was
+that its sanity check — "more than 20 money inputs scanned" — was satisfied by
+the single directory it read. A coverage assertion calibrated to the scanned
+subset cannot detect that the subset is the problem. Its sanity bound is now
+past what one directory can meet, and a new case asserts the walk reaches
+nested directories, so flattening it back fails instead of narrowing quietly.
+
+**Sweep of the sibling mobile guards** (the point was the narrowing, not another
+missing `inputMode`):
+
+| guard | old scope | offenders outside it |
+|---|---|---|
+| `mobile-numeric-inputmode` | `components/modules/*.tsx`, non-recursive | **26** |
+| `mobile-no-horizontal-overflow` | `components/modules/*.tsx`, non-recursive | 0 |
+| `mobile-hover-reveal` | `components/modules/**`, `app/**` | 0 |
+
+All three now scan `app` + `components` whole. The two that are clean were
+widened anyway — the cost is nothing and the gap is identical.
+
+**Also measured, no finding:** `tests/ilike-patterns-are-escaped.test.ts` scans
+`app` + `lib` only, but `components` contains **zero** `.ilike(`/`.like(` calls,
+so nothing hides behind that gap. Recorded so the next sweep does not re-derive it.
+
+---
+
+## [CLAUDE-1][HIGH][BACKEND / FRONTEND] Five reads that handled every database failure and no network one
+
+- **Where:** `app/(app)/dashboard/calm/page.tsx`, `components/settings/app-lock-settings.tsx`,
+  `components/modules/event-detail-modal.tsx`, `components/modules/meals-module.tsx`,
+  `components/auth/step-up-form.tsx` (and `components/marketplace/quick-post.tsx`, best-effort)
+- **Problem:** a query builder **resolves** with `{ data, error }` for anything the
+  database answers and **rejects** only when the request never completed — DNS,
+  TCP, TLS, an aborted fetch. `.then(handler)` supplies only the first path.
+- **Impact:** each broke differently, which is why counting them as one shape matters:
+
+  | site | what the missing rejection path did |
+  |---|---|
+  | `calm/page.tsx` | a transport failure went through `Promise.all` and out of the page — the error boundary rendered **instead of** the degraded view the page was built to show |
+  | `app-lock-settings.tsx` | a failed read presented a **configured App Lock as never set up** |
+  | `event-detail-modal.tsx` | "No RSVPs yet — be the first!" over a read that never came back |
+  | `meals-module.tsx` | the meal library silently never updated |
+  | `step-up-form.tsx` | the MFA form sat on its loading state forever |
+
+- **Evidence (calm/page.tsx), measured:** three reads with one rejecting —
+
+  ```
+  safe (as shipped)        -> Promise.all THREW    (error boundary)
+  safe + rejection path    -> Promise.all RESOLVED, 3/3 failures counted (degrades)
+  ```
+
+  Every sibling hub page's local `safe` already used `try/catch`
+  (`marketplace/page.tsx`, `planning/page.tsx`, `dining/page.tsx`,
+  `lib/meals/degrade-read.ts`). This one was the lone outlier of six.
+- **`app-lock-settings` deserves its own note.** The component's own comment
+  defines three states — `undefined` = loading, `null` = no PIN ever set,
+  otherwise the config. A failed read is a **fourth** meaning and was given the
+  second. So a transient error offered the user "Set up PIN", and setting one
+  there **overwrites the real config of a lock they still have**. A failed read
+  now says so and offers nothing.
+- **Status:** FIXED. `tsc` clean, build compiles, 13,878 tests pass, lint unchanged.
+- **Proved load-bearing:** restoring `safe()`'s single-argument form turns the
+  new guard red at the exact line.
+
+**Why the existing guard could not see any of this.** `tests/read-error-surfaced.test.ts`
+is a good guard covering exactly this failure mode — for `useRealtimeQuery` call
+sites. Every one of these **bypassed the hook** and hand-rolled a fetch, which
+put them outside its premise entirely. *A guard on the safe path does not cover
+the path taken to avoid it.* That is a distinct shape from the scope gaps above
+and worth naming separately.
+
+`tests/query-builders-have-a-rejection-path.test.ts` now forbids the shape
+itself. Its argument splitting is bracket-depth-based, not regex: a first
+attempt matched `}` `,` to spot `.then(onFulfilled, onRejected)` and reported
+the file that had **just been fixed** to use it — the handler body `({ data })`
+puts a `)` between the `}` and the `,`. Recorded because a guard whose false
+positive is the correct code is worse than no guard.
+
+### Measured, NOT fixed — and explicitly not verified
+
+A scan for `const { ... } = await …from(…)` destructures that omit `error`
+returns **95 sites**. That number is a population, not a finding: most are
+existence checks where null-on-error and null-on-absent want the same answer,
+and the raw count even included a `settle()` written minutes earlier. Two were
+probed by hand:
+
+- `app/(app)/family/child-login-actions.ts:46` — a username uniqueness check
+  that fails **open** (a failed read reads as "not taken"), running as the
+  **service role**. Looked serious; is not. `child_logins` carries
+  `unique index on (lower(username))`, and `syntheticChildEmail(username)`
+  collides at the auth layer first, so the invariant holds and the rollback path
+  runs. It degrades the error message, not the data. **LOW.**
+- `app/(app)/family/child-login-actions.ts:37` — fails **closed** ("member not
+  found"). Correct as written.
+
+The remaining 93 need per-site judgement. Recorded as OPEN and **unverified** —
+not as 93 findings. Mass-converting them would repeat the `Promise.all` →
+`settleAll` mistake earlier in this audit (137 type errors, then syntax errors
+in 40 files, both reverted).
+
+---
+
+## [CLAUDE-1][HIGH][BACKEND / PERFORMANCE] The admin console reported the first thousand of everything
+
+- **Where:** `app/(app)/admin/reports/page.tsx`, `app/(app)/admin/backup/page.tsx`
+- **Problem:** PostgREST answers an **unbounded** select with at most
+  `db-max-rows` (1,000) and says nothing. The admin console computes its
+  aggregates by reading rows into the page and reducing them, so each silently
+  became "the first thousand" once a table passed it.
+- **Evidence, measured against a fake holding the server's cap** — 1,337
+  documents of 1,000 bytes:
+
+  ```
+  unbounded select   -> 1,000 rows, error: null, total 1,000,000
+  readAllAsQuery     -> 1,337 rows, error: null, total 1,337,000
+  count head:true    -> 1,337                      (never capped)
+  ```
+
+- **Impact:** `admin/reports` is the clearest case *because it is half right*.
+  Its family, user and subscription tiles use `{ count: 'exact', head: true }` —
+  a count is not rows and was never capped. Beside them, the **Documents tile
+  rendered `docs.length`**, so past a thousand documents it read exactly "1,000"
+  forever; storage used, both growth buckets and the revenue trend were reduced
+  over a prefix; and daily activity came from 1,000 `audit_logs`, which fourteen
+  days of a live platform passes easily. Exact counts sat next to charts built
+  from a sample with nothing saying they disagreed. `admin/backup` reported the
+  size of the first thousand documents as the total, on a page titled
+  "Data & Storage".
+- **Recommended fix:** applied. Both page through `readAllAsQuery` to a real
+  ceiling; the Documents tile uses an exact count like its neighbours. **The
+  ceiling matters as much as the paging:** reaching it returns the rows as a
+  prefix *plus an error*, which `admin/reports` already joins into its
+  `PartialReadBanner` and `admin/backup` already renders. Without that, a larger
+  ceiling would only be a larger silent truncation.
+- **Status:** FIXED. `tsc` clean, build compiles, 13,882 tests pass.
+- **Proved:** `tests/admin-aggregates-read-past-the-cap.test.ts` reproduces the
+  truncation against a capped fake before asserting the fix, and asserts that
+  passing the ceiling is *reported* rather than rounded down to.
+
+### Why the existing guard missed it
+
+`tests/whole-table-reads-are-not-capped.test.ts` is a strong **behavioural**
+guard: it seeds a capped fake and asserts four jobs read past it. But the list
+is **enumerated** — `deliverMorningBriefs`, `runNetworkAggregation`,
+`getMarketingCustomersWithError`, `runAutomations` — and nothing keeps it
+complete. A fifth surface (the admin console) was simply never added.
+
+That is a third distinct guard-failure shape, after scope gaps and premise gaps:
+**an enumerated guard with no scan behind it.** It cannot be wrong about what it
+checks; it just never grows.
+
+### OPEN — measured, not fixed
+
+- **A database aggregate is the real fix.** Summing bytes and bucketing months
+  by reading every row into a page does not scale however it is paged. The
+  ceilings applied here convert "silently wrong" into "explicitly incomplete",
+  which is a strict improvement and not the destination.
+- **~20 further unbounded cross-platform reads** remain on admin list pages
+  (`admin/users`, `admin/content`, `admin/audit`, `admin/security`,
+  `admin/billing`, `admin/subscriptions`, `admin/support`, `admin/stripe`).
+  These truncate a **list** rather than corrupt a **number**, which is why they
+  are ranked below the two fixed here. A scan is in this file's history; the
+  raw count of "unbounded unfiltered reads" is 106, and most of that number is
+  small config tables (`roles`, `permissions`, `feature_flags`,
+  `social_providers`) or reads scoped by a non-family id — **not** 106 findings.
+
+---
+
+## [CLAUDE-1][HIGH][BACKEND] Est. MRR, and the unpaid accounts the billing page could not see
+
+- **Where:** `app/(app)/admin/billing/page.tsx`
+- **Problem:** every figure on the page — Est. MRR, Active Subscriptions,
+  Past Due / Unpaid, the plan donut, the six-month new-MRR trend, the recent
+  list — is reduced from **one** read of `subscriptions`. That read was
+  unbounded (capped at 1,000, silently) **and carried no `.order()`**.
+- **Evidence, measured against a fake holding the cap,** 1,337 subscriptions
+  with every overdue account seeded past it:
+
+  ```
+  unbounded select  -> 1,000 rows, error: null, past-due found:   0
+  readAllAsQuery    -> 1,337 rows, error: null, past-due found: 237
+  ```
+
+- **Impact:** the two faults compound rather than repeat.
+  - *Capped:* MRR and Active understated past a thousand.
+  - *Unordered:* which thousand is arbitrary, so **"Past Due / Unpaid" could
+    omit unpaid accounts outright** — the number on this page most likely to be
+    acted on — and "recent" sorted an arbitrary thousand by `created_at` and
+    took ten, which need not contain a single genuinely recent row.
+  - The page's own subtitle is "live subscription revenue across every family".
+- **Recommended fix:** applied. The subscriptions read pages to a real ceiling;
+  reaching it returns an error, which this page already turns into a read-error
+  state. **On a revenue page, refusing to show a number beats showing a smaller
+  one with no way to tell.** `families` was also read unbounded only to build a
+  name map for ten rows — it now reads just the families those rows name, which
+  is both correct (a row past the cap rendered "—" for a family that exists) and
+  far fewer rows.
+- **Status:** FIXED. `tsc` clean, build compiles, 13,887 tests pass, CI green.
+
+## [CLAUDE-1][MEDIUM][TESTING] A ratchet on the ungated i18n surface — and a number that lied
+
+- **Where:** `scripts/i18n-scan.mjs` (`GATED_SURFACES`), new
+  `tests/i18n-ungated-surface-ratchet.test.ts`
+- **Problem:** `app/` + `components/` is deliberately **not** gated, for a good
+  recorded reason. But "it goes back in the list when it scans clean" has no
+  force on its own: nothing stopped the number growing and nothing would have
+  reported it.
+- **A wrong conclusion, recorded because it was nearly shipped.** The comment
+  records 2,343; today's scan says **2,812**. That reads like 469 strings of
+  drift, and I was one step from reporting it that way. Measured with **one
+  scanner held fixed** against both trees:
+
+  ```
+  current scanner, tree at 0babad30 (where 2,343 was written)   2,903
+  current scanner, tree today                                   2,812
+  ```
+
+  The surface has **improved by 91**. The apparent rise was entirely the scanner
+  getting better at seeing strings — the same improvement that produced the
+  2,343. *Two numbers from two different scanners say nothing about the code,
+  and the obvious reading of them was backwards.*
+- **Recommended fix:** applied — a ratchet, not a gate. The surface need not be
+  clean, only not get worse. The failure message names both causes of a rise,
+  because they are indistinguishable from the number alone, and a third case
+  fails when the surface improves enough that the ceiling should be **lowered**,
+  so a ratchet nobody tightens cannot drift up to meet the code.
+- **Status:** FIXED. Verified load-bearing: one hardcoded string added to a
+  component takes it to 2,813 and fails, naming the direction.
+
+---
+
+## [CLAUDE-1][HIGH][BACKEND] Two wallet balances summed from a capped read
+
+- **Where:** `app/(app)/wallet/invest/actions.ts` (`investBucketBalance`),
+  `lib/wallet/server.ts` (`childSpendableCents`, removed)
+- **Money was never at risk, and that is the first thing to establish.** Both
+  authoritative paths sum in **SQL under a lock**: `wallet_reserve_card_auth`
+  (0155) decides card authorizations, `invest_decide_order` (0196) decides fills
+  and refuses with `insufficient_cash`. A SQL aggregate reads every row —
+  `db-max-rows` caps response **rows**, not an aggregate. Verified by reading
+  both functions before drawing any conclusion.
+- **Problem:** the TypeScript pre-checks *in front of* those summed an
+  **unbounded** read, which PostgREST answers with at most 1,000 rows, silently.
+- **Evidence, measured** — 900 credits and 400 debits of $1, true balance $500:
+
+  ```
+  unbounded select -> 1,000 rows, error: null, balance $800
+  readAllAsQuery   -> 1,300 rows, error: null, balance $500
+  ```
+
+  It read **high** here only because the debits sorted after the credits. Which
+  way it errs depends on which thousand the server returns — that is the point.
+- **Impact:** `investBucketBalance` gates order placement with "not enough money
+  in the Invest bucket". A child past a thousand ledger rows could be **refused
+  funds they have**, with nothing they can do about it. Fixed by paging.
+- **`childSpendableCents` was removed, not fixed.** It had **zero callers**
+  anywhere in the repository, and its doc comment said *"this is what a card
+  authorization is checked against in real time"* — untrue of it, and untrue
+  since 0155. Leaving it was the hazard: a correct-looking, ready-to-use helper
+  with a capped sum and a comment inviting the next author to wire it into
+  exactly the decision that must not use it.
+- **Status:** FIXED. 13,894 tests pass, build compiles.
+
+## [CLAUDE-1][MEDIUM][PERFORMANCE / BACKEND] The routine cron read each family's clock once per rule, and guessed it on failure
+
+- **Where:** `app/api/cron/family-routines/route.ts`, both loops
+- **Problem:** each loop read `families.timezone` **inside** the loop, so a
+  household with ten routines cost ten identical round trips. The tick is
+  **deadline-bounded** (`if (Date.now() > deadline) break;`), so wasted round
+  trips are not merely slow — they are routines that never get processed, and a
+  routine that is not processed does not fire.
+- **The worse half:** both reads destructured `{ data: family }` and dropped the
+  error, falling back to `'America/New_York'`. That is not a loss of precision —
+  a failed read **asserts a specific US zone** for a family that may be in
+  Tokyo, and files their routine against the wrong day. This sits directly in
+  front of the DST handling added earlier in this audit, which exists precisely
+  to get a family's wall clock right.
+- **Recommended fix:** applied. One `.in()` read per tick into a Map. A failed
+  zone read now fires nothing and reports, because late is recoverable and the
+  wrong wall clock is not. A family row that is genuinely absent or blank keeps
+  the long-standing default — only a *failed read* is treated as unknown.
+- **Status:** FIXED. Verified load-bearing: restoring the per-rule read makes
+  the tick take 6 `families` reads for 6 rules instead of 1, and file routines
+  despite a failed zone read. The test double needed `.in()` support, which is
+  recorded in it — a double that cannot answer the query shape under test
+  exercises a client the code never meets.
+
+**Also noted, not changed:** the repo has two different default timezones —
+`DEFAULT_TZ = 'UTC'` in `lib/services/scope.ts` and `'America/New_York'` in four
+AI routes plus this cron. In the AI routes the fallback covers an *empty* value
+on a NOT NULL column, which is a different situation from a failed read, so they
+are not the same bug. Recorded as a consistency question for an owner, OPEN.
+
+---
+
+## [CLAUDE-1][HIGH][BACKEND] The medication reminder, and the UTC fallback the file argues against
+
+- **Where:** `lib/server/notifications.ts:61`
+- **Problem:** the file spends ten lines explaining why a UTC "today" is
+  unacceptable here, and then silently falls back to UTC when the read fails.
+  Its own comment, verbatim:
+
+  > `todayStartIso` bounds the doses already logged today, and the medication
+  > reminder asks "has this dose been taken yet?" against it. Read in UTC it
+  > starts at 17:00 local in California — so the morning dose looks untaken
+  > every evening and the family is reminded again — and in Tokyo it starts at
+  > 09:00 the PREVIOUS local day, so yesterday's dose is mistaken for today's
+  > and **the reminder never fires**. A missed medication reminder is the worse
+  > of the two, and neither is acceptable.
+
+  The code underneath was `const { data: familyRow } = await …` — the error
+  dropped — followed by `familyRow?.timezone || 'UTC'`.
+- **Impact:** a transient read failure produces exactly the outcome the comment
+  calls unacceptable, and produces it **silently**. This is a sharper case than
+  the sibling reads in the same function: those fan out ~13 source reads and
+  degrade a *category* (a missing notification), while this one corrupts the
+  *day key every category is bounded by* — a wrong notification, and for
+  medication a missing dose reminder.
+- **Recommended fix:** applied. The zone read now fails the family's tick.
+  Verified first that all **three** callers wrap each family in `try/catch` and
+  count `generationFailures`, so the family is retried next tick and a broken
+  tick still reads differently from a quiet one. A family row with **no zone
+  set** keeps the default — absent is not unreadable, and only a failed read is
+  treated as unknown.
+- **Status:** FIXED. 13,896 tests pass, build compiles.
+- **Proved load-bearing:** restoring the dropped-error form fails the new case.
+
+### Triage that produced no finding, recorded so it is not redone
+
+The scan behind this was "a discarded read error falling through to a
+**substantive** default" (not `?? []` / `?? null`), which returned 15 sites.
+Most are cosmetic name fallbacks (`?? 'a family'`). Two looked serious and are
+**not** bugs:
+
+- `lib/server/entitlement.ts:76` — `prefs?.active_family_id ?? ''`. The
+  function's own header says it returns `UNLOCKED_FALLBACK` "on any error / no
+  family / pre-migration DB, so a hiccup never traps a user". Failing **open**
+  on entitlement is a deliberate, documented product decision, and the `?? ''`
+  simply falls through to `familyIds[0]`, the user's first family. Correct.
+- `app/(app)/missions/actions.ts:301` — `assignment.ai_score ?? 100`. Reads like
+  a failed AI validation scoring full marks. It is not: the line above is
+  `if (!assignment || !chore) return;`, so a failed read returns early — fails
+  **closed**. The `?? 100` is reached only on a real row with no AI score, in a
+  path already gated on `isManager`, where a parent is explicitly approving.
+
+Recorded because both cost real time to clear, and the next sweep over this
+shape will surface them again.
+
+---
+
+## [CLAUDE-1][HIGH][FRONTEND / DATABASE] A member could vote twice in the family meal vote
+
+- **Where:** `components/modules/meals-module.tsx` (`castVote`), schema
+  `supabase/migrations/0055_meal_votes.sql`
+- **Problem:** `castVote` clears the member's prior pick and inserts the new one:
+
+  ```ts
+  // One ballot per member: clear any prior pick, then record this one.
+  await sb.from('meal_vote_ballots').delete().eq('vote_id', …).eq('member_id', selfId);
+  const { error } = await sb.from('meal_vote_ballots').insert({ … });
+  if (error) return toastError(…);
+  success('Vote recorded');
+  ```
+
+  The insert's error is checked. **The delete's is discarded** — statement
+  position, so whatever it resolved with goes nowhere.
+- **The database does not backstop it, and the reason is exact.**
+  `meal_vote_ballots_once` is `UNIQUE (option_id, member_id)` — one ballot per
+  member per **option**, not per **vote**. A member switching from option A to
+  option B inserts a *different* key, so the constraint never fires. The
+  comment's invariant ("one ballot per member") is enforced **only** by that
+  unchecked delete.
+- **Impact:** a failed clear plus a successful insert leaves the member holding
+  ballots on both options, while the toast says "Vote recorded". The panel
+  tallies
+
+  ```ts
+  tally(opt) = ballots.filter(b => b.option_id === opt).length
+  total      = ballots.length
+  ```
+
+  so that member adds one to each of two meals **and two to the denominator** —
+  one person deciding a family's dinner twice, for two different dinners.
+- **Recommended fix:** applied at the application layer — the clear is checked
+  and a failure aborts before inserting. Verified load-bearing: restoring the
+  statement-position delete fails two cases.
+- **Status:** FIXED (application). Schema **OPEN** — see below.
+
+**OPEN, deliberately not done here:** the constraint that would actually express
+the invariant is `UNIQUE (vote_id, member_id)`, which would make the database
+refuse a second ballot regardless of what the client does. That is a migration,
+and two other workers are actively adding migrations (0314–0317) and editing the
+ledger and `PENDING_PROD_MIGRATIONS.md`. Adding a competing one is how two
+workers collide on a version number. Recommended for whoever owns the ledger
+next; the application fix closes the user-facing defect in the meantime.
+
+### The guard shape behind this find
+
+`tests/claimed-writes-that-did-not-land.test.ts` forbids exactly this — "a write
+whose result is discarded, followed by something that claims it happened" — and
+scans `app`, `lib` **and** `components`. It did not catch this one because its
+`WATCHED` map is **enumerated by table**: 12 tables, chosen as each instance was
+found. `meal_vote_ballots` is not among them.
+
+That is the **enumerated-with-no-scan** shape again (third sighting, after
+`whole-table-reads-are-not-capped` and the i18n `GATED_SURFACES`). A sweep for
+statement-position writes across the tree finds **34 tables** outside the watched
+set. Most are legitimately fire-and-forget — `activation_events`,
+`social_usage_events`, `home_ai_logs`, `dashboard_layout_events` — which is
+precisely why the guard is enumerated rather than universal, and why the 34 are
+**not** 34 findings. Triaged by hand for a *claim* following the write:
+
+- `components/modules/meals-module.tsx` — **the finding above.**
+- `app/(auth)/actions.ts:147` — clears the login throttle after a successful
+  child sign-in. Discarded, and the comment claims "a genuine kid never carries
+  a stale lock". But it fails **safe** (too strict, never too lenient), and the
+  security-critical direction is already checked:
+  `if (!(await recordFailure())) return …`. LOW.
+- `components/modules/messages-module.tsx:204` — a per-row read-receipt fallback.
+  A receipt that does not stick; no claim is made to the user. LOW.

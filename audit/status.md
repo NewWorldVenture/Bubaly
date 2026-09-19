@@ -157,30 +157,30 @@ PRIOR SESSIONS (unchanged, see history below): F-020 migration idempotency;
     `seller_member` to themselves and inherit the completed-sales count two
     pages display as a seller's track record (C1-S6-08). The obvious repair —
     `with check` = `using` — was tried first and STAYED RED, because the
-    predicate is symmetric and RLS cannot see the old row; 0314 makes the four
+    predicate is symmetric and RLS cannot see the old row; 0321 makes the four
     identity columns immutable with a trigger gated on `row_security_active()`.
     Recorded alongside it, the audit's FOURTH refuted hypothesis: the 20
     UPDATE/ALL policies with `using` and no `with check` are safe, because
     PostgreSQL reuses `using` as the check — measured, not cited, and the
     ratchet's premise (`with check (true)` switches that off) measured too,
     after the first mutation turned out over-determined on `todo_lists`.
-    Also added the 0312/0313/0314 rows docs/PENDING_PROD_MIGRATIONS.md was
+    Also added the 0319/0320/0321 rows docs/PENDING_PROD_MIGRATIONS.md was
     missing — those migrations are worth nothing until an operator applies them
     and the document is the operator's list.
     Censusing for C1-S6-08's shape found three more tables (C1-S6-09):
     marketplace_reviews/saves/follows pin authorship on INSERT and left an UPDATE
     policy of `is_family_member(family_id)` on both clauses — not scoped to the
     author at all, so the member a review was ABOUT could rewrite its rating, and
-    `rating` is aggregated by `reviewee_member` on four screens. 0315 scopes them
+    `rating` is aggregated by `reviewee_member` on four screens. 0322 scopes them
     to the owner (nothing in the tree updates any of the three, so nothing is
-    lost) and replaces 0314's table-branching trigger with a generic
+    lost) and replaces 0321's table-branching trigger with a generic
     columns_are_immutable() that raises on a column that does not exist — the
     probe measures that typo guard, because a misspelled column would compare
     NULL to NULL and guard nothing.
     Then ran the identical census one verb over and found C1-S6-10: the DELETE
     policies on the same four tables are family-wide too, so the subject of a
     review could erase it and a member with no stake in a listing could delete a
-    competing offer. 0316 scopes all four. Recorded plainly in finalaudit.md that
+    competing offer. 0323 scopes all four. Recorded plainly in finalaudit.md that
     I fixed UPDATE without checking DELETE in the same pass — the second census
     was one query.
     C1-S6-11 came out of a third census (INSERT requires a manager, some write
@@ -188,7 +188,7 @@ PRIOR SESSIONS (unchanged, see history below): F-020 migration idempotency;
     DELETE policy was family-wide, and because social_role_for() falls back to a
     family-role default when no row exists, an adult restricted to read_only
     deleted their own restriction and became marketing_manager — publish_posts
-    and manage_settings on the family's CONNECTED social accounts. 0317 gives
+    and manage_settings on the family's CONNECTED social accounts. 0324 gives
     DELETE the predicate INSERT and UPDATE already carry.
   - Pass V: five adjacent classes swept, none a finding, all recorded rather than
     dropped — other COALESCE-fallback permission resolvers (shape does not
@@ -236,7 +236,7 @@ NEXT: C2-M03 is the largest open finding — ~251 en-US-pinned date/time call
   this as a deliberate follow-up and it is the coordinator's job.
 FILES-TOUCHED (session 3):
   - audit/status.md (this section only), audit/claude-1.md, finalaudit.md
-  - session 6 additions: supabase/migrations/0311-0317,
+  - session 6 additions: supabase/migrations/0318-0324,
     docs/audit/{household-binder-boundary,deactivated-member-sees-nothing,
     marketplace-ownership-update,no-truncate-for-public-roles}-check.sql,
     docs/PENDING_PROD_MIGRATIONS.md, tests/migration-version-safety.test.ts
@@ -257,6 +257,55 @@ NOTE FOR OTHER WORKERS:
   - A Next folder starting with `_` is excluded from routing; a probe page placed
     there is never compiled and the build passes for the wrong reason.
 LAST-UPDATE: 2026-09-16
+
+CURRENT: Continuous audit loop. Scope: Coordinator + Architecture/Integration,
+  and the applier of every fix.
+COMPLETED (this round): five findings, each found by hunting the GUARD SHAPE
+  rather than another instance of a bug.
+  1. Nine forms wrote Greenwich's day into a DATE column (HIGH).
+  2. Two reads capped at 1,000 rows in components/, one of them also dropping
+     its error and lacking a rejection path (HIGH).
+  3. Twenty-six money inputs could not take a decimal point on iOS (HIGH).
+  4. Five reads that handled every database failure and no network one,
+     including App Lock presenting a configured lock as never set up (HIGH).
+  5. The admin console reported the first thousand of everything (HIGH).
+  Three NEW guards added; five existing guards widened. Every fix proved
+  load-bearing by reverting it and watching the guard go red.
+NEXT: the OPEN items recorded at the end of audit/claude-1.md — a database
+  aggregate for the admin growth/storage figures, ~20 unbounded admin LIST
+  reads, and the 95-site awaited-destructure population (unverified, and
+  explicitly not 95 findings).
+FILES-TOUCHED: audit/claude-1.md, audit/status.md, and the source files named
+  in the commits on main between 358b1e6d and ea9bf3da. Chief among them:
+  lib/schedule/zoned.ts, components/modules/{school,expenses,trip-memories,
+  health-visits,finances,pets,subscriptions,meals,language,event-detail-modal}*,
+  components/{finance,wallet,settings,marketplace,calendar,auth}/*,
+  app/(app)/admin/{reports,backup}/page.tsx, app/(app)/dashboard/calm/page.tsx,
+  and tests/ (3 new guards, 5 widened).
+BLOCKERS: F5/F-001 and F-C08 still need an owner — no working path exists to
+  apply a migration to production. Unchanged, and not a blocker on the audit.
+
+### Three distinct ways a guard fails, all found this round
+
+Worth separating, because the fix for each differs:
+
+1. **Scope gap** — the rule is right, the walk is too small.
+   `family-day-not-greenwich-day` and `no-limit-above-the-row-cap` skipped
+   `components`; `mobile-numeric-inputmode` read ONE flat directory and its
+   own coverage assertion was satisfied by that directory, so it passed
+   honestly on every CI run while 26 offenders sat outside it.
+2. **Premise gap** — the guard covers the blessed helper, not the bypass.
+   `read-error-surfaced` checks `useRealtimeQuery` call sites; all five reads
+   in finding 4 hand-rolled a fetch instead, putting them outside its premise.
+   *A guard on the safe path does not cover the path taken to avoid it.*
+3. **Enumerated with no scan** — `whole-table-reads-are-not-capped` pins four
+   named jobs against a capped fake. It cannot be wrong about those four; it
+   just never grew to a fifth surface.
+
+A coverage assertion calibrated to the scanned subset cannot detect that the
+subset is the problem. Every widened guard here got a bound past what its old
+scope could satisfy, plus a case asserting the walk still reaches past it.
+LAST-UPDATE: 2026-09-18T20:05Z
 
 ## Claude-2
 CURRENT: COMPLETE — browser pass over the public marketing/auth surface.
@@ -428,8 +477,8 @@ LAST-UPDATE: 2026-09-15
 
 ## Round 5 — closed (Claude-1)
 All twelve round-5 findings FIXED: C4-S5-01/02 (plus C4-S5-03 recorded) and
-C3-S5-01..09. Eleven code changes, two migrations (`0311` social token store,
-`0312` TRUNCATE revoke), nine new guard files, every guard proved red before it
+C3-S5-01..09. Eleven code changes, two migrations (`0318` social token store,
+`0319` TRUNCATE revoke), nine new guard files, every guard proved red before it
 was trusted. Two items left as product/operator decisions and named as such in
 finalaudit.md: retiring the duplicate Google Calendar integration, and removing
 the inbound-email `?key=` form.

@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Flame, ChevronDown } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
+import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import { buildHeatmap, type HeatEvent } from '@/lib/calendar/heatmap';
 import { expandEvents } from '@/lib/calendar/recurrence';
@@ -27,21 +29,33 @@ const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
  */
 export function BusynessHeatmap({ familyId }: { familyId: string }) {
   const t = useTranslations();
-  const [rows, setRows] = useState<Tables<'calendar_events'>[]>([]);
   const [open, setOpen] = useState(true);
 
-  useEffect(() => {
-    let alive = true;
-    const start = new Date(Date.now() - WEEKS * 7 * 86400_000);
-    createClient().from('calendar_events').select('*')
-      .eq('family_id', familyId)
-      .lt('starts_at', new Date().toISOString())
-      .or(`starts_at.gte.${start.toISOString()},recurrence.neq.none`)
-      .order('starts_at')
-      .limit(2000)
-      .then(({ data }) => { if (alive && data) setRows(data as Tables<'calendar_events'>[]); });
-    return () => { alive = false; };
-  }, [familyId]);
+  // `.limit(2000)` here was not a bound: PostgREST caps a response at
+  // `db-max-rows` (1,000) whatever the client asks for, and this read is
+  // ordered by `starts_at` ASCENDING — so a family with more than 1,000 events
+  // in the window lost the MOST RECENT weeks, which is the half the strip is
+  // about. `readAllAsQuery` pages to a real ceiling and reports reaching it.
+  //
+  // The previous fetch also destructured `{ data }` and dropped `error`, so a
+  // failed read set no rows and the strip rendered a calm, empty eight weeks
+  // with advice underneath it — telling a family they are not busy because the
+  // query broke. `useRealtimeQuery` is the house pattern and carries the error,
+  // the offline fallback and the missing-table degrade that this bypassed.
+  const { data: rows, error } = useRealtimeQuery<Tables<'calendar_events'>>({
+    table: 'calendar_events', familyId, deps: [familyId],
+    fetcher: (s) => {
+      const start = new Date(Date.now() - WEEKS * 7 * 86400_000);
+      return readAllAsQuery<Tables<'calendar_events'>>((from, to) => s.from('calendar_events').select('*')
+        .eq('family_id', familyId)
+        .lt('starts_at', new Date().toISOString())
+        .or(`starts_at.gte.${start.toISOString()},recurrence.neq.none`)
+        // `starts_at` alone is not a total order, and paging a non-total order
+        // repeats and skips rows across page boundaries. `id` breaks the ties.
+        .order('starts_at').order('id')
+        .range(from, to), { max: 2000 });
+    },
+  });
 
   const report = useMemo(() => {
     const start = new Date(Date.now() - WEEKS * 7 * 86400_000);
@@ -63,7 +77,11 @@ export function BusynessHeatmap({ familyId }: { familyId: string }) {
         </span>
         <ChevronDown className={cn('h-4 w-4 text-muted transition-transform', open && 'rotate-180')} />
       </button>
-      {open && (
+      {open && error && (
+        // A broken read must not render as eight calm weeks with advice under it.
+        <div className="mt-3"><ErrorState message={error} /></div>
+      )}
+      {open && !error && (
         <>
           <div className="mt-3 flex gap-2 overflow-x-auto no-scrollbar">
             <div className="flex flex-col gap-1 pr-1">

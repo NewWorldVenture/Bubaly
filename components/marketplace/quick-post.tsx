@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Sparkles, Zap, Loader2, Wand2, X, Timer } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
+import { settle } from '@/lib/supabase/settle';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import {
@@ -58,13 +59,24 @@ export function QuickPost({ className }: { className?: string }) {
   useEffect(() => {
     if (!draft || comps !== null) return;
     const sb = createClient();
-    sb.from('marketplace_listings')
-      .select('category, condition, price_cents, kind')
-      .eq('family_id', familyId)
-      .eq('kind', 'sell')
-      .gt('price_cents', 0)
-      .limit(400)
-      .then(({ data }) => setComps((data ?? []) as Comparable[]));
+    // Best-effort is the right call here and stays: with fewer than two usable
+    // comparables `suggestPriceCents` returns null, so a failed read shows no
+    // suggestion rather than a wrong one. What was NOT deliberate is that a bare
+    // `.then()` on a query builder has no rejection path — a transport failure
+    // (DNS, TCP, TLS) became an unhandled rejection. `settle` never rejects.
+    void (async () => {
+      const { data, error } = await settle(sb.from('marketplace_listings')
+        .select('category, condition, price_cents, kind')
+        .eq('family_id', familyId)
+        .eq('kind', 'sell')
+        .gt('price_cents', 0)
+        .limit(400));
+      // Degrade to empty, but LOG — a silent [] here is indistinguishable from
+      // a family with no past listings, and the two want different answers when
+      // someone asks why the price suggestion never appears.
+      if (error) console.error('[quick-post] comparables read failed', { message: error.message });
+      setComps((data ?? []) as Comparable[]);
+    })();
   }, [draft, comps, familyId]);
 
   const makeDraft = () => {

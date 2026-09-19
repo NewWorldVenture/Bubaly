@@ -27,7 +27,7 @@ export function ValueComparisonSummary({ result, onRetry }: { result: FamilyValu
           <p className="mt-2 text-sm text-muted">{t('valueComparison.recorded', { count: result.completedRuns, minutes })}</p>
           {result.undatedCompletedRuns > 0 && <p className="mt-2 text-xs text-muted">{t('valueComparison.undated', { count: result.undatedCompletedRuns })}</p>}
           <label htmlFor={inputId} className="mt-3 block text-xs font-medium">{t('valueComparison.hourlyLabel')}</label>
-          <input id={inputId} type="number" min="0" max="1000" step="0.01" value={hourlyInput}
+          <input id={inputId} type="number" inputMode="decimal" min="0" max="1000" step="0.01" value={hourlyInput}
             onChange={(event) => setHourlyInput(event.target.value)} aria-invalid={!comparison}
             className="focus-ring mt-1 min-h-11 w-36 rounded-lg border border-border bg-surface px-3 text-sm" />
           {comparison ? <dl className="mt-3 grid gap-3 sm:grid-cols-3">

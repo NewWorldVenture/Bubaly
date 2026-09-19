@@ -1,4 +1,4 @@
--- ── 0312: the public roles hold no TRUNCATE privilege ───────────────────────
+-- ── 0319: the public roles hold no TRUNCATE privilege ───────────────────────
 --
 -- RLS does not constrain TRUNCATE: `using (false)` on sync_tokens does not stop
 -- `truncate public.sync_tokens`, because the privilege is checked against the
@@ -20,7 +20,7 @@ begin
      and privilege_type = 'TRUNCATE'
      and grantee in ('anon', 'authenticated');
   if n <> 0 then
-    raise exception '0312: % table(s) still grant TRUNCATE to anon/authenticated (e.g. %) — RLS does not cover this', n, sample;
+    raise exception '0319: % table(s) still grant TRUNCATE to anon/authenticated (e.g. %) — RLS does not cover this', n, sample;
   end if;
 
   -- The two that matter most, named so a failure says which boundary moved.
@@ -30,8 +30,8 @@ begin
      and privilege_type = 'TRUNCATE'
      and grantee in ('anon', 'authenticated');
   if n <> 0 then
-    raise exception '0312: a credential store still grants TRUNCATE to a public role (% grant(s))', n;
+    raise exception '0319: a credential store still grants TRUNCATE to a public role (% grant(s))', n;
   end if;
 
-  raise notice '0312 OK: no TRUNCATE for anon or authenticated anywhere in public';
+  raise notice '0319 OK: no TRUNCATE for anon or authenticated anywhere in public';
 end $$;

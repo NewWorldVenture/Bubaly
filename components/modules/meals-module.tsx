@@ -9,7 +9,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { settleAll } from '@/lib/supabase/settle';
+import { settle, settleAll } from '@/lib/supabase/settle';
 import { planMealAction, removeMealPlanAction } from '@/app/(app)/dashboard/meals/actions';
 import { addMealPlanToGroceryListAction, setGroceryItemCheckedAction } from '@/app/(app)/dashboard/grocery/actions';
 import type { Substitution } from '@/lib/meals/substitutions';
@@ -111,14 +111,17 @@ export function MealsModule() {
   const weekStartStr = useMemo(() => monday.toISOString().slice(0, 10), [monday]);
 
   const reloadLibrary = useCallback(() => {
-    createClient().from('meals').select('*').eq('family_id', familyId).order('name')
-      .then(({ data, error }) => {
-        // Secondary/enhancement read (the "add from your meals" library). Degrade
-        // to empty on failure, but LOG it — a silent [] made the library
-        // mysteriously empty with no signal when the read hit RLS/an outage.
-        if (error) console.error('[meals] library read failed', { message: error.message });
-        setLibrary(data ?? []);
-      });
+    // Secondary/enhancement read (the "add from your meals" library). Degrade to
+    // empty on failure, but LOG it — a silent [] made the library mysteriously
+    // empty with no signal when the read hit RLS/an outage. `settle` rather than
+    // a bare `.then()`, which had no rejection path: a transport failure left
+    // this as an unhandled rejection and the library never updated at all.
+    void (async () => {
+      const { data, error } = await settle(
+        createClient().from('meals').select('*').eq('family_id', familyId).order('name'));
+      if (error) console.error('[meals] library read failed', { message: error.message });
+      setLibrary(data ?? []);
+    })();
   }, [familyId]);
   useEffect(() => { reloadLibrary(); }, [reloadLibrary]);
 
@@ -264,7 +267,19 @@ export function MealsModule() {
     if (!voteData || !selfId) return;
     const sb = createClient();
     // One ballot per member: clear any prior pick, then record this one.
-    await sb.from('meal_vote_ballots').delete().eq('vote_id', voteData.vote.id).eq('member_id', selfId);
+    //
+    // The clear has to be CHECKED, because the database does not enforce what
+    // this comment claims. `meal_vote_ballots_once` is UNIQUE (option_id,
+    // member_id) — one ballot per member per OPTION — so a member switching
+    // from option A to option B inserts a different key and the constraint
+    // never fires. With the delete's error discarded, a failed clear plus a
+    // successful insert left the member holding ballots on BOTH options while
+    // the toast said "Vote recorded", and the tally below counts each ballot
+    // once and divides by `ballots.length` — so that member votes twice, for
+    // two different meals, and inflates the denominator too.
+    const { error: clearError } = await sb.from('meal_vote_ballots')
+      .delete().eq('vote_id', voteData.vote.id).eq('member_id', selfId);
+    if (clearError) return toastError(describeDbError(clearError));
     const { error } = await sb.from('meal_vote_ballots').insert({
       vote_id: voteData.vote.id, option_id: optionId, family_id: familyId, member_id: selfId, choice: 'yes',
     });

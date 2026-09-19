@@ -1,4 +1,4 @@
--- Bubaly :: 0317 A social restriction is not self-service
+-- Bubaly :: 0324 A social restriction is not self-service
 -- ----------------------------------------------------------------------------
 -- `social_access_permissions` is the table that says who may post to the
 -- family's connected social accounts. 0034 guarded it carefully on the way in

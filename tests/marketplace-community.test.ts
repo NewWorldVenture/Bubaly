@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   buildCircleFeed, circleStats, formatJoinCode, isValidJoinCode,
@@ -29,6 +31,41 @@ describe('join codes', () => {
     expect(formatJoinCode('ABCDEFGH')).toBe('ABCD-EFGH');
     expect(isValidJoinCode('abcd-efgh')).toBe(true);
     expect(isValidJoinCode('abc')).toBe(false);
+  });
+
+  // `marketplace_create_circle` promised "no 0/O/1/I" but ran `translate`
+  // before `upper` with only the uppercase letters in its from-set, so a
+  // lowercase `o` or `i` came back out as `O` or `I`. Measured: 22.8% of codes.
+  // 0314 fixes the generator AND teaches the lookup to read a typed digit as
+  // the letter, because the codes already issued cannot be rotated.
+  it('reads a typed 0 as O and a typed 1 as I, the way the SQL does', () => {
+    expect(normalizeJoinCode('0IVWXYZA')).toBe('OIVWXYZA');
+    expect(normalizeJoinCode('o1vwxyza')).toBe('OIVWXYZA');
+    expect(normalizeJoinCode('01vwxyza')).toBe('OIVWXYZA');
+    // Unambiguous precisely because a stored code can never hold a 0 or a 1.
+    expect(normalizeJoinCode('OIVWXYZA')).toBe('OIVWXYZA');
+  });
+
+  it('keeps displaying a stored code unchanged', () => {
+    // Stored codes carry no digits 0 or 1, so the mapping is a no-op on
+    // display — a circle's code must not render as something else.
+    for (const stored of ['OIVWXYZA', 'ABCDEFGH', 'ZY23KLMN', 'JKLMNPQR']) {
+      expect(formatJoinCode(stored).replace('-', '')).toBe(stored);
+    }
+  });
+
+  it('agrees with the SQL, character for character', () => {
+    // The two copies drifted apart once already in this repository (the
+    // document classifier). Pin them: this is `translate(upper(trim(p_code)),
+    // '01', 'OI')` read out of the migration and applied here.
+    const sql = readFileSync(resolve(process.cwd(), 'supabase/migrations/0314_circle_join_codes_are_unambiguous.sql'), 'utf8');
+    expect(sql).toContain("translate(upper(trim(p_code)), '01', 'OI')");
+    // And the generator's from-set names both cases of every ambiguous letter.
+    const fromSet = sql.match(/translate\(encode\(gen_random_bytes\(8\), 'base64'\),\s*'([^']+)'/)?.[1];
+    expect(fromSet, 'the generator from-set').toBeDefined();
+    for (const ch of ['0', 'O', '1', 'I', 'l', 'o', 'i']) {
+      expect(fromSet, `from-set is missing ${ch}`).toContain(ch);
+    }
   });
 });
 

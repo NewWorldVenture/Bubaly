@@ -19,6 +19,7 @@
 // This file is pure: no database, no clock of its own. `nextRunAt` takes the
 // instant to compute from, so the cron, the tests and the UI preview all agree.
 import type { RoutineAnchor } from './anchors';
+import { zonedTimeMs } from '@/lib/services/scope';
 
 export type CronSchedule = {
   kind: 'cron';
@@ -221,6 +222,29 @@ export function nextCronRun(expr: string, from: Date, tz: string): Date | null {
  * cannot have a "two days before" fire, and pretending otherwise would send a
  * "get ready" message about something happening tomorrow.
  */
+/**
+ * True when the expression names ONE hour, so it means "once a day at that
+ * hour" rather than "several times a day".
+ *
+ * The distinction only matters on the autumn DST transition, where the repeated
+ * hour makes a local wall-clock time happen twice. For `0 * * * *` that is
+ * correct — two real hours pass and the routine should run in both. For
+ * `30 1 * * *` it is not: the family asked for 01:30 daily and 01:30 arrives
+ * twice, so the routine runs twice in one night.
+ */
+export function firesOncePerDay(expr: string): boolean {
+  const hourField = expr.split(/\s+/)[1];
+  return /^\d{1,2}$/.test(hourField ?? '');
+}
+
+/** Same year-month-day and hour:minute in `tz` — the wall clock a family reads. */
+export function sameLocalMinute(a: Date, b: Date, tz: string): boolean {
+  const x = zoned(a, tz);
+  const y = zoned(b, tz);
+  return x.year === y.year && x.month === y.month && x.day === y.day
+    && x.hour === y.hour && x.minute === y.minute;
+}
+
 export function nextRelativeRun(schedule: RelativeSchedule, anchorDate: string, from: Date, tz: string): Date | null {
   const day = /^(\d{4})-(\d{2})-(\d{2})/.exec(anchorDate);
   if (!day) return null;
@@ -228,10 +252,25 @@ export function nextRelativeRun(schedule: RelativeSchedule, anchorDate: string, 
   const target = new Date(base + schedule.offsetDays * 86_400_000);
   const key = target.toISOString().slice(0, 10);
 
-  // Place the local hour: build the instant, then correct for the zone offset.
-  const naive = new Date(`${key}T${String(schedule.atHour).padStart(2, '0')}:00:00Z`);
-  const at = zoned(naive, tz);
-  const drift = (at.hour - schedule.atHour) * 3_600_000 + at.minute * 60_000;
-  const fires = new Date(naive.getTime() - drift);
+  // Place the local hour with the repository's own helper rather than a local
+  // offset correction.
+  //
+  // The previous version measured the zone offset at the UTC instant
+  // `<key>T<atHour>:00Z` and subtracted it. That reads the offset on whichever
+  // local DAY that instant happens to fall on, which is not always `key` — and
+  // when it is not, the hour difference wraps and the correction moves a whole
+  // day. Measured, with offsetDays: 0:
+  //
+  //   America/New_York, anchor 2026-06-15, atHour 1  -> fired 06-14 01:00  (a day EARLY)
+  //   America/New_York, anchor 2026-06-15, atHour 2  -> fired 06-14 02:00  (a day EARLY)
+  //   Asia/Tokyo,       anchor 2026-06-15, atHour 22 -> fired 06-16 22:00  (a day LATE)
+  //   Asia/Tokyo,       anchor 2026-06-15, atHour 23 -> fired 06-16 23:00  (a day LATE)
+  //
+  // So a zone behind UTC broke early-morning routines and a zone ahead of it
+  // broke late-evening ones — "the night before the trip" arriving two nights
+  // before. `zonedTimeMs` resolves the offset twice, at the guess and then at
+  // the corrected instant, which lands on the right local day and survives both
+  // DST transitions.
+  const fires = new Date(zonedTimeMs(key, schedule.atHour, 0, tz));
   return fires > from ? fires : null;
 }

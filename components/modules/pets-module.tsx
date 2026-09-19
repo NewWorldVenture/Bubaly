@@ -24,6 +24,7 @@ import {
   type CareUrgency,
 } from '@/lib/pets/care';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { todayInZone } from '@/lib/schedule/zoned';
 
 type Pet = Tables<'pets'>;
 type CareRecord = Tables<'pet_care_records'>;
@@ -290,6 +291,7 @@ function PetForm({ familyId, userId, onClose, onSaved }: { familyId: string; use
 
 function CareForm({ familyId, userId, pet, onClose, onSaved }: { familyId: string; userId: string; pet: Pet; onClose: () => void; onSaved: () => void }) {
   const t = useTranslations();
+  const { family } = useApp();
   const { error: toastError } = useToast();
   const [loading, setLoading] = useState(false);
 
@@ -304,7 +306,7 @@ function CareForm({ familyId, userId, pet, onClose, onSaved }: { familyId: strin
       pet_id: pet.id,
       kind: String(f.get('kind') ?? 'vet_visit') as CareRecord['kind'],
       title,
-      record_date: String(f.get('record_date') ?? '') || new Date().toISOString().slice(0, 10),
+      record_date: String(f.get('record_date') ?? '') || todayInZone(family?.timezone ?? 'UTC'),
       next_due: String(f.get('next_due') ?? '') || null,
       dose: String(f.get('dose') ?? '').trim() || null,
       weight_kg: f.get('weight_kg') ? Number(f.get('weight_kg')) : null,
@@ -321,7 +323,7 @@ function CareForm({ familyId, userId, pet, onClose, onSaved }: { familyId: strin
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label={t('pets.type')}>{(id) => <Select id={id} name="kind" defaultValue="vet_visit">{CARE_KINDS.map((k) => <option key={k.value} value={k.value}>{k.emoji} {k.label}</option>)}</Select>}</Field>
-          <Field label={t('pets.date')}>{(id) => <Input id={id} name="record_date" type="date" defaultValue={new Date().toISOString().slice(0, 10)} />}</Field>
+          <Field label={t('pets.date')}>{(id) => <Input id={id} name="record_date" type="date" defaultValue={todayInZone(family?.timezone ?? 'UTC')} />}</Field>
         </div>
         <Field label={t('pets.title')} required>{(id) => <Input id={id} name="title" autoFocus placeholder={t('pets.rabiesBooster')} />}</Field>
         <div className="grid grid-cols-2 gap-3">
