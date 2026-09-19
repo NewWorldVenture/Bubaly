@@ -186,7 +186,7 @@ export function VacationsList({ openCreate = false }: { openCreate?: boolean }) 
               <Field label={tr('vacationsList.endDate')}>{(id) => <Input id={id} type="date" value={form.end_date} onChange={(e) => setForm({ ...form, end_date: e.target.value })} />}</Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label={tr('vacationsList.budget')}>{(id) => <Input id={id} type="number" step="0.01" value={form.budget} onChange={(e) => setForm({ ...form, budget: e.target.value })} placeholder="5000" />}</Field>
+              <Field label={tr('vacationsList.budget')}>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" value={form.budget} onChange={(e) => setForm({ ...form, budget: e.target.value })} placeholder="5000" />}</Field>
               <label className="mt-7 flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={form.is_international} onChange={(e) => setForm({ ...form, is_international: e.target.checked })} className="h-4 w-4 rounded border-border" /> {tr('vacationsList.international')}
               </label>

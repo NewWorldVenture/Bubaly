@@ -1,11 +1,11 @@
--- Bubaly :: 0313 - the two records a child has the most motive to edit
+-- Bubaly :: 0329 - the two records a child has the most motive to edit
 -- ----------------------------------------------------------------------------
 -- Renumbered from 0301. A parallel session landed
 -- `0301_notification_authorship.sql` on main for a different finding while this
 -- was in flight — the SIXTH migration-number collision between the two
 -- sessions, and the second in a single afternoon (0300 was the fifth). Only the
 -- number changed; this touches `grades` and `screen_time_limits`, which nothing
--- between 0303 and 0312 goes near.
+-- between 0303 and 0328 goes near.
 -- ----------------------------------------------------------------------------
 -- `screen_time_limits` and `grades` each carry ONE `FOR ALL … is_family_member`
 -- policy, and both are written directly from the browser through the anon

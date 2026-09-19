@@ -55,13 +55,13 @@ export type InMemoryOptions = {
  * Functions the real schema carries, served from the backing tables so a test
  * does not have to know they exist.
  *
- * `family_allergies` (0316) is the narrow door onto `medical_profiles`: after
+ * `family_allergies` (0332) is the narrow door onto `medical_profiles`: after
  * that migration the table reads manager-or-self, and the meal planner and
  * grocery substituter — which need the WHOLE household's allergies, on the
  * caller's own client — go through this instead. Modelling it here rather than
  * in each test keeps the fake honest about the schema: a select on
  * `medical_profiles` and a call to this used to be interchangeable, and since
- * 0316 they are not.
+ * 0332 they are not.
  *
  * An explicit `rpc` option still wins, which is how a test says "this call
  * fails" or supplies rows the backing table does not hold.

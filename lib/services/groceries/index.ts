@@ -455,8 +455,8 @@ export async function addFromMealPlan(scope: ServiceScope, input: MealPlanGrocer
   // butter on the list because `medical_profiles` was unreachable is exactly
   // the failure this rule exists to prevent.
   //
-  // Which is why the allergies come through `family_allergies()` (0316) and not
-  // a select. `scope.db` is the CALLER's client, and since 0316 the table's own
+  // Which is why the allergies come through `family_allergies()` (0332) and not
+  // a select. `scope.db` is the CALLER's client, and since 0332 the table's own
   // SELECT policy is manager-or-self — a child selecting it would get
   // `{ data: [], error: null }`, the guard below would pass, and the list would
   // get its peanut butter with nothing having gone wrong anywhere. The RPC

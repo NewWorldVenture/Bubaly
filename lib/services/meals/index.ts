@@ -656,7 +656,7 @@ export async function foodProfile(scope: ServiceScope): Promise<ServiceResult<Fo
   const members = await getMembers(scope);
   if (!members.ok) return members;
 
-  // Allergies come through `family_allergies()` (0316), not a select on
+  // Allergies come through `family_allergies()` (0332), not a select on
   // `medical_profiles`: that table now reads manager-or-self, and `scope.db` is
   // the caller's client, so a child planning a meal would have been handed an
   // empty list with no error and the planner would have called the household

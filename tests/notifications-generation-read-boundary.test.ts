@@ -42,6 +42,32 @@ describe('generateFamilyNotifications source read boundary', () => {
     expect(logged.some((l) => l.includes('generation source read failed') && l.includes('medications'))).toBe(true);
   });
 
+  it("throws when the family's timezone cannot be read, instead of falling back to UTC", async () => {
+    // This one read is not like the other twelve, and the file says why at
+    // length: `todayStartIso` bounds the doses already logged today, so read in
+    // UTC the morning dose looks untaken every evening in California, and in
+    // Tokyo yesterday's dose is mistaken for today's and the reminder NEVER
+    // FIRES. A degraded category is a missing notification; a wrong day key is
+    // a wrong one — and for medication, a missed one.
+    //
+    // So this read alone fails the family's whole tick. All three callers wrap
+    // each family in try/catch and count `generationFailures`, so the family is
+    // retried next tick and a broken tick still reads differently from a quiet
+    // one.
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const supabase = fakeSupabase(new Set(['families']));
+
+    await expect(generateFamilyNotifications(supabase, 'fam-1')).rejects.toThrow(/timezone/i);
+  });
+
+  it('a family row with no timezone set still uses the default, which is not the same thing', async () => {
+    // Absent is not unreadable. Only a FAILED read is treated as unknown.
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const supabase = fakeSupabase(new Set());
+
+    await expect(generateFamilyNotifications(supabase, 'fam-1')).resolves.toBe(0);
+  });
+
   it('does not log when all source reads succeed', async () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {});
     const supabase = fakeSupabase(new Set());

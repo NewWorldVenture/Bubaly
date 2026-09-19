@@ -143,9 +143,9 @@ function LogModal({ members, defaultMember, familyId, userId, onClose }: { membe
         </div>
         <div className="grid grid-cols-4 gap-3">
           <Field label={t('nutrition.calories')}>{(id) => <Input id={id} type="number" value={v.calories} onChange={(e) => setV({ ...v, calories: e.target.value })} placeholder="320" />}</Field>
-          <Field label={t('nutrition.protein')}>{(id) => <Input id={id} type="number" step="0.1" value={v.protein_g} onChange={(e) => setV({ ...v, protein_g: e.target.value })} placeholder="12" />}</Field>
-          <Field label={t('nutrition.carbs')}>{(id) => <Input id={id} type="number" step="0.1" value={v.carbs_g} onChange={(e) => setV({ ...v, carbs_g: e.target.value })} placeholder="45" />}</Field>
-          <Field label="Fat">{(id) => <Input id={id} type="number" step="0.1" value={v.fat_g} onChange={(e) => setV({ ...v, fat_g: e.target.value })} placeholder="8" />}</Field>
+          <Field label={t('nutrition.protein')}>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.1" value={v.protein_g} onChange={(e) => setV({ ...v, protein_g: e.target.value })} placeholder="12" />}</Field>
+          <Field label={t('nutrition.carbs')}>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.1" value={v.carbs_g} onChange={(e) => setV({ ...v, carbs_g: e.target.value })} placeholder="45" />}</Field>
+          <Field label="Fat">{(id) => <Input id={id} type="number" inputMode="decimal" step="0.1" value={v.fat_g} onChange={(e) => setV({ ...v, fat_g: e.target.value })} placeholder="8" />}</Field>
         </div>
         <Field label={t('nutrition.waterMl')} hint={t('nutritionView.optional')}>{(id) => <Input id={id} type="number" value={v.water_ml} onChange={(e) => setV({ ...v, water_ml: e.target.value })} placeholder="250" />}</Field>
         <div className="flex justify-end gap-2 pt-2">

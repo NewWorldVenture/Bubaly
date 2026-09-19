@@ -1,4 +1,4 @@
-// Migration 0316 narrowed `medical_profiles` to manager-or-self: a child no
+// Migration 0332 narrowed `medical_profiles` to manager-or-self: a child no
 // longer selects the household's conditions, medications, physicians or
 // emergency contacts. Two services had to move for that to be safe.
 //
@@ -27,7 +27,7 @@ import { createInMemorySupabase } from './helpers/in-memory-supabase';
 const FAMILY = 'fam-allergy-1';
 
 /**
- * A child's view of the database after 0316: `medical_profiles` answers with
+ * A child's view of the database after 0332: `medical_profiles` answers with
  * nothing at all — no error, no rows — and the narrow door still opens.
  */
 function childsClient() {
@@ -85,7 +85,7 @@ describe('the allergy path survives the medical_profiles narrowing', () => {
   it('fails rather than reporting an allergy-free household when the door is shut', async () => {
     // What the real function does to a caller who is not a member of this
     // family: it raises. The fake's built-in handler would answer from the
-    // (empty) table, which is the very thing 0316 made unsafe to rely on, so
+    // (empty) table, which is the very thing 0332 made unsafe to rely on, so
     // this one is stated explicitly.
     const db = createInMemorySupabase<SupabaseClient<Database>>({
       rpc: { family_allergies: () => { throw new Error('not a member of this family'); } },

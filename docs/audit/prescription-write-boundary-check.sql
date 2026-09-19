@@ -4,7 +4,7 @@
 -- and the module's idea of who may write is a React boolean
 -- (`const canEdit = isManager(role)`, medications-module.tsx:77). A child is a
 -- real Supabase auth user, so a child session can call PostgREST directly and
--- RLS is the only boundary. Before 0312 the child's UPDATE and DELETE succeeded.
+-- RLS is the only boundary. Before 0328 the child's UPDATE and DELETE succeeded.
 -- (This migration was 0300 until main landed its own 0300 for the paywall.)
 --
 -- Deleting a schedule also silences the medication reminder, so this is a safety
@@ -69,7 +69,7 @@ begin
   perform set_config('request.jwt.claim.sub', child_uid::text, true);
   set local role authenticated;
 
-  -- 1. Cannot change a dosage. Before 0312 this was UPDATE 1.
+  -- 1. Cannot change a dosage. Before 0328 this was UPDATE 1.
   update public.medications set dosage = '500mg' where id = med_id;
   get diagnostics n = row_count;
   if n <> 0 then

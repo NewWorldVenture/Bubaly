@@ -38,7 +38,7 @@ function makeDb(tables: Record<string, TableSpec>) {
     return proxy;
   };
   // `foodProfile` reads the household's allergies through `family_allergies()`
-  // (0316), not a select on `medical_profiles`. Answered from the same table
+  // (0332), not a select on `medical_profiles`. Answered from the same table
   // spec, so a scenario that declares no medical rows gets an empty list rather
   // than a missing-function error. Like `from()` above it records the argument
   // rather than filtering on it — a spec's rows ARE this family's rows.

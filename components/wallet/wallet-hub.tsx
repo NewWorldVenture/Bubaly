@@ -25,6 +25,7 @@ import {
   deleteWalletRowAction,
 } from '@/app/(app)/wallet/hub-actions';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { todayInZone } from '@/lib/schedule/zoned';
 
 type Account = Tables<'financial_accounts'>;
 type Txn = Tables<'transactions'>;
@@ -483,7 +484,7 @@ function AddAccountModal({ onClose, onDone }: { onClose: () => void; onDone: () 
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label={tr('wallet.institution')} hint={t('walletHub.optional')}>{(id) => <Input id={id} value={v.institution} onChange={(e) => setV({ ...v, institution: e.target.value })} placeholder={t('walletHub.chase')} />}</Field>
-          <Field label={tr('wallet.balance')}>{(id) => <Input id={id} type="number" step="0.01" value={v.balance} onChange={(e) => setV({ ...v, balance: e.target.value })} placeholder="2735.40" />}</Field>
+          <Field label={tr('wallet.balance')}>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" value={v.balance} onChange={(e) => setV({ ...v, balance: e.target.value })} placeholder="2735.40" />}</Field>
         </div>
         <ModalFooter saving={saving} onClose={onClose} disabled={!v.name.trim()} />
       </form>
@@ -506,8 +507,8 @@ function AddCardModal({ onClose, onDone }: { onClose: () => void; onDone: () => 
         </div>
         <div className="grid grid-cols-3 gap-3">
           <Field label={tr('wallet.last4')}>{(id) => <Input id={id} value={v.last_four} onChange={(e) => setV({ ...v, last_four: e.target.value })} maxLength={4} placeholder="4242" />}</Field>
-          <Field label={tr('wallet.available')}>{(id) => <Input id={id} type="number" step="0.01" value={v.available} onChange={(e) => setV({ ...v, available: e.target.value })} placeholder="1250" />}</Field>
-          <Field label={tr('wallet.limit')} hint={t('walletHub.optional')}>{(id) => <Input id={id} type="number" step="0.01" value={v.limit} onChange={(e) => setV({ ...v, limit: e.target.value })} placeholder="5000" />}</Field>
+          <Field label={tr('wallet.available')}>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" value={v.available} onChange={(e) => setV({ ...v, available: e.target.value })} placeholder="1250" />}</Field>
+          <Field label={tr('wallet.limit')} hint={t('walletHub.optional')}>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" value={v.limit} onChange={(e) => setV({ ...v, limit: e.target.value })} placeholder="5000" />}</Field>
         </div>
         <ModalFooter saving={saving} onClose={onClose} disabled={!v.name.trim()} />
       </form>
@@ -546,8 +547,8 @@ function AddRewardModal({ onClose, onDone }: { onClose: () => void; onDone: () =
         <Field label={tr('wallet.programName')}>{(id) => <Input id={id} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} placeholder={t('walletHub.chaseUltimateRewards')} required autoFocus />}</Field>
         <div className="grid grid-cols-3 gap-3">
           <Field label={tr('wallet.kind')}>{(id) => <Select id={id} value={v.kind} onChange={(e) => setV({ ...v, kind: e.target.value })}>{['points', 'miles', 'cashback'].map((k) => <option key={k} value={k}>{k[0].toUpperCase() + k.slice(1)}</option>)}</Select>}</Field>
-          <Field label={tr('wallet.balance')}>{(id) => <Input id={id} type="number" step="0.01" value={v.balance} onChange={(e) => setV({ ...v, balance: e.target.value })} placeholder="1250" />}</Field>
-          <Field label={tr('wallet.value')}>{(id) => <Input id={id} type="number" step="0.01" value={v.value} onChange={(e) => setV({ ...v, value: e.target.value })} placeholder="125" />}</Field>
+          <Field label={tr('wallet.balance')}>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" value={v.balance} onChange={(e) => setV({ ...v, balance: e.target.value })} placeholder="1250" />}</Field>
+          <Field label={tr('wallet.value')}>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" value={v.value} onChange={(e) => setV({ ...v, value: e.target.value })} placeholder="125" />}</Field>
         </div>
         <ModalFooter saving={saving} onClose={onClose} disabled={!v.name.trim()} />
       </form>
@@ -559,13 +560,14 @@ function AddTransactionModal({ accounts, onClose, onDone }: { accounts: Account[
   const t = useTranslations();
   const tr = useTranslations();
   const { saving, submit } = useAddForm(addTransactionAction, onClose, onDone);
-  const [v, setV] = useState({ name: '', merchant: '', amount: '', type: 'expense', status: 'posted', category: '', account_id: '', date: new Date().toISOString().slice(0, 10) });
+  const { family } = useApp();
+  const [v, setV] = useState({ name: '', merchant: '', amount: '', type: 'expense', status: 'posted', category: '', account_id: '', date: todayInZone(family?.timezone ?? 'UTC') });
   return (
     <Modal open onClose={onClose} title={tr('wallet.addTransaction')}>
       <form onSubmit={(e) => { e.preventDefault(); void submit(v); }} className="space-y-4">
         <Field label={tr('wallet.description')}>{(id) => <Input id={id} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} placeholder={t('walletHub.groceryStore')} required autoFocus />}</Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label={tr('wallet.amount')}>{(id) => <Input id={id} type="number" step="0.01" value={v.amount} onChange={(e) => setV({ ...v, amount: e.target.value })} placeholder="87.65" required />}</Field>
+          <Field label={tr('wallet.amount')}>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" value={v.amount} onChange={(e) => setV({ ...v, amount: e.target.value })} placeholder="87.65" required />}</Field>
           <Field label={tr('wallet.type')}>{(id) => <Select id={id} value={v.type} onChange={(e) => setV({ ...v, type: e.target.value })}>{['expense', 'income', 'transfer'].map((t) => <option key={t} value={t}>{t[0].toUpperCase() + t.slice(1)}</option>)}</Select>}</Field>
         </div>
         <div className="grid grid-cols-2 gap-3">

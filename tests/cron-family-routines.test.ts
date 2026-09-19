@@ -24,6 +24,10 @@ const state = vi.hoisted(() => ({
   // Lets a case make one specific update RESOLVE with an error, the way
   // PostgREST does, without touching any other write.
   failUpdate: null as null | ((table: string, patch: Row) => boolean),
+  // Same idea for reads, plus a per-table tally so a test can assert how MANY
+  // round trips a tick made — which is the whole point of batching them.
+  failSelect: null as null | ((table: string) => boolean),
+  selectCounts: {} as Record<string, number>,
 }));
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -38,6 +42,7 @@ vi.mock('@/lib/supabase/server', () => ({
           if (c.startsWith('lte:')) return String(r[c.slice(4)] ?? '') <= String(v);
           if (c.startsWith('not:')) return r[c.slice(4)] !== null && r[c.slice(4)] !== undefined;
           if (c.startsWith('is:')) return (r[c.slice(3)] ?? null) === v;
+          if (c.startsWith('in:')) return (v as unknown[]).includes(r[c.slice(3)]);
           return r[c] === v;
         }));
       };
@@ -57,6 +62,10 @@ vi.mock('@/lib/supabase/server', () => ({
           for (const row of rowsFor()) Object.assign(row, payload);
           return { data: rowsFor(), error: null };
         }
+        state.selectCounts[table] = (state.selectCounts[table] ?? 0) + 1;
+        if (state.failSelect?.(table)) {
+          return { data: null, error: { code: '08006', message: 'connection failure' } };
+        }
         return { data: rowsFor(), error: null };
       };
       const b: Row = {};
@@ -66,6 +75,10 @@ vi.mock('@/lib/supabase/server', () => ({
         lte: (c: string, v: unknown) => { filters[`lte:${c}`] = v; return b; },
         not: (c: string) => { filters[`not:${c}`] = true; return b; },
         is: (c: string, v: unknown) => { filters[`is:${c}`] = v; return b; },
+        // The tick reads every due rule's family zone in ONE `.in()` query
+        // rather than one `.eq()` per rule; the double has to answer that shape
+        // or the cron under test is exercised against a client it never meets.
+        in: (c: string, v: unknown) => { filters[`in:${c}`] = v; return b; },
         insert: (p: Row) => { kind = 'insert'; payload = p; return b; },
         update: (p: Row) => { kind = 'update'; payload = p; return b; },
         single: async () => { const r = result(); return { data: Array.isArray(r.data) ? r.data[0] ?? null : r.data, error: r.error }; },
@@ -117,6 +130,8 @@ beforeEach(() => {
   vi.setSystemTime(FROZEN_NOW);
   vi.clearAllMocks();
   state.failUpdate = null;
+  state.failSelect = null;
+  state.selectCounts = {};
   state.rules = [{ ...RULE }];
   state.families = [{ id: 'fam-1', timezone: 'America/New_York' }];
   state.routineRuns = [];
@@ -333,5 +348,37 @@ describe('a reservation nobody came back for', () => {
     expect(await res.json()).toMatchObject({ skipped: 1 });
     expect(state.routineRuns[0]).toMatchObject({ status: 'filed', request_id: 'req-1' });
     expect(state.rules[0].next_run_at).toBe(RULE.next_run_at);
+  });
+});
+
+describe("a tick reads each family's wall clock once, and never guesses it", () => {
+  it('reads `families` ONCE for many rules, not once per rule', async () => {
+    // Six routines, one household. The zone is the same fact six times.
+    state.rules = Array.from({ length: 6 }, (_, i) => ({
+      ...RULE, id: `rule-${i + 1}`, next_run_at: '2026-09-05T12:00:00.000Z',
+    }));
+
+    const res = await GET(req() as never);
+    expect(res.status).toBe(200);
+
+    // The reads used to sit inside the loop, so this was 6 (plus the arming
+    // pass). The tick is deadline-bounded, so every wasted round trip is a
+    // routine that does not get processed before the worker gives up.
+    expect(state.selectCounts.families).toBe(1);
+  });
+
+  it('files nothing when the zone read fails, rather than filing against a guessed one', async () => {
+    state.failSelect = (table) => table === 'families';
+
+    const res = await GET(req() as never);
+
+    // The read it replaces destructured `{ data: family }` alone and fell back
+    // to 'America/New_York'. That is not a loss of precision — it ASSERTS a US
+    // zone for a family that may be in Tokyo, and files their routine against
+    // the wrong day. Late is recoverable; wrong wall clock is the bug this
+    // file's own DST handling exists to prevent.
+    expect(res.status).toBe(500);
+    expect(state.routineRuns).toHaveLength(0);
+    expect(mocks.createRequest).not.toHaveBeenCalled();
   });
 });

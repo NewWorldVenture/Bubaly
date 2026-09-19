@@ -1,4 +1,4 @@
--- Bubaly :: 0312 - a prescription is a parent's to write
+-- Bubaly :: 0328 - a prescription is a parent's to write
 -- ----------------------------------------------------------------------------
 -- Renumbered from 0300. A parallel session landed
 -- `0300_entitlement_is_not_client_writable.sql` on main for a different

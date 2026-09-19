@@ -3,6 +3,7 @@ import { PartialReadBanner } from '@/components/ui/partial-read-banner';
 import { Home, Users, CreditCard, DollarSign, FolderLock, Activity } from 'lucide-react';
 import { createServiceClient, describeConfiguredServiceKey } from '@/lib/supabase/server';
 import { settleAll, describeReadError, credentialHint } from '@/lib/supabase/settle';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { Card } from '@/components/ui/card';
 import { EmptyState, ErrorState } from '@/components/ui/states';
 import { Donut, Bars } from '@/components/admin/charts';
@@ -59,15 +60,39 @@ export default async function AdminReportsPage() {
     return { rework: null, compression: null, compressionRead: 'failed' as const, conversion: null, referrals: null };
   });
 
-  const [familyCountResult, userCountResult, activeSubCountResult, familiesResult, profilesResult, subscriptionsResult, docsResult, activityResult] = await settleAll([
+  // The three `head: true` counts are exact and uncapped — a count is not rows.
+  // The reads UNDER them are rows, and an unbounded select is answered with at
+  // most `db-max-rows` (1,000) and no signal, so every aggregate below was
+  // computed over a prefix the moment a table passed a thousand: the storage
+  // total understated, the revenue trend built from 1,000 subscriptions, and
+  // the Documents tile — which renders `docs.length` — pinned at exactly 1,000
+  // forever, sitting beside family and subscription tiles that were exact.
+  //
+  // `readAllAsQuery` pages to a REAL ceiling and, on reaching it, returns an
+  // error saying the rows are a prefix. That error joins `readFailures` below,
+  // so passing the ceiling shows the incomplete-report banner instead of
+  // quietly reporting a smaller platform than exists.
+  //
+  // These ceilings bound the page's round trips (one per 1,000 rows). They are
+  // the honest interim: the real fix for growth buckets and a byte total is a
+  // database aggregate rather than reading every row into the page, which is a
+  // larger change than this one. Recorded in audit/claude-1.md.
+  const ROW_CEILING = 25_000;
+  const [familyCountResult, userCountResult, activeSubCountResult, docCountResult, familiesResult, profilesResult, subscriptionsResult, docsResult, activityResult] = await settleAll([
     supabase.from('families').select('id', { count: 'exact', head: true }),
     supabase.from('profiles').select('id', { count: 'exact', head: true }),
     supabase.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'active'),
-    supabase.from('families').select('created_at'),
-    supabase.from('profiles').select('created_at'),
-    supabase.from('subscriptions').select('plan, status, created_at'),
-    supabase.from('documents').select('size_bytes'),
-    supabase.from('audit_logs').select('created_at').gte('created_at', fourteenDaysAgo),
+    supabase.from('documents').select('id', { count: 'exact', head: true }),
+    readAllAsQuery<{ created_at: string }>((from, to) =>
+      supabase.from('families').select('created_at').order('id').range(from, to), { max: ROW_CEILING }),
+    readAllAsQuery<{ created_at: string }>((from, to) =>
+      supabase.from('profiles').select('created_at').order('id').range(from, to), { max: ROW_CEILING }),
+    readAllAsQuery<{ plan: string | null; status: string | null; created_at: string }>((from, to) =>
+      supabase.from('subscriptions').select('plan, status, created_at').order('id').range(from, to), { max: ROW_CEILING }),
+    readAllAsQuery<{ size_bytes: number | null }>((from, to) =>
+      supabase.from('documents').select('size_bytes').order('id').range(from, to), { max: ROW_CEILING }),
+    readAllAsQuery<{ created_at: string }>((from, to) =>
+      supabase.from('audit_logs').select('created_at').gte('created_at', fourteenDaysAgo).order('id').range(from, to), { max: ROW_CEILING }),
   ]);
 
   // Awaited here, before any early return, so the in-flight read always has an
@@ -87,6 +112,7 @@ export default async function AdminReportsPage() {
     ['family count', familyCountResult],
     ['user count', userCountResult],
     ['active sub count', activeSubCountResult],
+    ['document count', docCountResult],
     ['families', familiesResult],
     ['profiles', profilesResult],
     ['subscriptions', subscriptionsResult],
@@ -139,7 +165,7 @@ export default async function AdminReportsPage() {
     { icon: Users, key: 'users', label: tr('adminReports.totalUsers'), value: (userCount ?? 0).toLocaleString(), tint: 'text-blue-400 bg-blue-500/15' },
     { icon: CreditCard, key: 'subscriptions', label: tr('adminReports.activeSubscriptions'), value: (activeSubCount ?? 0).toLocaleString(), tint: 'text-emerald-400 bg-emerald-500/15' },
     { icon: DollarSign, key: 'revenue', label: tr('adminReports.monthlyRevenue'), value: fmtMoney(mrrCents), tint: 'text-amber-400 bg-amber-500/15' },
-    { icon: FolderLock, key: 'documents', label: tr('adminReports.documents'), value: (docs ?? []).length.toLocaleString(), tint: 'text-rose-400 bg-rose-500/15' },
+    { icon: FolderLock, key: 'documents', label: tr('adminReports.documents'), value: (docCountResult.count ?? 0).toLocaleString(), tint: 'text-rose-400 bg-rose-500/15' },
     { icon: Activity, key: 'storage', label: tr('adminReports.storageUsed'), value: fmtBytes(usedBytes), tint: 'text-cyan-400 bg-cyan-500/15' },
   ];
 

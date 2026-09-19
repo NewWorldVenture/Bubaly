@@ -6,10 +6,43 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
 import { getAISettings } from '@/lib/services/ai-settings';
 import { nextRelativeFire, scheduleOf } from '@/lib/services/routines';
-import { nextCronRun } from '@/lib/services/routines/schedule';
+import { firesOncePerDay, nextCronRun, sameLocalMinute } from '@/lib/services/routines/schedule';
 import { createRequest, createRun } from '@/lib/ai/runs/store';
 import { kickRun } from '@/lib/ai/runs/continue';
 import type { ServiceScope } from '@/lib/services/types';
+
+/** Family id → timezone, read once per tick instead of once per rule.
+ *
+ * Both loops in this file used to read `families.timezone` INSIDE the loop, so
+ * a family with ten routines cost ten identical round trips. That matters here
+ * specifically because the tick is deadline-bounded: every wasted round trip is
+ * a routine that does not get processed before the worker gives up, and a
+ * routine that is not processed does not fire.
+ *
+ * The error is returned, not swallowed. The reads it replaces destructured
+ * `{ data: family }` alone and fell back to 'America/New_York' — so a failed
+ * read did not lose precision, it ASSERTED a specific US zone for a family that
+ * might be in Tokyo, and filed their routine against the wrong day. A routine
+ * that fires late is recoverable; one filed against the wrong wall clock is the
+ * bug this file's own DST handling exists to prevent.
+ */
+async function timezonesFor(
+  db: DB,
+  rules: readonly { family_id: string }[],
+): Promise<{ zones: Map<string, string>; error: unknown }> {
+  const ids = [...new Set(rules.map((r) => r.family_id).filter(Boolean))];
+  if (ids.length === 0) return { zones: new Map(), error: null };
+  const { data, error } = await db.from('families').select('id, timezone').in('id', ids);
+  if (error) return { zones: new Map(), error };
+  return { zones: new Map((data ?? []).map((f) => [f.id, f.timezone])), error: null };
+}
+
+/** The zone for a rule's family, or null when the read failed and we must not guess. */
+function zoneFor(zones: Map<string, string>, familyId: string): string {
+  // A family row that is genuinely absent or blank keeps the long-standing
+  // default. Only a FAILED read is treated as unknown, above.
+  return zones.get(familyId) || 'America/New_York';
+}
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -81,13 +114,21 @@ export async function GET(req: NextRequest) {
   let skipped = 0;
   const problems: string[] = [];
 
+  const { zones, error: zonesError } = await timezonesFor(db, due ?? []);
+  if (zonesError) {
+    // Every rule in this tick needs a wall clock and none of them has one.
+    // Filing them against a guessed zone is the one outcome worse than filing
+    // them a tick late, so the tick reports the failure and fires nothing.
+    console.error('[cron:family-routines] could not read family timezones', zonesError);
+    return NextResponse.json({ error: t('familyRoutines.couldNotReadRoutines') }, { status: 500 });
+  }
+
   for (const rule of due ?? []) {
     if (Date.now() > deadline) break;
     const dueAt = rule.next_run_at;
     if (!dueAt) continue;
 
-    const { data: family } = await db.from('families').select('timezone').eq('id', rule.family_id).maybeSingle();
-    const tz = family?.timezone ?? 'America/New_York';
+    const tz = zoneFor(zones, rule.family_id);
 
     // Reserve the occurrence first. A duplicate key means another worker has
     // it — not an error, just somebody else's turn.
@@ -168,9 +209,25 @@ export async function GET(req: NextRequest) {
 
     // Schedule the next occurrence. A cron's is arithmetic; a relative
     // routine's is read from its anchor rows, because the trip may have moved.
-    const next = schedule.kind === 'cron'
+    let next = schedule.kind === 'cron'
       ? nextCronRun(schedule.expr, now, tz)
       : await nextRelativeFire(db, rule.family_id, schedule, now, tz);
+
+    // The autumn DST transition repeats an hour, so a once-a-day routine's wall
+    // clock arrives TWICE. Measured for America/New_York on 2026-11-01: a
+    // `30 1 * * *` rule matches 05:30Z and again 06:30Z, and both render as
+    // 01:30 to the family. The occurrence key is (rule_id, due_at), and those
+    // are two different instants, so the reservation above does not stop it —
+    // the routine simply happens twice that night.
+    //
+    // Only for a FIXED hour. `0 * * * *` also repeats its wall clock across the
+    // transition and should run in both, because two real hours pass; the
+    // family did not ask for a time of day there, they asked for every hour.
+    if (schedule.kind === 'cron' && next && dueAt
+        && firesOncePerDay(schedule.expr)
+        && sameLocalMinute(next, new Date(dueAt), tz)) {
+      next = nextCronRun(schedule.expr, next, tz);
+    }
     // This write is the only thing that moves the rule off the occurrence it
     // just handled, and its result was discarded. A refused update leaves
     // next_run_at on the due_at that has already passed, so the next tick picks
@@ -233,12 +290,21 @@ async function armPendingRoutines(db: DB, now: Date): Promise<number> {
     return 0;
   }
 
+  const { zones, error: zonesError } = await timezonesFor(db, pending ?? []);
+  if (zonesError) {
+    // Arming writes `next_run_at`, the instant every later tick compares
+    // against. Computing it from a guessed zone would bake the wrong wall
+    // clock into the rule until something rearms it, so: nothing armed, and
+    // the tick says so by returning 0.
+    console.error('[cron:family-routines] could not read family timezones while arming', zonesError);
+    return 0;
+  }
+
   let armed = 0;
   for (const rule of pending ?? []) {
     const schedule = scheduleOf(rule);
     if (!schedule) continue;
-    const { data: family } = await db.from('families').select('timezone').eq('id', rule.family_id).maybeSingle();
-    const tz = family?.timezone ?? 'America/New_York';
+    const tz = zoneFor(zones, rule.family_id);
     const next = await nextFireAfter(db, rule.family_id, schedule, now, tz);
     if (!next) continue;
     // `armed` is returned and reported in the response precisely so a quiet tick

@@ -90,7 +90,7 @@ export function StripeSetupForm({ initial }: { initial: StripeSetupInitial }) {
             {(id) => (
               <div className="relative">
                 <Percent className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-                <Input id={id} type="number" min={0} step="0.01" value={feeDollars}
+                <Input id={id} type="number" inputMode="decimal" min={0} step="0.01" value={feeDollars}
                   onChange={(e) => setFeeDollars(e.target.value)} className="pl-9" placeholder="0.90" />
               </div>
             )}

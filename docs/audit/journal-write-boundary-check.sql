@@ -1,4 +1,4 @@
--- Behavioural proof for 0315, run as real `authenticated` sessions under RLS.
+-- Behavioural proof for 0331, run as real `authenticated` sessions under RLS.
 --
 -- `journal_entries` had ONE policy — `FOR ALL using/with check
 -- (is_family_member(family_id))` — so every member of a household could read,
@@ -137,5 +137,5 @@ begin
   delete from public.family_members   where user_id in (parent_uid, kid_uid);
   delete from public.families         where id = fam;
 
-  raise notice '0315 journal write boundary: all assertions held';
+  raise notice '0331 journal write boundary: all assertions held';
 end $$;

@@ -27,6 +27,15 @@ const ROOT = join(__dirname, '..');
  *
  *   lib/wallet/server.ts  childSpendableCents  — "what a card authorization is
  *                                                checked against in real time"
+ *                                                (since REMOVED on main: the
+ *                                                claim was false — the live
+ *                                                check is wallet_reserve_card_auth,
+ *                                                summing in SQL under `for
+ *                                                update` — and the function had
+ *                                                no callers. Deleting it beat
+ *                                                fixing it, because the comment
+ *                                                invited the next author to wire
+ *                                                it into exactly that decision.)
  *   lib/wallet/server.ts  bucketBalanceCents   — "Used to validate spend +
  *                                                transfers so a wallet can never
  *                                                overdraw"
@@ -116,13 +125,12 @@ describe('a truncated sum is a wrong balance', () => {
 /**
  * The ratchet. A function that SUMS the ledger must page; one that LISTS it need
  * not, and read-all.ts draws that line itself ("Pass `failOnMax: false` only
- * where the rows are LISTED rather than summed"). So this is scoped to the three
- * balance derivations by name rather than to every read of the table — the six
+ * where the rows are LISTED rather than summed"). So this is scoped to the
+ * remaining balance derivations by name rather than to every read of the table — the six
  * other `wallet_transactions` statements are three writes and three bounded
  * reads, and sweeping those in would be asserting something untrue about them.
  */
 const LEDGER_SUMS: { file: string; fn: string }[] = [
-  { file: 'lib/wallet/server.ts', fn: 'childSpendableCents' },
   { file: 'lib/wallet/server.ts', fn: 'bucketBalanceCents' },
   { file: 'app/(app)/wallet/invest/actions.ts', fn: 'investBucket' },
 ];
@@ -149,7 +157,18 @@ describe('every ledger sum pages', () => {
     const offenders: string[] = [];
     for (const { file, fn } of LEDGER_SUMS) {
       const body = bodyOf(readFileSync(join(ROOT, file), 'utf8'), fn);
-      if (!body.includes('readAll<')) offenders.push(`${file}: ${fn} does not page`);
+      // `readAllAsQuery` counts: it delegates straight to `readAll` with the
+      // same options and differs only in returning { data } instead of { rows },
+      // so it pages and honours failOnMax identically. Matching only `readAll<`
+      // would have flagged a correctly-paged read the moment a call site moved
+      // to the batch-shaped helper.
+      //
+      // Written as two `includes` rather than /readAll(AsQuery)?</ on purpose:
+      // that regex matches under plain node and does NOT under vitest's oxc
+      // transform, which silently flagged both correctly-paged reads. A guard
+      // whose matcher depends on the transformer is worse than a plain string.
+      const pages = body.includes('readAll<') || body.includes('readAllAsQuery<');
+      if (!pages) offenders.push(`${file}: ${fn} does not page`);
       // readAll's own header: "an unordered paged read can repeat or skip rows
       // between pages". For a sum either one is a wrong total, so the order is
       // not optional here the way it is for a list.

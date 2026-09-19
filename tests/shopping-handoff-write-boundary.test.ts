@@ -62,7 +62,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
   db = createInMemorySupabase<SupabaseClient<Database>>({
-    // `family_allergies()` (0316) is served by the fake itself, off the seeded
+    // `family_allergies()` (0332) is served by the fake itself, off the seeded
     // `medical_profiles` rows, so the allergy tests below still describe real
     // data rather than a script.
     defaults: {

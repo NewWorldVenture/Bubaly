@@ -1,5 +1,5 @@
 -- ============================================================================
--- 0315 — a journal is the one thing nobody else writes
+-- 0331 — a journal is the one thing nobody else writes
 --
 -- `journal_entries` resolves to a single policy:
 --
@@ -120,6 +120,6 @@ begin
     and p.polname not in ('journal_entries_insert', 'journal_entries_update', 'journal_entries_delete');
 
   if stray is not null then
-    raise exception '0315: a permissive write policy still stands on journal_entries: %', stray;
+    raise exception '0331: a permissive write policy still stands on journal_entries: %', stray;
   end if;
 end $$;

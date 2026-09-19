@@ -1,6 +1,6 @@
 // app/api/guardian/escalate/route.ts
 // Emergency escalation endpoint — called when AI detects an emergency call.
-// Notifies ALL parent members via push + SMS + attempted outbound call.
+// Notifies every manager (parent + adult) via push + SMS + attempted outbound call.
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
@@ -12,6 +12,7 @@ import { claimGuardianCallback, markGuardianCallbackError, markGuardianCallbackP
 import { guardianEscalationEventId, guardianEscalationSchema } from '@/lib/guardian/escalation';
 import { secretEquals } from '@/lib/server/secret-equals';
 import { appBaseUrl } from '@/lib/server/app-url';
+import { isManager } from '@/lib/constants/roles';
 
 export const runtime = 'nodejs';
 
@@ -105,7 +106,11 @@ export async function POST(req: NextRequest) {
     const phoneMap = new Map((profiles ?? []).map((p: { id: string; phone?: string | null }) => [p.id, p.phone]));
     for (const member of members) {
       const m = member as { id: string; user_id: string | null; display_name: string; role: string };
-      if (!['owner', 'manager', 'parent'].includes(m.role)) continue;
+      // The manager pair this product actually has. `public.member_role` is
+      // ('parent','adult','teen','child','caregiver','guest') — the list here
+      // used to read ['owner', 'manager', 'parent'], and two of those three
+      // match nobody, so an adult co-parent was never texted or called.
+      if (!isManager(m.role)) continue;
       const phone = m.user_id ? phoneMap.get(m.user_id) : null;
       if (!phone) continue;
       notifiedIds.push(m.id);

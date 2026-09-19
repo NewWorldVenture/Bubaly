@@ -4,7 +4,7 @@
 // notifications already created for the same item. Deterministic by design:
 // notifications must be trustworthy, so this is rule-based, not AI-generated.
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { settleAll } from '@/lib/supabase/settle';
+import { settle, settleAll, describeReadError } from '@/lib/supabase/settle';
 import type { Database, NotificationType } from '@/lib/database.types';
 import { renewalReminders, opportunityReminders } from '@/lib/notifications/deadline-reminders';
 import { approvalReminders, type ApprovalInput } from '@/lib/notifications/approval-reminders';
@@ -66,8 +66,21 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   // starts at 09:00 the PREVIOUS local day, so yesterday's dose is mistaken for
   // today's and the reminder never fires. A missed medication reminder is the
   // worse of the two, and neither is acceptable.
-  const { data: familyRow } = await supabase
-    .from('families').select('timezone').eq('id', familyId).maybeSingle();
+  // ...which is why the ERROR here is not dropped. This read used to be
+  // `const { data: familyRow }`, so a failed read fell through to exactly the
+  // `'UTC'` the paragraph above spends ten lines explaining is unacceptable —
+  // silently, and most damagingly for the medication reminder that then never
+  // fires. Throwing instead skips this family for this tick: all three callers
+  // wrap each family in try/catch and count `generationFailures`, so the family
+  // is retried next tick and a broken tick still reads differently from a quiet
+  // one. Late is recoverable; a dose reminder that never fires is not.
+  const { data: familyRow, error: familyZoneError } = await settle(
+    supabase.from('families').select('timezone').eq('id', familyId).maybeSingle());
+  if (familyZoneError) {
+    throw new Error(`Could not read the family timezone for ${familyId}: ${describeReadError(familyZoneError)}`);
+  }
+  // A family row with no zone set is a different thing from one we could not
+  // read, and keeps the long-standing default.
   const tz = familyRow?.timezone || 'UTC';
   const todayKey = dayKeyInTz(now, tz);
   const todayStartIso = new Date(zonedDayBoundsMs(todayKey, tz).start).toISOString();

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Check, X, HelpCircle, MapPin, Clock, CalendarDays, Pencil, Trash2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
+import { settle, describeReadError } from '@/lib/supabase/settle';
 import { deleteCalendarEventAction } from '@/app/(app)/dashboard/calendar/actions';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -40,6 +41,7 @@ export function EventDetailModal({ event, members, selfMemberId, familyId, onClo
   const t = useTranslations();
   const { error: toastError } = useToast();
   const [rsvps, setRsvps] = useState<Rsvp[]>([]);
+  const [rsvpError, setRsvpError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -65,9 +67,17 @@ export function EventDetailModal({ event, members, selfMemberId, familyId, onClo
   useEffect(() => {
     const supabase = createClient();
     let active = true;
-    void supabase.from('event_rsvps').select('*').eq('event_id', event.id).then(({ data }) => {
-      if (active) setRsvps(data ?? []);
-    });
+    void (async () => {
+      // A dropped error here rendered "No RSVPs yet — be the first!" over a
+      // read that never came back, so a family saw nobody had replied when
+      // people had. `settle` also covers the transport rejection the bare
+      // `.then()` left unhandled.
+      const { data, error } = await settle(supabase.from('event_rsvps').select('*').eq('event_id', event.id));
+      if (!active) return;
+      if (error) { setRsvpError(describeReadError(error)); return; }
+      setRsvpError(null);
+      setRsvps(data ?? []);
+    })();
     return () => { active = false; };
   }, [event.id]);
 
@@ -153,7 +163,9 @@ export function EventDetailModal({ event, members, selfMemberId, familyId, onClo
               </div>
             );
           })}
-          {rsvps.length === 0 && <p className="text-sm text-muted">{t('eventDetailModal.noRsvpsYetBeTheFirst')}</p>}
+          {rsvpError
+            ? <p className="text-sm text-danger">{rsvpError}</p>
+            : rsvps.length === 0 && <p className="text-sm text-muted">{t('eventDetailModal.noRsvpsYetBeTheFirst')}</p>}
         </div>
 
         {/* Edit / delete — any family member (family-scoped RLS governs). Delete

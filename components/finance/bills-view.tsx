@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { usd, billDueStatus, DUE_META, fmtDueDate } from '@/lib/finance/hub';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { todayInZone } from '@/lib/schedule/zoned';
 
 type Bill = Tables<'bills'>;
 export type BillsMode = 'all' | 'autopay' | 'due';
@@ -145,9 +146,10 @@ export function BillsView({ mode }: { mode: BillsMode }) {
 
 function BillModal({ familyId, userId, defaultAutopay, onClose }: { familyId: string; userId: string; defaultAutopay: boolean; onClose: () => void }) {
   const t = useTranslations();
+  const { family } = useApp();
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
-  const [v, setV] = useState({ name: '', amount: '', due_date: new Date().toISOString().slice(0, 10), category: 'Utilities', is_recurring: true, autopay: defaultAutopay });
+  const [v, setV] = useState({ name: '', amount: '', due_date: todayInZone(family?.timezone ?? 'UTC'), category: 'Utilities', is_recurring: true, autopay: defaultAutopay });
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -169,7 +171,7 @@ function BillModal({ familyId, userId, defaultAutopay, onClose }: { familyId: st
       <form onSubmit={submit} className="space-y-4">
         <Field label={t('bills.billName')}>{(id) => <Input id={id} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} placeholder={t('billsView.electricBill')} required autoFocus />}</Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label={t('bills.amount')}>{(id) => <Input id={id} type="number" step="0.01" value={v.amount} onChange={(e) => setV({ ...v, amount: e.target.value })} placeholder="120.00" required />}</Field>
+          <Field label={t('bills.amount')}>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" value={v.amount} onChange={(e) => setV({ ...v, amount: e.target.value })} placeholder="120.00" required />}</Field>
           <Field label={t('bills.dueDate')}>{(id) => <Input id={id} type="date" value={v.due_date} onChange={(e) => setV({ ...v, due_date: e.target.value })} />}</Field>
         </div>
         <Field label={t('bills.category')}>{(id) => <Select id={id} value={v.category} onChange={(e) => setV({ ...v, category: e.target.value })}>{CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}</Select>}</Field>
