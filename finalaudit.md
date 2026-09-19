@@ -4360,3 +4360,106 @@ three pre-existing warnings. CI green on `b0bacc54`.
 **Still the one recommendation this audit would make above all others: break
 what a guard protects and confirm it goes red.** This pass adds a corollary —
 **and check that it was looking there at all.**
+
+---
+
+# Pass C1-K — section C: the client code paths behind the swept tables
+
+Session `01KRUgA6hD6QgzmtpSP6TUmP`, working the "Auditable now" list: the
+sensitive tables were swept at the RLS layer, and what had never been examined
+is the client code around them — reads, writes, delete handling, error
+reporting. Two defects, one withdrawn hypothesis, two modules swept clean.
+
+> A note on this file: the copy on `main` is 4,362 lines and does not contain
+> Passes S/T or the C1-S6-* findings, so this pass was written without being
+> able to read them. If they land later, the overlap to check first is
+> `medical-records-module`.
+
+## C1-K-01 · HIGH · A write RLS refused was reported as a write that happened
+
+`health_providers`, `insurance_policies` and `medical_profiles` are
+`SELECT is_family_member` but `UPDATE`/`DELETE can_manage_family`. That gate
+works — Pass T was right about it. The defect is on the client side of it.
+
+A teen, child or caregiver sees the provider list, the insurance cards and the
+medical profile, and can press Delete on any of them. **RLS does not refuse
+those statements with an error.** It matches zero rows and returns success. All
+five write handlers in `medical-records-module` read
+
+```ts
+if (err) { toastError(...); return; }
+success('Deleted');
+```
+
+so they announced a deletion that did not happen, and "Profile saved" over
+allergies and emergency contacts that never changed.
+
+Measured in `docs/audit/health-write-gate-check.sql` against the replayed
+schema: a teen's `DELETE` on `health_providers` affects **0 rows and raises
+nothing** while the teen can still `SELECT` it (the control — otherwise
+"cannot delete" would only mean "cannot see"), a teen's `UPDATE` on
+`insurance_policies` likewise, and a parent's `DELETE` affects 1.
+
+Fixed by giving each of the five writes `.select('id')` and refusing on an
+empty result with `actions.onlyAParentGuardianCan16` — a key that already
+exists in all seven locales, so no half-translated string ships with the fix.
+Inserts blocked by RLS *do* raise, so only the update paths needed the count.
+
+**Blast radius beyond this module: 30 tables** are member-read / manager-write
+(`approval_requests`, `bills`, `budgets`, `child_wallets`, `families`,
+`family_members`, `financial_accounts`, `savings_goals`, `wallet_*`, …). Any
+client handler that writes one of them and reports success on `!error` alone
+has this defect. This pass fixed the three named in section C; the rest is the
+next pass's list.
+
+## C1-K-02 · MEDIUM · A best-effort log could lose the capture it was logging
+
+`run()` in `voice-module` saves the capture, then writes the voice history
+under a comment stating the contract: *"best-effort — a logging failure must
+not lose the thing we just created"*. The write sat inside the same `try`,
+awaited bare. supabase-js **resolves** an API error (which the bare await
+ignored, honouring the contract) but **rejects** a transport failure — and that
+rejection jumped to the catch, which reported "Could not run that command",
+offered no Undo for the thing that had been created, and wrote a `failed` row
+into the history it was trying to keep honest. The capture survived in the
+database with no route back to it from the UI.
+
+The second insert has the same shape *inside* the catch, where a rejection
+replaces the real failure with its own.
+
+Both now terminate their own promise with an `onRejected` handler and log.
+
+## Withdrawn · `medications` is not unguarded
+
+Listing the policies on `medications` shows a `can_manage_family` gate sitting
+beside an `is_family_member` policy for insert/update/delete — which reads as a
+manager gate defeated by a broad one, since permissive policies are OR'd. They
+are not both permissive: the `can_manage_family` ones are **RESTRICTIVE**, so
+they AND. A teen cannot write medications.
+
+Recorded because the listing that misled me is the obvious one — it omits
+`polpermissive` — and the probe now asserts the true invariant so the next
+reader gets the answer from the database instead of the policy names.
+
+## Swept clean
+
+- **`locator-module`** (live location, the highest-priority entry). Reads
+  capture `locationsError`/`placesError`/`eventsError` and short-circuit to an
+  `ErrorState` with retry *before* the map renders, so a failed read cannot
+  show an empty map as "nobody is anywhere". Every write goes through a server
+  action and checks `res.ok`.
+- **`health-visits-module`**. `health_visits` is `ALL is_family_member`, so no
+  manager gate exists to be misreported; its delete confirms first and reports
+  both branches.
+
+## Verification
+
+`tsc` clean · `next lint` 0 errors · **13,958 tests / 1,226 files** ·
+**40/40 probes** (330 migrations replayed, 0 failed).
+
+Both fixes calibrated by reverting them: removing the row checks fails 2 of the
+8 assertions in `a-refused-health-write-does-not-say-saved`, removing one
+rejection handler fails 2 of 5 in
+`a-voice-log-failure-does-not-lose-the-capture`. Controls hold in both
+directions — the pre-existing error branches still fire, and Undo still appears
+on success.

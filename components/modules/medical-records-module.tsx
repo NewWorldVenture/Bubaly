@@ -131,19 +131,28 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       is_primary: providerForm.is_primary,
       notes: providerForm.notes || null,
     };
-    const { error: err } = providerForm.id
-      ? await sb.from('health_providers').update(fields).eq('id', providerForm.id)
-      : await sb.from('health_providers').insert({ ...fields, family_id: familyId, kind, created_by: userId });
+    // `.select('id')` is what makes a REFUSED write tell itself apart from a
+    // successful one. health_providers / insurance_policies / medical_profiles
+    // are SELECT is_family_member but UPDATE/DELETE can_manage_family, so a
+    // teen, child or caregiver SEES these records and cannot change them — and
+    // RLS does not refuse them with an error. It matches zero rows and returns
+    // success, so `if (error)` alone reported "saved" over an unchanged row.
+    // (An INSERT blocked by RLS does raise, so only the update path needs this.)
+    const { data: rows, error: err } = providerForm.id
+      ? await sb.from('health_providers').update(fields).eq('id', providerForm.id).select('id')
+      : await sb.from('health_providers').insert({ ...fields, family_id: familyId, kind, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(`Could not save ${providerWord.toLowerCase()}`); return; }
+    if (!rows?.length) { toastError(t('actions.onlyAParentGuardianCan16')); return; }
     success(`${providerWord} saved`);
     setProviderForm(null);
   }
 
   async function deleteProvider(id: string) {
     const sb = createClient();
-    const { error: err } = await sb.from('health_providers').delete().eq('id', id);
+    const { data: rows, error: err } = await sb.from('health_providers').delete().eq('id', id).select('id');
     if (err) { toastError(t('medicalRecordsModule.couldNotDelete')); return; }
+    if (!rows?.length) { toastError(t('actions.onlyAParentGuardianCan16')); return; }
     success(t('medicalRecordsModule.deleted'));
   }
 
@@ -179,19 +188,21 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       back_image_path: policyForm.back_image_path || null,
       notes: policyForm.notes || null,
     };
-    const { error: err } = policyForm.id
-      ? await sb.from('insurance_policies').update(fields).eq('id', policyForm.id)
-      : await sb.from('insurance_policies').insert({ ...fields, family_id: familyId, kind, created_by: userId });
+    const { data: rows, error: err } = policyForm.id
+      ? await sb.from('insurance_policies').update(fields).eq('id', policyForm.id).select('id')
+      : await sb.from('insurance_policies').insert({ ...fields, family_id: familyId, kind, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(t('medicalRecordsModule.couldNotSaveInsurance')); return; }
+    if (!rows?.length) { toastError(t('actions.onlyAParentGuardianCan16')); return; }
     success(t('medicalRecordsModule.insuranceSaved'));
     setPolicyForm(null);
   }
 
   async function deletePolicy(id: string) {
     const sb = createClient();
-    const { error: err } = await sb.from('insurance_policies').delete().eq('id', id);
+    const { data: rows, error: err } = await sb.from('insurance_policies').delete().eq('id', id).select('id');
     if (err) { toastError(t('medicalRecordsModule.couldNotDelete')); return; }
+    if (!rows?.length) { toastError(t('actions.onlyAParentGuardianCan16')); return; }
     success(t('medicalRecordsModule.deleted'));
   }
 
@@ -217,9 +228,11 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       notes: profileForm.notes || null,
       updated_by: userId,
     };
-    const { error: err } = await sb.from('medical_profiles').upsert(payload, { onConflict: 'member_id' });
+    const { data: rows, error: err } = await sb.from('medical_profiles')
+      .upsert(payload, { onConflict: 'member_id' }).select('id');
     setSaving(false);
     if (err) { toastError(t('medicalRecordsModule.couldNotSaveProfile')); return; }
+    if (!rows?.length) { toastError(t('actions.onlyAParentGuardianCan16')); return; }
     success(t('medicalRecordsModule.profileSaved'));
     setProfileForm(null);
   }
