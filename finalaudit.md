@@ -2,17 +2,17 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-19T22:45:32.788Z
-- Total Audit Items: 14043
+- Last Updated: 2026-09-19T22:54:38.375Z
+- Total Audit Items: 14045
 - Not Started: 13842
 - In Progress: 192
 - Passed: 0
-- Fixed + Passed: 7
-- Blocked: 0
+- Fixed + Passed: 8
+- Blocked: 1
 - Failed: 2
 - Overall Completion: 0.04%
 
-Database-execution cycle: the local Supabase stack was brought up healthy and all 318 migrations applied, so this pass judged the database by running it rather than by reading it. That turned up DB-FN-001, a feature that has never worked in production: `marketplace_create_circle` is `security definer` and pinned `set search_path = public`, but Supabase keeps pgcrypto in the `extensions` schema, so every call since 0176 raised `function gen_random_bytes(integer) does not exist (42883)` and no family has ever created a sharing circle. 0318 pins `public, extensions`, matching 0238's working precedent, and circle creation now completes end to end. The guard that should have caught it was watching the exact line and asking the wrong question — it verified that a definer function PINS a search_path, which this one did — so `tests/definer-search-path-pinned.test.ts` gains the other half: the pin must also REACH what the body calls. Separately, running the boundary suite twice in a row exposed three probes that were not proving what the suite's green count implied (TEST-004/005/006): one passed on a virgin database and failed forever after, one ERRORED rather than ran on every Supabase database it was ever pointed at, so the wallet overspend race had never once been exercised, and one aborted during fixture setup before any assertion ran. All three are repaired and the invariants they were meant to prove now genuinely hold. `docs/audit/run-probes.sh` passes 39/39, twice in succession, for the first time. These are local-execution results against a local stack; they do not by themselves establish deployed behavior, and 0318 is a PENDING PRODUCTION MIGRATION that a human must apply.
+Database-execution cycle: the local Supabase stack was brought up healthy and every migration applied, so this pass judged the database by running it rather than by reading it. It found three features that have never worked in production and two live boundary breaches. DB-FN-001: `marketplace_create_circle` is `security definer` and pinned `set search_path = public`, but Supabase keeps pgcrypto in the `extensions` schema, so every call since 0176 raised 42883 and no family has ever created a sharing circle. DB-FN-002: `invest_decide_order` writes the ledger `direction` from a CASE over two string literals, which is `text` and does not cast to the enum — so APPROVAL has raised 42804 since 0196 while REJECTION worked, and a parent could decline a child's investment for ever while no order was ever filled. SEC-006: the locator's own comment says "Strictly self-only" and the server action honours it, but that was the only place it held — measured as a child, rewrote the parent's live location, deleted it, and fabricated an arrival event attributed to them. AUTHZ-003, open at FAIL for a full cycle on source analysis alone, was reproduced by execution: a read_only adult deleted their own restriction and became a marketing_manager with publish_posts and connect_accounts. Fixed in 0318-0321 with probes that each go red when reverted. The guards that should have caught the first two were asking the wrong question: one verified that a definer function PINS a search_path (this one did), and nothing at all resolved a plpgsql body, which binds its SQL at CALL time and so can be catastrophically wrong while installing, deploying and passing CI cleanly. Both halves are now guarded, the second by resolving all 70 plpgsql bodies against the live catalogue. Running the boundary suite twice in a row also exposed three probes not proving what the green count implied (TEST-004/005/006): one passed on a virgin database and failed forever after, one ERRORED rather than ran on every Supabase database it was ever pointed at so the wallet overspend race had never once been exercised, and one aborted during fixture setup before any assertion ran. `docs/audit/run-probes.sh` passes 43/43, twice in succession. The unit suite passes 16,705/16,705 across 1,305 files on Node 24.21.0, the version the repo declares; the three failures seen under this container's Node 22 are the already-tracked PERF-002 and disappear under 24. OPEN-001 records three member-data tables left deliberately unchanged as an owner decision. These are local-execution results; they do not by themselves establish deployed behavior, and 0318-0321 are PENDING PRODUCTION MIGRATIONS that a human must apply.
 
 Verified application release 2a5e7e7a15b93f544660b41c0f3185b4865e80ed publishes the phone OTP and signout repair on exact Vercel dpl_8oWh1TNVFNbmGissmnvmA11P6ECT (21:28:59 UTC). Public auth/phone readiness passes without authentication actions or SMS dispatch. Frozen source/test/workflow f75e7febdf01bf944fa35a505745001533c80028 passes 459/459 controlled browser cases and both full 16,703/16,703 unit runs across 1,305 files; build252, full strict types, lint (three existing warnings), localization and query checks pass. Exact hosted CI35470363378 Web/Database/Mobile succeed, including both full unit zones/build/types. E2E105970089707 fails only its three new phone HTTP cases:1,293/1,296 pass in8.3minutes; each stalls before code-entry heading after Continue, so real OTP verification is not reached. Repaired durable signout and all six callback cases pass by exact enabled-source matrix minus the three failures, not individual success log entries. A two-file CI provider/hook and diagnostic repair passes local strict types/lint, discovery3, guards66 and config/negative controls; no application runtime or product config/SQL changes. New hosted phone acceptance remains open. Published d954 hosted1,251/1,252 remains historical failed-baseline evidence, not the current release result. AUTH-001/002/003 stay IN PROGRESS. See docs/final-audit/auth-phone-ownership-cycle.md and production-rollout-20260919.md.
 
@@ -14175,6 +14175,8 @@ PRODUCTION READY: NO
 | TEST-005 | Testing | Wallet overlapping-authorization race | 🛠 FIXED + PASS | High | 4/4 | Password via GUC; host from `inet_server_addr()`; honest skip path | 1 of 2 simultaneous $8 authorizations approved against $10 | dblink refuses non-superusers; the race had never executed on any Supabase database |
 | TEST-006 | Testing | Document-vault storage byte boundary | 🛠 FIXED + PASS | High | 6/6 | Raised refusals caught; survival assertion added; fixture clear made tolerant but key-checked | Passes twice in sequence | `storage.protect_delete` aborted the file during fixture setup, before any assertion ran |
 | SEC-006 | Security | Family locator live position and arrival timeline | 🛠 FIXED + PASS | Critical | 10/10 | 0319 adds restrictive self-or-manager write guards to member_locations and location_events | Probe passes twice; 9 assertions fail with the guards dropped; suite 40/40 | A child could rewrite, delete and fabricate any member's location; the server action's "self-only" rule was never in the table |
+| DB-FN-002 | Database | invest_decide_order buy/sell fill | 🛠 FIXED + PASS | High | 7/7 | 0321 casts the direction CASE to wallet_txn_direction | Buy and sell both fill; ledger and holding agree; probe hard-errors without the fix; suite 43/43 | Approval raised 42804 since 0196 while rejection worked, so no order was ever filled. Found by plpgsql_check, not by calling it. |
+| OPEN-001 | Database | screen_time_limits, grades, behavior_logs, immunizations, health_visits write scope | ⚠️ BLOCKED | Medium | n/a | None — deliberately | n/a | Records kept about a member, writable by any member. No code declares a restriction, so the boundary is an owner decision. Recommended shape: can_manage_family OR is_self_member. |
 
 ## Inventory and evidence rules
 
@@ -20966,6 +20968,92 @@ Executed against a local Supabase stack, not inferred from source. The probe tha
 
 #### Final Status
 🛠 FIXED + PASS
+
+### DB-FN-002 — A parent could reject a child's investment order and never approve one
+
+Status: 🛠 FIXED + PASS
+Severity: High
+Route(s), components, actions, tables and providers: supabase/migrations/0196_atomic_economy_and_invest_decisions.sql:205, supabase/migrations/0321_an_approved_investment_can_actually_be_approved.sql, docs/audit/invest-order-fill-check.sql, docs/audit/plpgsql-bodies-resolve-check.sql, public.invest_orders, public.invest_holdings, public.wallet_transactions
+
+#### Expected Behavior
+A manager approves a child's buy or sell order: the order fills, the holding moves, and the investment bucket is debited or credited by the order's amount.
+
+#### Test Cases
+- [x] A member cannot decide their own order (control)
+- [x] A buy fills, creates the holding and debits the wallet
+- [x] A decided order cannot be decided twice
+- [x] A sell fills, reduces the holding and credits the wallet
+- [x] A rejection still rejects (control)
+- [x] An order beyond the balance is refused and moves nothing
+- [x] The probe fails when the fix is reverted
+
+#### Issues Found
+`invest_decide_order` has two outcomes and only one of them has ever worked. Measured as a manager against a funded wallet and a pending buy:
+
+    invest_decide_order(APPROVE) FAILS: column "direction" is of type wallet_txn_direction
+                                 but expression is of type text (42804)
+    invest_decide_order(REJECT)  -> {"ok": true, "status": "rejected"}
+
+The ledger insert on the approval path writes `direction` from a CASE:
+
+    case when v_order.side = 'buy' then 'debit' else 'credit' end,
+
+A bare string literal is of type `unknown`, and Postgres coerces that to the target enum — which is why `'adjustment'` and `'completed'` on the two lines directly above it are fine. **A CASE over two such literals is not `unknown`**: the expression resolves to `text`, and there is no implicit cast from `text` to an enum. Demonstrated on the real type:
+
+    insert into t(direction) values ('debit');                          -- OK
+    insert into t(direction) values (case when true then 'debit'
+                                          else 'credit' end);           -- 42804
+
+So `type` and `status` on adjacent lines of the same INSERT are correct and `direction` is not, which is the whole reason this survived review — the line reads exactly like its neighbours.
+
+The asymmetry is what made it invisible in use. The reject path returns before that INSERT, so it works; a parent can decline a child's investment for ever and the feature looks alive. Only approval throws, and it has thrown since 0196 created the function. The definition was never replaced, so **no child has ever had a buy or sell order filled**.
+
+#### Fixes Applied
+`supabase/migrations/0321_an_approved_investment_can_actually_be_approved.sql` re-creates the function with the CASE cast to `public.wallet_txn_direction`. Nothing else changes — the rest is 0196's text verbatim, so the migration is reviewable as a one-line diff.
+
+The more durable fix is `docs/audit/plpgsql-bodies-resolve-check.sql`, a new probe that resolves **every** plpgsql body in `public` against the live catalogue with `plpgsql_check` — 70 functions, ordinary and trigger (the latter checked against each relation that fires them, since NEW and OLD are typed by the table). This is what found the bug.
+
+#### Retest Results
+Approval now completes end to end:
+
+    APPROVE -> {"ok": true, "status": "filled", "txn_id": "f9ae45a4-…"}
+    holding shares=2.0000 ; invest bucket balance=98000 cents
+
+`docs/audit/invest-order-fill-check.sql` passes twice in succession and hard-errors without 0321. The full boundary suite passes 43/43.
+
+The probe exercises **both** branches: `buy` takes 'debit' and `sell` takes 'credit'. A fix that cast only one would leave half the feature broken, and a buy-only probe would call it green. Its assertions are on the ledger balance and the shares on the books rather than on the returned `{"ok": true}` — the jsonb is a claim, the debited balance is whether it happened.
+
+#### Evidence
+Executed against a local Supabase stack with all 321 migrations applied. Found by resolving the function body, not by calling the function: both this and DB-FN-001 hid behind an early return — a membership check, a reject branch — so a probe calling with dummy arguments would have reported success without ever reaching the broken line.
+
+#### Final Status
+🛠 FIXED + PASS — 0321 is a PENDING PRODUCTION MIGRATION; until a human applies it, no investment order can be filled in production.
+
+### OPEN-001 — Member-data tables an owner should rule on
+
+Status: ⚠️ BLOCKED (owner decision)
+Severity: Medium
+Route(s), components, actions, tables and providers: components/modules/screen-time-module.tsx, components/modules/school-module.tsx, components/modules/behavior-module.tsx, components/modules/immunizations-module.tsx, components/modules/health-visits-module.tsx, public.screen_time_limits, public.grades, public.behavior_logs, public.immunizations, public.health_visits
+
+#### Expected Behavior
+Undecided. These are records kept *about* a member, written from the browser by any family member, and whether that is the product or a gap is a call for the product owner rather than for an audit pass.
+
+#### Issues Found
+A scan of tables carrying `member_id` whose write policies mention neither `member_id` nor `can_manage_family` returns 90 tables. Most are family-wide by design — a parent logs a child's habit, anyone adds a family memory — so a blanket migration would close the product rather than a hole. Three stood out on their subject matter:
+
+- **`screen_time_limits`** — `ALL` to any family member, and the module has no role gate in the UI either, so a child can set their own daily limit, or a sibling's, or a parent's. **What holds this back from being a defect**: the limit is not enforced anywhere. `daily_minutes` is read only to draw a progress bar and a streak, and to tell the AI how many "active limits" exist. Nothing blocks a device. So it is a shared family target, not a bypassable parental control, and tightening it to managers would remove a teen's ability to set their own goal.
+- **`grades`** — written from `school-module.tsx` with the viewer's JWT. Whether a teen may self-report a grade is plausible; whether they may edit one after the fact is a different question.
+- **`behavior_logs`** — the same shape for conduct records a parent keeps.
+- **`immunizations` and `health_visits`** — the only two medical tables still member-writable. `medical_profiles`, `health_providers`, `insurance_policies`, `medications` and `medication_schedules` are all manager-gated (the last two by 0309), so these two are the class's odd ones out — the familiar "fixed where somebody remembered" shape. **What holds them back from being a defect**: 0309's reasoning turned on `medications` DRIVING something — `lib/server/notifications.ts` reads it to tell a parent what to administer, and `app/api/ai/health/coach/route.ts` repeats the dosage to a model as fact. These two drive nothing. `lib/ai/context/policy.ts` is a DENYLIST and both appear on it, so they are withheld from the assistant rather than fed to it. A child editing their own vaccination record is a record-integrity question, not a safety one, and whether a teen may log their own clinic visit is a reasonable product choice either way.
+
+#### Fixes Applied
+None, deliberately. The locator (SEC-006) and AUTHZ-003 were fixed because the code or the product **declared** a restriction that the table did not enforce — there the intent was already established and only the enforcement was missing. Here nothing declares one, so changing the boundary would be choosing the product's behaviour rather than repairing it.
+
+#### Recommendation
+The shape that fits the repo's own convention is `can_manage_family(family_id) OR is_self_member(member_id)` — the pattern `driver_licenses`, `event_rsvps` and now 0319 use. It would leave self-reporting and self-set goals intact while stopping a member writing a record about somebody else. It is a one-migration change once someone decides it is wanted.
+
+#### Final Status
+⚠️ BLOCKED — awaiting an owner decision, not a technical obstacle.
 
 ### SEC-006 — A child could move, erase or invent any family member's location
 

@@ -40,14 +40,14 @@ describe('Supabase migration filename safety', () => {
   // generation (00100 and 00101 both live in 0010). nextVersion reads the first
   // four digits, so those do not drag the next free number up to 1422.
   it('points new migrations at the next unused version', () => {
-    // Bumped whenever a migration lands — 0320 stops a restricted member
-    // deleting their way back to a broader social role, after 0319 scoped a
-    // location row to the member it names and 0318 gave
-    // marketplace_create_circle a search_path that can reach pgcrypto. Stating
-    // it rather than deriving it is the point: the number is how a new
-    // migration announces itself, so a file that quietly reuses one, or a
-    // rebase that drops one, fails here.
-    expect(audit.nextVersion).toBe('0321');
+    // Bumped whenever a migration lands — 0321 lets an investment order
+    // actually be approved, after 0320 stopped a restricted member deleting
+    // their way back to a broader social role, 0319 scoped a location row to
+    // the member it names and 0318 gave marketplace_create_circle a
+    // search_path that can reach pgcrypto. Stating it rather than deriving it
+    // is the point: the number is how a new migration announces itself, so a
+    // file that quietly reuses one, or a rebase that drops one, fails here.
+    expect(audit.nextVersion).toBe('0322');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

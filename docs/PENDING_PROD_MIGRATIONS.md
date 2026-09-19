@@ -514,8 +514,8 @@ passed; production application of the atomic `0240-0254` release remains pending
 ## Migrations added since this document's stated baseline (2026-09-12)
 
 The status line at the top of this file is dated **2026-09-05** against main
-`01881fb2`. **63** migration files have landed since, `0255` through
-`0320`, and none of them appear anywhere above. (This read "thirty-one, `0255`
+`01881fb2`. **64** migration files have landed since, `0255` through
+`0321`, and none of them appear anywhere above. (This read "thirty-one, `0255`
 through `0285`" until 2026-09-13, "seventy-one, `0255` through `0295`" until
 2026-09-15, and "forty-five, `0255` through `0302`", "46, `0255` through `0303`"
 and "49, `0255` through `0306`" until 2026-09-16; the range
@@ -1757,3 +1757,58 @@ guard dropped it reports 4 failed assertions.
 
 Until this is applied, a household member held at a restrictive social role can
 remove that restriction themselves in production.
+
+## 0321 — a parent could reject an investment order and never approve one
+
+`invest_decide_order` has two outcomes and only one of them has ever worked.
+Measured as a manager against a funded wallet and a pending buy:
+
+```
+invest_decide_order(APPROVE) FAILS: column "direction" is of type
+                             wallet_txn_direction but expression is of type text (42804)
+invest_decide_order(REJECT)  -> {"ok": true, "status": "rejected"}
+```
+
+The ledger insert on the approval path writes `direction` from a CASE:
+
+```
+case when v_order.side = 'buy' then 'debit' else 'credit' end,
+```
+
+A bare string literal is of type `unknown` and Postgres coerces it to the target
+enum — which is why `'adjustment'` and `'completed'` on the two lines directly
+above it are fine. **A CASE over two such literals is not `unknown`**: it
+resolves to `text`, and there is no implicit cast from `text` to an enum:
+
+```
+insert into t(direction) values ('debit');                          -- OK
+insert into t(direction) values (case when true then 'debit'
+                                      else 'credit' end);           -- 42804
+```
+
+So `type` and `status` on adjacent lines of the same INSERT are correct and
+`direction` is not, which is the whole reason it survived review: the line reads
+exactly like its neighbours.
+
+**The asymmetry is why nobody noticed.** Rejection returns before that INSERT, so
+it works — a parent can decline a child's investment for ever and the feature
+looks alive. Only approval throws, and it has thrown since `0196` created the
+function. The definition was never replaced, so no child has ever had a buy or
+sell order filled.
+
+`0321` adds the cast and changes nothing else; the rest is `0196`'s text
+verbatim, so it reviews as a one-line diff.
+
+Held by two probes. `docs/audit/invest-order-fill-check.sql` exercises BOTH
+branches — `buy` takes 'debit', `sell` takes 'credit', and a fix casting only one
+would leave half the feature broken while a buy-only probe called it green — and
+asserts on the ledger balance and the shares on the books rather than on the
+returned `{"ok": true}`, which is a claim rather than an outcome.
+`docs/audit/plpgsql-bodies-resolve-check.sql` is the general one: it resolves
+every plpgsql body in `public` (70 functions, trigger bodies checked against each
+relation that fires them) against the live catalogue. That is what found this,
+and it is what would have found `0318` — a plpgsql function binds its SQL at CALL
+time, so a body can be catastrophically wrong and still install, deploy and pass
+CI cleanly.
+
+Until this is applied, no investment order can be filled in production.
