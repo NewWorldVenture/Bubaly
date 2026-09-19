@@ -16,6 +16,7 @@ import type { MemberRole } from '@/lib/constants/roles';
 import type { PlanId } from '@/lib/constants/plans';
 import { isSuperAdminEmail } from '@/lib/constants/super-admins';
 import { describeActionError } from '@/lib/supabase/errors';
+import { isValidTimezone } from '@/lib/time/zoned';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -141,8 +142,13 @@ export async function adminCreateFamilyAction(input: {
     email: authOwner.email ?? null,
   };
 
+  // An unknown zone is indistinguishable from UTC once stored, silently and
+  // permanently, so it is refused here rather than written.
+  const timezone = (input.timezone || 'UTC').trim();
+  if (!isValidTimezone(timezone)) return { ok: false, error: t('actions.unknownTimeZone') };
+
   const { data: family, error } = await supabase.from('families').insert({
-    name, timezone: input.timezone || 'UTC', created_by: owner.id,
+    name, timezone, created_by: owner.id,
   }).select('id').single();
   if (error) return actionFailure(error, t('actions.couldNotCreateTheFamily'));
 
