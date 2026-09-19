@@ -4360,3 +4360,110 @@ three pre-existing warnings. CI green on `b0bacc54`.
 **Still the one recommendation this audit would make above all others: break
 what a guard protects and confirm it goes red.** This pass adds a corollary —
 **and check that it was looking there at all.**
+
+---
+
+# Pass K — the client code paths behind the swept tables (F-K01–F-K03)
+
+Pass T swept the **RLS layer** on the sensitive tables. This pass audits what
+was explicitly left: the **client code paths** — the modules' reads, writes,
+delete handling and error reporting. It began with the health and location
+modules, as the data the product treats as most sensitive.
+
+## F-K01 — Thirty-nine writes reported success for a change the database refused *(High, fixed)*
+
+**The finding is a consequence of a previous pass's fix, which is what makes it
+interesting.** Migrations 0254, 0275, 0306, 0308, 0309 and 0310 added
+manager-only write policies across forty-four tables. 0309's header states the
+problem it was solving exactly:
+
+> components/modules/medications-module.tsx declares `canEdit = isManager(role)`
+> and then writes `medications` … STRAIGHT FROM THE BROWSER with the viewer's
+> own JWT. … `canEdit` only decides whether a button renders, and a hidden
+> button is not a boundary.
+
+The boundary was added. **The UI in front of it was never told.**
+
+**Measured on Postgres 16**, with that exact policy shape, as a non-manager:
+
+```
+update medications set dosage = '40 mg' where id = 1;   UPDATE 0   dosage still 10 mg
+delete from medications where id = 1;                   DELETE 0   row still present
+insert into medications values (…);                     ERROR  42501
+```
+
+That asymmetry is the defect. `with check` (INSERT) **raises** and the client
+sees it. `using` (UPDATE/DELETE) **filters**, and the client sees
+`{ error: null }`. PostgREST returns affected rows only when asked — `.select()`
+is what appends `Prefer: return=representation` — so without it `data` is null
+whether one row changed or none did, and the call site could not tell **even in
+principle**.
+
+Thirty-nine call sites checked `error`, saw null, and said "Medication deleted",
+"Bill marked as paid", "Entry deleted", "Trip updated". All thirty-nine now ask
+for their rows and treat zero as a refusal.
+
+Three deserve naming:
+
+- **`medications.is_active`** decides whether `lib/server/notifications.ts`
+  raises the "dose due today" reminder at all. A toggle that silently did
+  nothing is a parent believing they stopped — or started — a reminder that
+  never moved.
+- **`passwords-module.remove` is a SOFT delete** (`update({ deleted_at })`), so
+  a refused one leaves the credential in the vault while the toast says it is
+  gone.
+- **The three document deletes remove the storage object BEFORE the row**, so a
+  refused row delete leaves a row pointing at a file that no longer exists.
+
+## F-K02 — The guard list was too narrow by 2.7× *(High, fixed — my own)*
+
+The first version of the guard drew its tables from policies declared
+`as restrictive`: nineteen. A **permissive** policy whose `using` clause
+requires `can_manage_family` filters a non-manager's update exactly as
+silently. Re-derived properly: **forty-four**. Fourteen call sites were sitting
+behind the difference — the health providers, the insurance policies, the
+password vault, three document surfaces and the family name.
+
+**`family_members` and `notifications` are deliberately excluded.** Their
+policies are "own row OR manager" (`user_id = auth.uid() or …`), so a member's
+own write succeeds and **zero rows is a normal outcome** — "mark all read" with
+nothing unread affects no rows, and reporting that as a refusal would be a new
+bug rather than a fix. Separating those two from the forty-four is why this pass
+re-derived the list rather than widening it by pattern.
+
+## F-K03 — locator-module *(verified healthy, no action)*
+
+The highest-value module named as never audited, and it is **sound**:
+
+- writes go through **server actions** that enforce `isManager` server-side
+  (`savePlace`, `deletePlace`, `setGeofenceEnabled`) — the browser-direct
+  pattern 0309 was written about does not appear here;
+- `updateMyLocation` and `setLocationSharing` take `member_id` from the
+  **session**, never from client input;
+- all three reads are error-checked, and `location_events` carries
+  `.limit(120)` — a real bound under the row cap;
+- `updateMyLocation` setting `is_sharing: true` unconditionally looked like a
+  privacy defect (sharing re-enabling itself) and is not: its only caller is the
+  "Share now" button, so it matches intent.
+
+## Method notes
+
+Two mistakes made and corrected in this pass, recorded because both were close
+to shipping:
+
+- The narrow table list above — caught by auditing the guard against the
+  migrations rather than trusting the pattern that produced it.
+- `open(p, 'w').write(transform(s))` truncates the file **before** evaluating
+  the argument, so a raise inside the transform left a module empty. Restored
+  from git; the helper now computes first and refuses to write a suspiciously
+  small file.
+
+A test double had to learn `.select()` after `.update().eq()` — it answered only
+the old shape, which exercises a client the code no longer uses. Second sighting
+in this audit, after the cron double.
+
+**Verification.** 13,923 tests across 1,222 files; `tsc` clean; `next build`
+compiles; lint unchanged at its three pre-existing warnings; i18n gate clean
+with one new string added to all seven populated catalogues. The new guard is
+verified load-bearing in both directions — removing one `.select('id')` turns it
+red with file, line, table and operation.
