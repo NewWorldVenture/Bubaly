@@ -1774,3 +1774,65 @@ precisely why the guard is enumerated rather than universal, and why the 34 are
   `if (!(await recordFailure())) return …`. LOW.
 - `components/modules/messages-module.tsx:204` — a per-row read-receipt fallback.
   A receipt that does not stick; no claim is made to the user. LOW.
+
+---
+
+## [CLAUDE-1][HIGH][UX / ACCESSIBILITY] `aria-modal` was a promise eleven overlays made and none kept
+
+- **Where:** `components/app/{account-closed-gate,trial-paywall-gate,app-lock-gate,app-shell,command-bar,blog-launcher,ai-orb}.tsx`,
+  `components/marketing/exit-intent.tsx`, `components/ui/camera-capture.tsx`,
+  `components/guardian/{contact-list,rules-editor}.tsx`
+- **Problem:** `aria-modal="true"` tells assistive technology that everything
+  outside the element is **inert**. Declaring it without making it true is worse
+  than a plain `<div>`: a screen-reader user is told to ignore a background their
+  keyboard can still reach, and nothing tells them otherwise.
+- **Evidence, measured across all eleven:**
+
+  | | focus trap | Escape | focus restore |
+  |---|---|---|---|
+  | all eleven | **0 / 11** | 5 / 11 | 1 / 11 |
+
+  **Not one trapped Tab.** Three are full-screen gates — a paywall, a lock
+  screen, a closed-account gate — which is where it matters most: a gate whose
+  Tab key walks into the application behind it is not a gate.
+- **Recommended fix:** applied. The behaviour is extracted to
+  `lib/a11y/use-dialog-behavior.ts` and **`Modal` uses it too** — one
+  implementation, not two. All eleven adopt it while keeping their own layout.
+  A gate passes no `onClose`: Escape does nothing and the trap still holds,
+  which is the correct shape — `aria-modal` has to be true even when there is
+  nothing to close.
+- **Status:** FIXED. `tsc` clean, build compiles, 13,905 tests pass, lint
+  unchanged at its three pre-existing warnings.
+- **Proved load-bearing:** removing the hook from `command-bar` turns the new
+  guard red, naming the file.
+
+### This is the premise gap, and the clearest instance of it
+
+`tests/modal-a11y-contract.test.ts` is a **good** guard. It pins the shared
+Modal's dialog contract in detail and would catch any regression in it. It could
+not see any of these eleven, and the reason is structural rather than careless:
+
+> Modal coupled the **behaviour** (focus in, Tab trap, Escape, scroll lock,
+> focus restore) to its own **chrome** (backdrop, title bar, close button,
+> bottom-sheet layout). A camera viewfinder, a command palette, a slide-over
+> drawer and three full-screen gates could not take the chrome — so they took
+> **neither**.
+
+*A guard on the blessed helper says nothing about the path taken to avoid it,*
+and coupling behaviour to chrome is what creates that path. The fix is therefore
+not only "adopt the helper" but "make the helper adoptable".
+
+**Five existing guards went red when the behaviour moved out of `modal.tsx`** —
+`modal-a11y-contract`, `mobile-overlay-safe-area`, `mobile-overlay-dialog-a11y`,
+`blog-launcher-frame`, `consent-preference-centre-focus`. That is them working,
+and it is worth recording as the cost of source-text assertions: they pin an
+*address*, not a property. Each now asserts that the component **delegates** and
+that the hook **implements**, so the contract follows the behaviour.
+
+**A fourth scan matched its own prose.** The first version of the new guard
+reported `consent-manager.tsx`, whose hand-rolled dialog had *already* been
+replaced with `<Modal>` earlier in this audit — it matched the paragraph
+explaining that fix. Excluding comments is now a case in the guard itself. Three
+previous scans in this audit made the identical mistake (the Node version check,
+the consent `aria-modal` scan, and this one), which is enough to call it a
+standing hazard rather than a coincidence.
