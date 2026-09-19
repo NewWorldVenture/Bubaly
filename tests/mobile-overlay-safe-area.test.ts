@@ -12,9 +12,8 @@ const modal = fs.readFileSync('components/ui/modal.tsx', 'utf8');
 // The dialog BEHAVIOUR was extracted to a hook so the full-screen overlays that
 // are deliberately not `<Modal>` (the photo lightbox) share one definition of
 // it. These assertions follow the code rather than being dropped: `modal`
-// carries the layout, `behaviour` the trap, and `scrollLock` the lock the hook
+// carries the layout; the trap and the scroll lock now live in the shared hook
 // composes.
-const behaviour = fs.readFileSync('lib/hooks/use-dialog-behavior.ts', 'utf8');
 const scrollLock = fs.readFileSync('lib/hooks/use-lock-body-scroll.ts', 'utf8');
 const shell = fs.readFileSync('components/app/app-shell.tsx', 'utf8');
 
@@ -32,13 +31,12 @@ describe('shared Modal is a mobile-correct bottom sheet (Phase 11)', () => {
   });
   it('traps + restores focus, closes on ESC, and locks body scroll', () => {
     expect(modal).toContain('aria-modal="true"');
-    // Modal must actually reach the behaviour, or the three lines below would be
-    // asserting about code it no longer runs.
+    // Behaviour lives in the shared hook; Modal must delegate to it.
     expect(modal).toContain('useDialogBehavior');
-    expect(behaviour).toContain("e.key === 'Escape'");
-    expect(behaviour).toContain('useLockBodyScroll(open)');
-    expect(scrollLock).toContain("body.style.overflow = 'hidden'");
-    expect(behaviour).toContain('previouslyFocused?.focus?.()');
+    const hook = fs.readFileSync('lib/a11y/use-dialog-behavior.ts', 'utf8');
+    expect(hook).toContain("e.key === 'Escape'");
+    expect(hook).toContain("document.body.style.overflow = 'hidden'");
+    expect(hook).toContain('previouslyFocused?.focus?.()');
   });
 });
 

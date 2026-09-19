@@ -39,6 +39,9 @@ describe('hand-rolled full-screen overlays expose dialog semantics to screen rea
 
   it('the dismissible exit-intent modal also closes on Escape', () => {
     const src = fs.readFileSync(dialogs.exitIntent, 'utf8');
-    expect(src).toMatch(/e\.key === 'Escape'/);
+    // Escape now comes from the shared hook, along with the Tab trap and focus
+    // restore this overlay never had.
+    expect(src).toMatch(/useDialogBehavior/);
+    expect(fs.readFileSync('lib/a11y/use-dialog-behavior.ts', 'utf8')).toMatch(/e\.key === 'Escape'/);
   });
 });

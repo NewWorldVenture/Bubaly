@@ -5,12 +5,13 @@
 // trap anyone: a "Sign out" escape is always present (forgot PIN → sign out → email
 // sign-in clears it). Unlock is session-scoped (sessionStorage), so it re-locks when
 // the tab/session ends or the account changes. No redirects, no loop risk.
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Lock, Delete, LogOut } from 'lucide-react';
 import { verifyPin, unlockKey } from '@/lib/security/app-lock';
 import { cn } from '@/lib/utils/cn';
 import { useLockBodyScroll } from '@/lib/hooks/use-lock-body-scroll';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useDialogBehavior } from '@/lib/a11y/use-dialog-behavior';
 
 export function AppLockGate({
   enabled, salt, hash, userId, children,
@@ -21,6 +22,8 @@ export function AppLockGate({
   userId: string;
   children: React.ReactNode;
 }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogBehavior(dialogRef, true, {});
   const tr = useTranslations();
   const [mounted, setMounted] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
@@ -109,6 +112,8 @@ export function AppLockGate({
   // before mount by showing the lock chrome immediately).
   return (
     <div
+      ref={dialogRef}
+      tabIndex={-1}
       role="dialog"
       aria-modal="true"
       aria-labelledby="app-lock-title"

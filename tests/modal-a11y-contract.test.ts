@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 // mobile safe-area/bottom-sheet layout would regress a11y everywhere at once.
 // This locks the WAI-ARIA dialog contract + the mobile layout at the source.
 //
-// The behaviour half now lives in `lib/hooks/use-dialog-behavior.ts`, extracted
+// The behaviour half now lives in `lib/a11y/use-dialog-behavior.ts`, extracted
 // so the photo lightbox — full-bleed black chrome, deliberately not a `<Modal>`
 // — gets the same contract from the same definition instead of a second copy.
 // These assertions FOLLOW the code into that file rather than being relaxed to
@@ -17,14 +17,11 @@ import { readFileSync } from 'node:fs';
 // what `Modal` renders. An extraction that dropped a property fails here, in
 // the same test, with the same message.
 const SRC = readUiSource('components/ui/modal.tsx');
-const BEHAVIOUR = readFileSync('lib/hooks/use-dialog-behavior.ts', 'utf8');
-const SCROLL_LOCK = readFileSync('lib/hooks/use-lock-body-scroll.ts', 'utf8');
-
-// Modal must actually USE the hook; otherwise the assertions below would pass
-// against a file the component no longer depends on — a guard reading code that
-// nothing runs, which is the failure this repository keeps finding.
-const USES_BEHAVIOUR = /useDialogBehavior<HTMLDivElement>\(open, onClose\)/.test(SRC)
-  && /from '@\/lib\/hooks\/use-dialog-behavior'/.test(SRC);
+// The dialog BEHAVIOUR moved to a hook so overlays that cannot take Modal's
+// chrome can still keep the promise `aria-modal` makes. The contract did not
+// weaken — it follows the behaviour to where it lives, and this file asserts
+// both halves: that Modal delegates, and that the hook implements.
+const HOOK = readFileSync('lib/a11y/use-dialog-behavior.ts', 'utf8');
 
 describe('A-19 shared Modal keeps its a11y + mobile contract', () => {
   it('is a labelled, modal dialog', () => {
@@ -37,36 +34,43 @@ describe('A-19 shared Modal keeps its a11y + mobile contract', () => {
     expect(SRC).toMatch(/id=\{titleId\}/);
   });
 
-  it('is wired to the shared dialog behaviour rather than a private copy', () => {
-    expect(USES_BEHAVIOUR).toBe(true);
+  it('delegates its dialog behaviour to the shared hook', () => {
+    // One implementation, not two. Modal keeping a private copy is how the
+    // behaviour became unavailable to everything that needed a different shell.
+    expect(SRC).toMatch(/useDialogBehavior\(dialogRef, open, \{ onClose \}\)/);
+    expect(SRC).toMatch(/from '@\/lib\/a11y\/use-dialog-behavior'/);
   });
 
   it('closes on Escape and traps Tab focus within the dialog', () => {
-    expect(BEHAVIOUR).toMatch(/e\.key === 'Escape'/);
-    // Either spelling of "call the close handler". It reads `onCloseRef.current()`
-    // because the effect deliberately does NOT depend on `onClose`'s identity —
-    // 92 call sites pass an inline arrow, and depending on it rebuilt the focus
-    // trap on every keystroke and moved the caret to the first field. That the
-    // CURRENT handler is the one Escape reaches is exercised for real in
-    // tests/a-dialog-does-not-steal-the-caret.test.ts, which is a stronger
-    // statement than this line can make by matching source.
-    expect(BEHAVIOUR).toMatch(/onClose\(\)|onCloseRef\.current\(\)/);
-    expect(BEHAVIOUR).toMatch(/e\.key !== 'Tab'/);
-    expect(BEHAVIOUR).toMatch(/preventDefault\(\)/);
+    expect(HOOK).toMatch(/e\.key === 'Escape'/);
+    // `onCloseRef.current?.()` counts, and is the correct form. The handler is
+    // held in a ref so the trap effect does not depend on its identity — 92 call
+    // sites pass an inline arrow, and depending on it rebuilt the trap on every
+    // keystroke and threw the caret back to the first field. See
+    // tests/a-dialog-does-not-steal-the-caret.
+    expect(HOOK).toMatch(/onCloseRef\.current\?\.\(\)|onClose\(\)/);
+    expect(HOOK).toMatch(/e\.key !== 'Tab'/);
+    expect(HOOK).toMatch(/preventDefault\(\)/);
     // a defined focusable set is what makes the trap real
-    expect(BEHAVIOUR).toMatch(/FOCUSABLE|focusables/);
+    expect(HOOK).toMatch(/FOCUSABLE|focusables/);
+    // Tab with nothing focusable inside must not walk out into the background
+    // this element claims is inert.
+    expect(HOOK).toMatch(/items\.length === 0/);
   });
 
   it('moves focus in on open and restores focus to the trigger on close', () => {
-    expect(BEHAVIOUR).toMatch(/previouslyFocused\s*=\s*document\.activeElement/);
-    expect(BEHAVIOUR).toMatch(/previouslyFocused\?\.focus\?\.\(\)/);
-    // scroll-lock the background while open. The hook composes the shared
-    // `useLockBodyScroll`, so the assertion follows it one file further —
-    // and that version restores the PREVIOUS overflow rather than clearing it,
-    // which is what lets a dialog open on top of the app-lock gate without
-    // unlocking the page underneath when it closes.
-    expect(BEHAVIOUR).toMatch(/useLockBodyScroll\(open\)/);
-    expect(SCROLL_LOCK).toMatch(/body\.style\.overflow = 'hidden'/);
+    expect(HOOK).toMatch(/previouslyFocused\s*=\s*document\.activeElement/);
+    expect(HOOK).toMatch(/previouslyFocused\?\.focus\?\.\(\)/);
+    // scroll-lock the background while open
+    expect(HOOK).toMatch(/document\.body\.style\.overflow = 'hidden'/);
+  });
+
+  it('keeps the trap for a dialog that has no close (a gate is still modal)', () => {
+    // A paywall or lock screen passes no `onClose`: Escape does nothing and the
+    // trap still holds. `aria-modal` has to be true even with nothing to close.
+    // Same property, current spelling: optional-chaining the ref is exactly
+    // "call it only if the caller supplied one".
+    expect(HOOK).toMatch(/onCloseRef\.current\?\.\(\)|if \(onClose\) onClose\(\)/);
   });
 
   it('gives the icon-only close control an accessible name', () => {

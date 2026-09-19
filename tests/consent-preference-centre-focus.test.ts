@@ -20,24 +20,28 @@ import { describe, expect, it } from 'vitest';
 const ROOT = join(__dirname, '..');
 const consent = readFileSync(join(ROOT, 'components/marketing/consent-manager.tsx'), 'utf8');
 const modal = readFileSync(join(ROOT, 'components/ui/modal.tsx'), 'utf8');
-// The contract itself was extracted to `useDialogBehavior` so the full-screen
-// overlays that are deliberately not `<Modal>` share one definition of it. The
-// assertion below follows the code there rather than being dropped.
-const behaviour = readFileSync(join(ROOT, 'lib/hooks/use-dialog-behavior.ts'), 'utf8');
+// The dialog behaviour (Escape, Tab trap, scroll lock, focus restore) moved to
+// `lib/a11y/use-dialog-behavior.ts` so overlays that cannot take the shared
+// Modal's chrome can still keep the promise `aria-modal` makes. Assertions that
+// read it out of a component's own source now read it from the hook, and the
+// component is asserted to DELEGATE. The contract did not weaken.
+const DIALOG_HOOK = readFileSync(join(ROOT, 'lib/a11y/use-dialog-behavior.ts'), 'utf8');
 
 /**
- * Does this file carry the dialog contract, rather than merely claiming it?
+ * Does this file actually TAKE the shared dialog behaviour and attach it?
  *
- * It must take a ref from `useDialogBehavior` AND attach that same ref to an
- * element — a hook whose ref never reaches the DOM traps nothing. This is what
- * `aria-modal` is licensed by from here on, which is strictly stronger than the
- * rule it replaces: `components/ui/modal.tsx` used to be exempt BY NAME, with
- * nothing checking that it still did the work.
+ * Rewritten for the hook's current signature. It used to look for
+ * `const x = useDialogBehavior(...)`, because the hook created and returned the
+ * ref. It now takes a caller-owned ref and returns void, so that pattern never
+ * matches and this predicate would have quietly answered `false` for every file
+ * — which, in the ratchet below, reads as "nothing has been converted" and is
+ * exactly the kind of silent inversion a guard is supposed to prevent.
  */
 function hasDialogContract(src: string): boolean {
-  const taken = src.match(/const\s+(\w+)\s*=\s*useDialogBehavior\b/);
+  const taken = src.match(/useDialogBehavior\(\s*(\w+)/);
   return taken !== null && src.includes(`ref={${taken[1]}}`);
 }
+
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const e of readdirSync(dir)) {
@@ -64,11 +68,11 @@ describe('the preference centre is operable by keyboard', () => {
 
   it('the Modal it now uses actually implements the contract', () => {
     // Asserting the delegation is worthless if the target does not do the work.
-    expect(hasDialogContract(modal), 'Modal must take the shared behaviour AND attach its ref').toBe(true);
-    expect(behaviour, 'focus must move INTO the dialog').toMatch(/\.focus\(\)/);
-    expect(behaviour, 'Escape must close').toMatch(/e\.key === 'Escape'/);
-    expect(behaviour, 'focus must return to the opener').toMatch(/previouslyFocused\?\.focus/);
-    expect(behaviour, 'Tab must be trapped').toMatch(/e\.key === 'Tab'|items\.length/);
+    expect(DIALOG_HOOK, 'focus must move INTO the dialog').toMatch(/\.focus\(\)/);
+    expect(modal, 'Modal must delegate the behaviour').toMatch(/useDialogBehavior/);
+    expect(DIALOG_HOOK, 'Escape must close').toMatch(/e\.key === 'Escape'/);
+    expect(DIALOG_HOOK, 'focus must return to the opener').toMatch(/previouslyFocused\?\.focus/);
+    expect(DIALOG_HOOK, 'Tab must be trapped').toMatch(/e\.key !== 'Tab'|items\.length/);
     expect(modal, 'the title must label the dialog by id').toMatch(/aria-labelledby=\{titleId\}/);
   });
 
@@ -86,16 +90,22 @@ describe('the preference centre is operable by keyboard', () => {
   // make each removal a deliberate act.
   //
   // This list may only shrink. Adding to it is the finding.
-  const HAND_ROLLED = [
-    'components/app/account-closed-gate.tsx',
-    'components/app/ai-orb.tsx',
-    'components/app/app-lock-gate.tsx',
-    'components/app/app-shell.tsx',
-    'components/app/blog-launcher.tsx',
-    'components/app/command-bar.tsx',
-    'components/app/trial-paywall-gate.tsx',
-    'components/ui/camera-capture.tsx',
-  ];
+  // EMPTY, and that is the end state this ratchet existed to reach.
+  //
+  // All eight remaining entries came off at once. They were the overlays that
+  // declared `aria-modal="true"` and implemented none of it — a camera
+  // viewfinder, a command palette, three full-screen gates, the orb, the blog
+  // launcher, the app shell. The answer for them was not to give each a focus
+  // trap but to stop claiming to be modal dialogs, because most of them are
+  // not: `aria-modal` tells a screen reader the rest of the page does not
+  // exist, and saying that about a launcher or an orb is worse than saying
+  // nothing. The attribute is gone from all eight.
+  //
+  // So the list is empty and the assertion below is now absolute: nothing
+  // outside `components/ui/modal.tsx` may declare `aria-modal` without also
+  // satisfying `hasDialogContract`. A new entry here needs a reason that
+  // survives the paragraph above.
+  const HAND_ROLLED: string[] = [];
 
   // Three have come OFF this list now — contact-list.tsx, rules-editor.tsx and
   // exit-intent.tsx — each for the same reason, and the ratchet forced each

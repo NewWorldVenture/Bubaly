@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useState, useTransition } from 'react';
+import { useEffect, useState, useTransition, useRef, useCallback } from 'react';
 import { useDismissOnEscape } from '@/lib/hooks/use-dismiss-on-escape';
 import { ChevronDown, Check, Gift, Home, Lock, LogOut, Menu, Plus, Search, Settings as SettingsIcon, ShieldCheck, UserCog, X } from 'lucide-react';
 import { Logo, LogoMark } from '@/components/brand/logo';
@@ -13,6 +13,7 @@ import { tierLabelForLevel } from '@/lib/constants/plans';
 import { DASHBOARD_VIEWS, dashboardLabel, dashboardIcon, isDashboardView, type DashboardView } from '@/lib/constants/dashboards';
 import { cn } from '@/lib/utils/cn';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useDialogBehavior } from '@/lib/a11y/use-dialog-behavior';
 import { useApp } from './app-context';
 import { ThemeSwitch } from './theme-switch';
 import { SidebarAccount } from './sidebar-account';
@@ -352,6 +353,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // Close the mobile nav drawer whenever the route changes.
   useEffect(() => { setMobileNavOpen(false); }, [pathname]);
 
+  // The drawer declares `aria-modal="true"`, so Tab must not walk out of it into
+  // the page it claims is inert. Focus enters on open and returns to the menu
+  // button on close.
+  const mobileNavRef = useRef<HTMLDivElement>(null);
+  const closeMobileNav = useCallback(() => setMobileNavOpen(false), []);
+  useDialogBehavior(mobileNavRef, mobileNavOpen, { onClose: closeMobileNav });
+
   return (
     <>
       {/* Role-tailored display density (kids bigger/roomier, parents default). */}
@@ -418,6 +426,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="overlay-scrim absolute inset-0 backdrop-blur-sm animate-fade-in" onClick={() => setMobileNavOpen(false)} aria-hidden />
           <div
+            ref={mobileNavRef}
+            tabIndex={-1}
             className="absolute inset-y-0 left-0 flex w-[300px] max-w-[86%] flex-col border-r border-border/60 bg-surface animate-slide-in-left"
             style={{ paddingTop: 'var(--safe-top)', paddingLeft: 'var(--safe-left)', paddingBottom: 'var(--safe-bottom)' }}
             role="dialog"

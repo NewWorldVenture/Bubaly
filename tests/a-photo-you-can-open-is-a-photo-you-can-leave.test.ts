@@ -12,7 +12,7 @@
 // chrome around a photo, and `<Modal>` is a titled panel — that would be a
 // design change wearing an audit fix's clothes. It is to give both surfaces the
 // same BEHAVIOUR from the same definition, which is what
-// `lib/hooks/use-dialog-behavior.ts` now is. The contract itself is asserted in
+// `lib/a11y/use-dialog-behavior.ts` now is. The contract itself is asserted in
 // tests/modal-a11y-contract.test.ts (which follows the code into that hook) and
 // exercised in tests/a-dialog-does-not-steal-the-caret.test.ts.
 //
@@ -29,8 +29,13 @@ const SRC = readFileSync('components/modules/photos-module.tsx', 'utf8');
 
 describe('the lightbox is a dialog, and says so', () => {
   it('gets its behaviour from the shared hook rather than a second copy', () => {
-    expect(SRC).toMatch(/from '@\/lib\/hooks\/use-dialog-behavior'/);
-    expect(SRC).toMatch(/useDialogBehavior<HTMLDivElement>\(lightboxOpen,/);
+    // Updated for the hook's current home and signature: it lives in
+    // `lib/a11y/` and takes a caller-owned ref rather than creating one, so the
+    // old `useDialogBehavior<HTMLDivElement>(lightboxOpen, ...)` spelling is
+    // gone. The question is unchanged — does the lightbox take the SHARED
+    // behaviour, and is it wired to the overlay?
+    expect(SRC).toMatch(/from '@\/lib\/a11y\/use-dialog-behavior'/);
+    expect(SRC).toMatch(/useDialogBehavior\(lightboxRef, lightboxOpen,/);
     // The ref the hook hands back has to reach the overlay, or the trap has no
     // boundary and the hook is imported scenery.
     expect(SRC).toMatch(/ref=\{lightboxRef\}/);

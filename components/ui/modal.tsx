@@ -1,20 +1,20 @@
 'use client';
 
-import { useId } from 'react';
+import { useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
-import { useDialogBehavior } from '@/lib/hooks/use-dialog-behavior';
+import { useDialogBehavior } from '@/lib/a11y/use-dialog-behavior';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
 /** Accessible modal dialog: focus-trapped, ESC to close, scroll lock, and focus
  *  restored to the trigger on close. Renders as a bottom sheet on mobile.
  *
- *  The dialog BEHAVIOUR lives in `useDialogBehavior` (lib/hooks/use-dialog-behavior.ts)
- *  so the full-screen overlays that deliberately do not use this component — the
- *  photo lightbox is full-bleed black chrome rather than a titled panel — get it
- *  from the same definition. This file owns the markup and the mobile layout;
- *  the hook owns focus, Escape, the Tab trap and the scroll lock. */
+ *  The behaviour lives in `useDialogBehavior` rather than here. It used to be
+ *  inline, which meant it was only available to anything willing to take this
+ *  component's chrome too — and eleven overlays that could not (a camera
+ *  viewfinder, a command palette, three full-screen gates) declared
+ *  `aria-modal="true"` and implemented none of it. */
 export function Modal({
   open,
   onClose,
@@ -34,9 +34,11 @@ export function Modal({
   headerAction?: React.ReactNode;
 }) {
   const t = useTranslations();
-  const dialogRef = useDialogBehavior<HTMLDivElement>(open, onClose);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const descId = useId();
+
+  useDialogBehavior(dialogRef, open, { onClose });
 
   if (!open || typeof document === 'undefined') return null;
 

@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useDialogBehavior } from '@/lib/hooks/use-dialog-behavior';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { X } from 'lucide-react';
 import { useLockBodyScroll } from '@/lib/hooks/use-lock-body-scroll';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useDialogBehavior } from '@/lib/a11y/use-dialog-behavior';
 
 type Offer = {
   id: string;
@@ -39,13 +39,15 @@ export function ExitIntent() {
   // Lock background scroll while the offer modal is showing (mobile scroll-bleed).
   useLockBodyScroll(Boolean(offer) && open);
 
-  // ESC closes the offer (keyboard parity with the scrim click + close button).
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open]);
+  // ESC, plus the focus trap and focus restore the markup already promised with
+  // `aria-modal="true"`. Scroll lock stays with useLockBodyScroll above.
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeOffer = useCallback(() => setOpen(false), []);
+  // `open` alone, not `Boolean(offer) && open`: this banner is ALWAYS mounted
+  // and returns null below, so the hook must not act while there is no offer to
+  // show. main gates it with lockScroll: false for the same reason — a banner
+  // is not a modal and must not freeze the page behind it.
+  useDialogBehavior(dialogRef, Boolean(offer) && open, { onClose: closeOffer, lockScroll: false });
 
   // Resolve once on mount (skip entirely if we've shown one recently).
   useEffect(() => {
@@ -109,16 +111,6 @@ export function ExitIntent() {
     };
   }, [offer]);
 
-  // The REAL open condition, not a constant `true`.
-  //
-  // The other dialogs on this hook (NewRuleModal, ContactEditor, the photo
-  // lightbox) are conditionally MOUNTED by their parent, so `true` is honest
-  // there. This one is always mounted and returns null below, so passing `true`
-  // would lock body scroll, bind Escape and try to move focus into a ref that
-  // holds null — the whole time the banner is not showing. Hooks cannot go
-  // after the early return, so the condition has to be in the argument.
-  const dialogRef = useDialogBehavior<HTMLDivElement>(Boolean(offer) && open, () => setOpen(false));
-
   if (!offer || !open) return null;
 
   return (
@@ -130,10 +122,10 @@ export function ExitIntent() {
       onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}>
       <div
         ref={dialogRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="exit-intent-title"
-        tabIndex={-1}
         className="relative w-full max-w-md rounded-2xl bg-bg p-8 text-center shadow-2xl outline-none"
       >
         <button onClick={() => setOpen(false)} aria-label={t('exitIntent.close')} className="absolute right-3 top-3 text-muted hover:text-fg">

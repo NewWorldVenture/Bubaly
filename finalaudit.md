@@ -22,8 +22,12 @@ property they were cited for. It is now fixed, rehearsed end to end, and enforce
 on every pull request.
 
 **The pattern worth carrying forward** is that this repository's characteristic
-defect is not a broken feature but **a guard that cannot fail**. Eleven
-independent instances are now on record — a money probe that could not catch the
+defect is not a broken feature but **a guard that cannot fail**. Pass J separates
+it into three distinct shapes — a scope gap, a premise gap, and an enumerated
+list with no scan behind it — and finds eight defects by hunting the shape rather
+than the bug; the sharpest is a guard that RAN on every CI job and passed
+honestly, because its own coverage assertion was satisfied by the single
+directory it read. Eleven independent instances are now on record — a money probe that could not catch the
 hole it was written for (F-004); a fix carrying the defect it fixed (F-011); a
 probe that granted itself privileges (F-015); a concurrency check that ran two
 statements sequentially (F-019); a replay that only ever ran against an empty
@@ -4538,6 +4542,133 @@ previous code**, naming both files.
 **Verification.** Full suite **13,729 / 13,729**. `tsc` and eslint clean.
 
 **Status: FIXED.** No migration, so it reaches production with the deploy.
+
+---
+
+# Pass J — the guard shapes, and eight findings behind them (F-J01–F-J08)
+
+This pass found nothing by looking for another instance of a known bug. Every
+finding came from asking a different question: **why did the guard that exists
+for this not catch it?** The answer turned out to have three distinct forms, and
+separating them is the substance of this pass, because the remedy for each
+differs.
+
+## The three ways a guard fails
+
+**1. Scope gap — the rule is right, the walk is too small.**
+`family-day-not-greenwich-day` and `no-limit-above-the-row-cap` scanned `app` and
+`lib`, never `components`. `mobile-numeric-inputmode` read **one flat directory**
+with `readdirSync` — not even its subdirectories.
+
+The last one is the most instructive defect in this pass, because it is the
+"guard that cannot fail" in its softest and most convincing form. It **ran**, on
+every CI job, and passed **honestly**. What made it useless is that its own
+coverage assertion — "more than 20 money inputs scanned" — was satisfied by the
+single directory it read. *A coverage assertion calibrated to the scanned subset
+cannot detect that the subset is the problem.* Twenty-six money inputs sat
+outside it with no `inputMode="decimal"`: every wallet balance, available and
+limit, bill and budget amounts, savings targets, trip budgets, itinerary costs.
+On iOS none of it could take a decimal point.
+
+**2. Premise gap — the guard covers the blessed helper, not the bypass.**
+`read-error-surfaced` is a good guard that checks every `useRealtimeQuery` call
+site for a dropped error. Five reads dropped theirs anyway, because each had
+**hand-rolled a fetch instead of using the hook** — outside its premise entirely.
+*A guard on the safe path does not cover the path taken to avoid it.*
+
+**3. Enumerated, with no scan behind it.** Three sightings:
+`whole-table-reads-are-not-capped` pins four named jobs against a capped fake;
+the i18n gate lists named surfaces; `claimed-writes-that-did-not-land` watches
+twelve named tables. None can be *wrong* about what it checks. None ever grew.
+
+Every guard widened in this pass got a bound past what its old scope could
+satisfy, plus a case asserting the walk still reaches past it.
+
+## The findings
+
+| | Finding | Severity |
+|---|---|---|
+| F-J01 | Nine forms wrote Greenwich's day into a DATE column | High |
+| F-J02 | Two reads capped at 1,000 rows in `components/`, one also dropping its error and lacking a rejection path | High |
+| F-J03 | Twenty-six money inputs could not take a decimal point on iOS | High |
+| F-J04 | Five reads handled every database failure and no network one — including App Lock presenting a configured lock as never set up | High |
+| F-J05 | The admin console reported the first thousand of everything | High |
+| F-J06 | Est. MRR, and the unpaid accounts the billing page could not see | High |
+| F-J07 | Two wallet balances summed from a capped read | High |
+| F-J08 | A member could vote twice in the family meal vote | High |
+
+Plus: the routine cron read each family's clock once per rule and guessed it on
+failure; the medication reminder's UTC fallback; and an i18n ratchet. Full
+evidence for each is in `audit/claude-1.md`.
+
+## Three that deserve naming
+
+**F-J04, App Lock.** The component's own comment defines three states:
+`undefined` = loading, `null` = no PIN ever set, otherwise the config. A failed
+read is a **fourth** meaning and was given the second. So a transient error
+presented a configured App Lock as never set up and offered "Set up PIN" — and
+setting one there overwrites the real config of a lock the user still has.
+
+**F-J05/F-J06, the admin console.** These convince because they are *half right*.
+`{ count: 'exact', head: true }` is uncapped and was used for the family, user
+and subscription tiles. Beside them, the Documents tile rendered `docs.length`
+— pinned at exactly 1,000 forever — and MRR, growth buckets, the revenue trend
+and "Past Due / Unpaid" were each reduced over a truncated prefix. Exact counts
+sat next to charts built from a sample, with nothing saying they disagreed. On
+billing the read also carried no `.order()`, so *which* thousand was arbitrary:
+measured against a capped fake with every overdue account past the cap, the page
+showed **zero** past-due accounts.
+
+**F-J08, the meal vote.** `castVote` clears the prior pick then inserts the new
+one; the insert's error was checked and the delete's discarded. The database does
+not backstop it, and the reason is exact: `meal_vote_ballots_once` is
+`UNIQUE (option_id, member_id)` — one ballot per member per **option**, not per
+**vote** — so switching from A to B inserts a different key and the constraint
+never fires. A failed clear left the member holding both ballots while the toast
+said "Vote recorded", and the tally counts each and divides by `ballots.length`:
+one person deciding a family's dinner twice, for two different dinners.
+
+## What this pass got wrong, twice
+
+Recorded because both were one step from being reported as findings.
+
+**The i18n number.** The count of hardcoded strings in the ungated surface reads
+2,812 today against a recorded 2,343 — apparently 469 strings of drift. Measured
+with **one scanner held fixed** across both trees: 2,903 then, 2,812 now. The
+surface has **improved by 91**; the apparent rise was the scanner getting better
+at seeing strings. *Two numbers from two different scanners say nothing about the
+code, and the obvious reading of them was backwards.*
+
+**Three counts, each too large.** The Greenwich-day write scan returned 57 files
+with a loose detector (over-reporting 4.4× on type annotations and unrelated
+literals), then 13 with a comma-terminated one (under-reporting, because
+`str(fd, 'service_date')` ends the value early), and finally **14** with a
+depth-aware property-value extractor — every one verified by eye. The loose
+number would have put 43 phantom findings on the board.
+
+The same discipline cleared four candidates that looked serious and were not:
+`resolveEntitlement`'s fail-open is documented and deliberate; `?? 100` on an AI
+score is reached only in a parent-approval path that already returns early on a
+failed read; the child-login uniqueness check fails open but is backstopped by a
+unique index *and* a synthetic-email collision; and `childSpendableCents`'
+capped sum could not affect a card authorization, because the authoritative
+check sums in SQL under `for update`. That last one was removed anyway — it had
+**zero callers**, and its comment claimed to be the live check, which is an
+invitation to the next author.
+
+## Verification
+
+Every fix in this pass was proved load-bearing the same way: revert it, watch the
+guard go red, restore. Three new guards added
+(`query-builders-have-a-rejection-path`, `aggregates-read-past-the-row-cap`,
+`i18n-ungated-surface-ratchet`), five existing guards widened. Full suite
+**13,899 / 13,899**, `tsc` clean, `next build` compiles, lint unchanged at its
+three pre-existing warnings. CI green on `b0bacc54`.
+
+**Still the one recommendation this audit would make above all others: break
+what a guard protects and confirm it goes red.** This pass adds a corollary —
+**and check that it was looking there at all.**
+
 # Pass P — the specialist workers' backlog, re-checked rather than taken on report
 
 Six commits on `claude/bubaly-repo-connect-etzqg7` (PR #548), working the OPEN

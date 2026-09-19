@@ -25,7 +25,7 @@ import { SkeletonList, ErrorState, EmptyState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import { progressBarA11y } from '@/lib/ui/a11y';
 import { galleryStep } from '@/lib/ui/gallery';
-import { useDialogBehavior } from '@/lib/hooks/use-dialog-behavior';
+import { useDialogBehavior } from '@/lib/a11y/use-dialog-behavior';
 import { openOnKey } from '@/lib/ui/a11y';
 import type { Tables } from '@/lib/database.types';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
@@ -75,7 +75,9 @@ export function PhotosModule() {
   // no way to reach the controls. Same contract as `<Modal>`, from the same
   // hook; the chrome stays full-bleed black rather than becoming a titled panel,
   // which is why this is not simply swapped for `<Modal>`.
-  const lightboxRef = useDialogBehavior<HTMLDivElement>(lightboxOpen, useCallback(() => setLightboxIdx(null), []));
+  const lightboxRef = useRef<HTMLDivElement>(null);
+  const closeLightbox = useCallback(() => setLightboxIdx(null), []);
+  useDialogBehavior(lightboxRef, lightboxOpen, { onClose: closeLightbox });
   const lightboxLabelId = useId();
   const lightboxCaptionId = useId();
   const [newAlbumOpen, setNewAlbumOpen] = useState(false);
