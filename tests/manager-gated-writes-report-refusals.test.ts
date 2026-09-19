@@ -47,8 +47,13 @@ describe('a manager-gated write never claims success on a refusal', () => {
     }
 
     it(`${file.split('/').pop()}: refuses out loud when zero rows changed`, () => {
-      expect(source).toContain("actions.onlyAParentGuardianCan16");
-      expect(source).toMatch(/!\w*[Rr]ows\?\.length/);
+      // Two sessions found this class independently and converged on
+      // `wroteNoRows` from lib/supabase/errors (whose header records the
+      // Postgres 16 measurement: `using` FILTERS an update/delete to zero rows
+      // while `with check` RAISES on an insert). The property asserted here is
+      // the zero-row check plus a message — not one spelling of it.
+      expect(source).toMatch(/wroteNoRows\(\w+\)|![\w]*[Rr]ows\?\.length/);
+      expect(source).toMatch(/errors\.thatChangeWasNotSaved|actions\.onlyAParentGuardianCan16/);
     });
   }
 
@@ -56,7 +61,7 @@ describe('a manager-gated write never claims success on a refusal', () => {
     // A guard that ships a missing translation key just moves the lie.
     for (const locale of ['en-US', 'nl-NL', 'fr-FR', 'de-DE', 'es-ES', 'it-IT', 'pt-PT']) {
       const messages = JSON.parse(readFileSync(`lib/i18n/messages/${locale}.json`, 'utf8'));
-      expect(messages['actions.onlyAParentGuardianCan16'], `${locale}`).toBeTruthy();
+      expect(messages['errors.thatChangeWasNotSaved'], `${locale}`).toBeTruthy();
     }
   });
 });

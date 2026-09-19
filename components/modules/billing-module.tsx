@@ -37,7 +37,7 @@ import {
 import { useBillingSubscription } from '@/lib/hooks/use-billing-subscription';
 import { SelectedPlanReview } from '@/components/billing/selected-plan-review';
 import { isReviewPlan, parseReviewSelection, type ReviewPlan } from '@/lib/billing/review-selection';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { Badge } from '@/components/ui/badge';
@@ -892,9 +892,12 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
 
   async function deleteBill(id: string) {
     const supabase = createClient();
+    // A restrictive RLS policy FILTERS an update/delete rather than raising, so
+    // a refused write returns zero rows and no error. `.select('id')` is what
+    // makes the difference visible — without it `data` is null either way.
     const { data: rows, error } = await supabase.from('bills').delete().eq('id', id).select('id');
     if (error) return toastError(describeDbError(error));
-    if (!rows?.length) return toastError(tr('actions.onlyAParentGuardianCan16'));
+    if (wroteNoRows(rows)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('billingModule.billRemoved'));
     void refreshBills();
   }
@@ -903,7 +906,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
     const supabase = createClient();
     const { data: rows, error } = await supabase.from('bills').update({ status: 'paid' }).eq('id', id).select('id');
     if (error) return toastError(describeDbError(error));
-    if (!rows?.length) return toastError(tr('actions.onlyAParentGuardianCan16'));
+    if (wroteNoRows(rows)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('billingModule.billMarkedAsPaid'));
     void refreshBills();
   }
@@ -919,7 +922,7 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
     const supabase = createClient();
     const { data: rows, error } = await supabase.from('financial_accounts').delete().eq('id', id).select('id');
     if (error) return toastError(describeDbError(error));
-    if (!rows?.length) return toastError(tr('actions.onlyAParentGuardianCan16'));
+    if (wroteNoRows(rows)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('billingModule.accountRemoved'));
     void refreshAccounts();
   }

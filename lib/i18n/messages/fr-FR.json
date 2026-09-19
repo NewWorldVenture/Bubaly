@@ -4995,6 +4995,7 @@
   "engagementHeatmap.notEnoughActivityRecordedYet": "Pas encore assez d’activité enregistrée.",
   "engagementHeatmap.peakActivity": "Pic d’activité",
   "error.weHitAnUnexpectedError": "Nous avons rencontré une erreur inattendue. Vos données sont en sécurité — réessayez, et si cela persiste, voici quelques pistes ci-dessous.",
+  "errors.thatChangeWasNotSaved": "Cette modification n'a pas été enregistrée : vous n'avez peut-être pas l'autorisation. Actualisez et réessayez.",
   "escalate.invalidEscalationPayload": "Charge utile d’escalade invalide",
   "escalate.unableToProcessEscalation": "Impossible de traiter l’escalade",
   "escalate.unauthorized": "Non autorisé",

@@ -8,7 +8,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -109,26 +109,32 @@ export function SignupsModule() {
       status: form.status,
       notes: form.notes.trim() || null,
     };
-    const { error: err } = form.id
-      ? await sb.from('opportunities').update(fields).eq('id', form.id)
-      : await sb.from('opportunities').insert({ ...fields, family_id: familyId, created_by: userId });
+    // A restrictive RLS policy FILTERS an update/delete rather than raising, so
+    // a refused write returns zero rows and no error. `.select('id')` is what
+    // makes the difference visible — without it `data` is null either way.
+    const { data: rows, error: err } = form.id
+      ? await sb.from('opportunities').update(fields).eq('id', form.id).select('id')
+      : await sb.from('opportunities').insert({ ...fields, family_id: familyId, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(form.id ? 'Signup updated' : 'Signup added');
     setModalOpen(false);
   }
 
   async function setStatus(o: Opportunity, status: OpportunityStatus) {
     const sb = createClient();
-    const { error: err } = await sb.from('opportunities').update({ status }).eq('id', o.id);
-    if (err) toastError(describeDbError(err));
+    const { data: rows, error: err } = await sb.from('opportunities').update({ status }).eq('id', o.id).select('id');
+    if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(rows)) toastError(t('errors.thatChangeWasNotSaved'));
   }
 
   async function remove(o: Opportunity) {
     if (!confirm(`Delete "${o.title}"?`)) return;
     const sb = createClient();
-    const { error: err } = await sb.from('opportunities').delete().eq('id', o.id);
+    const { data: rows, error: err } = await sb.from('opportunities').delete().eq('id', o.id).select('id');
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('signupsModule.signupDeleted'));
   }
 

@@ -1,5 +1,7 @@
 'use client';
 
+import { wroteNoRows } from '@/lib/supabase/errors';
+
 import { useEffect, useMemo, useState } from 'react';
 import {
   Stethoscope, Smile, Plus, Pencil, Trash2, FileText, ClipboardList,
@@ -158,7 +160,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       : await sb.from('health_providers').insert({ ...fields, family_id: familyId, kind, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(`Could not save ${providerWord.toLowerCase()}`); return; }
-    if (!rows?.length) { toastError(t('actions.onlyAParentGuardianCan16')); return; }
+    if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(`${providerWord} saved`);
     setProviderForm(null);
   }
@@ -167,7 +169,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
     const sb = createClient();
     const { data: rows, error: err } = await sb.from('health_providers').delete().eq('id', id).select('id');
     if (err) { toastError(t('medicalRecordsModule.couldNotDelete')); return; }
-    if (!rows?.length) { toastError(t('actions.onlyAParentGuardianCan16')); return; }
+    if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('medicalRecordsModule.deleted'));
   }
 
@@ -208,7 +210,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       : await sb.from('insurance_policies').insert({ ...fields, family_id: familyId, kind, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(t('medicalRecordsModule.couldNotSaveInsurance')); return; }
-    if (!rows?.length) { toastError(t('actions.onlyAParentGuardianCan16')); return; }
+    if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('medicalRecordsModule.insuranceSaved'));
     setPolicyForm(null);
   }
@@ -217,7 +219,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
     const sb = createClient();
     const { data: rows, error: err } = await sb.from('insurance_policies').delete().eq('id', id).select('id');
     if (err) { toastError(t('medicalRecordsModule.couldNotDelete')); return; }
-    if (!rows?.length) { toastError(t('actions.onlyAParentGuardianCan16')); return; }
+    if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('medicalRecordsModule.deleted'));
   }
 
@@ -247,7 +249,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       .upsert(payload, { onConflict: 'member_id' }).select('id');
     setSaving(false);
     if (err) { toastError(t('medicalRecordsModule.couldNotSaveProfile')); return; }
-    if (!rows?.length) { toastError(t('actions.onlyAParentGuardianCan16')); return; }
+    if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('medicalRecordsModule.profileSaved'));
     setProfileForm(null);
   }

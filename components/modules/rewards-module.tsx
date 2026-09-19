@@ -8,7 +8,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -90,12 +90,15 @@ export function RewardsModule() {
     setSaving(true);
     const sb = createClient();
     const fields = { title: form.title.trim(), description: form.description.trim() || null, cost_points: Math.round(form.cost_points) };
+    // A restrictive RLS policy FILTERS an update/delete rather than raising, so
+    // a refused write returns zero rows and no error. `.select('id')` is what
+    // makes the difference visible — without it `data` is null either way.
     const { data: rows, error: err } = form.id
       ? await sb.from('rewards').update(fields).eq('id', form.id).select('id')
       : await sb.from('rewards').insert({ ...fields, family_id: familyId, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(describeDbError(err)); return; }
-    if (!rows?.length) { toastError(t('actions.onlyAParentGuardianCan16')); return; }
+    if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(form.id ? 'Reward updated' : 'Reward added');
     setModalOpen(false);
   }
@@ -105,7 +108,7 @@ export function RewardsModule() {
     const sb = createClient();
     const { data: rows, error: err } = await sb.from('rewards').delete().eq('id', r.id).select('id');
     if (err) { toastError(describeDbError(err)); return; }
-    if (!rows?.length) { toastError(t('actions.onlyAParentGuardianCan16')); return; }
+    if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('rewardsModule.rewardDeleted'));
   }
 

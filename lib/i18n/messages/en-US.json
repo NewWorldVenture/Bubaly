@@ -4995,6 +4995,7 @@
   "engagementHeatmap.notEnoughActivityRecordedYet": "Not enough activity recorded yet.",
   "engagementHeatmap.peakActivity": "Peak Activity",
   "error.weHitAnUnexpectedError": "We hit an unexpected error. Your data is safe — try again, and if it keeps happening you have a couple of ways forward below.",
+  "errors.thatChangeWasNotSaved": "That change wasn't saved — you may not have permission. Refresh and try again.",
   "escalate.invalidEscalationPayload": "Invalid escalation payload",
   "escalate.unableToProcessEscalation": "Unable to process escalation",
   "escalate.unauthorized": "Unauthorized",

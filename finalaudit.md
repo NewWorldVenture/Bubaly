@@ -4604,9 +4604,32 @@ impossible.
 All 19 now capture and log their error. None blocks its response: the point is
 a trace, which is the difference between degrading and vanishing.
 
+## Converged with another session on C1-K-01/03
+
+While this pass was running, another session found the **same class
+independently** and landed `wroteNoRows()` in `lib/supabase/errors.ts` with a
+test of its own. Its header carries the measurement that explains the whole
+defect, and states it better than this document did:
+
+> `using` (UPDATE/DELETE) **filters** silently to zero rows; `with check`
+> (INSERT) **raises**. Measured on Postgres 16 against the policy shape 0309
+> installs, as a non-manager.
+
+That is why only the update/delete paths needed a row count — and it is
+independent corroboration of `health-write-gate-check.sql`, reached from the
+opposite direction.
+
+The merge conflicted in `rewards-module`. Resolved **towards theirs**: one
+shared helper beats two spellings, and `errors.thatChangeWasNotSaved` is the
+more accurate message — zero rows can also mean the row was deleted
+concurrently, not only that permission was refused. The three modules only this
+pass had fixed (`medical-records`, `family-module`, `settings-module`) were
+migrated to the same helper and key, and both sessions' guards now assert the
+**property** rather than either spelling.
+
 ## Verification
 
-`tsc` clean · `next lint` 0 errors · **14,051 tests / 1,232 files** ·
+`tsc` clean · `next lint` 0 errors · **14,056 tests / 1,232 files** ·
 **40/40 probes** (330 migrations replayed, 0 failed).
 
 Every fix calibrated by reverting it: removing the row checks fails 2 of the 8

@@ -57,19 +57,22 @@ describe('medical-records writes report what actually happened', () => {
 
   it('never claims success without checking the row count', () => {
     // The shape of the defect: a success() reached with only `if (err)` behind
-    // it. Each of the five now passes through a `!rows?.length` refusal first.
-    const refusals = source.match(/if \(!rows\?\.length\)/g) ?? [];
+    // it. Each of the five now passes through a zero-row refusal first, using
+    // the shared `wroteNoRows` helper another session landed for this same
+    // class — its header carries the Postgres 16 measurement showing `using`
+    // FILTERS an update/delete while `with check` RAISES on an insert.
+    const refusals = source.match(/if \(wroteNoRows\(\w+\)\)/g) ?? [];
     expect(refusals).toHaveLength(WRITES.length);
   });
 
   it('tells the reader WHY, in their own language', () => {
     // Not a generic failure: the row count distinguishes "refused" from
-    // "broken", so the message can say which. This key already exists in all
-    // seven locales, so no half-translated string ships with the fix.
-    expect(source).toContain("t('actions.onlyAParentGuardianCan16')");
+    // "broken", so the message can say which. This key exists in all seven
+    // locales, so no half-translated string ships with the fix.
+    expect(source).toContain("t('errors.thatChangeWasNotSaved')");
     for (const locale of ['en-US', 'nl-NL', 'fr-FR', 'de-DE', 'es-ES', 'it-IT', 'pt-PT']) {
       const messages = JSON.parse(readFileSync(`lib/i18n/messages/${locale}.json`, 'utf8'));
-      expect(messages['actions.onlyAParentGuardianCan16'], `${locale} is missing the refusal message`).toBeTruthy();
+      expect(messages['errors.thatChangeWasNotSaved'], `${locale} is missing the refusal message`).toBeTruthy();
     }
   });
 
