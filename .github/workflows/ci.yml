@@ -277,7 +277,7 @@ jobs:
         env:
           CI: '1'
 
-      - name: Align disposable Auth redirects with the E2E app
+      - name: Configure disposable Auth redirects and phone test codes
         shell: bash
         run: |
           python3 - <<'PY'
@@ -292,10 +292,23 @@ jobs:
           replacement = '''[auth]
           enable_signup = true
           site_url = "http://localhost:3107"
-          additional_redirect_urls = ["http://localhost:3107/**"]'''
+          additional_redirect_urls = ["http://localhost:3107/**"]
+
+          [auth.sms]
+          enable_signup = true
+          enable_confirmations = true
+          max_frequency = "1s"
+
+          [auth.sms.test_otp]
+          12025550101 = "483921"
+          12025550102 = "483922"
+          12025550103 = "483923"'''
           # This checkout and GoTrue are disposable. Keep the product defaults,
           # other sections and credentials untouched; stop if their shape drifts.
           assert source.count(original) == 1, 'Unexpected disposable Auth config'
+          # Reserved fictional numbers never reach an SMS provider: GoTrue uses
+          # these fixed codes before its provider path; no provider is enabled.
+          assert '[auth.sms' not in source, 'Unexpected disposable SMS config'
           path.write_text(source.replace(original, replacement, 1))
           PY
 

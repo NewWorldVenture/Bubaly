@@ -81,6 +81,57 @@ describe('actual compatibility POST, cookie parsing and installed token revocati
     expect(new Headers(provider.mock.calls[0][1]?.headers).get('authorization')).toBe(`Bearer ${token}`);
     expect(mock.set).not.toHaveBeenCalled();
   });
+  it('carries exact pending decision bytes alongside a stable session identity', async () => {
+    jar.set(`${KEY}-pkce-initiation`, `session-v1-${'a'.repeat(32)}`);
+    jar.set(`${KEY}-code-verifier.1`, 'second-verifier-part');
+    jar.set(`${KEY}-code-verifier.0`, 'first-verifier-part');
+    jar.set('sb-other-auth-token-pkce-initiation', 'unrelated');
+    const response = await POST(request());
+    const receipt = decodeSignOutBridge(response.cookies.get(SIGNOUT_BRIDGE_COOKIE)?.value,
+      new URL(response.headers.get('location')!).searchParams.get('intent')!);
+    expect(receipt?.intent).toEqual({ kind: 'session', userId: A, sessionId: SID,
+      pendingVerifier: JSON.stringify([
+        { name: `${KEY}-code-verifier.0`, value: 'first-verifier-part' },
+        { name: `${KEY}-code-verifier.1`, value: 'second-verifier-part' },
+        { name: `${KEY}-pkce-initiation`, value: `session-v1-${'a'.repeat(32)}` },
+      ]) });
+    expect(response.cookies.getAll().map(cookie => cookie.name)).toEqual([SIGNOUT_BRIDGE_COOKIE]);
+  });
+  it('captures the pending decision before a held provider response', async () => {
+    const original = `session-v1-${'a'.repeat(32)}`;
+    jar.set(`${KEY}-pkce-initiation`, original);
+    let release!: (response: Response) => void;
+    let started!: () => void;
+    const dispatched = new Promise<void>(resolve => { started = resolve; });
+    provider.mockImplementation(() => { started(); return new Promise(resolve => { release = resolve; }); });
+    const pending = POST(request());
+    await dispatched;
+    jar.set(`${KEY}-pkce-initiation`, `pending-v1-${'b'.repeat(32)}`);
+    release(new Response(null, { status: 204 }));
+    const response = await pending;
+    const receipt = decodeSignOutBridge(response.cookies.get(SIGNOUT_BRIDGE_COOKIE)?.value,
+      new URL(response.headers.get('location')!).searchParams.get('intent')!);
+    expect(receipt?.intent).toEqual({ kind: 'session', userId: A, sessionId: SID,
+      pendingVerifier: JSON.stringify([{ name: `${KEY}-pkce-initiation`, value: original }]) });
+  });
+  it('keeps an oversized pending owner within the bridge limit by requiring explicit review', async () => {
+    jar.set(`${KEY}-code-verifier`, 'x'.repeat(2000));
+    const response = await POST(request());
+    const encoded = response.cookies.get(SIGNOUT_BRIDGE_COOKIE)!.value;
+    expect(encoded.length).toBeLessThanOrEqual(2048);
+    expect(decodeSignOutBridge(encoded, new URL(response.headers.get('location')!).searchParams.get('intent')!))
+      .toMatchObject({ intent: null, revocation: 'confirmed' });
+    expect(response.cookies.getAll().map(cookie => cookie.name)).toEqual([SIGNOUT_BRIDGE_COOKIE]);
+  });
+  it('does not represent a pending-only login as an empty owner', async () => {
+    jar.clear();
+    jar.set(`${KEY}-pkce-initiation`, `pending-v1-${'b'.repeat(32)}`);
+    const response = await POST(request());
+    expect(decodeSignOutBridge(response.cookies.get(SIGNOUT_BRIDGE_COOKIE)?.value,
+      new URL(response.headers.get('location')!).searchParams.get('intent')!))
+      .toMatchObject({ intent: null, revocation: 'unconfirmed' });
+    expect(provider).not.toHaveBeenCalled();
+  });
   it('keeps local completion available when revocation is unconfirmed', async () => {
     provider.mockResolvedValue(new Response('{"message":"Fixture outage"}', { status: 503, headers: { 'content-type': 'application/json' } }));
     const response = await POST(request());
@@ -122,6 +173,10 @@ describe('short-lived matching POST intent', () => {
   });
   it.each(['', 'not-json', 'x'.repeat(2049), Buffer.from('null').toString('base64url')])('rejects malformed encoded receipt', value => {
     expect(decodeSignOutBridge(value, NONCE)).toBeNull();
+  });
+  it.each([null, 4, {}, [], ''])('rejects malformed pending comparisons (%s)', pendingVerifier => {
+    const value = { ...receipt(), intent: { kind: 'session', userId: A, sessionId: SID, pendingVerifier } };
+    expect(decodeSignOutBridge(Buffer.from(JSON.stringify(value)).toString('base64url'), NONCE)).toBeNull();
   });
 });
 

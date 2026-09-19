@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
+import { parseCookieHeader } from '@supabase/ssr';
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import type { SignOutBridge } from '../../lib/auth/signout-bridge';
 
@@ -33,7 +34,7 @@ function collect(filename: string): string {
   return id;
 }
 const entries = Object.fromEntries(['lib/supabase/client.ts', 'lib/auth/browser-signout.ts', 'lib/auth/browser-session-storage.ts',
-  'lib/auth/cache-session.ts', 'components/auth/sign-out-form.tsx', 'components/auth/sign-out-completion.tsx'].map(file => [file, collect(file)]));
+  'lib/auth/cache-session.ts', 'lib/auth/password-client.ts', 'components/auth/sign-out-form.tsx', 'components/auth/sign-out-completion.tsx'].map(file => [file, collect(file)]));
 const ORIGIN = 'https://signout-flow-fixture.invalid';
 const PROVIDER = 'https://signout-flow.supabase.co';
 const KEY = 'sb-signout-flow-auth-token';
@@ -43,6 +44,7 @@ const SIDA = '11111111-1111-4111-8111-111111111111';
 const SIDB = '22222222-2222-4222-8222-222222222222';
 type Probe = {
   signIn: (who: 'a' | 'b') => Promise<void>; refresh: () => Promise<void>;
+  ownedSignIn: (who: 'a' | 'b') => Promise<void>;
   mount: (bridge?: SignOutBridge | null) => void; user: () => string | null;
   navigation: string[]; results: string[]; errors: string[];
   cacheUser: () => string | null;
@@ -117,6 +119,7 @@ async function load(page: Page) {
     const Completion = load(entries['components/auth/sign-out-completion.tsx']).SignOutCompletion;
     const root = ReactDOM.createRoot(document.getElementById('root'));
     p.signIn = async who => { const result = await db.auth.signInWithPassword({ email: who + '@fixture.invalid', password: 'fixture-password' }); if(result.error) throw result.error; };
+    p.ownedSignIn = async who => { const result = await load(entries['lib/auth/password-client.ts']).signInWithOwnedSession({ email: who + '@fixture.invalid', password: 'fixture-password' }, () => true); if(result.error) throw result.error; };
     p.refresh = async () => { const result = await db.auth.refreshSession(); if(result.error) throw result.error; };
     p.user = () => storage.captureBrowserSessionSnapshot()?.userId ?? null;
     p.cacheUser = () => cache.getCacheSessionSnapshot().identity?.userId ?? null;
@@ -129,6 +132,53 @@ async function load(page: Page) {
 }
 const bridge = (): SignOutBridge => ({ nonce: '33333333-3333-4333-8333-333333333333', expiresAt: Date.now() + 60_000,
   intent: { kind: 'session', userId: A, sessionId: SIDA }, revocation: 'confirmed' });
+
+async function actualPostReceipt(context: BrowserContext) {
+  // Real server preparation/token reader/revocation SDK and codec. Only the
+  // immutable Next request cookies and provider transport are controlled.
+  const incoming = (await context.cookies(ORIGIN)).flatMap(cookie => parseCookieHeader(`${cookie.name}=${cookie.value}`));
+  const loaded = new Map<string, { exports: unknown }>();
+  let revocations = 0;
+  const providerFetch: typeof fetch = async (input, init) => {
+    expect(String(input) === `${PROVIDER}/auth/v1/logout?scope=local`).toBe(true);
+    expect(init?.method).toBe('POST');
+    expect(new Headers(init?.headers).get('authorization')?.startsWith('Bearer ')).toBe(true);
+    revocations++;
+    return new Response(null, { status: 204 });
+  };
+  function loadServer(filename: string): unknown {
+    const id = path.resolve(filename);
+    const cached = loaded.get(id);
+    if (cached) return cached.exports;
+    const loadedModule = { exports: {} };
+    loaded.set(id, loadedModule);
+    const transpiled = ts.transpileModule(fs.readFileSync(id, 'utf8'), { reportDiagnostics: true, compilerOptions: {
+      target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS,
+    } });
+    if (transpiled.diagnostics?.some(diagnostic => diagnostic.category === ts.DiagnosticCategory.Error)) {
+      throw new Error('Server fixture source must parse without errors');
+    }
+    const requireServer = (name: string): unknown => {
+      if (name === 'server-only') return {};
+      if (name === 'next/headers') return { cookies: async () => ({ getAll: () => incoming.map(cookie => ({ ...cookie })) }) };
+      if (name.startsWith('@/') || name.startsWith('.')) {
+        return loadServer((name.startsWith('@/') ? path.resolve(name.slice(2)) : path.resolve(path.dirname(id), name)) + '.ts');
+      }
+      return require(name);
+    };
+    new Function('require', 'module', 'exports', 'process', 'fetch', transpiled.outputText)(requireServer, loadedModule, loadedModule.exports,
+      { env: { NEXT_PUBLIC_SUPABASE_URL: PROVIDER, NEXT_PUBLIC_SUPABASE_ANON_KEY: 'synthetic-public-key' } }, providerFetch);
+    return loadedModule.exports;
+  }
+  const server = loadServer('lib/auth/signout-bridge.ts') as typeof import('../../lib/auth/signout-bridge');
+  const prepared = await server.prepareSignOutBridge('local');
+  const encoded = server.encodeSignOutBridge(prepared);
+  const decoded = server.decodeSignOutBridge(encoded, prepared.nonce);
+  expect(encoded.length).toBeLessThanOrEqual(2048);
+  expect(decoded).not.toBeNull();
+  expect(revocations).toBe(1);
+  return decoded!;
+}
 test.use({ trace: 'off', screenshot: 'off', video: 'off' });
 
 for (const outcome of [204, 503, 'network'] as const) {
@@ -187,6 +237,71 @@ test('matching POST completion clears A once without revoking again', async ({ c
   expect(await page.evaluate(() => window.__signoutFlow.user())).toBeNull();
   expect(control.logoutCalls()).toBe(0);
   expect(await page.evaluate(() => window.__signoutFlow.navigation)).toEqual(['/login']);
+});
+
+for (const renew of [false, true]) {
+  test(`actual POST bridge clears an owned password reservation (renew=${renew})`, async ({ context, page }) => {
+    const control = await install(context);
+    await load(page);
+    await page.evaluate(() => window.__signoutFlow.ownedSignIn('a'));
+    const receipt = await actualPostReceipt(context);
+    if (renew) await page.evaluate(() => window.__signoutFlow.refresh());
+    await page.evaluate(value => window.__signoutFlow.mount(value), receipt);
+    expect(await page.evaluate(() => window.__signoutFlow.user())).toBeNull();
+    expect((await context.cookies()).some(cookie => cookie.name === `${KEY}-pkce-initiation`)).toBe(false);
+    expect(await page.evaluate(() => window.__signoutFlow.navigation)).toEqual(['/login']);
+    expect(control.logoutCalls()).toBe(0);
+    expect(await page.evaluate(() => window.__signoutFlow.errors)).toEqual([]);
+  });
+}
+
+for (const change of ['marker', 'verifier', 'session'] as const) {
+  test(`actual POST bridge preserves a newer ${change} decision exactly`, async ({ context, page }) => {
+    const control = await install(context);
+    await load(page);
+    await page.evaluate(() => window.__signoutFlow.ownedSignIn('a'));
+    const receipt = await actualPostReceipt(context);
+    if (change === 'session') await page.evaluate(() => window.__signoutFlow.ownedSignIn('b'));
+    else await context.addCookies([{ name: `${KEY}-${change === 'marker' ? 'pkce-initiation' : 'code-verifier'}`,
+      value: change === 'marker' ? `pending-v1-${'b'.repeat(32)}` : 'newer-verifier', url: ORIGIN }]);
+    const before = await context.cookies();
+    await page.evaluate(value => window.__signoutFlow.mount(value), receipt);
+    expect(await context.cookies()).toEqual(before);
+    expect(await page.evaluate(() => window.__signoutFlow.navigation)).toEqual([]);
+    await expect(page.getByRole('status')).toBeVisible();
+    expect(control.logoutCalls()).toBe(0);
+    expect(await page.evaluate(() => window.__signoutFlow.errors)).toEqual([]);
+  });
+}
+
+test('actual POST bridge clears captured verifier chunks and its unchanged reservation', async ({ context, page }) => {
+  const control = await install(context);
+  await load(page);
+  await page.evaluate(() => window.__signoutFlow.ownedSignIn('a'));
+  await context.addCookies([0, 1].map(index => ({ name: `${KEY}-code-verifier.${index}`, value: `original-part-${index}`, url: ORIGIN })));
+  const receipt = await actualPostReceipt(context);
+  await page.evaluate(() => window.__signoutFlow.refresh());
+  await page.evaluate(value => window.__signoutFlow.mount(value), receipt);
+  expect(await page.evaluate(() => window.__signoutFlow.user())).toBeNull();
+  expect((await context.cookies()).filter(cookie => cookie.name.startsWith(KEY)).map(cookie => cookie.name))
+    .toEqual([`${KEY}-logout-generation`]);
+  expect(await page.evaluate(() => window.__signoutFlow.navigation)).toEqual(['/login']);
+  expect(control.logoutCalls()).toBe(0);
+});
+
+test('a bounded oversized bridge requires explicit review without altering the current session', async ({ context, page }) => {
+  const control = await install(context);
+  await load(page);
+  await page.evaluate(() => window.__signoutFlow.ownedSignIn('a'));
+  await context.addCookies([{ name: `${KEY}-code-verifier`, value: 'x'.repeat(2000), url: ORIGIN }]);
+  const receipt = await actualPostReceipt(context);
+  expect(receipt.intent).toBeNull();
+  const before = await context.cookies();
+  await page.evaluate(value => window.__signoutFlow.mount(value), receipt);
+  expect(await context.cookies()).toEqual(before);
+  expect(await page.evaluate(() => window.__signoutFlow.navigation)).toEqual([]);
+  await expect(page.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible();
+  expect(control.logoutCalls()).toBe(0);
 });
 test('delayed POST completion for A preserves current B and offers explicit review', async ({ context, page }) => {
   const control = await install(context);

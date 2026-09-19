@@ -69,6 +69,7 @@ vi.mock('@/lib/auth/signup-client', () => ({
 vi.mock('@/lib/auth/pkce-initiation-client', () => ({ signInWithOwnedOAuth: mock.oauth }));
 vi.mock('@/lib/auth/password-client', () => ({
   signInWithOwnedSession: (credentials: unknown, canCommit: () => boolean) => { mock.passwordGuards.push(canCommit); return mock.password(credentials); },
+  verifySmsWithOwnedSession: (credentials: unknown, canCommit: () => boolean) => mock.verify(credentials, canCommit),
   isPasswordSessionCurrent: mock.passwordCurrent,
 }));
 vi.mock('@/app/(auth)/actions', () => ({ resolveLandingPathAction: mock.landing, stitchIdentityAction: mock.stitch }));
@@ -127,7 +128,7 @@ beforeEach(() => {
   mock.passwordCurrent.mockReset().mockReturnValue(true); mock.passwordGuards = [];
   mock.oauth.mockReset().mockResolvedValue(undefined);
   mock.otp.mockReset().mockResolvedValue({ error: null });
-  mock.verify.mockReset().mockResolvedValue({ error: null });
+  mock.verify.mockReset().mockResolvedValue(passwordReceipt());
   mock.landing.mockReset().mockResolvedValue('/home');
   vi.stubGlobal('window', { location: { origin: 'https://bubaly.test', hash: '', href: 'https://bubaly.test/login' } });
   vi.stubGlobal('FormData', class { constructor(private fields: Record<string, string>) {} get(name: string) { return this.fields[name]; } });
@@ -193,8 +194,9 @@ describe.each(choices)('auth handoff for %s', (query, plan) => {
       await click(render(() => PhoneAuth({ next: destination })), getMessages('en-US')['phoneAuth.continue']);
       const codeTree = render(() => PhoneAuth({ next: destination }));
       const otp = nodes(codeTree).find((node) => typeof node.props.onComplete === 'function')!;
+      (otp.props.onChange as (code: string) => void)('123456');
       (otp.props.onComplete as (code: string) => void)('123456'); await settle();
-      expect(mock.verify).toHaveBeenLastCalledWith({ phone: '+15555550123', token: '123456', type: 'sms' });
+      expect(mock.verify).toHaveBeenLastCalledWith({ phone: '+15555550123', token: '123456' }, expect.any(Function));
       expect(mock.push).toHaveBeenLastCalledWith(destination);
     }
   });
@@ -256,6 +258,7 @@ describe('explicit destinations, failures and defaults', () => {
     mock.verify.mockResolvedValueOnce({ error: { message: 'try again' } });
     for (let i = 0; i < 2; i++) {
       const otp = nodes(render(factory)).find((node) => typeof node.props.onComplete === 'function')!;
+      (otp.props.onChange as (code: string) => void)('123456');
       (otp.props.onComplete as (code: string) => void)('123456'); await settle();
       if (i === 0) expect(mock.push).not.toHaveBeenCalled();
     }

@@ -3,8 +3,9 @@ import { AuthRetryableFetchError, isAuthError, type AuthTokenResponsePassword, t
 import { durableCookieOptions, isSecureOrigin } from './session';
 import { captureBrowserSessionSnapshot } from './browser-session-storage';
 import { notifySessionStorageChanged } from './session-change';
-import { parseCallbackAdmissionCookies } from './callback-witness';
+import { callbackAdmissionMaterial, parseCallbackAdmissionCookies } from './callback-witness';
 import { pkceInitiationCookieName, readPkceInitiationSlot } from './pkce-initiation';
+import { isLikelyE164, isValidOtp } from './otp';
 
 type Cookie = { name: string; value: string; options: CookieOptions };
 type Tokens = { access_token: string; refresh_token: string };
@@ -70,6 +71,7 @@ async function withOwnedClient(
   canCommitSession: () => boolean,
   canAdoptSession: (session: Session) => boolean = () => true,
   boundary?: OwnedSessionBoundary,
+  ownership?: { allowSessionRefresh: boolean; onLost: () => void },
 ): Promise<AuthTokenResponsePassword> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const key = `sb-${new URL(url).hostname.split('.')[0]}-auth-token`;
@@ -82,13 +84,27 @@ async function withOwnedClient(
     return cookies;
   };
   const snapshot = () => JSON.stringify(read().filter(cookie => isOwnership(cookie.name)).sort((a, b) => a.name.localeCompare(b.name)));
+  const decision = () => {
+    if (!ownership?.allowSessionRefresh) return snapshot();
+    const cookies = read(), material = callbackAdmissionMaterial(cookies, key);
+    if (!material) throw interrupted();
+    return JSON.stringify({ session: material.session, generation: material.generation,
+      initiation: readPkceInitiationSlot(cookies, key)!.raw });
+  };
   let expected = snapshot();
+  let expectedDecision = decision();
   let active = true;
   let exposed = false;
   let adopted: Session | null = null;
-  const owns = () => active && canCommitSession() && (boundary ? boundary.isCurrent() : snapshot() === expected);
+  const sameDecision = () => canCommitSession() && (boundary ? boundary.isCurrent() : decision() === expectedDecision);
+  const owns = () => {
+    if (!active) return false;
+    if (sameDecision()) return true;
+    ownership?.onLost();
+    return false;
+  };
   if (!boundary) {
-    // A deliberate password/child login claims the same pending decision slot
+    // A deliberate password/child/SMS login claims the same pending decision slot
     // before any await. Its marker cannot authorize PKCE exchange, and does not
     // consume the previous verifier. Callback adoption retains its own proof.
     if (!owns()) throw interrupted();
@@ -101,6 +117,7 @@ async function withOwnedClient(
     const planned = JSON.stringify([...intended].map(([name, value]) => ({ name, value })).sort((a, b) => a.name.localeCompare(b.name)));
     if (snapshot() !== planned) throw interrupted();
     expected = planned;
+    expectedDecision = decision();
   }
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -129,6 +146,7 @@ async function withOwnedClient(
         if (!owns()) throw interrupted();
         for (const cookie of writes) document.cookie = serializeCookieHeader(cookie.name, cookie.value, cookie.options);
         expected = snapshot();
+        expectedDecision = decision();
         const planned = JSON.stringify([...intended].map(([name, value]) => ({ name, value })).sort((a, b) => a.name.localeCompare(b.name)));
         if (expected !== planned || !isPasswordSessionCurrent(candidate)) throw interrupted();
         adopted = candidate;
@@ -146,9 +164,10 @@ async function withOwnedClient(
       if (!owns()) throw interrupted();
       exposed = true;
       const result = await run(client, owns);
+      if (ownership && !owns()) throw interrupted();
       if (result.error) return result;
       if (!validSession(result.data.session) || !canAdoptSession(result.data.session) || !adopted || !active || !canCommitSession()
-        || (boundary && !boundary.isCurrent()) || !isPasswordSessionCurrent(result.data.session)) throw interrupted();
+        || (boundary && !boundary.isCurrent()) || (ownership && !owns()) || !isPasswordSessionCurrent(result.data.session)) throw interrupted();
       notifySessionStorageChanged();
       return result;
     })();
@@ -156,16 +175,45 @@ async function withOwnedClient(
       timer = setTimeout(() => { active = false; controller.abort(); reject(interrupted()); }, 20_000);
     });
     return await Promise.race([work, deadline]);
+  } catch (error) {
+    // A deadline or provider error stays visible unless a later browser/user
+    // decision retired this SMS attempt. Storage uncertainty is not retirement.
+    if (ownership) { try { if (!sameDecision()) ownership.onLost(); } catch { /* Preserve the original failure. */ } }
+    throw error;
   } finally {
     active = false;
     if (timer) clearTimeout(timer);
     controller.abort();
-    await client.auth.dispose();
+    try { await client.auth.dispose(); }
+    finally {
+      // Disposal can yield after adoption. A newer decision must also retire
+      // the SMS receipt before the component is allowed to navigate with it.
+      if (ownership && !sameDecision()) { ownership.onLost(); throw interrupted(); }
+    }
   }
 }
 
 export function signInWithOwnedSession(credentials: SignInWithPasswordCredentials, canCommitSession: () => boolean): Promise<AuthTokenResponsePassword> {
   return withOwnedClient(client => client.auth.signInWithPassword(credentials), canCommitSession).catch(unavailable);
+}
+
+/** Verify SMS through isolated storage owned before the provider request begins. */
+export function verifySmsWithOwnedSession(credentials: { phone: string; token: string }, canCommitSession: () => boolean): Promise<AuthTokenResponsePassword> {
+  const phone = credentials?.phone, token = credentials?.token;
+  if (typeof phone !== 'string' || typeof token !== 'string'
+    || !isLikelyE164(phone) || token.length !== 6 || !isValidOtp(token)) return Promise.reject(interrupted());
+  let retired = false;
+  return withOwnedClient(async client => {
+    const result = await client.auth.verifyOtp({ phone, token, type: 'sms' });
+    if (result.error) return { data: { user: null, session: null }, error: result.error };
+    if (!result.data.user || !result.data.session) throw interrupted();
+    return { data: { user: result.data.user, session: result.data.session }, error: null };
+  }, canCommitSession, () => true, undefined, { allowSessionRefresh: true, onLost: () => { retired = true; } }).catch(error => {
+    if (retired) {
+      const changed = interrupted(); changed.name = 'AuthSessionInterruptedError'; throw changed;
+    }
+    return unavailable(error);
+  });
 }
 
 /** Capture browser ownership before the authorized server action produces tokens. */

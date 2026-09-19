@@ -2,43 +2,28 @@
 
 ## Pull request 510 integration — 2026-09-19
 
-CURRENT: Managed initiation ownership for AUTH-001/002/003 IN PROGRESS.
-WORKSPACE: bubaly-final-production-audit-20260912; PR510 merged, main70789485 live.
-SCOPE: Original signup/OAuth/reset ownership, synchronous pending reservation,
-canonical nonce/kind/session/logout/verifier proof, strict browser/server exchange.
-No missing-proof legacy bypass; existing sessions and same-session renewal preserved.
-FINAL SOURCE/TEST: eaba35cb7be2eb73d45fb3384ec4fced3680bc72; application remains
-bf22aca87274bf607c4c605180c62e21c89ecbb7. Two existing browser fixtures refined.
-37 files (15application,22tests), no SQL/dependency/config/workflow changes.
-FINAL LOCAL: ordering11/11; combined397/397browser PASS29.5s, zero failures/skips.
-BothfullUTC/DST16694/16694 across1305files; build252,full strict types,lint3existing
-warnings and i18n/queryPASS. The intermediate383/14 matrix is superseded after
-fixture corrections preserved exact session/verifier bytes and production logout.
-CURRENT HOSTED: New six-case HTTP/Mailpit fixture discovered/typechecked/linted;
-new-source runtime pending. Release discovery1252cases52files includes6HTTP+11order;
-authenticated/durable enabled. Prior707 hosted results do not cover this source.
-NATIVE CLOSURE: Only SEC-005 FIXED + PASS. Exact707 CI35466913827 all four jobs
-SUCCESS, E2E1186/1186 zero failures/flakes/skips with authenticated/durable flags.
-Exact source/discovery includes3readiness and4HTTP cases with genuine emailed
-recovery/password/save/logout/new-password-login; dot reporter prints no names.
-Both16543-test full unit runs, build252/lint/types and Database/Mobile pass.
-ROLLOUT: main70789485 / dpl_4e2X1mo4taDXyYNnd38F36DP7M4r live20:20:47Z.
-Exact deployed disabled controls/nativePOST credential exclusion and hydrated
-readiness pass; POST intercepted, no real provider operation. Four public renders
-pass with zero actionPOSTs/page errors. Historical0177 migration failure persists;
-no SQL retry. See docs/final-audit/production-rollout-20260919.md.
-INVENTORY: All14020 prior IDs/statuses retained, including acceptedSEC005 closure.
-15 new NOTSTARTED structural records:2libraries,9runtime exports,4testfiles.
-Total14035:13845 NOTSTARTED,186 INPROGRESS,1 FIXED+PASS,3 FAIL (0.01%).
-New routes/controls:0. Three type declarations mapped under pure-library record.
-NEXT: Publish the verified final source and await exact hosted acceptance.
-The1252-case discovery is not a runtime PASS.
-OPEN: Cross-process non-atomic cookie writes, production provider/session/redirect
-configuration, phone/admin recovery, physical devices and complete workflows.
-CURRENT RECORD: docs/final-audit/auth-initiation-ownership-cycle.md.
-EXACT MAPPING: docs/final-audit/discovery/auth-initiation-ownership-inventory.json.
-RELEASE: NO. AUTH-001/002/003 remain IN PROGRESS; only narrow SEC-005 is closed.
-LAST-UPDATE: 2026-09-19 eaba final source verified; new hosted acceptance pending
+CURRENT: Phone OTP and hosted signout completion AUTH-001/002 IN PROGRESS.
+FROZEN: f75e7febdf01bf944fa35a505745001533c80028; 9 source/test/workflow files.
+REPAIRS: Owned SMS verification and lifecycle guards; exact pending-cookie bridge.
+LOCAL: Combined 459/459 controlled browser cases across 17 files pass (1.1m).
+Both full unit zones pass 16,703/16,703 across 1,305 files. Lint (3 existing
+warnings), all 8 localization surfaces and query audit (491/86/146) pass.
+Final combined 252-page build passes; full strict types pass; new hosted acceptance pending.
+BASELINE: Published d954 public deployment checks PASS; hosted CI 1,251/1,252,
+sole durable-signout completion failure. Web/Database/Mobile pass. No rerun.
+HOSTED: Three real Next/GoTrue phone cases discovered/typechecked/linted; runtime
+pending new CI. Full discovery: 1,296 tests/54 files; authenticated/durable enabled.
+Disposable test SMS configuration only; product config/SQL unchanged.
+INVENTORY: All 14,035 prior IDs retained. Only PhoneAuth COMPONENT NS→IN PROGRESS;
+ROLE stays NOT STARTED. Three new helper/test obligations IN PROGRESS.
+Total 14,038: 13,844 NOT STARTED, 190 IN PROGRESS, 1 FIXED+PASS, 3 FAIL (0.01%).
+AUTH-001/002/003 stay open; only existing narrow SEC-005 is closed.
+NEXT: Publish and verify exact hosted phone and durable-signout acceptance.
+Physical devices, production SMS delivery and full workflows remain open.
+RECORD: docs/final-audit/auth-phone-ownership-cycle.md.
+MAPPING: docs/final-audit/discovery/auth-phone-ownership-inventory.json.
+RELEASE: NO full audit/phone/production workflow PASS.
+LAST-UPDATE: 2026-09-19T21:24:38.697Z
 
 Four workers audit this repository in parallel. Each worker maintains ONLY its
 own section below. Read this file before touching any source file: if another

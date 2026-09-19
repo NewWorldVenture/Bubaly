@@ -1,0 +1,280 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-19T21:20:47.452Z",
+  "baselineCommit": "d9542e256324e99d4e94f816266a35ed2de446b5",
+  "sourceTree": "f75e7febdf01bf944fa35a505745001533c80028",
+  "applicationSourceFreeze": "f75e7febdf01bf944fa35a505745001533c80028",
+  "methodology": [
+    "Initial new regression was recorded under existing AUTH-001/AUTH-002 before repair acceptance; original four-failure scratch proof is preserved.",
+    "Exact frozen Git blob bytes. TypeScript AST inventories exported runtime functions and rendered control sites; no new routes or controls, one new runtime export and two new fixtures.",
+    "All 14035 baseline IDs remain intact. Only COMPONENT-8E58E3039ED0 advances from NOT STARTED to IN PROGRESS after direct execution; all unrelated prior statuses, including narrow SEC-005 FIXED + PASS, remain intact. Three new helper/test obligations are IN PROGRESS with executed versus discovered-only evidence distinguished. Focused checks do not close whole authentication.",
+    "Isolated SMS verification shares the pre-await session-v1 decision slot. Original stable user/session renewal is allowed; generation/marker and UI intent must remain current through provider response, cookie writes and SDK disposal.",
+    "Disposable CI-only SMS test configuration and real HTTP acceptance do not imply production provider delivery. Product Supabase configuration, SQL and dependencies are unchanged."
+  ],
+  "counts": {
+    "files": 9,
+    "newFiles": 2,
+    "production": 3,
+    "tests": 5,
+    "testInfrastructure": 1,
+    "newPageRoutes": [],
+    "addedExportedFunctions": 1,
+    "newControls": 0,
+    "newPermanentRecords": 3,
+    "priorStatusTransitions": 1
+  },
+  "files": [
+    {
+      "path": ".github/workflows/ci.yml",
+      "kind": "test-infrastructure",
+      "isNew": false,
+      "baselineSha256": "0c200c0133884cb944910df07e339f7665090a1b1319d404747e9d9c9b5447e4",
+      "sourceSha256": "e9c77ae8320289c7d4950f12006dd53482325c049f28eb7e5311e7da23eb7a16",
+      "bytes": 18897,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "controls": [],
+      "baselineControlCount": 0,
+      "newControls": 0,
+      "existingMasterIds": [
+        "DEPLOY-B803FCB7F17E"
+      ],
+      "newMasterIds": []
+    },
+    {
+      "path": "components/auth/phone-auth.tsx",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "61ae5c1506d915ab2e0ad425b13ce71394b811fd14b5c820d19fa7dd570083d8",
+      "sourceSha256": "2259ac1af17e33c6ea7e1bb408e79ff2c194833af61640809c29e30c935cd5b7",
+      "bytes": 9838,
+      "exportedFunctions": [
+        {
+          "name": "PhoneAuth",
+          "line": 23
+        }
+      ],
+      "addedExportedFunctions": [],
+      "controls": [
+        {
+          "tag": "PhoneInput",
+          "line": 184
+        },
+        {
+          "tag": "Button",
+          "line": 185
+        },
+        {
+          "tag": "button",
+          "line": 189
+        },
+        {
+          "tag": "OtpInput",
+          "line": 206
+        },
+        {
+          "tag": "Button",
+          "line": 212
+        },
+        {
+          "tag": "button",
+          "line": 219
+        },
+        {
+          "tag": "button",
+          "line": 224
+        }
+      ],
+      "baselineControlCount": 7,
+      "newControls": 0,
+      "existingMasterIds": [
+        "COMPONENT-8E58E3039ED0",
+        "ROLE-8E58E3039ED0"
+      ],
+      "newMasterIds": []
+    },
+    {
+      "path": "lib/auth/password-client.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "4d989b26ccb17c37bfd18646ce1a22a579ae59da13b9251bbd79003450b55c96",
+      "sourceSha256": "83b303d9655d28377975055cbddc77267fe22baeefec00c7b0f5c9339073c458",
+      "bytes": 13188,
+      "exportedFunctions": [
+        {
+          "name": "isPasswordSessionCurrent",
+          "line": 43
+        },
+        {
+          "name": "signInWithOwnedSession",
+          "line": 196
+        },
+        {
+          "name": "verifySmsWithOwnedSession",
+          "line": 201
+        },
+        {
+          "name": "signInWithOwnedSessionTokens",
+          "line": 220
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "verifySmsWithOwnedSession",
+          "line": 201
+        }
+      ],
+      "controls": [],
+      "baselineControlCount": 0,
+      "newControls": 0,
+      "existingMasterIds": [
+        "LIBRARY-01DF23C3CC40"
+      ],
+      "newMasterIds": [
+        "SERVICE-110F74726994"
+      ]
+    },
+    {
+      "path": "lib/auth/signout-bridge.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "666ebde67a79e923438df10d4e86dd722db39789821f1c256726907e458cc8fa",
+      "sourceSha256": "9104a4e0368922b861cfe26671d2aa88118ddaad5c388da792d38affa999b845",
+      "bytes": 4917,
+      "exportedFunctions": [
+        {
+          "name": "prepareSignOutBridge",
+          "line": 15
+        },
+        {
+          "name": "encodeSignOutBridge",
+          "line": 51
+        },
+        {
+          "name": "decodeSignOutBridge",
+          "line": 63
+        }
+      ],
+      "addedExportedFunctions": [],
+      "controls": [],
+      "baselineControlCount": 0,
+      "newControls": 0,
+      "existingMasterIds": [
+        "LIBRARY-88AB2E1B8BBB"
+      ],
+      "newMasterIds": []
+    },
+    {
+      "path": "tests/signout-bridge.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "553ce96ea8bf33b6d57cbb14b644c258dd4d033b6f4f4b0e397f39a535052eeb",
+      "sourceSha256": "9996913bebe6ac93101dcaacfdda8409187a0ba1299484eb0985dc8df4b5a3fd",
+      "bytes": 12344,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "controls": [],
+      "baselineControlCount": 0,
+      "newControls": 0,
+      "existingMasterIds": [
+        "SUPPORT-80C408C5E90B"
+      ],
+      "newMasterIds": []
+    },
+    {
+      "path": "tests/e2e/browser-signout-flow.spec.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "ee0c9cbdee3fc42c764e1ba42dd9059e2cc9fee7889f2ac119b2c6b972fe3ee6",
+      "sourceSha256": "571cd8165a2dbc6875de2f331d96a30c7a6ad5ff1b3aecbb2bd755efd8f775df",
+      "bytes": 20746,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "controls": [],
+      "baselineControlCount": 0,
+      "newControls": 0,
+      "existingMasterIds": [
+        "SUPPORT-E149D86B1AAB"
+      ],
+      "newMasterIds": []
+    },
+    {
+      "path": "tests/auth-review-selection-forms.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "0b60477c9273ece47f627180b23374aa091bc3e3085890505893889adfcc761d",
+      "sourceSha256": "73131067e42f9adc4e4cf46d4d4a5a75fbdc013ff68f6e477294b5801e1ed6da",
+      "bytes": 25130,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "controls": [],
+      "baselineControlCount": 0,
+      "newControls": 0,
+      "existingMasterIds": [
+        "SUPPORT-11C68E6218DB"
+      ],
+      "newMasterIds": []
+    },
+    {
+      "path": "tests/e2e/phone-auth-boundaries.spec.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "33b8e1a88d514da90745d711b452a4a0253cdeb9265ef89f952214b2cb39f5ef",
+      "bytes": 24586,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "controls": [],
+      "baselineControlCount": 0,
+      "newControls": 0,
+      "existingMasterIds": [],
+      "newMasterIds": [
+        "SUPPORT-B98CAFA44FB9"
+      ]
+    },
+    {
+      "path": "tests/e2e/phone-auth-http.spec.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "90c5766b50ad81b2385d8b59ebb9dc61008924c86216d3b173959ea93f4894f7",
+      "bytes": 11192,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "controls": [],
+      "baselineControlCount": 0,
+      "newControls": 0,
+      "existingMasterIds": [],
+      "newMasterIds": [
+        "SUPPORT-788038831C82"
+      ]
+    }
+  ],
+  "newRecords": [
+    {
+      "id": "SERVICE-110F74726994",
+      "area": "SERVICE",
+      "key": "lib/auth/password-client.ts:verifySmsWithOwnedSession",
+      "name": "verifySmsWithOwnedSession",
+      "source": "lib/auth/password-client.ts",
+      "line": 201,
+      "status": "IN PROGRESS"
+    },
+    {
+      "id": "SUPPORT-B98CAFA44FB9",
+      "area": "SUPPORT",
+      "key": "tests/e2e/phone-auth-boundaries.spec.ts",
+      "name": "tests/e2e/phone-auth-boundaries.spec.ts",
+      "source": "tests/e2e/phone-auth-boundaries.spec.ts",
+      "status": "IN PROGRESS"
+    },
+    {
+      "id": "SUPPORT-788038831C82",
+      "area": "SUPPORT",
+      "key": "tests/e2e/phone-auth-http.spec.ts",
+      "name": "tests/e2e/phone-auth-http.spec.ts",
+      "source": "tests/e2e/phone-auth-http.spec.ts",
+      "status": "IN PROGRESS"
+    }
+  ]
+}
