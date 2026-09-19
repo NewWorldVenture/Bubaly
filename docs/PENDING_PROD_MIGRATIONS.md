@@ -1689,3 +1689,25 @@ because their value is zero until they are applied:
   `docs/audit/social-access-self-service-check.sql` asserts the refusal, the
   fallback that would have followed it, and that a family admin can still revoke.
   Audit C1-S6-11.
+
+- **`0325_where_a_child_went_is_not_theirs_to_rewrite.sql`** — replaces the two
+  `FOR ALL … is_family_member(family_id)` policies `00420` shipped on
+  `location_events` and `member_locations`. `0215` hardened the geofences
+  (`family_places`) against exactly this threat and said so in its header, but it
+  protected the INPUT to the geofence system and left the OUTPUT — the
+  arrival/departure timeline a parent reads — untouched; `location_events` is not
+  mentioned in `0215` at all. It also recorded `member_locations` as
+  "self-location", which `is_family_member` never made it. Measured as a
+  signed-in child against a replayed schema: the child DELETEd their own 02:00
+  "left home" event, moved a **sibling's** live pin, switched a **sibling's**
+  sharing off, re-pointed their own location row at another member, and filed an
+  event in a sibling's name. `00420`'s claim that "location sharing is strictly
+  opt-in (`member_locations.is_sharing`)" is only true after this migration. The
+  fix reuses `public.is_self_member()`, which `0272` added for the identical
+  shape on `event_rsvps`. No UPDATE or DELETE path is granted on
+  `location_events` — nothing in the tree uses one, and this document already
+  records what an unwired policy is worth (`call_logs`).
+  `docs/audit/location-trail-boundary-check.sql` asserts all six refusals plus
+  the four paths that must keep working: the member's own upsert,
+  `setLocationSharing(false)`, `deletePlace()`'s `ON DELETE SET NULL` against a
+  table with no UPDATE policy, and the family-delete cascade. Audit C1-S8-02.

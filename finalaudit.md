@@ -7597,3 +7597,157 @@ Recorded so the next pass does not repeat the search:
   `Intl` call sites in one piece of work; filing them separately would have
   split one fix across two findings. What this pass contributes is that the
   work now has a guard waiting for it at the consumer end.
+
+
+---
+
+# Pass V — the geofence was guarded and the trail was not
+
+Continuing the highest-value list: the locator, because it carries live location
+and had never had a targeted pass.
+
+## C1-S8-02 [HIGH][SECURITY/RLS] — a child can erase where they went, and move a sibling's pin
+
+**Files:** `supabase/migrations/00420_family_location.sql:81-84` ·
+`supabase/migrations/0215_safety_write_rls_hardening.sql:13`
+**Status:** FIXED by `0325_where_a_child_went_is_not_theirs_to_rewrite.sql`
+(**not yet applied to production** — see `docs/PENDING_PROD_MIGRATIONS.md`) ·
+`docs/audit/location-trail-boundary-check.sql`
+
+### Problem
+
+`0215` exists *because of this threat*. Its header says so:
+
+> a future missed gate or a direct PostgREST call by a signed-in child could
+> still tamper with the call/message screening rules or **the geofences that
+> drive location safety alerts**.
+
+It then hardened `family_places` — the geofences — to manager-only writes, and
+recorded that `member_locations` was *"intentionally NOT changed"* because a
+member must be able to write their own position.
+
+`location_events` is not mentioned anywhere in `0215`. The geofence system's
+**input** was protected; its **output** — the arrival/departure timeline a
+parent actually reads — kept the policy `00420` shipped:
+
+```sql
+CREATE POLICY "Members can manage location_events" ON public.location_events
+  FOR ALL TO authenticated USING (public.is_family_member(family_id))
+                           WITH CHECK (public.is_family_member(family_id));
+```
+
+And "self-location" was never self-scoped: `is_family_member` is *family-wide*,
+so the same policy on `member_locations` governs everyone's row, not your own.
+
+### Measured, as a signed-in child, against a replayed schema (338 migrations, 0 failed)
+
+```
+NOTICE:  child erased 1 of their own arrival/departure event(s)
+NOTICE:  child forged an "arrived at School" event for themselves
+NOTICE:  child moved a SIBLING's live pin to (0,0)
+NOTICE:  child switched a SIBLING's location sharing off
+NOTICE:  child re-pointed their own location row at another member
+NOTICE:  child filed a location event in a SIBLING's name
+```
+
+The first one is the point of the feature: the 02:00 *"left home"* is exactly
+the row a parent's safety alert was about, and its subject can delete it. The
+third and fourth are worse in kind — **they are not about the attacker at all**.
+One child falsifies the parent's map of a *different* child, or silently turns
+that child's sharing off, and the locator renders "Not sharing" with no
+indication of who decided that.
+
+`00420`'s own header claims:
+
+> Location sharing is strictly opt-in (`member_locations.is_sharing`)
+
+A flag that anyone in the family may flip is not opt-in. That sentence becomes
+true with `0325` and was not true before it.
+
+### Fix
+
+Four policies per table, replacing the two `FOR ALL`s. The shape was already in
+this repository: `0272` hit the identical problem on `event_rsvps` — one
+`FOR ALL` where a per-member rule was meant — and added
+`public.is_self_member(member_id)` for it. `0325` reuses that function rather
+than inventing a second convention.
+
+| table | select | insert | update | delete |
+|---|---|---|---|---|
+| `location_events` | any family member | self **or** manager, and the member must belong to that family | **none** | **none** |
+| `member_locations` | any family member | self only | self, in `using` **and** `with check` | **none** |
+
+Three decisions worth stating rather than burying:
+
+1. **The `FOR ALL` policy is dropped first.** Permissive policies are OR'd, so
+   leaving it in place would have made every narrower rule below it decoration —
+   `C1-S6-09`'s lesson, applied up front. The probe proves this is not a
+   theoretical concern: re-adding the old policy *alongside* the new ones
+   re-opens all six attacks (measured, below).
+2. **`using` AND `with check` on the update.** `C1-S6-08` was exactly this: an
+   ownership test in `using` alone governs the row you *started from*. Here the
+   two are different questions, because the predicate reads `member_id` — the
+   column an attacker would change — so `with check` is what refuses attack 5.
+3. **No UPDATE or DELETE path on `location_events`.** Nothing in the tree uses
+   one, and this document already records what an unwired policy is worth: the
+   `call_logs` manager-delete that `0092` wrote and no code has ever called. A
+   trail is append-only until someone decides otherwise on purpose.
+
+Forging *your own* arrival stays possible and is listed above deliberately.
+Content is self-asserted either way — you control the GPS you post — so the only
+boundary that means anything is **whose** row you may write.
+
+### The probe, in both directions
+
+`docs/audit/location-trail-boundary-check.sql`, run against the replayed schema:
+
+| state | result |
+|---|---|
+| before `0325` | **RED** — all six attacks land |
+| `0325` applied | **GREEN** |
+| `0325` + the old `FOR ALL` re-added | **RED** — all six again |
+
+That third row is the one worth having: it demonstrates the OR'd-permissive
+claim instead of asserting it.
+
+It also asserts the four things that must keep working, because a boundary fix
+that breaks a shipped feature is not a fix:
+
+- the member's own `upsert` (insert **and** conflict-update, which must satisfy
+  the INSERT with-check *and* the UPDATE using+with-check);
+- `setLocationSharing(false)`, the same upsert nulling the coordinates;
+- `deletePlace()`, whose `ON DELETE SET NULL` fires an UPDATE against a table
+  that now has **no UPDATE policy** — if a foreign key's referential action were
+  subject to RLS, deleting a place would have started failing, which is precisely
+  how this class of fix breaks a product;
+- the family-delete cascade, so account deletion is untouched.
+
+Full probe suite after the change: **46/46 passed**.
+
+## Observation: turning location sharing off does not hide where you have been
+
+Not fixed — recorded with the measurement, because the fix is a product decision.
+
+`setLocationSharing(false)` nulls `latitude`, `longitude` and `place_id` on the
+member's row, and the locator then renders **"Not sharing"** for them. On the
+same screen, the History rail reads:
+
+```ts
+sb.from('location_events').select('*').eq('family_id', familyId)
+  .order('occurred_at', { ascending: false }).limit(120)
+```
+
+— unfiltered by `is_sharing` — and renders each event beside
+`memberName(e.member_id)`. So a member who switches sharing off is labelled "Not
+sharing" while their arrivals and departures, with place names, times and raw
+coordinates, stay fully readable by every family member on the panel directly
+below.
+
+The two readings are both defensible, which is why this is a decision and not a
+defect: a *safety* history that a teenager can make disappear by flipping a
+toggle is worth less than one that cannot, and a *privacy* control that leaves
+the trail intact says less than its label. What is not defensible is the current
+state, where the same screen asserts both. Either the toggle's copy should say
+what it does ("stop sharing my live location"), or history should follow the
+flag. `0325` deliberately does not decide this — it only ensures that whoever
+does decide, the record cannot be quietly rewritten by its subject first.

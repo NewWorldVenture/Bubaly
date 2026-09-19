@@ -529,3 +529,38 @@ FILES-TOUCHED: lib/location/overview.ts, components/modules/locator-module.tsx,
   app/(app)/home/page.tsx, mobile/src/lib/format.ts, lib/onboarding/first-brief.ts,
   tests/a-display-label-is-not-a-branch.test.ts, finalaudit.md, audit/status.md
 LAST-UPDATE: 2026-09-19
+
+## Claude-1 — Session 8, Pass V (locator: live location)
+FOUND: `C1-S8-02` [HIGH][SECURITY/RLS] — `location_events` and
+  `member_locations` still carried 00420's `FOR ALL … is_family_member`.
+  0215 hardened `family_places` AGAINST EXACTLY THIS THREAT (its header names
+  "a direct PostgREST call by a signed-in child") but protected the geofences —
+  the INPUT — and never mentions `location_events`, the OUTPUT. It also called
+  `member_locations` "self-location", which `is_family_member` never made it.
+  Measured as a signed-in child on a replayed schema (338 migrations, 0 failed):
+  erased their own 02:00 "left home" event; moved a SIBLING's live pin;
+  switched a SIBLING's sharing off; re-pointed their own row at another member;
+  filed an event in a sibling's name. 00420's "location sharing is strictly
+  opt-in" was not true until 0325.
+  FIXED by `0325_where_a_child_went_is_not_theirs_to_rewrite.sql`, reusing
+  `is_self_member()` that 0272 added for the same shape on `event_rsvps`.
+  No UPDATE/DELETE granted on location_events (nothing uses one; `call_logs` is
+  this document's record of what an unwired policy is worth).
+  Probe `docs/audit/location-trail-boundary-check.sql` proved in THREE states:
+  RED before 0325 (six attacks), GREEN after, RED again with the old FOR ALL
+  re-added alongside the new policies — which demonstrates the OR'd-permissive
+  claim rather than asserting it. It also asserts four paths that must keep
+  working, incl. deletePlace()'s ON DELETE SET NULL against a table that now has
+  NO update policy, and the family-delete cascade.
+  NOT YET APPLIED TO PRODUCTION — operator credentials; recorded in
+  docs/PENDING_PROD_MIGRATIONS.md with 0318-0324.
+OBSERVATION (not fixed, product decision): switching location sharing off nulls
+  the live coordinates and the UI says "Not sharing" — while the History rail on
+  the SAME PANEL reads location_events unfiltered by is_sharing and renders that
+  member's arrivals, times and raw coordinates by name. Both readings are
+  defensible; the current state asserts both at once. 0325 deliberately does not
+  decide it, only ensures the record can't be rewritten by its subject first.
+PROBES: 46/46. nextVersion ratcheted to 0326.
+NEXT (goal order): medical-records / medications / immunizations / health-visits,
+  then trust-sharing-section + trust-activity-tab, paperwork-module, voice-module.
+LAST-UPDATE: 2026-09-19
