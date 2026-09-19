@@ -7428,3 +7428,42 @@ Checking first cost one command.
 
 Proved red in both layers independently: restoring the raw interpolation fires
 two assertions, and restoring the raw write fires two more.
+
+
+## Observation: "delete individual items" does not reach the messages or the calls
+
+The privacy page (`app/(marketing)/privacy/page.tsx`) tells families:
+
+> **Delete** — delete individual items, a member's profile, or your entire
+> account and family.
+
+Two of those three work. The third does not reach anything the Contact Center or
+the Guardian line files.
+
+| table | what it holds | DELETE policy | app path |
+| --- | --- | --- | --- |
+| `family_inbox_messages` | every inbound text, email and voicemail, with sender and body | **none — its only policy is `inbox_select`** | none |
+| `call_logs` | transcripts, caller numbers, voicemail URLs | `can_manage_family` (0092) | **none** |
+
+`call_logs` is the sharper half. The database **already expresses the intent** —
+`0092_front_desk.sql` wrote a delete policy saying a manager may remove a call
+log — and no code anywhere calls it. A capability was designed and then never
+wired, which is different from one nobody considered. `family_inbox_messages`
+cannot be deleted at all: no policy, so not even a direct PostgREST call would
+work. The inbox UI offers `read` and `archived`; **archiving is not deleting**,
+and the privacy page does not offer archiving as the remedy.
+
+Account deletion is unaffected — both cascade from `families`, and
+`docs/audit/family-delete-cascade-check.sql` already covers that.
+
+**Retention itself is not the gap.** The same page says *"We keep your
+information for as long as your account is active or as needed to provide
+Bubaly"*, which is an indefinite claim that the absence of a retention cron
+matches exactly. I went looking for a duration the code failed to honour and
+there isn't one; recorded so the next pass does not re-run that search.
+
+**Not acted on, deliberately.** Wiring a delete would mean choosing who may
+remove a call transcript and whether a scam call's record should be erasable at
+all — a family may want the log of a harassing caller to survive one member's
+tidying. That is a product decision about evidence, not a missing `.delete()`.
+Flagged with the measurement so it is decided rather than inherited.

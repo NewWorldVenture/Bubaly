@@ -2917,3 +2917,34 @@ Fix:      Two independent layers. (1) twimlDial escapes, matching every sibling,
           Proved red in both layers independently: 2 assertions each.
 Status:   FIXED
 ```
+
+```
+[CLAUDE-1][OBSERVATION][PRIVACY] "delete individual items" does not reach messages or calls
+File:     app/(marketing)/privacy/page.tsx (the claim)
+          supabase/migrations/0214_family_contact_center.sql (inbox_select only)
+          supabase/migrations/0092_front_desk.sql:99 (call_logs_delete, unused)
+Problem:  The privacy page promises "Delete — delete individual items, a
+          member's profile, or your entire account and family." Two of the three
+          work. The third reaches nothing the Contact Center or Guardian files.
+Evidence: family_inbox_messages — every inbound text, email and voicemail with
+            sender and body. Its ONLY policy is inbox_select. No delete policy,
+            no app path; not even a direct PostgREST call would work.
+          call_logs — transcripts, caller numbers, voicemail URLs. 0092 DID write
+            a delete policy (can_manage_family) and NO code anywhere calls it: a
+            capability designed and never wired, which differs from one nobody
+            considered.
+          The inbox UI offers read/archived. Archiving is not deleting, and the
+          privacy page does not offer archiving as the remedy.
+Impact:   A claim broader than the product, on the surface where families are
+          most likely to test it. Account deletion is unaffected — both cascade
+          from families, already covered by family-delete-cascade-check.sql.
+          RETENTION is NOT the gap: the same page says "we keep your information
+          for as long as your account is active", an indefinite claim that the
+          absence of a retention cron matches exactly. Recorded so the next pass
+          does not re-run that search.
+Fix:      NOT acted on. Wiring a delete means deciding who may remove a call
+          transcript and whether a scam call's record should be erasable at all —
+          a family may want the log of a harassing caller to survive one member's
+          tidying. A product decision about evidence, not a missing .delete().
+Status:   OPEN — needs a product decision
+```
