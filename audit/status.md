@@ -843,3 +843,28 @@ NOTE: this pass deliberately did NOT push while CI was mid-run on eee60276 —
 REPLAY: 343 migrations, 0 failed. PROBES: 51/51.
 SUITE: 1,252 files / 14,086 tests, 0 failures. nextVersion ratcheted to 0331.
 LAST-UPDATE: 2026-09-19
+
+## Claude-1 — Session 8, Pass AC (the websocket surface)
+VERIFIED HEALTHY (`C1-S8-11`): 61 tables are in the `supabase_realtime`
+  publication, including most of what this session has been about —
+  location_events, member_locations, call_logs, family_messages,
+  trust_audit_logs, permission_grants, trust_policies, trust_delegations,
+  emergency_sessions. published-tables.ts is careful about DRIFT (and has a test
+  for it); nobody had asked what an UNAUTHENTICATED subscriber receives.
+  Realtime evaluates RLS per subscriber, so a channel opened without a user
+  token is evaluated as `anon`. MEASURED: anon reads 0 rows from all 61.
+  THE RESULT IS ONLY WORTH SOMETHING BECAUSE THE INSTRUMENT COULD HAVE FOUND
+  SOMETHING — 29 of the 61 hold rows, several in the hundreds (call_logs 500,
+  location_events 500, family_messages 500, calendar_events 1,907). That check
+  runs FIRST and the probe refuses to pass on a half-seeded harness (<40
+  published, <10 populated). C4-S5-01's lesson applied to my own sweep.
+  PROVED RED: granting anon `using (true)` on location_events →
+  "anon can read published table(s) ... location_events (500 rows)".
+  KEPT AS A FLOOR, not filed as a finding: a future migration granting anon a
+  read — or a policy `to public` whose predicate ignores auth.uid() — turns the
+  websocket into a public feed, and nothing else here would notice. The
+  publication is the amplifier: a readable table is a query someone must make;
+  a readable AND published table is a push.
+PROBES: 52/52.
+DISCIPLINE NOTE: held the push again while CI ran on 97a50e49.
+LAST-UPDATE: 2026-09-19

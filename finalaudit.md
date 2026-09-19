@@ -8644,3 +8644,59 @@ tight scope check in a test about *parsing* was masking the test about
 
 Replay: **343 migrations, 0 failed.** Probes: **51/51**.
 Suite: **1,252 files / 14,086 tests, 0 failures.**
+
+
+---
+
+# Pass AC — the websocket, which nobody had asked about
+
+## C1-S8-11 [VERIFIED HEALTHY][SECURITY] — an unauthenticated Realtime subscriber receives nothing, and the check that says so is not vacuous
+
+**Status:** No defect. Ratcheted by `docs/audit/realtime-anon-stream-check.sql`.
+
+`lib/realtime/published-tables.ts` is careful and well-documented about *drift* —
+which tables are in the `supabase_realtime` publication, and the dead channels
+that opened for tables that were not. `tests/realtime-publication-drift.test.ts`
+already holds that line.
+
+Nobody had asked the other question. **61 tables are published**, and they
+include most of what this session has been about: `location_events`,
+`member_locations`, `call_logs`, `family_messages`, `trust_audit_logs`,
+`permission_grants`, `trust_policies`, `trust_delegations`,
+`emergency_sessions`.
+
+Realtime evaluates RLS per subscriber, so a channel opened **without** a user
+token is evaluated as `anon`. The application's own subscriptions carry the
+user's JWT — but the question is the floor underneath them: if a token is
+missing, expired, or never set, does the stream fall silent or start talking?
+
+**Measured: `anon` reads 0 rows from all 61 published tables.**
+
+### The part that makes the result worth anything
+
+A sweep that returns zero is worthless unless the instrument could have returned
+something — which is `C4-S5-01`'s whole finding, turned on my own work. So the
+probe establishes that first: **29 of the 61 published tables hold rows**, several
+of them hundreds — `call_logs` 500, `location_events` 500, `family_messages`
+500, `calendar_events` 1,907. It refuses to run if fewer than 40 tables are
+published or fewer than 10 hold rows, so a half-seeded harness reports a
+problem rather than a pass.
+
+And it was proved red: granting `anon` a `using (true)` read on
+`location_events` produced
+
+```
+ERROR:  realtime: anon can read published table(s), so an unauthenticated
+        websocket is a public feed: location_events (500 rows)
+```
+
+### Why keep it
+
+Not as a finding — as a floor. A future migration that grants `anon` a read, or
+writes a policy `to public` whose predicate does not depend on `auth.uid()`,
+turns the websocket into a public feed of whichever table it touched, and
+nothing else in this repository would notice. The publication is the amplifier:
+a table that is merely readable is a query someone has to make, while a table
+that is readable *and* published is a push.
+
+Probes: **52/52**.
