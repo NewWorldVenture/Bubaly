@@ -8066,3 +8066,30 @@ now on word boundaries. The guard was green and wrong for the minutes between
 writing and calibrating it.
 
 **Status:** NO DEFECT. 14,297 green both timezones, tsc clean, lint 0.
+
+---
+
+[CLAUDE-1][MEDIUM][I18N] The scanner behind the i18n ratchet could not see the app's own toasts
+
+The ungated-surface ratchet counts `app/` + `components/`, and its header warns
+about exactly the failure that created it — a surface measured by a scanner that
+could not see a whole category of copy. It was true again, for the toast API.
+
+Three blind spots in `toastPattern`: strings containing PARENTHESES (rejected by
+a slice-detection rule that is correct for JSX text and wrong for a quoted
+literal, which cannot be a slice); DOUBLE-QUOTED strings; and TEMPLATE LITERALS,
+which is how every interpolated message here is written.
+
+Both scanners against the same tree: old 2,804, new 2,878 — a delta of 74,
+entirely the scanner, not one new string. Ceiling raised to 2,878 with the proof
+beside it, per the file's own rule. 74 user-facing strings across ~50 modules
+were shipping English to eleven locales AND could not trip the ratchet.
+
+Also clean from this sweep: all 168 `useRealtimeQuery` sites destructure the read
+error and reference it — no module renders a failed read as an empty list.
+
+A false start worth recording: my first count was 54 "hardcoded toasts" that were
+mostly `console.error` calls the regex had swept in.
+
+**Status:** FIXED (scanner) + ratchet re-based. **Verified:** 14,297 green both
+timezones, tsc clean, lint 0.

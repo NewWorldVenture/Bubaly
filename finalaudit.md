@@ -7226,3 +7226,60 @@ them is certainly wrong. Authority itself is asserted where it lives —
 
 **Verified:** 14,297 green under both `TZ=UTC` and `TZ=America/Los_Angeles`,
 tsc clean, lint 0 at 12.
+
+---
+
+## Q46 — The i18n scanner could not see the app's own toasts
+
+**Severity: MEDIUM.** The ungated-surface ratchet has been counting `app/` +
+`components/` since it was written, and its header warns in as many words about
+the failure that produced it: a surface measured by a scanner "that could not
+see copy in a data structure". The same thing was true again, of a different
+category — the application's own notification API.
+
+`scripts/i18n-scan.mjs` has patterns for JSX text, JSX props, object values,
+string arrays, `confirm`/`alert`/`prompt`, and a `toastPattern` that reads the
+destructured `useToast()` names per file. That last one is careful work and it
+was blind in three ways:
+
+1. **Parentheses.** `/\)\s*$/` in `NOT_COPY` catches `TEXT_PATTERN` slicing
+   through an expression — `) : isActive ? (` sits between a `>` and a `<`
+   exactly the way copy does — and it is right there. A **quoted literal cannot
+   be such a slice**: the quotes bound it exactly. Applied to one it only ever
+   hid real copy — *"Photo is too large (max 25 MB)"*, *"Item name is too long
+   (max 120 characters)"*, *"Split must total 100% (currently 40%)."* The three
+   bracket rules now apply only to undelimited matches.
+2. **Double quotes.** The pattern matched `'...'` alone.
+3. **Template literals** — how every interpolated message in this codebase is
+   written. They are now tested with their `${...}` holes stripped and reported
+   whole, so `${item.name}: lent out` counts as copy while `${a} ${b}` still
+   does not.
+
+**Measured both ways against the same tree**, the method this file's own header
+documents after an earlier wrong conclusion:
+
+| | |
+|---|---|
+| old scanner, tree today | 2,804 |
+| new scanner, tree today | **2,878** |
+| delta | **74, entirely the scanner** |
+
+Not one new hardcoded string was written. The old scanner also reads 2,804
+against the 2,812 it was set at, so the surface has *improved* by 8 since. The
+ceiling is raised to 2,878 with that proof recorded beside it, which the file
+requires — a stricter scanner is the only legitimate reason to raise it.
+
+**What this actually buys.** 74 user-facing strings across ~50 modules — *"Item
+name is too long"*, *"Photo is too large"*, *"Sent $X to Y"*, *"Login created
+for Z"* — were shipping English to eleven locales **and could not trip the
+ratchet**, so more could be added freely. They are now counted, and the next one
+fails the build.
+
+**Two clean results from the same sweep.** All 168 `useRealtimeQuery` call sites
+across every module destructure the read error *and* reference it — no module
+renders a failed read as an empty list. And my first pass at this finding
+counted 54 "hardcoded toasts" that were mostly `console.error` calls my regex
+had swept in; the real number came only after excluding them.
+
+**Verified:** 14,297 green under both `TZ=UTC` and `TZ=America/Los_Angeles`,
+tsc clean, lint 0 at 12.

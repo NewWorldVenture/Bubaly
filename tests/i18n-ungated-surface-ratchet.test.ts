@@ -33,7 +33,39 @@ import { scanPaths } from '../scripts/i18n-scan.mjs';
 // raises the count without a single new hardcoded string being written. That is
 // a legitimate reason to raise CEILING, and it is the ONLY one. Say which in
 // the commit.
-const CEILING = 2812;
+// RAISED 2812 -> 2878 because the SCANNER got stricter, which this file's
+// header names as the only legitimate reason, and requires saying which.
+//
+// Measured both ways against the SAME tree, exactly as the 2,343 correction
+// above was:
+//
+//     old scanner, tree today   2,804
+//     new scanner, tree today   2,878
+//
+// A delta of 74, entirely the scanner. Not one new hardcoded string was
+// written. The old scanner also reads 2,804 against the 2,812 it was set at, so
+// the surface has IMPROVED by 8 in the meantime.
+//
+// What the scanner learned to see: the toast API — `success(...)` and
+// `toastError(...)`, the app's own user-facing notifications — in three shapes
+// it had been blind to.
+//
+//   1. Strings containing PARENTHESES. `/\)\s*$/` in NOT_COPY exists to catch
+//      TEXT_PATTERN slicing through an expression, and it is right there. A
+//      QUOTED literal cannot be such a slice — the quotes bound it — so the
+//      rule only ever hid real copy: "Photo is too large (max 25 MB)", "Item
+//      name is too long (max 120 characters)", "Split must total 100%
+//      (currently 40%)." Those rules now apply only to undelimited matches.
+//   2. DOUBLE-QUOTED strings. The pattern matched `'...'` alone.
+//   3. TEMPLATE LITERALS — which is how every interpolated message in this
+//      codebase is written. They are tested with their `${...}` holes stripped
+//      and reported whole, so `${item.name}: lent out` counts as copy while
+//      `${a} ${b}` still does not.
+//
+// The shape of this is the same one the header already warns about: a surface
+// measured by a scanner that could not see a whole CATEGORY of copy. It was
+// data structures last time and the app's own toast calls this time.
+const CEILING = 2878;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);
