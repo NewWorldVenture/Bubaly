@@ -2,7 +2,7 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-19T19:49:04.850Z
+- Last Updated: 2026-09-19T20:00:00Z
 - Total Audit Items: 14018
 - Not Started: 13829
 - In Progress: 186
@@ -11,6 +11,8 @@
 - Blocked: 0
 - Failed: 3
 - Overall Completion: 0.00%
+
+Production rollout: the user-authorized PR 510 merge is live on www.bubaly.com at main 4bee6275 / Vercel dpl_4pWBho8dManFcsbzy8Z8FDFybTsy. Eight HTTP and four real-browser public checks pass. A test-only alert-selector correction follows from the real Next route announcer; its hosted acceptance remains pending. The separate production migration workflow failed on historical 0177 with the same FK notice and timeout seen before this release. No SQL changed or retry was performed. Deployment does not establish full workflow or database readiness. See docs/final-audit/production-rollout-20260919.md.
 
 Active request-admission witness cycle from dc99dc83: AUTH-001/AUTH-002/AUTH-003 remain IN PROGRESS. Request-time configured-project ownership evidence is being implemented to fence a callback response held across logout or a newer login before completion mounts. Installed-SDK pre-mount regressions first fail twice; final browser ownership passes 81 checks and completion/recovery UI passes 82. Frozen application source ee003898 passes both full UTC/DST runs (16,543/16,543 checks across 1,303 files), a 252-page build, strict types, lint with three existing warnings, localization and query audit. Final test/infrastructure tree d0adca17 adds four discovered/typechecked/linted HTTP/Mailpit cases and disposable CI redirects; full discovery lists 1,183 cases across 49 files. These new runtime paths have not executed. Published dc99dc83 passes all hosted CI/Finance gates, including 1,150 browser cases; that baseline proof does not cover the new witness source. Published browser-adoption evidence remains separate; initiation ownership and production provider/configuration verification remain open. See docs/final-audit/auth-callback-admission-witness-cycle.md.
 

@@ -181,7 +181,7 @@ test.describe('callback admission through the real Next HTTP path', () => {
       await expect(decision).toHaveURL(/\/login(?:\?|$)/);
       expect(authCookies(await context.cookies(), authCookieName(provider)).length).toBe(0);
       held.release(); expect(await navigation).toBe(true);
-      await expect(completion.getByRole('alert')).toContainText('Your sign-in state changed');
+      await expect(completion.getByRole('alert').filter({ hasText: 'Your sign-in state changed' })).toContainText('Your sign-in state changed');
       expect(new URL(completion.url()).pathname).toBe('/auth/complete');
       expect(actions, 'Stale admission must be refused before a real server action').toBe(0);
       expect(held.failed()).toBe(false);
@@ -204,7 +204,7 @@ test.describe('callback admission through the real Next HTTP path', () => {
       await signIn(decision, origin, replacement);
       const before = await sessionBytes(context);
       held.release(); expect(await navigation).toBe(true);
-      await expect(completion.getByRole('alert')).toContainText('Your sign-in state changed');
+      await expect(completion.getByRole('alert').filter({ hasText: 'Your sign-in state changed' })).toContainText('Your sign-in state changed');
       expect(new URL(completion.url()).pathname).toBe('/auth/complete');
       expect(actions, 'Newer login must be detected before a real server action').toBe(0);
       expect(held.failed()).toBe(false);

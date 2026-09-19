@@ -5,7 +5,7 @@
 CURRENT: AUTH-001/AUTH-002/AUTH-003 request-admission witness cycle IN PROGRESS
 on published baseline dc99dc83. All prior 14,006 IDs/statuses remain preserved.
 WORKSPACE: Separate bubaly-final-production-audit-20260912 worktree, existing
-PR 510. Main remains 57f22c0b; the main checkout is untouched.
+PR 510 merged as main 4bee6275; production frontend is live. The main checkout is untouched.
 SCOPE: Original callback request ownership reaches completion without recapturing
 newer cookies. Both entrypoints preserve supplied witnesses; duplicate cookie
 names remain visible for rejection. The witness is comparison metadata only.
@@ -20,14 +20,15 @@ HOSTED BASELINE: Exact dc99dc83 CI 35464679043 has Web, Database and Mobile SUCC
 Finance 35464679048 has 66 explicit 0274 PASS notices. Web passes both 16,495-test
 unit runs, build 252 and strict types. Database passes 330 migrations, 38 probes
 and 327 reapplications. E2E passes 1,150/1,150 with auth/durable enabled. No restarts.
-NEXT: Publish the authorized updates to main/production and verify the new runtime.
+ROLLOUT: Exact Vercel deployment dpl_4pWBho8dManFcsbzy8Z8FDFybTsy is live; eight HTTP and four real-browser public checks pass. Historical production migration 0177 failed again; no SQL change or retry. Test-only Next alert selectors are corrected; hosted acceptance is pending.
+NEXT: Finish new hosted recovery acceptance and investigate the existing production database failure. See docs/final-audit/production-rollout-20260919.md.
 OPEN: Attempt-owned initiation, non-atomic cookie compare/write, successful hosted
 recipient/PKCE recovery, real provider delivery and production configuration.
 CURRENT RECORD: docs/final-audit/auth-callback-admission-witness-cycle.md.
 REFERENCES: docs/final-audit/auth-callback-browser-ownership-cycle.md and finalaudit.md.
 RELEASE: NO. Twelve new structural rows are NOT STARTED; total 14,018. No complete
 workflow PASS or existing status promotion.
-LAST-UPDATE: 2026-09-19T19:49:04.860Z
+LAST-UPDATE: 2026-09-19T20:00:00Z
 
 Four workers audit this repository in parallel. Each worker maintains ONLY its
 own section below. Read this file before touching any source file: if another
