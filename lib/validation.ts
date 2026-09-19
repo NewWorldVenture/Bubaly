@@ -1,6 +1,7 @@
 // Shared Zod schemas — used by both client forms and server routes so validation
 // rules live in exactly one place.
 import { z } from 'zod';
+import { isValidTimezone } from '@/lib/time/zoned';
 
 export const emailSchema = z.string().trim().toLowerCase().email('Enter a valid email address');
 
@@ -47,7 +48,19 @@ export const signInSchema = z.object({
 
 export const createFamilySchema = z.object({
   name: z.string().trim().min(2, 'Give your family a name').max(80),
-  timezone: z.string().min(1).default('UTC'),
+  // Validated, and not only for tidiness. This value is PERSISTED as
+  // `families.timezone`, and every wall-clock answer the app gives that family
+  // is computed from it through `Intl.DateTimeFormat`. An unknown zone makes
+  // every one of those calls throw, and each call site catches and degrades to
+  // UTC by design — so a bad zone here is indistinguishable from UTC, silently,
+  // forever: routines fire on the wrong local day, "today" becomes Greenwich's
+  // day, and the medication reminder's day bounds are wrong.
+  //
+  // The preview schema further down has validated its timezone all along, with
+  // the comment "malformed supplied input must not guess" — on a value that is
+  // never stored. The stricter rule was on the throwaway copy and the looser one
+  // on the durable record.
+  timezone: z.string().trim().min(1).max(100).refine(isValidTimezone, 'Unknown timezone').default('UTC'),
 });
 
 export const onboardingProfileSchema = z.object({
@@ -175,10 +188,7 @@ export const previewCalendarImportSchema = z.object({
   icsText: z.string().max(200_000).optional(),
   // Presentation only: use the wizard's selected zone without reading a family.
   // Omitted legacy input keeps UTC; malformed supplied input must not guess.
-  timezone: z.string().min(1).max(100).refine((timezone) => {
-    try { new Intl.DateTimeFormat('en-US', { timeZone: timezone }); return true; }
-    catch { return false; }
-  }, 'Invalid timezone').default('UTC'),
+  timezone: z.string().min(1).max(100).refine(isValidTimezone, 'Invalid timezone').default('UTC'),
 });
 
 export const completeProfileOnboardingSchema = z.object({
