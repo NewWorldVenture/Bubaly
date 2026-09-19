@@ -8038,3 +8038,31 @@ rate-limited 60/min, bounded-body and input-sliced.
 **Status:** NO DEFECT in either layer. Recorded because "I looked and found
 nothing" is worth the same as a finding to whoever asks next whether these were
 covered.
+
+---
+
+[CLAUDE-1][INFO][API] Every write route is gated and bounded — and the gate list now lives in the suite
+
+All 141 route files hold: gated on identity or rate, JSON bodies bounded. No
+defect. Filed for the method, because it took four scans and the first three
+were confidently wrong in the same direction — a hand-written list of gate
+helpers that omitted `authenticateAI` (26 false positives), then
+`hasInternalSecret`/`getUserContext` (3), then `validateTwilioSignature` (8,
+every Twilio callback).
+
+The list is now derived from the code, written down, and checked BOTH ways: a
+new gate must be added, and a name nothing uses fails as dead weight. That
+caught two entries I had guessed — `requireAdmin` and `hasCronAuthorization` —
+which no write route uses.
+
+Public write routes (blog like, contact, A/B beacon, gift) are a distinct
+category: no identity by design, gated on RATE. The guard asserts the split
+rather than lumping them in.
+
+**A calibration that failed to fail**, and is the reason to trust the rest:
+renaming a call to `DISABLED_enforceRequestRateLimit` left the name in the file,
+so `includes()` still said the gate was there and the test passed. Matching is
+now on word boundaries. The guard was green and wrong for the minutes between
+writing and calibrating it.
+
+**Status:** NO DEFECT. 14,297 green both timezones, tsc clean, lint 0.

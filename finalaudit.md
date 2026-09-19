@@ -7178,3 +7178,51 @@ remain, and each is public by design: `build-info`, `blog/search-index`,
 difference between an audit and a scanner is which of those two you report.
 
 **Verified:** 14,292 green under both timezones, tsc clean, lint 0 at 12.
+
+---
+
+## Q45 — Every write route is gated and bounded, and the list of gates now lives in the suite
+
+**Severity: INFO — no defect.** All 141 `app/api/**/route.ts` files hold. Every
+write route is gated on identity or on rate, and every one that reads a JSON
+body bounds it. The file exists because establishing that by hand took **four**
+attempts, each wrong in the same direction.
+
+| scan | reported | why it was wrong |
+|---|---|---|
+| 1 | 26 ungated | list omitted `authenticateAI` — the AI run pause/cancel routes |
+| 2 | 3 unprotected | list omitted `hasInternalSecret`, `getUserContext` |
+| 3 | 8 ungated | list omitted `validateTwilioSignature` — every Twilio callback |
+| 4 | 0 | — |
+
+A list of gate helpers that lives in someone's head gets shorter every time it
+is retyped. This codebase has fourteen of them, and a hand-written subset will
+keep producing confident false accusations about the routes that use the ones
+left out. The list is now derived from what the routes actually call, written
+down, and checked in both directions — a new gate has to be added here, and a
+name nothing uses fails as dead weight. That second assertion immediately caught
+two entries I had guessed (`requireAdmin`, `hasCronAuthorization`); no write
+route uses either.
+
+**Two categories, named rather than conflated.** A blog like, a contact form, an
+A/B beacon and the gift flow carry no identity **by design** — they are gated on
+RATE, which is the only gate available when the answer to "who is this" is
+"nobody yet". Earlier scans lumped these in with genuinely ungated routes. The
+guard now asserts the split: an identity gate, or public-and-rate-limited, and
+nothing with neither.
+
+**A calibration that failed to fail.** Renaming a call to
+`DISABLED_enforceRequestRateLimit` left the gate's name in the file, so
+`includes()` kept answering yes about a gate that no longer runs — the test
+passed when it should have caught the removal. Identifiers are now matched on
+word boundaries. Worth recording because the guard was *green and wrong* for the
+minutes between writing it and calibrating it, which is exactly the state a
+guard is supposed to make impossible.
+
+**What this does not claim.** Presence of a gate is not proof the gate is
+correct or covers every branch. It is the floor: a write route calling none of
+them is certainly wrong. Authority itself is asserted where it lives —
+`cron-auth`, `route-access-is-total`, and the RLS boundary probes.
+
+**Verified:** 14,297 green under both `TZ=UTC` and `TZ=America/Los_Angeles`,
+tsc clean, lint 0 at 12.
