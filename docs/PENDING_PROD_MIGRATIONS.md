@@ -514,8 +514,8 @@ passed; production application of the atomic `0240-0254` release remains pending
 ## Migrations added since this document's stated baseline (2026-09-12)
 
 The status line at the top of this file is dated **2026-09-05** against main
-`01881fb2`. **64** migration files have landed since, `0255` through
-`0321`, and none of them appear anywhere above. (This read "thirty-one, `0255`
+`01881fb2`. **66** migration files have landed since, `0255` through
+`0323`, and none of them appear anywhere above. (This read "thirty-one, `0255`
 through `0285`" until 2026-09-13, "seventy-one, `0255` through `0295`" until
 2026-09-15, and "forty-five, `0255` through `0302`", "46, `0255` through `0303`"
 and "49, `0255` through `0306`" until 2026-09-16; the range
@@ -1812,3 +1812,98 @@ time, so a body can be catastrophically wrong and still install, deploy and pass
 CI cleanly.
 
 Until this is applied, no investment order can be filled in production.
+
+## 0322 — a single-choice poll would take every choice
+
+`family_polls.kind` is `single` or `multi`, and `voting-module.tsx` enforces the
+difference in the browser:
+
+```
+if (poll.kind === 'single' && mine.size > 0) {
+  // Clear the prior selection first; if this fails, do NOT insert or the
+  // single-choice poll ends up with two votes for this member.
+```
+
+The comment is exactly right about the consequence. It was also the only thing
+enforcing it: `family_poll_votes` carries `UNIQUE (option_id, member_id)` — one
+vote per OPTION, correct for a `multi` poll and no rule at all for a `single`
+one — and the table is client-reachable.
+
+**Measured, as a child of the family:**
+
+```
+SINGLE-choice poll: one member cast 3 votes across 3 options
+```
+
+`voterCount` and the result bars read straight from these rows, so the poll
+reports a result the family never gave.
+
+**A trigger, not an index**, because the rule depends on `family_polls.kind` in
+another table and a unique index cannot reach across one. That also changes how
+pre-existing rows are handled, deliberately: `0316` had to REFUSE to apply while
+duplicates existed, because a unique index cannot be created over rows that
+violate it. A trigger governs new writes only, so `0322` installs regardless,
+leaves existing rows untouched, and REPORTS what is already in the data as a
+notice — silently deleting a family's recorded votes is not a migration's
+business either.
+
+It takes `for update` on the poll row, because a trigger that only SELECTs
+before it INSERTs is `0317`'s defect again: two simultaneous votes each read "no
+existing vote" and both land. It fires on UPDATE as well as INSERT, because
+without that arm a member votes once legally and then re-points a second row at
+the same poll — a path the probe confirms is real.
+
+Held by `docs/audit/poll-single-choice-check.sql`, whose six controls are
+load-bearing in both directions: a guard that simply forbade a second vote would
+break MULTI polls, and one keyed on `poll_id` alone would stop a second MEMBER
+voting.
+
+Until this is applied, a single-choice poll can be stuffed in production.
+
+## 0323 — a family timezone had no constraint, and a typo meant Greenwich
+
+`families.timezone` decides which local day a routine belongs to, what "today"
+means, and the day bounds the medication reminder uses.
+`components/modules/family-module.tsx` states the failure above the field:
+`Intl` throws on an unknown zone, every call site catches and degrades to UTC by
+design, so a typo saved silently and left the family on Greenwich time while the
+form said "Family profile updated".
+
+Both application paths refuse a bad zone now. `families` carried **no constraint
+of any kind**, and `families_update` is reachable by any manager's JWT.
+
+**The guard had to accept exactly what `Intl` accepts**, and getting that wrong
+was the real risk here. A guard checking `pg_timezone_names` alone would be
+STRICTER than the application and would reject `CST` and `PST`, which the form
+offers — closing the product rather than the hole. Postgres keeps IANA names and
+legacy abbreviations in two catalogues and `Intl` accepts both:
+
+```
+zone              names  abbrevs  union   Intl
+CST               f      t        yes     accepted
+PST               f      t        yes     accepted
+EST               t      t        yes     accepted
+US/Central        t      f        yes     accepted
+America/Chicago   t      f        yes     accepted
+Etc/GMT+5         t      f        yes     accepted
+UTC / GMT         t      t        yes     accepted
+Amercia/Chicago   f      f        NO      REJECTED
+```
+
+The union agrees with `Intl` on every case measured, so the union is the rule.
+`CST` being accepted is not an oversight — it is a fixed offset with no DST, so a
+family in Chicago choosing it is an hour out for half the year, but `Intl`
+accepts it and the form offers it. Which zones to OFFER is a product question;
+it is not a reason for the table to disagree with the app.
+
+**A trigger, not a CHECK**: a CHECK may only call IMMUTABLE functions, and
+reading `pg_timezone_names` is not immutable — the zone database changes with the
+server's tzdata. Declaring a function IMMUTABLE when it is not survives until a
+`pg_dump`/restore revalidates every CHECK against a differently-versioned
+catalogue.
+
+Held by `docs/audit/family-timezone-exists-check.sql`, whose controls are the
+point: five accepted zones plus `CST` and `PST` are exactly what a names-only
+guard would wrongly reject. With the trigger dropped it reports 4 failures.
+
+Until this is applied, a direct write can still put a family on Greenwich time.

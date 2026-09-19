@@ -2,17 +2,17 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-19T22:54:38.375Z
-- Total Audit Items: 14045
+- Last Updated: 2026-09-19T23:07:52.648Z
+- Total Audit Items: 14047
 - Not Started: 13842
 - In Progress: 192
 - Passed: 0
-- Fixed + Passed: 8
+- Fixed + Passed: 10
 - Blocked: 1
 - Failed: 2
 - Overall Completion: 0.04%
 
-Database-execution cycle: the local Supabase stack was brought up healthy and every migration applied, so this pass judged the database by running it rather than by reading it. It found three features that have never worked in production and two live boundary breaches. DB-FN-001: `marketplace_create_circle` is `security definer` and pinned `set search_path = public`, but Supabase keeps pgcrypto in the `extensions` schema, so every call since 0176 raised 42883 and no family has ever created a sharing circle. DB-FN-002: `invest_decide_order` writes the ledger `direction` from a CASE over two string literals, which is `text` and does not cast to the enum — so APPROVAL has raised 42804 since 0196 while REJECTION worked, and a parent could decline a child's investment for ever while no order was ever filled. SEC-006: the locator's own comment says "Strictly self-only" and the server action honours it, but that was the only place it held — measured as a child, rewrote the parent's live location, deleted it, and fabricated an arrival event attributed to them. AUTHZ-003, open at FAIL for a full cycle on source analysis alone, was reproduced by execution: a read_only adult deleted their own restriction and became a marketing_manager with publish_posts and connect_accounts. Fixed in 0318-0321 with probes that each go red when reverted. The guards that should have caught the first two were asking the wrong question: one verified that a definer function PINS a search_path (this one did), and nothing at all resolved a plpgsql body, which binds its SQL at CALL time and so can be catastrophically wrong while installing, deploying and passing CI cleanly. Both halves are now guarded, the second by resolving all 70 plpgsql bodies against the live catalogue. Running the boundary suite twice in a row also exposed three probes not proving what the green count implied (TEST-004/005/006): one passed on a virgin database and failed forever after, one ERRORED rather than ran on every Supabase database it was ever pointed at so the wallet overspend race had never once been exercised, and one aborted during fixture setup before any assertion ran. `docs/audit/run-probes.sh` passes 43/43, twice in succession. The unit suite passes 16,705/16,705 across 1,305 files on Node 24.21.0, the version the repo declares; the three failures seen under this container's Node 22 are the already-tracked PERF-002 and disappear under 24. OPEN-001 records three member-data tables left deliberately unchanged as an owner decision. These are local-execution results; they do not by themselves establish deployed behavior, and 0318-0321 are PENDING PRODUCTION MIGRATIONS that a human must apply.
+Database-execution cycle: the local Supabase stack was brought up healthy and every migration applied, so this pass judged the database by running it rather than by reading it. It found three features that have never worked in production and two live boundary breaches. DB-FN-001: `marketplace_create_circle` is `security definer` and pinned `set search_path = public`, but Supabase keeps pgcrypto in the `extensions` schema, so every call since 0176 raised 42883 and no family has ever created a sharing circle. DB-FN-002: `invest_decide_order` writes the ledger `direction` from a CASE over two string literals, which is `text` and does not cast to the enum — so APPROVAL has raised 42804 since 0196 while REJECTION worked, and a parent could decline a child's investment for ever while no order was ever filled. SEC-006: the locator's own comment says "Strictly self-only" and the server action honours it, but that was the only place it held — measured as a child, rewrote the parent's live location, deleted it, and fabricated an arrival event attributed to them. AUTHZ-003, open at FAIL for a full cycle on source analysis alone, was reproduced by execution: a read_only adult deleted their own restriction and became a marketing_manager with publish_posts and connect_accounts. Three further integrity gaps followed from the same question — what does the table enforce, as opposed to what does the code promise: DATA-008, a single-choice poll took every choice (one member cast 3 votes across 3 options) because the single/multi rule lived only in the browser and spans two tables, so it needed a trigger rather than an index; DATA-009, `families.timezone` had no constraint at all, so a typo saved silently and put the family on Greenwich time. Fixed in 0318-0323 with probes that each go red when reverted. The guards that should have caught the first two were asking the wrong question: one verified that a definer function PINS a search_path (this one did), and nothing at all resolved a plpgsql body, which binds its SQL at CALL time and so can be catastrophically wrong while installing, deploying and passing CI cleanly. Both halves are now guarded, the second by resolving all 70 plpgsql bodies against the live catalogue. Running the boundary suite twice in a row also exposed three probes not proving what the green count implied (TEST-004/005/006): one passed on a virgin database and failed forever after, one ERRORED rather than ran on every Supabase database it was ever pointed at so the wallet overspend race had never once been exercised, and one aborted during fixture setup before any assertion ran. `docs/audit/run-probes.sh` passes 45/45, twice in succession. The unit suite passes 16,705/16,705 across 1,305 files on Node 24.21.0, the version the repo declares; the three failures seen under this container's Node 22 are the already-tracked PERF-002 and disappear under 24. OPEN-001 records five member-data tables left deliberately unchanged as an owner decision, with the reasoning and a recommended shape written down for whoever decides. These are local-execution results; they do not by themselves establish deployed behavior, and 0318-0323 are PENDING PRODUCTION MIGRATIONS that a human must apply.
 
 Verified application release 2a5e7e7a15b93f544660b41c0f3185b4865e80ed publishes the phone OTP and signout repair on exact Vercel dpl_8oWh1TNVFNbmGissmnvmA11P6ECT (21:28:59 UTC). Public auth/phone readiness passes without authentication actions or SMS dispatch. Frozen source/test/workflow f75e7febdf01bf944fa35a505745001533c80028 passes 459/459 controlled browser cases and both full 16,703/16,703 unit runs across 1,305 files; build252, full strict types, lint (three existing warnings), localization and query checks pass. Exact hosted CI35470363378 Web/Database/Mobile succeed, including both full unit zones/build/types. E2E105970089707 fails only its three new phone HTTP cases:1,293/1,296 pass in8.3minutes; each stalls before code-entry heading after Continue, so real OTP verification is not reached. Repaired durable signout and all six callback cases pass by exact enabled-source matrix minus the three failures, not individual success log entries. A two-file CI provider/hook and diagnostic repair passes local strict types/lint, discovery3, guards66 and config/negative controls; no application runtime or product config/SQL changes. New hosted phone acceptance remains open. Published d954 hosted1,251/1,252 remains historical failed-baseline evidence, not the current release result. AUTH-001/002/003 stay IN PROGRESS. See docs/final-audit/auth-phone-ownership-cycle.md and production-rollout-20260919.md.
 
@@ -14177,6 +14177,8 @@ PRODUCTION READY: NO
 | SEC-006 | Security | Family locator live position and arrival timeline | 🛠 FIXED + PASS | Critical | 10/10 | 0319 adds restrictive self-or-manager write guards to member_locations and location_events | Probe passes twice; 9 assertions fail with the guards dropped; suite 40/40 | A child could rewrite, delete and fabricate any member's location; the server action's "self-only" rule was never in the table |
 | DB-FN-002 | Database | invest_decide_order buy/sell fill | 🛠 FIXED + PASS | High | 7/7 | 0321 casts the direction CASE to wallet_txn_direction | Buy and sell both fill; ledger and holding agree; probe hard-errors without the fix; suite 43/43 | Approval raised 42804 since 0196 while rejection worked, so no order was ever filled. Found by plpgsql_check, not by calling it. |
 | OPEN-001 | Database | screen_time_limits, grades, behavior_logs, immunizations, health_visits write scope | ⚠️ BLOCKED | Medium | n/a | None — deliberately | n/a | Records kept about a member, writable by any member. No code declares a restriction, so the boundary is an owner decision. Recommended shape: can_manage_family OR is_self_member. |
+| DATA-008 | DATA | Single-choice family poll integrity | 🛠 FIXED + PASS | Medium | 7/7 | 0322 adds a trigger (the rule spans two tables, so no index can express it) taking `for update` on the poll, firing on INSERT and UPDATE | Probe passes twice; 2 assertions fail with the trigger dropped; suite 44/44 | One member cast 3 votes across 3 options of a single-choice poll. The module enforced it client-side and said so in a comment. |
+| DATA-009 | DATA | families.timezone validity | 🛠 FIXED + PASS | Medium | 6/6 | 0323 adds a trigger accepting pg_timezone_names UNION pg_timezone_abbrevs, which matches Intl exactly | Probe passes twice; 4 assertions fail with the trigger dropped; suite 45/45 | No constraint of any kind; a typo saved silently and put the family on Greenwich time. A names-only guard would have wrongly rejected CST and PST. |
 
 ## Inventory and evidence rules
 
@@ -20968,6 +20970,113 @@ Executed against a local Supabase stack, not inferred from source. The probe tha
 
 #### Final Status
 🛠 FIXED + PASS
+
+### DATA-009 — A family's timezone had no constraint, and a typo meant Greenwich
+
+Status: 🛠 FIXED + PASS
+Severity: Medium
+Route(s), components, actions, tables and providers: components/modules/family-module.tsx:583, lib/validation.ts, lib/time/zoned.ts, supabase/migrations/0323_a_family_timezone_is_a_zone_that_exists.sql, docs/audit/family-timezone-exists-check.sql, public.families
+
+#### Expected Behavior
+`families.timezone` holds a zone the server can resolve. Everything the form offers saves; a typo does not.
+
+#### Test Cases
+- [x] `Amercia/Chicago` is refused and the stored zone is unchanged
+- [x] `America/Chicago`, `Australia/Sydney`, `US/Central`, `Etc/GMT+5`, `UTC` all still save (controls)
+- [x] `CST` and `PST` still save — abbreviations, not IANA names (controls)
+- [x] A blank zone is refused
+- [x] The guard covers INSERT as well as UPDATE
+- [x] The probe fails when the trigger is dropped
+
+#### Issues Found
+`families.timezone` decides which local day a routine belongs to, what "today" means, and the day bounds the medication reminder uses. `family-module.tsx` states the failure above the field: `Intl` throws on an unknown zone, every call site catches and degrades to UTC by design, so a typo saved silently and left the family on Greenwich time while the form said "Family profile updated".
+
+Both application paths refuse a bad zone now — `createFamilySchema.timezone` on create, `isValidTimezone` on edit. `families` carried **no constraint of any kind**, and `families_update` is reachable by any manager's JWT, so the rule lived entirely in the two places that happen to ask.
+
+#### Fixes Applied
+`supabase/migrations/0323_a_family_timezone_is_a_zone_that_exists.sql` adds a trigger.
+
+**The guard had to accept exactly what `Intl` accepts**, and getting that wrong was the real risk. A guard checking `pg_timezone_names` alone would be *stricter* than the application and would reject `CST` and `PST`, which the form offers — closing the product rather than the hole. Postgres keeps IANA names and legacy abbreviations in two different catalogues and `Intl` accepts both. Measured:
+
+    zone              names  abbrevs  union   Intl
+    CST               f      t        yes     accepted
+    PST               f      t        yes     accepted
+    EST               t      t        yes     accepted
+    US/Central        t      f        yes     accepted
+    America/Chicago   t      f        yes     accepted
+    Etc/GMT+5         t      f        yes     accepted
+    UTC / GMT         t      t        yes     accepted
+    Amercia/Chicago   f      f        NO      REJECTED
+
+The union agrees with `Intl` on every case, including the ones where the individual catalogues disagree. `CST` being accepted is not an oversight: it is a fixed offset with no DST, so a family in Chicago choosing it will be an hour out for half the year — but `Intl` accepts it and the form offers it, and a database that refused it would reject a value the product permits. Which zones to *offer* is a separate product question; it is not a reason for the table to disagree with the app.
+
+Blank is refused rather than waved through: `Intl` raises a RangeError on `''` exactly as it does on a typo, so an empty zone reaches the same silent UTC.
+
+**A trigger, not a CHECK.** A CHECK may only call IMMUTABLE functions, and reading `pg_timezone_names` is not immutable — the zone database changes with the server's tzdata. Declaring a function IMMUTABLE when it is not is the kind of lie that survives until a `pg_dump`/restore revalidates every CHECK against a differently-versioned catalogue.
+
+#### Retest Results
+Passes twice in succession; the suite passes 45/45. With the trigger dropped the probe reports 4 failed assertions.
+
+An earlier draft of the probe asserted that writing `null` should succeed, and failed against the real schema: `families.timezone` is NOT NULL with a default of `'UTC'`, so the column refuses null before any trigger runs. The probe now says so explicitly, and the trigger leaves null to the column rather than raising a second, different error for the same thing.
+
+#### Evidence
+Executed against a local Supabase stack with all 323 migrations applied. The Postgres/`Intl` comparison was measured on both sides — `psql` against the two catalogues, Node 24.21.0 for `Intl` — rather than assumed.
+
+#### Final Status
+🛠 FIXED + PASS — 0323 is a PENDING PRODUCTION MIGRATION.
+
+### DATA-008 — A single-choice poll would take every choice
+
+Status: 🛠 FIXED + PASS
+Severity: Medium
+Route(s), components, actions, tables and providers: components/modules/voting-module.tsx:135, supabase/migrations/0322_a_single_choice_poll_takes_one_vote.sql, docs/audit/poll-single-choice-check.sql, public.family_poll_votes, public.family_polls
+
+#### Expected Behavior
+A member casts one choice on a `single` poll and as many as they like on a `multi` one. Changing a single choice replaces it.
+
+#### Test Cases
+- [x] A member can vote once on a single-choice poll (control)
+- [x] A second option in the same single-choice poll is refused
+- [x] Re-pointing an existing vote row into that poll is refused
+- [x] Clearing and re-voting — the product's own flow — still works (control)
+- [x] A multi-choice poll still takes several votes (control)
+- [x] A different member can still vote in the same poll (control)
+- [x] The probe fails when the trigger is dropped
+
+#### Issues Found
+`family_polls.kind` is `single` or `multi`, and `voting-module.tsx` enforces the difference in the browser:
+
+    if (poll.kind === 'single' && mine.size > 0) {
+      // Clear the prior selection first; if this fails, do NOT insert or the
+      // single-choice poll ends up with two votes for this member.
+
+The comment is exactly right about the consequence and the ordering is careful. It was also the only thing enforcing it. `family_poll_votes` carries `UNIQUE (option_id, member_id)` — one vote per OPTION per member, which is the correct rule for a `multi` poll and no rule at all for a `single` one — and the table is client-reachable, so the delete-then-insert dance is advisory.
+
+Measured, acting as a child of the family:
+
+    SINGLE-choice poll: one member cast 3 votes across 3 options
+
+`voterCount` and the result bars read straight from these rows, so the poll reports a result the family never gave.
+
+#### Fixes Applied
+`supabase/migrations/0322_a_single_choice_poll_takes_one_vote.sql` adds a trigger, not an index. The rule depends on `family_polls.kind`, which lives in another table, and a unique index cannot reach across one — 0316 closed its equivalent ("a chore is paid once") with a partial unique index precisely because its rule was expressible in one table's own columns.
+
+That difference also changes how pre-existing bad rows are handled, deliberately rather than as a softening: 0316 had to REFUSE to apply while duplicates existed, because `create unique index` physically cannot be created over rows that violate it. A trigger governs new writes only, so it installs regardless and leaves existing rows untouched. 0322 therefore REPORTS what is already in the data as a notice instead of blocking on it, because silently deleting a family's recorded votes is not a migration's business either.
+
+The trigger takes `for update` on the poll row. A trigger that only SELECTs before it INSERTs is 0317's defect over again — two simultaneous votes each read "no existing vote" and both land. Voting on one poll is serialized for the moment it takes to insert a row; different polls do not contend.
+
+It fires on UPDATE as well as INSERT. Without that arm a member casts one legal vote and then re-points a second row's `poll_id`/`option_id` at the same poll, arriving exactly where the INSERT arm refused to let them — which the probe confirms is a real path, not a theoretical one.
+
+#### Retest Results
+`docs/audit/poll-single-choice-check.sql` passes twice in succession; the full suite passes 44/44. With the trigger dropped it reports 2 failed assertions, one for each arm.
+
+The controls are load-bearing in both directions here, which is the point of having six of them: a guard that simply forbade a second vote would break MULTI polls, which exist to take several, and a guard keyed on `poll_id` alone would stop a second MEMBER voting.
+
+#### Evidence
+Executed against a local Supabase stack with all 322 migrations applied, acting as a real `authenticated` member.
+
+#### Final Status
+🛠 FIXED + PASS — 0322 is a PENDING PRODUCTION MIGRATION; until a human applies it, a single-choice poll can be stuffed in production.
 
 ### DB-FN-002 — A parent could reject a child's investment order and never approve one
 
