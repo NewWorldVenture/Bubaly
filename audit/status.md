@@ -945,3 +945,28 @@ NOT TOUCHED: the previous author's prose about method, the merge verification of
   the 151 figure (re-framed as describing the state it described, not deleted),
   and every existing pass row. Rule 2 — never delete another worker's findings.
 LAST-UPDATE: 2026-09-19
+
+## Claude-1 — CI: the readiness gate that could not fail
+`finance-operation-sql` went RED on 28ae9b1a. My diff there touched ONE TEST
+FILE, so it could not have caused it — and the root cause turned out to be this
+audit's own thesis, in this audit's own CI.
+
+The job starts a postgres:17 container, waits with `pg_isready --dbname=
+bubaly_finance_operation_ci`, then runs psql against that database. The gate
+passed and psql failed ONE SECOND LATER with `database "..." does not exist`.
+
+WHY: `pg_isready` DOES NOT CONNECT. It asks the postmaster whether it is
+accepting connections and nothing else, so --dbname is only used to build a
+connection string. MEASURED locally rather than assumed:
+  $ pg_isready --dbname=this_database_does_not_exist  -> "accepting connections", exit 0
+  $ psql --dbname=this_database_does_not_exist -c 'select 1' -> exit 2
+A readiness gate that could not fail for the thing it was named for.
+
+FIXED: the gate now opens a REAL connection to the REAL database, and requires
+THREE CONSECUTIVE successes — because the postgres image runs a temporary server
+on the same socket during init to create POSTGRES_DB, then stops it and starts
+the real one. A single success can land on that temporary server and be followed
+by "the database system is shutting down"; any failure resets the count, so the
+restart window cannot be straddled.
+NOT A FLAKE RE-RUN: the race is real and would have recurred. Fixed at source.
+LAST-UPDATE: 2026-09-19
