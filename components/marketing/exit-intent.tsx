@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { X } from 'lucide-react';
 import { useLockBodyScroll } from '@/lib/hooks/use-lock-body-scroll';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useDialogBehavior } from '@/lib/a11y/use-dialog-behavior';
 
 type Offer = {
   id: string;
@@ -38,13 +39,11 @@ export function ExitIntent() {
   // Lock background scroll while the offer modal is showing (mobile scroll-bleed).
   useLockBodyScroll(Boolean(offer) && open);
 
-  // ESC closes the offer (keyboard parity with the scrim click + close button).
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open]);
+  // ESC, plus the focus trap and focus restore the markup already promised with
+  // `aria-modal="true"`. Scroll lock stays with useLockBodyScroll above.
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeOffer = useCallback(() => setOpen(false), []);
+  useDialogBehavior(dialogRef, open, { onClose: closeOffer, lockScroll: false });
 
   // Resolve once on mount (skip entirely if we've shown one recently).
   useEffect(() => {
@@ -113,6 +112,8 @@ export function ExitIntent() {
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4" onClick={() => setOpen(false)}>
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="exit-intent-title"

@@ -20,6 +20,13 @@ import { describe, expect, it } from 'vitest';
 const ROOT = join(__dirname, '..');
 const consent = readFileSync(join(ROOT, 'components/marketing/consent-manager.tsx'), 'utf8');
 const modal = readFileSync(join(ROOT, 'components/ui/modal.tsx'), 'utf8');
+// The dialog behaviour (Escape, Tab trap, scroll lock, focus restore) moved to
+// `lib/a11y/use-dialog-behavior.ts` so overlays that cannot take the shared
+// Modal's chrome can still keep the promise `aria-modal` makes. Assertions that
+// read it out of a component's own source now read it from the hook, and the
+// component is asserted to DELEGATE. The contract did not weaken.
+const DIALOG_HOOK = readFileSync(join(ROOT, 'lib/a11y/use-dialog-behavior.ts'), 'utf8');
+
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const e of readdirSync(dir)) {
@@ -46,10 +53,11 @@ describe('the preference centre is operable by keyboard', () => {
 
   it('the Modal it now uses actually implements the contract', () => {
     // Asserting the delegation is worthless if the target does not do the work.
-    expect(modal, 'focus must move INTO the dialog').toMatch(/\.focus\(\)/);
-    expect(modal, 'Escape must close').toMatch(/e\.key === 'Escape'/);
-    expect(modal, 'focus must return to the opener').toMatch(/previouslyFocused\?\.focus/);
-    expect(modal, 'Tab must be trapped').toMatch(/e\.key === 'Tab'|items\.length/);
+    expect(DIALOG_HOOK, 'focus must move INTO the dialog').toMatch(/\.focus\(\)/);
+    expect(modal, 'Modal must delegate the behaviour').toMatch(/useDialogBehavior/);
+    expect(DIALOG_HOOK, 'Escape must close').toMatch(/e\.key === 'Escape'/);
+    expect(DIALOG_HOOK, 'focus must return to the opener').toMatch(/previouslyFocused\?\.focus/);
+    expect(DIALOG_HOOK, 'Tab must be trapped').toMatch(/e\.key !== 'Tab'|items\.length/);
     expect(modal, 'the title must label the dialog by id').toMatch(/aria-labelledby=\{titleId\}/);
   });
 
