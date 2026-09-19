@@ -1,4 +1,897 @@
-# Bubaly — Final Audit
+# Final Production Audit
+
+*This control document was added 2026-09-19 to the top of an audit that already
+existed. Everything below Part 0 is the accumulated evidence of thirty passes and
+169 finding IDs from four workers and two parallel sessions; none of it was
+removed to make room for this. The register below is the DISCOVERY inventory the
+brief asks for — every page, API route, feature module, server-action file,
+scheduled job, workflow and bucket in the repository, each with a permanent ID.*
+
+## Audit Status
+- Started: 2026-09-13
+- Last Updated: 2026-09-19
+- Total Audit Items: 821
+- Not Started: 439
+- In Progress: 373
+- Passed: 9
+- Fixed + Passed: see Part 0 — 169 finding IDs, the large majority fixed and re-tested
+- Blocked: see Critical Blockers
+- Failed: 0
+- Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
+
+## Status Legend
+- ⬜ NOT STARTED
+- 🔄 IN PROGRESS
+- ✅ PASS
+- 🛠 FIXED + PASS
+- ⚠️ BLOCKED
+- ❌ FAIL
+
+## Release Gate
+PRODUCTION READY: NO
+
+## Critical Blockers
+
+| # | Blocker | Why it cannot be resolved from the repository |
+|---|---|---|
+| B1 | **Thirteen migrations (`0318`–`0330`) are not applied to production** | Applying them needs operator credentials no agent in this audit has had. They include live privilege-escalation fixes. Listed in `docs/PENDING_PROD_MIGRATIONS.md`. |
+| B2 | **No authenticated browser session** | There is no local Supabase, so `app/(app)` cannot be exercised as a signed-in user. Every authenticated-UI finding here is statically derived or driven through the in-memory Supabase fake. |
+| B3 | **The Expo app has never been run** | Read and typechecked only. |
+| B4 | **Production schema never verified** | The audit replays migrations into a local PG17/16; whether production matches is unverified. |
+| B5 | **No real screen reader, no `forced-colors`** | Accessibility findings are axe-derived plus static analysis. |
+
+*Per the brief: a BLOCKED item does not count as PASS, and while B1 affects
+security-critical functionality the release gate stays NO.*
+
+## Audit Summary — coverage by area
+
+| Area | Items | Named in audit evidence | Coverage |
+|---|---:|---:|---:|
+| Pages | 395 | 170 | 43% |
+| API | 141 | 69 | 49% |
+| Feature modules | 118 | 68 | 58% |
+| Server actions | 126 | 53 | 42% |
+| Database | 2 | 2 | 100% |
+| Scheduled | 24 | 9 | 38% |
+| CI/CD | 8 | 4 | 50% |
+| Storage | 7 | 7 | 100% |
+
+*"Named in audit evidence" means the file or route appears somewhere in
+`finalaudit.md` or a worker file — i.e. it has been looked at. It is
+deliberately NOT counted as PASS: the brief is explicit that a feature is
+complete only when its full workflow is verified, and a static read is not that.*
+
+## Audit Register
+
+*821 items. IDs are permanent. An item is never removed for failing.*
+
+| ID | Area | Item | Status | Evidence |
+|---|---|---|---|---|
+| PAGE-001 | Pages | `/admin/admins` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-002 | Pages | `/admin/ai-activity` | ⬜ NOT STARTED | — |
+| PAGE-003 | Pages | `/admin/ai` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-004 | Pages | `/admin/audit-logs` | ⬜ NOT STARTED | — |
+| PAGE-005 | Pages | `/admin/audit` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-006 | Pages | `/admin/backup` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-007 | Pages | `/admin/benchmarks` | ⬜ NOT STARTED | — |
+| PAGE-008 | Pages | `/admin/billing` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-009 | Pages | `/admin/content` | ⬜ NOT STARTED | — |
+| PAGE-010 | Pages | `/admin/feedback` | ⬜ NOT STARTED | — |
+| PAGE-011 | Pages | `/admin/integrations` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-012 | Pages | `/admin/marketing/ads` | ⬜ NOT STARTED | — |
+| PAGE-013 | Pages | `/admin/marketing/aeo` | ⬜ NOT STARTED | — |
+| PAGE-014 | Pages | `/admin/marketing/affiliates` | ⬜ NOT STARTED | — |
+| PAGE-015 | Pages | `/admin/marketing/analytics` | ⬜ NOT STARTED | — |
+| PAGE-016 | Pages | `/admin/marketing/assets` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-017 | Pages | `/admin/marketing/assistant` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-018 | Pages | `/admin/marketing/audit` | ⬜ NOT STARTED | — |
+| PAGE-019 | Pages | `/admin/marketing/automation` | ⬜ NOT STARTED | — |
+| PAGE-020 | Pages | `/admin/marketing/campaigns/[id]` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-021 | Pages | `/admin/marketing/campaigns/new` | ⬜ NOT STARTED | — |
+| PAGE-022 | Pages | `/admin/marketing/campaigns` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-023 | Pages | `/admin/marketing/competitive` | ⬜ NOT STARTED | — |
+| PAGE-024 | Pages | `/admin/marketing/content` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-025 | Pages | `/admin/marketing/crm` | ⬜ NOT STARTED | — |
+| PAGE-026 | Pages | `/admin/marketing/customers` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-027 | Pages | `/admin/marketing/email` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-028 | Pages | `/admin/marketing/exit-intent` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-029 | Pages | `/admin/marketing/experiments` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-030 | Pages | `/admin/marketing/forms` | ⬜ NOT STARTED | — |
+| PAGE-031 | Pages | `/admin/marketing/funnels` | ⬜ NOT STARTED | — |
+| PAGE-032 | Pages | `/admin/marketing/health` | ⬜ NOT STARTED | — |
+| PAGE-033 | Pages | `/admin/marketing/intelligence` | ⬜ NOT STARTED | — |
+| PAGE-034 | Pages | `/admin/marketing/landing-pages` | ⬜ NOT STARTED | — |
+| PAGE-035 | Pages | `/admin/marketing/lead-scores` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-036 | Pages | `/admin/marketing/leads` | ⬜ NOT STARTED | — |
+| PAGE-037 | Pages | `/admin/marketing/loyalty` | ⬜ NOT STARTED | — |
+| PAGE-038 | Pages | `/admin/marketing` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-039 | Pages | `/admin/marketing/personalization` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-040 | Pages | `/admin/marketing/pipeline` | ⬜ NOT STARTED | — |
+| PAGE-041 | Pages | `/admin/marketing/platform` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-042 | Pages | `/admin/marketing/proposals` | ⬜ NOT STARTED | — |
+| PAGE-043 | Pages | `/admin/marketing/push` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-044 | Pages | `/admin/marketing/referrals` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-045 | Pages | `/admin/marketing/reputation` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-046 | Pages | `/admin/marketing/reviews` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-047 | Pages | `/admin/marketing/segments` | ⬜ NOT STARTED | — |
+| PAGE-048 | Pages | `/admin/marketing/seo` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-049 | Pages | `/admin/marketing/settings` | ⬜ NOT STARTED | — |
+| PAGE-050 | Pages | `/admin/marketing/sms` | ⬜ NOT STARTED | — |
+| PAGE-051 | Pages | `/admin/marketing/social` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-052 | Pages | `/admin/marketing/social/recurring` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-053 | Pages | `/admin/marketing/surveys/[id]` | ⬜ NOT STARTED | — |
+| PAGE-054 | Pages | `/admin/marketing/surveys` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-055 | Pages | `/admin/marketing/video` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-056 | Pages | `/admin/marketing/visitor-intelligence` | ⬜ NOT STARTED | — |
+| PAGE-057 | Pages | `/admin/marketplace/reports` | ⬜ NOT STARTED | — |
+| PAGE-058 | Pages | `/admin/notifications` | ⬜ NOT STARTED | — |
+| PAGE-059 | Pages | `/admin/onboarding` | ⬜ NOT STARTED | — |
+| PAGE-060 | Pages | `/admin` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-061 | Pages | `/admin/reports` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-062 | Pages | `/admin/security` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-063 | Pages | `/admin/services` | ⬜ NOT STARTED | — |
+| PAGE-064 | Pages | `/admin/settings` | ⬜ NOT STARTED | — |
+| PAGE-065 | Pages | `/admin/settings/social-links` | ⬜ NOT STARTED | — |
+| PAGE-066 | Pages | `/admin/social/audit` | ⬜ NOT STARTED | — |
+| PAGE-067 | Pages | `/admin/social` | ⬜ NOT STARTED | — |
+| PAGE-068 | Pages | `/admin/social/providers` | ⬜ NOT STARTED | — |
+| PAGE-069 | Pages | `/admin/social/usage` | ⬜ NOT STARTED | — |
+| PAGE-070 | Pages | `/admin/stripe` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-071 | Pages | `/admin/subscriptions` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-072 | Pages | `/admin/support-tickets` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-073 | Pages | `/admin/support` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-074 | Pages | `/admin/sync` | ⬜ NOT STARTED | — |
+| PAGE-075 | Pages | `/admin/system` | ⬜ NOT STARTED | — |
+| PAGE-076 | Pages | `/admin/tier-features` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-077 | Pages | `/admin/tiers` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-078 | Pages | `/admin/users` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-079 | Pages | `/admin/wallet` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-080 | Pages | `/admin/wallet/reconciliation` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-081 | Pages | `/auth/step-up` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-082 | Pages | `/capture/link` | ⬜ NOT STARTED | — |
+| PAGE-083 | Pages | `/capture` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-084 | Pages | `/dashboard/activity` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-085 | Pages | `/dashboard/agents` | ⬜ NOT STARTED | — |
+| PAGE-086 | Pages | `/dashboard/announcements` | ⬜ NOT STARTED | — |
+| PAGE-087 | Pages | `/dashboard/app-store` | ⬜ NOT STARTED | — |
+| PAGE-088 | Pages | `/dashboard/assistant` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-089 | Pages | `/dashboard/assistant/purchases/[approvalId]` | ⬜ NOT STARTED | — |
+| PAGE-090 | Pages | `/dashboard/assistants` | ⬜ NOT STARTED | — |
+| PAGE-091 | Pages | `/dashboard/auto/accident` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-092 | Pages | `/dashboard/auto/insurance` | ⬜ NOT STARTED | — |
+| PAGE-093 | Pages | `/dashboard/auto/licenses` | ⬜ NOT STARTED | — |
+| PAGE-094 | Pages | `/dashboard/auto` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-095 | Pages | `/dashboard/auto/registration` | ⬜ NOT STARTED | — |
+| PAGE-096 | Pages | `/dashboard/auto/rentals` | ⬜ NOT STARTED | — |
+| PAGE-097 | Pages | `/dashboard/auto/service` | ⬜ NOT STARTED | — |
+| PAGE-098 | Pages | `/dashboard/auto/vehicles` | ⬜ NOT STARTED | — |
+| PAGE-099 | Pages | `/dashboard/autonomous-family-management` | ⬜ NOT STARTED | — |
+| PAGE-100 | Pages | `/dashboard/autopay` | ⬜ NOT STARTED | — |
+| PAGE-101 | Pages | `/dashboard/autopilot` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-102 | Pages | `/dashboard/behavior` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-103 | Pages | `/dashboard/billing` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-104 | Pages | `/dashboard/bills` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-105 | Pages | `/dashboard/binder` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-106 | Pages | `/dashboard/briefing` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-107 | Pages | `/dashboard/budgets` | ⬜ NOT STARTED | — |
+| PAGE-108 | Pages | `/dashboard/calendar` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-109 | Pages | `/dashboard/calm` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-110 | Pages | `/dashboard/care` | ⬜ NOT STARTED | — |
+| PAGE-111 | Pages | `/dashboard/career` | ⬜ NOT STARTED | — |
+| PAGE-112 | Pages | `/dashboard/celebrations` | ⬜ NOT STARTED | — |
+| PAGE-113 | Pages | `/dashboard/chores` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-114 | Pages | `/dashboard/closet` | ⬜ NOT STARTED | — |
+| PAGE-115 | Pages | `/dashboard/command-center` | ⬜ NOT STARTED | — |
+| PAGE-116 | Pages | `/dashboard/concierge-calls` | ⬜ NOT STARTED | — |
+| PAGE-117 | Pages | `/dashboard/concierge` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-118 | Pages | `/dashboard/concierge/runs/[id]` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-119 | Pages | `/dashboard/concierge/runs` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-120 | Pages | `/dashboard/conflicts` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-121 | Pages | `/dashboard/connections` | ⬜ NOT STARTED | — |
+| PAGE-122 | Pages | `/dashboard/contact-center` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-123 | Pages | `/dashboard/contacts/[id]` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-124 | Pages | `/dashboard/contacts` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-125 | Pages | `/dashboard/decisions` | ⬜ NOT STARTED | — |
+| PAGE-126 | Pages | `/dashboard/declutter` | ⬜ NOT STARTED | — |
+| PAGE-127 | Pages | `/dashboard/dental` | ⬜ NOT STARTED | — |
+| PAGE-128 | Pages | `/dashboard/devices` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-129 | Pages | `/dashboard/dining` | ⬜ NOT STARTED | — |
+| PAGE-130 | Pages | `/dashboard/documents` | ⬜ NOT STARTED | — |
+| PAGE-131 | Pages | `/dashboard/due` | ⬜ NOT STARTED | — |
+| PAGE-132 | Pages | `/dashboard/expenses` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-133 | Pages | `/dashboard/experience` | ⬜ NOT STARTED | — |
+| PAGE-134 | Pages | `/dashboard/family-access` | ⬜ NOT STARTED | — |
+| PAGE-135 | Pages | `/dashboard/family-ai-assistant` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-136 | Pages | `/dashboard/family-automation` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-137 | Pages | `/dashboard/family-cfo` | ⬜ NOT STARTED | — |
+| PAGE-138 | Pages | `/dashboard/family-coo` | ⬜ NOT STARTED | — |
+| PAGE-139 | Pages | `/dashboard/family-digital-twin` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-140 | Pages | `/dashboard/family-emergency` | ⬜ NOT STARTED | — |
+| PAGE-141 | Pages | `/dashboard/family-health` | ⬜ NOT STARTED | — |
+| PAGE-142 | Pages | `/dashboard/family-knowledge-graph` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-143 | Pages | `/dashboard/family-memory` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-144 | Pages | `/dashboard/family-operating-index` | ⬜ NOT STARTED | — |
+| PAGE-145 | Pages | `/dashboard/family-operations` | ⬜ NOT STARTED | — |
+| PAGE-146 | Pages | `/dashboard/family-school` | ⬜ NOT STARTED | — |
+| PAGE-147 | Pages | `/dashboard/family-signals` | ⬜ NOT STARTED | — |
+| PAGE-148 | Pages | `/dashboard/family-sports` | ⬜ NOT STARTED | — |
+| PAGE-149 | Pages | `/dashboard/family-stress` | ⬜ NOT STARTED | — |
+| PAGE-150 | Pages | `/dashboard/family-tree` | ⬜ NOT STARTED | — |
+| PAGE-151 | Pages | `/dashboard/family/check-in` | ⬜ NOT STARTED | — |
+| PAGE-152 | Pages | `/dashboard/family/driving-safety` | ⬜ NOT STARTED | — |
+| PAGE-153 | Pages | `/dashboard/family/find-phone` | ⬜ NOT STARTED | — |
+| PAGE-154 | Pages | `/dashboard/family` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-155 | Pages | `/dashboard/family/play-dates` | ⬜ NOT STARTED | — |
+| PAGE-156 | Pages | `/dashboard/favorites` | ⬜ NOT STARTED | — |
+| PAGE-157 | Pages | `/dashboard/files/cloud` | ⬜ NOT STARTED | — |
+| PAGE-158 | Pages | `/dashboard/files/shared` | ⬜ NOT STARTED | — |
+| PAGE-159 | Pages | `/dashboard/files/vault` | ⬜ NOT STARTED | — |
+| PAGE-160 | Pages | `/dashboard/focus` | ⬜ NOT STARTED | — |
+| PAGE-161 | Pages | `/dashboard/food` | ⬜ NOT STARTED | — |
+| PAGE-162 | Pages | `/dashboard/fridge-chef` | ⬜ NOT STARTED | — |
+| PAGE-163 | Pages | `/dashboard/front-desk` | ⬜ NOT STARTED | — |
+| PAGE-164 | Pages | `/dashboard/goals` | ⬜ NOT STARTED | — |
+| PAGE-165 | Pages | `/dashboard/grandparent-portal` | ⬜ NOT STARTED | — |
+| PAGE-166 | Pages | `/dashboard/graph` | ⬜ NOT STARTED | — |
+| PAGE-167 | Pages | `/dashboard/grocery` | ⬜ NOT STARTED | — |
+| PAGE-168 | Pages | `/dashboard/habits` | ⬜ NOT STARTED | — |
+| PAGE-169 | Pages | `/dashboard/health` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-170 | Pages | `/dashboard/home/assets/[id]` | ⬜ NOT STARTED | — |
+| PAGE-171 | Pages | `/dashboard/home/diagnose` | ⬜ NOT STARTED | — |
+| PAGE-172 | Pages | `/dashboard/home/maintenance` | ⬜ NOT STARTED | — |
+| PAGE-173 | Pages | `/dashboard/home` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-174 | Pages | `/dashboard/home/pros` | ⬜ NOT STARTED | — |
+| PAGE-175 | Pages | `/dashboard/home/service` | ⬜ NOT STARTED | — |
+| PAGE-176 | Pages | `/dashboard/home/warranties` | ⬜ NOT STARTED | — |
+| PAGE-177 | Pages | `/dashboard/homework` | ⬜ NOT STARTED | — |
+| PAGE-178 | Pages | `/dashboard/inbox` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-179 | Pages | `/dashboard/independence` | ⬜ NOT STARTED | — |
+| PAGE-180 | Pages | `/dashboard/insurance` | ⬜ NOT STARTED | — |
+| PAGE-181 | Pages | `/dashboard/intelligence` | ⬜ NOT STARTED | — |
+| PAGE-182 | Pages | `/dashboard/inventory` | ⬜ NOT STARTED | — |
+| PAGE-183 | Pages | `/dashboard/journal` | ⬜ NOT STARTED | — |
+| PAGE-184 | Pages | `/dashboard/journeys` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-185 | Pages | `/dashboard/kitchen` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-186 | Pages | `/dashboard/knowledge` | ⬜ NOT STARTED | — |
+| PAGE-187 | Pages | `/dashboard/knowledge/seed` | ⬜ NOT STARTED | — |
+| PAGE-188 | Pages | `/dashboard/language` | ⬜ NOT STARTED | — |
+| PAGE-189 | Pages | `/dashboard/library` | ⬜ NOT STARTED | — |
+| PAGE-190 | Pages | `/dashboard/life-events` | ⬜ NOT STARTED | — |
+| PAGE-191 | Pages | `/dashboard/locator` | ⬜ NOT STARTED | — |
+| PAGE-192 | Pages | `/dashboard/meals` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-193 | Pages | `/dashboard/medical` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-194 | Pages | `/dashboard/medications` | ⬜ NOT STARTED | — |
+| PAGE-195 | Pages | `/dashboard/memories/create` | ⬜ NOT STARTED | — |
+| PAGE-196 | Pages | `/dashboard/memories` | ⬜ NOT STARTED | — |
+| PAGE-197 | Pages | `/dashboard/messages` | ⬜ NOT STARTED | — |
+| PAGE-198 | Pages | `/dashboard/migrate` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-199 | Pages | `/dashboard/moments` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-200 | Pages | `/dashboard/money-timeline` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-201 | Pages | `/dashboard/more` | ⬜ NOT STARTED | — |
+| PAGE-202 | Pages | `/dashboard/moving` | ⬜ NOT STARTED | — |
+| PAGE-203 | Pages | `/dashboard/needs-you` | ⬜ NOT STARTED | — |
+| PAGE-204 | Pages | `/dashboard/next-best-actions` | ⬜ NOT STARTED | — |
+| PAGE-205 | Pages | `/dashboard/notes` | ⬜ NOT STARTED | — |
+| PAGE-206 | Pages | `/dashboard/notifications` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-207 | Pages | `/dashboard/nutrition` | ⬜ NOT STARTED | — |
+| PAGE-208 | Pages | `/dashboard/onboarding-funnel` | ⬜ NOT STARTED | — |
+| PAGE-209 | Pages | `/dashboard/outcomes` | ⬜ NOT STARTED | — |
+| PAGE-210 | Pages | `/dashboard` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-211 | Pages | `/dashboard/pantry` | ⬜ NOT STARTED | — |
+| PAGE-212 | Pages | `/dashboard/paperwork` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-213 | Pages | `/dashboard/passwords` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-214 | Pages | `/dashboard/payments` | ⬜ NOT STARTED | — |
+| PAGE-215 | Pages | `/dashboard/pets` | ⬜ NOT STARTED | — |
+| PAGE-216 | Pages | `/dashboard/photos` | ⬜ NOT STARTED | — |
+| PAGE-217 | Pages | `/dashboard/planning` | ⬜ NOT STARTED | — |
+| PAGE-218 | Pages | `/dashboard/playbook` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-219 | Pages | `/dashboard/prep-plans` | ⬜ NOT STARTED | — |
+| PAGE-220 | Pages | `/dashboard/profile` | ⬜ NOT STARTED | — |
+| PAGE-221 | Pages | `/dashboard/projects` | ⬜ NOT STARTED | — |
+| PAGE-222 | Pages | `/dashboard/readiness` | ⬜ NOT STARTED | — |
+| PAGE-223 | Pages | `/dashboard/reasoning` | ⬜ NOT STARTED | — |
+| PAGE-224 | Pages | `/dashboard/recipes/discover` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-225 | Pages | `/dashboard/recipes` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-226 | Pages | `/dashboard/recipes/vote` | ⬜ NOT STARTED | — |
+| PAGE-227 | Pages | `/dashboard/relationship` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-228 | Pages | `/dashboard/reminders` | ⬜ NOT STARTED | — |
+| PAGE-229 | Pages | `/dashboard/renewals` | ⬜ NOT STARTED | — |
+| PAGE-230 | Pages | `/dashboard/rewards` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-231 | Pages | `/dashboard/rides` | ⬜ NOT STARTED | — |
+| PAGE-232 | Pages | `/dashboard/savings` | ⬜ NOT STARTED | — |
+| PAGE-233 | Pages | `/dashboard/scan` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-234 | Pages | `/dashboard/school` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-235 | Pages | `/dashboard/screen-time` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-236 | Pages | `/dashboard/search` | ⬜ NOT STARTED | — |
+| PAGE-237 | Pages | `/dashboard/security` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-238 | Pages | `/dashboard/settings` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-239 | Pages | `/dashboard/setup` | ⬜ NOT STARTED | — |
+| PAGE-240 | Pages | `/dashboard/signups` | ⬜ NOT STARTED | — |
+| PAGE-241 | Pages | `/dashboard/sleep` | ⬜ NOT STARTED | — |
+| PAGE-242 | Pages | `/dashboard/social-feed` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-243 | Pages | `/dashboard/social/accounts/connect` | ⬜ NOT STARTED | — |
+| PAGE-244 | Pages | `/dashboard/social/accounts` | ⬜ NOT STARTED | — |
+| PAGE-245 | Pages | `/dashboard/social/analytics` | ⬜ NOT STARTED | — |
+| PAGE-246 | Pages | `/dashboard/social/calendar` | ⬜ NOT STARTED | — |
+| PAGE-247 | Pages | `/dashboard/social/content-studio/new` | ⬜ NOT STARTED | — |
+| PAGE-248 | Pages | `/dashboard/social/content-studio` | ⬜ NOT STARTED | — |
+| PAGE-249 | Pages | `/dashboard/social/failed` | ⬜ NOT STARTED | — |
+| PAGE-250 | Pages | `/dashboard/social/feed` | ⬜ NOT STARTED | — |
+| PAGE-251 | Pages | `/dashboard/social/inbox` | ⬜ NOT STARTED | — |
+| PAGE-252 | Pages | `/dashboard/social/media-library` | ⬜ NOT STARTED | — |
+| PAGE-253 | Pages | `/dashboard/social` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-254 | Pages | `/dashboard/social/posts/[id]` | ⬜ NOT STARTED | — |
+| PAGE-255 | Pages | `/dashboard/social/posts` | ⬜ NOT STARTED | — |
+| PAGE-256 | Pages | `/dashboard/social/published` | ⬜ NOT STARTED | — |
+| PAGE-257 | Pages | `/dashboard/social/scheduled` | ⬜ NOT STARTED | — |
+| PAGE-258 | Pages | `/dashboard/social/settings` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-259 | Pages | `/dashboard/sports` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-260 | Pages | `/dashboard/subscriptions` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-261 | Pages | `/dashboard/sync/accounts/[provider]` | ⬜ NOT STARTED | — |
+| PAGE-262 | Pages | `/dashboard/sync/accounts` | ⬜ NOT STARTED | — |
+| PAGE-263 | Pages | `/dashboard/sync/conflicts` | ⬜ NOT STARTED | — |
+| PAGE-264 | Pages | `/dashboard/sync/history` | ⬜ NOT STARTED | — |
+| PAGE-265 | Pages | `/dashboard/sync` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-266 | Pages | `/dashboard/tax-vault` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-267 | Pages | `/dashboard/timetable` | ⬜ NOT STARTED | — |
+| PAGE-268 | Pages | `/dashboard/todos` | ⬜ NOT STARTED | — |
+| PAGE-269 | Pages | `/dashboard/trip-intel` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-270 | Pages | `/dashboard/trip-memories` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-271 | Pages | `/dashboard/trips` | ⬜ NOT STARTED | — |
+| PAGE-272 | Pages | `/dashboard/trust` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-273 | Pages | `/dashboard/utilities` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-274 | Pages | `/dashboard/vacations/[id]/activities` | ⬜ NOT STARTED | — |
+| PAGE-275 | Pages | `/dashboard/vacations/[id]/ai-assistant` | ⬜ NOT STARTED | — |
+| PAGE-276 | Pages | `/dashboard/vacations/[id]/budget` | ⬜ NOT STARTED | — |
+| PAGE-277 | Pages | `/dashboard/vacations/[id]/documents` | ⬜ NOT STARTED | — |
+| PAGE-278 | Pages | `/dashboard/vacations/[id]/emergency` | ⬜ NOT STARTED | — |
+| PAGE-279 | Pages | `/dashboard/vacations/[id]/family` | ⬜ NOT STARTED | — |
+| PAGE-280 | Pages | `/dashboard/vacations/[id]/itinerary` | ⬜ NOT STARTED | — |
+| PAGE-281 | Pages | `/dashboard/vacations/[id]/lodging` | ⬜ NOT STARTED | — |
+| PAGE-282 | Pages | `/dashboard/vacations/[id]/overview` | ⬜ NOT STARTED | — |
+| PAGE-283 | Pages | `/dashboard/vacations/[id]/packing` | ⬜ NOT STARTED | — |
+| PAGE-284 | Pages | `/dashboard/vacations/[id]` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-285 | Pages | `/dashboard/vacations/[id]/travel` | ⬜ NOT STARTED | — |
+| PAGE-286 | Pages | `/dashboard/vacations/[id]/weather` | ⬜ NOT STARTED | — |
+| PAGE-287 | Pages | `/dashboard/vacations/calendar` | ⬜ NOT STARTED | — |
+| PAGE-288 | Pages | `/dashboard/vacations/new` | ⬜ NOT STARTED | — |
+| PAGE-289 | Pages | `/dashboard/vacations` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-290 | Pages | `/dashboard/vacations/reports` | ⬜ NOT STARTED | — |
+| PAGE-291 | Pages | `/dashboard/voice` | ⬜ NOT STARTED | — |
+| PAGE-292 | Pages | `/dashboard/voting` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-293 | Pages | `/dashboard/watchlist` | ⬜ NOT STARTED | — |
+| PAGE-294 | Pages | `/dashboard/weather` | ⬜ NOT STARTED | — |
+| PAGE-295 | Pages | `/dashboard/weekend` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-296 | Pages | `/dashboard/weekly-briefing` | ⬜ NOT STARTED | — |
+| PAGE-297 | Pages | `/dashboard/wishlists` | ⬜ NOT STARTED | — |
+| PAGE-298 | Pages | `/dashboard/workload` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-299 | Pages | `/display` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-300 | Pages | `/display/setup` | ⬜ NOT STARTED | — |
+| PAGE-301 | Pages | `/economy` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-302 | Pages | `/family/activity` | ⬜ NOT STARTED | — |
+| PAGE-303 | Pages | `/family/members` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-304 | Pages | `/family/notifications` | ⬜ NOT STARTED | — |
+| PAGE-305 | Pages | `/family/permissions` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-306 | Pages | `/family/reports` | ⬜ NOT STARTED | — |
+| PAGE-307 | Pages | `/family/settings` | ⬜ NOT STARTED | — |
+| PAGE-308 | Pages | `/feedback` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-309 | Pages | `/guardian/contacts` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-310 | Pages | `/guardian/history` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-311 | Pages | `/guardian` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-312 | Pages | `/guardian/rules` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-313 | Pages | `/guardian/settings` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-314 | Pages | `/home` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-315 | Pages | `/kids` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-316 | Pages | `/kids/submit/[assignmentId]` | ⬜ NOT STARTED | — |
+| PAGE-317 | Pages | `/marketplace/alerts` | ⬜ NOT STARTED | — |
+| PAGE-318 | Pages | `/marketplace/auctions` | ⬜ NOT STARTED | — |
+| PAGE-319 | Pages | `/marketplace/browse` | ⬜ NOT STARTED | — |
+| PAGE-320 | Pages | `/marketplace/collections` | ⬜ NOT STARTED | — |
+| PAGE-321 | Pages | `/marketplace/community` | ⬜ NOT STARTED | — |
+| PAGE-322 | Pages | `/marketplace/creators/[id]` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-323 | Pages | `/marketplace/creators` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-324 | Pages | `/marketplace/deals` | ⬜ NOT STARTED | — |
+| PAGE-325 | Pages | `/marketplace/following` | ⬜ NOT STARTED | — |
+| PAGE-326 | Pages | `/marketplace/insights` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-327 | Pages | `/marketplace/item/[id]` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-328 | Pages | `/marketplace/negotiations` | ⬜ NOT STARTED | — |
+| PAGE-329 | Pages | `/marketplace/orders` | ⬜ NOT STARTED | — |
+| PAGE-330 | Pages | `/marketplace` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-331 | Pages | `/marketplace/questions` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-332 | Pages | `/marketplace/reviews` | ⬜ NOT STARTED | — |
+| PAGE-333 | Pages | `/marketplace/saved` | ⬜ NOT STARTED | — |
+| PAGE-334 | Pages | `/marketplace/seed` | ⬜ NOT STARTED | — |
+| PAGE-335 | Pages | `/marketplace/selling` | ⬜ NOT STARTED | — |
+| PAGE-336 | Pages | `/marketplace/store` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-337 | Pages | `/missions/new` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-338 | Pages | `/missions` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-339 | Pages | `/parent` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-340 | Pages | `/referrals` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-341 | Pages | `/services/[category]` | ⬜ NOT STARTED | — |
+| PAGE-342 | Pages | `/services` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-343 | Pages | `/wallet/activity` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-344 | Pages | `/wallet/allowance` | ⬜ NOT STARTED | — |
+| PAGE-345 | Pages | `/wallet/babysitters` | ⬜ NOT STARTED | — |
+| PAGE-346 | Pages | `/wallet/cards` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-347 | Pages | `/wallet/children/[childId]` | ⬜ NOT STARTED | — |
+| PAGE-348 | Pages | `/wallet/gift` | ⬜ NOT STARTED | — |
+| PAGE-349 | Pages | `/wallet/goals` | ⬜ NOT STARTED | — |
+| PAGE-350 | Pages | `/wallet/invest` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-351 | Pages | `/wallet` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-352 | Pages | `/wallet/send` | ⬜ NOT STARTED | — |
+| PAGE-353 | Pages | `/wallet/settings` | ⬜ NOT STARTED | — |
+| PAGE-354 | Pages | `/wallet/treasury` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-355 | Pages | `/kid-login` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-356 | Pages | `/login` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-357 | Pages | `/signup` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-358 | Pages | `/welcome` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-359 | Pages | `/acceptable-use` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-360 | Pages | `/ai` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-361 | Pages | `/alternatives/[slug]` | ⬜ NOT STARTED | — |
+| PAGE-362 | Pages | `/audiences/[slug]` | ⬜ NOT STARTED | — |
+| PAGE-363 | Pages | `/blog/[slug]` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-364 | Pages | `/blog` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-365 | Pages | `/compare/[slug]` | ⬜ NOT STARTED | — |
+| PAGE-366 | Pages | `/contact` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-367 | Pages | `/cookies` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-368 | Pages | `/customers/[slug]` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-369 | Pages | `/f/[id]` | ⬜ NOT STARTED | — |
+| PAGE-370 | Pages | `/family-display` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-371 | Pages | `/faq` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-372 | Pages | `/features/[slug]` | ⬜ NOT STARTED | — |
+| PAGE-373 | Pages | `/features` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-374 | Pages | `/glossary/[slug]` | ⬜ NOT STARTED | — |
+| PAGE-375 | Pages | `/guides/[slug]` | ⬜ NOT STARTED | — |
+| PAGE-376 | Pages | `/how-it-works` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-377 | Pages | `/lp/[slug]` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-378 | Pages | `/mobile` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-379 | Pages | `/p/[slug]` | ⬜ NOT STARTED | — |
+| PAGE-380 | Pages | `/` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-381 | Pages | `/pricing` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-382 | Pages | `/privacy` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-383 | Pages | `/questions/[slug]` | ⬜ NOT STARTED | — |
+| PAGE-384 | Pages | `/resources/[slug]` | ⬜ NOT STARTED | — |
+| PAGE-385 | Pages | `/resources/benchmarks` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-386 | Pages | `/security` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-387 | Pages | `/terms` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-388 | Pages | `/gift/[token]` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-389 | Pages | `/join` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-390 | Pages | `/offline` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-391 | Pages | `/onboarding` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-392 | Pages | `/pay/[handle]` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-393 | Pages | `/reviews/new` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-394 | Pages | `/reviews` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-395 | Pages | `/s/[slug]` | 🔄 IN PROGRESS | named in evidence |
+| API-001 | API | `/api/ab/track` | ⬜ NOT STARTED | — |
+| API-002 | API | `/api/admin/benchmarks/export` | ⬜ NOT STARTED | — |
+| API-003 | API | `/api/admin/marketing/ai` | 🔄 IN PROGRESS | named in evidence |
+| API-004 | API | `/api/admin/marketing/email/send` | 🔄 IN PROGRESS | named in evidence |
+| API-005 | API | `/api/ai/assist` | ⬜ NOT STARTED | — |
+| API-006 | API | `/api/ai/auto/accident` | ⬜ NOT STARTED | — |
+| API-007 | API | `/api/ai/briefing` | 🔄 IN PROGRESS | named in evidence |
+| API-008 | API | `/api/ai/chat` | ⬜ NOT STARTED | — |
+| API-009 | API | `/api/ai/chef` | 🔄 IN PROGRESS | named in evidence |
+| API-010 | API | `/api/ai/flyer` | 🔄 IN PROGRESS | named in evidence |
+| API-011 | API | `/api/ai/gift` | 🔄 IN PROGRESS | named in evidence |
+| API-012 | API | `/api/ai/habits` | ⬜ NOT STARTED | — |
+| API-013 | API | `/api/ai/health/coach` | ⬜ NOT STARTED | — |
+| API-014 | API | `/api/ai/home/diagnose` | ⬜ NOT STARTED | — |
+| API-015 | API | `/api/ai/home/find-pro` | ⬜ NOT STARTED | — |
+| API-016 | API | `/api/ai/home/forecast` | ⬜ NOT STARTED | — |
+| API-017 | API | `/api/ai/home/utility-savings` | ⬜ NOT STARTED | — |
+| API-018 | API | `/api/ai/import` | ⬜ NOT STARTED | — |
+| API-019 | API | `/api/ai/insights` | 🔄 IN PROGRESS | named in evidence |
+| API-020 | API | `/api/ai/invest` | 🔄 IN PROGRESS | named in evidence |
+| API-021 | API | `/api/ai/journal` | 🔄 IN PROGRESS | named in evidence |
+| API-022 | API | `/api/ai/meals/nutrition` | 🔄 IN PROGRESS | named in evidence |
+| API-023 | API | `/api/ai/meals/plan` | 🔄 IN PROGRESS | named in evidence |
+| API-024 | API | `/api/ai/notes` | 🔄 IN PROGRESS | named in evidence |
+| API-025 | API | `/api/ai/pantry-chef` | ⬜ NOT STARTED | — |
+| API-026 | API | `/api/ai/relationship` | 🔄 IN PROGRESS | named in evidence |
+| API-027 | API | `/api/ai/requests` | 🔄 IN PROGRESS | named in evidence |
+| API-028 | API | `/api/ai/resolve-conflict` | 🔄 IN PROGRESS | named in evidence |
+| API-029 | API | `/api/ai` | 🔄 IN PROGRESS | named in evidence |
+| API-030 | API | `/api/ai/runs/[id]/answer` | ⬜ NOT STARTED | — |
+| API-031 | API | `/api/ai/runs/[id]/cancel` | ⬜ NOT STARTED | — |
+| API-032 | API | `/api/ai/runs/[id]/pause` | ⬜ NOT STARTED | — |
+| API-033 | API | `/api/ai/runs/[id]/rerun` | ⬜ NOT STARTED | — |
+| API-034 | API | `/api/ai/runs/[id]/resume` | ⬜ NOT STARTED | — |
+| API-035 | API | `/api/ai/runs/[id]` | 🔄 IN PROGRESS | named in evidence |
+| API-036 | API | `/api/ai/savings` | ⬜ NOT STARTED | — |
+| API-037 | API | `/api/ai/schedule` | ⬜ NOT STARTED | — |
+| API-038 | API | `/api/ai/trip` | ⬜ NOT STARTED | — |
+| API-039 | API | `/api/ai/voice/speak` | ⬜ NOT STARTED | — |
+| API-040 | API | `/api/ai/voice/transcribe` | ⬜ NOT STARTED | — |
+| API-041 | API | `/api/ai/wallet/child/[childId]` | 🔄 IN PROGRESS | named in evidence |
+| API-042 | API | `/api/ai/wallet` | 🔄 IN PROGRESS | named in evidence |
+| API-043 | API | `/api/ai/weekly-briefing` | ⬜ NOT STARTED | — |
+| API-044 | API | `/api/assistant/alexa` | 🔄 IN PROGRESS | named in evidence |
+| API-045 | API | `/api/assistant` | 🔄 IN PROGRESS | named in evidence |
+| API-046 | API | `/api/autopilot/scan` | 🔄 IN PROGRESS | named in evidence |
+| API-047 | API | `/api/behavior/insight` | 🔄 IN PROGRESS | named in evidence |
+| API-048 | API | `/api/billing/cancel` | ⬜ NOT STARTED | — |
+| API-049 | API | `/api/billing/change-plan` | ⬜ NOT STARTED | — |
+| API-050 | API | `/api/billing/checkout` | ⬜ NOT STARTED | — |
+| API-051 | API | `/api/billing/portal` | ⬜ NOT STARTED | — |
+| API-052 | API | `/api/blog/like` | 🔄 IN PROGRESS | named in evidence |
+| API-053 | API | `/api/blog/save` | 🔄 IN PROGRESS | named in evidence |
+| API-054 | API | `/api/blog/search-index` | 🔄 IN PROGRESS | named in evidence |
+| API-055 | API | `/api/blog/subscribe` | 🔄 IN PROGRESS | named in evidence |
+| API-056 | API | `/api/blog/unsubscribe` | 🔄 IN PROGRESS | named in evidence |
+| API-057 | API | `/api/build-info` | 🔄 IN PROGRESS | named in evidence |
+| API-058 | API | `/api/calendar/sync` | ⬜ NOT STARTED | — |
+| API-059 | API | `/api/concierge-calls/place` | 🔄 IN PROGRESS | named in evidence |
+| API-060 | API | `/api/contact-center/email` | 🔄 IN PROGRESS | named in evidence |
+| API-061 | API | `/api/contact-center/sms` | 🔄 IN PROGRESS | named in evidence |
+| API-062 | API | `/api/contact-center/voice` | 🔄 IN PROGRESS | named in evidence |
+| API-063 | API | `/api/contact-center/voice/transcription` | 🔄 IN PROGRESS | named in evidence |
+| API-064 | API | `/api/contact` | 🔄 IN PROGRESS | named in evidence |
+| API-065 | API | `/api/cron/admin-digest` | 🔄 IN PROGRESS | named in evidence |
+| API-066 | API | `/api/cron/ai-runs` | ⬜ NOT STARTED | — |
+| API-067 | API | `/api/cron/automations` | ⬜ NOT STARTED | — |
+| API-068 | API | `/api/cron/autopilot-scan` | 🔄 IN PROGRESS | named in evidence |
+| API-069 | API | `/api/cron/calendar-feeds` | ⬜ NOT STARTED | — |
+| API-070 | API | `/api/cron/checkout-abandoned` | ⬜ NOT STARTED | — |
+| API-071 | API | `/api/cron/chore-reminders` | 🔄 IN PROGRESS | named in evidence |
+| API-072 | API | `/api/cron/close-auctions` | ⬜ NOT STARTED | — |
+| API-073 | API | `/api/cron/family-routines` | 🔄 IN PROGRESS | named in evidence |
+| API-074 | API | `/api/cron/feedback-github-sync` | ⬜ NOT STARTED | — |
+| API-075 | API | `/api/cron/guardian-learning` | ⬜ NOT STARTED | — |
+| API-076 | API | `/api/cron/journey-recovery` | 🔄 IN PROGRESS | named in evidence |
+| API-077 | API | `/api/cron/library-feeds` | ⬜ NOT STARTED | — |
+| API-078 | API | `/api/cron/marketing-providers` | ⬜ NOT STARTED | — |
+| API-079 | API | `/api/cron/marketing-social` | 🔄 IN PROGRESS | named in evidence |
+| API-080 | API | `/api/cron/marketing` | 🔄 IN PROGRESS | named in evidence |
+| API-081 | API | `/api/cron/model-refresh` | 🔄 IN PROGRESS | named in evidence |
+| API-082 | API | `/api/cron/network-aggregate` | ⬜ NOT STARTED | — |
+| API-083 | API | `/api/cron/notifications` | 🔄 IN PROGRESS | named in evidence |
+| API-084 | API | `/api/cron/provider-sync` | ⬜ NOT STARTED | — |
+| API-085 | API | `/api/cron/push-scan` | 🔄 IN PROGRESS | named in evidence |
+| API-086 | API | `/api/cron/return-reminders` | ⬜ NOT STARTED | — |
+| API-087 | API | `/api/cron/wallet-allowance` | 🔄 IN PROGRESS | named in evidence |
+| API-088 | API | `/api/cron/weekly-digest` | 🔄 IN PROGRESS | named in evidence |
+| API-089 | API | `/api/email/invite` | 🔄 IN PROGRESS | named in evidence |
+| API-090 | API | `/api/email/welcome` | 🔄 IN PROGRESS | named in evidence |
+| API-091 | API | `/api/exit-intent/resolve` | ⬜ NOT STARTED | — |
+| API-092 | API | `/api/exit-intent/track` | ⬜ NOT STARTED | — |
+| API-093 | API | `/api/forms/submit` | ⬜ NOT STARTED | — |
+| API-094 | API | `/api/gif/search` | 🔄 IN PROGRESS | named in evidence |
+| API-095 | API | `/api/google/calendar/auth` | ⬜ NOT STARTED | — |
+| API-096 | API | `/api/google/calendar/callback` | 🔄 IN PROGRESS | named in evidence |
+| API-097 | API | `/api/google/calendar/sync` | 🔄 IN PROGRESS | named in evidence |
+| API-098 | API | `/api/guardian/escalate` | 🔄 IN PROGRESS | named in evidence |
+| API-099 | API | `/api/guardian/escalate/twiml` | ⬜ NOT STARTED | — |
+| API-100 | API | `/api/guardian/inbound/sms` | 🔄 IN PROGRESS | named in evidence |
+| API-101 | API | `/api/guardian/inbound/voice` | ⬜ NOT STARTED | — |
+| API-102 | API | `/api/guardian/inbound/whatsapp` | ⬜ NOT STARTED | — |
+| API-103 | API | `/api/guardian/screen` | ⬜ NOT STARTED | — |
+| API-104 | API | `/api/guardian/status/voicemail` | ⬜ NOT STARTED | — |
+| API-105 | API | `/api/health` | 🔄 IN PROGRESS | named in evidence |
+| API-106 | API | `/api/lp/track` | ⬜ NOT STARTED | — |
+| API-107 | API | `/api/marketing/unsubscribe` | 🔄 IN PROGRESS | named in evidence |
+| API-108 | API | `/api/mkt/consent` | ⬜ NOT STARTED | — |
+| API-109 | API | `/api/mkt/track` | 🔄 IN PROGRESS | named in evidence |
+| API-110 | API | `/api/moving/recalculate` | ⬜ NOT STARTED | — |
+| API-111 | API | `/api/notifications/generate` | 🔄 IN PROGRESS | named in evidence |
+| API-112 | API | `/api/paperwork/capture` | 🔄 IN PROGRESS | named in evidence |
+| API-113 | API | `/api/paperwork/link` | 🔄 IN PROGRESS | named in evidence |
+| API-114 | API | `/api/privacy/export` | 🔄 IN PROGRESS | named in evidence |
+| API-115 | API | `/api/push/subscribe` | 🔄 IN PROGRESS | named in evidence |
+| API-116 | API | `/api/push/test` | 🔄 IN PROGRESS | named in evidence |
+| API-117 | API | `/api/push/unsubscribe` | ⬜ NOT STARTED | — |
+| API-118 | API | `/api/recipes/search` | ⬜ NOT STARTED | — |
+| API-119 | API | `/api/recipes/suggest` | ⬜ NOT STARTED | — |
+| API-120 | API | `/api/recipes/transform` | ⬜ NOT STARTED | — |
+| API-121 | API | `/api/services/descriptions` | ⬜ NOT STARTED | — |
+| API-122 | API | `/api/social/ai` | ⬜ NOT STARTED | — |
+| API-123 | API | `/api/subscriptions/candidates` | ⬜ NOT STARTED | — |
+| API-124 | API | `/api/subscriptions/price-history` | ⬜ NOT STARTED | — |
+| API-125 | API | `/api/sync/[provider]/auth` | ⬜ NOT STARTED | — |
+| API-126 | API | `/api/sync/[provider]/callback` | 🔄 IN PROGRESS | named in evidence |
+| API-127 | API | `/api/sync/[provider]/disconnect` | ⬜ NOT STARTED | — |
+| API-128 | API | `/api/sync/[provider]/status` | ⬜ NOT STARTED | — |
+| API-129 | API | `/api/sync/feeds/[token]` | 🔄 IN PROGRESS | named in evidence |
+| API-130 | API | `/api/sync/google/auth` | ⬜ NOT STARTED | — |
+| API-131 | API | `/api/sync/google/callback` | ⬜ NOT STARTED | — |
+| API-132 | API | `/api/sync/google/disconnect` | ⬜ NOT STARTED | — |
+| API-133 | API | `/api/sync/google/sync` | ⬜ NOT STARTED | — |
+| API-134 | API | `/api/sync/run` | ⬜ NOT STARTED | — |
+| API-135 | API | `/api/vacations/ai` | ⬜ NOT STARTED | — |
+| API-136 | API | `/api/vacations/confirmation-import` | ⬜ NOT STARTED | — |
+| API-137 | API | `/api/vacations/weather` | ⬜ NOT STARTED | — |
+| API-138 | API | `/api/webhooks/money` | 🔄 IN PROGRESS | named in evidence |
+| API-139 | API | `/api/webhooks/resend` | 🔄 IN PROGRESS | named in evidence |
+| API-140 | API | `/api/webhooks/stripe` | 🔄 IN PROGRESS | named in evidence |
+| API-141 | API | `/api/weekend/discover` | 🔄 IN PROGRESS | named in evidence |
+| MOD-001 | Feature modules | `agents-module` | ⬜ NOT STARTED | — |
+| MOD-002 | Feature modules | `announcements-module` | ⬜ NOT STARTED | — |
+| MOD-003 | Feature modules | `assistant-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-004 | Feature modules | `autopilot-module` | ⬜ NOT STARTED | — |
+| MOD-005 | Feature modules | `behavior-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-006 | Feature modules | `billing-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-007 | Feature modules | `binder-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-008 | Feature modules | `briefing-module` | ⬜ NOT STARTED | — |
+| MOD-009 | Feature modules | `calendar-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-010 | Feature modules | `calm-module` | ⬜ NOT STARTED | — |
+| MOD-011 | Feature modules | `care-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-012 | Feature modules | `career-module` | ⬜ NOT STARTED | — |
+| MOD-013 | Feature modules | `celebrations-module` | ⬜ NOT STARTED | — |
+| MOD-014 | Feature modules | `chores-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-015 | Feature modules | `closet-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-016 | Feature modules | `concierge-calls-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-017 | Feature modules | `concierge-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-018 | Feature modules | `connections-module` | ⬜ NOT STARTED | — |
+| MOD-019 | Feature modules | `contact-center-module` | ⬜ NOT STARTED | — |
+| MOD-020 | Feature modules | `contact-timeline-module` | ⬜ NOT STARTED | — |
+| MOD-021 | Feature modules | `contacts-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-022 | Feature modules | `decisions-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-023 | Feature modules | `declutter-module` | ⬜ NOT STARTED | — |
+| MOD-024 | Feature modules | `devices-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-025 | Feature modules | `dining-module` | ⬜ NOT STARTED | — |
+| MOD-026 | Feature modules | `documents-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-027 | Feature modules | `event-detail-modal` | 🔄 IN PROGRESS | named in evidence |
+| MOD-028 | Feature modules | `expenses-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-029 | Feature modules | `experience-scorecard-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-030 | Feature modules | `family-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-031 | Feature modules | `family-signals-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-032 | Feature modules | `family-tree-module` | ⬜ NOT STARTED | — |
+| MOD-033 | Feature modules | `files-hub-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-034 | Feature modules | `finances-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-035 | Feature modules | `find-time-modal` | 🔄 IN PROGRESS | named in evidence |
+| MOD-036 | Feature modules | `focus-module` | ⬜ NOT STARTED | — |
+| MOD-037 | Feature modules | `front-desk-module` | ⬜ NOT STARTED | — |
+| MOD-038 | Feature modules | `goals-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-039 | Feature modules | `graph-module` | ⬜ NOT STARTED | — |
+| MOD-040 | Feature modules | `habits-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-041 | Feature modules | `handle-it-button` | 🔄 IN PROGRESS | named in evidence |
+| MOD-042 | Feature modules | `health-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-043 | Feature modules | `health-visits-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-044 | Feature modules | `home-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-045 | Feature modules | `homework-module` | ⬜ NOT STARTED | — |
+| MOD-046 | Feature modules | `immunizations-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-047 | Feature modules | `inbox-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-048 | Feature modules | `inbox-queue` | ⬜ NOT STARTED | — |
+| MOD-049 | Feature modules | `independence-module` | ⬜ NOT STARTED | — |
+| MOD-050 | Feature modules | `insurance-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-051 | Feature modules | `intelligence-module` | ⬜ NOT STARTED | — |
+| MOD-052 | Feature modules | `inventory-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-053 | Feature modules | `journal-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-054 | Feature modules | `kitchen-dashboard` | 🔄 IN PROGRESS | named in evidence |
+| MOD-055 | Feature modules | `knowledge-base-module` | ⬜ NOT STARTED | — |
+| MOD-056 | Feature modules | `language-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-057 | Feature modules | `life-events-module` | ⬜ NOT STARTED | — |
+| MOD-058 | Feature modules | `locator-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-059 | Feature modules | `marketplace-module` | ⬜ NOT STARTED | — |
+| MOD-060 | Feature modules | `meals-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-061 | Feature modules | `medical-records-module` | ⬜ NOT STARTED | — |
+| MOD-062 | Feature modules | `medications-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-063 | Feature modules | `messages-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-064 | Feature modules | `money-timeline-module` | ⬜ NOT STARTED | — |
+| MOD-065 | Feature modules | `move-date-recalculation` | 🔄 IN PROGRESS | named in evidence |
+| MOD-066 | Feature modules | `moving-module` | ⬜ NOT STARTED | — |
+| MOD-067 | Feature modules | `next-actions-module` | ⬜ NOT STARTED | — |
+| MOD-068 | Feature modules | `notes-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-069 | Feature modules | `notifications-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-070 | Feature modules | `outcomes-launcher` | ⬜ NOT STARTED | — |
+| MOD-071 | Feature modules | `pantry-module` | ⬜ NOT STARTED | — |
+| MOD-072 | Feature modules | `paperwork-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-073 | Feature modules | `passwords-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-074 | Feature modules | `pets-module` | ⬜ NOT STARTED | — |
+| MOD-075 | Feature modules | `photos-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-076 | Feature modules | `planning-module` | ⬜ NOT STARTED | — |
+| MOD-077 | Feature modules | `playbook-module` | ⬜ NOT STARTED | — |
+| MOD-078 | Feature modules | `profile-module` | ⬜ NOT STARTED | — |
+| MOD-079 | Feature modules | `projects-module` | ⬜ NOT STARTED | — |
+| MOD-080 | Feature modules | `readiness-module` | ⬜ NOT STARTED | — |
+| MOD-081 | Feature modules | `recipes-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-082 | Feature modules | `relationship-module` | ⬜ NOT STARTED | — |
+| MOD-083 | Feature modules | `reminders-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-084 | Feature modules | `renewals-module` | ⬜ NOT STARTED | — |
+| MOD-085 | Feature modules | `rewards-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-086 | Feature modules | `rides-module` | ⬜ NOT STARTED | — |
+| MOD-087 | Feature modules | `routines-panel` | ⬜ NOT STARTED | — |
+| MOD-088 | Feature modules | `savings-coach-card` | 🔄 IN PROGRESS | named in evidence |
+| MOD-089 | Feature modules | `scan-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-090 | Feature modules | `school-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-091 | Feature modules | `screen-time-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-092 | Feature modules | `security-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-093 | Feature modules | `settings-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-094 | Feature modules | `shopping-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-095 | Feature modules | `signups-module` | ⬜ NOT STARTED | — |
+| MOD-096 | Feature modules | `sleep-module` | ⬜ NOT STARTED | — |
+| MOD-097 | Feature modules | `social-feed-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-098 | Feature modules | `sports-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-099 | Feature modules | `subscription-price-history-review` | ⬜ NOT STARTED | — |
+| MOD-100 | Feature modules | `subscriptions-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-101 | Feature modules | `tax-vault-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-102 | Feature modules | `timetable-module` | ⬜ NOT STARTED | — |
+| MOD-103 | Feature modules | `todos-module` | ⬜ NOT STARTED | — |
+| MOD-104 | Feature modules | `trip-intel-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-105 | Feature modules | `trip-memories-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-106 | Feature modules | `trips-module` | ⬜ NOT STARTED | — |
+| MOD-107 | Feature modules | `trust-activity-tab` | 🔄 IN PROGRESS | named in evidence |
+| MOD-108 | Feature modules | `trust-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-109 | Feature modules | `trust-sharing-section` | 🔄 IN PROGRESS | named in evidence |
+| MOD-110 | Feature modules | `utilities-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-111 | Feature modules | `voice-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-112 | Feature modules | `voting-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-113 | Feature modules | `watchlist-module` | ⬜ NOT STARTED | — |
+| MOD-114 | Feature modules | `weather-module` | ⬜ NOT STARTED | — |
+| MOD-115 | Feature modules | `weekend-module` | 🔄 IN PROGRESS | named in evidence |
+| MOD-116 | Feature modules | `weekly-briefing-module` | ⬜ NOT STARTED | — |
+| MOD-117 | Feature modules | `wishlists-module` | ⬜ NOT STARTED | — |
+| MOD-118 | Feature modules | `workload-module` | ⬜ NOT STARTED | — |
+| ACT-001 | Server actions | `(app)/account/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-002 | Server actions | `(app)/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-003 | Server actions | `(app)/admin/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-004 | Server actions | `(app)/admin/admins/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-005 | Server actions | `(app)/admin/ai/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-006 | Server actions | `(app)/admin/benchmarks/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-007 | Server actions | `(app)/admin/feedback/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-008 | Server actions | `(app)/admin/marketing/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-009 | Server actions | `(app)/admin/marketing/affiliates/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-010 | Server actions | `(app)/admin/marketing/assets/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-011 | Server actions | `(app)/admin/marketing/competitive/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-012 | Server actions | `(app)/admin/marketing/content/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-013 | Server actions | `(app)/admin/marketing/crm/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-014 | Server actions | `(app)/admin/marketing/exit-intent/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-015 | Server actions | `(app)/admin/marketing/experiments/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-016 | Server actions | `(app)/admin/marketing/lead-scores/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-017 | Server actions | `(app)/admin/marketing/loyalty/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-018 | Server actions | `(app)/admin/marketing/personalization/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-019 | Server actions | `(app)/admin/marketing/platform/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-020 | Server actions | `(app)/admin/marketing/proposals/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-021 | Server actions | `(app)/admin/marketing/push/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-022 | Server actions | `(app)/admin/marketing/referrals/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-023 | Server actions | `(app)/admin/marketing/reputation/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-024 | Server actions | `(app)/admin/marketing/reviews/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-025 | Server actions | `(app)/admin/marketing/social/recurring/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-026 | Server actions | `(app)/admin/marketing/surveys/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-027 | Server actions | `(app)/admin/marketing/video/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-028 | Server actions | `(app)/admin/marketplace/reports/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-029 | Server actions | `(app)/admin/notifications-actions.ts` | ⬜ NOT STARTED | — |
+| ACT-030 | Server actions | `(app)/admin/services/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-031 | Server actions | `(app)/admin/settings/social-links/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-032 | Server actions | `(app)/admin/support-tickets/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-033 | Server actions | `(app)/admin/tier-features/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-034 | Server actions | `(app)/capture/shortcuts-actions.ts` | ⬜ NOT STARTED | — |
+| ACT-035 | Server actions | `(app)/dashboard/agents/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-036 | Server actions | `(app)/dashboard/ai-feedback-actions.ts` | ⬜ NOT STARTED | — |
+| ACT-037 | Server actions | `(app)/dashboard/app-store/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-038 | Server actions | `(app)/dashboard/approvals-actions.ts` | ⬜ NOT STARTED | — |
+| ACT-039 | Server actions | `(app)/dashboard/assistant/purchases/[approvalId]/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-040 | Server actions | `(app)/dashboard/assistants/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-041 | Server actions | `(app)/dashboard/auto/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-042 | Server actions | `(app)/dashboard/autopilot/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-043 | Server actions | `(app)/dashboard/billing/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-044 | Server actions | `(app)/dashboard/billing/value-actions.ts` | ⬜ NOT STARTED | — |
+| ACT-045 | Server actions | `(app)/dashboard/billing/value-comparison-actions.ts` | ⬜ NOT STARTED | — |
+| ACT-046 | Server actions | `(app)/dashboard/calendar/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-047 | Server actions | `(app)/dashboard/chores/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-048 | Server actions | `(app)/dashboard/concierge-calls/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-049 | Server actions | `(app)/dashboard/concierge/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-050 | Server actions | `(app)/dashboard/concierge/run-actions.ts` | ⬜ NOT STARTED | — |
+| ACT-051 | Server actions | `(app)/dashboard/conflicts/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-052 | Server actions | `(app)/dashboard/contact-center/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-053 | Server actions | `(app)/dashboard/contacts/[id]/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-054 | Server actions | `(app)/dashboard/customize-actions.ts` | ⬜ NOT STARTED | — |
+| ACT-055 | Server actions | `(app)/dashboard/dining/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-056 | Server actions | `(app)/dashboard/family-cfo/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-057 | Server actions | `(app)/dashboard/family-digital-twin/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-058 | Server actions | `(app)/dashboard/family-signals/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-059 | Server actions | `(app)/dashboard/goals/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-060 | Server actions | `(app)/dashboard/graph/twin-actions.ts` | ⬜ NOT STARTED | — |
+| ACT-061 | Server actions | `(app)/dashboard/grocery/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-062 | Server actions | `(app)/dashboard/home/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-063 | Server actions | `(app)/dashboard/inbox/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-064 | Server actions | `(app)/dashboard/independence/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-065 | Server actions | `(app)/dashboard/insight-actions.ts` | ⬜ NOT STARTED | — |
+| ACT-066 | Server actions | `(app)/dashboard/kitchen/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-067 | Server actions | `(app)/dashboard/knowledge/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-068 | Server actions | `(app)/dashboard/library/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-069 | Server actions | `(app)/dashboard/life-event-actions.ts` | ⬜ NOT STARTED | — |
+| ACT-070 | Server actions | `(app)/dashboard/locator/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-071 | Server actions | `(app)/dashboard/meals/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-072 | Server actions | `(app)/dashboard/migrate/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-073 | Server actions | `(app)/dashboard/moment-actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-074 | Server actions | `(app)/dashboard/moments/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-075 | Server actions | `(app)/dashboard/money-timeline/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-076 | Server actions | `(app)/dashboard/navigation-actions.ts` | ⬜ NOT STARTED | — |
+| ACT-077 | Server actions | `(app)/dashboard/needs-you/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-078 | Server actions | `(app)/dashboard/notes/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-079 | Server actions | `(app)/dashboard/pantry/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-080 | Server actions | `(app)/dashboard/paperwork/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-081 | Server actions | `(app)/dashboard/playbook/playbook-actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-082 | Server actions | `(app)/dashboard/prep-plans/prep-actions.ts` | ⬜ NOT STARTED | — |
+| ACT-083 | Server actions | `(app)/dashboard/recipes/discover/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-084 | Server actions | `(app)/dashboard/recipes/vote/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-085 | Server actions | `(app)/dashboard/relationship/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-086 | Server actions | `(app)/dashboard/reminders/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-087 | Server actions | `(app)/dashboard/rewards/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-088 | Server actions | `(app)/dashboard/school/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-089 | Server actions | `(app)/dashboard/search/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-090 | Server actions | `(app)/dashboard/settings/ai-actions.ts` | ⬜ NOT STARTED | — |
+| ACT-091 | Server actions | `(app)/dashboard/settings/profile-actions.ts` | ⬜ NOT STARTED | — |
+| ACT-092 | Server actions | `(app)/dashboard/social-feed/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-093 | Server actions | `(app)/dashboard/social/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-094 | Server actions | `(app)/dashboard/sync/feeds/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-095 | Server actions | `(app)/dashboard/todos/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-096 | Server actions | `(app)/dashboard/trip-intel/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-097 | Server actions | `(app)/dashboard/trust/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-098 | Server actions | `(app)/dashboard/vacations/[id]/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-099 | Server actions | `(app)/dashboard/wishlists/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-100 | Server actions | `(app)/dashboard/workload/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-101 | Server actions | `(app)/economy/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-102 | Server actions | `(app)/family/child-login-actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-103 | Server actions | `(app)/feedback/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-104 | Server actions | `(app)/guardian/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-105 | Server actions | `(app)/marketplace/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-106 | Server actions | `(app)/marketplace/alerts/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-107 | Server actions | `(app)/marketplace/assistant-actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-108 | Server actions | `(app)/marketplace/auctions/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-109 | Server actions | `(app)/marketplace/community/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-110 | Server actions | `(app)/marketplace/handoff/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-111 | Server actions | `(app)/marketplace/negotiations/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-112 | Server actions | `(app)/marketplace/report/actions.ts` | ⬜ NOT STARTED | — |
+| ACT-113 | Server actions | `(app)/missions/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-114 | Server actions | `(app)/money/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-115 | Server actions | `(app)/referrals/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-116 | Server actions | `(app)/settings/app-lock-actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-117 | Server actions | `(app)/wallet/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-118 | Server actions | `(app)/wallet/hub-actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-119 | Server actions | `(app)/wallet/invest/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-120 | Server actions | `(auth)/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-121 | Server actions | `(auth)/signup/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-122 | Server actions | `gift/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-123 | Server actions | `onboarding/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-124 | Server actions | `onboarding/calendar-actions.ts` | ⬜ NOT STARTED | — |
+| ACT-125 | Server actions | `reviews/new/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-126 | Server actions | `s/[slug]/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| DB-001 | Database | `343 migrations replay clean` | ✅ PASS | named in evidence |
+| DB-002 | Database | `491 tables — RLS swept (Pass T + Session 8 census)` | ✅ PASS | named in evidence |
+| CRON-001 | Scheduled | `cron/admin-digest` | 🔄 IN PROGRESS | named in evidence |
+| CRON-002 | Scheduled | `cron/ai-runs` | ⬜ NOT STARTED | — |
+| CRON-003 | Scheduled | `cron/automations` | ⬜ NOT STARTED | — |
+| CRON-004 | Scheduled | `cron/autopilot-scan` | ⬜ NOT STARTED | — |
+| CRON-005 | Scheduled | `cron/calendar-feeds` | ⬜ NOT STARTED | — |
+| CRON-006 | Scheduled | `cron/checkout-abandoned` | ⬜ NOT STARTED | — |
+| CRON-007 | Scheduled | `cron/chore-reminders` | 🔄 IN PROGRESS | named in evidence |
+| CRON-008 | Scheduled | `cron/close-auctions` | ⬜ NOT STARTED | — |
+| CRON-009 | Scheduled | `cron/family-routines` | 🔄 IN PROGRESS | named in evidence |
+| CRON-010 | Scheduled | `cron/feedback-github-sync` | ⬜ NOT STARTED | — |
+| CRON-011 | Scheduled | `cron/guardian-learning` | ⬜ NOT STARTED | — |
+| CRON-012 | Scheduled | `cron/journey-recovery` | 🔄 IN PROGRESS | named in evidence |
+| CRON-013 | Scheduled | `cron/library-feeds` | ⬜ NOT STARTED | — |
+| CRON-014 | Scheduled | `cron/marketing-providers` | ⬜ NOT STARTED | — |
+| CRON-015 | Scheduled | `cron/marketing-social` | 🔄 IN PROGRESS | named in evidence |
+| CRON-016 | Scheduled | `cron/marketing` | ⬜ NOT STARTED | — |
+| CRON-017 | Scheduled | `cron/model-refresh` | 🔄 IN PROGRESS | named in evidence |
+| CRON-018 | Scheduled | `cron/network-aggregate` | ⬜ NOT STARTED | — |
+| CRON-019 | Scheduled | `cron/notifications` | ⬜ NOT STARTED | — |
+| CRON-020 | Scheduled | `cron/provider-sync` | ⬜ NOT STARTED | — |
+| CRON-021 | Scheduled | `cron/push-scan` | 🔄 IN PROGRESS | named in evidence |
+| CRON-022 | Scheduled | `cron/return-reminders` | ⬜ NOT STARTED | — |
+| CRON-023 | Scheduled | `cron/wallet-allowance` | 🔄 IN PROGRESS | named in evidence |
+| CRON-024 | Scheduled | `cron/weekly-digest` | 🔄 IN PROGRESS | named in evidence |
+| CI-001 | CI/CD | `ci.yml` | 🔄 IN PROGRESS | named in evidence |
+| CI-002 | CI/CD | `cron-dispatch.yml` | ⬜ NOT STARTED | — |
+| CI-003 | CI/CD | `finance-transaction-operation-runtime.yml` | ⬜ NOT STARTED | — |
+| CI-004 | CI/CD | `move-date-recalculation-runtime.yml` | 🔄 IN PROGRESS | named in evidence |
+| CI-005 | CI/CD | `supabase-forward-release.yml` | 🔄 IN PROGRESS | named in evidence |
+| CI-006 | CI/CD | `supabase-production-migrations.yml` | 🔄 IN PROGRESS | named in evidence |
+| CI-007 | CI/CD | `supabase-schema-audit.yml` | ⬜ NOT STARTED | — |
+| CI-008 | CI/CD | `travel-confirmation-runtime.yml` | ⬜ NOT STARTED | — |
+| STORE-001 | Storage | `avatars` | ✅ PASS | named in evidence |
+| STORE-002 | Storage | `family-media` | ✅ PASS | named in evidence |
+| STORE-003 | Storage | `feedback-attachments` | ✅ PASS | named in evidence |
+| STORE-004 | Storage | `marketplace-photos` | ✅ PASS | named in evidence |
+| STORE-005 | Storage | `documents` | ✅ PASS | named in evidence |
+| STORE-006 | Storage | `chore-proof` | ✅ PASS | named in evidence |
+| STORE-007 | Storage | `marketing-assets` | ✅ PASS | named in evidence |
+
+---
+# Part 0 — the audit this control document sits on top of
+
 
 # Part 0 — Consolidated index (authoritative)
 
@@ -9199,3 +10092,84 @@ call site. Re-run against the exact call, it went red. A mutation that fails to
 kill is a claim about the mutation first, and only then about the guard.
 
 Suite: **1,253 files / 14,091 tests, 0 failures.**
+
+
+---
+
+# Final Regression
+
+*Re-run 2026-09-19 after merging the parallel session's Pass J/K into this
+branch. Everything here is a command that was actually run, with its output.*
+
+## Build
+Status: **NOT RUN IN THIS SESSION** — `next build` is exercised by CI's
+`Typecheck · Lint · Test · Build` job, which is green on this branch's recent
+heads. Re-running it locally is pending.
+
+## Type Check
+Status: ✅ PASS — `npx tsc --noEmit`, exit 0, after the merge.
+
+## Lint
+Status: **DELEGATED TO CI** — the `Typecheck · Lint · Test · Build` job runs it.
+
+## Automated Tests
+Status: ✅ PASS — `npx vitest run`: **1,258 files / 14,119 tests / 0 failures.**
+
+## Authentication
+Status: ✅ PASS (static + fake-driven) — every server action reaches auth
+(`tests/every-server-action-reaches-auth.test.ts`, 439 actions, six named
+public-by-design exceptions); all 141 API routes authenticate (Pass E);
+24/24 cron routes enforce `hasCronAuthorization`. ⚠️ No live browser session
+(blocker B2).
+
+## Authorization
+Status: 🛠 FIXED + PASS at the database layer — 52 SQL boundary probes against a
+343-migration replay, including this session's six new write-boundary
+migrations. ⚠️ Thirteen of those migrations are NOT applied to production
+(blocker B1), so production authorization is **not** what this branch proves.
+
+## Core User Journeys
+Status: 🔄 IN PROGRESS — see the register. Journeys are verified through the
+in-memory Supabase fake and static tracing, not a live session (B2).
+
+## APIs
+Status: 🔄 IN PROGRESS — 141 routes inventoried and swept for authentication;
+per-route request/response/error behaviour is the open half.
+
+## Database
+Status: ✅ PASS — 343 migrations replay with 0 failures; 52/52 probes.
+
+## Integrations
+Status: ⚠️ BLOCKED in part — implementations reviewed (Twilio signature
+verification, Stripe webhooks, Google Calendar, OpenAI, Giphy); live credential
+paths cannot be exercised here.
+
+## Mobile / Responsive
+Status: ⚠️ BLOCKED — the Expo app has never been run (B3); web responsive
+findings are axe/static (B5).
+
+## Accessibility
+Status: 🔄 IN PROGRESS — 17 `C2-B*` findings and a `C2-M*` series recorded, many
+fixed; no real screen reader (B5).
+
+## Security
+Status: 🛠 FIXED + PASS for everything this branch can reach — RLS write
+boundaries, SSRF surface, storage MIME, prompt-injection fencing, rate limits,
+service-role separation. ⚠️ Unresolved: B1 (fixes not applied to production).
+
+## Performance
+Status: 🔄 IN PROGRESS — recorded findings on bundle size, sequential marketing
+reads and unbounded table reads; no production profiling.
+
+## Known Blockers
+B1–B5 above.
+
+## Remaining Issues
+The register's ⬜ NOT STARTED rows, and the three product decisions recorded in
+"Session 8 at a glance".
+
+## Production Readiness
+NO
+
+## Final Sign-Off
+Pending — blocked on B1 at minimum.
