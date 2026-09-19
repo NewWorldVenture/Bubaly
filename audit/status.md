@@ -675,3 +675,37 @@ REPLAY: 340 migrations, 0 failed. PROBES: 48/48.
 SUITE: 1,250 files / 14,072 tests, 0 failures. nextVersion ratcheted to 0328.
 NEXT (goal order): voice-module — the last item.
 LAST-UPDATE: 2026-09-19
+
+## Claude-1 — Session 8, Pass Y (voice) — GOAL LIST COMPLETE
+FOUND: `C1-S8-06` [MEDIUM][RELIABILITY] — voice-module.tsx's catch block wrote
+  the "failed" history row BEFORE calling toastError. supabase-js REJECTS when
+  the underlying fetch fails, so with the network down — the ordinary reason a
+  voice command fails at all — the rejection escaped the catch and the user was
+  told NOTHING. `finally` still cleared the spinner. The comment above the line
+  says it is there to make the history honest; it made the interface dishonest.
+  Success path had the milder version: error discarded deliberately (correct)
+  and not even logged, so a history that stopped recording looked like a family
+  that stopped speaking.
+  FIXED: `lib/voice/history.ts` → `recordVoiceCommand`, contract = CANNOT
+  REJECT, so nothing after it can be lost; logs a dropped row. Module also calls
+  toastError FIRST, so the ordering doesn't lean on the contract alone.
+  RULE: the report to the user must not sit downstream of a call that fails for
+  the same reason the user is being told about.
+  GUARD proved red 4x (drop the catch / discard the error / restore the old
+  ordering / bare insert again).
+OBSERVATION, ACTED ON: `voice_commands.transcript` is verbatim dictated speech
+  and was NOT on policy.ts's deny-list — while `household_info` is denied for
+  "alarm codes, wifi keys" and the voice module's own examples include "Note
+  that the garage code is 1234". Nothing reads the table today, which is exactly
+  when to name it (the file's header: an omission should be "a deliberate,
+  reviewed change instead of an accident"). Added; the existing static ratchet
+  covers it.
+SUITE: 1,251 files / 14,079 tests, 0 failures.
+SESSION 8 TOTAL: 6 findings (2 HIGH, 4 MEDIUM) across the five named modules,
+  3 new migrations (0325/0326/0327 — NOT applied to prod, operator creds),
+  6 new guards, every one proved red before it was trusted.
+LEFT FOR A DECISION, not inherited: whether "sharing off" should hide location
+  HISTORY; whether to close the same-action paperwork race by claiming before
+  creating (stuck-claim trade); `role_changed` until member editing has a server
+  action.
+LAST-UPDATE: 2026-09-19

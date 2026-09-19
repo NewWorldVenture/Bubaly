@@ -8113,3 +8113,114 @@ still covers the common case of a slow double-tap on one button.
 
 Replay: **340 migrations, 0 failed.** Probes: **48/48**.
 Suite: **1,250 files / 14,072 tests, 0 failures.**
+
+
+---
+
+# Pass Y — told nothing, for the same reason it failed
+
+## C1-S8-06 [MEDIUM][RELIABILITY] — the voice command's error message sat downstream of a call that fails for the same reason
+
+**Files:** `components/modules/voice-module.tsx` · `lib/voice/history.ts` (new)
+**Status:** FIXED · `tests/a-voice-failure-still-reaches-the-user.test.ts`
+
+### Problem
+
+```ts
+} catch (err) {
+  journey.abandon();
+  // Record the failed attempt so the history is honest.
+  await sb.from('voice_commands').insert({ …, status: 'failed' }).select('id');
+  toastError(describeDbError(err, tr('voiceModule.couldNotRunThatCommand')));
+```
+
+`supabase-js` returns `{ error }` for a PostgREST refusal but **rejects** when
+the underlying fetch fails. So with the network down — the ordinary reason a
+voice command fails at all — that insert rejected, the rejection escaped the
+`catch`, and `toastError` was never reached. `finally` still cleared the
+spinner, so the user watched their command stop and **was told nothing
+whatsoever**.
+
+The comment above the line is the giveaway: it is there to make the history
+honest, and it made the interface dishonest instead.
+
+The success path had the milder version of the same thing — a bare `await …
+.insert(…)` whose error was discarded deliberately (*"a logging failure must not
+lose the thing we just created"* — correct) and not even logged, so a history
+that had stopped recording was indistinguishable from a family that had stopped
+speaking.
+
+### Fix
+
+`lib/voice/history.ts` exports `recordVoiceCommand`, whose contract is the fix:
+**it cannot reject**, so nothing sequenced after it can be lost, and a dropped
+row is logged rather than discarded. Both writes go through it.
+
+The module also calls `toastError` **before** it, so the ordering does not lean
+on that contract alone — two independent reasons the user is told. The general
+rule this is an instance of: *the report to the user must not sit downstream of
+a call that fails for the same reason the user is being told about.*
+
+### The guard
+
+`tests/a-voice-failure-still-reaches-the-user.test.ts` asserts the contract
+behaviourally (`await expect(...).resolves` against an insert that rejects, one
+that throws synchronously, one that returns a PostgREST error, and one that
+succeeds quietly) and the ordering statically, with the catch block sliced out
+and checked for length first so the assertions cannot go vacuous.
+
+Proved red four times:
+
+| mutation | guard |
+|---|---|
+| remove the `catch` in `recordVoiceCommand` | **RED** — *promise rejected "TypeError: Failed to fetch" instead of resolving* |
+| discard the PostgREST error again | **RED** — *expected "error" to be called at least once* |
+| move `toastError` back after the history write | **RED** — *the user is told AFTER the history write again* |
+| write `voice_commands` directly again | **RED** |
+
+## Observation, acted on: a transcript is a credential store
+
+`lib/ai/context/policy.ts` denies `household_info` because it holds *"alarm
+codes, wifi keys"*. `voice_commands.transcript` is verbatim dictated speech —
+and the voice module's own on-screen examples include:
+
+```
+'Note that the garage code is 1234',
+```
+
+The same class of secret, arriving by a different door, and the table was not on
+the deny-list. Nothing reads it today, which is precisely when to name it: the
+file's own header says the list is *"explicit and long on purpose"* so that an
+omission is *"a deliberate, reviewed change instead of an accident"*. Added, with
+that reasoning written next to it. The existing static ratchet
+(`tests/context-policy.test.ts`) now covers it.
+
+Suite: **1,251 files / 14,079 tests, 0 failures.**
+
+---
+
+## Where Session 8 leaves the audit
+
+Six findings across the five modules the deep-dive list named, in that order:
+
+| # | module | finding | severity |
+|---|---|---|---|
+| C1-S8-01 | (found via locator) | display labels used as control flow, in the path of `C2-M03` | MEDIUM |
+| C1-S8-02 | locator | a child can erase their own location trail and move a sibling's pin | **HIGH** |
+| C1-S8-03 | health | `immunizations` / `health_visits` — the two tables `0309` stopped short of | **HIGH** |
+| C1-S8-04 | trust | the ledger recorded decisions under the rules, never changes to the rules | MEDIUM |
+| C1-S8-05 | paperwork | two taps erased each other's stamp, and the next tap double-created | MEDIUM |
+| C1-S8-06 | voice | the failure message sat behind a call that fails for the same reason | MEDIUM |
+
+Three new migrations — `0325`, `0326`, `0327` — join `0318`–`0324` as **not yet
+applied to production**; all ten are described in
+`docs/PENDING_PROD_MIGRATIONS.md`, and applying them needs operator credentials
+this worker does not have.
+
+Two things were deliberately **not** acted on and are recorded for a decision
+rather than inherited: whether turning location sharing off should also hide
+where you have been (`C1-S8-02`'s observation), and whether a second tap on the
+*same* paperwork action should be closed by claiming before creating, which
+trades a rare double-create for a claim that can get stuck (`C1-S8-05`).
+`role_changed` stays unwritten because there is nowhere to write it from until
+member editing gets a server action (`C1-S8-04`).
