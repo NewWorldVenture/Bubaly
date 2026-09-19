@@ -2775,3 +2775,68 @@ precisely why the guard is enumerated rather than universal, and why the 34 are
   `if (!(await recordFailure())) return …`. LOW.
 - `components/modules/messages-module.tsx:204` — a per-row read-receipt fallback.
   A receipt that does not stick; no claim is made to the user. LOW.
+
+```
+[CLAUDE-1][MEDIUM][SECURITY] the line that answers strangers did not fence what they said
+File:     lib/contact-center/concierge.ts, reached from
+          app/api/contact-center/{sms,email,voice/transcription}/route.ts
+Problem:  The Contact Center runs an AI concierge over inbound texts, emails and
+          voicemail transcripts — input from anyone who knows the number.
+          lib/ai/safety/untrusted.ts exists for exactly this and its header says
+          it was extracted from lib/guardian/scam-ai.ts's handling of
+          "third-party call transcripts"; scam-ai.ts says outright "the
+          transcript is ATTACKER-CONTROLLED (an inbound caller / SMS)" and
+          fences it. The concierge interpolated body and sender raw. The only
+          /fence/ match in the file was the phrase "no code fences" in its
+          prompt, which is why it reads as compliant.
+Evidence: content: `... From: ${input.from} ... Message:\n${input.text.slice(0,2000)}`
+          No fence, no UNTRUSTED_CONTENT_RULE in the system prompt.
+Impact:   intent is coerced to a 7-value enum (injection cannot move it).
+          summary reaches the family's inbox AND their real phone as
+          "🚨 Urgent at your Bubaly line: <summary>" — a phishing lure delivered
+          through the family's own product in its urgent-alert formatting.
+          reply is sent back to the sender. tools: [] bounds this to CONTENT
+          injection, not action — which is why MEDIUM, not HIGH.
+Fix:      Fence the body and the sender; carry UNTRUSTED_CONTENT_RULE in SYSTEM.
+          tests/a-strangers-words-are-fenced.test.ts covers both stranger-facing
+          modules and asserts the fence's real property: content quoting the end
+          marker cannot close its own block, because the nonce is per-call.
+          TWO SELF-INFLICTED FAULTS, both kept in the record: the first draft was
+          a SPELLING-ONLY guard (C4-S5-01's class, 46 instances) — deleting the
+          rule from the prompt left it green because the import still spelled the
+          name; and my patch adding the rule silently failed its anchor while I
+          read three unrelated grep hits as success. The suite caught the second.
+          Proved red on both halves independently.
+Status:   FIXED
+```
+
+```
+[CLAUDE-1][OBSERVATION][SECURITY] three model-backed routes carry no rate limit
+File:     app/api/contact-center/{sms,email,voice/transcription}/route.ts
+Problem:  Pass P recorded C3-S4-01 as "three server actions were the only
+          unmetered doors to the LLM, against 31 of 31 API routes that all carry
+          a limit". Re-measured: 34 API routes reach a model and THREE carry no
+          limit — the three Contact Center inbound webhooks.
+Evidence: All three DO authenticate, and the difference matters: the Twilio
+          routes verify a signature against a URL built from NEXT_PUBLIC_APP_URL
+          rather than a spoofable Host header (better than most), and the email
+          route requires CONTACT_CENTER_INBOUND_SECRET compared in constant time,
+          fail-closed in production.
+Impact:   A signature authenticates the TRANSPORT, not the sender. A stranger
+          texting the family's number produces genuinely-signed webhooks, one per
+          text, each costing a model call plus one or two outbound SMS when the
+          concierge replies or escalates. A per-IP limit would not help: the IP is
+          always Twilio's.
+Fix:      NOT fixed — the right limit is per-sender or per-family, the existing
+          rateLimit/rateLimitDb helpers are keyed for neither, and deciding what a
+          family's phone line does when a sender exceeds it (drop / stop replying
+          / keep filing silently) is a product decision about a number real people
+          call. Recorded with the measurement so it can be decided.
+          Two corrections to the audit's own record: the population is 34, not 31,
+          and "all carry a limit" held only for the set Pass P examined. Reaching
+          that took three passes — the first census missed rateLimit/rateLimitDb
+          (lowercase) and cried five, then missed a custom secretsMatch and called
+          the email route unauthenticated. Both errors ran alarming; both were
+          corrected by reading the files rather than trusting the grep.
+Status:   OPEN — needs a product decision
+```

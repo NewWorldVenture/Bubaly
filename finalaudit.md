@@ -7179,3 +7179,117 @@ reaches auth *only* through that private helper, must be credited as guarded.
 Both proved red on their own: adding a new unauthenticated export fails the
 allow-list assertion; restricting the declaration scanner to exported functions
 fails the private-helper assertion with 65 false positives.
+
+
+## C1-S7-03 [MEDIUM][SECURITY] — the line that answers strangers did not fence what they said
+
+**File:** `lib/contact-center/concierge.ts` · reached from
+`app/api/contact-center/{sms,email,voice/transcription}/route.ts`
+**Status:** FIXED — plus `tests/a-strangers-words-are-fenced.test.ts`
+
+### Problem
+
+The Contact Center gives a family a phone number and an email address, and runs
+an AI concierge over whatever arrives. So the model's input comes from **anyone
+who knows the number** — a text, an email, a voicemail transcript.
+
+`lib/ai/safety/untrusted.ts` exists for precisely this, and its header records
+where it came from: *"the approach `lib/guardian/scam-ai.ts` already uses for
+third-party call transcripts"*. `scam-ai.ts` is blunter still:
+
+> the transcript is ATTACKER-CONTROLLED (an inbound caller / SMS)
+
+— and it keeps the system role separate, wraps the content in a random-nonce
+fence, and tells the model the fence contains data.
+
+The concierge did none of it:
+
+```ts
+content: `Channel: … From: ${input.from} … Message:\n${input.text.slice(0, 2000)}`
+```
+
+The only match for `/fence/` in the entire file was the words **"no code
+fences"** in its own prompt — which is why it reads as compliant at a glance.
+Two implementations of "run a model over a message from a stranger", in one
+product, disagreeing about the same hazard, one of them naming SMS explicitly.
+
+### Impact, bounded honestly
+
+The model returns `intent`, `summary` and `reply`. `intent` is coerced to a
+seven-value enum, so injection cannot move it anywhere interesting. The other
+two are the payload:
+
+- **`summary`** is written into the family's inbox and, when the intent is
+  urgent, sent to their real phone: `🚨 Urgent at your Bubaly line: ${summary}`.
+  A stranger who can shape that text can deliver a phishing lure **through the
+  family's own trusted product**, wearing its urgent-alert formatting.
+- **`reply`** is sent back to the sender.
+
+`tools: []` is what bounds this. No tool can be called, so this is content
+injection, not action — which is why it is MEDIUM rather than HIGH, and the
+distinction is worth keeping rather than rounding up.
+
+### Fix
+
+The concierge now fences the message body **and the sender**, and carries
+`UNTRUSTED_CONTENT_RULE` in its system prompt — the same three moves `scam-ai.ts`
+makes. `From` is fenced too because it is caller-supplied on the email path and
+sat on a line the model reads as structure.
+
+### The guard caught my own fix being incomplete, twice
+
+`tests/a-strangers-words-are-fenced.test.ts` covers both stranger-facing modules
+and asserts the fence's actual property — that content quoting the end marker
+cannot close its own block, because the nonce is per-call.
+
+Two things went wrong writing it, both worth keeping:
+
+1. **The first draft was a spelling-only guard** — the exact defect `C4-S5-01`
+   found 46 times. Deleting `${UNTRUSTED_CONTENT_RULE}` from the system prompt
+   left the test green, because the file still *imported* the name and the regex
+   ran against the whole source. It now strips import lines and requires the
+   **interpolation**.
+2. **My patch silently failed.** The edit adding the rule to `SYSTEM` did not
+   match its anchor, I read three unrelated grep hits as success, and the rule
+   was never added. The full suite caught it — the guard failing on the very fix
+   it was written for. The second attempt asserts its anchor before patching.
+
+Proved red on both halves independently: restoring the raw interpolation fails
+the fencing assertion, and removing the rule fails the explanation assertion.
+
+
+## Measured alongside it: three model-backed routes carry no rate limit
+
+Pass P recorded `C3-S4-01` as *"three server actions were the only unmetered
+doors to the LLM, **against 31 of 31 API routes that all carry a limit**"*.
+Re-measuring that claim: **34** API routes reach a model, and **three** carry no
+limit — all three the Contact Center inbound webhooks
+(`contact-center/sms`, `contact-center/email`, `contact-center/voice/transcription`).
+
+It is not the open door the earlier finding described, and the difference
+matters. All three authenticate: the two Twilio routes verify a signature
+against a URL built from `NEXT_PUBLIC_APP_URL` rather than a spoofable `Host`
+header — better than most implementations of that check — and the email route
+requires `CONTACT_CENTER_INBOUND_SECRET`, compared in constant time, fail-closed
+in production.
+
+**But a signature authenticates the transport, not the sender.** A stranger
+texting the family's number produces genuinely-signed Twilio webhooks, one per
+text, each costing a model call and — when the concierge replies or escalates —
+one or two outbound SMS. Nothing bounds how many a single sender may trigger,
+and a per-IP limit would not help, because the IP is always Twilio's.
+
+Left as an observation rather than fixed: the right limit here is per-sender or
+per-family, the existing `rateLimit`/`rateLimitDb` helpers are keyed for neither,
+and choosing what a family's line should do when a sender exceeds it — drop,
+stop replying, keep filing silently — is a product decision about a phone number
+real people call. Recorded with the measurement so it can be decided rather than
+rediscovered.
+
+**Two corrections to this document's own record**, both from the same
+re-measurement: the population is 34 model-backed API routes, not 31, and "all
+carry a limit" was true only of the set Pass P looked at. Getting *there* also
+took three passes — the first census missed `rateLimit`/`rateLimitDb` (lowercase)
+and reported five offenders, then missed a custom `secretsMatch` and called the
+email route unauthenticated. Both numbers were wrong in the alarming direction,
+and both were corrected by reading the files rather than trusting the grep.
