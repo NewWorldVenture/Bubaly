@@ -943,7 +943,17 @@ deadlock. Proven against the real claimRun; calibrated both directions. FILED no
 fixed: the correct reset is progress-gated, and a bare reset stops stuck runs
 dead-lettering.
 
-VERIFIED: 14,189 green under both timezones, tsc clean, lint 0 at 12.
+Q41 (MEDIUM, ai-runtime): resolveIdempotencyKey names "the duplicate a plan
+actually produces is two steps creating the same thing" and builds a run-scoped
+natural key for it - unreachable during plan execution, because the function
+short-circuits on a supplied key and the executor always supplies a STEP-scoped
+one. savePlan never compares two steps tool+input, and withIdempotency uses
+scopeKey which carries stepId too, so 0256 table-level keys do not catch it
+either. Retry-dedupe works; sibling-dedupe does not. Proven against the real
+exported functions, calibrated by removing stepId from each derivation. FILED not
+fixed: honouring both keys changes ledger retry semantics.
+
+VERIFIED: 14,194 green under both timezones, tsc clean, lint 0 at 12.
 STILL UNVERIFIED BY CI: no ci.yml run has been created for any commit after
 b05f0b32, across thirty checks. Everything above is local only.
 LAST-UPDATE: 2026-09-19, after Q39.

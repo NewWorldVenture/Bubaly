@@ -6846,3 +6846,47 @@ still terminates, which is more than a unilateral change to a concurrency-critic
 state machine should carry. The cheaper half — giving `claim_ai_runs` the same
 ceiling — is worse alone, since it converts "no human can resume this" into
 "nothing can". Both together, in that order.
+
+---
+
+## Q41 — The duplicate a plan actually produces, and the defence that cannot see it
+
+**Severity: MEDIUM.** `resolveIdempotencyKey` names the failure mode in its own
+comment — "the duplicate a plan actually produces is two steps creating the same
+thing" — and builds a run-scoped natural key to catch it. That branch is
+unreachable during plan execution: the function short-circuits on a supplied key,
+and the executor's only call site unconditionally supplies
+`stepIdempotencyKey(family, run, step, tool)`. A plan step never consults its
+tool's `idempotencyFrom`.
+
+Step-scoping is correct for its own purpose — `scopeKey` documents it as making a
+*retried step* idempotent, which it does. The gap is that it is the only key such
+a call gets, so retry-dedupe is delivered and same-thing-dedupe is not.
+
+Nothing else closes it. `savePlan` validates step keys, dependencies and cycles
+and never compares two steps' tool and input. `withIdempotency` uses `scopeKey`,
+which carries the step id too, so 0256's table-level unique index also sees two
+distinct keys and writes both rows.
+
+**Proven** in `tests/two-steps-that-do-the-same-thing.test.ts` against the real
+exported functions: two steps, same family, run, tool and intent, two different
+keys — at both the ledger and the service layer — while a retried step still
+collides with itself. Calibrated by removing the step id from each derivation in
+turn; both collapse the keys and fail.
+
+Impact is duplicate household rows. Gated on the planner emitting two
+content-identical steps, but the repo's own comment asserts that is what plans
+do, and the same class has landed before ("planning a meal twice left two dinners
+in one slot").
+
+**Filed, not applied.** The fix is for a run's tool call to honour both keys —
+the step key for retries, the natural key for siblings. The ledger's unique index
+is single-column, so that means a second reservation, or preferring the natural
+key where a tool defines one. The latter is probably right but changes retry
+semantics for every tool with a natural key, and proving that against the
+approval, replan and dead-letter paths is not a unilateral change.
+
+**Process note.** The near-miss entry immediately before this one deprioritised
+exactly this question as "prior that this is a defect is low". Following it
+anyway is what turned it into a finding; the refutation recorded there was about
+a different claim and still stands.

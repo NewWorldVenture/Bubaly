@@ -7000,3 +7000,91 @@ this is a defect is low given how deliberately this area is built. Named here so
 it is a known open question rather than an unexamined one.
 
 **Status:** NO DEFECT. Hypothesis refuted by the code's own documentation.
+
+---
+
+[CLAUDE-1][MEDIUM][AI-RUNTIME] The duplicate a plan actually produces, and the defence that cannot see it
+
+**Files:** `lib/ai/tools/execute.ts` (`resolveIdempotencyKey`),
+`lib/ai/runs/executor.ts:920`, `lib/ai/runs/store.ts:269-283` (`savePlan`),
+`lib/services/idempotency.ts` (`scopeKey`).
+
+**I deprioritised this an hour ago and was wrong to.** In the near-miss entry
+above I refuted the claim that the executor defeats a documented decision about
+*retries* — that refutation stands; step-scoping is correct and intended for
+what it was chosen for. I then named one question as open with "the prior that
+this is a defect is low". Having actually followed it, the prior was wrong. This
+is the finding that near-miss should have become.
+
+**Problem.** `resolveIdempotencyKey` names this exact failure mode in its own
+words and builds a defence for it:
+
+```ts
+// Deliberately keyed by the run/request and NOT the step: the duplicate a
+// plan actually produces is two steps creating the same thing.
+if (natural) return makeKey([familyId, runId ?? requestId, tool.name, natural]);
+```
+
+That branch is unreachable during plan execution. The function short-circuits —
+`if (supplied) return supplied;` — and the executor's **only** call site
+(`executor.ts:920`) unconditionally supplies
+`stepIdempotencyKey(family, run, step, tool)`, a sha256 that is never empty. A
+plan step therefore never consults its tool's `idempotencyFrom`, and the key it
+gets carries the step.
+
+Step-scoping is not wrong: `scopeKey`'s docstring says executor calls are keyed
+by run + step "so a retried step is deduplicated", which is true and wanted. The
+gap is that it is the **only** key such a call ever gets. Retry-dedupe is
+delivered; same-thing-dedupe is not; and the code written to deliver it is
+bypassed on the one path it was aimed at.
+
+**Nothing upstream or downstream closes it.** `savePlan` rejects a duplicate
+step *key*, a missing tool, an unknown dependency and a dependency cycle — it
+never compares two steps' tool and input, so a plan carrying two differently-keyed
+steps that create the identical thing persists intact. And the service layer's
+`withIdempotency` reaches for `scopeKey`, which carries `scope.stepId` too, so
+0256's table-level partial unique index also sees two distinct keys and writes
+both rows.
+
+**Evidence.** `tests/two-steps-that-do-the-same-thing.test.ts`, against the real
+exported functions:
+
+- `stepIdempotencyKey(fam, run, stepA, 'calendar.createEvent')` ≠ the same call
+  with `stepB`. The ledger's unique index is `(family_id, idempotency_key)`:
+  two keys, two reservations, two executions.
+- `scopeKey` with identical input in the same run yields two keys as well.
+- A *retried* step gets the same key both ways — non-vacuity, and the reason
+  step-scoping is not simply a mistake.
+- The natural branch's unreachability is pinned structurally: the short-circuit
+  exists, the executor has exactly one supply site, and it is unconditional. A
+  second supply site appearing fails the test.
+- `savePlan` is pinned as validating keys, deps and cycles and *not* content.
+
+**Calibrated.** Removing `stepId` from `stepIdempotencyKey` collapses the two
+keys into one and fails the first assertion; removing `scope.stepId` from
+`scopeKey` does the same for the service layer. So the step is demonstrably what
+splits them.
+
+**Impact.** Duplicate household rows — two identical calendar events, two todos,
+two reminders. Not dangerous, and gated on the planner emitting two
+content-identical steps. But the repo's own comment asserts that is what plans
+produce, and this audit has already recorded the same class landing for real:
+"planning a meal twice left two dinners in one slot" (§7 domain service layer).
+
+**Recommended fix — filed, not applied.** A tool call inside a run wants *both*
+keys, not one: the step key so a retry is deduplicated, and the natural key so a
+sibling step creating the same thing is caught. The ledger's unique index is over
+a single column, so honouring both means either reserving against the natural key
+*in addition* (a second ledger row, or a second index), or having
+`resolveIdempotencyKey` prefer the natural key when a tool defines one and fall
+back to the supplied step key when it does not — which fixes the sibling case and
+keeps retry-dedupe for every tool with `idempotencyFrom: () => null` but changes
+retry behaviour for the others, since a retried step would then collide with its
+own earlier natural-keyed reservation and be reported `duplicate` rather than
+re-run. That is probably correct — a retry of a step that already created the
+thing *should* see it as already done — but it is a semantic change to the
+execution ledger, and proving it against the approval, replan and dead-letter
+paths is more than a unilateral change should carry with two other workers live.
+
+**Status:** FILED with a proven reproduction. The test pins the current
+behaviour and names what would change it.
