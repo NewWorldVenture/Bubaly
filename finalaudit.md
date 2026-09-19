@@ -15,10 +15,36 @@ and both sessions independently labelled a pass **"L"** for different work, so
 theirs is relabelled **L′** while its finding ID `F-L01` is left exactly as its
 author wrote it.*
 
-**Nineteen passes, A–Q plus L′ and the parallel session's own N. 151 distinct
-finding IDs are named in this document**, of which Pass P added 17 and Pass Q 12
-(plus one earlier ID, C3-S3-02, now cited individually rather than by range).
-The count was verified across the merge with `main` rather than asserted: 150
+**Thirty passes, A–AD plus L′ and the parallel session's own N. 157 distinct
+finding IDs are named in this document**, of which Pass P added 17, Pass Q 12,
+and Session 8 (passes U–AD) twelve (plus one earlier ID, C3-S3-02, now cited
+individually rather than by range).
+
+*Re-counted 2026-09-19, and the method matters because the number is meant to be
+reproducible. An ID is counted when it is NAMED anywhere in this document, which
+is the method the 151 figure used:*
+
+```
+grep -oE "\b(C[1-4]-S[0-9]+-[0-9]+|C[1-4]-[A-Z][0-9]+|F-[A-Z][0-9]+|F[0-9]+|LB-[0-9]+)\b" \
+  finalaudit.md | sort -u | wc -l
+```
+
+*That command prints **158**, and exactly one of those is not an ID: `C1-S4`,
+matched out of the wildcard reference `C1-S4-*` where Pass P's worker files are
+cited (`grep -n 'C1-S4-\*' finalaudit.md` finds it; the line number moves as the
+document grows, so it is not quoted here). Hence 157. The
+discrepancy is stated rather than hidden in the pattern, because a count whose
+command does not reproduce it is the defect this document keeps finding
+elsewhere.*
+
+*Two corrections to the instrument itself, both of which it had wrong before:
+`M1`/`M23`-style IDs are MILESTONES, not findings, and were being counted as
+findings; and `C2-B*`/`C2-M*` were being MISSED entirely, because Claude-2's IDs
+do not use the `-S<n>-` form the earlier pattern assumed — so the old figure was
+simultaneously too high and too low.*
+
+*The 151 figure below was verified across the merge with `main` rather than
+asserted, and that verification stands for the state it described:* 150
 IDs here, 99 there, 151 in the union and 151 in the merged file, with none
 lost. The passes' own totals are larger than the
 IDs named here — Pass P alone produced 38 findings — because this index cites
@@ -46,6 +72,58 @@ is the same defect this audit keeps finding elsewhere.
 | O | `C2-B01` + `C2-B04` fixed together; a contrast contract that computes no contrast; a security test that could not pass | 2 (`C1-S3-03`, `C1-S3-04`) + 2 fixes |
 | L′ | *(parallel session)* An invitee could rewrite the invite they were about to accept | 1 (`F-L01`) |
 | P | Three surfaces nobody had audited: server actions, the Expo app, inside `app/(app)` | 38 (`C2-M01`–`M16`, `C3-S4-01`–`07`, `C4-S4-01`–`13`, `C1-S4-01`–`02`) |
+| Q | The suite that could not fail, and a credential store opened on a false premise | 12 (`C3-S5-01`–`09`, `C4-S5-01`–`03`) |
+| R | The landing page's eleven waits, and a deletion that was told it worked | 2 round-4 carry-overs fixed (`C4-S4-09` + the landing waits) |
+| S | The deleted file that wasn't, five more times | 5 (`C1-S6-01`–`05`) |
+| T | The sensitive-table list, measured instead of estimated | 11 (`C1-S6-06`–`11`, `C1-S7-01`–`05`) |
+| U | The words were load-bearing | 1 (`C1-S8-01`) |
+| V | The geofence was guarded and the trail was not | 2 (`C1-S8-02`, `C1-S8-03`) |
+| W | The ledger that watched everything except itself | 1 (`C1-S8-04`) |
+| X | The promise in the doc comment, broken by two taps | 1 (`C1-S8-05`) |
+| Y | Told nothing, for the same reason it failed | 1 (`C1-S8-06`) |
+| Z | Measuring the pattern instead of guessing the next module | 2 (`C1-S8-07`, `C1-S8-08`) |
+| AA | Two tables whose schemas already named the author | 1 (`C1-S8-09`) |
+| AB | The deferred fix that was covering a cheap one | 1 (`C1-S8-10`) |
+| AC | The websocket, which nobody had asked about | 1 (`C1-S8-11`, verified healthy) |
+| AD | Eight AI insights that had never worked | 1 (`C1-S8-12`) |
+
+## Session 8 at a glance (passes U–AD)
+
+The five modules the deep-dive list named, then the pattern behind them measured
+across the product rather than guessed at.
+
+| ID | Severity | What |
+|---|---|---|
+| `C1-S8-01` | MEDIUM | Display labels used as control flow, sitting in `C2-M03`'s path |
+| `C1-S8-02` | **HIGH** | A child can erase their own location trail and move a sibling's pin |
+| `C1-S8-03` | **HIGH** | `immunizations` / `health_visits` — the two tables `0309` stopped short of |
+| `C1-S8-04` | MEDIUM | The trust ledger recorded decisions under the rules, never changes to the rules |
+| `C1-S8-05` | MEDIUM | Two taps erased each other's paperwork stamp, and the next tap double-created |
+| `C1-S8-06` | MEDIUM | The voice error message sat behind a call that fails for the same reason |
+| `C1-S8-07` | **HIGH** | A column called `is_private`, referenced nowhere; and an insurance twin left ungated |
+| `C1-S8-08` | LOW | Nine browser controls on manager-only tables that can never succeed — ratcheted, not fixed |
+| `C1-S8-09` | **HIGH** | `behavior_logs` / `care_log`: the subject could rewrite the record about them |
+| `C1-S8-10` | MEDIUM | The only public bucket with no type restriction is the one that takes everything |
+| `C1-S8-11` | *verified healthy* | An unauthenticated Realtime subscriber receives nothing — and the check is not vacuous |
+| `C1-S8-12` | **HIGH** | Nine table names that name no table; eight AI insights had never worked |
+
+**Six migrations — `0325`–`0330` — and they are NOT applied to production.**
+With `0318`–`0324` from round 5 that is **thirteen pending migrations**, every
+one described in `docs/PENDING_PROD_MIGRATIONS.md`. Applying them needs operator
+credentials no agent worker in this audit has had.
+
+**Four sweeps are recorded as coming back empty**, with the evidence that the
+instrument could have found something: the boundary-column sweep (Pass AB), the
+`.from()` and table-name-helper censuses (Pass AD), and the Realtime anon stream
+(Pass AC). A class that does not recur is worth as much to the next reader as
+one that does.
+
+**Three things are left for a decision rather than inherited:** whether turning
+location sharing off should also hide location history (`C1-S8-02`); whether to
+close the same-action paperwork race by claiming before creating, which trades a
+rare double-create for a claim that can get stuck (`C1-S8-05`); and
+`role_changed`, which stays unwritten because member editing has no server
+action to write it from (`C1-S8-04`).
 
 Session record 1 says "87 findings across six passes". That was true when
 written; passes G–K have landed since, and Pass A is `F1`–`F22`, which is 22 and

@@ -919,3 +919,29 @@ ALSO: the first saveRow mutation came back GREEN and the tempting conclusion was
   is a claim about the MUTATION first, and only then about the guard.
 SUITE: 1,253 files / 14,091 tests, 0 failures.
 LAST-UPDATE: 2026-09-19
+
+## Claude-1 — Coordinator: the index reconciliation (an owed deliverable)
+DONE — this was named in status.md's NEXT as "the coordinator's job" and had
+  been outstanding since round 5. finalaudit.md's Part 0 claimed "Nineteen
+  passes, A–Q ... 151 distinct finding IDs" while the body held THIRTY pass
+  headers and 157 IDs. A reader of the index was being told something the
+  document itself contradicted.
+FIXED: the pass table now runs A–AD (fourteen rows added, Q–AD), each citing
+  the IDs I could verify from the body rather than from memory. Added a
+  "Session 8 at a glance" table: the twelve findings with severities, the
+  thirteen pending migrations, the four sweeps that came back empty, and the
+  three items left for a product decision.
+THE COUNT IS NOW REPRODUCIBLE, which was the point. The index states the exact
+  grep that produces it, and states honestly that the command prints 158 while
+  the real figure is 157 — the extra is `C1-S4`, matched out of the wildcard
+  reference `C1-S4-*`. A count whose command doesn't reproduce it is the defect
+  this document keeps finding elsewhere, so the discrepancy is named rather than
+  hidden by tightening the pattern.
+TWO INSTRUMENT ERRORS IN THE OLD COUNT, both fixed: `M1`/`M23`-style MILESTONE
+  ids were being counted as findings, and `C2-B*`/`C2-M*` were MISSED entirely
+  because Claude-2's IDs don't use the `-S<n>-` form the pattern assumed. So 151
+  was simultaneously too high and too low.
+NOT TOUCHED: the previous author's prose about method, the merge verification of
+  the 151 figure (re-framed as describing the state it described, not deleted),
+  and every existing pass row. Rule 2 — never delete another worker's findings.
+LAST-UPDATE: 2026-09-19
