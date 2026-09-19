@@ -4446,6 +4446,59 @@ The highest-value module named as never audited, and it is **sound**:
   privacy defect (sharing re-enabling itself) and is not: its only caller is the
   "Share now" button, so it matches intent.
 
+## F-K04 — Five access writes on the trust page *(High, fixed)*
+
+The same shape, on the surface where the sentence is about **access**. Every
+write there is `.eq('id', …).eq('family_id', …)`, which matches nothing for a
+stale or foreign id — and a write that matches nothing succeeds. These are
+server actions, so the manager check has already run; RLS is not what refuses
+them. The zero-row case is exactly what a revoke button on a list rendered a
+moment ago produces:
+
+| write | what it said | what was true |
+|---|---|---|
+| `trust_policies` update / toggle / delete | "policy disabled" | still enabled |
+| `trust_delegations` revoke | **"access revoked"** | still granting access |
+| `emergency_sessions` end | **"emergency ended"** | still elevating access |
+
+All five now ask for their rows and refuse rather than claim.
+
+## F-K05 — Two medical tables are member-writable while their neighbours are manager-only *(Medium, OPEN — owner decision)*
+
+`immunizations` (0069) and `health_visits` (0068) carry
+`FOR ALL … USING (is_family_member(family_id))`. On the **same page**,
+`medical_profiles`, `health_providers` and `insurance_policies` are
+manager-only, and 0309 made `medications` manager-only. The page gate is
+`requireFeature` — a **subscription** check, not a role check.
+
+So a child on a qualifying plan can edit or delete a sibling's vaccination
+record and medical visit history, while the same child cannot touch a
+medication or an insurance policy.
+
+**This is not the 0309 shape.** Neither module gates its UI on `isManager`, so
+the interface and the database agree — there is no hidden button making a
+promise the database does not keep. It is an asymmetry, not a lie, which is why
+it is recorded for an owner rather than changed: whether a teenager may log
+their own vaccine is a product judgement, and closing it needs a migration that
+two other workers are actively holding.
+
+It is nonetheless the shape 0309's own header named — *"a class fixed where
+somebody remembered and left open where nobody did."*
+
+## Verified healthy in this pass, recorded so it is not re-derived
+
+- **locator-module**, the highest-value module named as never audited: server
+  actions enforce `isManager` server-side, `member_id` comes from the session,
+  reads are bounded and error-checked.
+- **paperwork-module**: server actions only.
+- **trust actions**: ten of eleven call `managerCtx()`; the eleventh delegates
+  to one that does, deliberately.
+- **RLS is enabled on every health table checked.** A plain grep for
+  `ENABLE ROW LEVEL SECURITY` returns **zero** for `symptom_logs`,
+  `health_goals`, `appointments`, `health_metrics` and `workout_logs` — because
+  every one is enabled through dynamic SQL. That zero is not a finding, and is
+  recorded here because it reads exactly like one.
+
 ## Method notes
 
 Two mistakes made and corrected in this pass, recorded because both were close
