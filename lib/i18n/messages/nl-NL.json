@@ -4995,6 +4995,7 @@
   "engagementHeatmap.notEnoughActivityRecordedYet": "Nog niet genoeg activiteit vastgelegd.",
   "engagementHeatmap.peakActivity": "Piekactiviteit",
   "error.weHitAnUnexpectedError": "Er ging iets onverwachts mis. Je gegevens zijn veilig — probeer het opnieuw, en als het blijft gebeuren staan hieronder een paar opties.",
+  "errors.thatChangeWasNotSaved": "Die wijziging is niet opgeslagen — je hebt mogelijk geen toestemming. Ververs de pagina en probeer het opnieuw.",
   "escalate.invalidEscalationPayload": "Ongeldige escalatiegegevens",
   "escalate.unableToProcessEscalation": "Kan de escalatie niet verwerken",
   "escalate.unauthorized": "Niet geautoriseerd",

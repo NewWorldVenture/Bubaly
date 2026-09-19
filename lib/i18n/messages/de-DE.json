@@ -4995,6 +4995,7 @@
   "engagementHeatmap.notEnoughActivityRecordedYet": "Noch nicht genug Aktivität erfasst.",
   "engagementHeatmap.peakActivity": "Höchste Aktivität",
   "error.weHitAnUnexpectedError": "Es ist ein unerwarteter Fehler aufgetreten. Ihre Daten sind sicher – versuchen Sie es erneut; wenn es weiterhin passiert, finden Sie unten ein paar Wege weiter.",
+  "errors.thatChangeWasNotSaved": "Diese Änderung wurde nicht gespeichert – möglicherweise fehlt dir die Berechtigung. Aktualisiere die Seite und versuche es erneut.",
   "escalate.invalidEscalationPayload": "Ungültige Eskalationsdaten",
   "escalate.unableToProcessEscalation": "Die Eskalation kann nicht verarbeitet werden",
   "escalate.unauthorized": "Nicht autorisiert",
