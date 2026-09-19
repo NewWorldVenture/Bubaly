@@ -302,13 +302,28 @@ jobs:
           [auth.sms.test_otp]
           12025550101 = "483921"
           12025550102 = "483922"
-          12025550103 = "483923"'''
+          12025550103 = "483923"
+
+          [auth.sms.twilio]
+          enabled = true
+          account_sid = "ci-only-unused-account"
+          message_service_sid = "ci-only-unused-service"
+          auth_token = "ci-only-unused-token"
+
+          [auth.hook.send_sms]
+          enabled = true
+          uri = "http://127.0.0.1:1/ci-sms-must-not-send"
+          secrets = "v1,whsec_Y2ktb25seS1waG9uZS1ob29rLXNlY3JldC0wMDAwMDA="'''
           # This checkout and GoTrue are disposable. Keep the product defaults,
           # other sections and credentials untouched; stop if their shape drifts.
           assert source.count(original) == 1, 'Unexpected disposable Auth config'
-          # Reserved fictional numbers never reach an SMS provider: GoTrue uses
-          # these fixed codes before its provider path; no provider is enabled.
+          # CLI 2.109.1 disables phone login unless a provider flag is enabled,
+          # even with test_otp or a send_sms hook. These invalid placeholders
+          # satisfy that local config check. Keep the hook mandatory: fixed
+          # codes bypass it; every other number fails at closed container
+          # loopback. GoTrue 2.192.0 returns hook errors without provider fallback.
           assert '[auth.sms' not in source, 'Unexpected disposable SMS config'
+          assert '[auth.hook' not in source, 'Unexpected disposable Auth hook config'
           path.write_text(source.replace(original, replacement, 1))
           PY
 

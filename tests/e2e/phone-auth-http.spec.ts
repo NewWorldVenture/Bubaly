@@ -5,7 +5,8 @@ import {
 } from './helpers/durable-session';
 
 // Actual Next UI and disposable GoTrue. CI configures only these reserved
-// fictional numbers with fixed OTPs; no SMS provider is configured or contacted.
+// fictional numbers with fixed OTPs. Inert provider config satisfies the CLI;
+// a mandatory closed-loopback SMS hook prevents any external provider contact.
 // Fixed test codes are reusable, so this does not assert delivery or code expiry.
 const enabled = process.env.E2E_AUTHENTICATED === '1' && process.env.E2E_DURABLE_SESSION === '1';
 const provider = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
@@ -63,10 +64,26 @@ async function signOut(page: Page) {
 }
 
 async function requestCode(page: Page, origin: string, phone: string) {
+  const providerOrigin = requireLocalOrigin(provider);
   await page.goto(`${origin}/login?redirect=/home`, { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'Continue with phone', exact: true }).click();
   await page.getByRole('textbox', { name: 'Phone number', exact: true }).fill(phone.slice(2));
+  const sent = page.waitForResponse(response => {
+    const url = new URL(response.url());
+    return url.origin === providerOrigin && url.pathname === '/auth/v1/otp' && response.request().method() === 'POST';
+  }, { timeout: 30_000 }).then(async response => {
+    const body: unknown = await response.json().catch(() => null);
+    const code = body && typeof body === 'object' && 'error_code' in body ? body.error_code : null;
+    const known = ['phone_provider_disabled', 'sms_send_failed', 'over_sms_send_rate_limit',
+      'hook_timeout', 'hook_timeout_after_retry', 'hook_payload_over_size_limit', 'hook_invalid_payload', 'unexpected_failure'];
+    // Only bounded status/known error metadata enters assertions, never the
+    // body, phone, account, request headers or provider diagnostic message.
+    return { status: response.status(), errorCode: code === null ? null
+      : typeof code === 'string' && known.includes(code) ? code : 'unrecognized_error' };
+  }).catch(() => ({ status: 0, errorCode: 'response_unavailable' }));
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  expect(await sent, 'Disposable GoTrue must accept the configured test-number OTP request')
+    .toEqual({ status: 200, errorCode: null });
   await expect(page.getByRole('heading', { name: 'Enter the code we sent you', exact: true })).toBeVisible({ timeout: 30_000 });
 }
 

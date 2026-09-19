@@ -2,6 +2,18 @@
 
 The user authorized publishing the current changes to main and production. PR 510 merged at 19:50:26 UTC as `4bee627572be77112b1206f4243841df00f9a181`; its direct parents are prior main `57f22c0b` and audited branch `6353d0d4`. The merge and branch share frozen tree `b039b2c08e994037e65b2677c102b7a338a9bbe5`. No SQL or Supabase configuration changed from prior main.
 
+## Verified application release: 2a5e7e7a
+
+Application release `2a5e7e7a15b93f544660b41c0f3185b4865e80ed` was verified live at www.bubaly.com at21:29:31 UTC. Application commit `837b210106e48fe43023df352a4b84bed6200552` contains frozen source/test/workflow tree `f75e7febdf01bf944fa35a505745001533c80028`; the final release tree is `10034dc3858d7894fb8e302d259e33ad605294ed`. Vercel deployment `dpl_8oWh1TNVFNbmGissmnvmA11P6ECT` succeeded at 21:28:59 UTC, GitHub Production record `6545922576`. The immutable deployment is [bubaly-hkto1x84l](https://bubaly-hkto1x84l-newworldventure.vercel.app).
+
+Public acceptance matches that exact deployment: login with JavaScript disabled retains disabled credential controls and POST; intercepted native submission contains no credential fields in query or body. Hydrated login/signup/reset are ready, and invalid callback admission is cookie-neutral with private/no-store and no-referrer headers, a clear invalid-link result and clean history. Phone selection/input and return to password login render correctly; an empty number cannot continue. Both scripts report zero page errors, zero failed public assets and no authentication cookies, actions or SMS dispatch. The phone check passes using system CA trust with certificate validation retained. These are public rendering/readiness checks, not production OTP verification or delivery.
+
+Evidence: `Temp/bubaly-phone-production-release-20260919.json`, `Temp/bubaly-auth-initiation-production-acceptance-2a5e7e7a-20260919.log` and `Temp/bubaly-phone-production-readiness-2a5e7e7a-systemca-20260919.log`. Earlier phone smoke diagnostics remain retained; no certificate-validation bypass was used for the passing check.
+
+Exact CI `35470363378` has successful Web, Database and Mobile jobs. Web `105970089770` passes both UTC and DST full runs at 16,703/16,703 tests across 1,305 files, a 252-page build, lint and strict types (`Temp/bubaly-2a5-web-105970089770.log`). E2E `105970089707` fails with **1,293/1,296 passing in 8.3 minutes**. All three new phone HTTP cases fail waiting for the code-entry heading after Continue, before genuine OTP verification. The repaired durable-signout case and six callback HTTP/Mailpit cases pass by exact-source/discovery and the all-other-cases matrix, not individual named success lines. No phone HTTP PASS is claimed. Pinned CLI validation disables SMS signup without a concrete provider, despite the disposable test OTP/hook configuration. The CI-only provider/hook and failure-diagnostic repair is frozen at workflow blobddc304a3fe92dd6bb19d1f601a5299c137a2cfd7 and fixture blobc37916a3b3049d62fc1aab71cac3b966d5583678. Application code, product Supabase configuration and SQL stay unchanged. The two-file CI follow-up passes strict fixture types, lint, all three phone-case discovery, 66 workflow guards, and the exact YAML/Python/TOML rewrite with unrelated fields unchanged, six negative controls and existing-SMS/hook refusal. Logs: Temp/bubaly-phone-ci-repair-{types,lint,discovery,guards,config}-20260919.log. The pinned CLI is not installed in the private verification environment: source/config checks are not a disposable-stack runtime pass. New hosted phone acceptance remains pending. Failed-run evidence: Temp/bubaly-2a5-e2e-105970089707.log; actual /otp status was not captured there.
+
+All 14,038 permanent audit IDs remain. Follow-up SEC-001 discovery executes a desired failing cache-isolation regression, so existing SUPPORT-98FD1D4C44AD (public/sw.js) advances from NOT STARTED to IN PROGRESS. The executed disposable SMS failure/repair also advances existing DEPLOY-B803FCB7F17E (CI workflow): 13,842 NOT STARTED, 192 IN PROGRESS, one FIXED + PASS and three FAIL. Actual worker handlers, Chromium CacheStorage and actual logout show synthetic A image bytes reaching B offline after logout; native worker registration, real Next optimizer and production private content are not tested. This follow-up includes no media privacy repair. AUTH-001/002/003 and SEC-001 remain open; only the existing narrow SEC-005 is closed. Historical production migration failure below remains unresolved. Broader production readiness remains **NO**.
+
 ## Native-form follow-up on main 70789485
 
 Main `70789485cd5e8ad00d49c2834e5c2aebf6941679` is live on Vercel deployment
@@ -63,9 +75,10 @@ reporter does not print individual successes. Web job `105960830743` passes both
 Evidence: `Temp/bubaly-707-e2e-105960830821.log` and
 `Temp/bubaly-707-web-105960830743.log`.
 
-Only SEC-005 becomes FIXED + PASS: exact production native credential exclusion
+At the 70789485 checkpoint, only SEC-005 became FIXED + PASS: exact production native credential exclusion
 and the repaired source's normal hosted hydrated login both pass. AUTH-001/002/003
 and DEPLOY-001 remain IN PROGRESS. All 14,020 IDs and every other status are
-preserved. Frontend deployment and this narrow boundary pass; broader production
-readiness remains **NO**. Initiation implementation remains a separate unpublished
-cycle and is not covered by these hosted results.
+preserved at that checkpoint. Frontend deployment and this narrow boundary pass;
+broader production readiness remains **NO**. Later initiation and phone/signout
+releases have their own evidence above and in the linked cycle records; these
+70789485 results do not cover their changed source.
