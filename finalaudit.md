@@ -4641,7 +4641,33 @@ removing one catch fails 2 of 16 in
 directions — the pre-existing error branches still fire, and Undo still appears
 on success.
 
-### Swept clean in this pass, and worth recording as such
+## Swept clean, mechanically, and worth recording as such
+
+- **Every write on a manager-gated table now carries a row check.** A sweep of
+  all 33 gated tables across `components/` *and* `app/` returns **zero**
+  remaining `update`/`delete`/`upsert` without `.select('id')`. Closed by the
+  two sessions combined.
+- **Optimistic UI that never reconciles: not found.** 109 raw candidates
+  narrowed to 26, and every one is either a busy flag under another name
+  (`setDismissing`, `setPlanning`, `setMarkingAll`) or a setter that runs
+  *after* the write succeeded (`setReviewedCount(0)`, `setNote('')`). No module
+  shows a change the database refused.
+- **Writes whose error is captured then ignored: none.** The three the detector
+  flagged all check, just further down than a 400-character window reached.
+- **Section C's priority list is fully covered**: `locator-module`,
+  `health-visits`, `immunizations`, `trust-sharing-section` and
+  `trust-activity-tab` clean; `medical-records`, `medications`, `paperwork` and
+  `voice` fixed above.
+
+### Recorded, not fixed
+
+`career-module.setPrimary` clears `is_primary` on every other resume and *then*
+sets it on the target. If the second update fails, the family is left with no
+primary resume at all. The user is told it failed, and making it atomic needs a
+transaction or an RPC rather than two client statements — so it is written down
+here rather than half-fixed.
+
+### Also swept clean
 
 - Every `useRealtimeQuery` call in every component binds its `error`, and none
   binds one it never uses. The "empty list shown as nothing-here" class does not
