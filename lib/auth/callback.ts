@@ -1,7 +1,7 @@
 import type { RecoveryIdentity } from './recovery-server';
 
 export type CallbackTokens = { access_token: string; refresh_token: string };
-export type CallbackInput = { code: string; next: string; verifierFingerprint: string };
+export type CallbackInput = { code: string; next: string; verifierFingerprint: string; attempt: string };
 export type CallbackReceipt =
   | {
     status: 'exchanged';

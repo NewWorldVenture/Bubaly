@@ -24,7 +24,7 @@ beforeEach(() => {
   vi.stubGlobal('fetch', provider);
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
-const complete = () => completeCallback({ code: 'synthetic-code', next: '/home', verifierFingerprint: 'a'.repeat(64) });
+const complete = () => completeCallback({ code: 'synthetic-code', next: '/home', verifierFingerprint: 'a'.repeat(64), attempt: 'd'.repeat(32) });
 
 describe('callback transport is confined to configured SDK endpoints', () => {
   it.each([

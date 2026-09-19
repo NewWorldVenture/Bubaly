@@ -33,7 +33,8 @@ function collect(filename: string): string {
   }
   return id;
 }
-const entries = Object.fromEntries(['components/auth/kid-login-form.tsx', 'lib/supabase/client.ts', 'lib/auth/browser-session-storage.ts'].map(file => [file, collect(file)]));
+const entries = Object.fromEntries(['components/auth/kid-login-form.tsx', 'lib/supabase/client.ts', 'lib/auth/browser-session-storage.ts',
+  'lib/auth/browser-signout.ts'].map(file => [file, collect(file)]));
 const origin = 'https://kid-login-fixture.invalid';
 const provider = 'https://kid-provider.invalid';
 const userA = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -115,6 +116,7 @@ async function fixture(page: Page, mode: ActionMode = 'success', locale = 'en-US
     const Form = load(entries['components/auth/kid-login-form.tsx']).KidLoginForm;
     const db = load(entries['lib/supabase/client.ts']).createClient();
     const storage = load(entries['lib/auth/browser-session-storage.ts']);
+    const logout = load(entries['lib/auth/browser-signout.ts']);
     p.mount = () => { root ??= ReactDOM.createRoot(document.getElementById('root')); ReactDOM.flushSync(() => root.render(React.createElement(Form))); };
     p.retire = () => ReactDOM.flushSync(() => root.render(null));
     p.captureSubmit = () => {
@@ -127,7 +129,7 @@ async function fixture(page: Page, mode: ActionMode = 'success', locale = 'en-US
     p.settle = async () => { await Promise.all(jobs); jobs = []; };
     p.currentUser = () => storage.captureBrowserSessionSnapshot()?.userId ?? null;
     p.signInB = async () => { const { error } = await db.auth.signInWithPassword({ email: 'b@example.invalid', password: 'synthetic-password' }); if (error) throw error; };
-    p.logout = () => { if (!storage.clearBrowserSessionSnapshot(storage.captureBrowserSessionSnapshot())) throw new Error('Logout ownership changed'); };
+    p.logout = () => { if (logout.signOutBrowserSession(logout.captureSignOutIntent(), { revoke: false }).status !== 'signed-out') throw new Error('Logout ownership changed'); };
     p.failWrites = () => { const descriptor = Object.getOwnPropertyDescriptor(Document.prototype, 'cookie'); Object.defineProperty(document, 'cookie', { configurable: true, get: () => descriptor.get.call(document), set: () => {} }); };
     p.mount();
   })();` });

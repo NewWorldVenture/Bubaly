@@ -10,6 +10,7 @@ import { parseCallbackAdmissionWitness } from '@/lib/auth/callback-witness';
 
 const ORIGIN = 'https://admission-witness.supabase.co', KEY = 'sb-admission-witness-auth-token';
 const USER = '11111111-1111-4111-8111-111111111111', SID = '22222222-2222-4222-8222-222222222222';
+const ATTEMPT = '0123456789abcdef0123456789abcdef';
 const encode = (value: unknown) => `base64-${Buffer.from(JSON.stringify(value)).toString('base64url')}`;
 function session(rotation: string, identity = true) {
   const claims = Buffer.from(JSON.stringify({ sub: USER, ...(identity ? { session_id: SID } : {}), rotation })).toString('base64url');
@@ -37,6 +38,35 @@ beforeEach(() => {
 afterEach(() => { expect(fetch).not.toHaveBeenCalled(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
 describe('callback ownership starts at the original request', () => {
+  it('preserves the nonce and original admission through callback and completion despite newer cookies', async () => {
+    const admission = witness(await GET(request()));
+    const response = await GET(request('newer-generation', `?code=synthetic-code&attempt=${ATTEMPT}&admission=${admission}`));
+    const location = new URL(response.headers.get('location')!);
+    expect(location.searchParams.get('attempt')).toBe(ATTEMPT);
+    expect(witness(response)).toBe(admission);
+    const tree = await Page({ searchParams: Promise.resolve(Object.fromEntries(location.searchParams)) });
+    expect(tree.props.attempt).toBe(ATTEMPT); expect(tree.props.admission).toBe(admission);
+    expect(JSON.parse(String(tree.key))).toEqual({ code: 'synthetic-code', next: '/home', admission, attempt: ATTEMPT });
+    expect(response.cookies.getAll()).toEqual([]);
+  });
+
+  it('keys the completion lifetime by the exact attempt even when code and witness agree', async () => {
+    const admission = witness(await GET(request()));
+    const first = await Page({ searchParams: Promise.resolve({ code: 'synthetic-code', admission, attempt: ATTEMPT }) });
+    const second = await Page({ searchParams: Promise.resolve({ code: 'synthetic-code', admission, attempt: 'f'.repeat(32) }) });
+    expect(first.props.attempt).toBe(ATTEMPT); expect(second.props.attempt).toBe('f'.repeat(32));
+    expect(first.key).not.toBe(second.key);
+  });
+
+  it.each([undefined, '', 'malformed', ATTEMPT.toUpperCase(), ATTEMPT.slice(1), ATTEMPT + '0', ATTEMPT + '\n',
+    [ATTEMPT, ATTEMPT], [ATTEMPT, 'malformed']])('rejects invalid direct-page attempt without synthesizing proof', async attempt => {
+    const admission = witness(await GET(request()));
+    const tree = await Page({ searchParams: Promise.resolve({ code: 'synthetic-code', admission, attempt }) });
+    expect(tree.props.attempt).toBeNull(); expect(tree.props.code).toBe('synthetic-code');
+    expect(tree.props.admission).toBe(admission);
+    expect(JSON.parse(String(tree.key)).attempt).toBeNull();
+  });
+
   it.each(['?code=synthetic-code', '?error=denied', ''])('retains original ownership through a held admission %s', async query => {
     const original = request('original-generation', query), expected = witness(await GET(request('original-generation', query)));
     const pending = GET(original);

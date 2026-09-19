@@ -21,7 +21,8 @@ function storageKey(url = process.env.NEXT_PUBLIC_SUPABASE_URL!): string {
 }
 const generationKey = (key: string) => `${key}-logout-generation`;
 const read = (): Cookie[] => parseCookieHeader(document.cookie).map(({ name, value }) => ({ name, value: value ?? '' }));
-const isOwned = (name: string, key: string) => isChunkLike(name, key) || isChunkLike(name, `${key}-user`) || isChunkLike(name, `${key}-code-verifier`);
+const isOwned = (name: string, key: string) => isChunkLike(name, key) || isChunkLike(name, `${key}-user`)
+  || isChunkLike(name, `${key}-code-verifier`) || isChunkLike(name, `${key}-pkce-initiation`);
 const owned = (cookies: Cookie[], key: string) => cookies.filter(cookie => isOwned(cookie.name, key)).sort((a, b) => a.name.localeCompare(b.name));
 const generation = (cookies: Cookie[], key: string) => cookies.find(cookie => cookie.name === generationKey(key))?.value ?? '';
 

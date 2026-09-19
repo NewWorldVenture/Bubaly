@@ -1,6 +1,6 @@
 # Native authentication form submission
 
-2026-09-19. **AUTH-002 and the distinct SEC-005 remain IN PROGRESS.** This cycle follows a
+2026-09-19. **SEC-005 is FIXED + PASS; AUTH-002 remains IN PROGRESS.** This cycle follows a
 hosted sign-in navigation whose path included `/login?email=...` before a correct
 retry. The remaining query was masked; this observation alone does not prove
 which other fields were transmitted. Controlled actual SSR/browser reproduction
@@ -63,14 +63,15 @@ Executed evidence (all logs under `C:/Users/Daniel/AppData/Local/Temp/`):
 
 The existing callback HTTP fixture also receives a test-only response-capture
 repair after navigation made the old response body unavailable. Its provider,
-server-action and session assertions remain; new hosted acceptance is pending.
+server-action and session assertions remain; exact-source hosted acceptance now passes.
 Unfinished initiation design/OAuth regressions are excluded from this patch.
 Six shipping source/test files are frozen at
 `1536752b12c9c87e4dfd63a748228810e33879b6`: four component files, the existing
 callback HTTP fixture and the new readiness fixture. Their exact Git-blob hashes
 and unchanged export/route inventory are in
 [the compact inventory](discovery/auth-native-form-inventory.json).
-New hosted/deployed acceptance remains pending. This cycle ran the focused
+Exact deployed native-form acceptance and new hosted successful-login
+acceptance now pass on 70789485. This cycle ran the focused
 122-unit compatibility gate; the earlier full-suite proof remains historical.
 
 The master gains SEC-005 for the specific credential-URL obligation and one new
@@ -79,8 +80,49 @@ SUPPORT record for `tests/e2e/login-readiness.spec.ts`: 14,020 total, with all p
 for private family media; broad SEC-002 is also unchanged. No complete workflow
 PASS is claimed.
 
-SEC-005 can close after the exact repaired deployment confirms disabled initial
-credentials and native POST with no credentials in URL/body, and the new hosted
-run proves normal hydrated successful login/navigation. That narrow closure does
-not complete AUTH-002 or initiation ownership. SUPPORT-6C0575881A8C is the new
+SEC-005 closes after exact deployed native-submission checks and the new hosted
+run prove normal hydrated successful login/navigation on the repaired source.
+That narrow closure does not complete AUTH-002 or initiation ownership. SUPPORT-6C0575881A8C is the new
 test-file obligation and remains NOT STARTED.
+
+## Exact production acceptance
+
+Main `70789485cd5e8ad00d49c2834e5c2aebf6941679` is live on deployment
+`dpl_4e2X1mo4taDXyYNnd38F36DP7M4r`, successful at 20:20:47 UTC; GitHub Production
+record `6545293519`. Its immutable address is
+[the verified deployment](https://bubaly-gqgndu7rm-newworldventure.vercel.app).
+
+`Temp/bubaly-native-form-production-70789485.log` verifies the exact deployment
+identifier in three HTML responses. With JavaScript disabled, login email,
+password and submit are disabled and the form declares POST. An intercepted
+native submission is POST with no credential fields in its query or body. With
+JavaScript enabled, all three controls become ready. Zero page errors occurred;
+the interceptor prevented the actual POST and no provider operation ran.
+
+`Temp/bubaly-production-render-70789485.{json,log}` separately verifies login,
+signup, reset and denied callback render correctly: four checks pass, zero Server
+Action posts and zero page errors. Six `ERR_ABORTED` script/prefetch requests
+occurred during navigation; they do not establish an application exception.
+
+Earlier exact `a70d27c4` CI `35466125080` completed all four jobs successfully;
+E2E passed 1,183/1,183 with zero failures/skips, including all four HTTP callback
+cases and the genuine emailed recovery journey. It predates this native-form
+repair and later response-capture fixture change.
+
+Exact `70789485cd5e8ad00d49c2834e5c2aebf6941679` CI `35466913827` now completes
+all four jobs successfully. E2E job `105960830821` passes **1,186/1,186** in 8.1
+minutes with zero failures, flakes or skips. Authenticated and durable-session
+flags are enabled. The exact source/discovery contains the three new readiness
+cases and four actual HTTP callback cases, including genuine emailed recovery,
+password save, logout and successful new-password sign-in. The github/dot reporter
+does not print individual successful names; this coverage follows from the
+complete scheduled matrix passing without skips. Log:
+`Temp/bubaly-707-e2e-105960830821.log`.
+
+Web job `105960830743` passes both UTC/DST runs of 16,543 checks across 1,303
+files, the 252-page build, lint and strict types. Log:
+`Temp/bubaly-707-web-105960830743.log`. Database and Mobile also pass.
+**Only SEC-005 becomes FIXED + PASS.** All 14,020 IDs remain; every other status
+is unchanged. This is disposable hosted successful-login proof alongside exact
+production native-form checks, not production email/provider delivery or full
+authentication workflow completion.

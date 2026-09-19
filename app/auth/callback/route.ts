@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { resolveAuthSelection } from '@/lib/billing/review-selection';
 import { captureCallbackRequestWitness } from '@/lib/auth/callback-witness-server';
 import { parseCallbackAdmissionWitness } from '@/lib/auth/callback-witness';
+import { isPkceInitiationNonce } from '@/lib/auth/pkce-initiation';
 
 /** Admission only. The browser owns the later exchange and session adoption. */
 export async function GET(request: Request) {
@@ -12,6 +13,8 @@ export async function GET(request: Request) {
     : supplied.length ? null : captureCallbackRequestWitness(originalCookies);
   const selection = resolveAuthSelection(url.searchParams, 'next');
   const query = new URLSearchParams({ next: selection.next ?? '/home', admission: admission ?? 'invalid' });
+  const attempts = url.searchParams.getAll('attempt');
+  if (attempts.length === 1 && isPkceInitiationNonce(attempts[0])) query.set('attempt', attempts[0]);
   const codes = url.searchParams.getAll('code');
   const code = codes[0];
   if (codes.length === 1 && typeof code === 'string' && code.length > 0 && code.length <= 4096

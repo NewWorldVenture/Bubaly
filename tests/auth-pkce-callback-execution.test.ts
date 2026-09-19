@@ -3,14 +3,21 @@ import { createChunks, stringFromBase64URL, stringToBase64URL } from '@supabase/
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const seam = vi.hoisted(() => ({ getAll: vi.fn(), set: vi.fn() }));
-vi.mock('next/headers', () => ({ cookies: async () => ({ getAll: seam.getAll, set: seam.set }) }));
+vi.mock('next/headers', () => ({
+  cookies: async () => ({ getAll: seam.getAll, set: seam.set }),
+  headers: async () => ({ get: (name: string) => name === 'cookie' ? seam.getAll()
+    .map((cookie: { name: string; value: string }) => `${cookie.name}=${encodeURIComponent(cookie.value)}`).join('; ') : null }),
+}));
 vi.mock('@/lib/marketing/identity', () => ({ stitchVisitorIdentity: vi.fn() }));
 import { completeCallbackAction } from '@/app/(auth)/auth/complete/actions';
 import { stitchVisitorIdentity } from '@/lib/marketing/identity';
+import { callbackAdmissionMaterial } from '@/lib/auth/callback-witness';
+import { encodePkceInitiationRecord, type PkceInitiationKind } from '@/lib/auth/pkce-initiation';
 
 const ORIGIN = 'https://ordinary-pkce.supabase.co';
 const KEY = 'sb-ordinary-pkce-auth-token';
 const VERIFIER = `${KEY}-code-verifier`;
+const ATTEMPT = 'b'.repeat(32);
 const A = '11111111-1111-4111-8111-111111111111';
 const B = '22222222-2222-4222-8222-222222222222';
 const keys = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
@@ -44,6 +51,7 @@ beforeEach(() => {
   vi.stubEnv('SUPER_ADMIN_EMAILS', '');
   vi.spyOn(console, 'error').mockImplementation(() => {});
   jar = new Map([[KEY, encode(session(B))], [VERIFIER, encode('synthetic-verifier')]]);
+  sealInitiation();
   calls = []; exchangeStatus = 200; userStatus = 200; admin = false;
   exchanged = session(A); allowRenewal = false;
   membership = [{ role: 'parent', family_id: 'synthetic-family' }];
@@ -87,8 +95,16 @@ function fingerprint() {
     .map(([name, value]) => ({ name, value })).sort((a, b) => a.name.localeCompare(b.name));
   return createHash('sha256').update(JSON.stringify(selected)).digest('hex');
 }
+function sealInitiation(kind: PkceInitiationKind = 'oauth') {
+  const material = callbackAdmissionMaterial([...jar].map(([name, value]) => ({ name, value })), KEY);
+  if (!material) throw new Error('Invalid initiation fixture');
+  const digest = (value: string) => createHash('sha256').update(value).digest('hex');
+  jar.set(`${KEY}-pkce-initiation`, encodePkceInitiationRecord({ v: 1, nonce: ATTEMPT, kind,
+    project: digest(material.project), generation: digest(material.generation),
+    verifier: digest(material.verifier), session: digest(material.session) }));
+}
 function callback(next = '/home', verifierFingerprint = fingerprint()) {
-  return completeCallbackAction({ code: 'synthetic-code', next, verifierFingerprint });
+  return completeCallbackAction({ code: 'synthetic-code', next, verifierFingerprint, attempt: ATTEMPT });
 }
 const owner = () => JSON.parse(stringFromBase64URL(jar.get(KEY)!.slice(7))).user.id;
 
@@ -109,6 +125,7 @@ describe('ordinary callback action returns checked data without publishing cooki
       jar.delete(VERIFIER);
       for (const cookie of createChunks(VERIFIER, encode('synthetic-verifier'), 13)) jar.set(cookie.name, cookie.value);
     }
+    sealInitiation();
     const before = [...jar];
     expect(await callback('/dashboard/meals')).toMatchObject({ status: 'exchanged', destination: '/dashboard/meals' });
     expect([...jar]).toEqual(before); expect(seam.set).not.toHaveBeenCalled();
@@ -140,6 +157,7 @@ describe('ordinary callback action returns checked data without publishing cooki
   it.each(['absent', 'chunked'] as const)('rejects definitive user failure without writing %s ambient storage', async layout => {
     jar.delete(KEY);
     if (layout === 'chunked') for (const cookie of createChunks(KEY, encode(session(B, false, 'x'.repeat(9000))), 1000)) jar.set(cookie.name, cookie.value);
+    sealInitiation();
     const before = [...jar]; userStatus = 401;
     expect((await callback()).status).toBe('rejected'); expect([...jar]).toEqual(before); expect(seam.set).not.toHaveBeenCalled();
   });
@@ -201,6 +219,7 @@ describe('ordinary callback action returns checked data without publishing cooki
   it('exchanges a real suffixed recovery verifier into an explicitly verified grant without cookie publication', async () => {
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'synthetic-grant-signing-secret');
     jar.set(VERIFIER, encode('synthetic-verifier/recovery'));
+    sealInitiation('recovery');
     const claims = JSON.parse(stringFromBase64URL(exchanged.access_token.split('.')[1]));
     claims.iat = Math.floor(Date.now() / 1000); claims.amr = [{ method: 'recovery', timestamp: claims.iat }];
     const header = Buffer.from(JSON.stringify({ alg: 'ES256', kid: jwk.kid })).toString('base64url');

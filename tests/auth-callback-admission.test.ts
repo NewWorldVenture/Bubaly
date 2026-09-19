@@ -26,6 +26,32 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe('callback admission never owns browser authentication storage', () => {
+  const attempt = '0123456789abcdef0123456789abcdef';
+  it('forwards the exact opaque initiation nonce with a code without issuing new proof', async () => {
+    const response = await GET(new Request(`https://app.example.invalid/auth/callback?code=older-code&attempt=${attempt}&next=%2Fdashboard%2Fmeals`));
+    const location = new URL(response.headers.get('location')!);
+    expect(location.searchParams.getAll('attempt')).toEqual([attempt]);
+    expect(location.searchParams.get('code')).toBe('older-code');
+    expect(location.searchParams.get('next')).toBe('/dashboard/meals');
+    expect(response.headers.get('set-cookie')).toBeNull();
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(response.headers.get('referrer-policy')).toBe('no-referrer');
+    expect(seam.exchange).not.toHaveBeenCalled(); expect(seam.ambient).not.toHaveBeenCalled();
+  });
+  it.each([
+    '', 'attempt=', 'attempt=malformed', `attempt=${attempt.toUpperCase()}`,
+    `attempt=${attempt.slice(1)}`, `attempt=${attempt}0`, `attempt=${attempt}%0A`,
+    `attempt=${attempt}&attempt=${attempt}`, `attempt=${attempt}&attempt=malformed`,
+  ])('does not invent or repair invalid initiation query %s', async query => {
+    const response = await GET(new Request(`https://app.example.invalid/auth/callback?code=older-code&${query}`));
+    const location = new URL(response.headers.get('location')!);
+    expect(location.searchParams.has('attempt')).toBe(false);
+    // Preserve the code so completion can reject its missing proof explicitly;
+    // never turn an unowned code into an ordinary no-code fallback.
+    expect(location.searchParams.get('code')).toBe('older-code');
+    expect(response.cookies.getAll()).toEqual([]);
+    expect(seam.exchange).not.toHaveBeenCalled(); expect(seam.ambient).not.toHaveBeenCalled();
+  });
   it.each([false, true])('a delayed old callback remains cookie-neutral after a newer browser decision (exchangeFailure=%s)', async failed => {
     seam.failed = failed;
     let release = () => {};

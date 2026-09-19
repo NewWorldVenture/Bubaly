@@ -1,8 +1,10 @@
-import { createBrowserClient, isChunkLike, parseCookieHeader, serializeCookieHeader, stringFromBase64URL, type CookieOptions } from '@supabase/ssr';
+import { createBrowserClient, isChunkLike, serializeCookieHeader, stringFromBase64URL, type CookieOptions } from '@supabase/ssr';
 import { AuthRetryableFetchError, isAuthError, type AuthTokenResponsePassword, type Session, type SignInWithPasswordCredentials } from '@supabase/supabase-js';
 import { durableCookieOptions, isSecureOrigin } from './session';
 import { captureBrowserSessionSnapshot } from './browser-session-storage';
 import { notifySessionStorageChanged } from './session-change';
+import { parseCallbackAdmissionCookies } from './callback-witness';
+import { pkceInitiationCookieName, readPkceInitiationSlot } from './pkce-initiation';
 
 type Cookie = { name: string; value: string; options: CookieOptions };
 type Tokens = { access_token: string; refresh_token: string };
@@ -71,15 +73,35 @@ async function withOwnedClient(
 ): Promise<AuthTokenResponsePassword> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const key = `sb-${new URL(url).hostname.split('.')[0]}-auth-token`;
+  const initiationKey = pkceInitiationCookieName(key);
   const isSession = (name: string) => isChunkLike(name, key) || isChunkLike(name, `${key}-user`);
-  const isOwnership = (name: string) => isSession(name) || name === `${key}-logout-generation`;
-  const read = () => parseCookieHeader(document.cookie).map(cookie => ({ name: cookie.name, value: cookie.value ?? '' }));
+  const isOwnership = (name: string) => isSession(name) || name === `${key}-logout-generation` || name === initiationKey;
+  const read = () => {
+    const cookies = parseCallbackAdmissionCookies(document.cookie);
+    if (!cookies || !readPkceInitiationSlot(cookies, key)) throw interrupted();
+    return cookies;
+  };
   const snapshot = () => JSON.stringify(read().filter(cookie => isOwnership(cookie.name)).sort((a, b) => a.name.localeCompare(b.name)));
   let expected = snapshot();
   let active = true;
   let exposed = false;
   let adopted: Session | null = null;
   const owns = () => active && canCommitSession() && (boundary ? boundary.isCurrent() : snapshot() === expected);
+  if (!boundary) {
+    // A deliberate password/child login claims the same pending decision slot
+    // before any await. Its marker cannot authorize PKCE exchange, and does not
+    // consume the previous verifier. Callback adoption retains its own proof.
+    if (!owns()) throw interrupted();
+    const reservation = 'session-v1-' + [...crypto.getRandomValues(new Uint8Array(16))]
+      .map(value => value.toString(16).padStart(2, '0')).join('');
+    const intended = new Map(read().filter(cookie => isOwnership(cookie.name)).map(cookie => [cookie.name, cookie.value]));
+    intended.set(initiationKey, reservation);
+    if (!owns()) throw interrupted();
+    document.cookie = serializeCookieHeader(initiationKey, reservation, durableCookieOptions(isSecureOrigin(window.location.origin)));
+    const planned = JSON.stringify([...intended].map(([name, value]) => ({ name, value })).sort((a, b) => a.name.localeCompare(b.name)));
+    if (snapshot() !== planned) throw interrupted();
+    expected = planned;
+  }
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const client = createBrowserClient(url, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {

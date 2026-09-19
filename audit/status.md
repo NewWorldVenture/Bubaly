@@ -2,43 +2,43 @@
 
 ## Pull request 510 integration — 2026-09-19
 
-CURRENT: AUTH-002 and SEC-005 native credential-form repair IN PROGRESS.
-All prior 14,018 IDs/statuses remain preserved; two additions make 14,020 total.
-WORKSPACE: Separate bubaly-final-production-audit-20260912 worktree, existing
-PR 510 merged as main 4bee6275; production frontend is live. The main checkout is untouched.
-SCOPE: Actual SSR/native execution confirms synthetic credentials could enter a
-default GET URL before hydration. Login readiness plus POST and four adjacent
-POST-only forms repair this boundary. Existing logins remain intact; no masked
-hosted query value is inferred. Unfinished initiation work is excluded.
-CURRENT LOCAL: Source freeze 1536752b has 34 login and 96 adjacent browser checks,
-122 compatibility units across six suites, scoped lint, build (252 pages) and
-full strict types PASS. New hosted/deployed native-submission/successful-login
-acceptance is pending. Independent source review finds no blockers.
-PRIOR LOCAL FINAL: Application ee003898 passes UTC and DST 16,543/16,543 in 1,303 files
-each, build 252, strict types, lint with three existing warnings and i18n/query
-(491 tables / 86 functions / 146 routes). Focused browser ownership 81 and
-completion/recovery 82 pass; server/routing 147 and shared/server/page 77 overlap.
-HOSTED WITNESS: Exact 6353d0d4 CI 35465566214 completed Web/Database/Mobile;
-Finance 35465566163 succeeds. E2E 105957139370 passes 1,180/1,183 with zero skips.
-The genuine emailed recovery/password-save/logout/new-password-login case passes;
-three callback fixture cases fail. Alert-selection and response-capture fixes are
-test-only; their hosted acceptance is pending. Production email delivery is unproven.
-HOSTED BASELINE: Exact dc99dc83 CI 35464679043 has Web, Database and Mobile SUCCESS;
-Finance 35464679048 has 66 explicit 0274 PASS notices. Web passes both 16,495-test
-unit runs, build 252 and strict types. Database passes 330 migrations, 38 probes
-and 327 reapplications. E2E passes 1,150/1,150 with auth/durable enabled. No restarts.
-ROLLOUT: Exact Vercel deployment dpl_4pWBho8dManFcsbzy8Z8FDFybTsy is live; eight HTTP and four real-browser public checks pass. Historical production migration 0177 failed again; no SQL change or retry. Test-only Next alert selectors are corrected; hosted acceptance is pending.
-NEXT: Publish the focused native-form patch; verify deployed
-native submission and hosted successful login. Continue the separate database investigation.
-See docs/final-audit/production-rollout-20260919.md.
-OPEN: Deployed native-login acceptance, attempt-owned initiation,
-non-atomic cookie compare/write, real provider delivery and production configuration.
-CURRENT RECORD: docs/final-audit/auth-native-form-cycle.md.
-REFERENCES: docs/final-audit/auth-callback-admission-witness-cycle.md,
-docs/final-audit/auth-callback-browser-ownership-cycle.md and finalaudit.md.
-RELEASE: NO. SEC-005 is IN PROGRESS and new SUPPORT-6C0575881A8C is NOT STARTED;
-total 14,020. No complete workflow PASS or existing status promotion.
-LAST-UPDATE: 2026-09-19 native-form source freeze 1536752b
+CURRENT: Managed initiation ownership for AUTH-001/002/003 IN PROGRESS.
+WORKSPACE: bubaly-final-production-audit-20260912; PR510 merged, main70789485 live.
+SCOPE: Original signup/OAuth/reset ownership, synchronous pending reservation,
+canonical nonce/kind/session/logout/verifier proof, strict browser/server exchange.
+No missing-proof legacy bypass; existing sessions and same-session renewal preserved.
+FINAL SOURCE/TEST: eaba35cb7be2eb73d45fb3384ec4fced3680bc72; application remains
+bf22aca87274bf607c4c605180c62e21c89ecbb7. Two existing browser fixtures refined.
+37 files (15application,22tests), no SQL/dependency/config/workflow changes.
+FINAL LOCAL: ordering11/11; combined397/397browser PASS29.5s, zero failures/skips.
+BothfullUTC/DST16694/16694 across1305files; build252,full strict types,lint3existing
+warnings and i18n/queryPASS. The intermediate383/14 matrix is superseded after
+fixture corrections preserved exact session/verifier bytes and production logout.
+CURRENT HOSTED: New six-case HTTP/Mailpit fixture discovered/typechecked/linted;
+new-source runtime pending. Release discovery1252cases52files includes6HTTP+11order;
+authenticated/durable enabled. Prior707 hosted results do not cover this source.
+NATIVE CLOSURE: Only SEC-005 FIXED + PASS. Exact707 CI35466913827 all four jobs
+SUCCESS, E2E1186/1186 zero failures/flakes/skips with authenticated/durable flags.
+Exact source/discovery includes3readiness and4HTTP cases with genuine emailed
+recovery/password/save/logout/new-password-login; dot reporter prints no names.
+Both16543-test full unit runs, build252/lint/types and Database/Mobile pass.
+ROLLOUT: main70789485 / dpl_4e2X1mo4taDXyYNnd38F36DP7M4r live20:20:47Z.
+Exact deployed disabled controls/nativePOST credential exclusion and hydrated
+readiness pass; POST intercepted, no real provider operation. Four public renders
+pass with zero actionPOSTs/page errors. Historical0177 migration failure persists;
+no SQL retry. See docs/final-audit/production-rollout-20260919.md.
+INVENTORY: All14020 prior IDs/statuses retained, including acceptedSEC005 closure.
+15 new NOTSTARTED structural records:2libraries,9runtime exports,4testfiles.
+Total14035:13845 NOTSTARTED,186 INPROGRESS,1 FIXED+PASS,3 FAIL (0.01%).
+New routes/controls:0. Three type declarations mapped under pure-library record.
+NEXT: Publish the verified final source and await exact hosted acceptance.
+The1252-case discovery is not a runtime PASS.
+OPEN: Cross-process non-atomic cookie writes, production provider/session/redirect
+configuration, phone/admin recovery, physical devices and complete workflows.
+CURRENT RECORD: docs/final-audit/auth-initiation-ownership-cycle.md.
+EXACT MAPPING: docs/final-audit/discovery/auth-initiation-ownership-inventory.json.
+RELEASE: NO. AUTH-001/002/003 remain IN PROGRESS; only narrow SEC-005 is closed.
+LAST-UPDATE: 2026-09-19 eaba final source verified; new hosted acceptance pending
 
 Four workers audit this repository in parallel. Each worker maintains ONLY its
 own section below. Read this file before touching any source file: if another

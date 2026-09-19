@@ -3,6 +3,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import ts from 'typescript';
 import { expect, test, type Page } from '@playwright/test';
+import { parsePkceInitiationRecord } from '../../lib/auth/pkce-initiation';
 
 // Actual SignupForm, validation, selection/referral helpers, Locale/Toast providers,
 // production browser factory, installed SSR cookie adapter and auth SDK. Provider
@@ -234,7 +235,13 @@ test('control: confirmation-required signup sends normalized referral/selection 
   const verifier = await page.evaluate(() => window.__signupBoundaries.pkce());
   expect(verifier).toBeTruthy();
   expect(state.signups[0].body).toMatchObject({ email: 'new@example.invalid', data: { full_name: 'Jordan Rivera', referral_code: 'SMITH-7K4Q' }, code_challenge_method: 's256', code_challenge: challenge(verifier!) });
-  expect(new URL(state.signups[0].url).searchParams.get('redirect_to')).toBe(`${origin}/auth/callback?next=%2Fonboarding%3FreviewPlan%3Dplus_annual`);
+  const callback = new URL(new URL(state.signups[0].url).searchParams.get('redirect_to')!);
+  expect(callback.origin).toBe(origin);
+  expect(callback.pathname).toBe('/auth/callback');
+  expect(callback.searchParams.get('next')).toBe('/onboarding?reviewPlan=plus_annual');
+  expect([...callback.searchParams.keys()].sort()).toEqual(['attempt', 'next']);
+  const record = parsePkceInitiationRecord((await page.context().cookies()).find(cookie => cookie.name.endsWith('-auth-token-pkce-initiation'))?.value);
+  expect(record).toMatchObject({ kind: 'signup', nonce: callback.searchParams.get('attempt') });
   expect(await page.evaluate(() => window.__signupBoundaries.referrals)).toEqual(['SMITH-7K4Q']);
   await state.release(); await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Back to sign in' })).toHaveAttribute('href', '/login?reviewPlan=plus_annual');

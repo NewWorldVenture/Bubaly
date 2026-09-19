@@ -13,6 +13,7 @@ import { durableCookieOptions, isRetryableAuthError, isSecureOrigin } from '@/li
 import type { RecoveryIdentity } from '@/lib/auth/recovery-server';
 import { consumeRecoveryAction, inspectRecoveryAction, prepareRecoveryAction, saveRecoveryAction } from '@/app/(auth)/auth/recovery/actions';
 import { RECOVERY_GRANT_STORAGE_KEY } from '@/lib/auth/callback';
+import { sendOwnedRecoveryEmail } from '@/lib/auth/pkce-initiation-client';
 
 const STORAGE_KEY = RECOVERY_GRANT_STORAGE_KEY;
 const DEADLINE_MS = 35_000;
@@ -43,7 +44,7 @@ function authCookies(): string {
   // Logout remains a newer decision even when the browser refuses to clear
   // the session bytes. Other projects cannot retire this recovery operation.
   return JSON.stringify(parseCookieHeader(document.cookie).filter(cookie => isChunkLike(cookie.name, key)
-    || isChunkLike(cookie.name, `${key}-user`) || isChunkLike(cookie.name, `${key}-code-verifier`)
+    || isChunkLike(cookie.name, `${key}-user`) || isChunkLike(cookie.name, `${key}-code-verifier`) || isChunkLike(cookie.name, `${key}-pkce-initiation`)
     || cookie.name === `${key}-logout-generation`)
     .sort((a, b) => a.name.localeCompare(b.name)));
 }
@@ -252,9 +253,7 @@ export function RecoveryForm({ request = false, initialGrant }: { request?: bool
     publish(scope, { phase: 'sending' });
     let dispatched = false;
     try {
-      const db = createClient();
-      dispatched = true;
-      const result = await bounded(db.auth.resetPasswordForEmail(parsed.data, { redirectTo: `${window.location.origin}/auth/callback?next=/auth/recovery` }));
+      const result = await bounded(sendOwnedRecoveryEmail(parsed.data, () => activePhase(scope, 'sending'), () => { dispatched = true; }));
       if (!current(scope)) return;
       if (result.error) {
         const rejected = result.error.status !== undefined && result.error.status >= 400 && result.error.status < 500 && !isRetryableAuthError(result.error);

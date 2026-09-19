@@ -50,7 +50,7 @@ const CONSTANT_HOST: Record<string, string> = {
 };
 
 const AUTH_TRANSPORTS = new Set([
-  'lib/auth/password-client.ts', 'lib/auth/signup-client.ts',
+  'lib/auth/password-client.ts', 'lib/auth/pkce-initiation-client.ts',
   'lib/auth/revoke-session.ts', 'lib/auth/recovery-server.ts',
   'lib/auth/callback-server.ts',
 ]);
@@ -97,6 +97,47 @@ function configuredAuthFetchLines(file: string, source: string): Set<number> {
       const init = call.arguments[1];
       if (guard.length !== 1 || guard[0].getStart(tree) > call.getStart(tree) || !init
         || compact(init) !== "{...init,redirect:'manual',cache:'no-store',signal:requestSignal}") continue;
+    } else if (file === 'lib/auth/pkce-initiation-client.ts') {
+      let arrow: ts.Node | undefined = call.parent;
+      while (arrow && !ts.isArrowFunction(arrow)) arrow = arrow.parent;
+      if (!arrow || !ts.isArrowFunction(arrow) || !ts.isBlock(arrow.body)
+        || arrow.parameters[0]?.name.getText(tree) !== 'input'
+        || arrow.parameters[1]?.name.getText(tree) !== 'init'
+        || call.arguments[0]?.getText(tree) !== 'input') continue;
+      const property = arrow.parent;
+      if (!ts.isPropertyAssignment(property) || property.name.getText(tree) !== 'fetch') continue;
+      const global = property.parent.parent;
+      if (!ts.isPropertyAssignment(global) || global.name.getText(tree) !== 'global') continue;
+      const sdk = global.parent.parent;
+      if (!ts.isCallExpression(sdk) || sdk.expression.getText(tree) !== 'createBrowserClient'
+        || sdk.arguments[0]?.getText(tree) !== 'owner.url') continue;
+      let operation: ts.Node | undefined = sdk.parent;
+      while (operation && !ts.isFunctionDeclaration(operation)) operation = operation.parent;
+      const begin = descendants(tree, node => ts.isFunctionDeclaration(node) && node.name?.text === 'begin')[0];
+      if (!operation || !ts.isFunctionDeclaration(operation) || operation.name?.text !== 'run'
+        || !declaration(operation, 'owner', 'begin(kind,canCommit)')
+        || !begin || !ts.isFunctionDeclaration(begin) || !begin.body
+        || !declaration(begin, 'url', 'newURL(process.env.NEXT_PUBLIC_SUPABASE_URL!)')) continue;
+      const returned = begin.body.statements.filter(ts.isReturnStatement);
+      const ownerObject = returned.length === 1 ? returned[0].expression : undefined;
+      if (!ownerObject || !ts.isObjectLiteralExpression(ownerObject) || ownerObject.properties.some(ts.isSpreadAssignment)) continue;
+      const origins = ownerObject.properties.filter(prop => prop.name?.getText(tree) === 'url');
+      if (origins.length !== 1 || !ts.isPropertyAssignment(origins[0]) || compact(origins[0].initializer) !== 'url.origin') continue;
+      // Recognize only this configured SDK callback. Its ordered prelude must
+      // validate the exact input before the fetch, with no intervening rewrite.
+      let statement: ts.Node = call;
+      while (statement.parent !== arrow.body) statement = statement.parent;
+      const before = arrow.body.statements.slice(0, arrow.body.statements.indexOf(statement as ts.Statement)).map(compact);
+      const expected = [
+        'owner.assert();',
+        'consttarget=newURL(inputinstanceofRequest?input.url:String(input));',
+        "if(!active||!owner.published()||target.origin!==owner.url||target.pathname!==`/auth/v1/${kind==='signup'?'signup':'recover'}`||kind==='oauth')throwinterrupted();",
+        'dispatched=true;',
+        'onDispatch?.();',
+      ];
+      const init = call.arguments[1];
+      if (before.length !== expected.length || before.some((value, index) => value !== expected[index])
+        || !init || compact(init) !== "{...init,credentials:'omit',redirect:'error',signal:AbortSignal.any([controller.signal,...(init?.signal?[init.signal]:[])])}") continue;
     } else if (file === 'lib/auth/recovery-server.ts') {
       let arrow: ts.Node | undefined = call.parent;
       while (arrow && !ts.isArrowFunction(arrow)) arrow = arrow.parent;
@@ -239,6 +280,33 @@ describe('a URL a user chose is only fetched through the SSRF guard', () => {
     const source = readFileSync(file, 'utf8');
     expect(configuredAuthFetchLines(file, source.replace('url.origin !== config.origin', 'false')).size).toBe(0);
     expect(configuredAuthFetchLines(file, source.replace("redirect: 'manual'", "redirect: 'follow'")).size).toBe(0);
+  });
+
+  it('does not recognize initiation requests after configured ownership or transport boundaries are weakened', () => {
+    const file = 'lib/auth/pkce-initiation-client.ts';
+    const source = readFileSync(file, 'utf8');
+    for (const [label, from, to] of [
+      ['owner origin', 'url: url.origin', 'url: userChosenUrl'],
+      ['owner override', 'url: url.origin, key, nonce', 'url: url.origin, ...userOptions, key, nonce'],
+      ['SDK project', 'createBrowserClient(owner.url,', 'createBrowserClient(userChosenUrl,'],
+      ['owner snapshot', 'const owner = begin(kind, canCommit)', 'const owner = userChosenOwner'],
+      ['owner assertion', 'owner.assert();\n      const target', 'const target'],
+      ['active operation', '!active || !owner.published()', '!owner.published()'],
+      ['published verifier', '!active || !owner.published()', '!active'],
+      ['same origin', 'target.origin !== owner.url', 'false'],
+      ['fixed endpoint', "target.pathname !== `/auth/v1/${kind === 'signup' ? 'signup' : 'recover'}`", 'false'],
+      ['OAuth refusal', "|| kind === 'oauth') throw interrupted();", ') throw interrupted();'],
+      ['throwing refusal', "|| kind === 'oauth') throw interrupted();", "|| kind === 'oauth') {}"],
+      ['input rewrite', 'dispatched = true; onDispatch?.();', 'input = userChosenUrl; dispatched = true; onDispatch?.();'],
+      ['ambient credentials', "credentials: 'omit'", "credentials: 'include'"],
+      ['redirect following', "redirect: 'error'", "redirect: 'follow'"],
+      ['late override', "...init, credentials: 'omit', redirect: 'error',", "credentials: 'omit', redirect: 'error', ...init,"],
+      ['cancellation', 'controller.signal, ...(init?.signal ? [init.signal] : [])', '...(init?.signal ? [init.signal] : [])'],
+    ]) {
+      const mutated = source.replace(from, to);
+      expect(mutated, `${label}: mutation must reach its boundary`).not.toBe(source);
+      expect(configuredAuthFetchLines(file, mutated).size, label).toBe(0);
+    }
   });
 
   it('does not recognize callback requests after origin, endpoint, caller or redirect guards are weakened', () => {

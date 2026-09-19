@@ -23,7 +23,7 @@ vi.mock('@/lib/auth/recovery-cookies', () => ({ createPkceCookieExchange: async 
 import { completeCallback } from '@/lib/auth/callback-server';
 
 const userId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
-const input = { code: 'synthetic-code', next: '/home', verifierFingerprint: 'a'.repeat(64) };
+const input = { code: 'synthetic-code', next: '/home', verifierFingerprint: 'a'.repeat(64), attempt: 'e'.repeat(32) };
 beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://callback-boundary.supabase.co');

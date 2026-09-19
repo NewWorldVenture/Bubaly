@@ -4,6 +4,7 @@ import { CallbackCompletion } from '@/components/auth/callback-completion';
 import { resolveAuthSelection } from '@/lib/billing/review-selection';
 import { captureCallbackRequestWitness } from '@/lib/auth/callback-witness-server';
 import { parseCallbackAdmissionWitness } from '@/lib/auth/callback-witness';
+import { isPkceInitiationNonce } from '@/lib/auth/pkce-initiation';
 
 export const metadata: Metadata = { title: 'Complete sign in', robots: { index: false, follow: false }, referrer: 'no-referrer' };
 
@@ -20,9 +21,11 @@ export default async function CallbackCompletionPage({ searchParams }: { searchP
     && !/[\s\x00-\x1f\x7f]/.test(values[0]) && !query.has('error') && !query.has('error_code')
     && !['access_token', 'refresh_token', 'id_token', 'token_hash'].some(name => query.has(name)) ? values[0] : null;
   const next = resolveAuthSelection(query, 'next').next ?? '/home';
+  const attempts = query.getAll('attempt');
+  const attempt = attempts.length === 1 && isPkceInitiationNonce(attempts[0]) ? attempts[0] : null;
   const supplied = query.getAll('admission');
   const captured = supplied.length ? null : await originalCookies;
   const admission = supplied.length === 1 && parseCallbackAdmissionWitness(supplied[0]) ? supplied[0]
     : supplied.length ? null : captured ? captureCallbackRequestWitness(captured.cookie) : null;
-  return <CallbackCompletion key={JSON.stringify({ code, next, admission })} code={code} next={next} admission={admission} />;
+  return <CallbackCompletion key={JSON.stringify({ code, next, admission, attempt })} code={code} next={next} admission={admission} attempt={attempt} />;
 }

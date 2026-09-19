@@ -28,12 +28,14 @@ function collect(filename: string): string {
   return id;
 }
 const entries = Object.fromEntries(['components/auth/callback-completion.tsx', 'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts',
-  'lib/auth/browser-signout.ts', 'lib/auth/password-client.ts', 'lib/supabase/client.ts', 'lib/auth/callback-witness.ts'].map(file => [file, collect(file)]));
+  'lib/auth/browser-signout.ts', 'lib/auth/password-client.ts', 'lib/supabase/client.ts', 'lib/auth/callback-witness.ts',
+  'lib/auth/pkce-initiation.ts'].map(file => [file, collect(file)]));
 const origin = 'https://callback-ui.invalid', provider = 'https://callback-provider.invalid';
 const cookieKey = 'sb-callback-provider-auth-token', grantKey = 'bubaly.auth.recovery.grant.v1';
 const userA = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', userB = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const sidA = '11111111-1111-4111-8111-111111111111', sidB = '22222222-2222-4222-8222-222222222222';
 const grant = 'Z3JhbnQtQS1zeW50aGV0aWM.c2lnbmF0dXJlLXN5bnRoZXRpYw';
+const attempt = '0123456789abcdef0123456789abcdef';
 function user(account: 'A' | 'B') { return { id: account === 'A' ? userA : userB, email: `${account.toLowerCase()}@example.invalid`, aud: 'authenticated', role: 'authenticated', app_metadata: {}, user_metadata: {}, created_at: '2026-09-12T00:00:00Z' }; }
 function session(account: 'A' | 'B', rotation = 'callback') {
   const now = Math.floor(Date.now() / 1000);
@@ -45,20 +47,24 @@ type Kind = 'complete' | 'user';
 type MalformedRecovery = 'missing-grant' | 'non-string-grant' | 'invalid-grant' | 'oversized-grant'
   | 'missing-identity' | 'wrong-user' | 'wrong-session' | 'expired-identity' | 'invalid-email';
 type Fixture = { calls: Array<{ name: string; values: unknown[] }>; held: Partial<Record<Kind, boolean>>; failUser: boolean; rejected: boolean; userReads: number;
+  sessionCookies: Array<{ name: string; value: string }>;
   release: (kind: Kind) => Promise<void> };
 type Probe = { errors: string[]; routes: string[]; mount: () => void; retire: () => void; login: (account: 'A' | 'B') => Promise<void>;
   logout: () => Promise<void>; user: () => Promise<string | null>; replaceVerifier: () => void; seedGrant: () => void; rotate: () => Promise<void>;
-  prepareAdmission: () => Promise<void>; logoutWithVerifierRetained: () => Promise<void> };
+  prepareAdmission: () => Promise<void>; prepareInitiation: () => Promise<void>; logoutWithVerifierRetained: () => Promise<void> };
 declare global { interface Window { __callbackUi: Probe } }
 async function fixture(page: Page, options: { hold?: Kind; recovery?: boolean; strict?: boolean; blockStorage?: boolean; noCode?: boolean;
   existing?: 'A' | 'B'; next?: string; locale?: string; visitorReset?: boolean; malformedRecovery?: MalformedRecovery;
-  extraQuery?: Record<string, string>; hash?: string; beforeMount?: 'logout-retained' | 'login' | 'rotate' | 'logout'; admission?: string | null } = {}): Promise<Fixture> {
+  extraQuery?: Record<string, string>; hash?: string; beforeMount?: 'logout-retained' | 'login' | 'rotate' | 'logout'; admission?: string | null;
+  attempt?: string | null; initiation?: 'missing' | 'malformed' | 'wrong-kind' | 'wrong-nonce' | 'project' | 'generation' | 'session' | 'verifier';
+  beforeAdmission?: 'logout-retained' | 'login' | 'rotate' } = {}): Promise<Fixture> {
   const pending: Partial<Record<Kind, Array<() => Promise<void>>>> = {};
-  const state: Fixture = { calls: [], held: options.hold ? { [options.hold]: true } : {}, failUser: false, rejected: false, userReads: 0,
+  const state: Fixture = { calls: [], held: options.hold ? { [options.hold]: true } : {}, failUser: false, rejected: false, userReads: 0, sessionCookies: [],
     release: async kind => { delete state.held[kind]; await Promise.all((pending[kind] ?? []).splice(0).map(run => run())); } };
   const schedule = async (kind: Kind, fn: () => Promise<void>) => { if (state.held[kind]) (pending[kind] ??= []).push(fn); else await fn(); };
   const headers = { 'access-control-allow-origin': origin, 'access-control-allow-headers': '*', 'access-control-allow-methods': 'GET,POST,OPTIONS' };
   const next = options.recovery ? '/auth/recovery' : options.next ?? '/home';
+  const suppliedAttempt = options.attempt === undefined ? options.noCode ? null : attempt : options.attempt;
   await page.route('**/*', async route => {
     const req = route.request(), url = new URL(req.url());
     if (url.origin === origin && !url.pathname.startsWith('/fixture-actions/')) {
@@ -98,7 +104,7 @@ async function fixture(page: Page, options: { hold?: Kind; recovery?: boolean; s
     }
     throw new Error('Unexpected provider endpoint');
   });
-  await page.goto(`${origin}/auth/complete?next=${encodeURIComponent(next)}${options.noCode ? '' : '&code=synthetic-code'}${options.extraQuery ? '&' + new URLSearchParams(options.extraQuery) : ''}${options.hash ? '#' + options.hash : ''}`);
+  await page.goto(`${origin}/auth/complete?next=${encodeURIComponent(next)}${options.noCode ? '' : '&code=synthetic-code'}${suppliedAttempt === null ? '' : '&attempt=' + encodeURIComponent(suppliedAttempt)}${options.extraQuery ? '&' + new URLSearchParams(options.extraQuery) : ''}${options.hash ? '#' + options.hash : ''}`);
   await page.clock.install();
   for (const content of [react, reactDom, sdk]) await page.addScriptTag({ content });
   const messages = Object.fromEntries(Object.entries(JSON.parse(fs.readFileSync(`lib/i18n/messages/${options.locale ?? 'en-US'}.json`, 'utf8')))
@@ -126,7 +132,7 @@ async function fixture(page: Page, options: { hold?: Kind; recovery?: boolean; s
     document.cookie = ${JSON.stringify(cookieKey + '-code-verifier=' + encodeURIComponent('base64-' + Buffer.from(JSON.stringify('synthetic-verifier')).toString('base64url')) + '; Path=/; Secure; SameSite=Lax')};
     document.cookie = 'bubaly_vid=visitor-original; Path=/; Secure';
     ${options.blockStorage ? "Object.defineProperty(window, 'sessionStorage', { configurable: true, get() { throw new Error('Storage disabled'); } });" : ''}
-    function render() { root ??= ReactDOM.createRoot(document.getElementById('root')); const content = React.createElement(LocaleProvider,{locale,source:'default',messages:${JSON.stringify(messages)}}, shown ? React.createElement(form,{...${JSON.stringify({ code: options.noCode ? null : 'synthetic-code', next })}, admission: ${options.admission === undefined ? 'admission' : JSON.stringify(options.admission)}}) : React.createElement('p',null,'Other route'));
+    function render() { root ??= ReactDOM.createRoot(document.getElementById('root')); const content = React.createElement(LocaleProvider,{locale,source:'default',messages:${JSON.stringify(messages)}}, shown ? React.createElement(form,{...${JSON.stringify({ code: options.noCode ? null : 'synthetic-code', next, attempt: suppliedAttempt })}, admission: ${options.admission === undefined ? 'admission' : JSON.stringify(options.admission)}}) : React.createElement('p',null,'Other route'));
       ReactDOM.flushSync(() => root.render(${options.strict ? 'React.createElement(React.StrictMode,null,content)' : 'content'})); }
     p.mount = () => { shown = true; render(); }; p.retire = () => { shown = false; render(); };
     p.login = async account => { const r = await password.signInWithOwnedSession({email:account.toLowerCase()+'@example.invalid',password:'synthetic-password'},()=>true); if(r.error) throw r.error; };
@@ -135,28 +141,44 @@ async function fixture(page: Page, options: { hold?: Kind; recovery?: boolean; s
     p.rotate = async () => { const r = await factory.createClient().auth.refreshSession(); if(r.error) throw r.error; };
     p.replaceVerifier = () => { document.cookie = ${JSON.stringify(cookieKey + '-code-verifier=newer-verifier; Path=/; Secure')}; };
     p.seedGrant = () => sessionStorage.setItem(${JSON.stringify(grantKey)},'newer.grant');
-    p.prepareAdmission = async () => {
+    async function captureWitness() {
       const witness = load(entries['lib/auth/callback-witness.ts']);
-      const ssr = load(sources[entries['lib/auth/callback-witness.ts']].imports['@supabase/ssr']);
-      const material = witness.callbackAdmissionMaterial(ssr.parseCookieHeader(document.cookie).map(c => ({name:c.name,value:c.value ?? ''})), ${JSON.stringify(cookieKey)});
+      const material = witness.callbackAdmissionMaterial(witness.parseCallbackAdmissionCookies(document.cookie), ${JSON.stringify(cookieKey)});
       const snapshot = {v:1};
       for (const [name,value] of Object.entries(material)) snapshot[name] = [...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value)))].map(b=>b.toString(16).padStart(2,'0')).join('');
-      admission = witness.encodeCallbackAdmissionWitness(snapshot);
+      return snapshot;
+    }
+    p.prepareAdmission = async () => { admission = load(entries['lib/auth/callback-witness.ts']).encodeCallbackAdmissionWitness(await captureWitness()); };
+    p.prepareInitiation = async () => {
+      if (${JSON.stringify(!!options.noCode || options.initiation === 'missing')}) return;
+      const initiation = load(entries['lib/auth/pkce-initiation.ts']);
+      const record = {...await captureWitness(), nonce:${JSON.stringify(options.initiation === 'wrong-nonce' ? 'f'.repeat(32) : attempt)},
+        kind:${JSON.stringify(options.initiation === 'wrong-kind' ? options.recovery ? 'oauth' : 'recovery' : options.recovery ? 'recovery' : 'oauth')}};
+      const field = ${JSON.stringify(options.initiation ?? null)};
+      if (['project','generation','session','verifier'].includes(field)) record[field] = '0'.repeat(64);
+      const raw = ${JSON.stringify(options.initiation === 'malformed')} ? 'malformed-record' : initiation.encodePkceInitiationRecord(record);
+      document.cookie = initiation.pkceInitiationCookieName(${JSON.stringify(cookieKey)}) + '=' + encodeURIComponent(raw) + '; Path=/; Secure; SameSite=Lax';
     };
     p.logoutWithVerifierRetained = async () => {
       const original = Object.getOwnPropertyDescriptor(Document.prototype,'cookie');
       Object.defineProperty(document,'cookie',{configurable:true,get:()=>original.get.call(document),set:value=>{
-        if (!(String(value).startsWith(${JSON.stringify(cookieKey + '-code-verifier=')}) && /max-age=0/i.test(String(value)))) original.set.call(document,value);
+        if (!([${JSON.stringify(cookieKey + '-code-verifier=')},${JSON.stringify(cookieKey + '-pkce-initiation=')}].some(name=>String(value).startsWith(name)) && /max-age=0/i.test(String(value)))) original.set.call(document,value);
       }});
       try { await p.logout(); } finally { delete document.cookie; }
     };
   })();` });
   if (options.existing) await page.evaluate(account => window.__callbackUi.login(account), options.existing);
+  await page.evaluate(() => window.__callbackUi.prepareInitiation());
+  if (options.beforeAdmission === 'logout-retained') await page.evaluate(() => window.__callbackUi.logoutWithVerifierRetained());
+  if (options.beforeAdmission === 'login') await page.evaluate(() => window.__callbackUi.login('B'));
+  if (options.beforeAdmission === 'rotate') await page.evaluate(() => window.__callbackUi.rotate());
   await page.evaluate(() => window.__callbackUi.prepareAdmission());
   if (options.beforeMount === 'logout-retained') await page.evaluate(() => window.__callbackUi.logoutWithVerifierRetained());
   if (options.beforeMount === 'logout') await page.evaluate(() => window.__callbackUi.logout());
   if (options.beforeMount === 'login') await page.evaluate(() => window.__callbackUi.login('B'));
   if (options.beforeMount === 'rotate') await page.evaluate(() => window.__callbackUi.rotate());
+  state.sessionCookies = (await page.context().cookies()).filter(cookie => cookie.name === cookieKey || cookie.name.startsWith(cookieKey + '.'))
+    .map(({name,value}) => ({name,value}));
   await page.evaluate(() => window.__callbackUi.mount());
   return state;
 }
@@ -166,10 +188,65 @@ const navigated = async (page: Page, target = '/home') => expect.poll(() => page
 test('completes once under Strict Mode, verifies tokens, consumes verifier and cleans the URL', async ({ page }) => {
   const state = await fixture(page, { strict: true }); await navigated(page);
   expect(state.calls.map(call => call.name)).toEqual(['complete']);
-  expect(state.calls[0].values[0]).toMatchObject({ code: 'synthetic-code', next: '/home', verifierFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/) });
+  expect(state.calls[0].values[0]).toMatchObject({ code: 'synthetic-code', next: '/home', attempt, verifierFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/) });
   expect(new URL(page.url()).searchParams.has('code')).toBe(false);
   expect(await page.evaluate(() => window.__callbackUi.user())).toBe(userA);
   expect((await page.context().cookies()).some(cookie => cookie.name.includes('code-verifier'))).toBe(false);
+  expect((await page.context().cookies()).some(cookie => cookie.name === cookieKey + '-pkce-initiation')).toBe(false);
+});
+
+for (const invalid of [
+  { label: 'missing nonce', attempt: null }, { label: 'empty nonce', attempt: '' },
+  { label: 'malformed nonce', attempt: 'not-a-nonce' }, { label: 'uppercase nonce', attempt: attempt.toUpperCase() },
+  ...(['missing', 'malformed', 'wrong-nonce', 'project', 'generation', 'session', 'verifier'] as const)
+    .map(initiation => ({ label: initiation + ' initiation proof', initiation })),
+]) {
+  test(`a code with ${invalid.label} cannot fall back to an ambient login`, async ({ page }) => {
+    const state = await fixture(page, { existing: 'B', ...invalid });
+    await expect(page.getByRole('alert')).toContainText('This sign-in link is invalid');
+    expect(state.calls).toEqual([]); expect(state.userReads).toBe(0);
+    expect(await page.evaluate(() => window.__callbackUi.routes)).toEqual([]);
+    expect((await page.context().cookies()).filter(cookie => cookie.name === cookieKey || cookie.name.startsWith(cookieKey + '.'))
+      .map(({name,value}) => ({name,value}))).toEqual(state.sessionCookies);
+    expect(await page.evaluate(() => window.__callbackUi.user())).toBe(userB);
+    await expect(page.getByRole('link', { name: 'Back to sign in' })).toBeVisible();
+  });
+}
+for (const recovery of [false, true]) {
+  test(`initiation purpose cannot switch to recovery=${recovery}`, async ({ page }) => {
+    const state = await fixture(page, { existing: 'B', recovery, initiation: 'wrong-kind' });
+    await expect(page.getByRole('alert')).toContainText('This sign-in link is invalid');
+    expect(state.calls).toEqual([]); expect(state.userReads).toBe(0);
+    expect(await page.evaluate(() => window.__callbackUi.routes)).toEqual([]);
+    expect(await page.evaluate(() => window.__callbackUi.user())).toBe(userB);
+    expect(await page.evaluate(key => sessionStorage.getItem(key), grantKey)).toBeNull();
+  });
+}
+test('a provider-rejected ordinary code preserves the current login without ambient fallback navigation', async ({ page }) => {
+  const state = await fixture(page, { existing: 'B', hold: 'complete' });
+  await expect.poll(() => state.calls.length).toBe(1); state.rejected = true; await state.release('complete');
+  await expect(page.getByRole('alert')).toContainText('This sign-in link is invalid');
+  expect(state.calls.map(call => call.name)).toEqual(['complete']); expect(state.userReads).toBe(0);
+  expect(await page.evaluate(() => window.__callbackUi.routes)).toEqual([]);
+  expect((await page.context().cookies()).filter(cookie => cookie.name === cookieKey || cookie.name.startsWith(cookieKey + '.'))
+    .map(({name,value}) => ({name,value}))).toEqual(state.sessionCookies);
+  expect(await page.evaluate(() => window.__callbackUi.user())).toBe(userB);
+});
+for (const beforeAdmission of ['logout-retained', 'login'] as const) {
+  test(`a fresh callback request cannot revive initiation before ${beforeAdmission}`, async ({ page }) => {
+    const state = await fixture(page, { existing: 'A', beforeAdmission });
+    await expect(page.getByRole('alert')).toContainText('This sign-in link is invalid');
+    expect(state.calls).toEqual([]); expect(state.userReads).toBe(0);
+    expect(await page.evaluate(() => window.__callbackUi.routes)).toEqual([]);
+    expect(await page.evaluate(() => window.__callbackUi.user())).toBe(beforeAdmission === 'login' ? userB : null);
+    expect((await page.context().cookies()).some(cookie => cookie.name === cookieKey + '-code-verifier')).toBe(true);
+    expect((await page.context().cookies()).some(cookie => cookie.name === cookieKey + '-pkce-initiation')).toBe(true);
+  });
+}
+test('same-session renewal before the callback request preserves the original initiation', async ({ page }) => {
+  const state = await fixture(page, { existing: 'A', beforeAdmission: 'rotate' }); await navigated(page);
+  expect(state.calls.map(call => call.name)).toEqual(['complete']);
+  expect(await page.evaluate(() => window.__callbackUi.user())).toBe(userA);
 });
 for (const change of ['logout', 'login', 'verifier', 'unmount'] as const) {
   test(`a held completion cannot override ${change}`, async ({ page }) => {

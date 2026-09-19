@@ -13,7 +13,7 @@ afterEach(() => vi.unstubAllEnvs());
 describe('direct completion page admission', () => {
   it('awaits Next 15 searchParams and passes one admitted code and internal destination', async () => {
     const tree = await page({ code: 'synthetic-code', next: '/dashboard/meals?week=next', ignored: undefined });
-    expect(tree.props).toEqual({ code: 'synthetic-code', next: '/dashboard/meals?week=next', admission: expect.any(String) });
+    expect(tree.props).toEqual({ code: 'synthetic-code', next: '/dashboard/meals?week=next', admission: expect.any(String), attempt: null });
     expect(metadata).toMatchObject({ robots: { index: false, follow: false }, referrer: 'no-referrer' });
   });
 
@@ -24,7 +24,7 @@ describe('direct completion page admission', () => {
     ['oversized', { code: 'x'.repeat(4097) }], ['provider error', { code: 'one', error: 'denied' }],
     ['empty provider error', { code: 'one', error: '' }], ['provider error code', { code: 'one', error_code: 'denied' }],
   ])('rejects %s code even when the admission redirect is bypassed', async (_label, query) => {
-    expect((await page(query)).props).toEqual({ code: null, next: '/home', admission: expect.any(String) });
+    expect((await page(query)).props).toEqual({ code: null, next: '/home', admission: expect.any(String), attempt: null });
   });
 
   it.each<[string, Query, string]>([
@@ -40,7 +40,7 @@ describe('direct completion page admission', () => {
     ['checkout flag', { reviewPlan: 'plus_annual', checkout: 'true' }, '/home'],
     ['explicit invite before pricing', { next: '/invite/synthetic', reviewPlan: 'plus_annual' }, '/invite/synthetic'],
   ])('resolves %s through the real selection contract', async (_label, query, expected) => {
-    expect((await page({ code: 'synthetic-code', ...query })).props).toEqual({ code: 'synthetic-code', next: expected, admission: expect.any(String) });
+    expect((await page({ code: 'synthetic-code', ...query })).props).toEqual({ code: 'synthetic-code', next: expected, admission: expect.any(String), attempt: null });
   });
 
   it('does not serialize unadmitted token query values in the client element key or props', async () => {
@@ -54,7 +54,7 @@ describe('direct completion page admission', () => {
   });
 
   it.each(['access_token', 'refresh_token', 'id_token', 'token_hash'])('rejects a direct code mixed with %s query credentials', async name => {
-    expect((await page({ code: 'synthetic-code', [name]: 'synthetic-secret' })).props).toEqual({ code: null, next: '/home', admission: expect.any(String) });
+    expect((await page({ code: 'synthetic-code', [name]: 'synthetic-secret' })).props).toEqual({ code: null, next: '/home', admission: expect.any(String), attempt: null });
   });
 
   it('unknown query values do not change the admitted operation key', async () => {

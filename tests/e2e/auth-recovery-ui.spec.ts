@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 import { expect, test, type Page } from '@playwright/test';
+import { parsePkceInitiationRecord } from '../../lib/auth/pkce-initiation';
 
 // Real RecoveryForm/LoginForm, locale/shared controls, production browser factory,
 // installed SSR cookie adapters and auth SDK. Signed-grant server actions are a
@@ -38,6 +39,7 @@ const storageKey = 'bubaly.auth.recovery.grant.v1';
 const handoff = 'a'.repeat(64);
 type Account = 'A' | 'B';
 type Action = 'prepare' | 'consume' | 'inspect' | 'save';
+type InitiationBarrier = 'write' | 'metadata';
 type Fixture = {
   calls: Array<{ action: Action; body: unknown[] }>;
   recover: Array<Record<string, unknown> & { redirect: string | null }>;
@@ -50,6 +52,7 @@ type Fixture = {
   reload: () => Promise<void>;
 };
 type Probe = { mount: () => void; retire: () => void; capture: () => void; fire: (times?: number) => void; settle: () => Promise<void>;
+  initiationHeld: boolean; releaseInitiation: () => void; refuseInitiationCookie: (part: 'record' | 'verifier') => void;
   signIn: (account: Account) => Promise<void>; rotate: () => Promise<void>; user: () => Promise<string | null>; factoryHashes: string[]; errors: string[]; storage: () => Record<string, string>; seedGrant: (value: string) => void;
   logoutWithBlockedSessionDeletion: () => string;
   installers: Array<{ reads: number; ambientReads: number; writes: number; disposed: boolean }> };
@@ -62,7 +65,7 @@ function session(account: Account, rotation = 'original', expiresIn = 3600) {
   return { access_token: token, refresh_token: `synthetic-refresh-${account}-${rotation}`, token_type: 'bearer', expires_in: expiresIn, expires_at: now + expiresIn, user: user(account) };
 }
 const implicit = () => new URLSearchParams({ type: 'recovery', access_token: session('A').access_token, refresh_token: 'synthetic-refresh-input' }).toString();
-async function fixture(page: Page, options: { hash?: string; query?: string; existing?: Account; existingExpiresIn?: number; stored?: string; request?: boolean; login?: boolean; locale?: string; strict?: boolean; hold?: Fixture['held']; mount?: boolean } = {}): Promise<Fixture> {
+async function fixture(page: Page, options: { hash?: string; query?: string; existing?: Account; existingExpiresIn?: number; stored?: string; request?: boolean; login?: boolean; locale?: string; strict?: boolean; hold?: Fixture['held']; holdInitiation?: InitiationBarrier; mount?: boolean } = {}): Promise<Fixture> {
   const pending = new Map<string, Array<() => Promise<void>>>();
   const state: Fixture = { calls: [], recover: [], userReads: [], tokenRequests: [], held: { ...options.hold }, fail: {}, save: 'updated', recoverMode: 'ok',
     reload: async () => {},
@@ -115,7 +118,24 @@ async function fixture(page: Page, options: { hash?: string; query?: string; exi
   const messages = Object.fromEntries(Object.entries(JSON.parse(fs.readFileSync(`lib/i18n/messages/${locale}.json`, 'utf8'))).filter(([key]) => /^(authRecovery\.|login\.|loginForm\.|signup\.|signupForm\.|legalConsent\.)/.test(key)));
   const bootstrap = `(() => {
     const sources = ${JSON.stringify(modules)}, entries = ${JSON.stringify(entries)}, loaded = {}, messages = ${JSON.stringify(messages)};
-    const p = window.__recoveryUi = { errors: [], factoryHashes: [], installers: [] }; let show = true, root, captured, jobs = [];
+    const p = window.__recoveryUi = { errors: [], factoryHashes: [], installers: [], initiationHeld: false }; let show = true, root, captured, jobs = [];
+    const initiationGate = new Promise(resolve => { p.releaseInitiation = resolve; });
+    const pauseInitiation = async kind => {
+      if (kind === ${JSON.stringify(options.holdInitiation ?? null)} && !p.initiationHeld) {
+        p.initiationHeld = true; await initiationGate;
+      }
+    };
+    const originalDigest = crypto.subtle.digest.bind(crypto.subtle);
+    crypto.subtle.digest = async (algorithm, bytes) => {
+      if (new TextDecoder().decode(bytes).startsWith('[{"name":"sb-recovery-provider-auth-token-code-verifier')) await pauseInitiation('metadata');
+      return originalDigest(algorithm, bytes);
+    };
+    p.refuseInitiationCookie = part => {
+      const cookie = Object.getOwnPropertyDescriptor(Document.prototype, 'cookie');
+      const name = 'sb-recovery-provider-auth-token-' + (part === 'record' ? 'pkce-initiation' : 'code-verifier');
+      Object.defineProperty(document, 'cookie', { configurable: true, get: () => cookie.get.call(document),
+        set: value => { if (!String(value).startsWith(name + '=')) cookie.set.call(document, value); } });
+    };
     window.addEventListener('error', e => p.errors.push(e.message)); window.addEventListener('unhandledrejection', e => { p.errors.push(String(e.reason)); e.preventDefault(); });
     const action = async (name, values) => { const response = await fetch('/fixture-actions/' + name, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(values) }); if (!response.ok) throw new Error('Fixture action response lost'); return response.json(); };
     const mocks = { react: React, '@supabase/supabase-js': window.supabase, 'lucide-react': new Proxy({}, { get: () => () => null }),
@@ -140,7 +160,11 @@ async function fixture(page: Page, options: { hash?: string; query?: string; exi
       const originalCookies = options.cookies;
       const client = originalBrowserClient(url, key, { ...options, cookies: { ...originalCookies,
         getAll: (...args) => { observation.reads++; const values = originalCookies.getAll(...args); if (values.some(cookie => cookie.name.includes('-auth-token'))) observation.ambientReads++; return values; },
-        setAll: (...args) => { observation.writes++; return originalCookies.setAll(...args); },
+        setAll: async (...args) => {
+          observation.writes++;
+          if (args[0].some(write => write.name.startsWith('sb-recovery-provider-auth-token-code-verifier') && write.options.maxAge !== 0)) await pauseInitiation('write');
+          return originalCookies.setAll(...args);
+        },
       } });
       const dispose = client.auth.dispose.bind(client.auth);
       client.auth.dispose = async () => { await dispose(); observation.disposed = true; };
@@ -355,7 +379,14 @@ test('a 35-second lost save acknowledgement becomes uncertain and a late respons
 test('self-service reset uses the SDK, normalized email, callback recovery target, and one request', async ({ page }) => {
   const state = await fixture(page, { login: true, query: 'reset=1', hold: { recover: true } });
   await expect(page.getByRole('heading', { name: 'Reset your password' })).toBeVisible(); await page.locator('input[name="email"]').fill('A@EXAMPLE.INVALID'); await submit(page, 2);
-  await expect.poll(() => state.recover.length).toBe(1); expect(state.recover[0]).toMatchObject({ email: 'a@example.invalid', redirect: `${origin}/auth/callback?next=/auth/recovery`, code_challenge_method: 's256' });
+  await expect.poll(() => state.recover.length).toBe(1); expect(state.recover[0]).toMatchObject({ email: 'a@example.invalid', code_challenge_method: 's256' });
+  const redirect = new URL(state.recover[0].redirect!);
+  const record = parsePkceInitiationRecord((await page.context().cookies()).find(cookie => cookie.name === 'sb-recovery-provider-auth-token-pkce-initiation')?.value);
+  expect(record?.kind).toBe('recovery');
+  expect(redirect.origin + redirect.pathname).toBe(`${origin}/auth/callback`);
+  expect(redirect.searchParams.get('next')).toBe('/auth/recovery');
+  expect(redirect.searchParams.get('attempt')).toBe(record?.nonce);
+  expect([...redirect.searchParams.keys()].sort()).toEqual(['attempt', 'next']);
   await state.release('recover'); await page.evaluate(() => window.__recoveryUi.settle()); await expect(page.getByRole('status')).toContainText('If this email belongs to an account');
   await page.evaluate(() => window.__recoveryUi.fire()); await page.evaluate(() => window.__recoveryUi.settle()); expect(state.recover).toHaveLength(1);
 });
@@ -364,6 +395,64 @@ test('self-service lost email response reports uncertainty without a resend cont
   const state = await fixture(page, { request: true }); state.recoverMode = 'lost'; await page.locator('input[name="email"]').fill('a@example.invalid'); await submit(page); await page.evaluate(() => window.__recoveryUi.settle());
   await expect(page.getByRole('alert')).toContainText("We couldn't confirm the email request"); await expect(page.getByRole('button', { name: 'Send recovery link' })).toHaveCount(0);
   await page.evaluate(() => window.__recoveryUi.fire()); await page.evaluate(() => window.__recoveryUi.settle()); expect(state.recover).toHaveLength(1);
+});
+
+for (const barrier of ['write', 'metadata'] as const) for (const decision of ['logout', 'newer-login', 'unmount'] as const) {
+  test(`held recovery initiation at ${barrier} cannot dispatch or publish after ${decision}`, async ({ page }) => {
+    const state = await fixture(page, { request: true, existing: 'A', holdInitiation: barrier });
+    await page.locator('input[name="email"]').fill('a@example.invalid'); await submit(page);
+    await expect.poll(() => page.evaluate(() => window.__recoveryUi.initiationHeld)).toBe(true);
+    if (decision === 'logout') await page.evaluate(() => window.__recoveryUi.logoutWithBlockedSessionDeletion());
+    else if (decision === 'newer-login') await page.evaluate(() => window.__recoveryUi.signIn('B'));
+    else await page.evaluate(() => window.__recoveryUi.retire());
+    const before = (await page.context().cookies()).map(({ name, value }) => ({ name, value })).sort((a, b) => a.name.localeCompare(b.name));
+    await page.evaluate(() => window.__recoveryUi.releaseInitiation());
+    await page.evaluate(() => window.__recoveryUi.settle());
+    expect(state.recover).toHaveLength(0);
+    expect((await page.context().cookies()).map(({ name, value }) => ({ name, value })).sort((a, b) => a.name.localeCompare(b.name))).toEqual(before);
+    expect((await page.evaluate(() => window.__recoveryUi.installers)).every(value => value.disposed)).toBe(true);
+  });
+}
+
+test('normal same-session refresh preserves a held recovery initiation and its original proof', async ({ page }) => {
+  const state = await fixture(page, { request: true, existing: 'A', holdInitiation: 'metadata' });
+  await page.locator('input[name="email"]').fill('a@example.invalid'); await submit(page);
+  await expect.poll(() => page.evaluate(() => window.__recoveryUi.initiationHeld)).toBe(true);
+  await page.evaluate(() => window.__recoveryUi.rotate());
+  await page.evaluate(() => window.__recoveryUi.releaseInitiation());
+  await page.evaluate(() => window.__recoveryUi.settle());
+  expect(state.recover).toHaveLength(1);
+  await expect(page.getByRole('status')).toContainText('If this email belongs to an account');
+  expect(await page.evaluate(() => window.__recoveryUi.user())).toBe(userA);
+  const record = parsePkceInitiationRecord((await page.context().cookies()).find(cookie => cookie.name === 'sb-recovery-provider-auth-token-pkce-initiation')?.value);
+  expect(record?.kind).toBe('recovery');
+  expect(new URL(state.recover[0].redirect!).searchParams.get('attempt')).toBe(record?.nonce);
+});
+
+for (const part of ['record', 'verifier'] as const) test(`refused ${part} persistence stops the recovery request and permits an explicit retry`, async ({ page }) => {
+  const state = await fixture(page, { request: true, existing: 'A' });
+  const sessionBefore = (await page.context().cookies()).filter(cookie => /^sb-recovery-provider-auth-token(?:\.\d+)?$/.test(cookie.name)).map(({ name, value }) => ({ name, value }));
+  await page.evaluate(part => window.__recoveryUi.refuseInitiationCookie(part), part);
+  await page.locator('input[name="email"]').fill('a@example.invalid'); await submit(page);
+  await page.evaluate(() => window.__recoveryUi.settle());
+  expect(state.recover).toHaveLength(0);
+  expect((await page.context().cookies()).filter(cookie => /^sb-recovery-provider-auth-token(?:\.\d+)?$/.test(cookie.name)).map(({ name, value }) => ({ name, value }))).toEqual(sessionBefore);
+  await expect(page.getByRole('alert')).toContainText('temporarily unavailable');
+  await expect(page.getByRole('button', { name: 'Send recovery link', exact: true })).toBeEnabled();
+});
+
+test('recovery initiation deadline retires delayed metadata before it can publish or dispatch', async ({ page }) => {
+  const state = await fixture(page, { request: true, existing: 'A', holdInitiation: 'metadata' });
+  await page.locator('input[name="email"]').fill('a@example.invalid'); await submit(page);
+  await expect.poll(() => page.evaluate(() => window.__recoveryUi.initiationHeld)).toBe(true);
+  const before = (await page.context().cookies()).map(({ name, value }) => ({ name, value }));
+  await page.clock.fastForward(36_000);
+  await page.evaluate(() => window.__recoveryUi.settle());
+  await page.evaluate(() => window.__recoveryUi.releaseInitiation());
+  await page.evaluate(() => window.__recoveryUi.settle());
+  expect(state.recover).toHaveLength(0);
+  expect((await page.context().cookies()).map(({ name, value }) => ({ name, value }))).toEqual(before);
+  expect((await page.evaluate(() => window.__recoveryUi.installers)).every(value => value.disposed)).toBe(true);
 });
 
 test('legacy login recovery fragment is consumed by the recovery form before SDK initialization', async ({ page }) => {

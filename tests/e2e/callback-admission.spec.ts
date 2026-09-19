@@ -1,5 +1,7 @@
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { expect, test as base, type BrowserContext, type Page } from '@playwright/test';
+import { callbackAdmissionMaterial, parseCallbackAdmissionCookies } from '../../lib/auth/callback-witness';
+import { encodePkceInitiationRecord, pkceInitiationCookieName, readPkceInitiationSlot } from '../../lib/auth/pkce-initiation';
 import {
   authCookieName, authCookies, closeWithoutSnapshot, createOwnedAccount, readSession, requireLocalOrigin, type OwnedAccount,
 } from './helpers/durable-session';
@@ -7,7 +9,7 @@ import {
 // Runs against the real Next server and the CI job's disposable GoTrue. This is
 // not a component fixture: route.fetch obtains the original HTTP redirect, and
 // only its delivery is delayed. No provider response or server action is mocked.
-// The invalid-code control covers rejection/fallback; the Mailpit case follows
+// The invalid-code control covers explicit rejection; the Mailpit case follows
 // a real emailed recovery code through exchange, adoption and password change.
 const enabled = process.env.E2E_AUTHENTICATED === '1';
 const provider = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
@@ -43,7 +45,20 @@ async function seedInvalidExchange(context: BrowserContext, origin: string) {
   await context.addCookies([{ name: authCookieName(provider) + '-code-verifier',
     value: 'base64-' + Buffer.from(JSON.stringify('synthetic-admission-verifier-' + randomUUID())).toString('base64url'),
     url: origin, sameSite: 'Lax' }]);
-  return `${origin}/auth/callback?code=${randomUUID()}&next=%2Fhome`;
+  // Seal the original owner before the callback request. Held-response cases
+  // retain these exact hashes through logout or a newer password login.
+  const key = authCookieName(provider);
+  const cookies = parseCallbackAdmissionCookies((await context.cookies(origin))
+    .map(({ name, value }) => `${name}=${value}`).join('; '));
+  const material = cookies && callbackAdmissionMaterial(cookies, key);
+  if (!material) throw new Error('Callback admission E2E cannot capture its original initiation owner.');
+  const hash = (value: string) => createHash('sha256').update(value).digest('hex');
+  const nonce = randomBytes(16).toString('hex');
+  const record = encodePkceInitiationRecord({ v: 1, nonce, kind: 'oauth',
+    project: hash(material.project), generation: hash(material.generation),
+    verifier: hash(material.verifier), session: hash(material.session) });
+  await context.addCookies([{ name: pkceInitiationCookieName(key), value: record, url: origin, sameSite: 'Lax' }]);
+  return `${origin}/auth/callback?${new URLSearchParams({ code: randomUUID(), next: '/home', attempt: nonce })}`;
 }
 
 function actionRequest(request: { url(): string; method(): string; headers(): Record<string, string> }, origin: string) {
@@ -132,7 +147,7 @@ function ownedRecipient(message: MailpitMessage, email: string) {
   return Array.isArray(message.To) && message.To.length === 1 && message.To[0]?.Address === email;
 }
 
-function recoveryLink(message: MailpitMessage, origin: string): string | null {
+function recoveryLink(message: MailpitMessage, origin: string, attempt: string): string | null {
   const providerOrigin = requireLocalOrigin(provider);
   const body = [message.Text, message.HTML].filter((value): value is string => typeof value === 'string').join('\n');
   if (body.length > 262_144) throw new Error('Callback admission E2E received an oversized owned recovery email.');
@@ -149,7 +164,7 @@ function recoveryLink(message: MailpitMessage, origin: string): string | null {
     if (url.username || url.password || url.hash || candidate.length > 8_192
       || token.length !== 1 || !token[0] || token[0].length > 4_096
       || kind.length !== 1 || kind[0] !== 'recovery'
-      || redirect.length !== 1 || redirect[0] !== `${origin}/auth/callback?next=/auth/recovery`) {
+      || redirect.length !== 1 || redirect[0] !== `${origin}/auth/callback?${new URLSearchParams({ next: '/auth/recovery', attempt })}`) {
       throw new Error('Callback admission E2E recovery email has an invalid provider link or disposable redirect configuration.');
     }
     links.add(url.href);
@@ -158,7 +173,7 @@ function recoveryLink(message: MailpitMessage, origin: string): string | null {
   return links.values().next().value ?? null;
 }
 
-async function waitForOwnedRecoveryEmail(email: string, origin: string): Promise<string> {
+async function waitForOwnedRecoveryEmail(email: string, origin: string, attempt: string): Promise<string> {
   const deadline = Date.now() + 30_000;
   const seen = new Set<string>();
   do {
@@ -177,7 +192,7 @@ async function waitForOwnedRecoveryEmail(email: string, origin: string): Promise
       if (!message || !ownedRecipient(message, email)) {
         throw new Error('Callback admission E2E refuses a mailbox message for a different recipient.');
       }
-      const link = recoveryLink(message, origin);
+      const link = recoveryLink(message, origin, attempt);
       if (link) return link;
     }
     await new Promise(resolve => setTimeout(resolve, 500));
@@ -249,11 +264,35 @@ test.describe('callback admission through the real Next HTTP path', () => {
       const receipt = await captureActualActionReceipt(completion, origin, 'rejected');
       await completion.goto(callbackUrl, { waitUntil: 'domcontentloaded' });
       await receipt();
-      await expect(completion).toHaveURL(`${origin}/home`, { timeout: 30_000 });
+      await expect(completion.getByRole('alert').filter({ hasText: 'This sign-in link is invalid' }))
+        .toContainText('This sign-in link is invalid or has expired');
+      expect(new URL(completion.url()).pathname).toBe('/auth/complete');
       expect(await sessionBytes(context) === before, 'Failed code exchange must retain the existing session bytes').toBe(true);
       expect(readSession(await context.cookies(), authCookieName(provider)).user.id === account.userId).toBe(true);
     } finally { await closeWithoutSnapshot(context); }
   });
+
+  for (const missing of ['nonce', 'record'] as const) {
+    test(`missing initiation ${missing} refuses completion before a real action and preserves the existing login`, async ({ browser, baseURL, account }) => {
+      const origin = requireLocalOrigin(baseURL), context = await browser.newContext({ locale: 'en-US' });
+      try {
+        const decision = await context.newPage(); await signIn(decision, origin, account);
+        const callbackUrl = new URL(await seedInvalidExchange(context, origin));
+        if (missing === 'nonce') callbackUrl.searchParams.delete('attempt');
+        else await context.clearCookies({ name: pkceInitiationCookieName(authCookieName(provider)) });
+        const before = await sessionBytes(context), completion = await context.newPage();
+        let actions = 0;
+        completion.on('request', request => { if (actionRequest(request, origin)) actions++; });
+        await completion.goto(callbackUrl.href, { waitUntil: 'domcontentloaded' });
+        await expect(completion.getByRole('alert').filter({ hasText: 'This sign-in link is invalid' }))
+          .toContainText('This sign-in link is invalid or has expired');
+        expect(new URL(completion.url()).pathname).toBe('/auth/complete');
+        expect(actions, 'Missing initiation authority must be refused before a real server action').toBe(0);
+        expect(await sessionBytes(context) === before, 'Refused completion must preserve the existing session bytes').toBe(true);
+        expect(readSession(await context.cookies(), authCookieName(provider)).user.id === account.userId).toBe(true);
+      } finally { await closeWithoutSnapshot(context); }
+    });
+  }
 
   test('real emailed recovery completes PKCE and the saved password works after production logout', async ({ browser, baseURL, account }) => {
     const origin = requireLocalOrigin(baseURL), context = await browser.newContext({ locale: 'en-US' });
@@ -268,7 +307,9 @@ test.describe('callback admission through the real Next HTTP path', () => {
       const verifier = authCookieName(provider) + '-code-verifier';
       expect((await context.cookies()).some(cookie => cookie.value && (cookie.name === verifier || cookie.name.startsWith(`${verifier}.`))),
         'The production email request must create a PKCE verifier').toBe(true);
-      const link = await waitForOwnedRecoveryEmail(account.email, origin);
+      const initiated = readPkceInitiationSlot(await context.cookies(origin), authCookieName(provider))?.record;
+      if (!initiated || initiated.kind !== 'recovery') throw new Error('The production recovery request must retain its original initiation record.');
+      const link = await waitForOwnedRecoveryEmail(account.email, origin, initiated.nonce);
       const exchange = await captureActualActionReceipt(page, origin, 'exchanged');
       // Keep the token-bearing URL out of Playwright's named navigation steps.
       try { await page.evaluate(value => { window.location.assign(value); }, link); }
@@ -281,6 +322,8 @@ test.describe('callback admission through the real Next HTTP path', () => {
         'Successful callback adoption must install the owned recovery account').toBe(true);
       expect((await context.cookies()).some(cookie => cookie.name === verifier || cookie.name.startsWith(`${verifier}.`)),
         'Successful isolated exchange must retire its PKCE verifier').toBe(false);
+      expect(readPkceInitiationSlot(await context.cookies(origin), authCookieName(provider))?.raw,
+        'Successful callback adoption must consume its exact initiation record').toBe(null);
       const password = `Recovery1!${randomBytes(24).toString('base64url')}`;
       try {
         await page.locator('input[name="password"]').fill(password);

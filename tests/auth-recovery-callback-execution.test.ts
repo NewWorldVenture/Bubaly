@@ -50,7 +50,7 @@ beforeEach(() => {
 });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 async function callback(next = '/auth/recovery') {
-  return completeCallbackAction({ code: 'explicit-code', next, verifierFingerprint: 'a'.repeat(64) });
+  return completeCallbackAction({ code: 'explicit-code', next, verifierFingerprint: 'a'.repeat(64), attempt: 'f'.repeat(32) });
 }
 function expectInvalid(receipt: Awaited<ReturnType<typeof callback>>) {
   expect(receipt.status).not.toBe('exchanged'); expect(receipt).not.toHaveProperty('tokens'); expect(receipt).not.toHaveProperty('recovery');

@@ -3,15 +3,22 @@ import { createChunks, stringFromBase64URL, stringToBase64URL } from '@supabase/
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const boundary = vi.hoisted(() => ({ getAll: vi.fn(), get: vi.fn(), set: vi.fn(), server: vi.fn() }));
-vi.mock('next/headers', () => ({ cookies: async () => ({ getAll: boundary.getAll, get: boundary.get, set: boundary.set }) }));
+vi.mock('next/headers', () => ({
+  cookies: async () => ({ getAll: boundary.getAll, get: boundary.get, set: boundary.set }),
+  headers: async () => ({ get: (name: string) => name === 'cookie' ? boundary.getAll()
+    .map((cookie: { name: string; value: string }) => `${cookie.name}=${encodeURIComponent(cookie.value)}`).join('; ') : null }),
+}));
 vi.mock('@/lib/supabase/server', () => ({ createServer: boundary.server, createServiceClient: vi.fn() }));
 vi.mock('@/lib/marketing/identity', () => ({ stitchVisitorIdentity: vi.fn() }));
 import { createRecoveryGrant, RECOVERY_HANDOFF_COOKIE, verifyRecoveryGrant } from '@/lib/auth/recovery-server';
 import { consumeRecoveryAction, inspectRecoveryAction, saveRecoveryAction } from '@/app/(auth)/auth/recovery/actions';
 import { completeCallbackAction } from '@/app/(auth)/auth/complete/actions';
+import { callbackAdmissionMaterial } from '@/lib/auth/callback-witness';
+import { encodePkceInitiationRecord } from '@/lib/auth/pkce-initiation';
 
 const ORIGIN = 'https://recovery-cookie-execution.supabase.co';
 const COOKIE = 'sb-recovery-cookie-execution-auth-token';
+const ATTEMPT = 'c'.repeat(32);
 const A = '11111111-1111-4111-8111-111111111111';
 const B = '22222222-2222-4222-8222-222222222222';
 const SID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -82,11 +89,19 @@ afterEach(() => {
 function setSession(value: ReturnType<typeof session>, chunkSize?: number) {
   jar = new Map(createChunks(COOKIE, encode(value), chunkSize).map(cookie => [cookie.name, cookie.value]));
 }
-function withVerifier() { jar.set(`${COOKIE}-code-verifier`, encode('synthetic-verifier/recovery')); }
+function withVerifier() {
+  jar.set(`${COOKIE}-code-verifier`, encode('synthetic-verifier/recovery'));
+  const material = callbackAdmissionMaterial([...jar].map(([name, value]) => ({ name, value })), COOKIE);
+  if (!material) throw new Error('Invalid recovery initiation fixture');
+  const digest = (value: string) => createHash('sha256').update(value).digest('hex');
+  jar.set(`${COOKIE}-pkce-initiation`, encodePkceInitiationRecord({ v: 1, nonce: ATTEMPT, kind: 'recovery',
+    project: digest(material.project), generation: digest(material.generation),
+    verifier: digest(material.verifier), session: digest(material.session) }));
+}
 function callback() {
   const verifier = [...jar].filter(([name]) => name === `${COOKIE}-code-verifier` || name.startsWith(`${COOKIE}-code-verifier.`))
     .map(([name, value]) => ({ name, value })).sort((a, b) => a.name.localeCompare(b.name));
-  return completeCallbackAction({ code: 'synthetic-code', next: '/auth/recovery',
+  return completeCallbackAction({ code: 'synthetic-code', next: '/auth/recovery', attempt: ATTEMPT,
     verifierFingerprint: createHash('sha256').update(JSON.stringify(verifier)).digest('hex') });
 }
 function owner(browser = jar) {

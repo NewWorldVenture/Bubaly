@@ -10,7 +10,7 @@ import { useTranslations } from '@/components/i18n/locale-provider';
 import { RecoveryForm } from '@/components/auth/recovery-form';
 import { createClient } from '@/lib/supabase/client';
 import { captureBrowserSessionSnapshot } from '@/lib/auth/browser-session-storage';
-import { adoptCallbackSession, assertAdmissionOwnership, callbackVerifierFingerprint, captureCallbackOwnership, isAdoptedCallbackSessionCurrent,
+import { adoptCallbackSession, assertAdmissionOwnership, assertInitiationOwnership, callbackVerifierFingerprint, captureCallbackOwnership, isAdoptedCallbackSessionCurrent,
   isCallbackOwnershipCurrent, type CallbackOwnership } from '@/lib/auth/callback-client';
 import { parseCallbackAdmissionWitness } from '@/lib/auth/callback-witness';
 import { RECOVERY_GRANT_STORAGE_KEY, type CallbackReceipt } from '@/lib/auth/callback';
@@ -44,7 +44,7 @@ function message(key: string): string {
 }
 
 /** Provider receipts stay in memory until this browser verifies and owns adoption. */
-export function CallbackCompletion({ code, next, admission }: { code: string | null; next: string; admission: string | null }) {
+export function CallbackCompletion({ code, next, admission, attempt }: { code: string | null; next: string; admission: string | null; attempt: string | null }) {
   const t = useTranslations();
   const router = useRouter();
   const [view, setView] = useState<View>({ phase: 'checking' });
@@ -150,15 +150,19 @@ export function CallbackCompletion({ code, next, admission }: { code: string | n
       try { admitted = !!witness && await assertAdmissionOwnership(opening.owner, witness); } catch { /* Invalid request context cannot authorize completion. */ }
       if (!admitted || !owns(opening)) { changed(opening); return; }
       if (!code) { await fallback(opening); return; }
+      let initiated = false;
+      try { initiated = await assertInitiationOwnership(opening.owner, attempt, recovery); } catch { /* Missing or retired initiation must not adopt this code. */ }
+      if (!owns(opening)) { changed(opening); return; }
+      if (!initiated || !attempt) { finish(opening, { phase: 'error', error: 'authCallback.invalidLink' }); return; }
       let fingerprint: string;
       try { fingerprint = await callbackVerifierFingerprint(opening.owner); }
-      catch { if (owns(opening)) await fallback(opening); else changed(opening); return; }
+      catch { if (owns(opening)) finish(opening, { phase: 'error', error: 'authCallback.temporarilyUnavailable' }); else changed(opening); return; }
       if (!owns(opening)) { changed(opening); return; }
       try {
-        const receipt = await completeCallbackAction({ code, next: destination, verifierFingerprint: fingerprint });
+        const receipt = await completeCallbackAction({ code, next: destination, verifierFingerprint: fingerprint, attempt });
         if (!current(opening)) return;
         if (!owns(opening)) { changed(opening); return; }
-        if (receipt.status !== 'exchanged') { await fallback(opening, message(receipt.errorKey)); return; }
+        if (receipt.status !== 'exchanged') { finish(opening, { phase: 'error', error: message(receipt.errorKey) }); return; }
         opening.receipt = receipt;
         await install(opening);
       } catch { if (owns(opening)) finish(opening, { phase: 'error', error: 'authCallback.temporarilyUnavailable' }); else changed(opening); }

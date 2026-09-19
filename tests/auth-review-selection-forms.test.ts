@@ -66,6 +66,7 @@ vi.mock('@/lib/supabase/client', () => ({ createClient: () => ({ auth: {
 vi.mock('@/lib/auth/signup-client', () => ({
   signUpWithOwnedVerifier: (_client: unknown, credentials: unknown) => mock.signUp(credentials),
 }));
+vi.mock('@/lib/auth/pkce-initiation-client', () => ({ signInWithOwnedOAuth: mock.oauth }));
 vi.mock('@/lib/auth/password-client', () => ({
   signInWithOwnedSession: (credentials: unknown, canCommit: () => boolean) => { mock.passwordGuards.push(canCommit); return mock.password(credentials); },
   isPasswordSessionCurrent: mock.passwordCurrent,
@@ -124,7 +125,7 @@ beforeEach(() => {
   mock.password.mockReset().mockResolvedValue({ data: { user: signupUser, session: { user: signupUser,
     access_token: 'synthetic-access-token', refresh_token: 'synthetic-refresh-token', token_type: 'bearer', expires_in: 3600 } }, error: null });
   mock.passwordCurrent.mockReset().mockReturnValue(true); mock.passwordGuards = [];
-  mock.oauth.mockReset().mockResolvedValue({ error: null });
+  mock.oauth.mockReset().mockResolvedValue(undefined);
   mock.otp.mockReset().mockResolvedValue({ error: null });
   mock.verify.mockReset().mockResolvedValue({ error: null });
   mock.landing.mockReset().mockResolvedValue('/home');
@@ -184,9 +185,7 @@ describe.each(choices)('auth handoff for %s', (query, plan) => {
       expect(phone.props.next).toBe(destination);
       resetHooks();
       await click(render(() => OAuthButtons({ next: String(google.props.next) })), getMessages('en-US')['oauthButtons.continueWithGoogle']);
-      const oauth = mock.oauth.mock.calls.at(-1)![0];
-      expect(oauth.provider).toBe('google');
-      expect(new URL(oauth.options.redirectTo).searchParams.get('next')).toBe(destination);
+      expect(mock.oauth).toHaveBeenLastCalledWith(destination, expect.any(Function));
       resetHooks();
       const phoneTree = render(() => PhoneAuth({ next: String(phone.props.next) }));
       const input = nodes(phoneTree).find((node) => node.props.defaultCountryCode === 'US')!;
@@ -233,10 +232,20 @@ describe('explicit destinations, failures and defaults', () => {
     await submit(render(LoginForm));
     expect(mock.push).toHaveBeenLastCalledWith('/onboarding?reviewPlan=plus_annual');
     resetHooks();
-    mock.oauth.mockResolvedValueOnce({ error: new Error('cancelled') });
+    mock.oauth.mockRejectedValueOnce(new Error('cancelled'));
     for (let i = 0; i < 2; i++) await click(render(() => OAuthButtons({ next: '/onboarding?reviewPlan=plus_annual' })), getMessages('en-US')['oauthButtons.continueWithGoogle']);
     expect(mock.oauth).toHaveBeenCalledTimes(2);
-    for (const [input] of mock.oauth.mock.calls) expect(new URL(input.options.redirectTo).searchParams.get('next')).toBe('/onboarding?reviewPlan=plus_annual');
+    for (const [next] of mock.oauth.mock.calls) expect(next).toBe('/onboarding?reviewPlan=plus_annual');
+  });
+
+  it('silently retires a changed OAuth session and permits an explicit new attempt', async () => {
+    mock.oauth.mockRejectedValueOnce(Object.assign(new Error('retired'), { name: 'AuthSessionInterruptedError' }));
+    const factory = () => OAuthButtons({ next: '/dashboard/meals' });
+    await click(render(factory), getMessages('en-US')['oauthButtons.continueWithGoogle']);
+    expect(mock.toast).not.toHaveBeenCalled();
+    expect((render(factory) as ReactElement<{ disabled: boolean }>).props.disabled).toBe(false);
+    await click(render(factory), getMessages('en-US')['oauthButtons.continueWithGoogle']);
+    expect(mock.oauth).toHaveBeenCalledTimes(2);
   });
 
   it('retains an SMS review after a rejected verification', async () => {

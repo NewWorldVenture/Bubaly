@@ -20,7 +20,8 @@ function intentFor(session: BrowserSessionSnapshot | null): SignOutIntent {
   if (!session) return { kind: 'empty' };
   // Session identity survives token rotation, but a newly started signup or
   // OAuth handoff belongs to a newer decision than the captured logout.
-  const pending = session.cookies.filter(cookie => isChunkLike(cookie.name, `${session.storageKey}-code-verifier`))
+  const pending = session.cookies.filter(cookie => isChunkLike(cookie.name, `${session.storageKey}-code-verifier`)
+    || isChunkLike(cookie.name, `${session.storageKey}-pkce-initiation`))
     .sort((a, b) => a.name.localeCompare(b.name));
   return session.sessionId && session.userId ? { kind: 'session', userId: session.userId, sessionId: session.sessionId,
     ...(pending.length ? { pendingVerifier: JSON.stringify(pending) } : {}) }

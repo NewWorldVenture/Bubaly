@@ -9,6 +9,7 @@ import { isRetryableAuthError } from './session';
 import { isSuperAdminEmail } from '@/lib/constants/super-admins';
 import { landingPathForRole } from './landing';
 import { stitchVisitorIdentity } from '@/lib/marketing/identity';
+import { isPkceInitiationNonce } from './pkce-initiation';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const unavailable = (): CallbackReceipt => ({ status: 'unavailable', errorKey: 'authRecovery.temporarilyUnavailable' });
@@ -81,7 +82,7 @@ function boundedFetch(origin: string, signal: AbortSignal): typeof fetch {
 export async function completeCallback(input: CallbackInput): Promise<CallbackReceipt> {
   if (!input || typeof input.code !== 'string' || !input.code || input.code.length > 4096 || /[\s\x00-\x1f\x7f]/.test(input.code)
     || typeof input.next !== 'string' || input.next.length > 4096 || typeof input.verifierFingerprint !== 'string'
-    || !/^[a-f0-9]{64}$/.test(input.verifierFingerprint)) return rejected();
+    || !/^[a-f0-9]{64}$/.test(input.verifierFingerprint) || !isPkceInitiationNonce(input.attempt)) return rejected();
   const next = safeInternalRedirect(input.next, '/home');
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 20_000);
@@ -89,7 +90,8 @@ export async function completeCallback(input: CallbackInput): Promise<CallbackRe
   try {
     const origin = new URL(clean(process.env.NEXT_PUBLIC_SUPABASE_URL)).origin;
     const transport = boundedFetch(origin, controller.signal);
-    exchange = await createPkceCookieExchange({ verifierFingerprint: input.verifierFingerprint, fetch: transport });
+    exchange = await createPkceCookieExchange({ attempt: input.attempt, recovery: input.next === '/auth/recovery',
+      verifierFingerprint: input.verifierFingerprint, fetch: transport });
     const current = exchange;
     const run = async (): Promise<CallbackReceipt> => {
       const result = await current.client.auth.exchangeCodeForSession(input.code);

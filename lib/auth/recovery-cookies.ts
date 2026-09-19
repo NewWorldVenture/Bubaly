@@ -1,10 +1,12 @@
 import 'server-only';
 import { combineChunks, createServerClient, isChunkLike, stringFromBase64URL, stringToBase64URL } from '@supabase/ssr';
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { durableCookieOptions, isSecureOrigin } from '@/lib/auth/session';
 import { RecoveryError } from '@/lib/auth/recovery-server';
 import type { Database } from '@/lib/database.types';
+import { callbackAdmissionMaterial, parseCallbackAdmissionCookies } from './callback-witness';
+import { isPkceInitiationNonce, readPkceInitiationSlot } from './pkce-initiation';
 
 const MAX_COOKIE_LENGTH = 65_536;
 const MAX_CHUNKS = 24;
@@ -67,12 +69,20 @@ export async function readRecoveryCookieToken(): Promise<string> {
   }
 }
 
-/** Compare the browser's captured verifier before constructing an isolated SDK. */
-export async function createPkceCookieExchange(options: { verifierFingerprint: string; fetch: typeof fetch }) {
+/** Compare the original initiation owner and captured verifier before constructing an isolated SDK. */
+export async function createPkceCookieExchange(options: { attempt: string; recovery: boolean; verifierFingerprint: string; fetch: typeof fetch }) {
   const { origin, key } = configuration();
   const anon = cleanEnv(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
   if (!anon) throw new RecoveryError('authRecovery.setupRequired');
-  const incoming = (await cookies()).getAll().map(({ name, value }) => ({ name, value }));
+  const incoming = parseCallbackAdmissionCookies((await headers()).get('cookie'));
+  if (!incoming || !isPkceInitiationNonce(options.attempt) || typeof options.recovery !== 'boolean') invalid();
+  const record = readPkceInitiationSlot(incoming, key)?.record;
+  const material = callbackAdmissionMaterial(incoming, key);
+  if (!record || !material || record.nonce !== options.attempt
+    || (options.recovery ? record.kind !== 'recovery' : record.kind === 'recovery')) invalid();
+  for (const field of ['project', 'generation', 'verifier', 'session'] as const) {
+    if (!timingSafeEqual(createHash('sha256').update(material[field]).digest(), Buffer.from(record[field], 'hex'))) invalid();
+  }
   const verifierKey = `${key}-code-verifier`;
   const selected = incoming.filter(cookie => isChunkLike(cookie.name, verifierKey)).sort((a, b) => a.name.localeCompare(b.name));
   if (!selected.length || selected.length > 128 || selected.reduce((size, cookie) => size + cookie.value.length, 0) > 256 * 1024
