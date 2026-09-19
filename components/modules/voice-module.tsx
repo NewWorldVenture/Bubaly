@@ -9,6 +9,7 @@ import { useApp } from '@/components/app/app-context';
 import { useSpeechRecognition } from '@/lib/hooks/use-speech-recognition';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { settle } from '@/lib/supabase/settle';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
@@ -98,12 +99,15 @@ export function VoiceModule() {
         kind: route.kind, text: route.text, familyId, userId, memberId: selfMember?.id ?? null,
       });
       // Log the command to the family's voice history (best-effort — a logging
-      // failure must not lose the thing we just created).
-      await sb.from('voice_commands').insert({
+      // failure must not lose the thing we just created). Best-effort, but not
+      // SILENT: a history that quietly stops recording looks identical to a
+      // family that stopped using voice.
+      const { error: logError } = await settle(sb.from('voice_commands').insert({
         family_id: familyId, member_id: selfMember?.id ?? null, transcript: route.text,
         resolved_kind: route.kind, action_table: tableForKind(route.kind),
         action_count: res.count, status: 'routed', created_by: userId,
-      });
+      }));
+      if (logError) console.error('[voice] history write failed', { message: logError.message });
       success(
         `${describeRoute(route.kind)}${res.count > 1 ? ` · ${res.count} items` : ''}`,
         { label: 'Undo', onClick: () => {
@@ -115,11 +119,14 @@ export function VoiceModule() {
       speech.reset();
     } catch (err) {
       journey.abandon();
-      // Record the failed attempt so the history is honest.
-      await sb.from('voice_commands').insert({
+      // Record the failed attempt so the history is honest — and `settle`,
+      // because this runs INSIDE the catch: a transport rejection here would
+      // replace the error being reported below with a less useful one.
+      const { error: failLogError } = await settle(sb.from('voice_commands').insert({
         family_id: familyId, member_id: selfMember?.id ?? null, transcript: raw,
         resolved_kind: route.kind, status: 'failed', created_by: userId,
-      }).select('id');
+      }));
+      if (failLogError) console.error('[voice] failed-attempt history write failed', { message: failLogError.message });
       toastError(describeDbError(err, tr('voiceModule.couldNotRunThatCommand')));
     } finally {
       setRunning(false);
