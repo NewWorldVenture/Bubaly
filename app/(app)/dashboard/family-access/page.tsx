@@ -6,6 +6,7 @@ import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { ChildAccessManager, type AccessMember } from '@/components/family/child-access-manager';
+import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Kid Logins' };
@@ -20,11 +21,25 @@ export default async function FamilyAccessPage() {
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
 
-  const [{ data: members }, { data: logins }] = await settleAll([
+  const [membersResult, loginsResult] = await settleAll([
     supabase.from('family_members').select('id, display_name, role, color, user_id')
       .eq('family_id', familyId).eq('is_active', true).order('created_at'),
     supabase.from('child_logins').select('member_id, username').eq('family_id', familyId),
   ]);
+
+  // `settleAll` hands back `{ data: null, error }` on a failed read, so
+  // destructuring `{ data }` alone turns an outage into an EMPTY PAGE. Here that
+  // page says a family has no kid logins and offers to create them — an
+  // access-control record, reported absent because a query failed. The kids page
+  // states the same principle about its own reads: a dropped error becomes a
+  // "reassuring-but-wrong" answer.
+  const accessError = membersResult.error ?? loginsResult.error;
+  if (accessError) {
+    console.error('[family-access] access read failed', accessError);
+    return <ErrorState message={t('root.somethingWentWrong')} />;
+  }
+  const { data: members } = membersResult;
+  const { data: logins } = loginsResult;
 
   const usernameByMember = new Map((logins ?? []).map((l) => [l.member_id, l.username]));
 

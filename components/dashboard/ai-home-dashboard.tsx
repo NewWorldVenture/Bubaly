@@ -272,10 +272,14 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   const aiApprovals = aiApprovalsRes.ok ? aiApprovalsRes.data : [];
   const recommendations = (recsRes.data ?? []) as (RecommendationRow & { body: string | null })[];
 
-  // Soonest relationship date inside its reminder window (gentle proactive nudge).
+  // Soonest relationship date inside its reminder window (gentle proactive
+  // nudge). The family's day, not the server's: this took no anchor at all and
+  // fell through to `new Date()`, so an anniversary a day out already read
+  // "Today" on a UTC host from 5pm Pacific onwards.
   const relReminder = upcomingRelationship(
     ((relDateRows ?? []) as { id: string; kind: RelKind; title: string; event_date: string; recurs_annually: boolean; reminder_days_before: number; status: string }[])
       .map((d) => ({ id: d.id, kind: d.kind, title: d.title, eventDate: d.event_date, recursAnnually: d.recurs_annually, reminderDaysBefore: d.reminder_days_before, status: d.status })),
+    todayKey,
   )[0];
 
   const openSuggestions = (autopilotOpen ?? []) as { id: string; title: string; detail: string | null; kind: string; urgency: number; confidence: number }[];

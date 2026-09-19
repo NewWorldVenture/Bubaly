@@ -10,6 +10,7 @@ import { iconForType, groupByUser } from '@/lib/notifications/digest';
 import * as React from 'react';
 import { listAllAuthUsers } from './list-all-auth-users';
 import { childrenBlockedOn } from '@/lib/notifications/child-channels';
+import { readInChunks } from '@/lib/supabase/chunked-in';
 
 type DB = SupabaseClient<Database>;
 export type NotificationEmailResult = { sent: number; failed: number; skipped: number };
@@ -44,10 +45,21 @@ export async function deliverNotificationEmails(supabase: DB): Promise<Notificat
   const userIds = [...byUser.keys()];
 
   // Respect the per-user email toggle (default on).
-  const { data: prefs, error: prefsError } = await supabase
+  //
+  // Chunked: `pending` is .limit(500), so userIds can hold up to 500 UUIDs, and
+  // lib/supabase/chunked-in.ts puts one `.in()` at roughly 40 bytes per id —
+  // 500 is a ~20 KB query string against a common 8 KB request-line limit. The
+  // read comes back "URI too long", this function returns failed:1 without
+  // marking anything sent, and the next run reads the SAME 500 rows and fails
+  // the same way. Nothing is settled before this point, so the stall is
+  // self-reinforcing: it begins exactly when the backlog is big enough to
+  // matter and never clears on its own.
+  const { data: prefs, error: prefsError } = await readInChunks<
+    { user_id: string; email_enabled: boolean | null }, { message: string }
+  >(userIds, (chunk) => supabase
     .from('user_preferences')
     .select('user_id, email_enabled')
-    .in('user_id', userIds);
+    .in('user_id', chunk));
   if (prefsError) {
     console.error('[notification-email] preference read failed', prefsError);
     return { sent: 0, failed: 1, skipped: 0 };

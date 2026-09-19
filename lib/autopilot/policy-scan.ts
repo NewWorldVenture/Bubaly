@@ -24,6 +24,7 @@ import {
   type ApprovalHistoryRow, type ExistingAiPolicy, type PolicyCandidate, type ToolCallHistoryRow,
 } from '@/lib/autopilot/policy-candidates';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { settleAll } from '@/lib/supabase/settle';
 
 type DB = SupabaseClient<Database>;
 
@@ -55,7 +56,7 @@ function canonicalToolName(name: string | null): string | null {
  */
 export async function loadPolicyHistory(supabase: DB, familyId: string, now: Date, windowDays = POLICY_WINDOW_DAYS): Promise<PolicyHistory> {
   const sinceIso = new Date(now.getTime() - windowDays * 86400000).toISOString();
-  const [approvalsResult, toolCallsResult, policiesResult, suggestionsResult] = await Promise.all([
+  const [approvalsResult, toolCallsResult, policiesResult, suggestionsResult] = await settleAll([
     supabase.from('approval_requests')
       .select('id, domain, capability, status, decided_at, requested_by_kind, payload, payload_kind')
       .eq('family_id', familyId).eq('requested_by_kind', 'ai')

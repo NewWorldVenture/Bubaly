@@ -1,15 +1,20 @@
 'use client';
 
-import { useEffect, useId, useRef } from 'react';
+import { useId } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
+import { useDialogBehavior } from '@/lib/hooks/use-dialog-behavior';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
-const FOCUSABLE = 'a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])';
-
 /** Accessible modal dialog: focus-trapped, ESC to close, scroll lock, and focus
- *  restored to the trigger on close. Renders as a bottom sheet on mobile. */
+ *  restored to the trigger on close. Renders as a bottom sheet on mobile.
+ *
+ *  The dialog BEHAVIOUR lives in `useDialogBehavior` (lib/hooks/use-dialog-behavior.ts)
+ *  so the full-screen overlays that deliberately do not use this component — the
+ *  photo lightbox is full-bleed black chrome rather than a titled panel — get it
+ *  from the same definition. This file owns the markup and the mobile layout;
+ *  the hook owns focus, Escape, the Tab trap and the scroll lock. */
 export function Modal({
   open,
   onClose,
@@ -29,46 +34,9 @@ export function Modal({
   headerAction?: React.ReactNode;
 }) {
   const t = useTranslations();
-  const dialogRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useDialogBehavior<HTMLDivElement>(open, onClose);
   const titleId = useId();
   const descId = useId();
-
-  useEffect(() => {
-    if (!open) return;
-    const dialog = dialogRef.current;
-    // Remember what had focus so we can return to it on close (VoiceOver/TalkBack
-    // + keyboard users land back where they were, per WAI-ARIA dialog practice).
-    const previouslyFocused = document.activeElement as HTMLElement | null;
-
-    // Move focus into the dialog (first focusable control, else the panel).
-    const focusables = () => Array.from(dialog?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [])
-      .filter((el) => el.offsetParent !== null || el === dialog);
-    (focusables()[0] ?? dialog)?.focus();
-
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { onClose(); return; }
-      if (e.key !== 'Tab' || !dialog) return;
-      // Trap Tab within the dialog.
-      const items = focusables();
-      if (items.length === 0) { e.preventDefault(); dialog.focus(); return; }
-      const first = items[0];
-      const last = items[items.length - 1];
-      const active = document.activeElement as HTMLElement;
-      if (e.shiftKey && (active === first || !dialog.contains(active))) {
-        e.preventDefault(); last.focus();
-      } else if (!e.shiftKey && active === last) {
-        e.preventDefault(); first.focus();
-      }
-    };
-
-    document.addEventListener('keydown', onKey);
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = '';
-      previouslyFocused?.focus?.();
-    };
-  }, [open, onClose]);
 
   if (!open || typeof document === 'undefined') return null;
 

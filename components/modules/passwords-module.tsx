@@ -6,7 +6,7 @@
 // reveal. Fully wired: realtime read, create/update, soft-delete, search,
 // category filter, favorite, empty/error/loading states, toasts, confirms.
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { firstName } from '@/lib/utils/format';
 import {
   Wifi, Globe, Mail, CreditCard, KeyRound, Tv, AppWindow, BadgeCheck, Lock,
@@ -55,6 +55,21 @@ export function PasswordsModule() {
   const [catFilter, setCatFilter] = useState<string | null>(null);
   const [revealed, setRevealed] = useState<Set<string>>(new Set());
   const [menuId, setMenuId] = useState<string | null>(null);
+
+  // Escape closes the menu.
+  //
+  // Its click-outside scrim is `aria-hidden` with `tabIndex={-1}`, which is the
+  // honest description of a mouse-only dismiss — and which also silences
+  // `click-events-have-key-events` and `no-static-element-interactions`, the two
+  // rules that were pointing at the gap. With the rules quiet and no Escape
+  // path, a keyboard user could open this menu and had no way out of it but to
+  // pick something. Same shape as components/app/ai-orb.tsx:39.
+  useEffect(() => {
+    if (!(menuId !== null)) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuId(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [menuId]);
   const [editOpen, setEditOpen] = useState(false);
   const [form, setForm] = useState<Form>(blankForm);
   const [formSecretShown, setFormSecretShown] = useState(false);

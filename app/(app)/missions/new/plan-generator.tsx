@@ -40,7 +40,13 @@ export function PlanGenerator({ members }: { members: { id: string; name: string
     fd.set('recurrence', item.recurrence);
     if (item.auto_approve_eligible) fd.set('auto_approve_score', '85');
     start(async () => {
-      await createChoreAction(fd);
+      // Only mark it added if it actually was. createChoreAction used to return
+      // void, so this marked every suggestion "added" whether the chore had been
+      // created, refused for want of a manager role, or rolled back because the
+      // assignment insert failed.
+      const result = await createChoreAction(fd);
+      if (!result.ok) { setError(result.error ?? t('submitForm.somethingWentWrongTryAgain')); return; }
+      setError(null);
       setAdded((s) => new Set(s).add(idx));
     });
   }

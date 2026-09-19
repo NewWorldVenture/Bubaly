@@ -11,11 +11,12 @@ import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 import { resolveFamilyByNumberResult, getOrCreateChannelResult, recordInboundMessage, recordOutboundMessage, routeInboundToPlanner } from '@/lib/contact-center/server';
 import { runConcierge } from '@/lib/contact-center/concierge';
 import { shouldNotifyFamily, autoReplyText } from '@/lib/contact-center/routing';
+import { appBaseUrl } from '@/lib/server/app-url';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const BASE_URL = (process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/$/, '');
+const BASE_URL = appBaseUrl();
 const MAX_BODY = 64 * 1024;
 
 function xml(body: string): NextResponse {
@@ -81,8 +82,15 @@ export async function POST(req: NextRequest) {
     }).catch((error) => { console.error('[contact-center] sms planner routing threw', error); });
   }
 
-  // Escalate genuine urgencies to the family's human fallback.
-  if (shouldNotifyFamily(result.intent) && channel?.forward_to_phone) {
+  // Escalate genuine urgencies to the family's human fallback — and only on a
+  // delivery that was actually NEW. `filed.inserted` is the same signal the
+  // planner routing above turns on, for the same reason: Twilio can re-fire this
+  // webhook, and without it a redelivery sends the family a SECOND 🚨 text and
+  // files a second urgent notification about one message. The sibling email
+  // route already reads `filed.inserted && shouldNotifyFamily(…)`; these two
+  // stated the reasoning and then did not apply it to the side effects that
+  // actually reach a person.
+  if (filed.inserted && shouldNotifyFamily(result.intent) && channel?.forward_to_phone) {
     try { await sendSms(channel.forward_to_phone, `🚨 Urgent at your Bubaly line: ${result.summary}`); } catch (error) { console.error('[contact-center] urgent SMS escalation failed', error); }
     try {
       const { error: notifyError } = await admin.from('notifications').insert({

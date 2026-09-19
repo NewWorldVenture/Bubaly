@@ -78,14 +78,14 @@ export default async function KitchenPage() {
 
   // ── Pantry ──
   const pantry = pantryRes.data ?? [];
-  const pSummary = pantrySummary(pantry);
-  const expiring = expiringSoon(pantry, 5).map((p) => ({ name: p.name, expires_at: p.expires_at ?? null }));
+  const pSummary = pantrySummary(pantry, today);
+  const expiring = expiringSoon(pantry, 5, today).map((p) => ({ name: p.name, expires_at: p.expires_at ?? null }));
 
   // ── Leftovers (migration-aware) ──
   const leftoversMissing = isMissingTableError(leftoverRes.error);
   const leftoverRows = (leftoversMissing ? [] : (leftoverRes.data ?? [])) as LeftoverLike[];
-  const active = activeLeftovers(leftoverRows);
-  const nudge = leftoverNudge(leftoverRows);
+  const active = activeLeftovers(leftoverRows, today);
+  const nudge = leftoverNudge(leftoverRows, today);
 
   // ── Recipes (rating proxy for satisfaction; cost for budget) ──
   const recipes = recipesRes.data ?? [];
@@ -128,6 +128,7 @@ export default async function KitchenPage() {
   const foodScore = computeFoodScore(scoreInput);
 
   const data: KitchenData = {
+    todayKey: today,
     tonight: tonight ? dishName(tonight) : null,
     upcoming,
     pantrySummary: { total: pSummary.total, expiringSoon: pSummary.expiringSoon, expired: pSummary.expired, lowStock: pSummary.lowStock },

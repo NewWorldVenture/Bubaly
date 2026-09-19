@@ -7,6 +7,7 @@
 import { requireUserContext } from '@/lib/supabase/auth';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
+import { describeActionError } from '@/lib/supabase/errors';
 
 export type FeedbackSurface = 'insight' | 'autopilot' | 'agent' | 'voting' | 'decision' | 'briefing';
 export type FeedbackSignal = 'helpful' | 'not_helpful' | 'dismissed' | 'undo' | 'adjusted';
@@ -45,6 +46,6 @@ export async function recordAiFeedbackAction(input: RecordFeedbackInput): Promis
     note: input.note?.slice(0, 500) ?? null,
     created_by: ctx.user.id,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   return { ok: true };
 }

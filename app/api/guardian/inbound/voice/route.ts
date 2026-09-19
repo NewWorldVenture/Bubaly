@@ -5,7 +5,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
-import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { runDecisionPipeline } from '@/lib/guardian/pipeline';
 import { buildInitialGreeting, buildVoicemailPrompt } from '@/lib/guardian/ai-screen';
 import {
@@ -16,10 +15,12 @@ import { formatPhone } from '@/lib/guardian/phone';
 import { detectScamFromText } from '@/lib/guardian/scam';
 import { claimGuardianCallback, isValidGuardianEventId, markGuardianCallbackProcessed } from '@/lib/guardian/callbacks';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
+import type { Database } from '@/lib/database.types';
+import { appBaseUrl } from '@/lib/server/app-url';
 
 export const runtime = 'nodejs';
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? '';
+const BASE_URL = appBaseUrl();
 const MAX_TWILIO_BODY_BYTES = 64 * 1024;
 
 export async function POST(req: NextRequest) {
@@ -46,7 +47,11 @@ export async function POST(req: NextRequest) {
   if (!callSid || callStatus === 'completed') {
     return twimlResponse(wrapTwiml(twimlHangup()));
   }
-  if (!isValidGuardianEventId(callSid)) {
+  // `To` is the Guardian number the message reached, and it is the ONLY thing
+  // that resolves which family this belongs to. Without it the profile lookup
+  // matches nothing and the callback is consumed anyway — so refuse it here,
+  // before the claim, rather than after.
+  if (!isValidGuardianEventId(callSid) || !to) {
     return new NextResponse('Invalid callback', { status: 400 });
   }
 
@@ -61,15 +66,32 @@ export async function POST(req: NextRequest) {
     await markGuardianCallbackProcessed(supabase, callSid);
     return twimlResponse(xml);
   };
-  const db = withGuardianTables(supabase);
-  const gFrom = (t: Parameters<typeof db.from>[0]) => (db.from(t) as ReturnType<typeof supabase.from>);
 
   // Find which family/member this number belongs to
-  const { data: memberProfile } = await gFrom('guardian_member_profiles')
+  const { data: memberProfile, error: profileError } = await supabase.from('guardian_member_profiles')
     .select('id, family_id, member_id, ai_persona_name, ai_greeting_template, current_context, default_mode_immediate, default_mode_close, default_mode_trusted, default_mode_known, default_mode_unknown, default_mode_suspected_spam, default_mode_blocked, context_overrides, voicemail_greeting, guardian_phone')
     .eq('guardian_phone', to)
     .eq('is_active', true)
     .maybeSingle();
+
+  // A FAILED lookup is not an unknown number. `maybeSingle()` answers
+  // `data: null` plus PGRST116 when MORE THAN ONE profile holds this number —
+  // which is exactly the state 0326's unique index exists to prevent, and which
+  // a production database may already be in, because 0326 reports duplicates
+  // rather than choosing which household loses its number. Dropping the error
+  // turned that into "we do not know this number", and sent the caller to voicemail. Answering 5xx
+  // instead leaves the event unconsumed so Twilio retries it, and puts the
+  // reason somewhere a person can find.
+  if (profileError) {
+    console.error('[guardian-voice] Guardian number lookup failed', { to, error: profileError });
+    // NOT `finish()`: that calls markGuardianCallbackProcessed, which is
+    // precisely what must not happen here. The event has to stay unconsumed so
+    // Twilio retries it once the duplicate is resolved.
+    return new NextResponse(
+      wrapTwiml(twimlSay('Sorry, we cannot take this call right now. Please try again shortly.')),
+      { status: 503, headers: { 'content-type': 'application/xml; charset=utf-8' } },
+    );
+  }
 
   if (!memberProfile) {
     // Unknown number — just record to voicemail
@@ -98,7 +120,7 @@ export async function POST(req: NextRequest) {
   });
 
   // Create communication record
-  const { data: comm } = await gFrom('guardian_communications').insert({
+  const { data: comm } = await supabase.from('guardian_communications').insert({
     family_id: familyId,
     member_id: memberId,
     contact_id: decision.contactId,
@@ -169,7 +191,7 @@ export async function POST(req: NextRequest) {
 
   if (routingMode === 'silent_handling' || routingMode === 'ai_handle_first') {
     // Create screening session
-    const { data: session } = await gFrom('guardian_screening_sessions').insert({
+    const { data: session } = await supabase.from('guardian_screening_sessions').insert({
       family_id: familyId,
       communication_id: commId,
       twilio_call_sid: callSid,
@@ -203,10 +225,13 @@ export async function POST(req: NextRequest) {
   ));
 }
 
-async function updateCommStatus(supabase: ReturnType<typeof createServiceClient>, commId: string | undefined, status: string) {
+type CommStatus = Database['public']['Tables']['guardian_communications']['Row']['status'];
+
+// `status` is CHECK-constrained in the database; take the column's own union so
+// a typo is a compile error rather than a discarded update.
+async function updateCommStatus(supabase: ReturnType<typeof createServiceClient>, commId: string | undefined, status: CommStatus) {
   if (!commId) return;
-  const db = withGuardianTables(supabase);
-  await (db.from('guardian_communications') as ReturnType<typeof supabase.from>).update({ status }).eq('id', commId);
+  await supabase.from('guardian_communications').update({ status }).eq('id', commId);
 }
 
 function twimlResponse(xml: string): NextResponse {

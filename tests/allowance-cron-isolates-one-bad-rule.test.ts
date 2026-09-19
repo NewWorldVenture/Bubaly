@@ -29,6 +29,12 @@ const state = vi.hoisted(() => ({
   // Which rule ids fail to CLAIM the schedule, the way a transient or
   // recurring write error on that one row does.
   claimFails: new Set<string>(),
+  // Active managers, for the author gate this branch added ahead of the credit.
+  // Empty is the right default HERE: these fixtures carry no `created_by`, and
+  // a rule with no author is deliberately still payable (the seed and
+  // service-role path). The gate is exercised in
+  // tests/allowance-cron-pays-only-manager-written-rules.test.ts.
+  managers: [] as Row[],
 }));
 
 vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => (k: string) => k }));
@@ -54,7 +60,23 @@ vi.mock('@/lib/wallet/server', () => ({
 }));
 vi.mock('@/lib/supabase/server', () => ({
   createServiceClient: () => ({
-    from: () => {
+    from: (table: string) => {
+      // The author gate reads family_members with .in(), which the write
+      // builder below does not implement — an unmocked method threw into the
+      // route's outer catch and turned every case here into a 500. It is a
+      // READ, so it must not be recorded in state.updates either, or it would
+      // count as one of the schedule writes these tests assert over.
+      if (table === 'family_members') {
+        const read: Record<string, unknown> = {
+          select() { return read; },
+          in() { return read; },
+          eq() { return read; },
+          then(res: (v: unknown) => unknown) {
+            return Promise.resolve({ data: state.managers, error: null }).then(res);
+          },
+        };
+        return read;
+      }
       const filters: Row = {};
       let patch: Row = {};
       const builder: Record<string, unknown> = {

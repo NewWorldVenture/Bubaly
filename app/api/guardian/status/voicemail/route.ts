@@ -7,15 +7,15 @@ import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { notify } from '@/lib/services/notifications';
 import { systemScopeForFamily } from '@/lib/services/scope';
-import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { wrapTwiml, twimlSay, twimlHangup, validateTwilioSignature } from '@/lib/guardian/twilio';
 import { formatPhone } from '@/lib/guardian/phone';
 import { claimGuardianCallback, isValidGuardianEventId, markGuardianCallbackProcessed } from '@/lib/guardian/callbacks';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
+import { appBaseUrl } from '@/lib/server/app-url';
 
 export const runtime = 'nodejs';
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? '';
+const BASE_URL = appBaseUrl();
 const MAX_TWILIO_BODY_BYTES = 64 * 1024;
 
 export async function POST(req: NextRequest) {
@@ -65,11 +65,9 @@ export async function POST(req: NextRequest) {
       headers: { 'content-type': 'application/xml' },
     });
   }
-  const db = withGuardianTables(supabase);
-  const gFrom = (t: Parameters<typeof db.from>[0]) => (db.from(t) as ReturnType<typeof supabase.from>);
 
   // Fetch communication to get family context
-  const { data: comm } = await gFrom('guardian_communications')
+  const { data: comm } = await supabase.from('guardian_communications')
     .select('family_id, member_id, from_number, from_name')
     .eq('id', commId)
     .maybeSingle();
@@ -83,7 +81,7 @@ export async function POST(req: NextRequest) {
     };
 
     // Update the communication record with recording
-    await gFrom('guardian_communications').update({
+    await supabase.from('guardian_communications').update({
       status: 'handled',
       call_recording_url: recordingUrl,
       call_duration_secs: recordingDuration,

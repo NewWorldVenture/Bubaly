@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useDismissOnEscape } from '@/lib/hooks/use-dismiss-on-escape';
 import {
   ChevronLeft, ChevronRight, Plus, Sparkles, Activity, Check, X as XIcon,
   Search, MoreHorizontal, Clock, Heart, ThumbsUp, Utensils,
@@ -98,6 +99,11 @@ export function MealsModule() {
   const [newMealOpen, setNewMealOpen] = useState(false);
   const [autoPlanOpen, setAutoPlanOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  // The "more" menu closed on a scrim click and nothing else, so a keyboard
+  // user who opened it had no way to dismiss it — only to tab through to an
+  // item and activate one. Escape is the missing half; the scrim is the mouse
+  // convenience that duplicates it.
+  useDismissOnEscape(moreOpen, () => setMoreOpen(false));
   const [recipeSearch, setRecipeSearch] = useState('');
   const [dinnerIdx, setDinnerIdx] = useState(0);
   const [addingPlan, setAddingPlan] = useState(false);
@@ -315,7 +321,13 @@ export function MealsModule() {
                   </Button>
                   {moreOpen && (
                     <>
-                      <div className="fixed inset-0 z-10" onClick={() => setMoreOpen(false)} />
+                      {/* A presentational scrim: it has no content, no name and
+                          nothing to focus, and it exists so a click anywhere
+                          dismisses the menu. Its keyboard equivalent is the
+                          Escape handler above, not a listener here — there is
+                          nothing for a keyboard to land on. */}
+                      {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+                      <div aria-hidden="true" className="fixed inset-0 z-10" onClick={() => setMoreOpen(false)} />
                       <div className="absolute right-0 z-20 mt-1 w-52 rounded-xl border border-border bg-elevated p-1 shadow-lg">
                         <button onClick={() => { setMoreOpen(false); setAutoPlanOpen(true); }}
                           className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-surface">
@@ -384,9 +396,13 @@ export function MealsModule() {
                       const plan = planMap.get(cellKey(dStr, type));
                       const isToday = dStr === todayStr;
                       return (
+                        // The cell is LAYOUT. Only the empty state is an action,
+                        // and it is a real <button> rather than a div wearing
+                        // role="button": a filled cell's click did nothing, so
+                        // making the wrapper claim to be a button would promise
+                        // an action that is not there.
                         <div key={di}
-                          className={cn('group relative min-h-[104px] border-l border-border p-1.5 transition', isToday && 'bg-brand/5', !plan && 'cursor-pointer hover:bg-elevated/30')}
-                          onClick={() => !plan && setAddCell({ date: dStr, type })}>
+                          className={cn('group relative min-h-[104px] border-l border-border p-1.5 transition', isToday && 'bg-brand/5')}>
                           {plan ? (
                             <div className="relative overflow-hidden rounded-lg border border-border/60 bg-surface/40">
                               <MealImg src={plan.meal?.image_url ?? null} emoji={MEAL_ICONS[type]} className="h-14 w-full" />
@@ -397,10 +413,11 @@ export function MealsModule() {
                               </button>
                             </div>
                           ) : (
-                            <div className="flex h-full flex-col items-center justify-center opacity-0 transition group-hover:opacity-100">
+                            <button type="button" onClick={() => setAddCell({ date: dStr, type })}
+                              className="flex h-full w-full cursor-pointer flex-col items-center justify-center rounded-lg opacity-0 transition hover:bg-elevated/30 focus-visible:opacity-100 group-hover:opacity-100 focus-ring">
                               <Plus className="h-4 w-4 text-muted" />
                               <span className="mt-0.5 text-[9px] text-muted">{tr('meals.addMeal')}</span>
-                            </div>
+                            </button>
                           )}
                         </div>
                       );
@@ -425,19 +442,34 @@ export function MealsModule() {
                       {MEAL_TYPES.map(type => {
                         const plan = planMap.get(cellKey(dStr, type));
                         return (
-                          <div key={type} className={cn('flex items-center gap-3 px-3 py-2.5', !plan && 'cursor-pointer hover:bg-elevated/30')}
-                            onClick={() => !plan && setAddCell({ date: dStr, type })}>
-                            {plan?.meal
-                              ? <MealImg src={plan.meal.image_url} emoji={MEAL_ICONS[type]} className="h-10 w-10 shrink-0 rounded-lg" />
-                              : <span className="text-base">{MEAL_ICONS[type]}</span>}
-                            <div className="min-w-0 flex-1">
-                              <div className="text-[10px] font-semibold uppercase text-muted">{MEAL_LABELS[type]}</div>
-                              {plan ? <div className="truncate text-sm font-medium">{plan.meal?.name ?? 'Meal'}</div> : <div className="text-xs text-muted">{tr('meals.tapToAdd')}</div>}
+                          // Filled row: a container, with its own remove button.
+                          // Empty row: the whole row IS the action, so it is a
+                          // real <button>. Its accessible name comes free from
+                          // the text already inside it — "BREAKFAST · Tap to
+                          // add" — which names the slot better than any label
+                          // invented for it would.
+                          plan ? (
+                            <div key={type} className="flex items-center gap-3 px-3 py-2.5">
+                              {plan.meal
+                                ? <MealImg src={plan.meal.image_url} emoji={MEAL_ICONS[type]} className="h-10 w-10 shrink-0 rounded-lg" />
+                                : <span className="text-base">{MEAL_ICONS[type]}</span>}
+                              <div className="min-w-0 flex-1">
+                                <div className="text-[10px] font-semibold uppercase text-muted">{MEAL_LABELS[type]}</div>
+                                <div className="truncate text-sm font-medium">{plan.meal?.name ?? 'Meal'}</div>
+                              </div>
+                              <button onClick={() => removePlan(plan.id)} aria-label={tr('meals.removeMeal')} className="rounded-full p-1 text-muted hover:text-danger"><XIcon className="h-3.5 w-3.5" /></button>
                             </div>
-                            {plan
-                              ? <button onClick={(e) => { e.stopPropagation(); removePlan(plan.id); }} aria-label={tr('meals.removeMeal')} className="rounded-full p-1 text-muted hover:text-danger"><XIcon className="h-3.5 w-3.5" /></button>
-                              : <Plus className="h-4 w-4 text-muted" />}
-                          </div>
+                          ) : (
+                            <button key={type} type="button" onClick={() => setAddCell({ date: dStr, type })}
+                              className="flex w-full cursor-pointer items-center gap-3 px-3 py-2.5 text-left transition hover:bg-elevated/30 focus-ring">
+                              <span className="text-base">{MEAL_ICONS[type]}</span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block text-[10px] font-semibold uppercase text-muted">{MEAL_LABELS[type]}</span>
+                                <span className="block text-xs text-muted">{tr('meals.tapToAdd')}</span>
+                              </span>
+                              <Plus className="h-4 w-4 shrink-0 text-muted" />
+                            </button>
+                          )
                         );
                       })}
                     </div>

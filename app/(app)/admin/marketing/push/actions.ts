@@ -5,6 +5,7 @@ import { requireMarketingAdmin, logMarketingAudit, marketingActionFailure } from
 import { sendPushToUsers } from '@/lib/server/push';
 import { selectPushRecipients, canSendPush } from '@/lib/marketing/push';
 import { readAll } from '@/lib/supabase/read-all';
+import { readInChunks } from '@/lib/supabase/chunked-in';
 
 function s(fd: FormData, k: string): string | null {
   const v = String(fd.get(k) ?? '').trim();
@@ -55,8 +56,22 @@ export async function sendPushCampaignAction(id: string): Promise<void> {
   // Opted-in device owners. Paged: an unbounded select stops at PostgREST's
   // db-max-rows without a word, so past 1,000 devices a campaign would reach a
   // prefix of its audience and record `recipients` as if that were everyone.
+  //
+  // `id` breaks the tie. `push_devices` is one row per PHYSICAL device, so
+  // `user_id` repeats for anyone with a phone and a laptop, and read-all.ts is
+  // explicit that a paged read needs an order that is unique or "pages can
+  // repeat and skip rows". Ordering by `user_id` alone is not a total order, so
+  // the boundary between two separately-planned pages can move within a run of
+  // equal ids — the same defect blog/posts.ts measured at 717 colliding rows.
+  //
+  // It is latent here rather than live, and that is worth stating plainly: only
+  // rows INSIDE a tie group can be permuted, so the set of distinct `user_id`
+  // values is the same either way, and `selectPushRecipients` dedupes to
+  // exactly that set. What changes is the device rows, and the moment this read
+  // grows a second column — a device_key, a per-device count, a platform
+  // breakdown — the drop becomes the audience bug the comment above describes.
   const { rows: devices, error: deviceError } = await readAll<{ user_id: string }>((from, to) =>
-    supabase.from('push_devices').select('user_id').eq('enabled', true).order('user_id').range(from, to));
+    supabase.from('push_devices').select('user_id').eq('enabled', true).order('user_id').order('id').range(from, to));
   if (deviceError) await markFailedAndThrow(deviceError);
   const userIds = devices.map((d) => d.user_id);
 
@@ -64,7 +79,15 @@ export async function sendPushCampaignAction(id: string): Promise<void> {
   const uniqueIds = [...new Set(userIds.filter(Boolean))];
   const emailByUser: Record<string, string | null> = {};
   if (uniqueIds.length) {
-    const { data: profiles, error: profileError } = await supabase.from('profiles').select('id, email').in('id', uniqueIds);
+    // Chunked, and for a reason created by the readAll three lines above: that
+    // fix removed the 1,000-device cap, which is exactly what makes uniqueIds
+    // unbounded here. One `.in()` runs about 40 bytes per id, so an audience of
+    // a few hundred devices builds a query string past the gateway's
+    // request-line limit and the whole campaign fails. Fixing the prefix read
+    // is what made the next statement reachable at scale.
+    const { data: profiles, error: profileError } = await readInChunks<
+      { id: string; email: string | null }, { message: string }
+    >(uniqueIds, (chunk) => supabase.from('profiles').select('id, email').in('id', chunk));
     if (profileError) await markFailedAndThrow(profileError);
     for (const p of profiles ?? []) emailByUser[p.id] = p.email;
   }

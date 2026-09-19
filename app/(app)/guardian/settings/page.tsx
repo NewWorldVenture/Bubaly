@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
-import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { RoutingSettings } from '@/components/guardian/routing-settings';
 import { GuardianNumberForm } from '@/components/guardian/guardian-number-form';
 import { Settings, ArrowLeft } from 'lucide-react';
@@ -18,14 +17,13 @@ export default async function GuardianSettingsPage() {
   const familyId = ctx.active.familyId;
   const memberId = ctx.active.member.id;
   const supabase = await createServer();
-  const db = withGuardianTables(supabase);
 
   // Both settled: the guardian-tables read was not, so a transport failure —
   // DNS, TCP, TLS, a timed-out fetch — rejected the batch and took the page to
   // the error boundary rather than degrading. See lib/supabase/settle.ts.
   const [{ data: profile }, { data: member }] = await Promise.all([
-    // Same cast, same erasure — see the note in guardian/contacts.
-    settle<{ data: Record<string, unknown> | null }>((db.from('guardian_member_profiles') as ReturnType<typeof supabase.from>)
+    // Settled per main, cast dropped — see the note in guardian/contacts.
+    settle(supabase.from('guardian_member_profiles')
       .select('*')
       .eq('family_id', familyId)
       .eq('member_id', memberId)

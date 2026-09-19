@@ -4,8 +4,9 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
 import { needsDueReminder, needsOverdueAlert, daysUntilDue } from '@/lib/marketplace/returns';
 import { notify } from '@/lib/services/notifications';
-import { systemScopeForFamily } from '@/lib/services/scope';
+import { dayKeyInTz, systemScopeForFamily } from '@/lib/services/scope';
 import type { ServiceScope } from '@/lib/services/types';
+import { readInChunks } from '@/lib/supabase/chunked-in';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -29,12 +30,21 @@ export async function GET(req: NextRequest) {
     // household agreed to hear from Bubaly, and so a re-run of the cron cannot
     // send the same nudge twice before anyone has read the first.
     const scopes = new Map<string, ServiceScope | null>();
+    // Resolved BEFORE the due-date decision, not just before the send, because
+    // the scope is where the family's timezone lives and "is this due today"
+    // cannot be answered without it. This job is cross-family — one query, no
+    // family filter — so a single host day was deciding for every household at
+    // once, and the dedupe stamps are one-shot: a nudge sent against the wrong
+    // day is not early, it is the only nudge that order will ever get.
+    const scopeFor = async (familyId: string): Promise<ServiceScope | null> => {
+      if (!scopes.has(familyId)) scopes.set(familyId, await systemScopeForFamily(admin, familyId));
+      return scopes.get(familyId) ?? null;
+    };
     const notifyFamily = async (
       familyId: string,
       n: { title: string; body: string; relatedType: string; relatedId: string | null },
     ): Promise<boolean> => {
-      if (!scopes.has(familyId)) scopes.set(familyId, await systemScopeForFamily(admin, familyId));
-      const scope = scopes.get(familyId);
+      const scope = await scopeFor(familyId);
       if (!scope) return false;
       const sent = await notify(scope, { recipients: 'family', type: 'system', ...n });
       return sent.ok;
@@ -54,9 +64,13 @@ export async function GET(req: NextRequest) {
     // Titles for friendlier copy. A failed lookup is a failed batch because the
     // job must not acknowledge a partial notification run as healthy.
     const listingIds = [...new Set((due ?? []).map((o) => o.listing_id))];
-    const { data: listings, error: listingError } = listingIds.length
-      ? await admin.from('marketplace_listings').select('id, title').in('id', listingIds)
-      : { data: [], error: null };
+    // Chunked: BATCH is 200, so this could carry 200 UUIDs in one `.in()` —
+    // about 8 KB of query string against a limit chunked-in.ts puts at 8 KB.
+    // On failure this route 502s without stamping any reminder, so the next run
+    // reads the same 200 orders and 502s again: a stall that does not clear.
+    const { data: listings, error: listingError } = await readInChunks<
+      { id: string; title: string }, { message: string }
+    >(listingIds, (chunk) => admin.from('marketplace_listings').select('id, title').in('id', chunk));
     if (listingError) {
       console.error('Return-reminders listing lookup failed:', listingError);
       return NextResponse.json({ ok: false, error: t('returnReminders.couldNotLoadListingTitles') }, { status: 502 });
@@ -72,8 +86,20 @@ export async function GET(req: NextRequest) {
       const title = titleOf.get(o.listing_id) ?? 'a borrowed item';
       const verb = o.kind === 'rent' ? 'rental' : 'borrowed item';
 
-      if (needsOverdueAlert(order, now)) {
-        const late = Math.abs(daysUntilDue(o.ends_on, now) ?? 0);
+      // Without the family's zone there is no honest answer to "is this due
+      // today", so this order is a failure rather than a guess. The send would
+      // have failed on the same missing scope anyway; deciding here only moves
+      // the failure to where the reason is legible.
+      const scope = await scopeFor(o.family_id);
+      if (!scope) {
+        console.error(`Return-reminders scope unavailable for ${o.id}; cannot resolve the family's day.`);
+        failed++;
+        continue;
+      }
+      const todayKey = dayKeyInTz(now, scope.tz);
+
+      if (needsOverdueAlert(order, todayKey)) {
+        const late = Math.abs(daysUntilDue(o.ends_on, todayKey) ?? 0);
         const notified = await notifyFamily(o.family_id, {
           title: `Overdue: "${title}"`,
           body: `This ${verb} was due ${late} day${late === 1 ? '' : 's'} ago. Arrange the return so it doesn't hold anyone up.`,
@@ -91,8 +117,8 @@ export async function GET(req: NextRequest) {
         continue; // don't also send a due-soon nudge for the same order
       }
 
-      if (needsDueReminder(order, now)) {
-        const d = daysUntilDue(o.ends_on, now) ?? 0;
+      if (needsDueReminder(order, todayKey)) {
+        const d = daysUntilDue(o.ends_on, todayKey) ?? 0;
         const notified = await notifyFamily(o.family_id, {
           title: `Due ${d === 0 ? 'today' : `in ${d} day${d === 1 ? '' : 's'}`}: "${title}"`,
           body: `Time to return this ${verb}. Tap to see the exchange details.`,

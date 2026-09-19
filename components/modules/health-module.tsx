@@ -389,6 +389,11 @@ export function HealthModule() {
       value: parseFloat(metricForm.value),
       unit: typeInfo?.unit || null,
       recorded_at: metricForm.recorded_at ? new Date(metricForm.recorded_at).toISOString() : new Date().toISOString(),
+      // 0323: health_metrics was the one table of the nine with no author at
+      // all, so it gained a `created_by`. Its eight siblings here already set
+      // one; without it every metric would arrive unattributed and only the
+      // subject or a manager could ever correct it.
+      created_by: userId,
     });
     setSaving(false);
     if (err) { toastError(tr('healthModule.failedToLogMetric')); return; }

@@ -259,7 +259,10 @@ function ChildRow({ child, familyTotal }: { child: TreasuryChild; familyTotal: n
   const goalPct = child.goalTargetCents > 0 ? Math.min(100, Math.round((child.goalSavedCents / child.goalTargetCents) * 100)) : null;
 
   return (
-    <Link href={`/wallet/wallets/${child.id}`}
+    // `/wallet/children/<child_wallets.id>` — the same route the wallet
+    // dashboard links to, and the one that exists. `/wallet/wallets/...` never
+    // did, so every row on this page was a 404.
+    <Link href={`/wallet/children/${child.id}`}
       className="flex items-center gap-3 rounded-2xl border border-border bg-surface/40 p-4 transition hover:border-brand/30 hover:bg-brand/5">
       <Avatar name={child.name} color={child.color ?? undefined} size={40} className="rounded-full flex-shrink-0" />
       <div className="min-w-0 flex-1">

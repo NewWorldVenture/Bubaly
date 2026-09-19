@@ -1,5 +1,6 @@
 import { isValidElement, type ReactElement, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { localeContextValue } from './helpers/render-translated';
 import { MoveDateRecalculation } from '@/components/modules/move-date-recalculation';
 import {
   addMoveDays, isMoveDate, isMoveDatePreview, isMoveDateResult, moveDateContextKey,
@@ -35,12 +36,18 @@ vi.mock('react', async (original) => ({
   },
   // The panel calls `useTranslations()`, which reads a context. This harness
   // invokes the component as a plain function, so there is no React dispatcher
-  // and the real `useContext` throws. Returning undefined is the honest stand-in
-  // for "rendered outside a LocaleProvider": `useTranslations` then falls back
-  // through `translate({}, key)` to SOURCE_MESSAGES, so the panel renders its
-  // ENGLISH copy — which is exactly what the assertions below are written
-  // against, and what a user would see if the provider were ever missing.
-  useContext: () => undefined,
+  // and the real `useContext` throws.
+  //
+  // It used to return `undefined` and let `useTranslations` fall back through
+  // `translate({}, key)` to SOURCE_MESSAGES, on the reasoning that this was
+  // "what a user would see if the provider were ever missing". Neither half of
+  // that holds any more: the fallback held the whole English catalogue, which is
+  // why it shipped 244 KB gzip into every page's JavaScript and had to go; and
+  // the provider is never missing, because `app/layout.tsx` wraps the entire
+  // tree. So the stub hands back a REAL context value carrying the real
+  // catalogue — closer to the app, and the assertions below go on reading the
+  // English words a person actually sees.
+  useContext: () => localeContextValue(),
   useEffect: (effect: () => void | (() => void), deps?: readonly unknown[]) => {
     const index = mocks.cursor++;
     const slots = mocks.slots;

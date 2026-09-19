@@ -62,6 +62,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
   db = createInMemorySupabase<SupabaseClient<Database>>({
+    // `family_allergies()` (0332) is served by the fake itself, off the seeded
+    // `medical_profiles` rows, so the allergy tests below still describe real
+    // data rather than a script.
     defaults: {
       grocery_items: { quantity: null, category: null, is_checked: false, source_meal_id: null, idempotency_key: null },
       grocery_lists: { is_archived: false, archived_at: null, store: null, list_icon: null, list_color: null, sort_order: 0 },
@@ -415,18 +418,15 @@ describe('Add this week to the list', () => {
   });
 
   it('FAILS CLOSED when the allergy read errors, rather than shopping blind', async () => {
-    const realFrom = db.from.bind(db);
-    vi.spyOn(db, 'from').mockImplementation(((table: string) => {
-      if (table !== 'medical_profiles') return realFrom(table);
-      const reply = { data: null, error: { code: '42501', message: 'permission denied', details: null, hint: null } };
-      const builder: Record<string, unknown> = {};
-      const chain = () => builder;
-      Object.assign(builder, {
-        select: chain, eq: chain, in: chain, order: chain, limit: chain,
-        then: (resolve: (v: unknown) => void) => resolve(reply),
-      });
-      return builder;
-    }) as typeof db.from);
+    // `family_allergies()` RAISES for a caller who is not a member of the family
+    // rather than answering with an empty list, precisely so this guard has
+    // something to catch. A select on `medical_profiles` would have returned
+    // `{ data: [], error: null }` and shopped blind with nothing logged.
+    const realRpc = db.rpc.bind(db);
+    vi.spyOn(db, 'rpc').mockImplementation((async (name: string, args: Record<string, unknown>) => {
+      if (name !== 'family_allergies') return realRpc(name, args);
+      return { data: null, error: { code: '42501', message: 'permission denied', details: null, hint: null }, count: null, status: 403, statusText: 'Forbidden' };
+    }) as typeof db.rpc);
 
     const result = await addMealPlanToGroceryListAction({ from: '2026-09-08', to: '2026-09-08', listId: LIST });
     expect(result.ok).toBe(false);

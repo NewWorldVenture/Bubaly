@@ -1,5 +1,28 @@
 // lib/pantry/logic.ts — pure helpers for Pantry / Inventory / Expiration tracking.
 // No I/O here so it's fully unit-testable; the module + API call into it.
+//
+// ── The unit is a DAY KEY, not an instant ───────────────────────────────────
+//
+// These took `now: number = Date.now()` and computed "today" with
+// `setHours(0, 0, 0, 0)` — the HOST's midnight. On a UTC server that is 5pm in
+// California, so for the last seven hours of every day:
+//
+//   food expiring TOMORROW was labelled "Expires today";
+//   food expiring TODAY was labelled "Expired yesterday";
+//   and `expiringSoon` handed the AI chef and the meal planner a window shifted
+//   a day, so they urged cooking things that were not urgent and wrote off food
+//   that was still good.
+//
+// Taking a `todayKey` instead of an instant removes the zone from this module
+// entirely: both dates are parsed as UTC midnights, so the subtraction is exact
+// whole days and there is no host clock left to be wrong about. Each caller
+// answers "which day is it" where it has the family's zone to answer with — and
+// that includes the CLIENT ones, because "expires today" has to mean the same
+// day for the parent on a server-rendered page and the child on a
+// browser-rendered one.
+//
+// No default. `= Date.now()` is exactly what made this invisible: every call
+// site read as though it were already correct.
 
 export type PantryLocation = 'pantry' | 'fridge' | 'freezer' | 'counter' | 'garage' | 'other';
 
@@ -18,24 +41,29 @@ export function locationMeta(id: string) {
 
 export type ExpiryTone = 'danger' | 'warning' | 'caution' | 'success' | 'neutral';
 
-/** Whole days from `now` until the date (negative = already past). */
-export function daysUntil(dateStr: string | null | undefined, now: number = Date.now()): number | null {
+/**
+ * Whole days from `todayKey` until the date (negative = already past).
+ *
+ * Both are `YYYY-MM-DD` and both are parsed as UTC midnight, which is not a
+ * claim that anyone is in UTC — it is how two calendar days are subtracted
+ * without a zone entering into it at all.
+ */
+export function daysUntil(dateStr: string | null | undefined, todayKey: string): number | null {
   if (!dateStr) return null;
-  const t = new Date(`${dateStr}T00:00:00`).getTime();
-  if (!Number.isFinite(t)) return null;
-  const today = new Date(now);
-  today.setHours(0, 0, 0, 0);
-  return Math.round((t - today.getTime()) / 86400000);
+  const t = Date.parse(`${dateStr.slice(0, 10)}T00:00:00Z`);
+  const today = Date.parse(`${todayKey.slice(0, 10)}T00:00:00Z`);
+  if (!Number.isFinite(t) || !Number.isFinite(today)) return null;
+  return Math.round((t - today) / 86400000);
 }
 
 /**
  * Expiration status for a best-by date. Tiers, soonest first:
  *   expired (<0) · today (0) · soon (≤3) · this week (≤7) · ok (>7) · none.
  */
-export function expiryStatus(dateStr: string | null | undefined, now: number = Date.now()): {
+export function expiryStatus(dateStr: string | null | undefined, todayKey: string): {
   tone: ExpiryTone; label: string; days: number | null; expired: boolean;
 } {
-  const days = daysUntil(dateStr, now);
+  const days = daysUntil(dateStr, todayKey);
   if (days === null) return { tone: 'neutral', label: 'No date', days: null, expired: false };
   if (days < 0) return { tone: 'danger', label: days === -1 ? 'Expired yesterday' : `Expired ${-days}d ago`, days, expired: true };
   if (days === 0) return { tone: 'danger', label: 'Expires today', days, expired: false };
@@ -65,13 +93,13 @@ export function isLowStock(item: PantryLike): boolean {
 }
 
 /** Items expiring within `withinDays` (inclusive), expired items first, soonest first. */
-export function expiringSoon<T extends PantryLike>(items: T[], withinDays = 5, now: number = Date.now()): T[] {
+export function expiringSoon<T extends PantryLike>(items: T[], withinDays: number, todayKey: string): T[] {
   return items
     .filter((i) => {
-      const d = daysUntil(i.expires_at, now);
+      const d = daysUntil(i.expires_at, todayKey);
       return d !== null && d <= withinDays;
     })
-    .sort((a, b) => (daysUntil(a.expires_at, now) ?? 0) - (daysUntil(b.expires_at, now) ?? 0));
+    .sort((a, b) => (daysUntil(a.expires_at, todayKey) ?? 0) - (daysUntil(b.expires_at, todayKey) ?? 0));
 }
 
 /** Everything that's low on stock (for the restock / grocery-suggestion list). */
@@ -91,12 +119,12 @@ export function groupByLocation<T extends PantryLike>(items: T[]): { location: P
 }
 
 /** Headline counts for the dashboard cards. */
-export function pantrySummary(items: PantryLike[], now: number = Date.now()) {
-  const expiring = expiringSoon(items, 5, now);
+export function pantrySummary(items: PantryLike[], todayKey: string) {
+  const expiring = expiringSoon(items, 5, todayKey);
   return {
     total: items.length,
     expiringSoon: expiring.length,
-    expired: items.filter((i) => expiryStatus(i.expires_at, now).expired).length,
+    expired: items.filter((i) => expiryStatus(i.expires_at, todayKey).expired).length,
     lowStock: lowStockItems(items).length,
   };
 }

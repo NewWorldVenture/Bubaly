@@ -40,11 +40,28 @@ describe('Supabase migration filename safety', () => {
   // generation (00100 and 00101 both live in 0010). nextVersion reads the first
   // four digits, so those do not drag the next free number up to 1422.
   it('points new migrations at the next unused version', () => {
-    // Bumped whenever a migration lands — 0302 keeps one live system policy
-    // per family per name. Stating it rather than deriving it is
+    // Bumped whenever a migration lands. Stating it rather than deriving it is
     // the point: the number is how a new migration announces itself, so a file
     // that quietly reuses one, or a rebase that drops one, fails here.
-    expect(audit.nextVersion).toBe('0318');
+    //
+    // ELEVEN collision EVENTS between two sessions running at once, and
+    // twenty-one numbers: 0297, 0298 (twice, on the same finding), 0299, then
+    // 0300, 0301, 0302, 0303 on four consecutive merges — then all of 0304-0310
+    // in one go when main landed seven at once, then 0311, and now FIVE more
+    // (0312-0316) when main landed 0312-0317 while this branch already held
+    // 0312-0316. EVERY merge since 0300 has brought one.
+    //
+    // This branch's five move to 0328-0332, keeping their relative order. Order
+    // is not load-bearing and that was CHECKED rather than assumed: they touch
+    // medications, medication_schedules, grades, screen_time_limits,
+    // behavior_logs, journal_entries, medical_profiles and family_allergies, and
+    // main's 0312-0317 touch documents, groceries, meals, marketplace and
+    // wallet_transactions — no table appears on both sides, and nothing in this
+    // branch's own 0318-0327 goes near the eight either.
+    //
+    // This reads 0333: main holds 0001-0317, this branch 0318-0327 and
+    // 0328-0332.
+    expect(audit.nextVersion).toBe('0333');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

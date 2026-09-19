@@ -6,7 +6,7 @@
 // actions that revalidate the public /feedback board instantly.
 
 import Link from 'next/link';
-import { useMemo, useState, useTransition } from 'react';
+import { useId, useMemo, useState, useTransition } from 'react';
 import {
   Loader2, Pin, PinOff, Trash2, Send, ChevronDown, ChevronRight,
   ArrowBigUp, MessageSquare, Search, Github, RefreshCw, Bell, Check, ExternalLink,
@@ -217,6 +217,9 @@ function IdeaAdminCard({ idea, comments, expanded, onToggle, onSuccess, onError 
 }) {
   const t = useTranslations();
   const [status, setStatus] = useState<FeedbackStatus>((STATUS_META[idea.status as FeedbackStatus] ? idea.status : 'under_review') as FeedbackStatus);
+  // useId, not a literal: this panel renders once per idea row, so a fixed id
+  // would be duplicated across every row on the page.
+  const statusSelectId = useId();
   const [note, setNote] = useState(idea.admin_note ?? '');
   const [reply, setReply] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
@@ -307,8 +310,8 @@ function IdeaAdminCard({ idea, comments, expanded, onToggle, onSuccess, onError 
           {/* Status + roadmap note */}
           <div className="grid gap-3 sm:grid-cols-[200px_1fr]">
             <div>
-              <label className="mb-1 block text-xs font-semibold text-muted">{t('feedbackAdmin.roadmapStatus')}</label>
-              <select value={status} onChange={(e) => setStatus(e.target.value as FeedbackStatus)}
+              <label htmlFor={statusSelectId} className="mb-1 block text-xs font-semibold text-muted">{t('feedbackAdmin.roadmapStatus')}</label>
+              <select id={statusSelectId} value={status} onChange={(e) => setStatus(e.target.value as FeedbackStatus)}
                 className="h-9 w-full rounded-lg border border-border bg-bg px-2 text-sm outline-none focus:border-brand">
                 {FILTERABLE_STATUSES.map((s) => <option key={s} value={s}>{STATUS_META[s].label}</option>)}
               </select>

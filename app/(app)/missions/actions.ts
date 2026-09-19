@@ -216,7 +216,7 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
       // session (the submitter). Route the reward finalization through the service
       // role so it credits the immutable ledger under the manager-only wallet RLS
       // (0217) — the child's session must never be the authority for a money credit.
-      await finalizeApproval(service, { familyId, assignment, chore, submissionId: submission.id, score: verdict.quality_score, actorId: assignment.member_id, auto: true });
+      await finalizeApproval(service, { familyId, tz: scopeFromUserContext(ctx, supabase).tz, assignment, chore, submissionId: submission.id, score: verdict.quality_score, actorId: assignment.member_id, auto: true });
     } catch {
       await setSubmissionStatus(service, familyId, submission.id, 'parent_review');
       const { error: fallbackAssignmentError } = await supabase.from('chore_assignments').update({ status: 'submitted' })
@@ -248,7 +248,7 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
 /** Shared approval finalizer: sets reward, flips status, applies gamification. */
 async function finalizeApproval(
   supabase: Awaited<ReturnType<typeof createServer>>,
-  args: { familyId: string; assignment: Record<string, unknown>; chore: Record<string, unknown>; submissionId: string; score: number; actorId: string | null; auto: boolean; pointsOverride?: number | null; cashOverride?: number | null },
+  args: { familyId: string; tz: string; assignment: Record<string, unknown>; chore: Record<string, unknown>; submissionId: string; score: number; actorId: string | null; auto: boolean; pointsOverride?: number | null; cashOverride?: number | null },
 ) {
   const reward = computeReward(rewardConfig(args.chore), args.score);
   const points = args.pointsOverride ?? reward.points;
@@ -264,6 +264,8 @@ async function finalizeApproval(
     await applyCompletionRewards(supabase, {
       familyId: args.familyId, memberId: args.assignment.member_id as string,
       difficulty: ((args.chore.difficulty as Difficulty) ?? 'medium'), qualityScore: args.score,
+      // The streak is counted in the family's day; see lib/chores/server.ts.
+      tz: args.tz,
     });
   } catch (error) {
     const { error: rollbackError } = await supabase.from('chore_assignments').update({
@@ -283,90 +285,131 @@ async function finalizeApproval(
   });
 }
 
-/** Parent approves a submission, optionally overriding the AI's reward. */
-export async function approveSubmissionAction(formData: FormData): Promise<void> {
+/**
+ * Parent approves a submission, optionally overriding the AI's reward.
+ *
+ * Returns `{ ok, error }` rather than void. It used to be `Promise<void>` with
+ * seven bare `return;` exits and `revalidatePath` on the success path only, so
+ * every failure — not a manager, the row gone, the status write failing, the
+ * wallet credit THROWING after the assignment had already flipped to approved —
+ * did nothing observable at all: no toast, no error, not even a re-render. The
+ * spinner stopped and the card sat where it was, and the parent clicked again,
+ * re-running the same failing path.
+ *
+ * The shape is not invented: `submitProofAction`, sixty lines up in this same
+ * file, already returns `{ ok, error }` with eight distinct messages, and the
+ * kid's submit form renders them. The CHILD was told why their submission
+ * failed; the PARENT was told nothing when the approval did.
+ */
+export async function approveSubmissionAction(formData: FormData): Promise<{ ok: boolean; error?: string }> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   // Approving a submission mints a wallet reward, so only a family manager
   // (parent/adult) may do it — a child must never approve their own chore.
   // RLS on chore_submissions is family-scoped (any member), so this app-level
   // gate is the authorization boundary; it must not be removed.
-  if (!isManager(ctx.active.role)) return;
+  if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentGuardianCan') };
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
   const submissionId = str(formData, 'submission_id');
-  if (!submissionId) return;
+  if (!submissionId) return { ok: false, error: t('actions.missingSubmission') };
 
   const { data: submission } = await supabase.from('chore_submissions').select('*').eq('id', submissionId).eq('family_id', familyId).maybeSingle();
-  if (!submission) return;
+  if (!submission) return { ok: false, error: t('actions.submissionNotFound') };
   const { data: assignment } = await supabase.from('chore_assignments').select('*').eq('id', submission.assignment_id).maybeSingle();
   const { data: chore } = await supabase.from('chores').select('*').eq('id', submission.chore_id ?? '').maybeSingle();
-  if (!assignment || !chore) return;
+  if (!assignment || !chore) return { ok: false, error: t('actions.choreNotFound') };
 
   const score = intVal(formData, 'score') ?? assignment.ai_score ?? 100;
-  if (!await setSubmissionStatus(supabase, familyId, submissionId, 'approved')) return;
+  if (!await setSubmissionStatus(supabase, familyId, submissionId, 'approved')) {
+    return { ok: false, error: t('actions.couldNotApproveTryAgain') };
+  }
   const { error: disputeError } = await supabase.from('chore_disputes').update({ status: 'resolved', resolution: 'Approved by parent', resolved_by: ctx.active.member.id, resolved_at: new Date().toISOString() }).eq('submission_id', submissionId).eq('status', 'open').select('id');
   if (disputeError) {
     await setSubmissionStatus(supabase, familyId, submissionId, submission.status);
-    return;
+    console.error('[chore state] dispute resolve failed', disputeError);
+    return { ok: false, error: t('actions.couldNotApproveTryAgain') };
   }
   try {
     await finalizeApproval(supabase, {
-      familyId, assignment, chore, submissionId, score, actorId: ctx.active.member.id, auto: false,
+      familyId, tz: scopeFromUserContext(ctx, supabase).tz,
+      assignment, chore, submissionId, score, actorId: ctx.active.member.id, auto: false,
       pointsOverride: intVal(formData, 'points'), cashOverride: intVal(formData, 'cash_cents'),
     });
-  } catch {
+  } catch (err) {
+    // The worst of the seven. finalizeApproval mints the wallet reward, so a
+    // throw here means the assignment had already flipped to approved and the
+    // child is owed something recorded nowhere. Rolling back is right; doing it
+    // silently is not.
+    console.error('[chore state] approval finalise failed', err);
     await setSubmissionStatus(supabase, familyId, submissionId, submission.status);
     const { error: disputeRestoreError } = await supabase.from('chore_disputes').update({ status: 'open', resolution: null, resolved_by: null, resolved_at: null })
       .eq('submission_id', submissionId).eq('status', 'resolved');
     if (disputeRestoreError) console.error('[chore state] dispute rollback failed', disputeRestoreError);
-    return;
+    return { ok: false, error: t('actions.couldNotAwardTheRewardTryAgain') };
   }
   revalidatePath('/missions');
   revalidatePath('/kids');
+  return { ok: true };
 }
 
-/** Parent rejects or asks for a redo. */
-export async function rejectSubmissionAction(formData: FormData): Promise<void> {
+/** Parent rejects or asks for a redo. Same `{ ok, error }` contract as approve. */
+export async function rejectSubmissionAction(formData: FormData): Promise<{ ok: boolean; error?: string }> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   // Reviewing (reject / request redo) is a manager decision — a child must not
   // adjudicate their own submission. Mirrors approveSubmissionAction's gate.
-  if (!isManager(ctx.active.role)) return;
+  if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentGuardianCan') };
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
   const submissionId = str(formData, 'submission_id');
   const redo = str(formData, 'redo') === '1';
-  if (!submissionId) return;
+  if (!submissionId) return { ok: false, error: t('actions.missingSubmission') };
   const { data: submission } = await supabase.from('chore_submissions').select('*').eq('id', submissionId).eq('family_id', familyId).maybeSingle();
-  if (!submission) return;
+  if (!submission) return { ok: false, error: t('actions.submissionNotFound') };
 
-  if (!await setSubmissionStatus(supabase, familyId, submissionId, redo ? 'needs_improvement' : 'rejected')) return;
+  if (!await setSubmissionStatus(supabase, familyId, submissionId, redo ? 'needs_improvement' : 'rejected')) {
+    return { ok: false, error: t('actions.couldNotSaveThatDecision') };
+  }
   const { data: updatedAssignment, error: assignmentError } = await supabase.from('chore_assignments').update({ status: redo ? 'in_progress' : 'rejected', disputed: false })
     .eq('id', submission.assignment_id).eq('family_id', familyId).select('id').single();
   if (assignmentError || !updatedAssignment) {
     await setSubmissionStatus(supabase, familyId, submissionId, submission.status);
-    return;
+    if (assignmentError) console.error('[chore state] reject write failed', assignmentError);
+    return { ok: false, error: t('actions.couldNotSaveThatDecision') };
   }
   await logChoreEvent({ familyId, assignmentId: submission.assignment_id, submissionId, actorId: ctx.active.member.id, action: redo ? 'redo' : 'reject', note: str(formData, 'note') });
   revalidatePath('/missions');
   revalidatePath('/kids');
+  return { ok: true };
 }
 
-/** Kid disputes the AI verdict and asks a parent to look. */
-export async function disputeSubmissionAction(formData: FormData): Promise<void> {
+/**
+ * Kid disputes the AI verdict and asks a parent to look.
+ *
+ * This is the CHILD's "that's not fair" button, and it had five silent exits.
+ * A child told nothing when their appeal fails learns that the appeal does not
+ * work, which is worse than not offering one.
+ */
+export async function disputeSubmissionAction(formData: FormData): Promise<{ ok: boolean; error?: string }> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
   const submissionId = str(formData, 'submission_id');
-  if (!submissionId) return;
+  if (!submissionId) return { ok: false, error: t('actions.missingSubmission') };
   const { data: submission } = await supabase.from('chore_submissions').select('*').eq('id', submissionId).eq('family_id', familyId).maybeSingle();
-  if (!submission) return;
+  if (!submission) return { ok: false, error: t('actions.submissionNotFound') };
 
   const { data: dispute, error: disputeError } = await supabase.from('chore_disputes').insert({ family_id: familyId, submission_id: submissionId, member_id: submission.member_id, reason: str(formData, 'reason'), status: 'open' }).select('id').single();
-  if (disputeError || !dispute) return;
+  if (disputeError || !dispute) {
+    if (disputeError) console.error('[chore state] dispute insert failed', disputeError);
+    return { ok: false, error: t('actions.couldNotSendThatToAParent') };
+  }
   if (!await setSubmissionStatus(supabase, familyId, submissionId, 'disputed')) {
     const { error: disputeCleanupError } = await supabase.from('chore_disputes').delete().eq('id', dispute.id).eq('family_id', familyId);
     if (disputeCleanupError) console.error('[chore state] dispute cleanup failed', disputeCleanupError);
-    return;
+    return { ok: false, error: t('actions.couldNotSendThatToAParent') };
   }
   const { data: updatedAssignment, error: assignmentError } = await supabase.from('chore_assignments').update({ status: 'submitted', disputed: true })
     .eq('id', submission.assignment_id).eq('family_id', familyId).select('id').single();
@@ -374,20 +417,23 @@ export async function disputeSubmissionAction(formData: FormData): Promise<void>
     await setSubmissionStatus(supabase, familyId, submissionId, submission.status);
     const { error: disputeCleanupError } = await supabase.from('chore_disputes').delete().eq('id', dispute.id).eq('family_id', familyId);
     if (disputeCleanupError) console.error('[chore state] dispute cleanup failed', disputeCleanupError);
-    return;
+    if (assignmentError) console.error('[chore state] dispute assignment write failed', assignmentError);
+    return { ok: false, error: t('actions.couldNotSendThatToAParent') };
   }
   await logChoreEvent({ familyId, assignmentId: submission.assignment_id, submissionId, actorId: submission.member_id, action: 'dispute', note: str(formData, 'reason') });
   revalidatePath('/missions');
   revalidatePath('/kids');
+  return { ok: true };
 }
 
 /** Parent creates a chore (with AI/reward/safety config) and assigns it. */
-export async function createChoreAction(formData: FormData): Promise<void> {
+export async function createChoreAction(formData: FormData): Promise<{ ok: boolean; error?: string }> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
   const title = str(formData, 'title');
-  if (!title) return;
+  if (!title) return { ok: false, error: t('actions.giveTheChoreATitle') };
 
   // What a chore PAYS is a manager's number, not the submitter's.
   // payChoreRewardAction credits a wallet with `chores.cash_cents` whenever the
@@ -395,9 +441,25 @@ export async function createChoreAction(formData: FormData): Promise<void> {
   // points_awarded on approval — so a member pricing their own chore writes the
   // figure a parent's Pay click hands over. 0307 is the database boundary; this
   // refuses the same submission here rather than letting it fail silently.
+  //
+  // This branch briefly went further and refused a non-manager ANY chore here.
+  // That was wrong, and main's probe is what said so: docs/audit/chore-price-check.sql
+  // asserts, as a positive control, that a member may still add a chore and edit
+  // its text. The rule main landed is the narrower and better one — the PRICE is
+  // a manager's, the chore is anyone's — and it is the same distinction this
+  // branch applied to driving_trips a day earlier: do not narrow past what the
+  // screen renders. (The chores module offers Add to every member at
+  // chores-module.tsx:233, and gates it only in the empty state at :301.)
+  //
+  // What survives from this branch is the SHAPE of the refusal. It arrived as a
+  // bare `return;`, which is the exact defect fixed across these four actions:
+  // the parent is told nothing and the form stays as it was. Reusing
+  // `onlyAParentGuardianCan` means no new copy in eleven locales.
   const pricing = ['points', 'points_min', 'points_max', 'cash_cents', 'cash_min_cents', 'cash_max_cents'];
   const priced = pricing.some((field) => intVal(formData, field) != null);
-  if (priced && !isManager(ctx.active.role)) return;
+  if (priced && !isManager(ctx.active.role)) {
+    return { ok: false, error: t('actions.onlyAParentGuardianCan') };
+  }
 
   const memberIds = formData.getAll('member_ids').map((v) => String(v)).filter(Boolean);
 
@@ -424,20 +486,25 @@ export async function createChoreAction(formData: FormData): Promise<void> {
     icon: str(formData, 'icon'),
     created_by: ctx.user.id,
   }).select('id').single();
-  if (choreError || !chore) return;
+  if (choreError || !chore) {
+    if (choreError) console.error('[chore create] insert failed', choreError);
+    return { ok: false, error: t('actions.couldNotCreateTheChore') };
+  }
 
   if (memberIds.length) {
     const { error: assignmentError } = await supabase.from('chore_assignments').insert(memberIds.map((member_id) => ({
       family_id: familyId, chore_id: chore.id, member_id, due_at: str(formData, 'due_at'),
     })));
     if (assignmentError) {
+      console.error('[chore create] assignment failed', assignmentError);
       const { error: cleanupError } = await supabase.from('chores').delete().eq('id', chore.id).eq('family_id', familyId);
       if (cleanupError) console.error('[chore create] cleanup failed', cleanupError);
-      return;
+      return { ok: false, error: t('actions.couldNotAssignTheChore') };
     }
   }
   revalidatePath('/missions');
   revalidatePath('/kids');
+  return { ok: true };
 }
 
 /** AI chore-plan generator — returns suggestions for the parent to review. */

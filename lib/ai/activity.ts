@@ -15,6 +15,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AiRunState, Database } from '@/lib/database.types';
 import { RUN_STATES, TERMINAL_RUN_STATES } from '@/lib/ai/runs/states';
+import { escapeOrValue } from '@/lib/supabase/escape-like';
 
 export const AI_ACTIVITY_PAGE_SIZE = 25;
 
@@ -127,12 +128,6 @@ export function normalizeStatusFilter(raw: string | undefined): { status: AiRunS
  * feature name someone will reasonably type, and a dot inside the value half of
  * `column.operator.value` is not structural.
  */
-function safeSearchTerm(value: string): string {
-  return value
-    .replace(/[(),]/g, ' ')
-    .replace(/[\\%_]/g, (c) => `\\${c}`)
-    .trim();
-}
 
 export type AiActivityPage = {
   rows: AiActivityRow[];
@@ -169,7 +164,7 @@ export async function listAiActivity(
   if (status) query = query.eq('status', status);
   if (filters.feature) query = query.eq('feature', filters.feature);
   if (filters.familyId) query = query.eq('family_id', filters.familyId);
-  const term = safeSearchTerm(filters.q ?? '');
+  const term = escapeOrValue(filters.q ?? '');
   if (term) {
     const like = `%${term}%`;
     query = query.or(`feature.ilike.${like},error.ilike.${like}`);

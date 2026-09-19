@@ -23,6 +23,7 @@ declare
   child_uid  uuid := '00000000-0000-4000-8000-00000000eca2';
   child_mid uuid;
   currency uuid;
+  sticker  uuid;   -- a real, priced reward (see the note at the request control)
   wallet uuid;
   asset uuid;
   queued uuid;
@@ -48,6 +49,21 @@ begin
   if currency is null then
     insert into public.family_currencies (family_id, name) values (fam, 'Stars') returning id into currency;
   end if;
+  -- A catalogue reward for the request control below to name. It has to exist
+  -- because a redemption is no longer allowed to invent its own price: 0320's
+  -- `economy_redemption_request_guard` requires a member's request to name a
+  -- real, active reward of this family and to carry that reward's own cost and
+  -- currency. This probe's control previously inserted a free-form
+  -- ('Sticker', cost 1) row with no `reward_id`, which is precisely the shape
+  -- that guard refuses — a child naming their own price. The CONTROL is
+  -- unchanged in intent (a child may still queue a redemption); it just asks
+  -- for something off the shelf.
+  insert into public.economy_rewards (family_id, currency_id, title, emoji, cost, is_active)
+  values (fam, currency, 'Sticker', '⭐', 1, true)
+  on conflict do nothing;
+  select id into sticker from public.economy_rewards
+   where family_id = fam and title = 'Sticker' limit 1;
+
   select id into wallet from public.child_wallets where family_id = fam limit 1;
   if wallet is null then
     insert into public.child_wallets (family_id, member_id) values (fam, child_mid) returning id into wallet;
@@ -103,8 +119,8 @@ begin
   --    this would have closed the feature rather than the hole.
   begin
     insert into public.economy_redemptions
-      (family_id, currency_id, member_id, title, cost, status, requested_by)
-    values (fam, currency, child_mid, 'Sticker', 1, 'pending', child_uid)
+      (family_id, currency_id, member_id, reward_id, title, cost, status, requested_by)
+    values (fam, currency, child_mid, sticker, 'Sticker', 1, 'pending', child_uid)
     returning id into queued;
     if queued is null then
       raise warning 'CONTROL FAILED: a child could not REQUEST a redemption';

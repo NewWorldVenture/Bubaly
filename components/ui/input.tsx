@@ -1,4 +1,4 @@
-import { forwardRef, useId } from 'react';
+import { cloneElement, forwardRef, isValidElement, useId } from 'react';
 import { cn } from '@/lib/utils/cn';
 
 const base =
@@ -27,7 +27,67 @@ export const Select = forwardRef<
 ));
 Select.displayName = 'Select';
 
-/** Labelled field wrapper with optional error + hint, fully accessible. */
+/** What `Field` wires onto the control it labels. */
+export type FieldControlProps = {
+  id: string;
+  'aria-describedby'?: string;
+  'aria-invalid'?: true;
+  'aria-required'?: true;
+};
+
+/**
+ * The element types `Field` will wire itself onto.
+ *
+ * An allowlist rather than "any element", because ~19 call sites hand back a
+ * `<div>` wrapping a group of chips or radios. Putting `aria-describedby` on a
+ * div announces nothing, and a fix that silently lands there would LOOK
+ * universal while doing nothing — which is the failure this audit keeps
+ * finding. Those sites are named in
+ * tests/a-hint-nobody-hears-is-not-a-hint.test.ts and shrink from there.
+ */
+const WIRABLE: ReadonlySet<unknown> = new Set<unknown>([
+  Input, Select, Textarea, 'input', 'select', 'textarea',
+]);
+
+/**
+ * Put the field's a11y props on the control, without overwriting anything the
+ * call site set for itself.
+ */
+function wire(node: React.ReactNode, control: FieldControlProps): React.ReactNode {
+  if (!isValidElement(node) || !WIRABLE.has(node.type)) return node;
+  const own = node.props as Record<string, unknown>;
+  const patch: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(control)) {
+    if (value !== undefined && own[key] === undefined) patch[key] = value;
+  }
+  return Object.keys(patch).length ? cloneElement(node, patch) : node;
+}
+
+/**
+ * Labelled field wrapper with optional hint and error.
+ *
+ * It used to describe itself as "fully accessible" while rendering three of its
+ * four affordances as pictures only:
+ *
+ *   - `hint` was a `<p>` with no id and nothing pointing at it, so a screen
+ *     reader never read it;
+ *   - `error` was a `<p role="alert">` with no id and no `aria-invalid` on the
+ *     control, so the message was announced once as it appeared and the field
+ *     itself was never announced as invalid — tab back to it and you are told
+ *     nothing is wrong;
+ *   - `required` was a red asterisk, announced as "star" or skipped entirely.
+ *
+ * All three now reach the control. The a11y props are handed to the render prop
+ * as a second argument for call sites that build their own markup, AND wired on
+ * directly for the ~925 of 1,066 sites that hand back the control itself — so
+ * this is one change rather than a thousand.
+ *
+ * `aria-required` rather than the native `required` attribute, deliberately:
+ * native `required` changes form SUBMISSION, and switching it on across a
+ * thousand fields that were only ever marked with an asterisk would start
+ * blocking submits that work today. Announcing the requirement is the a11y fix;
+ * enforcing it is a product decision per form.
+ */
 export function Field({
   label,
   error,
@@ -39,19 +99,35 @@ export function Field({
   error?: string;
   hint?: string;
   required?: boolean;
-  children: (id: string) => React.ReactNode;
+  children: (id: string, control: FieldControlProps) => React.ReactNode;
 }) {
   const id = useId();
+  const hintId = `${id}hint`;
+  const errorId = `${id}error`;
+  // The hint is hidden while an error shows (it always was, visually), so it
+  // must not be described either — a description pointing at an element that is
+  // not rendered is worse than none.
+  const showHint = Boolean(hint) && !error;
+  const describedBy = [showHint ? hintId : null, error ? errorId : null]
+    .filter(Boolean).join(' ') || undefined;
+
+  const control: FieldControlProps = {
+    id,
+    'aria-describedby': describedBy,
+    'aria-invalid': error ? true : undefined,
+    'aria-required': required ? true : undefined,
+  };
+
   return (
     <div className="space-y-1.5">
       <label htmlFor={id} className="block text-sm font-medium text-fg">
         {label}
-        {required && <span className="ml-0.5 text-danger">*</span>}
+        {required && <span className="ml-0.5 text-danger" aria-hidden>*</span>}
       </label>
-      {children(id)}
-      {hint && !error && <p className="text-xs text-muted">{hint}</p>}
+      {wire(children(id, control), control)}
+      {showHint && <p id={hintId} className="text-xs text-muted">{hint}</p>}
       {error && (
-        <p className="text-xs text-danger" role="alert">
+        <p id={errorId} className="text-xs text-danger" role="alert">
           {error}
         </p>
       )}

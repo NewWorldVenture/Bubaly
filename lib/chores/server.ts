@@ -7,13 +7,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { createServiceClient } from '@/lib/supabase/server';
 import { DIFFICULTY_XP, levelForXp, nextStreak, type Difficulty } from '@/lib/chores/logic';
+import { dayKeyInTz } from '@/lib/services/scope';
 
 type DB = SupabaseClient<Database>;
 type Progress = Database['public']['Tables']['kid_progress']['Row'];
-
-function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 /** Get-or-create the member's progress row. */
 export async function ensureProgress(supabase: DB, familyId: string, memberId: string): Promise<Progress> {
@@ -50,10 +47,31 @@ export type CompletionResult = { xp: number; level: number; leveledUp: boolean; 
  */
 export async function applyCompletionRewards(
   supabase: DB,
-  opts: { familyId: string; memberId: string; difficulty: Difficulty; qualityScore: number | null },
+  opts: { familyId: string; memberId: string; difficulty: Difficulty; qualityScore: number | null; tz: string },
 ): Promise<CompletionResult> {
   const progress = await ensureProgress(supabase, opts.familyId, opts.memberId);
-  const today = todayISO();
+  // The FAMILY's day, not the server's. `kid_progress.last_activity` is the
+  // only thing `nextStreak` compares, so the zone this is read in IS the streak
+  // rule. It used to be `new Date().toISOString().slice(0, 10)` — UTC — and the
+  // failure is not an off-by-one in the display, it is a wrong streak in both
+  // directions. Measured in the test, at 6pm on the 23rd in Los Angeles — which
+  // is already the 24th in UTC:
+  //
+  //   last activity the 22nd, two evenings running  ->  UTC sees a two-day gap
+  //                                                     and RESETS the streak
+  //                                                     to 1. Correct: 3 -> 4.
+  //   last activity the 23rd, same family day       ->  UTC counts it a second
+  //                                                     time, 3 -> 4. Correct:
+  //                                                     unchanged at 3.
+  //
+  // A child who did chores two evenings in a row is told they are starting
+  // again. Evenings are when chores get done, so this is the common case rather
+  // than an edge one, and `streak_3`, `streak_7` and `longest_streak` all
+  // inherit it.
+  //
+  // `tz` is required rather than defaulted, for the reason a default hid this:
+  // every call site read as though it were already correct.
+  const today = dayKeyInTz(new Date(), opts.tz);
 
   const gainedXp = DIFFICULTY_XP[opts.difficulty] ?? DIFFICULTY_XP.medium;
   const xp = progress.xp + gainedXp;

@@ -15,15 +15,35 @@ import { DashboardWeather } from '@/components/dashboard/dashboard-weather';
 import { fmtTime } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { getTranslations } from '@/lib/i18n/server';
+import { dayKeyInTz, zonedDayBoundsMs, addDaysToDayKey, weekStartDayKey } from '@/lib/services/scope';
 
 const ACCENT = ['bg-violet-500', 'bg-emerald-500', 'bg-orange-500', 'bg-rose-500', 'bg-blue-500', 'bg-teal-500'];
 
-function dayBounds() {
-  const now = new Date();
-  const start = new Date(now); start.setHours(0, 0, 0, 0);
-  const end = new Date(start); end.setDate(end.getDate() + 1);
-  const in14 = new Date(start); in14.setDate(in14.getDate() + 14);
-  return { start, end, in14 };
+// Every bound below is the FAMILY's, not the host's.
+//
+// `setHours(0, 0, 0, 0)` is the server's midnight, which on a UTC host is 17:00
+// in California and 11:00 the same morning in Sydney. This dashboard's "today" and
+// "next 14 days" hung off it, so a household opening it
+// after their afternoon cutover saw tomorrow's day and lost today's — every
+// day. Same defect and same fix as the kitchen display
+// (app/(app)/display/page.tsx:122).
+//
+// Day KEYS rather than millisecond arithmetic: `+ 7 * 86400000` drifts by an
+// hour across a DST boundary, and `zonedDayBoundsMs` re-resolves each key onto a
+// real local midnight. `weekStartDayKey` keeps the Monday-start week the strip
+// already used.
+function dayBounds(tz: string) {
+  const todayKey = dayKeyInTz(new Date(), tz);
+  const today = zonedDayBoundsMs(todayKey, tz);
+  const weekStartKey = weekStartDayKey(todayKey);
+  return {
+    start: new Date(today.start),
+    end: new Date(today.end),
+    in7: new Date(zonedDayBoundsMs(addDaysToDayKey(todayKey, 7), tz).start),
+    in14: new Date(zonedDayBoundsMs(addDaysToDayKey(todayKey, 14), tz).start),
+    weekStart: new Date(zonedDayBoundsMs(weekStartKey, tz).start),
+    weekEnd: new Date(zonedDayBoundsMs(addDaysToDayKey(weekStartKey, 7), tz).start),
+  };
 }
 
 function StatCard({ href, label, value, icon: Icon, bg }: {
@@ -52,7 +72,7 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
   const manager = isManager(role);
   const isKid = role === 'child' || role === 'teen';
   const supabase = await createServer();
-  const { start, end, in14 } = dayBounds();
+  const { start, end, in14 } = dayBounds(ctx.active.family.timezone || 'UTC');
 
   const [
     { data: myChores },

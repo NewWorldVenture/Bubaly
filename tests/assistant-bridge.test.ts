@@ -234,7 +234,15 @@ describe('the endpoints refuse before they look anything up', () => {
     // occurrence of each name, and `resolveAssistantLink` appears first in the
     // import block at the top of the file — so it measured import order and
     // would have failed no matter how the handler was written.
-    const limitIndex = generic.indexOf('rateLimit(`assistant');
+    //
+    // Anchored on the KEY rather than the limiter's name, which is the second
+    // time this assertion's mechanism has been wrong while its question was
+    // right. It matched the literal `rateLimit(\`assistant`, so swapping the
+    // in-process limiter for the durable `enforceRequestRateLimit(supabase, …)`
+    // broke it even though the ordering it exists to protect was untouched.
+    // The key is what makes a call THE rate limit for this route, and it does
+    // not move when the implementation behind it does.
+    const limitIndex = generic.search(/RateLimit\([^)]*`assistant:|rateLimit\(`assistant:/);
     const lookupIndex = generic.indexOf('await resolveAssistantLink(');
     expect(limitIndex).toBeGreaterThan(-1);
     expect(lookupIndex).toBeGreaterThan(-1);

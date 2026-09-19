@@ -40,6 +40,7 @@ import { buildBrief, type Brief } from './build';
 import { readBriefDecisions } from './decisions';
 import { medicationsDueOn, weekdayOf, type MedicationScheduleRow } from './sources';
 import { briefingCalendarWindow } from './calendar-window';
+import { settleAll } from '@/lib/supabase/settle';
 
 type DB = SupabaseClient<Database>;
 
@@ -108,7 +109,7 @@ export async function readMorningBrief(scope: ServiceScope, target: MorningTarge
   const sinceIso = new Date(bounds.start - 24 * 3600_000).toISOString();
   const todayDow = weekdayOf(dayKey);
 
-  const [events, members, bills, meds, maintenance, warranties, trips, pantry, runs, activity] = await Promise.all([
+  const [events, members, bills, meds, maintenance, warranties, trips, pantry, runs, activity] = await settleAll([
     db.from('calendar_events').select('title, starts_at, ends_at, all_day, location')
       .eq('family_id', familyId).or(briefingCalendarWindow(dayKey, tz, 0, 7)).order('starts_at').limit(100),
     db.from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true),

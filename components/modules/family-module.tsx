@@ -116,6 +116,21 @@ export function FamilyModule() {
   const [removeMember, setRemoveMember] = useState<Member | null>(null);
   const [menuId, setMenuId] = useState<string | null>(null);
 
+  // Escape closes the menu.
+  //
+  // Its click-outside scrim is `aria-hidden` with `tabIndex={-1}`, which is the
+  // honest description of a mouse-only dismiss — and which also silences
+  // `click-events-have-key-events` and `no-static-element-interactions`, the two
+  // rules that were pointing at the gap. With the rules quiet and no Escape
+  // path, a keyboard user could open this menu and had no way out of it but to
+  // pick something. Same shape as components/app/ai-orb.tsx:39.
+  useEffect(() => {
+    if (!(menuId !== null)) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuId(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [menuId]);
+
   const load = useCallback(async () => {
     const sb = createClient();
     const nowIso = new Date().toISOString();

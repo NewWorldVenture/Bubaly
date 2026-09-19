@@ -15,7 +15,7 @@ import { isOpenCaptureKey, isSaveHotkey, isTypingTarget } from '@/lib/capture/sh
 import { CaptureShortcuts } from '@/components/capture/capture-shortcuts';
 import { useJourney } from '@/lib/analytics/use-journey';
 import { describeDbError } from '@/lib/supabase/errors';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { useTranslations, useLocale } from '@/components/i18n/locale-provider';
 
 /** Human "when" label for the live event preview, e.g. "Tomorrow at 3:00 PM". */
 function formatWhen(startsAt: Date, allDay: boolean): string {
@@ -32,15 +32,24 @@ function formatWhen(startsAt: Date, allDay: boolean): string {
 
 type CaptureType = 'task' | 'note' | 'event' | 'shopping';
 
-const TYPES: { key: CaptureType; label: string; icon: typeof Plus; placeholder: string }[] = [
-  { key: 'task', label: 'Task', icon: CheckSquare, placeholder: 'e.g. Pack lunches' },
-  { key: 'note', label: 'Note', icon: StickyNote, placeholder: 'Jot something down…' },
-  { key: 'event', label: 'Event', icon: CalendarPlus, placeholder: 'e.g. Dentist at 3pm' },
-  { key: 'shopping', label: 'Shopping', icon: ShoppingCart, placeholder: 'e.g. Milk' },
+// KEYS, not words. This array is built at module scope, long before a request
+// has a locale, so it cannot hold strings — the same reason `lib/marketing/*.ts`
+// holds keys and lets its component resolve them
+// (scripts/i18n-scan.mjs:49-53 says so in as many words). Holding English here
+// is what put "Task / Note / Event / Shopping" and "e.g. Pack lunches" in front
+// of every non-English family on all 354 signed-in pages.
+const TYPES: { key: CaptureType; labelKey: string; icon: typeof Plus; placeholderKey: string }[] = [
+  { key: 'task', labelKey: 'quickCapture.task', icon: CheckSquare, placeholderKey: 'quickCapture.egPackLunches' },
+  { key: 'note', labelKey: 'quickCapture.note', icon: StickyNote, placeholderKey: 'quickCapture.jotSomethingDown' },
+  { key: 'event', labelKey: 'quickCapture.event', icon: CalendarPlus, placeholderKey: 'quickCapture.egDentistAt3pm' },
+  { key: 'shopping', labelKey: 'quickCapture.shopping', icon: ShoppingCart, placeholderKey: 'quickCapture.egMilk' },
 ];
 
 export function QuickCapture() {
   const tr = useTranslations();
+  // The active locale, because lower-casing a translated word is locale-dependent
+  // (Turkish dotless i is the classic case) and this word comes from a catalogue now.
+  const locale = useLocale();
   const { familyId, userId, selfMember } = useApp();
   const { success, error: toastError } = useToast();
   const [open, setOpen] = useState(false);
@@ -81,8 +90,10 @@ export function QuickCapture() {
     try {
       const res = await saveCapture(supabase, { kind: type, text: value, familyId, userId, memberId: selfMember?.id ?? null });
       success(
-        res.count > 1 ? `${res.count} items added` : `${TYPES.find((t) => t.key === type)!.label} saved`,
-        { label: 'Undo', onClick: () => {
+        res.count > 1
+          ? tr('quickCapture.itemsAdded', { count: res.count })
+          : tr('quickCapture.saved', { label: tr(TYPES.find((t) => t.key === type)!.labelKey) }),
+        { label: tr('quickCapture.undo'), onClick: () => {
           undoCapture(createClient(), res.undo)
             .then(() => success(tr('quickCapture.undone')))
             .catch(() => toastError(tr('quickCapture.couldNotUndo')));
@@ -172,7 +183,7 @@ export function QuickCapture() {
                   type === t.key ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-muted hover:bg-elevated')}
               >
                 <t.icon className="h-5 w-5" />
-                {t.label}
+                {tr(t.labelKey)}
               </button>
             ))}
           </div>
@@ -195,14 +206,14 @@ export function QuickCapture() {
               className="flex w-full items-center gap-1.5 rounded-lg bg-brand/5 px-3 py-2 text-left text-xs text-brand-text transition hover:bg-brand/10"
             >
               <Sparkles className="h-3.5 w-3.5 shrink-0" />
-              <span>{tr('quickCapture.looksLikeA')} <span className="font-semibold">{TYPES.find((t) => t.key === suggested)!.label.toLowerCase()}</span> {tr('quickCapture.tapToSwitch')}</span>
+              <span>{tr('quickCapture.looksLikeA')} <span className="font-semibold">{tr(TYPES.find((t) => t.key === suggested)!.labelKey).toLocaleLowerCase(locale.code)}</span> {tr('quickCapture.tapToSwitch')}</span>
             </button>
           )}
 
-          <Field label={active.label}>
+          <Field label={tr(active.labelKey)}>
             {(id) => type === 'note'
-              ? <Textarea id={id} value={text} onChange={(e) => setText(e.target.value)} rows={4} placeholder={active.placeholder} autoFocus />
-              : <Input id={id} value={text} onChange={(e) => setText(e.target.value)} placeholder={active.placeholder} autoFocus />}
+              ? <Textarea id={id} value={text} onChange={(e) => setText(e.target.value)} rows={4} placeholder={tr(active.placeholderKey)} autoFocus />
+              : <Input id={id} value={text} onChange={(e) => setText(e.target.value)} placeholder={tr(active.placeholderKey)} autoFocus />}
           </Field>
 
           {type === 'shopping' && shoppingItems && (

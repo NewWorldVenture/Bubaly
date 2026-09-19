@@ -11,7 +11,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { settleAll } from '@/lib/supabase/settle';
 import { readAll } from '@/lib/supabase/read-all';
-import { readAllInChunks } from '@/lib/supabase/chunked-in';
+import { readAllInChunks, writeInChunks } from '@/lib/supabase/chunked-in';
 import type { Database } from '@/lib/database.types';
 import {
   contributionFeatures, bedtimeToMinutes, typicalWeeklySpend, type ContributionInput,
@@ -21,6 +21,7 @@ import {
   AGG_DEFAULTS, type Contribution,
 } from './aggregate';
 import type { ConsentScope } from './insights';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type DB = SupabaseClient<Database>;
 
@@ -168,7 +169,7 @@ export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Pro
     family_id: string; enabled: boolean; scopes: Database['public']['Tables']['network_consent']['Row']['scopes'];
   }>((from, to) => sb.from('network_consent')
     .select('family_id, enabled, scopes').eq('enabled', true).order('family_id').range(from, to));
-  if (cErr) return { ok: false, error: cErr.message, contributors: 0, aggregates: 0 };
+  if (cErr) return { ok: false, error: describeActionError(cErr), contributors: 0, aggregates: 0 };
 
   const optedIn = consents;
 
@@ -207,16 +208,39 @@ export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Pro
       console.error(`network contribution failed for family ${c.family_id}:`, err);
     }
   }
-  // Right-to-be-forgotten: remove contributions for families no longer opted in —
-  // in ONE delete rather than a read + N per-row deletes.
-  const keepIds = optedIn.map((c) => c.family_id);
-  let contributionDeleteError;
-  if (keepIds.length > 0) {
-    ({ error: contributionDeleteError } = await sb.from('network_contributions').delete().not('family_id', 'in', `(${keepIds.join(',')})`));
-  } else {
-    // No one opted in → clear every contribution (family_id is NOT NULL).
-    ({ error: contributionDeleteError } = await sb.from('network_contributions').delete().not('family_id', 'is', null));
-  }
+  // Right-to-be-forgotten: remove contributions for families no longer opted in.
+  //
+  // The natural spelling is one `not in (keepIds)` delete, and it is the wrong
+  // one at this scale. A PostgREST filter travels in the query string, so that
+  // list costs about 40 bytes per family (chunked-in.ts measures it), and it is
+  // the list of everyone STILL opted in — deliberately uncapped, because the
+  // consent read above pages precisely so that no consenting family is missed.
+  // Past the gateway's request-line limit the delete answers `URI too long`,
+  // the run reports 'failed to prune contributions', and nothing is written
+  // before it, so the next night selects the identical set and fails
+  // identically. At the common 8 KB limit that begins at roughly two hundred
+  // consenting families: paging the read to keep the list complete is exactly
+  // what removed the list's ceiling.
+  //
+  // Chunking cannot rescue `not in` — `family_id not in (chunk)` deletes every
+  // row outside that chunk, which is every other chunk's rows. So invert the
+  // set: read which families the table actually holds, subtract the ones still
+  // opted in, and delete that remainder by `.in()` a hundred at a time. The
+  // remainder is also the far smaller list — the families who withdrew since
+  // the last run, not the whole network — and it subsumes the old empty-keep
+  // branch, since nobody opted in makes every stored row stale.
+  const keep = new Set(optedIn.map((c) => c.family_id));
+  const { rows: stored, error: storedError } = await readAll<{ family_id: string }>((from, to) => sb
+    .from('network_contributions').select('family_id').order('family_id').range(from, to));
+  // A short read here would leave a withdrawn family's contribution in place,
+  // which is the one failure this block exists to prevent, so it fails the run
+  // rather than pruning what it happened to see.
+  if (storedError) return { ok: false, error: 'failed to prune contributions', contributors: contributions.length, aggregates: 0 };
+  const staleIds = [...new Set(stored.map((r) => r.family_id))].filter((id) => !keep.has(id));
+  // A family that withdraws between this read and the delete is pruned by the
+  // next run — the old delete had the same window, one statement narrower.
+  const { error: contributionDeleteError } = await writeInChunks(staleIds, (chunk) => sb
+    .from('network_contributions').delete().in('family_id', chunk));
   if (contributionDeleteError) return { ok: false, error: 'failed to prune contributions', contributors: contributions.length, aggregates: 0 };
   if (contributionFailures > 0) return { ok: false, error: 'failed to persist family contributions', contributors: contributions.length, aggregates: 0 };
 
@@ -238,10 +262,10 @@ export async function runNetworkAggregation(sb: DB, now: Date = new Date()): Pro
       })),
       { onConflict: 'scope,cohort_key,metric,value' },
     );
-    if (upsertErr) return { ok: false, error: upsertErr.message, contributors: contributions.length, aggregates: 0 };
+    if (upsertErr) return { ok: false, error: describeActionError(upsertErr), contributors: contributions.length, aggregates: 0 };
   }
   const { error: pruneErr } = await sb.from('network_aggregates').delete().lt('computed_at', now.toISOString());
-  if (pruneErr) return { ok: false, error: pruneErr.message, contributors: contributions.length, aggregates: aggregates.length };
+  if (pruneErr) return { ok: false, error: describeActionError(pruneErr), contributors: contributions.length, aggregates: aggregates.length };
 
   return { ok: true, contributors: contributions.length, aggregates: aggregates.length };
 }

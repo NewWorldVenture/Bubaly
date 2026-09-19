@@ -45,6 +45,8 @@ export function BehaviorModule() {
       .order('occurred_at', { ascending: false }).limit(1000),
   });
 
+  const [saving, setSaving] = useState(false);
+
   const [memberFilter, setMemberFilter] = useState('all');
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
   const [ai, setAi] = useState<{ loading: boolean; insight: string; tips: string[] } | null>(null);
@@ -64,22 +66,35 @@ export function BehaviorModule() {
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form) return;
-    const supabase = createClient();
-    const row = {
-      member_id: form.member_id || null,
-      kind: form.kind,
-      category: form.category.trim() || 'general',
-      note: form.note.trim() || null,
-      points: Number.isFinite(parseInt(form.points, 10)) ? parseInt(form.points, 10) : 0,
-      occurred_at: new Date(form.occurred_at).toISOString(),
-    };
-    const { error } = form.id
-      ? await supabase.from('behavior_logs').update(row).eq('id', form.id)
-      : await supabase.from('behavior_logs').insert({ ...row, family_id: familyId, logged_by: userId });
-    if (error) return toastError(describeDbError(error));
-    success(form.id ? 'Updated' : 'Logged');
-    setForm(null);
+    // A pending button AND a re-entrance guard. The guard is not redundant:
+    // `disabled` covers the click, this covers the ENTER KEY, which submits the
+    // form without touching the button at all.
+    //
+    // preventDefault() stays ABOVE it. Returning before it on the second submit
+    // would hand the form to the browser's own native submission — a full page
+    // navigation — which is worse than the double insert this exists to stop.
+    if (saving) return;
+    setSaving(true);
+    try {
+      if (!form) return;
+      const supabase = createClient();
+      const row = {
+        member_id: form.member_id || null,
+        kind: form.kind,
+        category: form.category.trim() || 'general',
+        note: form.note.trim() || null,
+        points: Number.isFinite(parseInt(form.points, 10)) ? parseInt(form.points, 10) : 0,
+        occurred_at: new Date(form.occurred_at).toISOString(),
+      };
+      const { error } = form.id
+        ? await supabase.from('behavior_logs').update(row).eq('id', form.id)
+        : await supabase.from('behavior_logs').insert({ ...row, family_id: familyId, logged_by: userId });
+      if (error) return toastError(describeDbError(error));
+      success(form.id ? 'Updated' : 'Logged');
+      setForm(null);
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function remove(id: string) {
@@ -252,7 +267,7 @@ export function BehaviorModule() {
             </Field>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="secondary" onClick={() => setForm(null)}>{tr('behavior.cancel')}</Button>
-              <Button type="submit">{form.id ? 'Save' : 'Log it'}</Button>
+              <Button type="submit" loading={saving}>{form.id ? 'Save' : 'Log it'}</Button>
             </div>
           </form>
         </Modal>

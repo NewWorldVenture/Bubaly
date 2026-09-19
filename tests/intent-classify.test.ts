@@ -95,7 +95,7 @@ describe('fast paths', () => {
 });
 
 describe('classifyIntent', () => {
-  const scope = { familyId: 'fam-1', requestId: null, now: NOW };
+  const scope = { familyId: 'fam-1', requestId: null, now: NOW, tz: 'America/Los_Angeles' };
 
   it('never calls the model when a fast path matched', async () => {
     const { provider, calls } = scriptedProvider({ intent: 'other', confidence: 1, entities: [] });
@@ -143,5 +143,61 @@ describe('INTENT_SLICES', () => {
     expect(INTENT_SLICES.find_vendor).toContain('vendors');
     expect(INTENT_SLICES.spending_review).toContain('money');
     expect(INTENT_SLICES.navigate).toEqual(['people']);
+  });
+});
+
+/**
+ * "Dinner tomorrow at 6" is a WALL CLOCK, and resolving it needs to know whose
+ * wall. The fast path does not merely CLASSIFY on the parsed date — it
+ * serialises `startsAt` into the capture's entities, which is what goes on the
+ * calendar — and it resolved that against the HOST's day, because `tz` was not
+ * in `classifyIntent`'s `Pick` of the scope.
+ *
+ * `lib/voice/command-router.ts` has taken an optional `timezone` all along and
+ * carries a long header explaining exactly how to use it. The machinery was
+ * built, documented, and then not reached by the path that needed it.
+ */
+describe('whose tomorrow the assistant means', () => {
+  // 2026-09-05T22:00Z is 3pm on the 5th in Los Angeles, and already the 6th
+  // NOWHERE — but 2026-09-06T02:00Z is 7pm on the 5th in LA and the 6th in UTC.
+  const EVENING_IN_LA = new Date('2026-09-06T02:00:00Z');
+  const LA = 'America/Los_Angeles';
+
+  it('the family is still on the 5th while the host has rolled to the 6th', () => {
+    expect(EVENING_IN_LA.toISOString().slice(0, 10)).toBe('2026-09-06');
+  });
+
+  it('puts "tomorrow at 3pm" on the family\u2019s tomorrow, at the family\u2019s 3pm', () => {
+    const capture = classifyIntentFast('Dentist tomorrow at 3pm', { now: EVENING_IN_LA, timezone: LA });
+    expect(capture?.entities.kind).toBe('event');
+    // The family's tomorrow is the 6th, and 3pm there is 22:00Z.
+    expect(capture?.entities.startsAt).toBe('2026-09-06T22:00:00.000Z');
+  });
+
+  it('a household actually in UTC gets a genuinely different answer', () => {
+    // The contrast stated between two NAMED zones rather than against the
+    // host's, because an assertion about the host is an assertion about
+    // whichever machine runs it — the exact flaw this whole sweep has been
+    // removing, and CI runs this suite under two zones on purpose.
+    //
+    // At 2026-09-06T02:00Z it is the evening of the 5th in Los Angeles and
+    // already the 6th in UTC, so "tomorrow at 3pm" is a different instant AND
+    // a different day for the two households. Both answers are correct; which
+    // one you get is precisely what the zone decides.
+    const la = classifyIntentFast('Dentist tomorrow at 3pm', { now: EVENING_IN_LA, timezone: LA });
+    const utc = classifyIntentFast('Dentist tomorrow at 3pm', { now: EVENING_IN_LA, timezone: 'UTC' });
+    expect(la?.entities.startsAt).toBe('2026-09-06T22:00:00.000Z');
+    expect(utc?.entities.startsAt).toBe('2026-09-07T15:00:00.000Z');
+  });
+
+  it('classifyIntent takes the zone from the scope it was already given', async () => {
+    const { provider } = scriptedProvider({ intent: 'other', confidence: 1, entities: [] });
+    const result = await classifyIntent(
+      { familyId: 'fam-1', requestId: null, now: EVENING_IN_LA, tz: LA },
+      'Dentist tomorrow at 3pm',
+      { provider },
+    );
+    expect(result.source).toBe('fast_path');
+    expect(result.entities.startsAt).toBe('2026-09-06T22:00:00.000Z');
   });
 });

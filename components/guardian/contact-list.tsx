@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { useDismissOnEscape } from '@/lib/hooks/use-dismiss-on-escape';
+import { useDialogBehavior } from '@/lib/hooks/use-dialog-behavior';
 import { Plus, Search, Pencil, Trash2, Phone, Mail, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import {
@@ -190,7 +192,9 @@ function ContactRow({
   onDelete: () => void;
   onTrustChange: (t: TrustLevel) => void;
 }) {
+  const tr = useTranslations();
   const [showTrustPicker, setShowTrustPicker] = useState(false);
+  useDismissOnEscape(showTrustPicker, () => setShowTrustPicker(false));
 
   return (
     <div className="flex items-center gap-3 px-4 py-3 hover:bg-surface/60 transition">
@@ -222,7 +226,11 @@ function ContactRow({
         </button>
         {showTrustPicker && (
           <>
-            <div className="fixed inset-0 z-10" onClick={() => setShowTrustPicker(false)} />
+            {/* Presentational: no content, no name, nothing to focus. It exists so a
+                click anywhere dismisses the menu, and its keyboard equivalent is the
+                Escape handler above — there is nothing here for a keyboard to land on. */}
+            {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+            <div aria-hidden="true" className="fixed inset-0 z-10" onClick={() => setShowTrustPicker(false)} />
             <div className="absolute right-0 top-full z-20 mt-1 min-w-[180px] rounded-xl border border-border bg-bg shadow-xl py-1">
               {TRUST_LEVELS.map((lvl) => (
                 <button
@@ -238,9 +246,11 @@ function ContactRow({
           </>
         )}
       </div>
-      {/* Actions */}
-      <button onClick={onEdit} className="rounded-lg p-1.5 text-muted hover:bg-surface hover:text-fg transition"><Pencil className="h-4 w-4" /></button>
-      <button onClick={onDelete} className="rounded-lg p-1.5 text-muted hover:bg-red-500/10 hover:text-red-400 transition"><Trash2 className="h-4 w-4" /></button>
+      {/* Actions. Icon-only, so the label IS the name — a screen reader had
+          nothing to read here, and one of the two deletes a contact. The house
+          pattern is devices-module.tsx:97-98. */}
+      <button onClick={onEdit} aria-label={tr('contactList.edit')} className="rounded-lg p-1.5 text-muted hover:bg-surface hover:text-fg transition"><Pencil className="h-4 w-4" /></button>
+      <button onClick={onDelete} aria-label={tr('contactList.delete')} className="rounded-lg p-1.5 text-muted hover:bg-red-500/10 hover:text-red-400 transition"><Trash2 className="h-4 w-4" /></button>
     </div>
   );
 }
@@ -258,6 +268,11 @@ function ContactModal({
   onSave: (form: { name: string; phone: string; email: string; notes: string; trust_level: TrustLevel; member_id: string }) => void;
   onClose: () => void;
 }) {
+  // This declared `role="dialog" aria-modal="true"` and provided none of what
+  // that promises: no Escape, no focus move-in, no focus trap, no focus
+  // restore. The hook supplies all four, and is the same one the photo
+  // lightbox uses.
+  const dialogRef = useDialogBehavior<HTMLDivElement>(true, onClose);
   const tr = useTranslations();
   const [form, setForm] = useState({
     name: contact?.name ?? '',
@@ -272,12 +287,19 @@ function ContactModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      {/* Presentational backdrop. The dialog's keyboard dismissal is Escape,
+          bound by `useDialogBehavior` on the panel below along with the focus
+          trap and focus restore — which this dialog declared itself entitled to
+          (`role="dialog" aria-modal="true"`) while providing none of it. */}
+      {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+      <div aria-hidden="true" className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="contact-editor-title"
-        className="relative z-10 w-full max-w-md rounded-2xl border border-border bg-bg p-5 space-y-4 shadow-2xl"
+        tabIndex={-1}
+        className="relative z-10 w-full max-w-md rounded-2xl border border-border bg-bg p-5 space-y-4 shadow-2xl outline-none"
       >
         <h2 id="contact-editor-title" className="text-lg font-bold">{contact ? 'Edit Contact' : 'Add Contact'}</h2>
         <div className="space-y-3">

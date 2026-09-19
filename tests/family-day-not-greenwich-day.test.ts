@@ -39,7 +39,6 @@ const ALLOWED = new Map([
   // Each takes familyId but not a zone, so converting means threading one
   // through; worth doing, not yet done.
   ['lib/autopilot/scan.ts', 'background scan; needs a tz threaded through its signature'],
-  ['lib/family/signals.ts', 'background signals; needs a tz threaded through its signature'],
   ['lib/finance/timeline-load.ts', 'derived timeline; needs a tz threaded through its signature'],
   ['lib/operating-index/server.ts', 'snapshot key; needs a tz threaded through its signature'],
   ['lib/planning/prep-server.ts', 'prep generation; needs a tz threaded through its signature'],
@@ -162,11 +161,13 @@ const WRITE_ROOTS = ['app', 'lib', 'components'];
  * Same rule as the read allowlist: shrinking it is the point.
  */
 const WRITE_ALLOWED = new Map([
-  // Server actions that take a family but no zone. Converting means threading a
-  // zone through the action's `ctx()`, which is worth doing and not yet done.
-  ['app/(app)/dashboard/auto/actions.ts', 'server action; needs a zone threaded through ctx()'],
-  ['app/(app)/dashboard/home/actions.ts', 'server action; needs a zone threaded through ctx()'],
-  ['app/(app)/wallet/hub-actions.ts', 'server action; needs a zone threaded through ctx()'],
+  // The three server-action entries that stood here — dashboard/auto,
+  // dashboard/home and wallet/hub-actions — are gone. Their note read "needs a
+  // zone threaded through ctx(), which is worth doing and not yet done"; this
+  // branch threaded it, and they now take the day key from `todayKeyFor(ctx)`.
+  // The ratchet's second assertion is what forced the removal: it failed on the
+  // merge naming all three as no longer needing their exemption, which is the
+  // list refusing to carry a licence nobody uses.
   ['lib/planning/prep-server.ts', 'prep generation; needs a tz threaded through its signature'],
   // `reasoning_snapshots` is keyed (family_id, as_of_date) and upserted once a
   // day. Changing the key changes what "already snapshotted today" means, so it

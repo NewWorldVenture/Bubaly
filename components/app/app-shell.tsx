@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState, useTransition } from 'react';
+import { useDismissOnEscape } from '@/lib/hooks/use-dismiss-on-escape';
 import { ChevronDown, Check, Gift, Home, Lock, LogOut, Menu, Plus, Search, Settings as SettingsIcon, ShieldCheck, UserCog, X } from 'lucide-react';
 import { Logo, LogoMark } from '@/components/brand/logo';
 import { Avatar } from '@/components/ui/avatar';
@@ -70,6 +71,7 @@ function FamilySwitcher() {
   const t = useTranslations();
   const { family, families, role, planLevel } = useApp();
   const [open, setOpen] = useState(false);
+  useDismissOnEscape(open, () => setOpen(false));
   const [pending, startTransition] = useTransition();
 
   function switchTo(familyId: string) {
@@ -97,7 +99,11 @@ function FamilySwitcher() {
       </button>
       {open && (
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          {/* Presentational: no content, no name, nothing to focus. It exists so a
+              click anywhere dismisses the menu, and its keyboard equivalent is the
+              Escape handler above — there is nothing here for a keyboard to land on. */}
+          {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+          <div aria-hidden="true" className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
           <div className="absolute left-0 right-0 top-full z-20 mt-1 rounded-xl popover-surface p-1 shadow-glass animate-fade-in">
             {families.map((f) => (
               <button
@@ -128,6 +134,7 @@ function UserMenu() {
   const t = useTranslations();
   const { userEmail, selfMember, isSuperAdmin, role, defaultDashboard, family, families } = useApp();
   const [open, setOpen] = useState(false);
+  useDismissOnEscape(open, () => setOpen(false));
   const [switching, startSwitch] = useTransition();
   const name = selfMember?.display_name ?? userEmail ?? 'You';
 
@@ -158,7 +165,11 @@ function UserMenu() {
       </button>
       {open && (
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          {/* Presentational: no content, no name, nothing to focus. It exists so a
+              click anywhere dismisses the menu, and its keyboard equivalent is the
+              Escape handler above — there is nothing here for a keyboard to land on. */}
+          {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+          <div aria-hidden="true" className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
           <div className="absolute right-0 top-full z-20 mt-2 w-60 rounded-xl popover-surface p-1 shadow-glass animate-fade-in">
             <div className="px-3 py-2">
               <p className="truncate text-sm font-medium">{name}</p>

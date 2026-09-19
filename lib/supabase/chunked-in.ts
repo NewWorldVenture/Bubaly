@@ -78,3 +78,36 @@ export async function readAllInChunks<Row, Err = { message: string }>(
   }
   return { data, error: null };
 }
+
+/**
+ * `.in(column, ids)` for a WRITE — the same URL limit, and one thing more.
+ *
+ * `readInChunks` exists because a PostgREST filter travels in the query string.
+ * That is just as true of a DELETE or an UPDATE, and the `.in()` there is often
+ * spelled as its complement: `not('id', 'in', `(${keep.join(',')})`)`, which
+ * reads naturally and carries the LONGER list — everything being kept rather
+ * than the few rows being removed.
+ *
+ * Chunking cannot rescue that spelling. `id not in (chunk)` deletes every row
+ * outside the chunk, which includes every other chunk's rows; run it twice and
+ * the table is empty. NOT IN does not decompose over a partition of its list,
+ * so a caller has to invert the set first — read what is there, subtract what
+ * it keeps, and pass the REMAINDER here.
+ *
+ * Sequential, not parallel like the read: concurrent deletes over one table
+ * take row locks in whatever order each chunk matches, and the batches are
+ * small. The first error is returned but the remaining chunks still run — a
+ * partial erasure is worth more than none, and the caller is told either way.
+ */
+export async function writeInChunks<Err>(
+  ids: readonly string[],
+  write: (chunk: string[]) => PromiseLike<{ error: Err | null }>,
+  chunkSize = 100,
+): Promise<{ error: Err | null }> {
+  let error: Err | null = null;
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const result = await write(ids.slice(i, i + chunkSize));
+    if (result.error && !error) error = result.error;
+  }
+  return { error };
+}

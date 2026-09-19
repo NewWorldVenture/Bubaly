@@ -35,6 +35,8 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
     fetcher: (sb) => sb.from('health_visits').select('*').eq('family_id', familyId),
   });
 
+  const [saving, setSaving] = useState(false);
+
   const [memberFilter, setMemberFilter] = useState('all');
   const [form, setForm] = useState<ReturnType<typeof blank> | null>(null);
 
@@ -49,26 +51,39 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form?.title.trim()) return;
-    const supabase = createClient();
-    const row = {
-      member_id: form.member_id || null,
-      kind: form.kind,
-      title: form.title.trim(),
-      provider_name: form.provider_name.trim() || null,
-      location: form.location.trim() || null,
-      visit_date: form.visit_date,
-      reason: form.reason.trim() || null,
-      outcome: form.outcome.trim() || null,
-      follow_up_date: form.follow_up_date || null,
-      cost_cents: form.cost ? Math.round(parseFloat(form.cost) * 100) : null,
-    };
-    const { error } = form.id
-      ? await supabase.from('health_visits').update(row).eq('id', form.id)
-      : await supabase.from('health_visits').insert({ ...row, family_id: familyId, created_by: userId });
-    if (error) return toastError(describeDbError(error));
-    success(form.id ? 'Visit updated' : 'Visit added');
-    setForm(null);
+    // A pending button AND a re-entrance guard. The guard is not redundant:
+    // `disabled` covers the click, this covers the ENTER KEY, which submits the
+    // form without touching the button at all.
+    //
+    // preventDefault() stays ABOVE it. Returning before it on the second submit
+    // would hand the form to the browser's own native submission — a full page
+    // navigation — which is worse than the double insert this exists to stop.
+    if (saving) return;
+    setSaving(true);
+    try {
+      if (!form?.title.trim()) return;
+      const supabase = createClient();
+      const row = {
+        member_id: form.member_id || null,
+        kind: form.kind,
+        title: form.title.trim(),
+        provider_name: form.provider_name.trim() || null,
+        location: form.location.trim() || null,
+        visit_date: form.visit_date,
+        reason: form.reason.trim() || null,
+        outcome: form.outcome.trim() || null,
+        follow_up_date: form.follow_up_date || null,
+        cost_cents: form.cost ? Math.round(parseFloat(form.cost) * 100) : null,
+      };
+      const { error } = form.id
+        ? await supabase.from('health_visits').update(row).eq('id', form.id)
+        : await supabase.from('health_visits').insert({ ...row, family_id: familyId, created_by: userId });
+      if (error) return toastError(describeDbError(error));
+      success(form.id ? 'Visit updated' : 'Visit added');
+      setForm(null);
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function remove(id: string) {
@@ -186,7 +201,7 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
             <Field label={t('healthVisits.cost')}>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" min="0" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} />}</Field>
             <div className="flex justify-end gap-2 pt-1">
               <Button type="button" variant="ghost" onClick={() => setForm(null)}>{t('healthVisits.cancel')}</Button>
-              <Button type="submit">{form.id ? 'Save' : 'Add visit'}</Button>
+              <Button type="submit" loading={saving}>{form.id ? 'Save' : 'Add visit'}</Button>
             </div>
           </form>
         </Modal>

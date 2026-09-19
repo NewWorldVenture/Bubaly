@@ -101,6 +101,21 @@ export function MessagesModule() {
   const [showArchived, setShowArchived] = useState(false);
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
+
+  // Escape closes the menu.
+  //
+  // Its click-outside scrim is `aria-hidden` with `tabIndex={-1}`, which is the
+  // honest description of a mouse-only dismiss — and which also silences
+  // `click-events-have-key-events` and `no-static-element-interactions`, the two
+  // rules that were pointing at the gap. With the rules quiet and no Escape
+  // path, a keyboard user could open this menu and had no way out of it but to
+  // pick something. Same shape as components/app/ai-orb.tsx:39.
+  useEffect(() => {
+    if (!(filterOpen)) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setFilterOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [filterOpen]);
   const [summaries, setSummaries] = useState<ReturnType<typeof summarizeConversations>>(
     { lastByConv: new Map(), unreadByConv: new Map() },
   );

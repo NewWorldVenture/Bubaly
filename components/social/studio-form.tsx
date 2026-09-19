@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useId, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Sparkles, Save, CalendarClock, Send, Loader2, AlertTriangle, CheckCircle2,
@@ -22,6 +22,14 @@ export function StudioForm({ accounts }: { accounts: AccountLite[] }) {
   const tr = useTranslations();
   const router = useRouter();
   const [title, setTitle] = useState('');
+  // Each caption below was a styled <label> pointing at nothing: announced on
+  // its own, then silence when focus reached the field it named. Every name
+  // already exists in the catalogue, so this is wiring, not copy.
+  const uid = useId();
+  const titleFieldId = `${uid}title`;
+  const bodyFieldId = `${uid}body`;
+  const linkFieldId = `${uid}link`;
+  const scheduleFieldId = `${uid}schedule`;
   const [body, setBody] = useState('');
   const [link, setLink] = useState('');
   const [kind, setKind] = useState<PostKind>('text');
@@ -103,8 +111,9 @@ export function StudioForm({ accounts }: { accounts: AccountLite[] }) {
       {/* Editor */}
       <div className="space-y-4 lg:col-span-2">
         <Card>
-          <label className="mb-1 block text-xs font-medium text-muted">{tr('studio.draftTitleInternal')}</label>
+          <label htmlFor={titleFieldId} className="mb-1 block text-xs font-medium text-muted">{tr('studio.draftTitleInternal')}</label>
           <input
+            id={titleFieldId}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder={tr('studio.springBreakRecap')}
@@ -126,16 +135,18 @@ export function StudioForm({ accounts }: { accounts: AccountLite[] }) {
             ))}
           </div>
 
-          <label className="mb-1 block text-xs font-medium text-muted">{tr('studio.captionBody')}</label>
+          <label htmlFor={bodyFieldId} className="mb-1 block text-xs font-medium text-muted">{tr('studio.captionBody')}</label>
           <textarea
+            id={bodyFieldId}
             value={body}
             onChange={(e) => setBody(e.target.value)}
             rows={6}
             placeholder={tr('studio.writeYourPostUseHashtagsAnd')}
             className="w-full resize-y rounded-xl border border-border bg-elevated px-3 py-2 text-sm focus-ring"
           />
-          <label className="mb-1 mt-3 block text-xs font-medium text-muted">{tr('studio.linkOptional')}</label>
+          <label htmlFor={linkFieldId} className="mb-1 mt-3 block text-xs font-medium text-muted">{tr('studio.linkOptional')}</label>
           <input
+            id={linkFieldId}
             value={link}
             onChange={(e) => setLink(e.target.value)}
             placeholder="https://…"
@@ -295,8 +306,9 @@ export function StudioForm({ accounts }: { accounts: AccountLite[] }) {
 
         {/* Actions */}
         <Card>
-          <label className="mb-1 block text-xs font-medium text-muted">{tr('studio.scheduleFor')}</label>
+          <label htmlFor={scheduleFieldId} className="mb-1 block text-xs font-medium text-muted">{tr('studio.scheduleFor')}</label>
           <input
+            id={scheduleFieldId}
             type="datetime-local"
             value={scheduledFor}
             onChange={(e) => setScheduledFor(e.target.value)}

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
-import { clientIp, rateLimit } from '@/lib/server/rate-limit';
+import { clientIp } from '@/lib/server/rate-limit';
+import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { readPresentedToken } from '@/lib/assistant/link-token';
 import { classifyAssistantUtterance } from '@/lib/assistant/intent';
 import { ERROR_SPEECH } from '@/lib/assistant/answers';
@@ -29,7 +30,23 @@ const MAX_UTTERANCE_CHARS = 500;
 export async function POST(req: NextRequest) {
   // Rate limited by IP BEFORE the token lookup, so an attacker cannot use this
   // endpoint to test guessed tokens at speed.
-  const limited = rateLimit(`assistant:${clientIp(req.headers)}`, { limit: 30, windowMs: 60_000 });
+  //
+  // DURABLE, not the in-process limiter this used to call. `lib/server/rate-limit.ts`
+  // says of itself: "Good for a single instance / dev; swap for Upstash Redis in
+  // multi-instance prod." Every warm lambda holds its own `buckets` Map, so the
+  // cap was really 30/minute PER INSTANCE — and load is what spawns instances,
+  // so the ceiling rose with the pressure it was meant to resist. The claim
+  // above was the thing that was untrue; `enforceRequestRateLimit` makes it true
+  // by keeping the in-process check as the cheap fast path and settling the
+  // count in Postgres, exactly as /api/ai/gift already does for the same shape
+  // of endpoint ("limit via Postgres so the cap holds under horizontal scale").
+  //
+  // The token is 32 random bytes, so guessing was never the live risk and this
+  // is not a hole being closed — it is a stated property being made true, and
+  // a public model-backed endpoint getting a cap that is one number rather than
+  // one number times however many instances are warm.
+  const supabase = createServiceClient();
+  const limited = await enforceRequestRateLimit(supabase, `assistant:${clientIp(req.headers)}`, { limit: 30, windowMs: 60_000 });
   if (!limited.ok) {
     return NextResponse.json(
       { error: 'Too many requests' },
@@ -48,7 +65,6 @@ export async function POST(req: NextRequest) {
   const token = readPresentedToken(req.headers.get('authorization'), payload.token);
   if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const supabase = createServiceClient();
   const link = await resolveAssistantLink(supabase, token);
   // One answer for unknown, revoked and malformed alike: telling them apart
   // would make this a way to check whether a guessed token exists.

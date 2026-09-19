@@ -26,6 +26,7 @@ import {
   PANTRY_LOCATIONS, locationMeta, expiryStatus, isLowStock, expiringSoon,
   lowStockItems, groupByLocation, pantrySummary, type PantryLocation,
 } from '@/lib/pantry/logic';
+import { dayKeyIn } from '@/lib/time/zoned';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
@@ -39,7 +40,7 @@ const TONE_CLASS: Record<string, string> = {
 
 export function PantryModule() {
   const t = useTranslations();
-  const { familyId, userId } = useApp();
+  const { familyId, userId, family } = useApp();
   const { success, error: toastError } = useToast();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<PantryItem | null>(null);
@@ -51,8 +52,15 @@ export function PantryModule() {
         .order('expires_at', { ascending: true, nullsFirst: false }).order('name'),
   });
 
-  const summary = useMemo(() => pantrySummary(items), [items]);
-  const expiring = useMemo(() => expiringSoon(items, 5), [items]);
+  // The FAMILY's day, not this device's. A parent on a phone set to UTC, or
+  // travelling, would otherwise be told food expires on a different day than
+  // the server-rendered kitchen page says — same data, two answers.
+  const todayKey = useMemo(
+    () => dayKeyIn(new Date(), family?.timezone || 'UTC'),
+    [family?.timezone],
+  );
+  const summary = useMemo(() => pantrySummary(items, todayKey), [items, todayKey]);
+  const expiring = useMemo(() => expiringSoon(items, 5, todayKey), [items, todayKey]);
   const low = useMemo(() => lowStockItems(items), [items]);
   const groups = useMemo(() => groupByLocation(items), [items]);
 
@@ -136,7 +144,7 @@ export function PantryModule() {
           </div>
           <ul className="space-y-2">
             {expiring.map((item) => {
-              const st = expiryStatus(item.expires_at);
+              const st = expiryStatus(item.expires_at, todayKey);
               return (
                 <li key={item.id} className="flex items-center gap-3 rounded-xl border border-border bg-surface/40 px-3 py-2.5">
                   <span className="text-lg">{locationMeta(item.location).emoji}</span>
@@ -191,7 +199,7 @@ export function PantryModule() {
             </div>
             <div className="grid gap-2 sm:grid-cols-2">
               {rows.map((item) => {
-                const st = expiryStatus(item.expires_at);
+                const st = expiryStatus(item.expires_at, todayKey);
                 const lowS = isLowStock(item);
                 return (
                   <div key={item.id} className="flex items-center gap-3 rounded-xl border border-border bg-surface/40 px-3 py-2.5">

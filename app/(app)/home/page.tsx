@@ -160,10 +160,14 @@ export default async function HomePage() {
   const todayStart = new Date(dayBounds.start);
   const todayEnd = new Date(dayBounds.end);
   const todayIso = todayKey;
-  const week = weekStrip(now);
+  const week = weekStrip(todayKey);
   const weekStartIso = week[0].date;
   const weekEndIso = week[6].date;
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  // The first of the month in the FAMILY's zone. `now.getFullYear()/getMonth()`
+  // are the host's, so for a household west of UTC the month rolled over on the
+  // last afternoon of the previous one, and "this month" spent a few hours
+  // reporting the wrong month's finances.
+  const monthStart = new Date(zonedDayBoundsMs(`${todayKey.slice(0, 7)}-01`, tz).start);
 
   const [
     { data: members, count: memberCount, error: membersError },
@@ -728,7 +732,7 @@ export default async function HomePage() {
         {/* Family Finances */}
         <Card>
           <CardHead icon={DollarSign} title={tr('home.familyFinances')} href="/dashboard/billing" action="View finances" />
-          <p className="text-xs text-muted">{tr('home.thisMonth')} {monthStart.toLocaleDateString('en-US', { month: 'long' })}</p>
+          <p className="text-xs text-muted">{tr('home.thisMonth')} {monthStart.toLocaleDateString('en-US', { month: 'long', timeZone: tz })}</p>
           <div className="mt-3 flex items-center gap-4">
             <FinanceDonut income={finances.income} expenses={finances.expenses} remaining={finances.remaining} />
             <div className="flex-1 space-y-2 text-sm">

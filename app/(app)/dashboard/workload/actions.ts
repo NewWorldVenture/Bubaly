@@ -4,6 +4,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { logAudit } from '@/lib/server/audit';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -26,7 +27,7 @@ export async function moveAssignmentAction(assignmentId: string, toMemberId: str
     .eq('id', assignmentId)
     .eq('family_id', ctx.active.familyId)
     .in('status', ['todo', 'in_progress']);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   if (!count) return { ok: false, error: t('actions.thatChoreIsNoLonger') };
 
   await logAudit(supabase, {
@@ -66,7 +67,7 @@ export async function saveWorkloadSnapshotAction(rows: {
       })),
       { onConflict: 'family_id,member_id,week_start' },
     );
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: describeActionError(error) };
     return { ok: true };
   } catch {
     return { ok: false, error: t('actions.couldNotSaveWorkloadHistory') };

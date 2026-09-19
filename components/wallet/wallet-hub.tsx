@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   Wallet, Plus, Send, MoreHorizontal, CreditCard, Landmark, PiggyBank, Banknote,
@@ -77,6 +77,24 @@ export function WalletHub() {
   const [adding, setAdding] = useState<AddKind>(null);
   const [txnSearch, setTxnSearch] = useState('');
   const [moreOpen, setMoreOpen] = useState(false);
+
+  // Escape closes either menu.
+  //
+  // Both click-outside scrims are `aria-hidden`, which is honest about a
+  // mouse-only dismiss and also silences the two jsx-a11y rules that were
+  // pointing at the gap. With the rules quiet and no Escape path, a keyboard
+  // user could open either menu and had no way out but to pick something.
+  // Same shape as components/app/ai-orb.tsx:39.
+  useEffect(() => {
+    if (!addOpen && !moreOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setAddOpen(false);
+      setMoreOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [addOpen, moreOpen]);
 
   const overview = useMemo(
     () => walletOverview(accounts, cards, rewards),

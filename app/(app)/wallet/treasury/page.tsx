@@ -37,7 +37,7 @@ export default async function WalletTreasuryPage() {
     // response at db-max-rows whatever the client asked for.
     readAllAsQuery((from, to) => supabase.from('wallet_transactions')
       .select('id, child_wallet_id, bucket_id, type, status, direction, amount_cents, created_at')
-      .eq('family_id', familyId).order('created_at', { ascending: false }).order('id').range(from, to), { max: 5000 }),
+      .eq('family_id', familyId).order('created_at', { ascending: false }).order('id').range(from, to), { max: 5000, failOnMax: true }),
     supabase.from('family_members').select('id, display_name, color').eq('family_id', familyId),
     supabase.from('wallet_goals')
       .select('id, child_wallet_id, title, target_cents, saved_cents, status, kind')

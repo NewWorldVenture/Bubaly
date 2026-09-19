@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useDismissOnEscape } from '@/lib/hooks/use-dismiss-on-escape';
 import { firstName } from '@/lib/utils/format';
 import {
   MapPin, LocateFixed, Plus, Pencil, Trash2, Home, GraduationCap, Briefcase,
@@ -80,8 +81,10 @@ export function LocatorModule() {
   const [focusMember, setFocusMember] = useState<string | null>(null);
   const [mapStyle, setMapStyle] = useState<(typeof MAP_STYLES)[number]['key']>('traffic');
   const [styleOpen, setStyleOpen] = useState(false);
+  useDismissOnEscape(styleOpen, () => setStyleOpen(false));
   const [zoom, setZoom] = useState(1);
   const [moreOpen, setMoreOpen] = useState(false);
+  useDismissOnEscape(moreOpen, () => setMoreOpen(false));
   const [togglingGeo, setTogglingGeo] = useState<string | null>(null);
   const historyRef = useRef<HTMLDivElement>(null);
 
@@ -218,7 +221,12 @@ export function LocatorModule() {
   const style = MAP_STYLES.find((s) => s.key === mapStyle) ?? MAP_STYLES[0];
 
   return (
-    <div className="module-with-sidebar" onClick={() => { setStyleOpen(false); setMoreOpen(false); }}>
+    // The page wrapper is LAYOUT again. Dismissal used to hang off a click
+    // handler on the whole page, which forced each menu panel to carry an
+    // `onClick={(e) => e.stopPropagation()}` purely to cancel it — two handlers
+    // whose only job was to undo each other, on elements a keyboard cannot
+    // reach. Each menu now owns a scrim, and Escape is the keyboard path.
+    <div className="module-with-sidebar">
       <div className="module-main module-page">
         <PageHeader
           title={tr('locator.location')}
@@ -235,11 +243,17 @@ export function LocatorModule() {
                   <MoreHorizontal className="h-4 w-4" />
                 </Button>
                 {moreOpen && (
-                  <div className="absolute right-0 z-30 mt-1 w-48 overflow-hidden rounded-xl border border-border bg-elevated shadow-lg" onClick={(e) => e.stopPropagation()}>
+                  <>
+                    {/* Presentational: no content, no name, nothing to focus. A click anywhere
+                        dismisses the menu; the keyboard equivalent is Escape, bound above. */}
+                    {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+                    <div aria-hidden="true" className="fixed inset-0 z-20" onClick={() => setMoreOpen(false)} />
+                    <div className="absolute right-0 z-30 mt-1 w-48 overflow-hidden rounded-xl border border-border bg-elevated shadow-lg">
                     <button onClick={() => { setMoreOpen(false); refreshAll(); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-surface"><RefreshCw className="h-3.5 w-3.5" /> {tr('locator.refreshLocations')}</button>
                     <button onClick={() => { setMoreOpen(false); historyRef.current?.scrollIntoView({ behavior: 'smooth' }); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-surface"><Clock className="h-3.5 w-3.5" /> {tr('locator.locationHistory')}</button>
                     {canManage && <button onClick={() => { setMoreOpen(false); openNewPlace(); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-surface"><Plus className="h-3.5 w-3.5" /> {tr('locator.addGeofence')}</button>}
-                  </div>
+                    </div>
+                  </>
                 )}
               </div>
             </div>
@@ -290,12 +304,17 @@ export function LocatorModule() {
               {style.label} <ChevronDown className="h-3 w-3" />
             </button>
             {styleOpen && (
-              <div className="absolute right-0 mt-1 w-32 overflow-hidden rounded-lg border border-border bg-elevated shadow-lg" onClick={(e) => e.stopPropagation()}>
+              <>
+                {/* Presentational; Escape is the keyboard path. */}
+                {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+                <div aria-hidden="true" className="fixed inset-0 z-10" onClick={() => setStyleOpen(false)} />
+                <div className="absolute right-0 z-20 mt-1 w-32 overflow-hidden rounded-lg border border-border bg-elevated shadow-lg">
                 {MAP_STYLES.map((s) => (
                   <button key={s.key} onClick={() => { setMapStyle(s.key); setStyleOpen(false); }}
                     className={cn('block w-full px-3 py-1.5 text-left text-xs hover:bg-surface', s.key === mapStyle && 'text-brand-text font-semibold')}>{s.label}</button>
-                ))}
-              </div>
+                  ))}
+                </div>
+              </>
             )}
           </div>
 

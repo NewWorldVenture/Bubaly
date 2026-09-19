@@ -31,16 +31,24 @@ type Candidate = {
 
 const HOUR = 3600_000;
 
-function timeLabel(iso: string, allDay = false): string {
+// "today", "tomorrow" and the clock time IN THE FAMILY'S ZONE. This used to
+// compare `toDateString()` against the SERVER's midnight, and render the time
+// with no timeZone at all — so on a UTC host a Pacific family was told an 8pm
+// event was "tomorrow" (20:00 PT is 03:00 UTC the next day) and shown the wrong
+// hour beside it. The rest of this file already resolves `families.timezone`
+// for exactly this reason — see the medication-window note above — and this was
+// the one place the value was not threaded through.
+function timeLabel(iso: string, tz: string, allDay = false): string {
   const d = new Date(iso);
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const day = d.toDateString() === today.toDateString()
+  const dayKey = dayKeyInTz(d, tz);
+  const todayKey = dayKeyInTz(new Date(), tz);
+  const day = dayKey === todayKey
     ? 'today'
-    : d.toDateString() === new Date(today.getTime() + 24 * HOUR).toDateString()
+    : dayKey === addDaysToDayKey(todayKey, 1)
       ? 'tomorrow'
-      : d.toLocaleDateString('en-US', { weekday: 'long' });
+      : d.toLocaleDateString('en-US', { weekday: 'long', timeZone: tz });
   if (allDay) return day;
-  return `${day} at ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+  return `${day} at ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz })}`;
 }
 
 export async function generateFamilyNotifications(supabase: DB, familyId: string): Promise<number> {
@@ -146,7 +154,7 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     candidates.push({
       type: 'calendar_event', related_type: 'calendar_events', related_id: e.id, user_id: target,
       title: e.title,
-      body: `${timeLabel(e.starts_at, e.all_day)}${e.location ? ` · ${e.location}` : ''}`,
+      body: `${timeLabel(e.starts_at, tz, e.all_day)}${e.location ? ` · ${e.location}` : ''}`,
     });
   }
 
@@ -155,7 +163,7 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
       type: 'chore_due', related_type: 'chore_assignments', related_id: c.id,
       user_id: userByMember.get(c.member_id) ?? null,
       title: `Chore due: ${choreTitle.get(c.chore_id) ?? 'Task'}`,
-      body: c.due_at ? `Due ${timeLabel(c.due_at)}` : 'Due soon',
+      body: c.due_at ? `Due ${timeLabel(c.due_at, tz)}` : 'Due soon',
     });
   }
 
@@ -164,7 +172,7 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     candidates.push({
       type: 'school_event', related_type: 'school_events', related_id: s.id, user_id: target,
       title: `School: ${s.title}`,
-      body: `${timeLabel(s.starts_at)}${s.event_type ? ` · ${s.event_type}` : ''}`,
+      body: `${timeLabel(s.starts_at, tz)}${s.event_type ? ` · ${s.event_type}` : ''}`,
     });
   }
 
@@ -173,7 +181,7 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     candidates.push({
       type: 'sports_event', related_type: 'sports_events', related_id: s.id, user_id: target,
       title: `${s.sport ?? 'Sports'}: ${s.title}`,
-      body: `${timeLabel(s.starts_at)}${s.location ? ` · ${s.location}` : ''}`,
+      body: `${timeLabel(s.starts_at, tz)}${s.location ? ` · ${s.location}` : ''}`,
     });
   }
 
@@ -182,7 +190,7 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
       type: 'system', related_type: 'reminders', related_id: r.id,
       user_id: r.member_id ? userByMember.get(r.member_id) ?? null : null,
       title: `Reminder: ${r.title}`,
-      body: `Due ${timeLabel(r.remind_at)}`,
+      body: `Due ${timeLabel(r.remind_at, tz)}`,
     });
   }
 
@@ -215,16 +223,23 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   // Relationship dates entering their reminder window (anniversaries, birthdays,
   // date nights). The related_id is keyed by occurrence year so the permanent
   // dedup sends one advance reminder per occurrence, then again next year.
+  //
+  // `todayKey` — the family's day, computed above and used by every other
+  // reminder in this function via `timeLabel(..., tz)`. This one block passed
+  // the raw instant instead, so it resolved against the HOST's day: a birthday
+  // reminder fired a day early for the last seven hours of every Californian
+  // day. And because the dedup is PERMANENT and keyed by occurrence year, the
+  // early one is the only one — the real day arrives with nothing sent.
   const { data: relDates } = await supabase.from('relationship_dates')
     .select('id, kind, title, event_date, recurs_annually, reminder_days_before, status')
     .eq('family_id', familyId).neq('status', 'cancelled').limit(100);
   for (const d of upcomingRelationship((relDates ?? []).map((r): RelDate => ({
     id: r.id, kind: r.kind, title: r.title, eventDate: r.event_date,
     recursAnnually: r.recurs_annually, reminderDaysBefore: r.reminder_days_before, status: r.status,
-  })), now)) {
+  })), todayKey)) {
     const ms = milestoneLabel(d);
     candidates.push({
-      type: 'system', related_type: 'relationship_dates', related_id: `${d.id}:${d.next.getFullYear()}`, user_id: null,
+      type: 'system', related_type: 'relationship_dates', related_id: `${d.id}:${d.nextKey.slice(0, 4)}`, user_id: null,
       title: `💞 ${d.title} ${formatCountdown(d.days).toLowerCase()}`,
       body: ms ? `${ms} · plan something special` : 'Open the Relationship Helper for gift ideas',
     });
@@ -243,7 +258,7 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
       type: 'system', related_type: 'family_reminders', related_id: `fr:${n.id}`,
       user_id: r.member_id ? userByMember.get(r.member_id) ?? null : null,
       title: `Reminder: ${n.title}`,
-      body: `Due ${timeLabel(n.remindAtIso)}`,
+      body: `Due ${timeLabel(n.remindAtIso, tz)}`,
     });
   }
 
@@ -289,7 +304,7 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   for (const c of detectConflicts((conflictEvents ?? []) as ConflictEvent[])) {
     const key = `conflict:${[...c.eventIds].sort().join('-')}`;
     const who = nameByMember.get(c.assigneeId);
-    const body = `${who ? `${who}: ` : ''}${c.eventIds.length} events overlap ${timeLabel(c.startsAt)}`;
+    const body = `${who ? `${who}: ` : ''}${c.eventIds.length} events overlap ${timeLabel(c.startsAt, tz)}`;
     const target = userByMember.get(c.assigneeId) ?? null;
     if (target) {
       candidates.push({ type: 'system', related_type: 'calendar_events', related_id: key, user_id: target, title: 'Schedule conflict', body });

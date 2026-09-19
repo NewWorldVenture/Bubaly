@@ -122,3 +122,78 @@ function execSyncGrep(dir: string, name: string): boolean {
   const out = execSync(`grep -rl "process.env.${name}" ${dir} --include=*.ts --include=*.tsx || true`, { encoding: 'utf8' });
   return out.trim().length > 0;
 }
+
+/**
+ * The other direction.
+ *
+ * Every rule above checks that what IS listed belongs there: it is really read,
+ * it is env-only, an admin cannot set it in the product. None checks that what
+ * belongs there IS listed — and that is the direction a subsystem dies in. It
+ * is the same asymmetry the translation catalogue had, where orphaned keys were
+ * guarded and missing ones were not.
+ *
+ * It has already cost this codebase twice. `RESEND_API_KEY` gates every outbound
+ * email and was absent from this list until an audit pass put it there
+ * (audit/claude-4.md raised it). `VAPID_PRIVATE_KEY` and `FCM_SERVER_KEY` gate
+ * web and native push and were absent until this one.
+ *
+ * So: a closed list of the gates, each carrying the evidence that it meets the
+ * criteria in `lib/health/status.ts` — absence silently disables a whole shipped
+ * subsystem, and the secret is read only as `process.env.X`. Adding a gate here
+ * without adding it to FEATURE_ENV fails.
+ */
+const SUBSYSTEM_GATES: { name: string; subsystem: string; silentBecause: string }[] = [
+  { name: 'CRON_SECRET', subsystem: 'all 24 scheduled jobs', silentBecause: 'hasCronAuthorization fails closed, so every job answers 401 and nothing logs an error' },
+  { name: 'RESEND_API_KEY', subsystem: 'every outbound email', silentBecause: 'lib/email.ts reports success when it is unset, so rows are marked delivered for mail never sent' },
+  { name: 'CHILD_LOGIN_SECRET', subsystem: 'child sign-in', silentBecause: 'no child in any family can sign in and nothing says so' },
+  { name: 'VAPID_PRIVATE_KEY', subsystem: 'web push', silentBecause: 'ensureVapid() false counts every webpush device as skipped, not failed' },
+  { name: 'FCM_SERVER_KEY', subsystem: 'native iOS/Android push', silentBecause: 'fcmConfigured() false counts every native device as skipped, not failed' },
+];
+
+describe('a secret that silently kills a subsystem is on the list', () => {
+  it('lists every known subsystem gate', () => {
+    const missing = SUBSYSTEM_GATES
+      .filter((g) => !(FEATURE_ENV as readonly string[]).includes(g.name))
+      .map((g) => `${g.name} — ${g.subsystem}: ${g.silentBecause}`);
+    expect(
+      missing,
+      'these gate a whole shipped subsystem and are read only from the environment, '
+      + 'so their absence is invisible from the outside — which is the entire reason '
+      + 'FEATURE_ENV exists. Add them to it:\n' + missing.map((m) => `  ${m}`).join('\n'),
+    ).toEqual([]);
+  });
+
+  it('states why each gate is silent rather than merely naming it', () => {
+    // An entry without its mechanism is a claim nobody can check later.
+    for (const g of SUBSYSTEM_GATES) {
+      expect(g.silentBecause.length, `${g.name} does not say how it fails`).toBeGreaterThan(20);
+      expect(g.subsystem.length, `${g.name} does not name its subsystem`).toBeGreaterThan(3);
+    }
+  });
+
+  it('the push gates really do count skipped rather than failed', () => {
+    // The mechanism, checked in the source rather than asserted in prose: it is
+    // what makes an unset key look like success to every caller, and if it ever
+    // became `failed++` these two would stop belonging on the list.
+    const push = readFileSync('lib/server/push.ts', 'utf8');
+    expect(push).toMatch(/if \(!vapid \|\| [^)]*\) \{ result\.skipped\+\+; continue; \}/);
+    expect(push).toMatch(/if \(!fcmConfigured\(\) \|\| !d\.token\) \{ result\.skipped\+\+; continue; \}/);
+  });
+
+  it('neither push gate has an admin-console fallback', () => {
+    // The exclusion test FEATURE_ENV applies to the AI keys, applied to these:
+    // a stored fallback would make absence from env stop proving anything.
+    const { execSync } = require('node:child_process') as typeof import('node:child_process');
+    for (const name of ['VAPID_PRIVATE_KEY', 'FCM_SERVER_KEY']) {
+      const hits = execSync(
+        `grep -rn "process.env.${name}" app lib --include=*.ts --include=*.tsx || true`,
+        { encoding: 'utf8' },
+      );
+      expect(hits.trim().length, `${name} is read nowhere`).toBeGreaterThan(0);
+      expect(
+        /(stored|cfg|settings|config)\.\w+\s*(\|\||\?\?)\s*process\.env\./.test(hits),
+        `${name} appears to have a stored fallback; re-check whether it belongs in FEATURE_ENV`,
+      ).toBe(false);
+    }
+  });
+});

@@ -38,7 +38,12 @@ export async function POST(req: NextRequest) {
     if (!boundedBody.ok) return NextResponse.json({ error: t('weeklyBriefing.requestBodyIsTooLarge') }, { status: 400 });
 
     const now = new Date();
-    const w = weekWindow(now);
+    // The family's zone, not the server's. `ctx.active.family.timezone` is
+    // already in hand — no extra read — and without it this briefing's "today"
+    // was UTC's today, which for a household in Los Angeles is tomorrow from
+    // 5pm onwards: exactly when somebody sits down to plan the week.
+    const { tz } = scopeFromUserContext(ctx, supabase);
+    const w = weekWindow(now, tz);
 
     const [
       { data: members },
@@ -71,7 +76,7 @@ export async function POST(req: NextRequest) {
     const memberName = (id: string | null) => (id ? memberMap.get(id)?.display_name ?? null : null);
 
     // Per-day look-ahead buckets so the prompt can present a true week grid.
-    const eventsByDay = bucketByDay(aheadEvents ?? [], (e) => e.starts_at, w.days);
+    const eventsByDay = bucketByDay(aheadEvents ?? [], (e) => e.starts_at, w.days, tz);
     const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
     const dayName = (key: string) => new Date(`${key}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
 
