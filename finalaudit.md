@@ -4405,12 +4405,44 @@ empty result with `actions.onlyAParentGuardianCan16` — a key that already
 exists in all seven locales, so no half-translated string ships with the fix.
 Inserts blocked by RLS *do* raise, so only the update paths needed the count.
 
-**Blast radius beyond this module: 30 tables** are member-read / manager-write
-(`approval_requests`, `bills`, `budgets`, `child_wallets`, `families`,
-`family_members`, `financial_accounts`, `savings_goals`, `wallet_*`, …). Any
-client handler that writes one of them and reports success on `!error` alone
-has this defect. This pass fixed the three named in section C; the rest is the
-next pass's list.
+## C1-K-03 · HIGH · The same lie in five more modules
+
+The blast radius was not one module. **33 tables** are member-read /
+manager-write; a sweep for client `update`/`delete`/`upsert` on any of them
+found **20 writes across 7 files**, and every one but a single already-correct
+handler in `family-module` reported success on `!error` alone:
+
+| Module | Tables | What a non-manager was told |
+| --- | --- | --- |
+| `medications-module` | `medications`, `medication_schedules` | "Medication deleted", "Medication updated", and a silent no-op on the active toggle |
+| `medical-records-module` | `health_providers`, `insurance_policies`, `medical_profiles` | "Deleted", "Profile saved" |
+| `rewards-module` | `rewards` | "Reward deleted" |
+| `billing-module` | `bills`, `financial_accounts` | "Bill removed", "Bill marked as paid", "Account removed" |
+| `bills-view` | `bills` | "Marked paid", "Auto Pay on", "Deleted" |
+| `family-module` | `family_members` | "Member removed", "Member updated" |
+| `settings-module` | `families`, `family_members` | "Family name updated", "Member removed", "Member updated" |
+
+`medications` deserves its own line: it is the data this product treats as most
+sensitive, and a teen pressing Delete on a prescription was told it was gone.
+
+All 20 now carry `.select('id')` and refuse an empty result.
+`tests/manager-gated-writes-report-refusals.test.ts` pins the class per module
+per table, so a module added later has to answer for it — it caught two writes
+(the member EDIT paths in `family-module` and `settings-module`) that this
+pass's own sweep had missed.
+
+## Correction to an earlier claim of mine
+
+A previous pass in this session reported that **no member-removal path exists**
+in the app, and closed a question about stale `social_access_permissions` rows
+on that basis. That was wrong. Removal is
+`family_members.update({ is_active: false })` in both `family-module` and
+`settings-module`; the earlier grep looked for `.delete()` under two directories
+and missed it. **The stale-social-access question is therefore open again**:
+`getSocialAccess` grants on an explicit row even when the membership row is
+gone, so a removed member with a surviving `status = 'active'` row keeps their
+social role. Not fixed here — it needs a decision about whether removal should
+revoke or whether the row should be read through membership.
 
 ## C1-K-02 · MEDIUM · A best-effort log could lose the capture it was logging
 
@@ -4454,7 +4486,7 @@ reader gets the answer from the database instead of the policy names.
 
 ## Verification
 
-`tsc` clean · `next lint` 0 errors · **13,958 tests / 1,226 files** ·
+`tsc` clean · `next lint` 0 errors · **13,984 tests / 1,227 files** ·
 **40/40 probes** (330 migrations replayed, 0 failed).
 
 Both fixes calibrated by reverting them: removing the row checks fails 2 of the

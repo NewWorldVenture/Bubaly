@@ -201,11 +201,12 @@ export function MedicationsModule() {
       refill_on: medForm.refill_on || null,
       refill_reminder_days: Math.max(0, Math.min(90, Number(medForm.refill_reminder_days) || 0)),
     };
-    const { error: err } = medForm.id
-      ? await sb.from('medications').update(fields).eq('id', medForm.id)
-      : await sb.from('medications').insert({ ...fields, family_id: familyId, created_by: userId });
+    const { data: rows, error: err } = medForm.id
+      ? await sb.from('medications').update(fields).eq('id', medForm.id).select('id')
+      : await sb.from('medications').insert({ ...fields, family_id: familyId, created_by: userId }).select('id');
     setSavingMed(false);
     if (err) { toastError(describeDbError(err)); return; }
+    if (!rows?.length) { toastError(t('actions.onlyAParentGuardianCan16')); return; }
     success(medForm.id ? 'Medication updated' : 'Medication added');
     setMedModalOpen(false);
   }
@@ -213,15 +214,17 @@ export function MedicationsModule() {
   async function deleteMed(m: Medication) {
     if (!confirm(`Delete ${m.name}? This also removes its schedules and dose history.`)) return;
     const sb = createClient();
-    const { error: err } = await sb.from('medications').delete().eq('id', m.id);
+    const { data: rows, error: err } = await sb.from('medications').delete().eq('id', m.id).select('id');
     if (err) { toastError(describeDbError(err)); return; }
+    if (!rows?.length) { toastError(t('actions.onlyAParentGuardianCan16')); return; }
     success(t('medicationsModule.medicationDeleted'));
   }
 
   async function toggleActive(m: Medication) {
     const sb = createClient();
-    const { error: err } = await sb.from('medications').update({ is_active: !m.is_active }).eq('id', m.id);
+    const { data: rows, error: err } = await sb.from('medications').update({ is_active: !m.is_active }).eq('id', m.id).select('id');
     if (err) toastError(describeDbError(err));
+    else if (!rows?.length) toastError(t('actions.onlyAParentGuardianCan16'));
   }
 
   // ── Schedule CRUD ─────────────────────────────────────────
@@ -248,8 +251,9 @@ export function MedicationsModule() {
 
   async function deleteSchedule(id: string) {
     const sb = createClient();
-    const { error: err } = await sb.from('medication_schedules').delete().eq('id', id);
+    const { data: rows, error: err } = await sb.from('medication_schedules').delete().eq('id', id).select('id');
     if (err) toastError(describeDbError(err));
+    else if (!rows?.length) toastError(t('actions.onlyAParentGuardianCan16'));
   }
 
   function toggleDay(day: number) {

@@ -892,16 +892,18 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
 
   async function deleteBill(id: string) {
     const supabase = createClient();
-    const { error } = await supabase.from('bills').delete().eq('id', id);
+    const { data: rows, error } = await supabase.from('bills').delete().eq('id', id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (!rows?.length) return toastError(tr('actions.onlyAParentGuardianCan16'));
     success(tr('billingModule.billRemoved'));
     void refreshBills();
   }
 
   async function markBillPaid(id: string) {
     const supabase = createClient();
-    const { error } = await supabase.from('bills').update({ status: 'paid' }).eq('id', id);
+    const { data: rows, error } = await supabase.from('bills').update({ status: 'paid' }).eq('id', id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (!rows?.length) return toastError(tr('actions.onlyAParentGuardianCan16'));
     success(tr('billingModule.billMarkedAsPaid'));
     void refreshBills();
   }
@@ -915,8 +917,9 @@ export function BillingModule({ serviceFeeNotice = null }: { serviceFeeNotice?: 
 
   async function deleteAccount(id: string) {
     const supabase = createClient();
-    const { error } = await supabase.from('financial_accounts').delete().eq('id', id);
+    const { data: rows, error } = await supabase.from('financial_accounts').delete().eq('id', id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (!rows?.length) return toastError(tr('actions.onlyAParentGuardianCan16'));
     success(tr('billingModule.accountRemoved'));
     void refreshAccounts();
   }

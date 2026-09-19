@@ -169,17 +169,19 @@ export function SettingsModule({ referralConfig }: { referralConfig?: ReferralCo
     if (!name) return toastError(t('settingsModule.nameIsRequired'));
     setSavingFamily(true);
     const supabase = createClient();
-    const { error } = await supabase.from('families').update({ name }).eq('id', family.id);
+    const { data: rows, error } = await supabase.from('families').update({ name }).eq('id', family.id).select('id');
     setSavingFamily(false);
     if (error) return toastError(describeDbError(error));
+    if (!rows?.length) return toastError(t('actions.onlyAParentGuardianCan16'));
     success(t('settingsModule.familyNameUpdated'));
   }
 
   async function removeMember(memberId: string) {
     if (!confirm(t('settingsModule.removeThisMemberFromThe'))) return;
     const supabase = createClient();
-    const { error } = await supabase.from('family_members').update({ is_active: false }).eq('id', memberId);
+    const { data: rows, error } = await supabase.from('family_members').update({ is_active: false }).eq('id', memberId).select('id');
     if (error) return toastError(describeDbError(error));
+    if (!rows?.length) return toastError(t('actions.onlyAParentGuardianCan16'));
     success(t('settingsModule.memberRemoved'));
     window.location.reload();
   }
@@ -451,10 +453,11 @@ function EditMemberModal({ member, isSelf, onClose }: {
     const birthday = String(form.get('birthday') ?? '').trim();
     if (!display_name) { toastError(t('settingsModule.nameIsRequired')); return; }
     setSaving(true);
-    const { error } = await createClient().from('family_members')
-      .update({ display_name, role, birthday: birthday || null }).eq('id', member.id);
+    const { data: rows, error } = await createClient().from('family_members')
+      .update({ display_name, role, birthday: birthday || null }).eq('id', member.id).select('id');
     setSaving(false);
     if (error) return toastError(describeDbError(error));
+    if (!rows?.length) return toastError(t('actions.onlyAParentGuardianCan16'));
     success(t('settingsModule.memberUpdated'));
     onClose();
     window.location.reload();

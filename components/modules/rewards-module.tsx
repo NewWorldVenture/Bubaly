@@ -90,11 +90,12 @@ export function RewardsModule() {
     setSaving(true);
     const sb = createClient();
     const fields = { title: form.title.trim(), description: form.description.trim() || null, cost_points: Math.round(form.cost_points) };
-    const { error: err } = form.id
-      ? await sb.from('rewards').update(fields).eq('id', form.id)
-      : await sb.from('rewards').insert({ ...fields, family_id: familyId, created_by: userId });
+    const { data: rows, error: err } = form.id
+      ? await sb.from('rewards').update(fields).eq('id', form.id).select('id')
+      : await sb.from('rewards').insert({ ...fields, family_id: familyId, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(describeDbError(err)); return; }
+    if (!rows?.length) { toastError(t('actions.onlyAParentGuardianCan16')); return; }
     success(form.id ? 'Reward updated' : 'Reward added');
     setModalOpen(false);
   }
@@ -102,8 +103,9 @@ export function RewardsModule() {
   async function remove(r: Reward) {
     if (!confirm(`Delete the reward "${r.title}"?`)) return;
     const sb = createClient();
-    const { error: err } = await sb.from('rewards').delete().eq('id', r.id);
+    const { data: rows, error: err } = await sb.from('rewards').delete().eq('id', r.id).select('id');
     if (err) { toastError(describeDbError(err)); return; }
+    if (!rows?.length) { toastError(t('actions.onlyAParentGuardianCan16')); return; }
     success(t('rewardsModule.rewardDeleted'));
   }
 
