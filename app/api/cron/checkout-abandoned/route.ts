@@ -39,6 +39,11 @@ export async function GET(req: NextRequest) {
   const abandoned = selectAbandonedSessions(pending ?? [], Date.now(), { graceMinutes: 60, maxAgeHours: 24 });
 
   let fired = 0;
+  // Both halves of the sweep were logged and then dropped on the floor, and the
+  // response was a hardcoded 200. scripts/cron-dispatch.mjs records nothing but
+  // the status, so a run in which every nudge threw read exactly like a clean
+  // one — the defect F-009 closed for the rest of this directory.
+  let failed = 0;
   for (const s of abandoned) {
     try {
       await fireAutomationEvent(supabase, {
@@ -50,14 +55,28 @@ export async function GET(req: NextRequest) {
       });
       fired += 1;
     } catch (e) {
+      failed += 1;
       console.error(`checkout_abandoned fire failed for ${s.session_id}:`, e);
     }
-    // Mark abandoned regardless of fire result so we never re-sweep this row.
-    await supabase
+    // Mark abandoned regardless of fire result so we never re-sweep this row —
+    // and notice when that write is refused. Nothing else moves the row off
+    // 'pending', so a lost mark means the session is swept again on every run
+    // until it ages out of the 24h look-back, silently. The fire itself is
+    // deduped on (workflow_id, subject_key), so the re-sweep does not double
+    // send; it is the run's own report that was wrong.
+    const { error: markError } = await supabase
       .from('checkout_sessions')
       .update({ status: 'abandoned', abandoned_at: new Date().toISOString() })
       .eq('session_id', s.session_id);
+    if (markError) {
+      failed += 1;
+      console.error(`checkout_abandoned mark failed for ${s.session_id}:`, markError);
+    }
   }
 
-  return NextResponse.json({ pending: (pending ?? []).length, abandoned: abandoned.length, fired });
+  const ok = failed === 0;
+  return NextResponse.json(
+    { ok, pending: (pending ?? []).length, abandoned: abandoned.length, fired, failed },
+    { status: ok ? 200 : 502 },
+  );
 }

@@ -103,11 +103,25 @@ async function sendFcm(token: string, payload: PushPayload): Promise<FcmOutcome>
  */
 export async function sendPushToUser(supabase: DB, userId: string, payload: PushPayload): Promise<PushResult> {
   const result: PushResult = { sent: 0, skipped: 0, failed: 0, pruned: 0 };
-  const { data: devices } = await supabase
+  const { data: devices, error: devicesError } = await supabase
     .from('push_devices')
     .select('id, platform, provider, endpoint, p256dh, auth, token')
     .eq('user_id', userId)
     .eq('enabled', true);
+  // A roster we could not READ is not a person with no phone. This error was
+  // discarded, so a refused read fell into the `!devices` branch below and
+  // answered an all-zero PushResult — no sends, and no failures either. That is
+  // the one shape `dispatchPendingPushes` reads as success: `failed === 0`
+  // means "something got through", so it stamped `pushed_at`, which is the only
+  // column the pending query filters on and which nothing ever clears. One blip
+  // on this table marked a whole batch delivered without sending any of it, and
+  // the cron answered 200 because it had nothing to count. Counting it as a
+  // failed send puts the row back on the retry path the caller already has.
+  if (devicesError) {
+    console.error('[push] device roster read failed', { userId, error: devicesError });
+    result.failed++;
+    return result;
+  }
 
   if (!devices || devices.length === 0) return result;
   const vapid = ensureVapid();

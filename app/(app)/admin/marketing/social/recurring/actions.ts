@@ -195,7 +195,15 @@ export async function runRecurringAdNowAction(id: string): Promise<ActionResult>
 
   const now = new Date();
   const schedule = scheduleFromRow(ad);
-  const { error: claimError } = await supabase
+  // The claim is a compare-and-set: `.eq('occurrences', ad.occurrences)` is what
+  // stops two "Run now" clicks — or a click racing the cron — from both posting
+  // the same occurrence and from walking past `max_occurrences`. It could not
+  // report its own failure. An UPDATE that matches nothing SUCCEEDS in Postgres
+  // (zero rows, no error), and without `.select()` PostgREST returns no rows at
+  // all, so `claimError` was null whether the claim was won or lost and the code
+  // went on to publish either way. `.select('id')` is what makes the lost claim
+  // visible, and a lost claim means somebody else already posted this one.
+  const { data: claimed, error: claimError } = await supabase
     .from('marketing_recurring_ads')
     .update({
       occurrences: ad.occurrences + 1,
@@ -204,8 +212,12 @@ export async function runRecurringAdNowAction(id: string): Promise<ActionResult>
       updated_by: gate.userId,
     })
     .eq('id', id)
-    .eq('occurrences', ad.occurrences);
+    .eq('occurrences', ad.occurrences)
+    .select('id');
   if (claimError) return { ok: false, error: 'Could not start this run.' };
+  if (!claimed || claimed.length === 0) {
+    return { ok: false, error: 'This occurrence has already been posted. Reload to see the latest run.' };
+  }
 
   const result = await publishOccurrence(supabase, ad, ad.occurrences, now, body);
   revalidatePath(PAGE);

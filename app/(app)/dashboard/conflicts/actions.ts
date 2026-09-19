@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 
 /**
  * Apply a conflict resolution by rescheduling one event. Family-scoped: RLS plus
@@ -21,12 +22,17 @@ export async function rescheduleEventAction(
     return { ok: false, error: t('actions.invalidRescheduleRequest') };
   }
   const supabase = await createServer();
-  const { error } = await supabase
+  // `.select('id')`: an UPDATE that matches nothing SUCCEEDS — zero rows, no
+  // error — so an event another phone had already moved or deleted came back as
+  // "Rescheduled" while the conflict the card was resolving was still there.
+  const { data: rows, error } = await supabase
     .from('calendar_events')
     .update({ starts_at: startsAtIso, ends_at: endsAtIso })
     .eq('id', eventId)
-    .eq('family_id', ctx.active.familyId);
-  if (error) return { ok: false, error: error.message };
+    .eq('family_id', ctx.active.familyId)
+    .select('id');
+  if (error) return { ok: false, error: describeActionError(error, t('actions.thatEventCouldNotBe')) };
+  if (wroteNoRows(rows)) return { ok: false, error: t('actions.thatEventCouldNotBe') };
   revalidatePath('/dashboard/conflicts');
   revalidatePath('/dashboard/command-center');
   revalidatePath('/dashboard/calendar');

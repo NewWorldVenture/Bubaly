@@ -262,15 +262,21 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // The status, not just the body. scripts/cron-dispatch.mjs logs `res.ok` and
+  // exits non-zero on it, and nothing anywhere reads this body — so a tick that
+  // wedged a routine, or filed nothing because every request was refused, was
+  // recorded as a clean run. Every other route in this directory answers 502 for
+  // the same reason (F-009); this one carried the count and kept the 200.
+  const ok = problems.length === 0;
   return NextResponse.json({
-    ok: problems.length === 0,
+    ok,
     considered: (due ?? []).length,
     armed,
     filed,
     skipped,
     problems: problems.length,
     ms: Date.now() - startedAt,
-  });
+  }, { status: ok ? 200 : 502 });
 }
 
 /** The next fire for a schedule of either kind, in one call. */

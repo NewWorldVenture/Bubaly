@@ -26,8 +26,13 @@ export async function saveAffiliateAction(formData: FormData) {
   };
 
   if (id) {
-    const { error } = await supabase.from('affiliates').update(row).eq('id', id);
-    if (error) marketingActionFailure('update the affiliate', error);
+    // `.select('id')` for the reason every other file in this console already
+    // has it (crm, proposals, competitive, loyalty): an UPDATE that matches
+    // nothing SUCCEEDS with zero rows and no error, so an id for a partner
+    // somebody else deleted wrote nothing — and the audit row below then
+    // recorded an edit that never happened.
+    const { data, error } = await supabase.from('affiliates').update(row).eq('id', id).select('id').maybeSingle();
+    if (error || !data) marketingActionFailure('update the affiliate', error ?? new Error('Affiliate not found'));
     await logMarketingAudit(supabase, { actorId, actorEmail, action: 'update', resource: 'affiliate', resourceId: id });
   } else {
     const { data, error } = await supabase.from('affiliates').insert({ ...row, created_by: actorId }).select('id').single();
@@ -40,16 +45,16 @@ export async function saveAffiliateAction(formData: FormData) {
 export async function toggleAffiliateStatusAction(id: string, status: string) {
   const next = status === 'paused' ? 'paused' : 'active';
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
-  const { error } = await supabase.from('affiliates').update({ status: next }).eq('id', id);
-  if (error) marketingActionFailure('update the affiliate status', error);
+  const { data, error } = await supabase.from('affiliates').update({ status: next }).eq('id', id).select('id').maybeSingle();
+  if (error || !data) marketingActionFailure('update the affiliate status', error ?? new Error('Affiliate not found'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'update', resource: 'affiliate', resourceId: id, metadata: { status: next } });
   revalidatePath('/admin/marketing/affiliates');
 }
 
 export async function deleteAffiliateAction(id: string) {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
-  const { error } = await supabase.from('affiliates').delete().eq('id', id);
-  if (error) marketingActionFailure('delete the affiliate', error);
+  const { data, error } = await supabase.from('affiliates').delete().eq('id', id).select('id').maybeSingle();
+  if (error || !data) marketingActionFailure('delete the affiliate', error ?? new Error('Affiliate not found'));
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'delete', resource: 'affiliate', resourceId: id });
   revalidatePath('/admin/marketing/affiliates');
 }

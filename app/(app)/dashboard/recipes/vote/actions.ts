@@ -61,12 +61,23 @@ export async function castBallot(input: { voteId: string; optionId: string; choi
 
 /** Close a vote and stamp the winning option (highest score). */
 export async function closeMealVote(voteId: string): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const [{ data: options }, { data: ballots }] = await settleAll([
+  const [{ data: options, error: optionsError }, { data: ballots, error: ballotsError }] = await settleAll([
     supabase.from('meal_vote_options').select('id').eq('vote_id', voteId).eq('family_id', ctx.active.familyId),
     supabase.from('meal_vote_ballots').select('option_id, choice').eq('vote_id', voteId).eq('family_id', ctx.active.familyId),
   ]);
+  // These two reads DECIDE the winner, and `?? []` turned a failed read into
+  // "nobody voted". `settleAll` hands a transport failure back in the same
+  // { data: null, error } shape, so a database blip closed the vote with
+  // `winner_option_id: null` — the family's dinner picked by an outage, stamped
+  // as final, and reported to them as a success. A vote that could not be
+  // counted must stay open.
+  if (optionsError || ballotsError) {
+    console.error('[meal-vote] could not read the ballots to close the vote', { voteId, optionsError, ballotsError });
+    return { ok: false, error: t('vote.couldNotLoadMealVoting') };
+  }
   const ids = (options ?? []).map((o) => o.id);
   const winner = winningOption(tallyVotes(ids, (ballots ?? []) as { option_id: string; choice: string }[]));
   const { error } = await supabase.from('meal_votes')

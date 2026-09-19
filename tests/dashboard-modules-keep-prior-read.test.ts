@@ -14,11 +14,18 @@ const assistant = fs.readFileSync('components/modules/assistant-module.tsx', 'ut
 
 describe('dashboard modules keep prior state on failed read (A-05)', () => {
   it('weather loadSaved does not wipe saved cities on error', () => {
-    const load = weather.slice(weather.indexOf('const loadSaved'), weather.indexOf('const loadSaved') + 500);
+    // The window is generous on purpose: this assertion used to slice 500 chars
+    // and match the literal `if (error) return [];`, which pinned a STATEMENT
+    // rather than the behaviour. When the bail grew to also surface the error to
+    // the user — strictly better, and the thing this file exists to encourage —
+    // the guard went red on an improvement. A test that fails when the code gets
+    // better is testing the wrong thing.
+    const load = weather.slice(weather.indexOf('const loadSaved'), weather.indexOf('const loadSaved') + 1200);
     expect(load).toContain("const { data, error } = await supabase.from('weather_locations')");
-    expect(load).toContain('if (error) return [];');
-    // The keep-prior guard must precede the setSaved clobber.
-    expect(at(load, 'if (error) return')).toBeLessThan(at(load, 'setSaved(data ?? [])'));
+    // What actually matters: the error is bailed on, and the bail happens BEFORE
+    // the line that would clobber the visible list to empty.
+    expect(load).toMatch(/if \(error\)[^\n]*return \[\];/);
+    expect(at(load, 'if (error)')).toBeLessThan(at(load, 'setSaved(data ?? [])'));
   });
 
   it('assistant conversation list keeps prior history on error', () => {

@@ -26,6 +26,9 @@ type ProposedEvent = {
 
 const CATEGORIES = ['general', 'school', 'sports', 'appointment', 'medication', 'maintenance', 'birthday', 'holiday', 'other'];
 
+/** The most events one confirm may create — the cap `/api/ai/import` uses. */
+const MAX_CONFIRMED_EVENTS = 50;
+
 function toIso(date: string, time: string | null): { iso: string; allDay: boolean } {
   if (!time) {
     const d = new Date(`${date}T09:00:00`);
@@ -69,18 +72,44 @@ export async function POST(req: NextRequest) {
     };
 
     // ── Phase 2: create the confirmed events ───────────────────────────────
+    // `confirm` is whatever the caller posts, not what phase 1 proposed — the
+    // two halves share a route, not a session — and this block used to forward
+    // it to the database field for field. Nothing capped the array (an 8 MiB
+    // body holds tens of thousands of rows for one insert), nothing checked
+    // that `title` was a string (it is `not null`, so an object without one is
+    // a 23502 the catch below reports as a 500), and nothing checked that
+    // `starts_at` was a date (`timestamptz not null`, so "tomorrow-ish" is a
+    // 22007, likewise a 500). `/api/ai/import` already takes the same confirm
+    // shape with `.slice(0, 50)`; this is that rule plus the field checks the
+    // columns imply, so a malformed item is dropped rather than turned into a
+    // server error.
     if (Array.isArray(body.confirm)) {
-      const rows = body.confirm.map((e) => ({
-        family_id: familyId,
-        created_by: userId,
-        title: e.title,
-        starts_at: e.starts_at,
-        ends_at: e.ends_at,
-        all_day: e.all_day,
-        location: e.location,
-        description: e.description,
-        category: (CATEGORIES.includes(e.category) ? e.category : 'general') as never,
-      }));
+      const text = (value: unknown, max: number): string | null => (
+        typeof value === 'string' && value.trim() ? value.trim().slice(0, max) : null
+      );
+      const instant = (value: unknown): string | null => {
+        const raw = typeof value === 'string' ? value.trim() : '';
+        if (!raw) return null;
+        const at = new Date(raw);
+        return Number.isNaN(at.getTime()) ? null : at.toISOString();
+      };
+      const rows = body.confirm.slice(0, MAX_CONFIRMED_EVENTS).flatMap((e) => {
+        const title = text(e?.title, 200);
+        const startsAt = instant(e?.starts_at);
+        if (!title || !startsAt) return [];
+        return [{
+          family_id: familyId,
+          created_by: userId,
+          title,
+          starts_at: startsAt,
+          ends_at: instant(e.ends_at),
+          all_day: e.all_day === true,
+          location: text(e.location, 300),
+          description: text(e.description, 2000),
+          category: (CATEGORIES.includes(e.category) ? e.category : 'general') as never,
+        }];
+      });
+      if (rows.length === 0) return NextResponse.json({ created: 0 });
       const { data, error } = await supabase.from('calendar_events').insert(rows).select('id');
       if (error) {
         console.error('Flyer calendar write failed:', error);

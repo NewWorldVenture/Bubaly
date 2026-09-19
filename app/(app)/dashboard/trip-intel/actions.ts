@@ -232,7 +232,12 @@ export async function refreshDeparturePlanAction(input: {
       weather_delay_minutes: input.weatherDelayMinutes,
       weather_summary: input.weatherSummary ?? null,
       leave_by: plan.leaveByISO,
-      reminder_event_id: reminderEventId,
+      // `upsertHeadOutEvent` answers null for a write it could not make, and
+      // writing that null would UNLINK a "Head out" event that is still on the
+      // family's calendar showing the OLD leave-by — stale, and now beyond the
+      // reach of every later refresh, because nothing points at it any more.
+      // Keeping the existing id leaves the pair repairable.
+      reminder_event_id: reminderEventId ?? existing.reminder_event_id,
       last_checked_at: new Date().toISOString(),
     })
     .eq('id', input.id).eq('family_id', ctx.active.familyId);
@@ -247,11 +252,20 @@ export async function deleteDeparturePlanAction(input: { id: string }): Promise<
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
-  // Remove the linked head-out calendar event too.
-  const { data: existing } = await supabase
+  // Remove the linked head-out calendar event FIRST, and only delete the plan
+  // once it is actually gone. The delete's result used to be dropped on the
+  // floor: a "🚗 Head out" event the calendar refused to remove stayed on the
+  // family's week at a leave-by time for a trip that no longer exists, and the
+  // one row that knew about it — the plan — was deleted in the same breath, so
+  // nothing could ever clean it up. Reporting the failure leaves the pair intact
+  // and the retry meaningful.
+  const { data: existing, error: readError } = await supabase
     .from('departure_plans').select('reminder_event_id').eq('id', input.id).eq('family_id', ctx.active.familyId).maybeSingle();
+  if (readError) return { ok: false, error: describeDbError(readError) };
   if (existing?.reminder_event_id) {
-    await supabase.from('calendar_events').delete().eq('id', existing.reminder_event_id).eq('family_id', ctx.active.familyId);
+    const { error: eventError } = await supabase.from('calendar_events').delete()
+      .eq('id', existing.reminder_event_id).eq('family_id', ctx.active.familyId);
+    if (eventError) return { ok: false, error: describeDbError(eventError) };
   }
   const { error } = await supabase
     .from('departure_plans').delete().eq('id', input.id).eq('family_id', ctx.active.familyId);

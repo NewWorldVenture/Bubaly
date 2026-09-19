@@ -41,11 +41,27 @@ export async function POST(req: NextRequest) {
     const fromISO = new Date(windowStart - 24 * 60 * 60 * 1000).toISOString(); // catch spanning events
     const toISO = new Date(windowEnd).toISOString();
 
-    const [{ data: events }, { data: school }, { data: sports }] = await settleAll([
+    const [
+      { data: events, error: eventsError },
+      { data: school, error: schoolError },
+      { data: sports, error: sportsError },
+    ] = await settleAll([
       supabase.from('calendar_events').select('*').eq('family_id', familyId).gte('starts_at', fromISO).lte('starts_at', toISO),
       supabase.from('school_events').select('starts_at, ends_at, member_id').eq('family_id', familyId).gte('starts_at', fromISO).lte('starts_at', toISO),
       supabase.from('sports_events').select('starts_at, ends_at, member_id').eq('family_id', familyId).gte('starts_at', fromISO).lte('starts_at', toISO),
     ]);
+
+    // A free slot is an ASSERTION about what is not in the calendar, so it is
+    // only as good as the reads it was computed from. These three errors were
+    // discarded and every consumer is `?? []`, which means a failed read did
+    // not make the answer thinner — it made every occupied hour look free, and
+    // `busyCount: 0` said so in the response. The worst case is the ordinary
+    // one: the calendar table hiccups, and the scheduler confidently proposes
+    // the hour of a hospital appointment.
+    if (eventsError || schoolError || sportsError) {
+      console.error('[ai-schedule] busy-window read failed', eventsError ?? schoolError ?? sportsError);
+      return NextResponse.json({ error: t('chat.couldNotLoadTheFamily') }, { status: 503 });
+    }
 
     // A member-scoped event blocks the busy set only if it belongs to a selected
     // member (or is unassigned → a whole-family commitment). With no members

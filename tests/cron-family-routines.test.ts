@@ -185,6 +185,11 @@ describe('the routine worker', () => {
     // But the tick may not call itself clean: the rule did not move.
     expect(body.ok, 'a tick that wedged a routine reported itself as fine').toBe(false);
     expect(body.problems).toBe(1);
+    // And the dispatcher only ever sees the STATUS. scripts/cron-dispatch.mjs
+    // logs `res.ok` and exits non-zero on it; nothing reads this body. A 200
+    // here is a wedged routine recorded as a clean run — the same defect F-009
+    // closed for every other route in this directory.
+    expect(res.status, 'the dispatcher was told the tick succeeded').toBe(502);
     expect(state.rules[0].next_run_at, 'the rule is still on the occurrence it just handled')
       .toBe(RULE.next_run_at);
   });
@@ -246,6 +251,7 @@ describe('the routine worker', () => {
     mocks.createRequest.mockResolvedValue({ ok: false, error: 'Bubaly could not record that request.', code: 'db' });
     const res = await GET(req() as never);
     expect(await res.json()).toMatchObject({ ok: false, filed: 0, problems: 1 });
+    expect(res.status, 'a tick that filed nothing answered 200').toBe(502);
     expect(state.updates.some((u) => u.table === 'routine_runs' && u.patch.status === 'failed')).toBe(true);
   });
 

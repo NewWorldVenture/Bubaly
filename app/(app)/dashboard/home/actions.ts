@@ -158,11 +158,21 @@ export async function scheduleRecommendedTasksAction(assetId: string): Promise<{
   if (cadences.length === 0) return { ok: false, created: 0, error: tr('actions.noRecommendedScheduleForThis') };
 
   // Avoid duplicating tasks we already created for this asset.
-  const { data: existing } = await supabase
+  //
+  // This read IS the de-dupe set, so `?? []` on a failed read means "nothing is
+  // scheduled yet" and the whole recommended cadence is written a second time —
+  // the family gets every task twice, and a third press gives them three. The
+  // same hazard app/(app)/dashboard/migrate/actions.ts names on its own de-dupe
+  // reads: a short or failed read is duplication, not emptiness.
+  const { data: existing, error: existingError } = await supabase
     .from('maintenance_tasks')
     .select('title')
     .eq('family_id', familyId)
     .eq('asset_id', assetId);
+  if (existingError) {
+    console.error('[home] maintenance de-dupe read failed', { familyId, assetId, error: existingError });
+    return { ok: false, created: 0, error: describeActionError(existingError, tr('actions.couldNotAddThatTask')) };
+  }
   const have = new Set((existing ?? []).map((t) => t.title.toLowerCase()));
 
   const base = asset.last_serviced_on ? new Date(asset.last_serviced_on) : new Date();
