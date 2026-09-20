@@ -2,15 +2,27 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-20T16:45:00.000Z
-- Total Audit Items: 14038
+- Last Updated: 2026-09-20T19:40:00.000Z
+- Total Audit Items: 14041 — **+3 this pass**: AUTHZ-022, CENSUS-004, DOC-001
 - Not Started: 13842
-- In Progress: 192
+- In Progress: 195
 - Passed: 0
 - Fixed + Passed: 1
 - Blocked: 0
 - Failed: 3 — **all three now have repairs in the tree; see the merge note below**
 - Overall Completion: 0.01%
+
+> **On these counts, plainly.** *Total Audit Items* is the Codex cycle's
+> enumeration of the whole target space — every route, table, policy, component
+> and flow it intends to reach — not a count of work anyone has done. *Overall
+> Completion: 0.01%* is therefore a statement about that denominator and says
+> almost nothing about the state of the product: the same tree passes 349/349
+> migration replays, 61/61 RLS boundary probes and every CI job but the one E2E
+> spec inherited from `main`. Reading 0.01% as "the audit has barely started"
+> would be wrong; reading it as "most of the enumerated surface has never been
+> individually signed off" is correct. The numbers that carry information are
+> the per-finding rows in §2–§5 and the gates in the Final Regression sections,
+> and they are the ones this pass moved.
 
 > **Merge note (2026-09-20).** This file is the union of two audits that ran in
 > parallel and have now been merged: the Codex cycle's control document, which
@@ -214,8 +226,9 @@ PRODUCTION READY: NO
 - AUTHZ-005: Verify deployed policy state, child contact/profile mutations and the contact-deletion cascade into routing rules. Independent member/family foreign keys require separate integrity verification.
 - SMS-002: Production scheduler configuration/execution and real provider delivery remain unverified; cross-table operations are not transactions.
 
-- PROD-001 (the largest single gap between this document and production): **none of `0318`-`0338` has been applied.** Sixteen migrations exist as files, replay cleanly from nothing (**346 applied, 0 failed**) and pass **58 of 58** boundary probes in CI's Database job — and production's ledger still records only `0001-0003`. Every row below that reads *"fixed by 0322"* or *"closed by 0324"* is fixed **in the repository** and open **in production**, and the paths the Pass BR sweep classified as *defeated* because a migration in the tree closes their source table (`gift_payments`, `pay_handles`, `wallet_goals`, `dashboard_layouts`) are **live**. Applying them is a human action (`docs/PENDING_PROD_MIGRATIONS.md`); `0321` must **not** be applied as written — it needs `create index concurrently`.
+- PROD-001 (the largest single gap between this document and production): **none of `0318`-`0338` has been applied.** Sixteen migrations exist as files, replay cleanly from nothing (**349 applied, 0 failed**, re-measured Pass BT) and pass **61 of 61** boundary probes in CI's Database job, which is green on this branch's head — and production's ledger still records only `0001-0003`. Every row below that reads *"fixed by 0322"* or *"closed by 0324"* is fixed **in the repository** and open **in production**, and the paths the Pass BR sweep classified as *defeated* because a migration in the tree closes their source table (`gift_payments`, `pay_handles`, `wallet_goals`, `dashboard_layouts`) are **live**. Applying them is a human action (`docs/PENDING_PROD_MIGRATIONS.md`); `0321` must **not** be applied as written — it needs `create index concurrently`.
 - AUTHZ-011 (measured, not estimated, and re-measured today): **248 tables / 719 (table, verb) pairs** still take a write from any household member — a predicate that is nothing but `is_family_member(family_id)`, with no restrictive guard on that verb and no **role-aware** `raise exception` trigger. This supersedes the 251 / 732 recorded through Pass BS: re-run against a database bootstrapped from the current tree, `0333` and `0338` have closed what they closed in between. Re-derive with `docs/audit/role-blind-write-census.sh` rather than trusting either number. It is **not** a defect count. The split is now a script too — `docs/audit/role-blind-write-triage.sh` — because it had only ever been a hand-count in prose: **184** have no manager gate in the application either and are consistent-open by design, **18** have no writer in `app/`, `lib/`, `components/` or `hooks/` (AUTHZ-020), and **46** are suspect because a file that writes them also carries an `isManager` gate. The 46 is a triage list; each needs its call sites read, because a manager-only guard on a feature that genuinely belongs to the member returns 500 to a child (CENSUS-002). **Writing the triage as a script immediately earned it**: the first version carried its own copy of the census query with a looser definition of *bare* and reported **251 where the census reported 248**, wrongly counting `marketplace_listings`, `marketplace_stores` and `notifications` — whose predicates pin a column beyond `is_family_member` (`member_id = marketplace_member_id(family_id)`, `user_id = auth.uid()`) and are role-blind but CONSTRAINED. Two derivations of one number disagreeing by three is CENSUS-001, -002 and -003 happening a fourth time, so the census now holds the CTEs in exactly one place and exposes `--tables`; the triage reads that and does not know how the list is derived. The refactored census emits byte-identical output to the version it replaced, verified by diff.
+- E2E-001 (**inherited from `main`, not this branch's**): the E2E job is red on three `tests/e2e/phone-auth-http.spec.ts` cases. This branch's merge-base **is** `main`'s head (`ad742c2b`, 0 behind / 122 ahead), and `main`'s own CI run on that commit fails **the same three plus a fourth** — 1292 passed / 4 failed there against **1293 passed / 3 failed** here, so this branch is strictly better on E2E than the branch it merges into. `main` went red at `d9542e25` on a different test (`durable-session.spec.ts`, 1251 passed — the phone-auth spec was not executing at all, 41 tests short); `75a1f3c6` *"Keep disposable phone login enabled"* is what made it execute, adding the `/auth/v1/otp` wait and the closed-loopback SMS hook. **Diagnosis**: all three fail in `observeVerify().wait()`, whose poll times out having seen **neither** a route failure **nor a single receipt** — so no `POST /auth/v1/verify` was observed at all and the flow never reached verification. A second, smaller defect hides it: `expect.poll` throws on timeout, so the line below it carrying the only human-readable message is **unreachable in exactly the case that fires**, and CI prints `Expected: true / Received: false`, which names nothing. A patch that makes the failure report what it saw is proposed on the PR and deliberately **not** pushed here — it is a file this branch does not touch, and widening a PR into someone else's red is how a diff stops being reviewable. No re-run was spent: the base branch failing identically is stronger evidence than a re-run would be, and "flake" is not a root cause.
 - SEO-001: Both generated social preview images answer 307 to /login for an unauthenticated crawler, so no shared Bubaly link renders a preview card on any platform.
 - SEO-002: resolveMarketingMetadata replaces the root Open Graph object with {title, description}, deleting og:image, og:url, og:type and og:site_name from every marketing page.
 
@@ -14499,7 +14512,7 @@ invisible because three declarations disagreed and nothing compared them.
 | **AUTHZ-009** | **AUTHZ-006 repeats in the money domain, and this one drains a sibling.** `wallet_fund_goal` is `SECURITY DEFINER` and checks `auth.uid() = p_actor_id AND `can_manage_family(p_family_id)` — correctly. It then reads a `wallet_goals` row and uses **that row's own fields** to decide what to do: `child_wallet_id` picks which child's Save bucket is debited, and `title` becomes the ledger description and the `wallet_audit_logs` detail the parent reads afterwards. `wallet_goals` carries only `0088`'s permissive `FOR ALL`. Proved end to end in one rolled-back transaction: the child's direct `wallet_transactions` insert is **BLOCKED** by `0322`; the child then inserts a goal pointing at a **sibling's** wallet (`INSERT 1`); the parent calls fund; the sibling's Save balance goes **5000 → 0**, the ledger reads *"Into goal: New bike for me"*, and the goal flips to `reached`. Independently a child can set `saved_cents`/`status` to fake progress. A second path feeds `goal.title` into `evaluateTrust(...)`, so child-controlled text reaches the trust engine's approval strings | **Pass BQ** | **Fixed by `0324` (UNAPPLIED).** Same shape as `AUTHZ-006` and the same verdict: the definer function is not the defect — it does what it promises. Two instances now, in two domains, found by asking the same question of a whole class rather than of one table |
 | **AUTHZ-010** | **A child could redirect a grandparent's money to their own wallet.** `pay_handles` is four columns — `family_id, child_wallet_id, handle, is_active` — written only by `claimPayHandleAction` and `releasePayHandleAction`, both `isManager`-gated. **The reason it outranks the rest: `app/pay/[handle]/page.tsx` resolves `/pay/<handle>` with `createServiceClient()`, so RLS is OFF on that path.** It reads `child_wallet_id`, finds that wallet's newest active `gift_links` row and redirects the visitor there. Measured: as a child, `UPDATE pay_handles SET child_wallet_id = <my wallet> WHERE handle = 'siblingpay'` → `UPDATE 1`. An outside person following the Pay ID they were given for one child lands on a gift link for another — and the child needs to mint nothing, because `0322` already closed `gift_links`; they repoint the handle at a link that exists. `is_active = false` or a `DELETE` is the denial-of-service variant | **Pass BQ** | **Fixed by `0324` (UNAPPLIED).** The service-role read is correct and stays — a public payment page cannot carry the visitor's session — which is exactly why the row it trusts must be manager-written |
 | **AUDIT-002** | **A child can name a parent as the actor in the wallet audit trail.** `wallet_audit_logs` has `INSERT … WITH CHECK is_family_member(family_id)` and **no actor binding**. `0320` gave `audit_logs` its `actor_id = auth.uid()` pin; this table was not in that change. So a child can insert a wallet audit row with `actor_user_id` set to a parent — into the same trail `wallet_fund_goal` writes to and a parent reads when reviewing money movements. There is no UPDATE or DELETE policy, so existing rows cannot be erased, only **polluted** | **Pass BQ**, found while tracing `AUTHZ-009`'s ledger output | **Fixed by `0328` (UNAPPLIED)**, applying `0320`'s treatment. Worth noting it sits in the 125 split-policy tables below, not the 170 — it was found by following a chain, not by the census |
-| **AUTHZ-011** | **125 tables with split role-blind write policies are counted and NOT audited.** The census covered permissive `FOR ALL`. A further 125 tables carry role-blind permissive `INSERT`/`UPDATE`/`DELETE` policies written separately, with no restrictive guard — equally role-blind, simply a different shape. Some are constrained in other ways (`parent_approvals` INSERT is role-blind but pinned to `status='pending' AND decided_by IS NULL`), so the number is **not** a defect count. Names in it that read like they deserve the same treatment: `wallet_cards`, `wallet_passes`, `wallet_rewards`, `wallet_audit_logs`, `graph_entities`, `graph_edges`, `notifications`, `chore_assignments`, `marketplace_*`, `social_*` | **Pass BQ** | **Open, but now MEASURED rather than estimated — and the measurement caught two errors in my own instrument first.** Recorded as a number rather than left implied, because 295 tables total have a role-blind write policy with no restrictive guard and this audit has now examined 170 of them. Stating the remainder is the difference between "we checked" and "we could not see". **Pass BS ran the census properly**, against the replayed database at all 346 migrations rather than against the source: **251 tables / 732 (table, verb) pairs** carry a predicate that is *nothing but* `is_family_member(family_id)`, with no restrictive guard on that verb and no **role-aware** `raise exception` trigger on the table. **All three of my attempts were wrong, in different directions, and all three for the reason this audit keeps finding.** (1) Excluding "any table with a trigger" reported **26**. `set_updated_at` is on **406 tables** and guards nothing — a coarse proxy that silently over-credited by 10x. Counting only trigger functions whose source matches `raise +exception` is the honest filter. (2) Not expanding `FOR ALL` **on both sides** reported 13 tables I had already closed — `gift_links`, `wallet_goals`, `pay_handles`, `dashboard_layouts` among them — as still open, because a bare `FOR ALL` policy was compared against restrictive policies filed under `INSERT`/`UPDATE`/`DELETE` and matched none of them. (3) Treating *"the table has a raising trigger"* as *"the table has a ROLE guard"* reported **247**. Nine of the seventeen guard functions consult the role; eight do not — `reference_shares_family` checks that a referenced row is in the same family and says nothing about **who** may write, and `validate_marketplace_negotiation_round` and `sync_blog_image_provenance` are validation. **`grocery_items`, `meal_plans`, `moves` and `move_tasks` were credited with a boundary they do not have.** Four tables is small; the shape is not, and it is **AUTHZ-014's generalisation arriving in my own instrument** — a TABLE-granular bucket standing in for a COLUMN-granular truth. The script now prints both counts and names the four, because collapsing them into one figure is how the distinction gets lost again. **Triaged against the application**, which is the question that matters (*does the app enforce a manager rule the database does not?*): **41 SUSPECT** — a file writing the table also carries an `isManager` / `MANAGER_ONLY` / `requireManager` gate; **184 with no manager gate anywhere**, which is **PROD-001's consistent-open class and must NOT be restricted**; **22 with no `.from()` in `app/`, `lib/`, `components/` or `hooks/` at all**. The 41 is a **triage list, not a defect count** — file-level co-occurrence over-approximates, and CENSUS-002 is what happens when a name on such a list is taken for a verdict. **Five names have now been verified one at a time, and the hit rate is the useful number: three real, two not.** `member_locations`/`location_events` (AUTHZ-018) and `home_assets` (AUTHZ-019) are real and closed; `medication_doses` was a **false positive for this class** and the real finding turned out to be underneath it (AUTHZ-017). **`wallet_cards` and `family_decisions` are NOT defects and no migration was written** — `addCardAction` carries no role gate at all, so the application never claimed the rule the census inferred, and `family_decisions` has exactly one writer, a client module with no manager rule anywhere. **`0334` and `0337` are permanently unused numbers**, left as gaps rather than renumbered, because a gap says *this was looked at and refused* where a renumber says nothing. The sharpest by domain: `wallet_cards`, `wallet_passes`, `wallet_rewards`, `subscriptions_tracked`, `project_quotes` (money); `member_locations`, `location_events`, `medication_doses` (safety and privacy); `family_decisions`, `family_ai_recommendations`, `concierge_plan_actions` (decision surfaces). Verification of the first tranche is in flight. **Pass BT re-measured all of it against a database bootstrapped from the current tree, and made the triage a script rather than a hand-count** (`docs/audit/role-blind-write-triage.sh`). The census now reads **248 tables / 719 pairs** — `0333` and `0338` landed in between — and the split is **46 SUSPECT / 18 NO-WRITER / 184 CONSISTENT **CORRECTED the same day, by my own follow-up rather than by a reviewer.** The split above was first published as **46 / 22 / 180**, and the NO-WRITER figure was **wrong**. Four of those 22 — `auto_insurance_policies`, `rental_cars`, `vehicle_inspections` and `vehicle_registrations` — are written every day by `saveRow(supabase, 'auto_insurance_policies', …)` and `softDelete(supabase, 'vehicle_registrations', …)` in `app/(app)/dashboard/auto/actions.ts`, which passes the table as an **argument** and reaches PostgREST as `from(table as 'vehicles')`. No `from('<table>')` regex can see that, and this repo has roughly **200** non-literal `.from(` call sites. *"Nothing in the application writes this table"* was a false statement about a live feature, and it is the one claim on this list that could send somebody to revoke DML on something in use. The script now runs **two tests and uses each where its error is the safe one**: NO-WRITER asks the WIDE question (does the name appear as a string literal anywhere under `app/`, `lib/` or `components/`, excluding the generated `database.types.ts`), because over-reaching there is the dangerous direction; SUSPECT keeps the NARROW `from('<table>')` question, because it is a list of call sites for a human to read and the wide test inflates it from 46 to **99** with files that merely mention the name — `lib/ai/context/policy.ts` lists tables for redaction. The two are disjoint, so the three still partition 248. **Corrected split: 46 SUSPECT / 18 NO-WRITER / 184 CONSISTENT.** The four are not defects either — `auto/actions.ts` carries no manager gate at all, so they are CONSISTENT — but the bucket they were in made a claim that was not true.**. Writing the triage down earned it immediately: the first version carried its own copy of the census query with a looser definition of *bare* and reported **251 against the census's 248**, wrongly counting `marketplace_listings`, `marketplace_stores` and `notifications`, whose predicates pin a column beyond `is_family_member` (`member_id = marketplace_member_id(family_id)`, `user_id = auth.uid()`) and are role-blind but CONSTRAINED. **Two derivations of one number disagreeing by three is CENSUS-001, -002 and -003 happening a fourth time**, so the census now holds its CTEs in one place and exposes `--tables`; the triage reads that and does not know how the list is derived. The refactored census emits byte-identical output to the version it replaced, verified by diff — which is the only reason the new counts can be compared with the old. **A proximity pass was then run and is reported but deliberately NOT used to narrow**: asking whether a manager gate sits within sixty lines of an actual write reduces the 46 to **five**, and **all five were read and all five are NOT defects**, by three distinct mechanisms. (1) *The neighbouring function* — `app/(app)/wallet/hub-actions.ts` gates `addAccountAction` and then defines `addCardAction`, `addPassAction` and `addRewardAction` beneath it with no gate, and states the intent outright: `MANAGER_ONLY_DELETES` is narrowed to `financial_accounts` and `transactions`, commented *"a teen tidying their own wallet cards, passes and rewards is not what 0267 is about"*. This independently re-confirms the earlier verdict on `wallet_cards`. (2) *The import line* — the only gate-shaped token near `subscriptions_tracked`'s write is `import { isManager }`; the real gate, `canReview`, governs an AI candidate-review feature in a different component. (3) *The gate governs a different table* — `dashboard_layout_events` is telemetry written by `logEvent`, while the guarded resource is `dashboard_layouts`, closed by `0325`. That event row's `user_id` is nonetheless forgeable by any member, which is **AUDIT-002's class and is recorded there rather than counted here**. A heuristic whose every hit so far is a false positive does not get to decide which names a human reads. **And zero hits is not absolution**: `calendar_events` has 18 write sites and no gate within sixty lines of any of them, and AUTHZ-021 is real and reproduced on it — because AUTHZ-021 is an attribution defect, not a role-gate mismatch. The instrument answers one question and its silence on the others means nothing  **A second, more principled narrowing was then tried and it fares no better.** Proximity's weakness is that sixty lines is arbitrary; the enclosing-function pass asks whether a manager gate appears anywhere in the **top-level function containing the write**. Over the same 46 it finds **seven** — the three wallet tables plus `medication_doses`, `daily_insights`, `maintenance_tasks` and `routine_templates` — and correctly drops `subscriptions_tracked`, whose only nearby match was an import line. **All seven were read. None is a defect.** That is **twelve distinct candidate hits across two independent heuristics and zero findings**, and it adds a **fourth mechanism**, the most instructive of them: **the gate is a different code path with a different intent.** `routine_templates` looked like the real thing — `forgetRoutine` (`lib/services/memory/index.ts:607`) is documented *"Family-scoped and manager-only"* and enforces `if (!canManage(scope)) return fail('Only a parent or adult can forget a routine.')`, while the table's DELETE policy is bare `is_family_member`. A textbook AUTHZ-011 shape. **It is not one.** `components/modules/routines-panel.tsx:177` — the panel the family actually uses — deletes the same rows through `createClient()` with **no role gate, and that file contains no `isManager`, `canManage`, `manager` or `role` check at all**. The application does not claim the rule: `forgetRoutine` is the *Settings → Bubaly AI* "forget what you learned" path, manager-only because it is an AI-memory action rather than because routine templates belong to parents. Restricting the table would refuse every child and teen on the routines panel. Its component-scale variant produced the other three — a gate anywhere in a 700-line React component flags every write in it, which is how `medication_doses` (already recorded under AUTHZ-017 as a false positive for this class), `daily_insights` (a system-generated insight upsert; the `manager` there is a prop passed to a child component) and `maintenance_tasks` (`completeTask` — a teen marking a chore done is the point) arrived. **The conclusion both passes support is worth stating plainly: these heuristics do not find the real ones.** Every one of the ten real findings this audit has made on this list was found by READING the call sites; the list's only job is to say which sites to read, and narrowing it further has so far only removed names that were already innocent. Both passes are printed by `docs/audit/role-blind-write-triage.sh` as evidence and neither is used to shrink the list |
+| **AUTHZ-011** | **125 tables with split role-blind write policies are counted and NOT audited.** The census covered permissive `FOR ALL`. A further 125 tables carry role-blind permissive `INSERT`/`UPDATE`/`DELETE` policies written separately, with no restrictive guard — equally role-blind, simply a different shape. Some are constrained in other ways (`parent_approvals` INSERT is role-blind but pinned to `status='pending' AND decided_by IS NULL`), so the number is **not** a defect count. Names in it that read like they deserve the same treatment: `wallet_cards`, `wallet_passes`, `wallet_rewards`, `wallet_audit_logs`, `graph_entities`, `graph_edges`, `notifications`, `chore_assignments`, `marketplace_*`, `social_*` | **Pass BQ** | **Open, but now MEASURED rather than estimated — and the measurement caught two errors in my own instrument first.** Recorded as a number rather than left implied, because 295 tables total have a role-blind write policy with no restrictive guard and this audit has now examined 170 of them. Stating the remainder is the difference between "we checked" and "we could not see". **Pass BS ran the census properly**, against the replayed database at all 346 migrations rather than against the source: **251 tables / 732 (table, verb) pairs** carry a predicate that is *nothing but* `is_family_member(family_id)`, with no restrictive guard on that verb and no **role-aware** `raise exception` trigger on the table. **All three of my attempts were wrong, in different directions, and all three for the reason this audit keeps finding.** (1) Excluding "any table with a trigger" reported **26**. `set_updated_at` is on **406 tables** and guards nothing — a coarse proxy that silently over-credited by 10x. Counting only trigger functions whose source matches `raise +exception` is the honest filter. (2) Not expanding `FOR ALL` **on both sides** reported 13 tables I had already closed — `gift_links`, `wallet_goals`, `pay_handles`, `dashboard_layouts` among them — as still open, because a bare `FOR ALL` policy was compared against restrictive policies filed under `INSERT`/`UPDATE`/`DELETE` and matched none of them. (3) Treating *"the table has a raising trigger"* as *"the table has a ROLE guard"* reported **247**. Nine of the seventeen guard functions consult the role; eight do not — `reference_shares_family` checks that a referenced row is in the same family and says nothing about **who** may write, and `validate_marketplace_negotiation_round` and `sync_blog_image_provenance` are validation. **`grocery_items`, `meal_plans`, `moves` and `move_tasks` were credited with a boundary they do not have.** Four tables is small; the shape is not, and it is **AUTHZ-014's generalisation arriving in my own instrument** — a TABLE-granular bucket standing in for a COLUMN-granular truth. The script now prints both counts and names the four, because collapsing them into one figure is how the distinction gets lost again. **Triaged against the application**, which is the question that matters (*does the app enforce a manager rule the database does not?*): **41 SUSPECT** — a file writing the table also carries an `isManager` / `MANAGER_ONLY` / `requireManager` gate; **184 with no manager gate anywhere**, which is **PROD-001's consistent-open class and must NOT be restricted**; **22 with no `.from()` in `app/`, `lib/`, `components/` or `hooks/` at all**. The 41 is a **triage list, not a defect count** — file-level co-occurrence over-approximates, and CENSUS-002 is what happens when a name on such a list is taken for a verdict. **Five names have now been verified one at a time, and the hit rate is the useful number: three real, two not.** `member_locations`/`location_events` (AUTHZ-018) and `home_assets` (AUTHZ-019) are real and closed; `medication_doses` was a **false positive for this class** and the real finding turned out to be underneath it (AUTHZ-017). **`wallet_cards` and `family_decisions` are NOT defects and no migration was written** — `addCardAction` carries no role gate at all, so the application never claimed the rule the census inferred, and `family_decisions` has exactly one writer, a client module with no manager rule anywhere. **`0334` and `0337` are permanently unused numbers**, left as gaps rather than renumbered, because a gap says *this was looked at and refused* where a renumber says nothing. The sharpest by domain: `wallet_cards`, `wallet_passes`, `wallet_rewards`, `subscriptions_tracked`, `project_quotes` (money); `member_locations`, `location_events`, `medication_doses` (safety and privacy); `family_decisions`, `family_ai_recommendations`, `concierge_plan_actions` (decision surfaces). Verification of the first tranche is in flight. **Pass BT re-measured all of it against a database bootstrapped from the current tree, and made the triage a script rather than a hand-count** (`docs/audit/role-blind-write-triage.sh`). The census now reads **248 tables / 719 pairs** — `0333` and `0338` landed in between — and the split is **46 SUSPECT / 18 NO-WRITER / 184 CONSISTENT **CORRECTED the same day, by my own follow-up rather than by a reviewer.** The split above was first published as **46 / 22 / 180**, and the NO-WRITER figure was **wrong**. Four of those 22 — `auto_insurance_policies`, `rental_cars`, `vehicle_inspections` and `vehicle_registrations` — are written every day by `saveRow(supabase, 'auto_insurance_policies', …)` and `softDelete(supabase, 'vehicle_registrations', …)` in `app/(app)/dashboard/auto/actions.ts`, which passes the table as an **argument** and reaches PostgREST as `from(table as 'vehicles')`. No `from('<table>')` regex can see that, and this repo has roughly **200** non-literal `.from(` call sites. *"Nothing in the application writes this table"* was a false statement about a live feature, and it is the one claim on this list that could send somebody to revoke DML on something in use. The script now runs **two tests and uses each where its error is the safe one**: NO-WRITER asks the WIDE question (does the name appear as a string literal anywhere under `app/`, `lib/` or `components/`, excluding the generated `database.types.ts`), because over-reaching there is the dangerous direction; SUSPECT keeps the NARROW `from('<table>')` question, because it is a list of call sites for a human to read and the wide test inflates it from 46 to **99** with files that merely mention the name — `lib/ai/context/policy.ts` lists tables for redaction. The two are disjoint, so the three still partition 248. **Corrected split: 46 SUSPECT / 18 NO-WRITER / 184 CONSISTENT.** The four are not defects either — `auto/actions.ts` carries no manager gate at all, so they are CONSISTENT — but the bucket they were in made a claim that was not true.**. Writing the triage down earned it immediately: the first version carried its own copy of the census query with a looser definition of *bare* and reported **251 against the census's 248**, wrongly counting `marketplace_listings`, `marketplace_stores` and `notifications`, whose predicates pin a column beyond `is_family_member` (`member_id = marketplace_member_id(family_id)`, `user_id = auth.uid()`) and are role-blind but CONSTRAINED. **Two derivations of one number disagreeing by three is CENSUS-001, -002 and -003 happening a fourth time**, so the census now holds its CTEs in one place and exposes `--tables`; the triage reads that and does not know how the list is derived. The refactored census emits byte-identical output to the version it replaced, verified by diff — which is the only reason the new counts can be compared with the old. **A proximity pass was then run and is reported but deliberately NOT used to narrow**: asking whether a manager gate sits within sixty lines of an actual write reduces the 46 to **five**, and **all five were read and all five are NOT defects**, by three distinct mechanisms. (1) *The neighbouring function* — `app/(app)/wallet/hub-actions.ts` gates `addAccountAction` and then defines `addCardAction`, `addPassAction` and `addRewardAction` beneath it with no gate, and states the intent outright: `MANAGER_ONLY_DELETES` is narrowed to `financial_accounts` and `transactions`, commented *"a teen tidying their own wallet cards, passes and rewards is not what 0267 is about"*. This independently re-confirms the earlier verdict on `wallet_cards`. (2) *The import line* — the only gate-shaped token near `subscriptions_tracked`'s write is `import { isManager }`; the real gate, `canReview`, governs an AI candidate-review feature in a different component. (3) *The gate governs a different table* — `dashboard_layout_events` is telemetry written by `logEvent`, while the guarded resource is `dashboard_layouts`, closed by `0325`. That event row's `user_id` is nonetheless forgeable by any member, which is **AUDIT-002's class and is recorded there rather than counted here**. A heuristic whose every hit so far is a false positive does not get to decide which names a human reads. **And zero hits is not absolution**: `calendar_events` has 18 write sites and no gate within sixty lines of any of them, and AUTHZ-021 is real and reproduced on it — because AUTHZ-021 is an attribution defect, not a role-gate mismatch. The instrument answers one question and its silence on the others means nothing  **A second, more principled narrowing was then tried and it fares no better.** Proximity's weakness is that sixty lines is arbitrary; the enclosing-function pass asks whether a manager gate appears anywhere in the **top-level function containing the write**. Over the same 46 it finds **seven** — the three wallet tables plus `medication_doses`, `daily_insights`, `maintenance_tasks` and `routine_templates` — and correctly drops `subscriptions_tracked`, whose only nearby match was an import line. **All seven were read. None is a defect.** That is **twelve hits over **nine distinct tables** across two independent heuristics, and zero findings**, and it adds a **fourth mechanism**, the most instructive of them: **the gate is a different code path with a different intent.** `routine_templates` looked like the real thing — `forgetRoutine` (`lib/services/memory/index.ts:607`) is documented *"Family-scoped and manager-only"* and enforces `if (!canManage(scope)) return fail('Only a parent or adult can forget a routine.')`, while the table's DELETE policy is bare `is_family_member`. A textbook AUTHZ-011 shape. **It is not one.** `components/modules/routines-panel.tsx:177` — the panel the family actually uses — deletes the same rows through `createClient()` with **no role gate, and that file contains no `isManager`, `canManage`, `manager` or `role` check at all**. The application does not claim the rule: `forgetRoutine` is the *Settings → Bubaly AI* "forget what you learned" path, manager-only because it is an AI-memory action rather than because routine templates belong to parents. Restricting the table would refuse every child and teen on the routines panel. Its component-scale variant produced the other three — a gate anywhere in a 700-line React component flags every write in it, which is how `medication_doses` (already recorded under AUTHZ-017 as a false positive for this class), `daily_insights` (a system-generated insight upsert; the `manager` there is a prop passed to a child component) and `maintenance_tasks` (`completeTask` — a teen marking a chore done is the point) arrived. **The conclusion both passes support is worth stating plainly: these heuristics do not find the real ones.** Every one of the ten real findings this audit has made on this list was found by READING the call sites; the list's only job is to say which sites to read, and narrowing it further has so far only removed names that were already innocent. Both passes are printed by `docs/audit/role-blind-write-triage.sh` as evidence and neither is used to shrink the list |
 | **PROD-002** | **Four surfaces where the app and RLS agree and the agreement itself looks wrong.** Not defects by the classification rule — no manager gate exists in the app either — so they are recorded for the owner exactly as `PROD-001` was, rather than repaired mid-audit. **`screen_time_limits`**: `components/modules/screen-time-module.tsx` upserts with no role gate, so a child can raise their own screen-time limit, in the UI or through REST. A parental control with no parent in it. **`grades`**: inserted from the school module with no role gate. **`tax_documents`, `family_insurance_policies`, `household_info`**: client-module CRUD, no gate. **`member_locations`** is a different axis — the app enforces **ownership** (you upsert your own row) while the database enforces only membership, so a child can forge or disable a sibling's location row | **Pass BQ** | **Owner's call.** Each is a product decision about what a family member may do, not a boundary being walked around. Making that call inside an audit pass would look identical in the diff to the seven genuine repairs, which is the reason it is separated |
 | **I18N-008** | **A public, unauthenticated page had no scope at all, and the guard's own surface list is what hid it.** `app/s/[slug]` — the feedback survey Bubaly links out to people who are **not customers** — is the only page in the tree with **no `layout.tsx` of its own**, so no `ScopedLocaleProvider` ever mounted for it and the root layout's `ROOT_CHROME_SCOPE` was the whole of what reached the browser. Its client component `survey-form.tsx` asks for **`surveyForm.*` and `sSurveyForm.*`**, neither of which is in that scope. It renders correct English today for the same reason the last two findings did: `translate`'s `SOURCE_MESSAGES` fallback — the one **PERF-001** proposes to delete. **The shape is the finding.** `tests/i18n-client-scope.test.ts` had been repaired twice, and both repairs were about things INSIDE the surfaces it already knew: the entry globs, then the extractor. The `SURFACES` array itself is hand-written, and **nothing required it to be complete** — the same defect one level up, for the third time in one file | **Pass BS**, while closing out PERF-001's gate | **Fixed.** `SURVEY_SCOPE` and an `app/s/[slug]/layout.tsx` that mounts it; `s.*` deliberately excluded because `page.tsx` is a server component and resolves those through `getTranslations()`, which never reaches the browser. The standing repair is the **third control, and this one closes the shape rather than the instance**: every `page.tsx` under `app/` must be governed by a provider declaring `namespaces="all"` (`app/(app)`, `app/onboarding` — behind a login, named rather than assumed) or belong to a surface this file walks, with a `> 100` non-vacuity floor because a scan that sees nothing must not pass. A new public route with no layout now fails on the day it is added, not on the day the fallback is deleted underneath it. **Planted and proven:** removing the survey surface from `SURFACES` fails the new control **alone**, naming `app/s/[slug]/page.tsx` (12 tests, 1 failed \| 11 passed); restoring it returns 13/13 |
 | **AUTHZ-020** | **Sixteen tables that no application file references at all, open to every household member's write.** Measured on the replayed database and cross-checked against the tree by BARE TABLE NAME across `app/`, `lib/`, `components/`, `mobile/`, `scripts/` and `hooks/` — not only `.from('…')`, and after ruling out dynamic access (the one `sb.from(table)` with a variable, `app/api/ai/insights/route.ts:142`, is a `select('*')`): **zero references**, for `family_stress_predictions`, `social_campaigns`, `social_post_assets`, `sync_calendar_shares`, `sync_change_logs`, `sync_conflict_resolutions`, `sync_event_attendees`, `sync_note_folders`, `sync_notes`, `sync_settings`, `vacation_activity_logs`, `vacation_activity_tickets`, `vacation_audit_logs`, `vacation_checklists`, `vacation_destinations`, `vacation_notifications`. Every one carries a role-blind write policy, and **six already hold seed rows** — `sync_change_logs` 500, `vacation_activity_logs` 500, `vacation_checklists` 500, `vacation_notifications` 200, `vacation_activity_tickets` 150, `vacation_audit_logs` 120. **The `sync_*` half is the sharpest, and the reason is the naming.** The sync subsystem is real and uses thirteen tables — `sync_accounts`, `sync_calendars`, `sync_conflicts`, `sync_jobs`, `sync_tokens` and the rest. Nine more exist that it never touches, and their names are **near-misses of the ones it does**: `sync_conflicts` is used, `sync_conflict_resolutions` is not; `sync_calendars` is used, `sync_calendar_shares` is not | **Pass BS**, while re-verifying the census's "no writer" bucket rather than accepting it | **Open, and NOT an escalation — stated at its size.** Nothing reads these tables, so no screen shows anything wrong and no privilege is crossed. What is true is narrower and still worth a decision: a household member can write **unbounded rows into sixteen tables the product never touches**, and a feature that later starts reading one inherits both the seed rows and anything a member put there. The near-miss names make that a live hazard rather than a theoretical one — a developer wiring the real feature can bind to `sync_conflict_resolutions` instead of `sync_conflicts` and get a table nobody has ever guarded. **The right repair is a product decision, not a migration**: either drop them, or `revoke` client DML and leave them service-role-only until the feature that owns them exists. This audit does not choose, because dropping a table is not reversible by the person who reads this next |
@@ -14517,6 +14530,9 @@ invisible because three declarations disagreed and nothing compared them.
 | **AUTHZ-016** | **A money-domain row's only statement of who asked for the money can be written by someone else.** `parent_approvals` (`0088`, the wallet approval inbox) is otherwise well pinned: `0251` left UPDATE and DELETE to `can_manage_family`, so the filer cannot decide what they filed, and `0252` pinned the INSERT to the undecided state (`status='pending'`, `decided_by IS NULL`, `decided_at IS NULL`). **`requested_by` was never pinned** — the same residue `audit_logs.actor_id` carried before `0320` and `wallet_audit_logs.actor_user_id` before `0328`. Measured on a replayed database as a child: a 5,000-cent allowance request signed with the **parent's** uid inserts, and so does one signed with a **sibling's**, and so does one with `requested_by` null. Filing itself is the designed child action — `requestAllowanceAction` and `requestSpendAction` carry no `isManager` gate deliberately, because asking a parent for money is the whole feature — so `amount_cents` and `note` are legitimately the child's to write; only the name is not | **Pass BS** | **Fixed in the repository by `0333_a_request_says_who_actually_filed_it.sql` (UNAPPLIED), and stated smaller than the brief that sent me.** The brief said the forged name lands *"in the inbox a parent reads while deciding"*. **It does not**, and the difference is worth recording: **nothing in the product SELECTs this column** — the wallet inbox, the home and needs-you decision cards, the reminder generator, the assistant and the admin count all read `id, kind, amount_cents, created_at` and no more, and the two decide actions never branch on the requester. **No screen shows a parent the wrong name.** What is defective is the stored record, which is the AUDIT-002 class, and the honest moment to pin a column is before something reads it. The guard is **restrictive rather than a restatement** of `parent_approvals_insert`, because that policy belongs to `0252` and `tests/ai-insert-authority.test.ts` and `tests/ai-runtime-schema.test.ts` are source-level ratchets that read it — recreating it here would leave those tests describing a policy that is no longer live. Proved by `docs/audit/a-request-says-who-actually-filed-it-check.sql`, whose **negative control drops the guard and requires the forgery to land again** |
 | **AUDIT-003** | **A child can file a request in a parent's name.** `parent_approvals` is otherwise well pinned — `0251`/`0252` force `status='pending'` and `decided_by`/`decided_at` NULL on insert and forbid UPDATE entirely, and filing a request is the **designed** child action, so the amount and note are legitimately theirs. The residue is that the INSERT policy does not pin `requested_by`, so a child can attribute their own request to a sibling or a parent in the inbox a parent reads while deciding. **Attribution noise, not escalation** | **Pass BR** | **Fixed in the repository by `0333_a_request_says_who_actually_filed_it.sql` (UNAPPLIED), and DUPLICATE of AUTHZ-016 — same table, same column, same repair; both rows are kept because they were filed in different passes and a reader looking up either should find the outcome.** The same omission as `AUDIT-002` (`wallet_audit_logs` had no actor binding) and the same one-line remedy `0320` applied to `audit_logs`. **One correction to this row's own text, made while writing the migration:** it says the forged name lands *"in the inbox a parent reads while deciding"*. **It does not.** Every consumer was read — the wallet inbox (`PendingApproval`), the home and needs-you decision cards (`lib/briefing/decisions.ts`), the reminder generator, `lib/assistant/tools.ts` and the admin wallet count all select `id, kind, amount_cents, created_at` and no more, and `decideSpendRequestAction` / `decideAllowanceRequestAction` select `status, kind, ref_type, ref_id, amount_cents, note` and never branch on the requester. **No screen shows a parent the wrong name.** The defect is the stored record alone, which is smaller than "attribution noise" implies and is still worth closing for AUDIT-002's reason: the honest moment to pin a column is before something reads it |
 | **CENSUS-002** | **`autopilot_suggestions` was in the defect bucket and should not have been — the repair brief was wrong and the repair refused it.** The census recorded *"no app path creates a row at all; only the server pass inserts"*, and the repair brief repeated it. Both were wrong. `app/api/autopilot/scan/route.ts:39` runs the scan on **`createServer()` — the caller's own RLS-bound client** — behind `resolveFeatureEntitlement('/dashboard/autopilot')`, which is **plan-level, not role-level**; `requireFeature` has no role check either; and `autopilot-module.tsx:95` fires that scan **automatically on page open**, for any member. The scan **throws** on a refused write. So the manager-only guard the brief asked for would have returned 500 from `/dashboard/autopilot` for every child in a Plus family. **The rule is plan, not role** — which puts the table in `CONSISTENT-OPEN`, not `DEFECT` | **Pass BS**, caught by the repair pass refusing its own brief | **Corrected, and only what the app never does was closed** (`0327`): DELETE refused for every client role — no `.delete()` exists anywhere, withdrawal is a status change — and `resolved_by` pinned to `auth.uid()` so a child cannot record that a *parent* dismissed a suggestion. **Third census error of this audit** after basenames (`CENSUS-001`) and the generic-by-name write path. This one was caught before it shipped, by a pass that read the code instead of the brief |
+| **AUTHZ-022** | **`0338`'s `attribution_is_immutable()` is written as though general and is not, so the obvious instrument for AUTHZ-021's UPDATE half does not work.** The function guards `created_by` with `if to_jsonb(new) ? 'created_by'` and then assigns `new.logged_by` **unconditionally**. Attached to `calendar_events`, which has no `logged_by`, every UPDATE raises `record "new" has no field "logged_by"` (**SQLSTATE 42703**) — measured on a live database. Its own `comment on function` describes it as shared by four tables, and it is only safe on tables carrying both columns | **Pass BT**, found by trying to reuse it rather than by reading it | **Open, and NOT a defect in `0338` as shipped.** All four tables `0338` attaches it to have both columns, so the migration is correct and none of its probe assertions is weakened; what is wrong is the claim of generality. The repair is one line — give `logged_by` the same presence test — and it was verified four ways inside rolled-back transactions: an ordinary `calendar_events` UPDATE then succeeds; a rewrite of `created_by` is preserved away; **the negative control** (drop the trigger, repeat the identical rewrite) shows it landing; and the same nulling edit against `care_log` gives **identical** results under both versions, so `0338` is unchanged. Not written as a migration because it belongs with whatever AUTHZ-021 lands, and landing it alone would be a change to a shipped function for no present benefit. **The first negative control is recorded as inconclusive rather than quietly re-run**: it named a `created_by` absent from `auth.users`, so the rewrite was refused by `calendar_events_created_by_fkey` and not by the trigger's absence. A control refused for the wrong reason is not a control |
+| **CENSUS-004** | **The AUTHZ-011 triage claimed "nothing in the application writes this table" about four live features.** The first published split was 46 SUSPECT / **22** NO-WRITER / 180 CONSISTENT. Four of those 22 — `auto_insurance_policies`, `rental_cars`, `vehicle_inspections`, `vehicle_registrations` — are written every day by `saveRow(supabase, 'auto_insurance_policies', …)` and `softDelete(supabase, 'vehicle_registrations', …)` in `app/(app)/dashboard/auto/actions.ts`, which passes the table as an **argument** and reaches PostgREST as `from(table as 'vehicles')`. No `from('<table>')` regex can see that, and the repo has roughly **200** non-literal `.from(` call sites | **Pass BT**, caught by my own follow-up the same day, not by a reviewer | **Fixed in the instrument, and the corrected number is 46 / 18 / 184.** This is the one claim on that list that could send somebody to revoke DML on something in use, so the script now runs two tests and uses each where its error is the safe one: **NO-WRITER asks the wide question** — does the name appear as a string literal anywhere under `app/`, `lib/` or `components/`, excluding the generated `database.types.ts` — because over-reaching there is the dangerous direction; **SUSPECT keeps the narrow `from('<table>')` question**, because it is a list of call sites for a human to read and the wide test inflates it from 46 to **99** with files that merely mention a name (`lib/ai/context/policy.ts` lists tables for redaction). A table with no literal anywhere cannot have a `from('t')`, so the two are disjoint and the three buckets still partition 248. The four are not defects — that file carries no manager gate at all — but the bucket they were in said something untrue about the product. **A residual limit stays and is stated in the script**: a table written only through a SECURITY DEFINER RPC, naming itself nowhere in TypeScript, still reads as NO-WRITER |
+| **DOC-001** | **This audit was hiding its own "why it is still open" column, and 33 table rows across the repo were written and never rendered.** A GFM table discards every cell past the count its HEADER declares, and a `\|` splits a cell even inside a code span. The §3 open-findings table declared three columns while 28 of its 35 rows carried four, so the fourth cell — the one saying why a finding is still open — was **dropped by the renderer** for 28 findings including AUTHZ-011, AUTHZ-017, AUTHZ-021, PERF-001 and I18N-001. Swept across all **403** tracked markdown files: `docs/AI_FAMILY_OS_IMPLEMENTATION_MAP.md`'s `ai_run_events` row held **29 cells against a 4-column header, so 25 were invisible**, losing the whole `event_type` check constraint; and `docs/PENDING_PROD_MIGRATIONS.md` — the file a human reads to decide what to apply to **production** — had row `0154_marketplace_ownership.sql` with **no description cell**, its coupling warning (*"apply this together with the deploy that ships it, else owner accept/withdraw/complete will error"*) sitting as a dropped fifth cell on the `0155` row beneath it | **Pass BT**, found while editing the AUTHZ-011 row | **Fixed, and provably content-preserving**: removing the inserted backslashes reproduces each previous file byte for byte (checked for the implementation map; checked as a cell multiset for the pending-migrations file, which also had the cell moved back to `0154`). `docs/audit/audit-tables-render.py` keeps it closed and separates the two cases, because only one is a defect: a row with **more** cells than the header loses text and fails; a row with **fewer** renders everything it holds, since GFM pads it, and is reported without failing. Five short rows remain in one table whose Files and Behaviour columns were merged when it was written — nothing is missing, and splitting them again is a judgement about meaning the script should not make. **Deliberately not wired into CI**: other agents edit these files and a red build over someone's prose is not what the check is for |
 
 ---
 
@@ -28676,6 +28692,283 @@ compiles; lint unchanged at its three pre-existing warnings; i18n gate clean
 with one new string added to all seven populated catalogues. The new guard is
 verified load-bearing in both directions — removing one `.select('id')` turns it
 red with file, line, table and operation.
+
+# Pass BT — What the instruments were wrong about (AUTHZ-021, AUTHZ-022, CENSUS-004, DOC-001)
+
+Pass BS ended with AUTHZ-021 recorded as *"a design question, not a one-line
+migration"* and AUTHZ-011 recorded as a number. This pass took both at their
+word and found that, in each case, the thing standing in the way was an
+instrument rather than the code.
+
+Everything below was measured against a database bootstrapped from the tree at
+this branch's head — **349 migrations applied, 0 failed** — with every
+destructive step inside a transaction that was rolled back. Where a measurement
+had no negative control, or where its control was refused for the wrong reason,
+that is said rather than smoothed over.
+
+## AUTHZ-021 — the design question had a shipped answer one table over
+
+The finding was already real: acting as a `child` member, an insert into
+`calendar_events` naming the **parent's** uid in `created_by` succeeds. Four
+things were measured this pass, and the fifth is why the other four count:
+
+| # | what was measured | result |
+|---|---|---|
+| 1 | `can_manage_family(fam)` as the child | **false** — its body is `role in ('parent','adult')`, so `teen`, `child`, `caregiver` and `guest` are all outside it |
+| 2 | child inserts with `created_by` = the parent's uid | **1 row** — the forgery lands |
+| 3 | insert omitting `created_by` entirely | **accepted** — so any pin must admit NULL |
+| 4 | child UPDATEs an existing row's `created_by` | **1 row** — the attribution is not only forgeable at birth but mutable afterwards by anyone in the household |
+| 5 | **negative control**: cross-family insert, same session | refused with `insufficient_privilege` — RLS *was* being enforced, so 1–4 are evidence rather than an unpoliced session |
+
+**The predicate this row has been asking for is already in the tree.**
+`supabase/migrations/0272_rsvp_is_first_person.sql` does exactly this job on
+`event_rsvps` — a table the approval replay **also** writes. It replaces one
+`FOR ALL … is_family_member` policy with four and pins INSERT, UPDATE (both
+`using` and `with check`) and DELETE to
+
+```
+public.is_self_member(member_id) or public.can_manage_family(family_id)
+```
+
+leaving SELECT open to the family because *"seeing who is coming is the point"*.
+`is_self_member` is `security definer … set search_path = public`, resolving
+*is this me* through the roster rather than a client-supplied id.
+`tests/rsvp-first-person-rls.test.ts` pins it, and one of its cases is named
+**"keeps a manager able to write anyone's row, which is what lets an approval
+replay"**, commented: *"`performApproved` runs under the APPROVING parent's
+client while writing the ASKER's `member_id` … Drop the manager branch and this
+migration breaks the very path it protects."*
+
+Nothing in this audit had noticed. **Three migrations (`0339`, `0340`, `0342`)
+were written and rejected against a wall that a shipped migration had already
+gone around.** The manager branch always holds on the replay path, verified two
+ways: `lib/services/approvals/index.ts:246` refuses any decision where
+`!isManager(scope.role)` with `MANAGER_ROLES = ['parent','adult']`, and
+`can_manage_family` is the same pair — measured false for a child above.
+
+### What still separates `calendar_events` from copying `0272`
+
+1. **`created_by` references `auth.users(id)`, not `family_members(id)`.** The
+   self branch is a bare `= auth.uid()`, and there is no roster row to constrain
+   the manager branch, so a manager could name an auth user outside the family —
+   which `0272`'s `member_id` shape prevents for free.
+2. **NULL must be admitted, and by more writers than the brief knew.** Two
+   RLS-applying paths write it: `app/api/calendar/sync/route.ts:132` (the ICS
+   paste import, on `createServer()`) and `lib/server/calendar-feeds.ts:54`
+   reached from `app/(app)/dashboard/sync/feeds/actions.ts:31,54`, also on
+   `createServer()`, whose rows come from `mapIcsEventToRow` and carry no
+   `created_by` key at all. `docs/audit/rls-isolation-check.sql` inserts without
+   it at lines 24 and 100 too, so a pin refusing NULL breaks the isolation probe
+   as well as the product. The cron sync (`createServiceClient`) bypasses RLS
+   and is unaffected.
+3. **Any new migration fails CI as written.**
+   `tests/migration-version-safety.test.ts:144` asserts `nextVersion === '0339'`
+   and carries a prose block recording `0339`/`0340`/`0342` as rejected — a
+   deliberate ratchet on this audit's own record. Landing one means rewriting
+   that paragraph to say what the new predicate is and why it is not the bare
+   pin that was refused.
+4. **AUTHZ-022**, below.
+
+Nothing else in `tests/` or `docs/audit/` pins the `calendar_events` policy set.
+SELECT stays untouched under every candidate, so the isolation and cascade
+probes are unaffected.
+
+## AUTHZ-022 — `0338`'s trigger function is written as if general and is not
+
+`public.attribution_is_immutable()` is the right instrument for AUTHZ-021's
+UPDATE half. It **preserves** rather than refuses — `new.created_by :=
+old.created_by` — which matters because no calendar writer sends `created_by` on
+UPDATE, so a refusing policy would block a member editing a parent's event while
+a preserve simply keeps the truth that was recorded.
+
+It cannot be reused as written. The function guards `created_by` with
+`if to_jsonb(new) ? 'created_by'` and then assigns `new.logged_by`
+**unconditionally**. `calendar_events` has no `logged_by`. Measured: attaching
+it and editing a row raises
+
+```
+record "new" has no field "logged_by"   [SQLSTATE 42703]
+```
+
+— every update to the family calendar would fail.
+
+This is invisible on the four tables `0338` attaches it to, because all four
+have both columns, so **`0338` is correct as shipped and none of its probe
+assertions is weakened.** But `comment on function` describes it as shared, and
+it is not. The repair is one line — give `logged_by` the same presence test —
+and it was verified four ways, each inside a rolled-back transaction:
+
+- an ordinary `calendar_events` UPDATE then succeeds;
+- a rewrite of `created_by` is preserved away rather than applied;
+- **negative control:** dropping the trigger and repeating the identical rewrite
+  shows it landing, so the guard is doing the work;
+- the same `logged_by`-and-`created_by`-nulling edit against `care_log` produces
+  **identical** results under the shipped function and the symmetric one.
+
+The first attempt at that negative control is recorded as **inconclusive**
+rather than quietly re-run: it named a `created_by` absent from `auth.users`, so
+the rewrite was refused by `calendar_events_created_by_fkey` and not by the
+trigger's absence. A control refused for the wrong reason is not a control.
+
+## AUTHZ-011 re-measured, and CENSUS-004
+
+Re-run against the current tree the census reads **248 tables / 719 pairs**,
+superseding the 251 / 732 carried since Pass BS — `0333` and `0338` closed what
+they closed. The triage, which had only ever been a hand-count in prose, is now
+`docs/audit/role-blind-write-triage.sh`.
+
+**Writing it down earned it three times over.**
+
+### CENSUS-003½ — the triage disagreed with the census by three
+
+The first version carried its own copy of the census query with a looser
+definition of *bare* and reported **251 against the census's 248**, wrongly
+counting `marketplace_listings`, `marketplace_stores` and `notifications`, whose
+predicates pin a column beyond `is_family_member` (`member_id =
+marketplace_member_id(family_id)`, `user_id = auth.uid()`). Those are role-blind
+but **constrained**, which the census excludes on purpose and says so in a
+comment. Two derivations of one number disagreeing by three is CENSUS-001, -002
+and -003 happening a fourth time, so the census now holds its CTEs in **one**
+place and exposes `--tables`; the triage reads that and does not know how the
+list is derived. The refactored census emits **byte-identical** output to the
+version it replaced, verified by diff — the only reason the new counts can be
+compared with the old.
+
+### CENSUS-004 — "nothing writes this table" was false for four live features
+
+The triage first published **46 SUSPECT / 22 NO-WRITER / 180 CONSISTENT**. The
+NO-WRITER figure was **wrong**, and it is the one claim on this list that could
+send somebody to revoke DML on something in use.
+
+Four of those 22 — `auto_insurance_policies`, `rental_cars`,
+`vehicle_inspections` and `vehicle_registrations` — are written every day by
+
+```ts
+saveRow(supabase, 'auto_insurance_policies', id, row, familyId, userId, …)
+softDelete(supabase, 'vehicle_registrations', id, familyId, userId)
+```
+
+in `app/(app)/dashboard/auto/actions.ts`, which passes the table as an
+**argument** and reaches PostgREST as `from(table as 'vehicles')`. No
+`from('<table>')` regex can see that shape, and this repo has roughly **200**
+non-literal `.from(` call sites.
+
+The script now runs two tests and uses each where its error is the safe one:
+**NO-WRITER asks the wide question** (does the name appear as a string literal
+anywhere under `app/`, `lib/` or `components/`, excluding the generated
+`database.types.ts`), because over-reaching there is the dangerous direction;
+**SUSPECT keeps the narrow `from('<table>')` question**, because it is a list of
+call sites for a human to read and the wide test inflates it from 46 to **99**
+with files that only mention the name — `lib/ai/context/policy.ts` lists tables
+for redaction. The two are disjoint, so the three still partition 248.
+
+**Corrected: 46 SUSPECT / 18 NO-WRITER / 184 CONSISTENT.** The four are not
+defects — `auto/actions.ts` carries no manager gate at all — but the bucket they
+were in made a statement about the product that was not true.
+
+### Two narrowing heuristics, nine tables, zero findings
+
+| pass | question | hits | defects |
+|---|---|---|---|
+| proximity | a manager gate within 60 lines above / 20 below a write | 5 | **0** |
+| enclosing function | a manager gate anywhere in the top-level function containing the write | 7 | **0** |
+| union | — | 12 hits over **9 distinct tables** | **0** |
+
+Four distinct false-positive mechanisms produced them, and each would have given
+a wrong verdict alone:
+
+1. **The neighbouring function.** `app/(app)/wallet/hub-actions.ts` gates
+   `addAccountAction` and then defines `addCardAction`, `addPassAction` and
+   `addRewardAction` beneath it with no gate, and states the intent outright:
+   `MANAGER_ONLY_DELETES` is narrowed to `financial_accounts` and
+   `transactions`, commented *"a teen tidying their own wallet cards, passes and
+   rewards is not what 0267 is about"*. This independently re-confirms the
+   earlier verdict on `wallet_cards`.
+2. **The import line.** `subscriptions_tracked`'s only gate-shaped token near
+   its write is `import { isManager }`; the real gate, `canReview`, governs an
+   AI candidate-review feature in a different component.
+3. **The gate governs a different table.** `dashboard_layout_events` is
+   telemetry written by `logEvent`; the guarded resource is `dashboard_layouts`,
+   closed by `0325`. (That event row's `user_id` is still forgeable by any
+   member — AUDIT-002's class, recorded there rather than counted here.)
+4. **The gate is a different code path with a different intent.**
+   `routine_templates` looked like the real thing: `forgetRoutine`
+   (`lib/services/memory/index.ts:607`) is documented *"Family-scoped and
+   manager-only"* and enforces `if (!canManage(scope)) return fail('Only a
+   parent or adult can forget a routine.')`, while the table's DELETE policy is
+   bare `is_family_member`. **It is not one.**
+   `components/modules/routines-panel.tsx:177` — the panel the family actually
+   uses — deletes the same rows through `createClient()` with no role gate, and
+   that file contains no `isManager`, `canManage`, `manager` or `role` check at
+   all. `forgetRoutine` is the *Settings → Bubaly AI* "forget what you learned"
+   path, manager-only because it is an AI-memory action rather than because
+   routine templates belong to parents. Restricting the table would refuse every
+   child and teen on the routines panel.
+   Its component-scale variant produced the other three — a gate anywhere in a
+   700-line React component flags every write in it: `medication_doses`
+   (AUTHZ-017 already recorded it as a false positive for this class),
+   `daily_insights` (a system-generated insight upsert; the `manager` there is a
+   prop handed to a child component) and `maintenance_tasks` (`completeTask` — a
+   teen marking a chore done is the point).
+
+**The conclusion both passes support is worth stating plainly: these heuristics
+do not find the real ones.** All ten real findings this audit has made on this
+list came from reading the call sites. The list's only job is to say which sites
+to read, and narrowing it further has so far only removed names that were
+already innocent. Both passes are printed as evidence and neither is used to
+shrink the list.
+
+## DOC-001 — the audit was hiding its own "why it is still open" column
+
+A GFM table discards every cell past the count its **header** declares, and a
+`|` splits a cell even inside a code span. The §3 open-findings table declared
+three columns while 28 of its 35 rows carried four, so the fourth cell was
+**dropped by the renderer** — not truncated, absent. In an audit of what remains
+open, the column saying *why something is still open* was in the file and
+invisible on the page, for 28 findings including AUTHZ-011, AUTHZ-017,
+AUTHZ-021, PERF-001 and I18N-001.
+
+Swept across all **403** tracked markdown files rather than fixed in place: **33
+rows** lost content.
+
+- `docs/AI_FAMILY_OS_IMPLEMENTATION_MAP.md` held the worst. The `ai_run_events`
+  row had **29 cells against a 4-column header, so 25 were invisible** — the
+  entire `event_type` check constraint
+  (`run_started|planned|step_started|…|run_complete`) rendered as nothing. Nine
+  rows were like that; 78 pipes inside code spans plus 77 tight alternation
+  pipes are now escaped.
+- `docs/PENDING_PROD_MIGRATIONS.md` had a worse kind of wrong, in the file a
+  human reads to decide what to apply to production. Row
+  `0154_marketplace_ownership.sql` had **no description cell**, and its text —
+  *"Security hardening (audit SEC-1/SEC-2/REL-1/RACE-1) … apply this together
+  with the deploy that ships it, else owner accept/withdraw/complete will
+  error"* — was sitting as a dropped fifth cell on the `0155` row beneath it. A
+  lost newline. `0154` rendered with a blank reason column and its coupling
+  warning reached nobody.
+
+Every edit is provably content-preserving: removing the inserted backslashes
+reproduces the previous file byte for byte (checked for the implementation map;
+checked as a cell multiset for the pending-migrations file, which also had the
+cell moved).
+
+`docs/audit/audit-tables-render.py` keeps it closed, and separates the two cases
+because only one is a defect: a row with **more** cells than the header loses
+text and fails the check; a row with **fewer** renders everything it holds — GFM
+pads it — and is reported without failing. Five such rows remain, all in one
+table whose Files and Behaviour columns were merged when it was written; nothing
+is missing, and splitting them again is a judgement about meaning the script
+should not make. Deliberately **not** wired into CI: other agents edit these
+files, and a red build over someone's prose is not what the check is for.
+
+## What this pass did not do
+
+No migration was written. AUTHZ-021 now has a verified precedent, a verified
+writer census, a measured NULL requirement and a named CI ratchet to update —
+everything a migration needs — and it is still open, because the last time this
+class was rushed it produced three files that passed 64 probes and were rejected
+on review. The remaining decision is recorded under AUTHZ-021 rather than
+settled here.
+
 
 # Final Regression
 
