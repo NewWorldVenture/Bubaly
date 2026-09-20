@@ -29179,6 +29179,49 @@ the admin API, and — the reason this is worth a finding rather than a note —
 future account-deletion or GDPR-erasure feature, which would fail on its first
 real user with a foreign key error naming a table the author never touched.
 
+## Where the AUTHZ-021 candidate stands, and why it is still not in the tree
+
+The adversarial run for this row finished 16 of its 17 agents — all nine
+refuters returned — and its final judge staged a **complete** landing in the
+working tree rather than a migration alone: the migration, a standing SQL probe,
+a 119-line source-shape test, the `tests/migration-version-safety.test.ts`
+ratchet moved to `'0340'` with a rewritten prose block, a `docs/audit/README.md`
+row, and a corrected doc-block in `lib/services/approvals/index.ts`.
+
+**All of it is parked** in the session scratchpad under `workflow-proposed/
+judge-final/`, with the tracked-file edits kept as a patch, because the judge's
+verdict had not returned. Nothing here is a decision to ship. What *is* settled,
+and settled by measurement rather than by the workflow's say-so:
+
+- The design moved from the earlier candidate's `security definer`
+  `is_approved_replay_author(...)` helper to **`0272`'s shipped shape** —
+  `created_by is null or created_by = auth.uid() or can_manage_family(family_id)`
+  — which is the predicate this row spent two passes establishing already exists.
+- The depth-guard mechanism is verified independently, five ways with controls,
+  under **The attribution freeze has a second failure mode** above.
+- The two TypeScript files pass locally: 13 tests across
+  `tests/calendar-attribution-rls.test.ts` and the ratchet.
+- The doc-block change to `lib/services/approvals/index.ts` is **comment-only**
+  — checked, not assumed — and its reasoning about why the manager branch keeps
+  the replay path safe matches what `lib/services/approvals/index.ts:246` and
+  `lib/constants/roles.ts:24-27` actually say.
+
+**Two defects in the staged landing are recorded now so they are not lost.**
+(1) The rewritten ratchet prose **drops the `lib/trust/ai-gate.ts:36`
+cross-reference**, and that reference is still accurate — the invariant is
+stated there in words, verified by reading it. It goes back in. (2) Nothing in
+the staged set adds a `0339` entry to `docs/PENDING_PROD_MIGRATIONS.md`, which
+every other migration in this audit has; the owner applies from that file, so a
+migration missing from it is a migration that does not get applied.
+
+**Still unverified, and the reason this waits:** the judge's verdict itself, and
+a clean-database replay of all 349 prior migrations plus this one with the 61
+existing probes re-run. The database this session built for that
+(`bubaly_verify`) no longer exists, and the shared `bubaly` database is the one
+the judge has been mutating, so neither is a surface a measurement can be
+attributed to — which is exactly the error this audit already made once and
+recorded. The replay gets rebuilt before anything lands.
+
 ## What this pass did not do
 
 No migration was written. AUTHZ-021 now has a verified precedent, a verified
