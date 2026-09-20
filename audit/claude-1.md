@@ -6738,12 +6738,37 @@ not the call was ever made.
 !durable.ok)` in both routes — a regression that keeps the round trip and
 ignores the verdict — both new cases go **red**; restored, 19/19 green.
 
-### Recorded, not fixed here
+### Recorded, then WITHDRAWN — I pattern-matched instead of reading the route
 
-`app/api/ai/gift/route.ts:31` constructs a service client and calls
-`rateLimitDb` **before** reading its token — the same shape as the Pass BA
-defect, on an unauthenticated gift-link path. It is outside this pass and has no
-boundary guard of its own; it needs the same relocation and a guard that pins it.
+I recorded `app/api/ai/gift/route.ts:31` as the same defect: a service client
+and `rateLimitDb` **before** the token read. It is not, and the withdrawal is
+worth more than the finding would have been.
+
+That route is unauthenticated **by design** — its own header says so, *"Givers
+aren't signed in, so this is unauthenticated: it's rate-limited per IP"* — and a
+gift link is a capability URL, not a credential the route authorizes against.
+So there is no auth check for the limiter to sit before.
+
+Two things make the assistant repair right there and wrong here:
+
+- **There is no principal to key on.** The assistant limiter moved from an IP to
+  `link.id`, which is what made "after" strictly better. `ai-gift` keys on
+  `ai-gift:${ip}` on both sides of the token read, so relocating it would change
+  nothing about what is written or who it is charged to.
+- **Moving it would make the route worse.** A durable, cross-instance cap in
+  front of a public model-backed endpoint is the only thing bounding
+  unauthenticated cost. Put it after the token check and a request carrying no
+  token is bounded by the per-lambda Map alone — which is the exact condition
+  `tests/no-route-gates-on-a-per-instance-limit.test.ts` exists to forbid.
+
+The write itself is one narrow upsert through an RPC, not the ledger row that
+made the assistant placement wrong.
+
+**This is the BK-01 lesson arriving from the other direction.** There I reported
+a defect without checking whether someone had already fixed it; here I reported
+one without checking whether it was a defect at all. Both times the missing step
+was reading the thing itself — and a pass that carries a false finding forward
+costs a reviewer more than one that carries none.
 
 **Verified:** `no-route-gates-on-a-per-instance-limit`,
 `middleware-assistant-boundary` and `alexa-request-verification` — **76/76**
