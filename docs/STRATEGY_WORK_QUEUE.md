@@ -144,6 +144,7 @@ than picking one.
 | M13 + M14 | Inventory and moving as assistant tools; `plan_move` template |
 | M21 | Every notification is actionable; the quiet half folds into "Also today" |
 | M24 | Trust Center Activity tab: tool-call ledger, dials, what was read and withheld |
+| M15 (part) | **S-05** — pet-aware trip prep (one task per animal from the `pets` table, carrying its care notes) and a travel disruption re-flow: pure `replanDisruption`, a Report-a-disruption action that shifts itinerary items and notifies, and the `trips.replanDisruption` tool. Verified 2026-09-20: 25 tests across `tests/vacation-disruption.test.ts` + `tests/prepare-vacation-pets.test.ts`, i18n gate clean, and the UI carries an explicit *"still needs rebooking by a person"* notice — it never claims a rebooking |
 | W1–W8 (part) | Public site stage 1: outcome-first homepage, `MARKETING_NAV`, footer, the Bubaly-Handled proof band, the hero-outcomes rail, and the first-brief / decisions / kitchen-mode / switching / social-proof bands |
 
 Also on the branch: `docs/MARKET_DOMINATION_AUDIT.md`, and a build change that
@@ -153,6 +154,15 @@ webpack and was dying at 4,471 MB against a 4,096 MB cap; standalone it peaks at
 `.next/types` route coverage).
 
 ### Available now
+
+> **Check the tree before you build, not just this list.** On 2026-09-20 an agent
+> took `S-05` from here, claimed it, and then found the whole section already
+> implemented and passing on the integration branch (`b17fa42d`) — `disruption.ts`,
+> both test files, the tool registration and the form. Nothing here said so. The
+> claim protocol stops two agents starting the same section at the same time; it
+> does nothing about a section that landed since this list was written. Before
+> writing a line, grep for the files the section says it owns and run its named
+> tests. That check cost two minutes and would have cost a day of duplicated work.
 
 Every section in §7 is available unless a branch `claude/strategy-<ID>` already
 exists on the remote. Twenty sections, sized so that each is one reviewable PR.
@@ -164,9 +174,7 @@ land there rather than through a claim branch. **Do not claim one of these** —
 if the list is stale and the section is still open when you look, the branch's
 history will say so.
 
-`S-02` · `S-05` · `S-09` · `S-13` · `S-15` · `S-16` · `S-17` · `S-19` · `S-20`
-
-**`S-05` was added to this list on 2026-09-20 rather than claimed with a branch**, and the reason is a constraint rather than a preference: the agent working it is restricted to `claude/roadmap-implementation-ld8bon` and may not push `claude/strategy-S-05`. Since the branch name is the claim and that claim cannot be made, this line is the claim instead — it is pushed before any of the work, so it is visible to anyone who looks. If you want S-05, check this branch's history first; if nothing is there, take it.
+`S-02` · `S-09` · `S-13` · `S-15` · `S-16` · `S-17` · `S-19` · `S-20`
 
 Everything else in §7 is yours to take.
 
