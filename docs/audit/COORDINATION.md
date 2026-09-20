@@ -244,6 +244,45 @@ table still under the FOR-ALL policy:
   movement). **FLAGGED for the owning agents** to make append-only with the same 0224 shape if desired;
   agent-01 did not touch them (outside A-08 claim).
 
+### ✅ RESOLVED 2026-09-20 (Pass BT, `finalaudit.md` AUTHZ-020) — the three flagged log tables
+
+The hand-off above reads: *"`vacation_audit_logs`/`vacation_activity_logs` (0070)
++ `home_security_events` (0081) — genuine activity/audit logs still FOR-ALL,
+**trigger-written (no app writer)**, so a child could tamper via direct
+PostgREST. LOW severity. FLAGGED for the owning agents."*
+
+Re-checked against a database bootstrapped from the current tree (349 migrations
+applied, 0 failed). All three still carry the bare `FOR ALL is_family_member`
+policy, unchanged. **But the premise is wrong, and in the reassuring direction:**
+
+- **None of the three is trigger-written.** The only trigger on each is
+  `set_updated_at`, which is on 406 tables and guards nothing — no trigger
+  function anywhere contains an `insert into` for any of them.
+- `vacation_audit_logs` and `vacation_activity_logs` have **no TypeScript
+  reference at all** under `app/`, `lib/` or `components/`. Their only writers
+  are `supabase/seed_vacations_trips.sql` and `SEED_ALL.sql`, which run as the
+  owner and bypass RLS. They are not tamperable live audit trails; they are
+  unused surface, and they are already carried as two of the sixteen in
+  **AUTHZ-020**.
+- `home_security_events` **is** written, by `components/modules/security-module.tsx`,
+  with no role gate — so it is live collaborative content where the application
+  and the database agree, not an audit log. It sits in the CONSISTENT bucket of
+  `docs/audit/role-blind-write-triage.sh`.
+
+So no append-only migration in the `0224` shape is called for on the evidence:
+there is no history to protect on the first two, and the third is content rather
+than a log. If a future feature starts writing the vacation pair, it inherits
+whatever a member put there — which is exactly the AUTHZ-020 hazard and is
+tracked there, not here.
+
+**Protocol note, stated rather than skipped.** §0 says a claim is real once
+pushed to `main`. This session is scoped to `claude/roadmap-implementation-ld8bon`
+and must not push to another branch, so no unit was claimed and this is recorded
+as a finding on that branch instead of as a board claim. It reaches `main` when
+that branch merges. Nothing above was edited under another agent's ACTIVE claim;
+the board's most recent heartbeat is 2026-07-18, ~2 months stale by §3's own
+90-minute rule.
+
 **FLAGGED — need an owner decision / deeper check (NOT money-critical):**
 - `autopilot_suggestions` (0085): FOR-ALL is acceptable — **VERIFIED SAFE (agent-01).** Execution is
   NOT user-status-triggered: the engine (`lib/autopilot/engine.ts`/`scan.ts`) auto-executes only
