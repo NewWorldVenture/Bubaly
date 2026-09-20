@@ -64,15 +64,30 @@
 -- depth 1 keeps every freeze 0338 shipped (its own probe still passes) while
 -- letting the constraint do the job it declares.
 --
--- Is `= 1` itself a hole? Only a TRIGGER-ISSUED update reaches depth 2, so the
--- question is whether one exists. Asked of the catalog rather than by grepping:
--- no trigger function attached to any table, and no function in any non-system
--- schema, contains an UPDATE against these four tables. A function invoked
--- directly is not a path either -- its UPDATE still runs triggers at depth 1.
--- The assertion block below RE-ASKS that at every replay, so the day someone
--- adds such a trigger this migration fails rather than silently stops guarding.
--- That is the one thing a future edit is most likely to get wrong, and it is the
--- mirror of the defect being fixed here.
+-- Is `= 1` itself a hole? Only a TRIGGER-ISSUED update reaches depth 2. A
+-- function invoked directly is not a path -- its UPDATE still runs triggers at
+-- depth 1 (measured). So the question is whether a trigger-issued one exists,
+-- and today none does.
+--
+-- THE ASSERTION BELOW IS A TRIPWIRE, NOT A PROOF, and the earlier draft of this
+-- header claimed otherwise. It reads `p.prosrc` of functions DIRECTLY attached
+-- as triggers and matches an UPDATE against these four names. An adversarial
+-- review defeated it three ways, each demonstrated rather than argued:
+--
+--   * the UPDATE lives in a HELPER the trigger calls -- prosrc of the trigger
+--     function contains no such statement;
+--   * the UPDATE is built by `execute format(...)` -- the table name is not in
+--     the source text at all;
+--   * and in the other direction it FALSE-POSITIVES on a COMMENT, so a trigger
+--     function merely mentioning these tables in prose makes this migration
+--     unreplayable.
+--
+-- It is kept because it catches the obvious shape and fails loudly, and because
+-- the alternative -- proving no nested write exists -- is not something a text
+-- scan can do. What it must not be read as is a guarantee that `= 1` still
+-- covers every application write. That remains the one thing a future edit is
+-- most likely to get wrong, and the honest statement is that this tripwire
+-- narrows it rather than closes it.
 --
 -- ── AUTHZ-022, the same function's other complaint ───────────────────────────
 --
@@ -82,9 +97,19 @@
 -- describes it as shared and general. 0339 worked around this by creating a
 -- DEDICATED function rather than widening this one. The claim of generality is
 -- still false, so it is made true here: `logged_by` gets the same presence test
--- `created_by` already has. This changes NOTHING on the four tables 0338
--- attaches it to, because all four carry both columns -- it is the comment that
--- was wrong, and a function whose comment lies is how AUTHZ-022 happened.
+-- `created_by` already has. MEASURED, because the first draft of this header
+-- asserted "all four carry both columns" and that is FALSE:
+--
+--     care_log             logged_by YES   created_by YES
+--     behavior_logs        logged_by YES   created_by NO
+--     screen_time_entries  logged_by YES   created_by NO
+--     medication_doses     logged_by YES   created_by NO
+--
+-- So `created_by`'s presence test is LOAD-BEARING on three of the four today --
+-- it is why 0338 worked at all -- while `logged_by`'s is defensive, since all
+-- four carry that column. The asymmetry was never harmless; it was merely not
+-- yet exercised. A function whose comment lies is how AUTHZ-022 happened, and
+-- a header that states a fact it never measured is the same mistake.
 --
 -- Both repairs are one line each on the same function. They are in one migration
 -- because splitting them would mean two migrations replacing the same function
@@ -153,13 +178,21 @@ begin
     if to_regclass('public.' || t) is null then
       continue;
     end if;
+    -- TIMING AND EVENT ARE PINNED, not just the name. A plpgsql trigger's
+    -- return value is DISCARDED on AFTER, so re-creating this as AFTER UPDATE
+    -- leaves the trigger present, the function unchanged, and the freeze
+    -- completely inert -- and the earlier version of this check printed OK.
+    -- tgtype bits: 1 = FOR EACH ROW, 2 = BEFORE, 16 = UPDATE.
     if not exists (
       select 1 from pg_trigger tg join pg_proc p on p.oid = tg.tgfoid
        where tg.tgrelid = ('public.' || t)::regclass
          and not tg.tgisinternal
          and p.proname = 'attribution_is_immutable'
+         and (tg.tgtype &  1) =  1
+         and (tg.tgtype &  2) =  2
+         and (tg.tgtype & 16) = 16
     ) then
-      raise exception '0340: % no longer carries 0338''s attribution trigger', t;
+      raise exception '0340: % no longer carries 0338''s attribution trigger as a BEFORE UPDATE FOR EACH ROW trigger — on AFTER the preserve is discarded and the freeze is inert', t;
     end if;
   end loop;
 

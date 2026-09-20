@@ -1944,7 +1944,7 @@ This also closes **AUTHZ-022**: `logged_by` was assigned unconditionally while
 `created_by` had a presence test, so the function raised `42703` on any table
 lacking `logged_by` while its own `comment on function` called itself shared and
 general. `logged_by` now gets the same test. That changes nothing on the four
-tables `0338` attaches it to, because all four carry both columns — it is the
+tables `0338` attaches it to — but NOT for the reason the first draft gave. "All four carry both columns" is **false**, measured: all four carry `logged_by`, and only `care_log` carries `created_by`. So `created_by`'s presence test is **load-bearing on three of the four today**, which is why `0338` worked at all, while `logged_by`'s is defensive. It is the
 comment that was wrong, and a function whose comment lies is how AUTHZ-022
 happened. Both repairs are one line on the same function, so they are one
 migration rather than two replacing it in sequence.
