@@ -31612,16 +31612,40 @@ short enough to return early, and was lengthened until it exercised the cut.
 - No deployed or hosted verification. Every claim here is from local `tsc`,
   the local suite, and reading the code. Blockers B1–B5 are unchanged.
 - `C1-S9-01` and `C1-S9-02` were introduced and caught inside one session. The
-  symbol-and-log diff that caught the second was run against `push.ts` only
-  after the first was found. It has **not** been run against every file this
-  merge resolved with `--theirs`, which is the honest limit of the sweep:
-  `app/api/contact-center/sms/route.ts`,
-  `app/api/contact-center/voice/transcription/route.ts`,
-  `tests/guardian-callback-security.test.ts` and
-  `tests/marketing-delivery-action-boundaries.test.ts` were each reasoned about
-  individually and their unique contributions confirmed subsumed, but not
-  diffed symbol-by-symbol. Recorded as an open follow-up rather than described
-  as a completed sweep.
+  symbol-and-log diff that caught the second was written after the first was
+  found, so it was initially run against `push.ts` alone. It has since been run
+  against the other four files this merge resolved with `--theirs`, and comes
+  back **clean** — which is recorded here with the evidence that it could have
+  found something, since a sweep that reports nothing is worth as much as its
+  instrument:
+  - `app/api/contact-center/sms/route.ts` — six literals lost, all of them the
+    inline escalation (`'🚨 Urgent message at your family line'`, the
+    `from('notifications')` insert and its two error logs). All subsumed by
+    `attemptUrgentDelivery` + `ensureNotification`, which is the finding the
+    resolution was made on.
+  - `app/api/contact-center/voice/transcription/route.ts` — same six, plus two
+    that looked like losses and are not: the `channel` binding (the route now
+    uses `channelResult.data` directly) and the
+    `@/lib/contact-center/routing` import (`routeInboundToPlanner` moved to
+    `@/lib/contact-center/server`). Checked separately: unlike the SMS route,
+    this one carries no channel-ownership comparison — but `familyId` arrives
+    as a query parameter that `validateTwilioSignature` covers, because the
+    URL it reconstructs and signs includes the query string. Not a gap.
+  - `tests/guardian-callback-security.test.ts` — lost the literal
+    `'await claimGuardianCallback'` because main parameterised it
+    (`const claim = voicemail ? 'claimGuardianVoicemail' : 'claimGuardianCallback'`).
+    The assertion is stronger, not weaker.
+  - `tests/marketing-delivery-action-boundaries.test.ts` — lost
+    `markFailedAndThrow(`, `profileError` and `suppressionError`. All three are
+    covered: the first is renamed to `markFailure` (which additionally
+    distinguishes a failure before the provider boundary from one after it),
+    and the latter two by `lib/marketing/push-audience.ts` throwing on ANY of
+    the three reads through one shared paged helper, with the claim race moved
+    to behavioural coverage in `tests/marketing-push-outcome-execution.test.ts`.
+
+  The instrument is a `comm -23` of declared symbols and of string literals of
+  twelve characters or more, pre-merge against post-merge, per file. It is what
+  found `C1-S9-02`, so it is not a sweep that cannot fail.
 - `C2-13` (Claude-2's claim that `components/capture/document-capture.tsx:24`
   has a genuine ref-in-cleanup bug) remains contradicted and unwritten-up. The
   cleanup does `generation.current++`, which increments AT cleanup time rather

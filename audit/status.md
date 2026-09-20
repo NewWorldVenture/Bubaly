@@ -1113,8 +1113,9 @@ container running Node 22.22.2 against the repository's `.nvmrc` 24.21.0.
 BLOCKERS: B1-B5 unchanged; B6 added (the public `family-media` bucket, where
 this register's `F-E03` and the parallel session's `SEC-001` are one finding
 reached from two directions); B7 added (the Node runtime above).
-OPEN: the symbol-and-log diff has been run against `push.ts` only, not against
-every file this merge took with `--theirs`. Named as a follow-up in Pass AF
-rather than described as a completed sweep. `C2-13` remains contradicted and
-still needs writing up.
+SWEEP: the symbol-and-log diff has now been run against all five files this
+merge took with `--theirs`, and comes back clean — every apparent loss is a
+rename or a subsumption, each named individually in Pass AF. It is the
+instrument that found `C1-S9-02`, so it is not a sweep that cannot fail.
+OPEN: `C2-13` remains contradicted and still needs writing up.
 LAST-UPDATE: 2026-09-20
