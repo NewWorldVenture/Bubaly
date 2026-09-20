@@ -18,7 +18,22 @@ import { getLocaleContext } from '@/lib/i18n/server';
 import { translate } from '@/lib/i18n/messages';
 import { createFormat, type Format } from '@/lib/utils/format';
 
-export async function getFormat(): Promise<Format> {
+/**
+ * `timeZone` is the family's IANA zone, and passing it is the difference between
+ * the right events and the right times.
+ *
+ * It is a PARAMETER rather than something this function looks up, deliberately.
+ * Reaching for `requireUserContext()` here would give every caller a new failure
+ * mode — a page with no signed-in user would start throwing from its formatter —
+ * and would bind a locale helper to the auth stack for the sake of one string.
+ * The callers that have a family already resolve `ctx.active.family.timezone` a
+ * few lines earlier, because they need it to choose which rows to read.
+ *
+ * Omitted, the formatter uses the runtime's zone, which on a server is the
+ * server's. That is the right answer only where there is no family to be wrong
+ * about. See the note on `createFormat`.
+ */
+export async function getFormat(timeZone?: string): Promise<Format> {
   const { locale, messages } = await getLocaleContext();
-  return createFormat(locale.code, (key, params) => translate(messages, key, params));
+  return createFormat(locale.code, (key, params) => translate(messages, key, params), timeZone);
 }

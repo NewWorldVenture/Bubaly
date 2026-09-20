@@ -8,8 +8,8 @@ import {
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { cn } from '@/lib/utils/cn';
-import { fmtTime } from '@/lib/utils/format';
 import { getLocaleContext, getTranslations } from '@/lib/i18n/server';
+import { getFormat } from '@/lib/utils/format-server';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
 import type { LocaleCode } from '@/lib/i18n/locales';
 
@@ -84,7 +84,12 @@ export default async function PlanningPage() {
   const now = new Date();
   const nowIso = now.toISOString();
   // `milestone_date` is a calendar day, so the key is the family's, not UTC's.
-  const todayIso = dayKeyInTz(now, ctx.active.family.timezone || 'UTC');
+  const tz = ctx.active.family.timezone || 'UTC';
+  const todayIso = dayKeyInTz(now, tz);
+  // The same zone the day key uses, for the clock printed on each event. It was
+  // the bare `fmtTime` import, which renders in the RUNTIME's zone — the server's
+  // here — so this page selected the family's day and then timed it in UTC.
+  const { fmtTime } = await getFormat(tz);
 
   const [
     { data: events, count: eventCount },

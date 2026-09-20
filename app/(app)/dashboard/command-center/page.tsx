@@ -9,7 +9,7 @@ import { requireFeature } from '@/lib/supabase/auth';
 import { settleAll, describeReadError } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { Avatar } from '@/components/ui/avatar';
-import { fmtTime, fmtDate } from '@/lib/utils/format';
+import { getFormat } from '@/lib/utils/format-server';
 import { cn } from '@/lib/utils/cn';
 import { loadOperatingIndex } from '@/lib/operating-index/server';
 import { ChangeRecap } from '@/components/operating-index/change-recap';
@@ -36,6 +36,11 @@ export default async function CommandCenterPage() {
 
   const now = new Date();
   const tz = ctx.active.family.timezone || 'UTC';
+  // Bound to that same zone. These were the bare exports, which format in the
+  // runtime's zone, so a conflict at 15:00 in Los Angeles read "10:00 PM" to the
+  // family it belonged to. Binding them also puts the month names and the AM/PM
+  // into the reader's language, which the bare exports could never do.
+  const { fmtTime, fmtDate } = await getFormat(tz);
   const familyToday = dayKeyInTz(now, tz);
   const weekDays = Array.from({ length: 8 }, (_, index) => new Date(Date.parse(`${familyToday}T12:00:00Z`) + index * 86_400_000).toISOString().slice(0, 10));
   const weekEnd = new Date(zonedDayBoundsMs(weekDays[7], tz).start);

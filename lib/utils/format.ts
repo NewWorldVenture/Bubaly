@@ -100,6 +100,23 @@ const PATTERNS: Record<string, Intl.DateTimeFormatOptions> = {
   'pp':                  { hour: 'numeric', minute: '2-digit', second: '2-digit' },
 };
 
+/**
+ * A `DATE` column: a day on the family's wall calendar, with no instant in it.
+ *
+ * This matters the moment a zone is bound. `parseISO('2026-09-21')` gives LOCAL
+ * midnight, and asking `Intl` to render that instant in another zone moves it:
+ * bound to America/Los_Angeles, a `due_date` of 2026-09-21 renders **"Sun, Sep 20"**.
+ * Measured, not feared — it is what `app/(app)/dashboard/family-cfo/page.tsx` would
+ * have started showing for every bill, because it formats `b.due_date` and binding
+ * its formatter was supposed to be the fix.
+ *
+ * So the rule is not "convert everything to the family's zone". It is that a
+ * TIMESTAMP names an instant and must be converted, and a DATE already IS the
+ * family's day and must be left alone. Converting the second is the same class of
+ * error as failing to convert the first, one day in the other direction.
+ */
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
 /** Every pattern the map knows — read by the guard that keeps it complete. */
 export const KNOWN_DATE_PATTERNS = Object.keys(PATTERNS);
 
@@ -174,15 +191,83 @@ export type Format = {
 };
 
 /**
- * Every formatter, bound to one locale.
+ * Every formatter, bound to one locale and, where the caller knows it, one zone.
  *
  * `t` is optional and only `fmtRelative` uses it, for the words "Today" and
  * "Tomorrow". Without it those stay English — which is the correct behaviour for
  * the non-request contexts the bare exports serve, and is why it is not required.
+ *
+ * `timeZone` is optional for a different reason, and the difference matters.
+ *
+ * Omitting it does NOT mean "no zone" — `Intl.DateTimeFormat` with no `timeZone`
+ * formats in the RUNTIME's zone, and `isToday` asks the runtime which day it is.
+ * In a browser that is the reader's own machine and is very probably right. On a
+ * server it is the SERVER's zone, which on Vercel is UTC and is nobody's kitchen.
+ *
+ * Measured, not argued. A task due 09:00 Monday for a family in Los Angeles is
+ * 16:00 UTC, and a server component asking for it at 18:30 Sunday their time —
+ * 01:30 Monday UTC — rendered:
+ *
+ *   TZ=UTC                  "Today, 4:00 PM"      <- wrong day AND wrong clock
+ *   TZ=America/Los_Angeles  "Tomorrow, 9:00 AM"
+ *
+ * `app/(app)/home/page.tsx` is the sharp case: it already resolves the family's
+ * timezone and uses it to choose WHICH events are today, then rendered each one's
+ * clock with a formatter that had no zone. The right events at the wrong times.
+ *
+ * So: pass it wherever a family's zone is known, and leave it off in a browser
+ * and in the genuinely zone-less contexts (a cron, an export) where the runtime
+ * zone is the best available answer.
  */
-export function createFormat(code: LocaleCode = DEFAULT_LOCALE, t?: Translator): Format {
+export function createFormat(
+  code: LocaleCode = DEFAULT_LOCALE,
+  t?: Translator,
+  timeZone?: string,
+): Format {
+  // An invalid IANA name must not take a household page down. This mirrors the
+  // choice `dayKeyInTz` in lib/services/scope.ts already documents, and it is
+  // made ONCE here rather than swallowed per call, so a bad zone degrades to
+  // exactly the pre-zone behaviour instead of throwing on every render.
+  const zone = ((): string | undefined => {
+    if (!timeZone) return undefined;
+    try {
+      new Intl.DateTimeFormat('en-CA', { timeZone }).format(new Date(0));
+      return timeZone;
+    } catch {
+      return undefined;
+    }
+  })();
+
   const dateTime = (options: Intl.DateTimeFormatOptions) =>
-    new Intl.DateTimeFormat(code, options);
+    new Intl.DateTimeFormat(code, zone ? { ...options, timeZone: zone } : options);
+
+  /**
+   * The calendar day an instant falls on, in the bound zone, as `YYYY-MM-DD`.
+   *
+   * `en-CA` because it is the one widely-supported locale whose short date is
+   * already ISO-ordered — the same trick `dayKeyInTz` uses. It cannot be imported
+   * from there: `lib/services/scope.ts` opens with `import 'server-only'`, and
+   * this module is on the client half too.
+   */
+  const dayKey = (d: Date): string =>
+    new Intl.DateTimeFormat('en-CA', {
+      ...(zone ? { timeZone: zone } : {}),
+      year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(d);
+
+  /**
+   * The day after a day KEY — on the key, never on the instant.
+   *
+   * `now + 86_400_000` is the obvious way to ask and it is wrong twice a year:
+   * a DST transition makes the local day 23 or 25 hours long, so adding a fixed
+   * day lands on the same date or skips one. Advancing the date arithmetically is
+   * exact because a calendar day always has exactly one successor.
+   */
+  const nextDayKey = (key: string): string => {
+    const d = new Date(`${key}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + 1);
+    return d.toISOString().slice(0, 10);
+  };
 
   const fmtDate = (value: string | Date | null | undefined, pattern = 'EEE, MMM d'): string => {
     if (!value) return '';
@@ -191,6 +276,10 @@ export function createFormat(code: LocaleCode = DEFAULT_LOCALE, t?: Translator):
     const options = PATTERNS[pattern];
     // An unmapped pattern keeps today's behaviour rather than guessing at one.
     if (!options) return format(d, pattern);
+    // A DATE has no instant to convert, so it is rendered in no zone — see DATE_ONLY.
+    if (typeof value === 'string' && DATE_ONLY.test(value)) {
+      return normaliseClock(new Intl.DateTimeFormat(code, options).format(d));
+    }
     return normaliseClock(dateTime(options).format(d));
   };
 
@@ -207,8 +296,23 @@ export function createFormat(code: LocaleCode = DEFAULT_LOCALE, t?: Translator):
     const time = fmtTime(d);
     // Today and Tomorrow read better than "in 4 hours" and are what the surface
     // showed before; only the words were English. The keys already existed.
-    if (isToday(d)) return t ? t('photosModule.todayAt', { time }) : `Today, ${time}`;
-    if (isTomorrow(d)) return t ? t('photosModule.tomorrowAt', { time }) : `Tomorrow, ${time}`;
+    //
+    // WHOSE today, though. With a zone bound this compares day keys in it; with
+    // none it keeps date-fns and the runtime's day, which is the previous
+    // behaviour exactly and is right in a browser. The two agree at offset zero
+    // and disagree for a slice of every day everywhere else — which is the same
+    // arithmetic `tests/family-day-not-greenwich-day.test.ts` measures for date
+    // COLUMNS, arriving here through a different door.
+    const todayKey = zone ? dayKey(new Date()) : null;
+    // A DATE's own text is already its day key, so it is compared as written
+    // rather than converted — converting it would shift the day. See DATE_ONLY.
+    const here = todayKey
+      ? (typeof value === 'string' && DATE_ONLY.test(value) ? value : dayKey(d))
+      : null;
+    const isSameDay = todayKey ? here === todayKey : isToday(d);
+    const isNextDay = todayKey ? here === nextDayKey(todayKey) : isTomorrow(d);
+    if (isSameDay) return t ? t('photosModule.todayAt', { time }) : `Today, ${time}`;
+    if (isNextDay) return t ? t('photosModule.tomorrowAt', { time }) : `Tomorrow, ${time}`;
     // Intl.RelativeTimeFormat rather than date-fns formatDistanceToNow, which has
     // no locale here and would say "about 2 hours ago" in English to everyone.
     const gap = d.getTime() - Date.now();

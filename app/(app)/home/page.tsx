@@ -150,7 +150,6 @@ type Member = { id: string; display_name: string; color: string | null; role: st
 
 export default async function HomePage() {
   const i18nT = await getTranslations();
-  const { fmtTime, fmtMoney } = await getFormat();
   const { locale } = await getLocaleContext();
   const usd = (amount: number) => usdIn(amount, locale.code);
   const tr = await getTranslations();
@@ -162,6 +161,11 @@ export default async function HomePage() {
   // The family's own day, not the server's: the Today section and its reads
   // resolve "today" in the family timezone.
   const tz = ctx.active.family.timezone || 'UTC';
+  // And so do the times PRINTED on them. This call sat above `tz` and took no
+  // zone, so the page picked the right events with `tz` and then rendered each
+  // one's clock in the server's zone — 15:00 in Los Angeles reaching a family as
+  // "10:00 PM". Bound here, after `tz` exists, because that is the whole fix.
+  const { fmtTime, fmtMoney } = await getFormat(tz);
   const todayKey = dayKeyInTz(now, tz);
   const dayBounds = zonedDayBoundsMs(todayKey, tz);
   const todayStart = new Date(dayBounds.start);
