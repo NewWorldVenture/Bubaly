@@ -223,6 +223,36 @@ webpack and was dying at 4,471 MB against a 4,096 MB cap; standalone it peaks at
 > regression, or quietly "fixing" a spec to match a real bug. Each clause was
 > read rather than scored, which is the only reason all three came out right.
 >
+> ### The synthesiser overturned one LANDED verdict, which is why it existed
+>
+> A final agent spot-checked clauses independently rather than trusting the
+> nineteen verdicts. It **disagreed with `S-11`'s LANDED** and was half right:
+>
+> * *"web tsc and mobile tsc both clean"* — the verifier marked this met using
+>   an **off-tree workaround** (fetching types into a scratchpad), which is not
+>   evidence. On a bare checkout `mobile/` typechecks **red**:
+>   `app/(tabs)/assistant.tsx(5,105): Cannot find module 'expo-audio'`, because
+>   `mobile/node_modules/expo-audio` was missing while `mobile/package.json:27`
+>   declares `expo-audio ~57.0.3`. **Resolved**: `npm install` in `mobile/`
+>   restores it and `npx tsc --noEmit` exits **0**. The clause holds — it was a
+>   stale sandbox `node_modules`, and CI's *Mobile (Expo) · Typecheck · Config*
+>   job proves it independently on a fresh install. The synthesiser's proposed
+>   remedy of *"add a mobile install+typecheck step to CI"* was already done.
+> * **A named test had never been written** — and this one was real. The
+>   *"Tests to add"* line asks for `tests/display-render.test.ts` extended with
+>   *"ask tile renders without a mic in SSR"*; the file contained neither `ask`
+>   nor `mic`. **Now written** (4 cases), with a `next/navigation` mock, because
+>   `AskBubaly` calls `useRouter()` and the tile could not be server-rendered in
+>   that harness at all — which is the practical reason nobody had written it.
+>   Mutation-tested: deleting `mic-button.tsx:148`'s
+>   `if (!micAvailable(support)) return null` turns exactly the two mic
+>   assertions red, and one case proves the search string is not vacuous.
+>
+> **The lesson the synthesiser is the evidence for**: a verifier that wants its
+> section to pass will accept evidence it gathered off-tree. Nineteen agents
+> reading carefully still produced one verdict that a twentieth, reading only to
+> disagree, could overturn.
+>
 > **Re-derive it, do not trust this paragraph:**
 >
 > ```bash
@@ -296,6 +326,7 @@ migration per feature. Nothing in this list may be created by an agent.
 - M23: new RLS on documents/notes/journal_entries honouring member_id (owner or can_manage_family) + SQL helper has_active_delegation(family_id, domain) consulted by sensitive-table read policies. No new tables.
 - M33: new SECURITY INVOKER function public.search_household(family_id, q, limit) (search_path pinned) UNIONing pg_trgm similarity over documents, inventory_items, trips/vacations, bills, home_warranties/renewals, decisions, calendar_events, notes, family_facts + GIN trigram indexes on their title/name columns. No new tables; underlying RLS applies.
 - W2 + W7 + W3 (ONE migration): CREATE OR REPLACE public.public_stats() adding ai_handled_30d bigint and avg_first_brief_minutes numeric (SECURITY DEFINER, anon-executable, excludes the demo family).
+  - ⚠️ **Flagged, not edited — this is the owner's list.** *"excludes the demo family"* is **stale**: `3994805e` *"Remove demo mode (#414)"* deleted demo mode, and a replayed database has no family matching `%demo%`. The exclusion would be a no-op rather than a bug, so the migration is still safe to approve as written — but whoever writes it should know the clause guards nothing, and decide whether to drop it. Same root cause as `SPEC-002`. Left in place because §6 is owner-approved and an agent editing a migration spec here is exactly what that rule forbids.
 - X1 + X2 + X4 + X6 + X9 + X11 (ONE migration): new table family_metric_weeks(family_id, week_start date, time_saved_minutes int, handled_actions int, auto_captured_pct numeric, signal_precision numeric, value_ratio numeric, weekly_active bool, created_at) unique(family_id, week_start), family-scoped SELECT RLS, service-role writes from the weekly-digest cron.
 - X8 + X9: ALTER TABLE family_members ADD COLUMN last_active_at timestamptz + index (family_id, last_active_at desc); service-role updates only, throttled from requireUserContext.
 - X2 optional follow-up: created_via text on calendar_events/todo_items/bills/family_reminders so manual captures are stamped explicitly.
@@ -947,12 +978,22 @@ Where it appears: (1) homepage section 6 KitchenModeBand — CSS-only tablet moc
 
 ### S-20 · Public site: what the price buys, in numbers the app can produce
 
-> Public site stage 3 — pricing value block, per-day framing, outcome-first tier copy, case-study cards, demo seed of completed runs
+> Public site stage 3 — pricing value block, per-day framing, outcome-first tier copy, case-study cards
+>
+> **Three demo-mode requirements were removed from this section on 2026-09-20**
+> (the summary above, the owned file `lib/demo/seed.ts`, the `TestAccountCard`
+> line below, and the "Done when" clause). They asked for work on a feature
+> `3994805e` *"Remove demo mode (#414)"* had already deleted. Recorded as
+> `SPEC-002` in `finalaudit.md`, and removed rather than left in place because
+> an agent taking S-20 and trying to satisfy them would **rebuild demo mode** —
+> the one-click shared household, the email gate and the cleanup cron that were
+> taken out on purpose. Nothing else in S-20 changed; the other six clauses were
+> verified met.
 
 Build these parts of the site spec:
 
 PRICING
-Skeleton kept: hero + Monthly/Yearly toggle (coarse:min-h-11 beside setPeriod — tests/mobile-pricing-toggle-touch-target.test.ts; /^monthly$/ /^yearly$/ buttons — tests/e2e/public.spec.ts), three PlanCards, HowTrialWorks, admin feature matrix, TestAccountCard (id="demo" anchor added to its wrapper), TrustStrip with familiesNote.
+Skeleton kept: hero + Monthly/Yearly toggle (coarse:min-h-11 beside setPeriod — tests/mobile-pricing-toggle-touch-target.test.ts; /^monthly$/ /^yearly$/ buttons — tests/e2e/public.spec.ts), three PlanCards, HowTrialWorks, admin feature matrix, TrustStrip with familiesNote. (The TestAccountCard that stood here was deleted with demo mode by `3994805e`; `pricing-content.tsx:507` carries the comment explaining the grid it left behind.)
 
 1. NEW components/marketing/pricing-value-block.tsx (client-safe: useTranslations from components/i18n/locale-provider, imports only components/marketing/primitives and lib/marketing/value.ts; receives handled stats and sample numbers as props from the server page). Mounted directly above the plan cards. Part A 'Work that stops landing on you': eyebrow pricingValue.eyebrow, title pricingValue.title, body, then a tier × row matrix with rows pricingValue.colYouDecide / colPrepares / colHandles and cells pricingValue.trial* / basic* / plus* (Family+ 'handles' names the routines a family approves once — meals→list every Sunday, forms→calendar, bill and renewal sweeps). On phones (<md) the matrix renders as three stacked tier cards each containing the three rows — no horizontal table (tests/e2e/overflow.spec.ts, mobile.spec.ts).
 
@@ -999,9 +1040,8 @@ Where: homepage section 7 SwitchingBand (three columns + 3-step strip + privacy 
 - `components/marketing/pricing-value-block.tsx`
 - `app/(marketing)/pricing/pricing-content.tsx`
 - `app/(marketing)/pricing/page.tsx`
-- `lib/demo/seed.ts`
-- `components/billing/upgrade-modal.tsx`
+- `components/app/upgrade-modal.tsx` *(the list said `components/billing/`, which does not exist; the per-day-consuming modal is this one — `:12` imports `formatPerDay`/`perDayCents` from `lib/marketing/value.ts`)*
 
 **Tests to add**: `tests/marketing-value.test.ts`, `tests/marketing-handled-honesty.test.ts`, `tests/mobile-pricing-toggle-touch-target.test.ts`, `tests/marketing-claims-contract.test.ts`
 
-**Done when**: Per-day amounts are derived with ceil from lib/constants/plans.ts (33c/83c yearly, 41c/101c monthly at the current plan prices) and appear UNDER the monthly price for paid tiers only; the REAL card is omitted below HANDLED_PUBLIC_MIN and never renders a 0; the ILLUSTRATIVE card carries the sample badge and the estimate note; the matrix stacks on phones with no horizontal scroll; the Monthly/Yearly toggle and its touch targets are byte-identical; the demo family gets persisted completed runs with step events; no competitor price anywhere.
+**Done when**: Per-day amounts are derived with ceil from lib/constants/plans.ts (33c/83c yearly, 41c/101c monthly at the current plan prices) and appear UNDER the monthly price for paid tiers only; the REAL card is omitted below HANDLED_PUBLIC_MIN and never renders a 0; the ILLUSTRATIVE card carries the sample badge and the estimate note; the matrix stacks on phones with no horizontal scroll; the Monthly/Yearly toggle and its touch targets are byte-identical; no competitor price anywhere.
