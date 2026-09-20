@@ -10512,6 +10512,7 @@
   "shared.deleteThisItem": "¿Eliminar este artículo?",
   "shared.deleted": "Eliminado",
   "shared.select": "— Selecciona —",
+  "shared.someInformationCouldNotBeLoaded": "No se pudo cargar parte de la información de esta página:",
   "shell.askAssistant": "Preguntar al asistente de IA",
   "shell.askPlaceholder": "Pregunta lo que quieras…",
   "shell.capture": "Capturar",

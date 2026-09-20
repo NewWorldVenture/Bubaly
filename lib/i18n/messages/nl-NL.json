@@ -10512,6 +10512,7 @@
   "shared.deleteThisItem": "Dit item verwijderen?",
   "shared.deleted": "Verwijderd",
   "shared.select": "— Selecteer —",
+  "shared.someInformationCouldNotBeLoaded": "Sommige informatie op deze pagina kon niet worden geladen:",
   "shell.askAssistant": "Vraag het de AI-assistent",
   "shell.askPlaceholder": "Vraag me alles…",
   "shell.capture": "Vastleggen",

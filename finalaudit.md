@@ -32068,6 +32068,74 @@ right. Changed to `medical`. A guard that fails for the wrong reason proves
 nothing, and it is the second time in this session that a first draft asserted
 something other than what it was named for.
 
+---
+
+### `[CLAUDE-1][MEDIUM][PAGES]` C1-S9-19 — a refused read rendered as "you have nothing", on two pages where that is a dangerous thing to say
+
+**Files:** `app/(app)/guardian/rules/page.tsx`, `app/(app)/family/permissions/page.tsx`
+
+**Found by** taking the Pages axis (398 items, 43%) and scanning every
+`page.tsx` for the one class that matters most on a server-rendered page: a read
+that destructures `data` and drops `error`, then falls back to `?? []`. Of the
+**185** pages that read from the database, **26** do this.
+
+**Why it matters here more than in an action.** An action that swallows an error
+usually tells the user *something*. A page renders. `?? []` turns "the database
+refused" into a confident empty state, and there is nothing on screen to say
+otherwise. The repository has already written this down, in the header of
+`components/ui/partial-read-banner.tsx`:
+
+> *"'0 flagged transactions' because the read failed looks exactly like
+> '0 flagged transactions' because there are none. A zero that means 'we could
+> not check' must never be mistaken for an all-clear."*
+
+That banner existed and was adopted on **six** of those 185 pages.
+
+**The two fixed, chosen because the empty state is a lie with consequences:**
+
+- **`/guardian/rules`** — the AI Call Guardian's routing rules. A parent
+  checking how their child's calls are screened saw an empty list, which is
+  indistinguishable from a family that has configured no protection at all.
+- **`/family/permissions`** — the role permission matrix. An empty matrix reads
+  as "no role can do anything", which is not a state the product can actually be
+  in, so the only conclusion a reader could safely draw was wrong.
+
+**Checked before assuming the worst.** The guardian page's editor could have
+made this data loss rather than misinformation, if it saved the whole rule set
+from what it rendered. It does not: `RulesEditor` acts per rule
+(`createRuleAction`, `toggleRuleAction`, `deleteRuleAction(id)`), so a failed
+read can mislead but cannot erase. That bounds the severity, and is recorded
+rather than left as an unexamined worry.
+
+**Fix.** Both pages now capture the error and render `PartialReadBanner`, so the
+page still shows what it has and says plainly what is missing — the degradation
+the banner was written for.
+
+**One thing the six existing adopters got wrong for this context.** They are all
+admin screens and pass an English string literal as the banner title. These two
+are family-facing pages, translated throughout; copying that pattern would have
+put untranslated copy in front of families in eleven locales — the same defect
+this audit recorded against the site footer. A new `shared.` key was added
+instead, translated in all seven base catalogues and inheriting through the
+regional chain.
+
+**A mistake made and undone in the process:** the first attempt added that key
+by parsing each catalogue, sorting, and re-serialising — which reordered about
+2,000 existing keys per file across seven files, a 7,000-line diff for one
+string. Reverted and inserted in place at the correct position instead. A tool
+that rewrites a file to change one line in it is not a safe tool, and the
+catalogues are exactly where that costs a reviewer the most.
+
+**Status:** FIXED for two pages. Guard:
+`tests/a-refused-read-is-not-an-empty-page.test.ts`, proved red both by removing
+the error capture and by building `readFailures` while never rendering it —
+because a failure list that is computed and dropped is the same silence.
+
+**Explicitly NOT closed:** the other 24 pages. They are listed by the scan and
+triaged as lower-consequence (marketplace listings, saved searches, review
+pages, onboarding), but they are not verified clean and must not be counted as
+such. The Pages axis stays at 43%.
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,

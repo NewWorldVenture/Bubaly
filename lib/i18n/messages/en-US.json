@@ -10512,6 +10512,7 @@
   "shared.deleteThisItem": "Delete this item?",
   "shared.deleted": "Deleted",
   "shared.select": "— Select —",
+  "shared.someInformationCouldNotBeLoaded": "Some information on this page could not be loaded:",
   "shell.askAssistant": "Ask the AI assistant",
   "shell.askPlaceholder": "Ask anything...",
   "shell.capture": "Capture",
