@@ -31965,6 +31965,61 @@ error when the destructure simply sat on a later line. Both were caught by
 reading the code, which is the only reason this entry describes two findings
 rather than five.
 
+---
+
+### `[CLAUDE-1][MEDIUM][CI]` C1-S9-17 — an extracted module orphaned the E2E harness, and the guard for it ran only in the 15-minute job
+
+**Files:** `tests/e2e/voice-capture-boundaries.spec.ts`, `components/modules/voice-module.tsx`
+
+**Found by** CI, which is the point of the entry. The E2E job went red on this
+branch's head with **13 failures**, ten of them every test in
+`voice-capture-boundaries.spec.ts`, all dying on
+`page.getByRole('textbox')` — a textbox that never rendered.
+
+**Cause, and it was mine.** That spec mounts the REAL voice module in a browser
+through a hand-rolled CommonJS loader with an explicit `SOURCE_FILES` list and a
+`MOCKED` list. The loader throws `Unexpected module <id>` for anything in
+neither. `C1-S8-06` extracted the voice-history write out of the component into
+`lib/voice/history.ts`; the merge kept that extraction over main's inline
+duplicate (correctly — it is a library with its own test), and nobody added the
+new file to `SOURCE_FILES`. The module threw at mount, so all ten tests failed
+on the same missing textbox.
+
+**Reproduced before fixing.** The spec's graph walk is pure Node — file reads
+and a regex, no browser, no server, no build — so it was replicated standalone:
+without `lib/voice/history.ts` it reports
+`@/lib/voice/history (add 'lib/voice/history.ts' to SOURCE_FILES...)` and exits
+1; with it, the walk reaches 21 files and reports nothing missing.
+
+**Fix.** One line in `SOURCE_FILES`. Its only runtime import is `settle`, which
+the harness already carries; the rest are `import type`, erased by transpilation.
+
+**The second, more useful fix.** That spec ALREADY has a first test named
+"covers the module under test's real import graph", written to fail by name
+instead of letting nine tests time out — and it worked exactly as designed. But
+it only runs inside the E2E job, so learning this cost a full 15-minute cycle
+for a check that needs 16 milliseconds. The same walk now also runs in the unit
+suite (`tests/the-voice-e2e-harness-provides-every-import.test.ts`), where a
+contributor meets it before pushing. It DUPLICATES rather than replaces the
+spec's copy: the spec's version is the one that actually knows whether the
+module mounts, and a guard living only in the unit suite would go stale the
+moment the harness changed shape. The new guard also pins a floor on how many
+files the walk reaches, so an instrument that stopped walking cannot read as a
+clean result.
+
+**Status:** FIXED. The unit guard was proved red by removing the same line —
+it reports the identical missing module.
+
+**The other three E2E failures are not this branch's.**
+`tests/e2e/phone-auth-http.spec.ts` fails three cases that stall before code
+entry. They belong to the parallel session's `AUTH-001`/`AUTH-002`, which its
+own Register B entries record as open and failing on ITS published heads,
+independently of this branch: *"E2E … fails only its three new phone HTTP
+cases: 1,293/1,296 pass"*. This branch touches no phone-auth code — its only
+change under `lib/guardian/phone.ts` is an ADDED `toE164` export (`C1-S7-05`)
+in the guardian SMS namespace, and that spec does not reference the module at
+all. No fix exists to port; the session that owns them is actively working them.
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
