@@ -160,13 +160,27 @@ export default async function AdminReportsPage() {
   });
   const maxActivity = Math.max(...activityByDay.map((a) => a.value), 1);
 
+  // Each tile answers from ITS OWN read, because `?? 0` cannot tell "no
+  // families" from "the families table did not answer" and picks the more
+  // flattering of the two. The comment above this page's strategy metrics
+  // already promised tiles that "say unavailable rather than showing a zero
+  // this page cannot stand behind"; that was true of StrategyMetricTiles and
+  // false of the six here, which is the gap S-15 found.
+  //
+  // The banner at the top already NAMES which reads failed, so this is not a
+  // second warning — it stops the number beside the warning from contradicting
+  // it. The two derived tiles take the read they are derived FROM: revenue is
+  // summed over `subscriptions` rows (not the active count), and storage over
+  // `docs` rows, so a failed row read makes $0.00 and 0 B, not the count read.
+  const unavailable = tr('strategyMetrics.unavailable');
+  const tile = (failed: boolean, value: string) => (failed ? unavailable : value);
   const metrics = [
-    { icon: Home, key: 'families', label: tr('adminReports.totalFamilies'), value: (familyCount ?? 0).toLocaleString(), tint: 'text-violet-400 bg-violet-500/15' },
-    { icon: Users, key: 'users', label: tr('adminReports.totalUsers'), value: (userCount ?? 0).toLocaleString(), tint: 'text-blue-400 bg-blue-500/15' },
-    { icon: CreditCard, key: 'subscriptions', label: tr('adminReports.activeSubscriptions'), value: (activeSubCount ?? 0).toLocaleString(), tint: 'text-emerald-400 bg-emerald-500/15' },
-    { icon: DollarSign, key: 'revenue', label: tr('adminReports.monthlyRevenue'), value: fmtMoney(mrrCents), tint: 'text-amber-400 bg-amber-500/15' },
-    { icon: FolderLock, key: 'documents', label: tr('adminReports.documents'), value: (docCountResult.count ?? 0).toLocaleString(), tint: 'text-rose-400 bg-rose-500/15' },
-    { icon: Activity, key: 'storage', label: tr('adminReports.storageUsed'), value: fmtBytes(usedBytes), tint: 'text-cyan-400 bg-cyan-500/15' },
+    { icon: Home, key: 'families', label: tr('adminReports.totalFamilies'), failed: !!familyCountResult.error, value: tile(!!familyCountResult.error, (familyCount ?? 0).toLocaleString()), tint: 'text-violet-400 bg-violet-500/15' },
+    { icon: Users, key: 'users', label: tr('adminReports.totalUsers'), failed: !!userCountResult.error, value: tile(!!userCountResult.error, (userCount ?? 0).toLocaleString()), tint: 'text-blue-400 bg-blue-500/15' },
+    { icon: CreditCard, key: 'subscriptions', label: tr('adminReports.activeSubscriptions'), failed: !!activeSubCountResult.error, value: tile(!!activeSubCountResult.error, (activeSubCount ?? 0).toLocaleString()), tint: 'text-emerald-400 bg-emerald-500/15' },
+    { icon: DollarSign, key: 'revenue', label: tr('adminReports.monthlyRevenue'), failed: !!subscriptionsResult.error, value: tile(!!subscriptionsResult.error, fmtMoney(mrrCents)), tint: 'text-amber-400 bg-amber-500/15' },
+    { icon: FolderLock, key: 'documents', label: tr('adminReports.documents'), failed: !!docCountResult.error, value: tile(!!docCountResult.error, (docCountResult.count ?? 0).toLocaleString()), tint: 'text-rose-400 bg-rose-500/15' },
+    { icon: Activity, key: 'storage', label: tr('adminReports.storageUsed'), failed: !!docsResult.error, value: tile(!!docsResult.error, fmtBytes(usedBytes)), tint: 'text-cyan-400 bg-cyan-500/15' },
   ];
 
   return (
@@ -182,7 +196,7 @@ export default async function AdminReportsPage() {
           <Card key={m.key} className="flex flex-col gap-3">
             <div className={`inline-flex h-10 w-10 items-center justify-center rounded-xl ${m.tint}`}><m.icon className="h-5 w-5" /></div>
             <div>
-              <p className="text-xl font-bold leading-none">{m.value}</p>
+              <p className={m.failed ? 'text-sm font-semibold leading-none text-danger' : 'text-xl font-bold leading-none'}>{m.value}</p>
               <p className="mt-1 text-xs text-muted">{m.label}</p>
             </div>
           </Card>
