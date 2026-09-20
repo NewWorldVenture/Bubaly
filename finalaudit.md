@@ -2,7 +2,7 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-20T12:07:16.796Z
+- Last Updated: 2026-09-20T12:24:40.983Z
 - Total Audit Items: 14051
 - Not Started: 13842
 - In Progress: 192
@@ -13380,7 +13380,7 @@ PRODUCTION READY: NO
 | PUSH-002 | PUSH | Native push through FCM HTTP v1 and APNs | 🔄 IN PROGRESS | High | Static source confirmed; official provider migration documentation located by ops audit. | Provider-specific FCM HTTP v1 service-account OAuth and APNs HTTP/2 signing; fixed hosts, bounded requests, token reuse/rotation, conservative stale registration classification. Root sender routes by provider. | 31 provider execution tests PASS with real RSA/EC signature verification and controlled transports; 30 dispatch/routing assertions PASS. Real provider and physical-device verification pending. |  |
 | EMAIL-001 | EMAIL | Resend signed event suppression persistence and failed-event replay | 🔄 IN PROGRESS | High | docs/final-audit/resend-cycle.md; tests/resend-webhook-execution.test.ts | Signed payload validation; only processed duplicates acknowledge success; conditional timestamp claims, failed-claim release, suppression before metrics. | 5 suites / 44 tests PASS, including actual audience exclusion after complaint retry. Full production provider/database workflow remains unverified; metrics tracked EMAIL-002. |  |
 | MOBILE-001 | MOBILE | PWA service worker first entry, updates and lifecycle | 🔄 IN PROGRESS | High | docs/final-audit/pwa-cycle.md | Register immediately after load; observe already installing worker; clean up observers/timer on unmount and ignore late registration completion. | 13 real-React Chromium checks and 16 existing PWA unit assertions PASS. Actual service worker install/offline/device workflow remains unverified. |  |
-| SEC-001 | SEC | Private family media storage and URL access | ❌ FAIL | Critical | Static schema/consumer evidence. Applied catalog and access verification pending; no SQL modification authorized. | None | Pending |  |
+| SEC-001 | SEC | Private family media storage and URL access | ❌ FAIL | Critical | Proven by execution: an unauthenticated GET of a family-media object returns HTTP 200 and its bytes; the same request against the private documents bucket returns 400. The RLS policy on storage.objects is correct and the public URL never consults it. | None to the bucket flag — closing it needs every consumer moved off getPublicUrl first, and flipping it alone would blank every photo and avatar in the product. New probe bucket-visibility-is-declared-check.sql holds the declared set in both directions. | Probe mutation-tested: a fifth public bucket fails it, and flipping family-media to private fails it with a message naming the rollout. Suite 47/47. | Objects are NOT enumerable — 122 bits from crypto.randomUUID, verified across every upload path. The residual is that a leaked URL is permanent and unrevocable. |
 | SOCIAL-001 | SOCIAL | Live social publishing connectors | 🔄 IN PROGRESS | High | Source inspection; full desired platform/flow verification pending. Follow-up inspection confirms no platform has per-account OAuth/token persistence wired. Existing X text/link input fits a bounded first live connector; official OAuth/PKCE/create-post contracts were checked. | X account OAuth/PKCE and encrypted canonical tokens implemented with owner/family/current-access/deadline/replay checks, safe reconnect/disconnect, exact-count ambiguity rejection and fixed bounded provider calls. Text/link-only registry publisher distinguishes confirmed success, explicit rejection and uncertain acceptance. Existing schema Update types aligned without SQL. | 80 X execution cases, including actual connect/callback/create action/pipeline/registry/retry, PASS; all combined gates PASS on6094eb04. See social-x-cycle.md and social-verification-checkpoint.md. | Controlled provider/database transport only; no live posts or OAuth exchanges. Implementation is no longer an empty registry; the full multi-provider workflow remains incomplete. |
 | A11Y-001 | A11Y | Keyboard, focus, labels, errors and assistive technology | ⬜ NOT STARTED | High | Pending | None | Pending |  |
 | PERF-001 | PERF | Page, client bundle, network and database performance | ⬜ NOT STARTED | High | Pending | None | Pending |  |
@@ -14651,7 +14651,24 @@ The complete supported workflow performs authorized actions, persists intended s
 - [ ] Console and network inspection; related regression
 
 #### Issues Found
-Family media bucket is explicitly public in repository migration0216 while consumers publish public URLs; unguessable object names do not enforce family-only reads. Current applied catalog/access has not been independently verified in this discovery. The old LB-009 runbook understates scope and calls the reminder column photo_url; the actual column is image_url.
+**Now proven by execution (2026-09-20).** This record previously carried the caveat that "current applied catalog/access has not been independently verified in this discovery". It has been. Against a running Supabase stack, uploading one object as the service role and then fetching it back with **no credentials of any kind** — no JWT, no anon key, no cookie:
+
+    upload to family-media                     -> HTTP 200
+    unauthenticated GET of family-media object -> HTTP 200, "secret family photo bytes"
+    unauthenticated GET of documents object    -> HTTP 400, "Bucket not found"
+
+Same bytes, same path shape, same request, both buckets seeded identically. The only difference is `storage.buckets.public`.
+
+The catalogue confirms the shape: `family-media` is `public = t`, and it carries a correct policy that the public URL never consults —
+
+    Family members can read their media  SELECT
+      bucket_id = 'family-media' AND is_family_member((storage.foldername(name))[1]::uuid)
+
+That is the premise gap exactly: the policy guards the authenticated Storage API, and `/storage/v1/object/public/...` walks past it. Four of the seven buckets are public — `avatars`, `feedback-attachments`, `marketplace-photos`, `family-media` — and `documents`, `chore-proof` and `marketing-assets` are private with family-scoped policies.
+
+The mitigation in place is real and was verified rather than assumed: `lib/storage/object-name.ts` gives every object in a public bucket 122 bits from `crypto.randomUUID`, `tests/public-bucket-objects-are-unguessable.test.ts` holds four separate assertions on it (no clock-derived name, no `Math.random` entropy, the shared helper is used, the storage modules adopt it), and no upload path in `app/`, `lib/` or `components/` still builds a name from `Date.now()`. So the objects are not enumerable. What remains is that a URL, once obtained — from a cache, a referrer, a forwarded link, the service-worker retention recorded below — grants permanent unauthenticated access that cannot be revoked short of deleting the object.
+
+Family media bucket is explicitly public in repository migration0216 while consumers publish public URLs; unguessable object names do not enforce family-only reads. The old LB-009 runbook understates scope and calls the reminder column photo_url; the actual column is image_url.
 
 Read-only source inventory at main2a5e7e7a identifies six uploaders:
 
@@ -14671,6 +14688,8 @@ Lifetime/cache review: Photos and CreateMemory upload with cacheControl31536000.
 Executed cache disclosure regression is RED: actual public/sw.js handlers, real Chromium CacheStorage and actual signOutBrowserSession run against synthetic controlled event/network delivery. A synthetic /_next/image response marked private,no-store is retained in bubaly-v4; logout clears session cookies and partitioned query storage but leaves the image. After B is installed, offline lookup returns A's bytes with fetch count unchanged at one. API/cross-origin image exclusions, old-v3 purge and library-cache retention controls pass. Evidence: Temp/bubaly-sw-private-image-repro-20260919.{log,json}, source SHA256 e7655b4571857cfaa3c2689b5a2bb055f0d75ac2ae6f6e29aa0a070693396ac4. This executes the real handlers/cache/logout, not native service-worker registration, a real Next optimizer, production content or a local app server. No source repair is included; SUPPORT-98FD1D4C44AD advances only to IN PROGRESS.
 
 Existing obligations remain SEC-001, STORAGE-EA481A772907, LIBRARY-02F9B7049DA7, the component records above, SUPPORT-98FD1D4C44AD (service worker), LIBRARY-82871795E0B6 (offline cache), LIBRARY-4E62B6772476 (realtime query) and SUPPORT-1462F49C5A6C (LB-009 runbook). No speculative API route, helper or new permanent ID was added.
+
+A new probe, `docs/audit/bucket-visibility-is-declared-check.sql`, now holds the shape of this in both directions. It deliberately does NOT assert that `family-media` should be private — it is public today and closing it needs every consumer moved off `getPublicUrl` first, so flipping the flag alone would blank every photo, avatar, attachment and album cover in the product. What it asserts is that the internet-readable set is exactly the set somebody declared, with reasons. Mutation-tested both ways: creating a fifth public bucket fails it ("bucket rogue-public is readable by the whole internet and is not on the declared list"), and flipping `family-media` to private also fails it, with a message naming the SEC-001 rollout and telling whoever did it to confirm the consumers moved. So the rollout cannot land quietly, and a new public bucket cannot appear unnoticed — which the existing test could not catch, since its `PUBLIC_READ_BUCKETS` is a hardcoded list of four and it cannot see the migrations that create buckets.
 
 Required rollout order: define strict configured-project/bucket/family reference parsing and the desired revocation/cache contract; prove authorized/cross-family, stale-owner, expiry/idle and range/download behavior on disposable data; deploy every legacy/new-reference consumer before changing bucket access; then verify a reviewed private-bucket change, denial of old public reads, permitted member reads, old-client behavior and cache handling. A signed bearer URL grants access until its expiry and alone cannot promise per-request membership or immediate logout revocation. Current provider configuration, old public cache exposure and production schema prerequisites need independent verification before such a rollout.
 
