@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { describeActionError } from '@/lib/supabase/errors';
+import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { DEFAULT_CADENCES } from '@/lib/home/maintenance';
 
 async function ctx() {
@@ -55,10 +55,14 @@ export async function saveWarrantyAction(fd: FormData) {
     notes: str(fd, 'notes'),
     updated_by: userId,
   };
-  const { error } = id
-    ? await supabase.from('home_warranties').update(row).eq('id', id).eq('family_id', familyId)
+  // Only the UPDATE branch needs confirming: an insert either inserts or
+  // errors, so it cannot match zero rows. Same split as `saveRow` in
+  // `dashboard/auto/actions.ts`. Audit C1-S9-47.
+  const { data: saved, error } = id
+    ? await supabase.from('home_warranties').update(row).eq('id', id).eq('family_id', familyId).select('id')
     : await supabase.from('home_warranties').insert({ ...row, family_id: familyId, created_by: userId });
   if (error) throw new Error(describeActionError(error, tr('actions.couldNotSaveThatWarranty')));
+  if (id && wroteNoRows(saved)) throw new Error(tr('actions.couldNotSaveThatWarranty'));
   revalidatePath('/dashboard/home/warranties');
   revalidatePath('/dashboard/home');
   revalidateAsset(row.asset_id);
@@ -67,8 +71,11 @@ export async function saveWarrantyAction(fd: FormData) {
 export async function deleteWarrantyAction(id: string) {
   const tr = await getTranslations();
   const { familyId, userId, supabase } = await ctx();
-  const { error } = await supabase.from('home_warranties').update({ deleted_at: new Date().toISOString(), updated_by: userId }).eq('id', id).eq('family_id', familyId);
+  // A soft delete is an update, so it carries the zero-rows hazard — and the
+  // caller has already told the family the record is gone. Audit C1-S9-47.
+  const { data: removed, error } = await supabase.from('home_warranties').update({ deleted_at: new Date().toISOString(), updated_by: userId }).eq('id', id).eq('family_id', familyId).select('id');
   if (error) throw new Error(describeActionError(error, tr('actions.couldNotDeleteThatWarranty')));
+  if (wroteNoRows(removed)) throw new Error(tr('actions.couldNotDeleteThatWarranty'));
   revalidatePath('/dashboard/home/warranties');
 }
 
@@ -89,18 +96,25 @@ export async function saveContractorAction(fd: FormData) {
     notes: str(fd, 'notes'),
     updated_by: userId,
   };
-  const { error } = id
-    ? await supabase.from('home_contractors').update(row).eq('id', id).eq('family_id', familyId)
+  // Only the UPDATE branch needs confirming: an insert either inserts or
+  // errors, so it cannot match zero rows. Same split as `saveRow` in
+  // `dashboard/auto/actions.ts`. Audit C1-S9-47.
+  const { data: saved, error } = id
+    ? await supabase.from('home_contractors').update(row).eq('id', id).eq('family_id', familyId).select('id')
     : await supabase.from('home_contractors').insert({ ...row, family_id: familyId, created_by: userId });
   if (error) throw new Error(describeActionError(error, tr('actions.couldNotSaveThatContractor')));
+  if (id && wroteNoRows(saved)) throw new Error(tr('actions.couldNotSaveThatContractor'));
   revalidatePath('/dashboard/home/pros');
 }
 
 export async function deleteContractorAction(id: string) {
   const tr = await getTranslations();
   const { familyId, userId, supabase } = await ctx();
-  const { error } = await supabase.from('home_contractors').update({ deleted_at: new Date().toISOString(), updated_by: userId }).eq('id', id).eq('family_id', familyId);
+  // A soft delete is an update, so it carries the zero-rows hazard — and the
+  // caller has already told the family the record is gone. Audit C1-S9-47.
+  const { data: removed, error } = await supabase.from('home_contractors').update({ deleted_at: new Date().toISOString(), updated_by: userId }).eq('id', id).eq('family_id', familyId).select('id');
   if (error) throw new Error(describeActionError(error, tr('actions.couldNotDeleteThatContractor')));
+  if (wroteNoRows(removed)) throw new Error(tr('actions.couldNotDeleteThatContractor'));
   revalidatePath('/dashboard/home/pros');
 }
 
@@ -137,8 +151,11 @@ export async function saveServiceRecordAction(fd: FormData) {
 export async function deleteServiceRecordAction(id: string) {
   const tr = await getTranslations();
   const { familyId, userId, supabase } = await ctx();
-  const { error } = await supabase.from('home_service_records').update({ deleted_at: new Date().toISOString(), updated_by: userId }).eq('id', id).eq('family_id', familyId);
+  // A soft delete is an update, so it carries the zero-rows hazard — and the
+  // caller has already told the family the record is gone. Audit C1-S9-47.
+  const { data: removed, error } = await supabase.from('home_service_records').update({ deleted_at: new Date().toISOString(), updated_by: userId }).eq('id', id).eq('family_id', familyId).select('id');
   if (error) throw new Error(describeActionError(error, tr('actions.couldNotDeleteThatService')));
+  if (wroteNoRows(removed)) throw new Error(tr('actions.couldNotDeleteThatService'));
   revalidatePath('/dashboard/home/service');
 }
 

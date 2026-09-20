@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-187 finding IDs from four workers and two parallel sessions; none of it was
+188 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -12,7 +12,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 > source-and-migration audit run without production credentials. Session B
 > (Register B, 14,038 items, `AUTH-001` / `API-<hash>` / `DB-TBL-nnn`) is a
 > hosted-CI and deployed-release audit. Their finding-ID sets are **disjoint**:
-> 909 IDs from A, 684 from B, 1,590 in union — verified mechanically at each
+> 910 IDs from A, 684 from B, 1,591 in union — verified mechanically at each
 > merge. The three literals both files contain (`LB-009`, `LB-016`, `SHA-256`)
 > are not counter-examples: the first two are pre-existing *runbook* names each
 > register cites, and the third is a hash algorithm the ID regex matches. No
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 197 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 198 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -33563,6 +33563,54 @@ passing.
 
 ---
 
+### `[CLAUDE-1][MEDIUM][SERVER ACTIONS]` C1-S9-47 — eleven more writes that asserted what they could not see
+
+Continuing the `C1-S9-46` inventory, taken by what each write controls rather
+than by file order. **The recurring shape across all three files: the action
+returns a value or a message that ASSERTS the write happened, while the write
+itself could not say whether it touched anything.**
+
+**`dashboard/independence/actions.ts` (2).** `independence-module.tsx` toasts
+*"&lt;child&gt; achieved “&lt;title&gt;” 🎉"* on `ok` and then calls
+`router.refresh()`. So an update that matched nothing put a celebration on
+screen beside a milestone that stayed in progress. This is a recognition
+feature — the message IS the product, and the refresh deletes it a second later.
+`skipMilestoneAction` promises the rung *"won't be suggested again"*; a silent
+no-op means it comes back. Both sit on the same page whose read path
+`C1-S9-27` had to fix for a destructive false-empty, so the file is now honest
+in both directions.
+
+**`dashboard/contact-center/actions.ts` (3).** The email assignment returns
+`{ ok: true, local }` — it *hands the family the address they now have*. An
+update matching no row gave them one that was never stored, and mail sent to it
+goes nowhere: the same shape as the marketplace handoff under `C1-S9-16`, a
+value returned to the user that the database never accepted. The concierge patch
+is treated as more than a settings write because it carries
+`forward_to_phone`: a parent who believes the family line now forwards to their
+mobile, and it does not, misses the call the feature exists for.
+
+**`dashboard/home/actions.ts` (6).** The same save/soft-delete pattern as
+`auto/actions.ts`, written inline six times across warranties, contractors and
+service records. Each save confirms its update branch and exempts its insert;
+each soft delete confirms unconditionally.
+
+**One thing deliberately left alone, and pinned.** The same file touches
+`home_assets.last_serviced_on` after saving a service record, under a comment
+saying it is best-effort *because the record itself is already saved*. A guard
+asserts that this one is **not** gated and does **not** throw — hardening it
+would lose a record the family successfully created, in order to report a
+forecast-math detail. The mutation that hardens it is one of the seven proved
+red.
+
+**Status:** FIXED. Guard: eleven cases, each proved red by mutation — including
+three over-tightening directions (giving an insert a `.select()`, exempting a
+soft delete as though it had an insert branch, and turning the best-effort touch
+into a throw).
+
+**Remaining: 86 of the 102, OPEN**, with locations from the `C1-S9-46` scan.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -33632,8 +33680,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,067 passing / 17,070 across 1,351
-files.** (Re-run after `C1-S9-46`; was 16,950 / 16,953 across 1,349 before this
+Status: ✅ PASS — `npx vitest run`: **17,075 passing / 17,078 across 1,351
+files.** (Re-run after `C1-S9-47`; was 16,950 / 16,953 across 1,349 before this
 batch.) The three failures are `C1-S9-09`, BLOCKED: this container runs Node
 22.22.2 against the repository's `.nvmrc` 24.21.0, and nvm cannot fetch the
 Node 24 distribution here. Not counted as passing.

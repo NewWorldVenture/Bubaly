@@ -263,6 +263,7 @@
   "actions.couldNotUpdateThatGoal": "Impossible de mettre à jour cet objectif.",
   "actions.couldNotUpdateThatItem": "Impossible de mettre à jour cet article.",
   "actions.couldNotUpdateThatMember": "Impossible de mettre à jour ce membre.",
+  "actions.couldNotUpdateThatMilestone": "Impossible de mettre à jour cette étape. Actualisez et réessayez — elle n’a pas changé.",
   "actions.couldNotUpdateThatPaperwork": "Impossible de mettre à jour ce document.",
   "actions.couldNotUpdateThatPolicy": "Impossible de mettre à jour ce contrat.",
   "actions.couldNotUpdateThatReport": "Impossible de mettre à jour ce signalement.",

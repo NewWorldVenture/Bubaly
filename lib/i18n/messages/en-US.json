@@ -263,6 +263,7 @@
   "actions.couldNotUpdateThatGoal": "Could not update that goal.",
   "actions.couldNotUpdateThatItem": "Could not update that item.",
   "actions.couldNotUpdateThatMember": "Could not update that member.",
+  "actions.couldNotUpdateThatMilestone": "Could not update that milestone. Refresh and try again — it has not changed.",
   "actions.couldNotUpdateThatPaperwork": "Could not update that paperwork.",
   "actions.couldNotUpdateThatPolicy": "Could not update that policy.",
   "actions.couldNotUpdateThatReport": "Could not update that report.",

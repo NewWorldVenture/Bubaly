@@ -263,6 +263,7 @@
   "actions.couldNotUpdateThatGoal": "Dieses Ziel konnte nicht aktualisiert werden.",
   "actions.couldNotUpdateThatItem": "Dieser Artikel konnte nicht aktualisiert werden.",
   "actions.couldNotUpdateThatMember": "Dieses Mitglied konnte nicht aktualisiert werden.",
+  "actions.couldNotUpdateThatMilestone": "Dieser Meilenstein konnte nicht aktualisiert werden. Aktualisieren Sie die Seite und versuchen Sie es erneut – er wurde nicht geändert.",
   "actions.couldNotUpdateThatPaperwork": "Dieses Dokument konnte nicht aktualisiert werden.",
   "actions.couldNotUpdateThatPolicy": "Diese Police konnte nicht aktualisiert werden.",
   "actions.couldNotUpdateThatReport": "Diese Meldung konnte nicht aktualisiert werden.",

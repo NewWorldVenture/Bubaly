@@ -2,6 +2,11 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { at, between, bodyOf } from './helpers/source-order';
 
+/** Line comments only — so an assertion cannot match the prose explaining it. */
+function stripComments(source: string): string {
+  return source.replace(/^\s*\/\/.*$/gm, '');
+}
+
 /**
  * Audit C1-S9-16 — two server actions that reported success for work that may
  * not have happened, found by scanning all 135 `'use server'` files for
@@ -337,5 +342,89 @@ describe('the shared auto helpers confirm for all fifteen call sites (C1-S9-46)'
     // why an insert needs no `.select()` goes with it.
     expect(auto).toContain('A PostgREST write returns { error } without throwing');
     expect(auto).toContain('cannot match zero rows');
+  });
+});
+
+/**
+ * Audit C1-S9-47 — eleven more from the 102, chosen by what each write
+ * controls rather than by file order.
+ *
+ * The recurring shape across all three files: the action returns a value or a
+ * message that ASSERTS the write happened — a celebration toast, an email
+ * address, "it won't be suggested again" — while the write itself could not say
+ * whether it touched anything.
+ */
+const independence = readFileSync('app/(app)/dashboard/independence/actions.ts', 'utf8');
+const contactCenter = readFileSync('app/(app)/dashboard/contact-center/actions.ts', 'utf8');
+const home = readFileSync('app/(app)/dashboard/home/actions.ts', 'utf8');
+
+describe('a milestone the child is congratulated for is confirmed (C1-S9-47)', () => {
+  it('both milestone transitions ask what they changed', () => {
+    for (const binding of ['achieved', 'skipped']) {
+      expect(independence, binding).toContain(`wroteNoRows(${binding})`);
+    }
+    expect(independence.match(/\.select\('id'\)/g) ?? []).toHaveLength(2);
+  });
+
+  it('each stays scoped to the acting family', () => {
+    for (const fn of ['achieveMilestoneAction', 'skipMilestoneAction']) {
+      const body = bodyOf(independence, `export async function ${fn}`, 'return { ok: true };');
+      expect(body, fn).toContain("eq('family_id', ctx.active.familyId)");
+    }
+  });
+
+  it('the module still celebrates only on ok', () => {
+    // The reason this matters: the toast is the product here. If the action
+    // stops gating it, the guard above becomes decorative.
+    const module = readFileSync('components/modules/independence-module.tsx', 'utf8');
+    expect(module).toContain('achieved “');
+    expect(module).toContain('router.refresh()');
+  });
+});
+
+describe('an address the family is told they have is confirmed (C1-S9-47)', () => {
+  it('the email assignment confirms before returning the address', () => {
+    // It returns `{ ok: true, local }` — it hands the family the address. An
+    // update matching no row gave them one that was never stored, and mail sent
+    // to it goes nowhere.
+    expect(contactCenter).toContain('wroteNoRows(assigned)');
+    expect(at(contactCenter, 'wroteNoRows(assigned)')).toBeLessThan(at(contactCenter, 'return { ok: true, local };'));
+  });
+
+  it('the concierge patch and the message status are confirmed', () => {
+    for (const binding of ['patched', 'updated']) {
+      expect(contactCenter, binding).toContain(`wroteNoRows(${binding})`);
+    }
+    // The concierge patch includes call forwarding, which is why it is not
+    // treated as a cosmetic settings write.
+    expect(contactCenter).toContain('patch.forward_to_phone = normalized;');
+  });
+});
+
+describe('the home records repeat auto\'s split, not its omission (C1-S9-47)', () => {
+  it('every save confirms the update branch and exempts the insert', () => {
+    expect(home.match(/if \(id && wroteNoRows\(saved\)\)/g) ?? []).toHaveLength(2);
+    // The insert branches must NOT have grown a select: an insert cannot match
+    // zero rows, and asking for the row back buys nothing.
+    const inserts = stripComments(home).split('\n').filter((l) => l.includes('.insert({ ...row'));
+    expect(inserts.length).toBeGreaterThan(0);
+    for (const line of inserts) expect(line, 'an insert does not need .select()').not.toContain('.select(');
+  });
+
+  it('every soft delete confirms unconditionally', () => {
+    expect(home.match(/if \(wroteNoRows\(removed\)\)/g) ?? []).toHaveLength(3);
+    // No `id &&` on a soft delete — it has no insert branch to exempt.
+    expect(home).not.toContain('if (id && wroteNoRows(removed))');
+  });
+
+  it('the best-effort asset touch stays best-effort', () => {
+    // `last_serviced_on` is explicitly documented as best-effort because the
+    // service record itself is already saved. Asserting that it is NOT gated
+    // stops a later sweep from hardening it into a thrown error that would lose
+    // a record the family successfully created.
+    expect(home).toContain('last_serviced_on update failed');
+    const touch = bodyOf(home, "update({ last_serviced_on: serviceDate })", '\n  }');
+    expect(touch).not.toContain('wroteNoRows');
+    expect(touch).not.toContain('throw');
   });
 });

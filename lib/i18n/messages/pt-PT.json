@@ -263,6 +263,7 @@
   "actions.couldNotUpdateThatGoal": "Não foi possível atualizar essa meta.",
   "actions.couldNotUpdateThatItem": "Não foi possível atualizar esse artigo.",
   "actions.couldNotUpdateThatMember": "Não foi possível atualizar esse membro.",
+  "actions.couldNotUpdateThatMilestone": "Não foi possível atualizar esse marco. Atualize e tente novamente — não foi alterado.",
   "actions.couldNotUpdateThatPaperwork": "Não foi possível atualizar essa papelada.",
   "actions.couldNotUpdateThatPolicy": "Não foi possível atualizar essa apólice.",
   "actions.couldNotUpdateThatReport": "Não foi possível atualizar essa denúncia.",

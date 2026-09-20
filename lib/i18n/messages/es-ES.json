@@ -263,6 +263,7 @@
   "actions.couldNotUpdateThatGoal": "No se ha podido actualizar ese objetivo.",
   "actions.couldNotUpdateThatItem": "No se ha podido actualizar ese artículo.",
   "actions.couldNotUpdateThatMember": "No se ha podido actualizar a ese miembro.",
+  "actions.couldNotUpdateThatMilestone": "No se ha podido actualizar ese hito. Actualiza e inténtalo de nuevo; no ha cambiado.",
   "actions.couldNotUpdateThatPaperwork": "No se ha podido actualizar ese papeleo.",
   "actions.couldNotUpdateThatPolicy": "No se ha podido actualizar esa póliza.",
   "actions.couldNotUpdateThatReport": "No se ha podido actualizar esa denuncia.",
