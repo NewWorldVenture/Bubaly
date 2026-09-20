@@ -4522,3 +4522,133 @@ Rebuild the module above, rewire the three construction sites, restore the guard
 then work failures **#1 and #2** — both stale assertions, both to be argued
 rather than relaxed. **#3 is not part of this pass**; it is the separate
 standalone-timeout finding recorded immediately above.
+
+---
+
+## Pass BI — the worker wrote the privacy rule down, then cached photos against it
+
+**[CLAUDE-1][CRITICAL][SECURITY] `public/sw.js` served one account's private family
+photos to the next account on the same device. — FIXED**
+
+Cross-referenced to the master control document on `main`:
+**SEC-001** (cache-disclosure half) and **SUPPORT-98FD1D4C44AD**.
+
+### Not duplicated work — the half the other agent could not take
+
+The Codex agent's SEC-001 record already contains an *executed* RED regression for
+this exact behaviour: *"A synthetic `/_next/image` response marked `private,
+no-store` is retained in `bubaly-v4`; logout clears session cookies and
+partitioned query storage but leaves the image. After B is installed, offline
+lookup returns A's bytes with fetch count unchanged at one."* Their record then
+says, explicitly: **"No source repair is included; SUPPORT-98FD1D4C44AD advances
+only to IN PROGRESS."**
+
+SEC-001's other half — making the media bucket private — needs SQL and provider
+configuration, which their cycle is fenced from and which no repository change
+can substitute for. **The cache half needs neither.** It is one file, and
+`public/sw.js` is byte-identical on `main` and on this branch, so the repair
+lands without depending on the 198-commit merge that is currently blocked.
+
+### The defect
+
+`public/sw.js` opens with the PRIVACY INVARIANT (M-023):
+
+> authenticated HTML is NEVER written to Cache Storage. Cached pages persist
+> unencrypted after logout and would be served offline to whoever next opens the
+> app on a shared/family device
+
+The navigation branch honours it. The asset branch, twenty-four lines below,
+cached anything whose `destination` was `image`/`style`/`script` the moment it
+came back 200. **The reason was written out in full, two dozen lines above the
+code that ignored it.**
+
+Three facts turn that into cross-account disclosure:
+
+1. **`/_next/image` is same-origin**, so `if (url.origin !== self.location.origin) return;`
+   never saw it — and it is the optimizer proxy in front of private family media.
+2. **The read is cache-first** (`caches.match(request).then((cached) => cached || fetch(...))`),
+   so once an image is in `bubaly-v4` it is served with **no network request at
+   all**. Nothing server-side can deny it — not RLS, not a signed URL's expiry,
+   not a revoked session.
+3. **Logout does not clear Cache Storage.** The entry outlives the session that
+   was permitted to see it.
+
+On the shared family device this product is built around, account B was served
+account A's photos. Severity Critical stands on the product's own core use case.
+
+### Fix — two rules, because neither covers the other
+
+```js
+const PRIVATE_DIRECTIVE = /(^|,)\s*(private|no-store)\s*(,|$)/;
+function saysPrivate(res) { … }                 // rule 1
+function isShareableAsset(request, url) {
+  if (url.pathname === '/_next/image') return false;   // rule 2
+  return request.destination === 'style' || … ;
+}
+```
+
+Rule 1 alone does **not** close it, and this is the part worth reading twice:
+family media is uploaded with `cacheControl: 31536000` (their own inventory
+records this for Photos and CreateMemory), so the optimizer can return a private
+photo marked `public, max-age=31536000, immutable`. **A header-respecting worker
+would have cached it.** Rule 2 is what actually holds: what `/_next/image`
+proxies is chosen by the page, not by the worker, so the worker cannot treat its
+output as public. Its responses are still held by the browser's own HTTP cache
+and the CDN — both partitioned and cleared with the session, as Cache Storage is
+not — so the offline cost is near zero.
+
+### Guard — `tests/a-private-photo-does-not-outlive-the-session-in-the-worker-cache.test.ts`
+
+**Drives the real handler.** The worker source is loaded into a synthetic scope
+with a fake CacheStorage and a counting `fetch`, and its `fetch` listener is
+dispatched — because the existing guard for this file
+(`tests/mobile-sw-auth-cache.test.ts`) asserts **source text** (`expect(sw).toContain(…)`)
+and would have passed throughout this defect's entire life.
+
+| case | asserts |
+| --- | --- |
+| private optimized image | not persisted (their RED repro) |
+| **the disclosure itself** | account B is served from the **network**, not A's bytes; **two** fetches, not one |
+| optimizer calls it public | still not persisted — the case rule 1 alone would miss |
+| app's own CSS + icon | **still cached** — not blind |
+| cached asset re-requested | **one** fetch — caching still works |
+| any asset marked private | not persisted — the header rule is general |
+
+**Planted and proven**: with the worker stashed back to its broken state, **4 of 6
+failed** and the 2 that passed were exactly the two not-blind controls — which is
+what makes them controls rather than restatements of the fix.
+
+### Still open on SEC-001, and not claimed here
+
+The bucket itself is still public (migration `0216`), consumers still publish
+public URLs, and unguessable object names are still the only protection on the
+object store. **That half is untouched by this fix and SEC-001 must stay FAIL.**
+What changes is that the device-local, logout-surviving, server-undeniable copy
+is gone. The remaining exposure needs a URL you already hold; it no longer needs
+only the device.
+
+Their record's `signOutBrowserSession` purge-on-logout belt-and-braces is *not*
+included: that function arrived in the 198 commits on `main` that this branch
+cannot merge without a permission it does not have.
+
+
+### BH-02 closed in Pass BI — the cost removed, not the ruler widened
+
+`tests/ai-prompt-injection.test.ts` failed again in the full suite during Pass BI's
+validation, which refines the earlier reading: it is not "passes under load, fails
+alone" but simply **a test body carrying ~4 s of module transform against a 5 s
+budget**, which tips over whenever the machine is busy either way.
+
+Four of its five `await import(...)` calls sat inside test bodies with no reason to
+be deferred — the file has no `vi.mock` at all. They are now static imports. The
+fifth is left dynamic **on purpose**: it follows a `vi.doMock`, which only affects
+imports that come after it, so hoisting that one would silently unmock the turn.
+
+| | test body | transform |
+| --- | --- | --- |
+| before | 5.70 s / 5.43 s / 5.56 s — **timeout at 5 s** | 4.47 / 4.15 / 4.21 s |
+| after | **178 ms / 174 ms / 172 ms** | moved to module load |
+
+Standalone: **3/3 pass**. No timeout was added and no assertion was touched — the
+thirty-fold drop in the body is the evidence that the cost was transform rather
+than the test.
