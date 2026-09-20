@@ -32651,6 +32651,19 @@ Node 24 distribution here. Not counted as passing.
 ## End-to-End (browser)
 Status: ✅ **CONFIRMED GREEN for this branch's own tests** — run 35508571343 on
 head `f9820169`: **1,293 passed, 3 failed in 11.2m**, down from 13 failures.
+Re-confirmed twice since, on `a7ba8f1f` (1,293 / 3) and on `9c9f3a43`
+(**1,292 passed, 3 failed, 1 flaky**), so Passes AG and the `C1-S9-25` AI-route
+fixes introduced no browser regression.
+
+The flaky one on `9c9f3a43` is `tests/e2e/durable-session.spec.ts:286`
+("explicit local sign-out clears this browser and preserves another device"),
+which failed with *"Durable-session E2E sign-out request failed"* and then
+PASSED on retry. Recorded rather than dismissed as noise, and not claimed as
+this branch's: `9c9f3a43` changed two AI routes and three test fakes, nothing
+in the sign-out path. Durable sign-out is the parallel session's own recent
+repair area. Flagged here so that if it recurs it is already on the record as
+having been seen once, which is the only way a genuine intermittent is ever
+told apart from a one-off.
 All ten `voice-capture-boundaries` failures are gone, which confirms `C1-S9-17`
 against the real browser harness rather than against my standalone reproduction
 of its import-graph walk.
