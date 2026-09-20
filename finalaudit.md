@@ -32136,6 +32136,84 @@ triaged as lower-consequence (marketplace listings, saved searches, review
 pages, onboarding), but they are not verified clean and must not be counted as
 such. The Pages axis stays at 43%.
 
+---
+
+### `[CLAUDE-1][MEDIUM][PROCESS]` C1-S9-20 — pushing every ten minutes meant CI never finished, so "verified" rested on local runs alone
+
+**File:** `.github/workflows/ci.yml` (`concurrency: cancel-in-progress: true`), and this session's own working method
+
+**What happened.** `C1-S9-17` fixed a red E2E run, was pushed as `635e340a`,
+and its CI run (**3281**) was **CANCELLED** — by my own next push, `c3bcb25b`,
+about eight minutes later. That run (**3282**) was in turn superseded by
+`0296430f` (**3283**). The workflow's concurrency group is `ci-${{ github.ref }}`
+with `cancel-in-progress: true`, and the E2E job alone takes roughly fifteen
+minutes. Pushing at a shorter interval than the pipeline takes means the
+pipeline never reports at all.
+
+**Why it is a finding and not just a habit.** Every push in this session was
+gated on a full local run — `tsc`, the unit suite, mutation proofs — and each
+commit message says so accurately. But the E2E job cannot run locally here (it
+needs a Next production build and a Supabase stack), and it is the only
+instrument that exercises the browser paths. So for three consecutive commits
+the honest status of the E2E fix was *"fixed and locally reproduced, not yet
+confirmed by CI"*, and the cadence guaranteed it stayed that way. A green
+pipeline that is never allowed to finish is indistinguishable from one that
+does not exist.
+
+It is also the same shape as several findings in this very session: an
+instrument that cannot report is not an instrument. `C1-S9-01` was a control
+that existed and was never called; `C1-S9-13` a signal accepted and never
+passed; this is a check configured and never completed.
+
+**Correction, not a code change.** Nothing in `ci.yml` is wrong —
+`cancel-in-progress` is right for a branch under active development, and
+removing it would burn runners on superseded commits. The defect is in the
+working method: **after a push that is meant to prove a CI failure fixed, stop
+pushing until that run reports.** Local work and local commits continue; the
+push is what waits. This session now holds pushes until run 3283 completes.
+
+**Status:** RECORDED as a method correction. The E2E fix in `C1-S9-17` remains
+*locally reproduced and not yet CI-confirmed*, and is described that way rather
+than as verified, here and in the PR comment that accompanied it.
+
+---
+
+### `[CLAUDE-1][LOW][PAGES]` C1-S9-21 — a failed read offers a referral a family has already used, and the server refuses it
+
+**File:** `app/(app)/referrals/page.tsx:30`
+
+**Problem.** One of the 26 pages from `C1-S9-19`'s scan, and the only one where
+the discarded read feeds CONTROL FLOW rather than a list:
+
+```ts
+const { data: wasReferred } = await supabase.from('referrals')
+  .select('id').eq('referred_family_id', familyId).maybeSingle();
+…
+alreadyReferred={Boolean(wasReferred)}
+```
+
+A refused read yields `null`, so `alreadyReferred` becomes `false` — the
+**permissive** direction — and `ReferralPanel` reveals its "Have a referral
+code?" form, promising a reward on upgrade to a family that has already used one.
+
+**Why it is LOW and not a money finding, checked rather than assumed.** The
+obvious worry is a second referral reward. It is not reachable:
+`applyReferralCode` in `lib/referrals/server.ts` re-reads `referrals` for the
+family server-side, **checks that read's error** (returning `lookup_failed`
+rather than proceeding), refuses with `already_referred` when a row exists, and
+a unique constraint backs it besides. So the cost is a form that appears and is
+then politely rejected — a confusing offer, not a duplicate payout.
+
+**Recorded rather than fixed in this pass**, with the reasoning attached,
+because the bound comes from the server action and the cheap page-side fix would
+otherwise be indistinguishable from the two in `C1-S9-19` — which are fixed
+precisely because nothing downstream catches them.
+
+**This is the second time in this session that reading the server-side gate
+bounded a finding the scan had ranked higher** (the first: `C1-S9-16`'s wallet
+deletes, where the error WAS captured and my scanner's look-back window was too
+short). A scan ranks by shape; only the code says what the shape costs.
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
