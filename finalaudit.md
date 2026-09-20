@@ -2,7 +2,7 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-20T16:47:10.303Z
+- Last Updated: 2026-09-20T16:49:03.223Z
 - Total Audit Items: 14058
 - Not Started: 13842
 - In Progress: 192
@@ -14189,7 +14189,7 @@ PRODUCTION READY: NO
 | DATA-010 | DATA | Resource lifecycle through the real API | ✅ PASS | High | 8/8 | None required | CREATE/READ/UPDATE/VERIFY/DELETE/VERIFY all pass as a real member; a child's refused write returns HTTP 204 without Prefer, 200 [] with it, dosage unchanged | Shows at the HTTP layer why .select() + wroteNoRows was needed: 204 No Content is a success for a write that changed nothing. |
 | SEC-008 | SEC | Realtime broadcast isolation and publication drift | ✅ PASS | Critical | 5/5 | None required | Publication and code agree exactly (61 = 61, empty diff both ways); a live socket received its own family's row and not another's | The first attempt used an unpublished table and received nothing — a run that would have read as a clean refusal while proving nothing. Controls decided it. |
 | PERF-003 | PERF | Unindexed foreign keys on cascade paths | ✅ PASS | Medium | 7/7 | None, deliberately | Member delete 0.50s before 158 indexes, 0.58s after; unchanged at 200,500 rows; a 0-FK delete takes 0.000174s | The half-second is 178 referential-integrity checks, not scans. An index cannot remove a check. Measuring first avoided a 158-index migration for no gain. |
-| API-MKT-001 | API | Marketplace negotiation and circle RPCs | ✅ PASS | High | 10/10 | No product change; a probe so three unexercised RPCs stop being unexercised | Offer/counter/accept produces an order at the countered price and claims the listing; circle create/join/leave all complete; suite 48/48 | Found by asking what else the app calls that nothing tests — the same gap DB-FN-001 hid in. The probe catches the pre-0318 dead function. |
+| API-MKT-001 | API | The five RPCs nothing exercised (marketplace + public tracking) | ✅ PASS | High | 14/14 | No product change; a probe so three unexercised RPCs stop being unexercised | Offer/counter/accept produces an order at the countered price and claims the listing; circle create/join/leave all complete; suite 48/48 | Found by asking what else the app calls that nothing tests — the same gap DB-FN-001 hid in. The probe catches the pre-0318 dead function. |
 
 ## Inventory and evidence rules
 
@@ -21104,6 +21104,17 @@ Fixing DB-FN-001 — `marketplace_create_circle`, dead from 0176 to 0318 — rai
     marketplace_negotiation_respond
 
 All three work. That is worth having proved rather than assumed — the last dead feature was hiding in exactly this gap, and the reason it stayed hidden was that nothing walked the path end to end on a production-shaped database.
+
+**The other two were checked as well**, and they are the more interesting pair on security grounds. `bump_landing_metric` and `bump_exit_intent` are called from `/api/lp/track` and `/api/exit-intent/track` — **public, unauthenticated visitor-tracking endpoints** — and both take a caller-supplied `p_metric`. Had that reached dynamic SQL as a column name it would be an injection vector on a public route. It does not: both bodies are static `IF`/`ELSIF` comparisons against literals, with no dynamic SQL anywhere. And the routes never pass arbitrary text in the first place — each normalizes to a closed set (`body.kind === 'conversion' ? 'conversion' : 'view'`), behind a durable 60-per-window IP rate limit and a bounded request body.
+
+Executed:
+
+    landing:     views 0->1, conversions 0->1, and a nonsense metric changed nothing
+    exit-intent: impressions 0->1, conversions 0->1
+    a PAUSED offer:      impressions 1->1  (must not move)
+    an UNPUBLISHED page: views 1->1        (must not move)
+
+The last two are the ones worth having controls for, and the first attempt at the unpublished check proved nothing: it read `views <NULL>-><NULL>` because the row had already been deleted, which is a refusal that looks identical to a boundary holding. Redone against a row that exists, with a control showing a published page does move 0→1 first.
 
 The full negotiation, executed:
 
