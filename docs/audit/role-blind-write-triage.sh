@@ -148,9 +148,20 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 
-tables=$(bash docs/audit/role-blind-write-census.sh --tables)
+# The census exits 2 when it cannot reach the database. That status used to be
+# discarded here, so an unreachable database and a genuinely clean schema both
+# arrived as an empty `tables` and both exited 0 — and the message below offers
+# the flattering reading first. "Exits 0 whichever way the counts fall" is the
+# right design for a measurement, but a census that could not RUN has no counts
+# to fall either way, so it is not covered by that sentence.
+tables=$(bash docs/audit/role-blind-write-census.sh --tables); census_status=$?
+if [ "$census_status" -ne 0 ]; then
+  echo "the census FAILED (exit ${census_status}) — it could not read the database, so nothing below was measured."
+  echo "this is NOT 'every write boundary is closed'. point PGHOST/PGUSER/PGDATABASE at the replayed database and re-run."
+  exit "$census_status"
+fi
 if [ -z "$tables" ]; then
-  echo "the census returned no open tables — either every write boundary is closed, or PG* is pointing somewhere unexpected"
+  echo "the census ran and returned no open tables — every role-blind write boundary is closed on this schema"
   exit 0
 fi
 
