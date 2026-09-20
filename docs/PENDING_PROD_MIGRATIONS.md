@@ -1838,3 +1838,66 @@ than by a buyer. Three assertions failed before, none after, with four controls
 both directions.
 
 Until this is applied, production can put a sold item back on the market.
+
+### `0339` makes a calendar event name who actually made it — unapplied
+
+`01050_calendar_events_rls_repair.sql` is the whole of this table's policy set,
+and every verb of it is the same sentence — `public.is_family_member(family_id)`
+— which is role-blind **and** identity-blind. So a child member may INSERT an
+event carrying a parent's uid in `created_by`, and, because UPDATE is the same
+sentence, may afterwards rewrite an existing row's author to anyone, or to NULL.
+
+It reaches a screen. `app/(app)/dashboard/workload/page.tsx` is the only select
+list in the tree that names this column, and `lib/workload/balance.ts` scores
+each organized event as 12 minutes of "invisible labour" — so the forgery moves
+a real number attributing real effort to the wrong parent.
+
+**Why this is not `created_by = auth.uid()`**, which three earlier drafts
+carrying the numbers `0339`/`0340`/`0342` all used and were rejected for:
+`lib/services/approvals/index.ts` `scopeForApprovedWork` deliberately runs
+approved work as the **ASKER** while the database session stays the approving
+parent's, so a bare identity pin breaks the approval-replay path it claims to
+protect. This migration instead copies the shape **already shipped and
+test-pinned** by `0272_rsvp_is_first_person.sql` on `event_rsvps`, a table the
+same replay writes:
+
+```
+created_by is null or created_by = auth.uid() or can_manage_family(family_id)
+```
+
+as a **RESTRICTIVE** INSERT policy, so `01050` keeps owning its own policies and
+no future permissive INSERT can grant past this one. The NULL branch is required,
+not tolerated: the ICS paste import and the subscribed-feed sync both write rows
+with no `created_by` key at all on an RLS-applying client, and two of the audit's
+own probes insert without it.
+
+**The UPDATE half is a trigger, not a policy, and its `pg_trigger_depth() = 1`
+guard is load-bearing.** No calendar writer sends `created_by` on UPDATE, so a
+checking policy would refuse a member legitimately editing someone else's event;
+a preserving trigger costs those paths nothing. But an *unconditional* preserve
+also reverts the column's own `ON DELETE SET NULL` referential action, which
+Postgres performs as an ordinary UPDATE. Measured both ways: in autocommit that
+**commits a dangling reference with no error at all**, and inside a transaction
+it raises a foreign key violation. The depth guard lets the constraint through at
+depth 2 while still freezing application UPDATEs at depth 1 — including
+`INSERT … ON CONFLICT DO UPDATE`, which an INSERT `WITH CHECK` never sees and
+which `.upsert()` emits.
+
+**Verified on a database built from nothing:** `docs/audit/verify-pg.sh up`
+applied **350 migrations, 0 failed**, and `docs/audit/run-probes.sh` then passed
+**62 of 62** boundary probes against it, the new
+`a-calendar-event-names-who-made-it-check.sql` included. That probe carries a
+negative control that puts **both** halves of the defect back inside its own
+transaction and fails itself if the forgery does not land or if `ON DELETE SET
+NULL` still fires — so it is a boundary rather than decoration. That is evidence
+about this tree. It is **not** evidence about production, which still records
+only `0001-0003`.
+
+**Known residue, recorded rather than implied.** `0339` closes INSERT and freezes
+the author; it does **not** close DELETE, and the manager branch is unconstrained
+by the roster, so a manager may still name an `auth.users` id outside the family
+— `0272`'s `member_id` shape prevents that for free and this column's
+`auth.users` reference cannot. Both are in the migration's own header.
+
+Until this is applied, any household member can sign a calendar event with
+another member's name, and rewrite or erase the author of one already there.

@@ -138,10 +138,21 @@ describe('Supabase migration filename safety', () => {
     // approvals/index.ts:618 `scopeForApprovedWork` deliberately runs approved
     // work as the ASKER, so `created_by` names the person who wanted the thing
     // while the session belongs to the approver. lib/trust/ai-gate.ts:36 states
-    // the invariant in words and a test guards it. A bare identity pin breaks
-    // it — CENSUS-002 for the third time, caught by review rather than by CI.
-    // See AUTHZ-021 in finalaudit.md; the files are not in this tree.
-    expect(audit.nextVersion).toBe('0339');
+    // the invariant in words — "an approval granted hours later could only be
+    // replayed as the APPROVER" — and a test guards it. A bare identity pin
+    // breaks it: CENSUS-002 for the third time, caught by review, not by CI.
+    //
+    // The NUMBER 0339 has since been re-used, by a migration that is in this
+    // tree: 0339_a_calendar_event_names_who_actually_made_it.sql. It is NOT the
+    // rejected draft. It carries 0272's shape rather than an identity pin —
+    // `created_by is null OR created_by = auth.uid() OR
+    // can_manage_family(family_id)` — so the NULL branch keeps ICS import and
+    // subscribed-feed sync working and the manager branch keeps the
+    // approval replay working, both of which the rejected draft broke. The
+    // 0340 (school/task) and 0342 (notes) drafts remain rejected and are still
+    // not in this tree; AUTHZ-021 is closed on INSERT only, and the residue is
+    // recorded in that migration's header and in finalaudit.md.
+    expect(audit.nextVersion).toBe('0340');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {
