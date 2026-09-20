@@ -24,7 +24,11 @@ for f in "${probes[@]}"; do
   name=$(basename "$f")
   if out=$(psql -v ON_ERROR_STOP=1 -f "$f" 2>&1); then
     echo "PASS  $name"
-    echo "$out" | grep -iE "NOTICE:.*(OK|PASSED)" | sed 's/^.*NOTICE:  /        /'
+    # SKIP is echoed alongside OK/PASSED, or a probe that declined to run its
+    # own invariant reports "PASS" here with nothing under it — indistinguishable
+    # from one that ran and held. A-15 can skip when its two sessions do not
+    # overlap, and that must be visible.
+    echo "$out" | grep -iE "NOTICE:.*(OK|PASSED|SKIP)" | sed 's/^.*NOTICE:  /        /'
   else
     failed+=("$name")
     echo "FAIL  $name"
