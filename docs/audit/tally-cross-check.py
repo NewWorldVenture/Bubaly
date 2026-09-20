@@ -51,10 +51,17 @@ def buckets(text: str) -> dict:
         part = part.strip()
         if not part:
             continue
-        m = re.fullmatch(r"([A-Z][A-Z'’ ]*?)\s+(\d+)", part)
+        # `— 4` is the generated block's own name for rows whose status could not
+        # be derived, and it is a real state that has to be comparable rather than
+        # fatal. The first time this script met one it exited 2 saying
+        # "unparseable" — safe, but it said nothing about what had actually gone
+        # wrong, which was a row opening "**Owner’s decision**" with a
+        # typographic apostrophe that finding-index.py's `Owner'?s` could not match.
+        m = re.fullmatch(r"(—|[A-Z][A-Z'’ ]*?)\s+(\d+)", part)
         if not m:
             raise ValueError(f'unparseable tally bucket: {part!r}')
-        out[m.group(1).strip().replace('’', "'")] = int(m.group(2))
+        name = m.group(1).strip().replace('’', "'")
+        out['BLANK' if name == '—' else name] = int(m.group(2))
     return out
 
 
@@ -92,6 +99,16 @@ def main() -> int:
     for key in sorted(set(g) | set(p)):
         if g.get(key) != p.get(key):
             problems.append(f'{key}: generated {g.get(key, "absent")}, prose {p.get(key, "absent")}')
+
+    # Named before any tally arithmetic: "N rows this parser could not classify"
+    # is a different and worse fact than "the two counts differ by N", and the
+    # second message would bury the first. A blank row is not a row with no
+    # state — it is a row whose owner cannot act on it.
+    if g.get('BLANK'):
+        problems.insert(0, f"{g['BLANK']} row(s) indexed BLANK — the status patterns in "
+                           'finding-index.py did not recognise how those rows open. Read '
+                           'the row and add a pattern for the words it already uses; do '
+                           'not reword the row to fit a pattern, and do not leave it.')
 
     if problems:
         print('TALLIES DISAGREE:')

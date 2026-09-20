@@ -49,7 +49,12 @@ STATUS = [
     ('FIXED',    re.compile(r'^\*{0,2}(Fixed|Corrected|Repaired|Closed)\b', re.I)),
     ('OPEN',     re.compile(r'^\*{0,2}Open\b', re.I)),
     ('CHECKED',  re.compile(r'^\*{0,2}(Checked|Verified)\b', re.I)),
-    ("OWNER'S",  re.compile(r"^\*{0,2}(Owner'?s|Deliberately NOT|a product decision|needs a|needs an|the naive fix)", re.I)),
+    # `Owner['’]?s`, both apostrophes, and that is not pedantry: this document is
+    # written with typographic quotes, so a row opening "**Owner’s decision**" —
+    # the natural way to type it here — fell through every pattern and indexed
+    # BLANK. It did so silently, which is the failure that matters: a row whose
+    # owner cannot act on it reads as one nobody has classified.
+    ("OWNER'S",  re.compile(r"^\*{0,2}(Owner['’]?s|Deliberately NOT|a product decision|needs a|needs an|the naive fix)", re.I)),
     # BLOCKED and SUPERSEDED are the last two shapes, added once the six blank
     # rows were read one at a time rather than guessed at. Both READ a word the
     # row already uses, which is the rule the rest of this table follows:
