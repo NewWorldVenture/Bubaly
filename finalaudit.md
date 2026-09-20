@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-180 finding IDs from four workers and two parallel sessions; none of it was
+181 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -12,7 +12,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 > source-and-migration audit run without production credentials. Session B
 > (Register B, 14,038 items, `AUTH-001` / `API-<hash>` / `DB-TBL-nnn`) is a
 > hosted-CI and deployed-release audit. Their finding-ID sets are **disjoint**:
-> 902 IDs from A, 684 from B, 1,583 in union — verified mechanically at each
+> 903 IDs from A, 684 from B, 1,584 in union — verified mechanically at each
 > merge. The three literals both files contain (`LB-009`, `LB-016`, `SHA-256`)
 > are not counter-examples: the first two are pre-existing *runbook* names each
 > register cites, and the third is a hash algorithm the ID regex matches. No
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 190 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 191 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -33190,6 +33190,70 @@ bucket (5, classified NOT this class) and 10 in "everything else", chiefly
 
 ---
 
+### `[CLAUDE-1][HIGH][API]` C1-S9-40 — "no behaviour logged yet", a dead gift link, and the rule that decides the rest
+
+**Files:** `app/api/behavior/insight/route.ts:50`, `app/api/ai/gift/route.ts:40`,
+`app/api/ai/insights/route.ts:78`, `app/api/ai/invest/route.ts:52,54,61`
+
+**The sharpest one.** `behavior/insight` dropped the error on its log read, so a
+refusal landed in this branch, at HTTP 200:
+
+> *"No behavior has been logged yet. Start logging positive moments and concerns
+> to unlock AI parenting insights."*
+
+A statement of fact about their family, and an invitation to start doing what
+they have already been doing — sometimes for months. The rows behind it are the
+positive moments and the **concerns** a parent has been recording. For a
+parenting-insight feature, being told your record is empty is the most
+discouraging wrong answer available. The genuine empty state is kept, because it
+is right for the family the copy was actually written for.
+
+**`ai/gift` is the twin of `C1-S9-31`, in the same feature** — `/pay/<handle>`
+redirects here, so the two are one user journey. A refused read produced *"This
+gift link is no longer available"* to someone outside the family trying to send
+money. Now 503, with the 404 kept for a link that really is gone or deactivated.
+
+**`ai/insights` did not match its own neighbour.** `fetchRows`, ten lines below
+the roster read, already returns 500 when it cannot load. The roster read
+dropped its error and fed an empty member list into the same prompt, so the
+insight was generated for a family the model had been told has no members —
+every name and every per-child observation silently missing from an answer that
+still reads as complete.
+
+#### The rule these produced: a smaller answer, or a different one?
+
+`ai/invest` contains both halves of the distinction, which is why it is worth
+stating:
+
+- **Smaller.** The child-name lookups fall back to `'your child'`. That is a
+  blander reply, not a wrong one. Logged, and deliberately **not** escalated —
+  a guard asserts the absence of a 503 here, so the fix cannot later be
+  "tightened" into failing a request over a cosmetic fallback.
+- **Different.** The asset lookup falls back to `null` name, `null` description
+  and **`null` risk level**. The caller named a specific asset; with the read
+  refused, the model gave a CHILD investing guidance about an asset it had been
+  told nothing about — including its risk level, which is the single fact this
+  feature exists to teach. That is not a smaller answer to the question asked.
+  It is a confident answer to a different one.
+
+This is the test that decides the remaining inventory, and it is sharper than
+"does it fall back to empty": a fallback is acceptable when it narrows the
+answer and visible when it does not, but never when it silently changes what
+question was answered.
+
+**Status:** FIXED. Guard: six cases, each proved red by mutation — removing each
+guard in turn, removing the genuine empty state (which the fix must preserve),
+and **escalating the name lookups to a 503**, the over-tightening error, which
+the guard catches as readily as the under-tightening one.
+
+**Inventory: 30 of the 39 now fixed, 9 remain OPEN** — the `auth.getUser()`
+bucket (5, classified NOT this class and still to be verified read-by-read) and
+4 in "everything else": `blog/like`, `blog/save`, `blog/subscribe`,
+`ab/track`, `google/calendar/sync`, `recipes/suggest`, `weekend/discover`,
+`webhooks/stripe`, plus the three remaining guardian name lookups.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -33259,8 +33323,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,013 passing / 17,016 across 1,351
-files.** (Re-run after `C1-S9-39`; was 16,950 / 16,953 across 1,349 before this
+Status: ✅ PASS — `npx vitest run`: **17,019 passing / 17,022 across 1,351
+files.** (Re-run after `C1-S9-40`; was 16,950 / 16,953 across 1,349 before this
 batch.) The three failures are `C1-S9-09`, BLOCKED: this container runs Node
 22.22.2 against the repository's `.nvmrc` 24.21.0, and nvm cannot fetch the
 Node 24 distribution here. Not counted as passing.

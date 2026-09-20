@@ -371,3 +371,83 @@ describe('a push device is not registered into the wrong scope (C1-S9-39)', () =
     }
   });
 });
+
+/**
+ * Audit C1-S9-40 — four more from the C1-S9-37 inventory, and the distinction
+ * that decides each one: does the fallback give a SMALLER answer, or a
+ * DIFFERENT one?
+ *
+ * A missing first name makes an AI reply blander. A missing asset makes it an
+ * answer to a different question. Both are "the read failed and we continued",
+ * and only one of them is acceptable.
+ */
+const behavior = readFileSync('app/api/behavior/insight/route.ts', 'utf8');
+const aiGift = readFileSync('app/api/ai/gift/route.ts', 'utf8');
+const aiInsights = readFileSync('app/api/ai/insights/route.ts', 'utf8');
+const aiInvest = readFileSync('app/api/ai/invest/route.ts', 'utf8');
+
+describe('a parent is not told their behaviour log is empty (C1-S9-40)', () => {
+  it('a refused read is a 503, not "nothing logged yet"', () => {
+    // At HTTP 200 it read as a statement of fact about their family, inviting
+    // them to start doing what they had already been doing for months — and the
+    // rows behind it include the concerns they recorded.
+    expect(behavior).toContain('error: logsError');
+    expect(bodyOf(behavior, 'if (logsError)', '{ status: 503 }')).toContain('console.error');
+    // The genuine empty state is kept: it is right for a family that has not
+    // started, which is who the copy was written for.
+    expect(behavior).toContain('if (!logs || logs.length === 0)');
+    expect(at(behavior, 'if (logsError)')).toBeLessThan(at(behavior, 'if (!logs || logs.length === 0)'));
+  });
+});
+
+describe('a gift link is not declared dead because a read failed (C1-S9-40)', () => {
+  it('the twin of C1-S9-31, in the same feature', () => {
+    // /pay/<handle> redirects here, so these two are one user journey: someone
+    // outside the family trying to send money.
+    expect(aiGift).toContain('error: linkError');
+    expect(bodyOf(aiGift, 'if (linkError)', '{ status: 503 }')).toContain('console.error');
+    expect(aiGift).toContain("t('gift.thisGiftLinkIsNo')");
+    expect(at(aiGift, 'if (linkError)')).toBeLessThan(at(aiGift, "t('gift.thisGiftLinkIsNo')"));
+  });
+});
+
+describe('an AI answer is not generated for a family with no members (C1-S9-40)', () => {
+  it('the roster read matches the convention its own neighbour sets', () => {
+    // `fetchRows`, ten lines below, already 500s when it cannot load. This read
+    // dropped its error and fed an empty member list into the same prompt.
+    expect(aiInsights).toContain('error: membersError');
+    expect(bodyOf(aiInsights, 'if (membersError)', '{ status: 500 }')).toContain('console.error');
+    expect(at(aiInsights, 'if (membersError)')).toBeLessThan(at(aiInsights, 'rows = await fetchRows('));
+  });
+});
+
+describe('smaller answer versus different answer (C1-S9-40)', () => {
+  it('the invest name lookups degrade and say so', () => {
+    // "your child" instead of a first name is blander, not wrong. Logged, and
+    // deliberately NOT a 503 — a guard asserts that, so the fix cannot be
+    // "tightened" into failing a request over a cosmetic fallback.
+    for (const binding of ['cwError', 'mError']) {
+      expect(aiInvest, binding).toContain(`if (${binding}) console.warn(`);
+    }
+    expect(aiInvest).toContain("let childName = 'your child';");
+    expect(stripComments(aiInvest)).not.toMatch(/if \((cwError|mError)\)[\s\S]{0,200}?status: 503/);
+  });
+
+  it('the asset the child actually chose does not', () => {
+    // A refused read left name, description AND risk level null, and the model
+    // gave a child investing guidance about an asset it knew nothing about —
+    // including the risk level, the one fact this feature exists to teach.
+    expect(aiInvest).toContain('error: assetError');
+    expect(bodyOf(aiInvest, 'if (assetError)', '{ status: 503 }')).toContain('console.error');
+    expect(at(aiInvest, 'if (assetError)')).toBeLessThan(at(aiInvest, 'if (a) { assetName = a.name;'));
+  });
+
+  it('the copy exists in every base catalogue', () => {
+    for (const locale of ['en-US', 'de-DE', 'es-ES', 'fr-FR', 'it-IT', 'nl-NL', 'pt-PT']) {
+      const catalogue = JSON.parse(readFileSync(`lib/i18n/messages/${locale}.json`, 'utf8')) as Record<string, string>;
+      for (const key of ['insight.behaviorDataIsTemporarilyUnavailable', 'gift.giftDataIsTemporarilyUnavailable']) {
+        expect(catalogue[key], `${locale} is missing ${key}`).toBeTruthy();
+      }
+    }
+  });
+});

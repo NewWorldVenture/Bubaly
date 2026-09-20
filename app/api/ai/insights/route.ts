@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { settle } from '@/lib/supabase/settle';
+import { settle, describeReadError } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
@@ -77,8 +77,19 @@ export async function POST(req: Request) {
   const familyId = ctx.active.familyId;
   const tz = ctx.active.family.timezone || 'America/New_York';
 
-  const { data: members } = await supabase
+  // The roster read directly beside this one — `fetchRows` — already fails the
+  // request with a 500 when it cannot load. This one dropped its error and fed
+  // an empty member list into the same prompt, so the insight was generated for
+  // a family the model was told has no members: every name, every per-child
+  // observation, silently absent from an answer that still reads as complete.
+  // Matched to the convention its own neighbour sets. Audit C1-S9-40.
+  const { data: members, error: membersError } = await supabase
     .from('family_members').select('id, display_name').eq('family_id', familyId).eq('is_active', true);
+
+  if (membersError) {
+    console.error('[ai/insights] member read failed', { familyId, error: describeReadError(membersError) });
+    return NextResponse.json({ error: t('insights.couldNotLoadDataFor') }, { status: 500 });
+  }
 
   let rows: Rows = {};
   try {
