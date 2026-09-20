@@ -10,7 +10,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { generateHandoffCode, type LocationKind } from '@/lib/marketplace/handoff';
-import { describeActionError } from '@/lib/supabase/errors';
+import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -131,11 +131,20 @@ export async function confirmHandoffAction(orderId: string): Promise<Result<{ co
     } catch { /* calendar optional — confirmation still succeeds */ }
   }
 
-  const { error } = await sb.from('marketplace_handoffs').update({
+  // The `.eq('status', 'proposed')` predicate is what makes zero rows ORDINARY
+  // here rather than exotic: if the other party confirmed or cancelled a moment
+  // earlier, this matches nothing and returns no error. Without `.select('id')`
+  // the action still answered `{ ok: true, data: { code } }` — handing back a
+  // freshly minted hand-off code that was never stored. `completeHandoffAction`
+  // validates against the STORED `confirm_code`, so the two of them would meet
+  // in person, for a marketplace pickup with a stranger, holding a code that
+  // could never work. Audit C1-S9-23.
+  const { data: confirmed, error } = await sb.from('marketplace_handoffs').update({
     status: 'confirmed', confirmed_at: new Date().toISOString(), confirm_code: code,
     calendar_event_id: calendarEventId,
-  }).eq('order_id', orderId).eq('status', 'proposed');
+  }).eq('order_id', orderId).eq('status', 'proposed').select('id');
   if (error) return actionFailure('confirm the pickup', t('handoff.couldNotConfirmThePickup'), error);
+  if (wroteNoRows(confirmed)) return { ok: false, error: t('handoff.couldNotConfirmThePickup') };
 
   revalidatePath('/marketplace/orders');
   return { ok: true, data: { code } };

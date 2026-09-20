@@ -44,3 +44,23 @@ export function between(source: string, start: string, end: string): string {
   expect(b, `expected ${JSON.stringify(end)} to come after ${JSON.stringify(start)}`).toBeGreaterThan(a);
   return source.slice(a, b);
 }
+
+/**
+ * The body of a named declaration: from `start` forward to the FIRST `end`
+ * that follows it.
+ *
+ * `between()` fixed the empty-slice case but searches both bounds from the
+ * beginning of the file, which is wrong whenever the end needle is a common
+ * token — `return { ok: true };`, `revalidatePath(...)`, `} catch {` — that
+ * also appears in an EARLIER function. Three guards in one session reached for
+ * `between(src, 'export async function foo', 'return { ok: true };')` and got a
+ * reversed range, because the file's first `return { ok: true };` belongs to
+ * somebody else. `between` refused each one, which is the only reason they were
+ * noticed; this gives them the bound they actually meant.
+ */
+export function bodyOf(source: string, start: string, end: string): string {
+  const from = at(source, start);
+  const to = source.indexOf(end, from + start.length);
+  expect(to, `expected ${JSON.stringify(end)} to appear after ${JSON.stringify(start)}`).toBeGreaterThan(-1);
+  return source.slice(from, to + end.length);
+}

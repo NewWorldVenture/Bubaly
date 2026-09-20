@@ -172,6 +172,11 @@ export function MessagesModule() {
   }, [familyId, userId, members, loadConversations]);
 
   // ── Load messages for active conv ──────────────────────────
+  // `toastError` is in the deps because it IS a dependency — this callback
+  // calls it. It is safe to list: `useToast`'s context value is memoised on
+  // `[push]` (see the comment in components/ui/toast.tsx, which says it exists
+  // for exactly this), so the identity is stable and adding it cannot make
+  // this callback — or the effects that depend on it — re-run per toast.
   const loadMessages = useCallback(async (convId: string) => {
     setLoadingMsgs(true);
     const supabase = createClient();
@@ -208,7 +213,7 @@ export function MessagesModule() {
         if (error) { console.error('[messages] read-receipt fallback failed', { message: error.message }); break; }
       }
     })();
-  }, [userId]);
+  }, [userId, toastError]);
 
   useEffect(() => {
     if (!activeConv) return;
@@ -278,7 +283,7 @@ export function MessagesModule() {
       return;
     }
     setSummaries(summarizeConversations(data ?? [], userId));
-  }, [familyId, userId]);
+  }, [familyId, userId, toastError]);
 
   useEffect(() => { void loadSummaries(); }, [conversations, loadSummaries]);
 

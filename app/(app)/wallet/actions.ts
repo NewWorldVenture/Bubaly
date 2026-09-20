@@ -14,7 +14,7 @@ import { walletTierForPlanLevel, walletFeatureEnabled } from '@/lib/wallet/tiers
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { normalizeHandle, handleError } from '@/lib/wallet/pay-handle';
 import { evaluateTrust, roleOf } from '@/lib/trust/server';
-import { describeActionError } from '@/lib/supabase/errors';
+import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { logWalletAudit } from '@/lib/server/audit';
 
 const WALLET_TERMS_VERSION = '2026-06-25';
@@ -268,13 +268,20 @@ export async function saveAllowanceRuleAction(input: {
   // Schedule from the family's calendar day: a parent setting up an allowance
   // on Sunday evening in California would otherwise have it dated from Monday.
   const next = nextRunDate(dayKeyInTz(new Date(), ctx.active.family.timezone || 'UTC'), input.cadence);
-  const { error } = input.id
+  // Same reasoning as the toggle: an edit that matches no row leaves the OLD
+  // amount and cadence live in the scheduler while the parent is shown the new
+  // ones. Only the update branch can match nothing — an insert either lands or
+  // errors — so only it is checked. Audit C1-S9-23.
+  const { data: saved, error } = input.id
     ? await supabase.from('allowance_rules')
         .update({ amount_cents: amount, cadence: input.cadence, is_active: true, next_run_on: next })
         .eq('id', input.id).eq('family_id', familyId)
+        .select('id')
     : await supabase.from('allowance_rules')
-        .insert({ family_id: familyId, child_wallet_id: input.childWalletId, amount_cents: amount, cadence: input.cadence, is_active: true, next_run_on: next, created_by: ctx.user.id });
+        .insert({ family_id: familyId, child_wallet_id: input.childWalletId, amount_cents: amount, cadence: input.cadence, is_active: true, next_run_on: next, created_by: ctx.user.id })
+        .select('id');
   if (error) return actionFailure(error, t('actions.couldNotSaveThatAllowance'));
+  if (input.id && wroteNoRows(saved)) return { ok: false, error: t('actions.couldNotSaveThatAllowance') };
 
   revalidatePath('/wallet');
   return { ok: true };
@@ -286,9 +293,18 @@ export async function toggleAllowanceRuleAction(input: { id: string; isActive: b
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentGuardianCan5') };
   const supabase = await createServer();
-  const { error } = await supabase.from('allowance_rules')
-    .update({ is_active: input.isActive }).eq('id', input.id).eq('family_id', ctx.active.familyId);
+  // `.select('id')` because this pause has a scheduler behind it. The cron at
+  // app/api/cron/wallet-allowance/route.ts selects rules with
+  // `.eq('is_active', true)`, so a pause that matches ZERO rows does not just
+  // fail to update a screen — the child keeps being paid, every week, while the
+  // parent has been told the allowance is paused. `allowance_rules` also
+  // carries a restrictive manager-only UPDATE guard (migration 0306), which is
+  // exactly the shape that yields zero rows with no error. Audit C1-S9-23.
+  const { data: toggled, error } = await supabase.from('allowance_rules')
+    .update({ is_active: input.isActive }).eq('id', input.id).eq('family_id', ctx.active.familyId)
+    .select('id');
   if (error) return actionFailure(error, t('actions.couldNotUpdateThatAllowance'));
+  if (wroteNoRows(toggled)) return { ok: false, error: t('actions.couldNotUpdateThatAllowance') };
   revalidatePath('/wallet/allowance');
   return { ok: true };
 }

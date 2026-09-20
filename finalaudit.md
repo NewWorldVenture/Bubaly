@@ -32232,6 +32232,159 @@ bounded a finding the scan had ranked higher** (the first: `C1-S9-16`'s wallet
 deletes, where the error WAS captured and my scanner's look-back window was too
 short). A scan ranks by shape; only the code says what the shape costs.
 
+---
+
+## Pass AG — three workers, disjoint scopes, and what verification did to their rankings
+
+*Session 9 continued, 2026-09-20. Claude-1 dispatched three parallel workers on
+strictly disjoint, ANALYSIS-ONLY scopes — the 24 remaining pages from
+`C1-S9-19`, the 116 remaining unconfirmed `'use server'` writes from
+`C1-S9-16`, and the 117 API routes not already covered. Analysis-only was
+deliberate: an earlier round of workers was killed mid-EDIT by a rate limit and
+left the tree to be cleaned up. A worker that only reads cannot do that.*
+
+**Every finding below was re-verified by Claude-1 in the source before any fix
+was applied.** That is not ceremony: the fixes that follow change money,
+permissions and a child's allowance, and the standing rule in this audit is that
+a report is a claim until the code says otherwise.
+
+---
+
+### `[CLAUDE-1][HIGH][PAGES]` C1-S9-22 — a form prefilled with invented defaults, over an upsert that never reads
+
+**File:** `app/(app)/dashboard/setup/page.tsx:41`
+
+**Verified.** `const { data: fo }` drops its error and falls back to
+`{ adults: 1, children: 0, childAges: [], goals: [], referralSource: '' }`. And
+the receiving action, `saveFamilyDetailsAction`
+(`app/onboarding/actions.ts:184`), is an `upsert` on
+`onConflict: 'family_id'` that performs **no read of its own** — confirmed by
+reading it. So it has nothing to merge with and no read error to notice.
+
+**Consequence.** A household with three children, their ages and four chosen
+goals opens "Finish setting up" after a transient read failure and sees
+*1 adult, 0 children, no ages, no goals*. It reads as "we never captured this".
+Whatever they submit from that screen overwrites the real row — and the same
+action then pushes the household shape into the CRM through the service role
+and fires the onboarding automation, so the loss propagates outward.
+
+**Fix, and why it differs from `C1-S9-19`'s.** The display pages there render a
+banner and carry on, because rendering is all they do. Here the form IS the
+destructive part, and a form pre-filled with fabricated defaults is worse than
+no form: it invites precisely the submission that causes the loss. So when the
+prefill cannot be read, the form is **withheld** and the banner explains why.
+Fail-closed, because the failure mode is a silent overwrite.
+
+---
+
+### `[CLAUDE-1][HIGH][WRITES]` C1-S9-23 — four state changes reported as done without being confirmed
+
+All four verified in source, all four with a specific consequence rather than a
+shape. All now `.select(...)` + a zero-row check, reusing existing translated
+messages.
+
+**(a) An allowance pause that does not pause.** `toggleAllowanceRuleAction`
+(`app/(app)/wallet/actions.ts:289`) returned `{ ok: true }` for an update it
+never confirmed. The consequence is checkable and was checked:
+`app/api/cron/wallet-allowance/route.ts:41` selects rules
+`.eq('is_active', true)`, so a pause matching zero rows means **the child keeps
+being paid every week** while the parent has been told it stopped.
+`allowance_rules` also carries a restrictive manager-only UPDATE guard
+(migration 0306) — exactly the shape that yields zero rows and no error. The
+sibling save path has the same hole: an edit that matches nothing leaves the OLD
+amount live in the scheduler behind a screen showing the new one.
+
+**(b) A hand-off code handed over but never stored.** `confirmHandoffAction`
+(`app/(app)/marketplace/handoff/actions.ts:134`) updates
+`.eq('order_id', …).eq('status', 'proposed')` — and that status predicate makes
+zero rows ORDINARY, not exotic: the other party confirming or cancelling a
+moment earlier does it. The action still returned
+`{ ok: true, data: { code } }`, handing back a freshly minted code.
+`completeHandoffAction` validates against the **stored** `confirm_code`, so the
+two of them would meet in person, for a marketplace pickup with a stranger,
+holding a code that could never work.
+
+**(c) The autopilot dial.** `setConciergeAutopilotAction`
+(`app/(app)/dashboard/concierge/actions.ts:302` and `:319`) governs whether
+Bubaly **executes plans on its own, asks first, or stays hands-off**. The file
+had already hardened the READ above it, with a comment explaining why, and then
+reported success for a write it never confirmed. A parent who sets the dial to
+hands-off, is told it worked, and finds the AI still acting is the worst outcome
+this surface has. Both branches are fixed — including the 23505 retry, which
+re-filters on four equalities against a row a racing request just wrote and so
+has its own way of matching nothing.
+
+**(d) Same file, same class:** the allowance save branch, above.
+
+---
+
+### `[CLAUDE-1][LOW][SECURITY]` C1-S9-24 — unescaped markup into a trusted support inbox
+
+**File:** `app/api/contact/route.ts:101`
+
+**Verified.** `${name}` went into the outbound HTML raw while `${message}` was
+escaped **on the same line** — so the escaping was intended and one value was
+missed. `contactSchema` bounds `name` by length only (2–120), not by character,
+and the endpoint is deliberately anonymous.
+
+**Consequence.** An unauthenticated visitor can put arbitrary markup into an
+email the support team trusts — a tracking pixel, or an anchor whose text and
+`href` disagree. Low, because it reaches an internal inbox rather than a user,
+and modern mail clients strip much of it.
+
+**Fix.** All four interpolations escaped through one helper covering
+`& < > " '` — not just `<`, which leaves attribute-context injection open.
+
+---
+
+### What the workers got RIGHT that changed my ranking
+
+Both triage workers downgraded findings by reading the code downstream, which is
+the behaviour this audit values most:
+
+- The `marketplace/saved` page's false-empty is LOW **because**
+  `toggleSaveAction` read-then-checks its error — the worker cited the line.
+- `app/s/[slug]` fails CLOSED and `submitResponseAction` re-reads and re-checks
+  `status !== 'active'`, so no bad response can land.
+- The `billing` page's suppressed fee notice is self-cancelling: the same
+  `stripe_settings` read failure that hides the notice also suppresses the
+  charge, because `serviceFeeAddInvoiceItems` returns undefined for null
+  settings. A consumer-disclosure defect that is not one.
+- `dashboard/workload/actions.ts` confirms its write through
+  `{ count: 'exact' }` rather than `.select()` — the one such case in 116, and
+  adding `.select()` would be redundant.
+
+### The API sweep came back CLEAN on its most important axis
+
+117 routes examined; **no route reaches a database write or a privileged read
+without a gate.** That is recorded with its evidence, because a sweep that
+reports nothing is worth exactly what its instrument is worth: the worker
+enumerated the entire public allowlist from `middleware.ts` and
+`lib/auth/route-access.ts` and verified each entry's gate **by reading the
+function body**, including several that look ungated by their imports —
+`/api/guardian/escalate` (bearer secret, fail-closed on an unset secret),
+`/api/webhooks/resend` (a private Svix HMAC verify with a 300s replay window),
+and `push/*` and `gif/search`, which call `auth.getUser()` inline. It also
+confirmed the trap the code comments warn about is genuinely closed:
+`'/api/contact'` in the public list does not match `/api/contact-center/...`.
+
+**Open, from that sweep, not fixed here:** `api/ai/savings` reports "On track"
+built from four dropped read errors and an unbounded `transactions` read;
+`api/ai/habits` computes streaks from a possibly-truncated `readAll` whose error
+it discards — the same defect this repo already fixed twice with that helper
+(`C4-S4-02`, `C4-S4-06`). Both are recorded as the next tier rather than
+claimed.
+
+### A mistake in my own method, recorded
+
+While mutation-testing these five fixes I backed the files up by `basename` —
+and three of the five are called `actions.ts`, so the backups overwrote each
+other and a restore put the wrong file back, breaking two exports. Caught
+immediately by `tsc`, repaired from git, and the mutations re-run with unique
+names. The lesson is the same one this audit keeps finding in the product: a
+key that is not unique will silently collide, and the collision looks like
+success.
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -32277,22 +32430,44 @@ short). A scan ranks by shape; only the code says what the shape costs.
 
 # Final Regression
 
-*Re-run 2026-09-19 after merging the parallel session's Pass J/K into this
-branch. Everything here is a command that was actually run, with its output.*
+*Re-run 2026-09-20, Session 9, after merge #6 and Passes AF/AG. Everything here
+is a command that was actually run in this container, with its result. Where a
+gate could NOT be run here, it says so and why rather than borrowing CI's word
+for it.*
 
 ## Build
-Status: **NOT RUN IN THIS SESSION** — `next build` is exercised by CI's
-`Typecheck · Lint · Test · Build` job, which is green on this branch's recent
-heads. Re-running it locally is pending.
+Status: ✅ PASS — `npx next build`, **exit 0**. Run locally this session rather
+than delegated: the previous entry said "exercised by CI, re-running locally is
+pending", which is a gate reported on somebody else's authority.
 
 ## Type Check
-Status: ✅ PASS — `npx tsc --noEmit`, exit 0, after the merge.
+Status: ✅ PASS — `npx tsc --noEmit`, exit 0, re-run after every change in this
+session.
 
 ## Lint
-Status: **DELEGATED TO CI** — the `Typecheck · Lint · Test · Build` job runs it.
+Status: ✅ PASS — `npx next lint`: **0 errors, 1 warning**, down from 3. The two
+`messages-module.tsx` `toastError` dependency warnings were fixed properly
+rather than suppressed: `useToast`'s context value is `useMemo`'d on `[push]`
+(the provider's own comment says it exists for exactly this), so listing the
+dependency is correct AND cannot cause a re-render per toast. The one remaining
+warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
+standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **1,258 files / 14,119 tests / 0 failures.**
+Status: ✅ PASS — `npx vitest run`: **16,950 passing / 16,953 across 1,349
+files.** The three failures are `C1-S9-09`, BLOCKED: this container runs Node
+22.22.2 against the repository's `.nvmrc` 24.21.0, and nvm cannot fetch the
+Node 24 distribution here. Not counted as passing.
+
+## End-to-End (browser)
+Status: ⚠️ **NOT CONFIRMED** — and this is the honest entry, not a hedge.
+`C1-S9-17` fixed a genuine 13-failure E2E run and was verified by reproducing
+the harness's import-graph walk standalone, but the CI runs that would confirm
+it were **cancelled three times by this session's own pushes** (`C1-S9-20`):
+`ci.yml` sets `concurrency: cancel-in-progress`, and the E2E job takes ~15
+minutes. E2E cannot be run in this container (it needs a Next production build
+plus a Supabase stack). Until a run completes, the fix is *locally reproduced,
+not CI-confirmed*.
 
 ## Authentication
 Status: ✅ PASS (static + fake-driven) — every server action reaches auth

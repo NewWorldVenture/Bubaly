@@ -299,10 +299,17 @@ export async function setConciergeAutopilotAction(level: AutopilotLevel): Promis
   }
 
   if (existing?.id) {
-    const { error } = await sb.from('trust_policies')
+    // This dial decides whether Bubaly executes plans on its own, asks first,
+    // or stays hands-off. The file already hardened the READ above (with a
+    // comment on why) and then reported success for a WRITE it never confirmed:
+    // a parent who sets the dial to hands-off, is told it worked, and finds the
+    // AI still acting is the worst outcome this surface has. Audit C1-S9-23.
+    const { data: moved, error } = await sb.from('trust_policies')
       .update({ effect, enabled: true })
-      .eq('id', existing.id).eq('family_id', familyId);
+      .eq('id', existing.id).eq('family_id', familyId)
+      .select('id');
     if (error) return { ok: false, error: error.message };
+    if (!moved?.length) return { ok: false, error: t('actions.couldNotUpdateThatPolicy') };
   } else {
     const { error } = await sb.from('trust_policies').insert({
       family_id: familyId, name: AUTOPILOT_POLICY_NAME,
@@ -316,11 +323,16 @@ export async function setConciergeAutopilotAction(level: AutopilotLevel): Promis
     // winner already carries a level the parent chose; re-apply ours over it
     // rather than reporting a failure for a dial that is about to be right.
     if (error?.code === '23505') {
-      const { error: retryError } = await sb.from('trust_policies')
+      // Four equalities against a row the RACING request just wrote. If that
+      // winner does not match all four, this matches nothing — and the parent
+      // was told the dial moved. Same confirmation as the direct branch above.
+      const { data: retried, error: retryError } = await sb.from('trust_policies')
         .update({ effect, enabled: true })
         .eq('family_id', familyId).eq('name', AUTOPILOT_POLICY_NAME)
-        .eq('is_system', true).eq('enabled', true);
+        .eq('is_system', true).eq('enabled', true)
+        .select('id');
       if (retryError) return { ok: false, error: retryError.message };
+      if (!retried?.length) return { ok: false, error: t('actions.couldNotUpdateThatPolicy') };
     } else if (error) {
       return { ok: false, error: error.message };
     }

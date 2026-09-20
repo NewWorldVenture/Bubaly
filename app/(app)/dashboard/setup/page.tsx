@@ -8,6 +8,8 @@ import { SectionCard, ScoreRing } from '@/components/family/shell';
 import { resolveCompleteness } from '@/lib/server/onboarding-progress';
 import { CompleteSetupForm } from '@/components/onboarding/complete-setup';
 import { getTranslations } from '@/lib/i18n/server';
+import { PartialReadBanner } from '@/components/ui/partial-read-banner';
+import { describeReadError } from '@/lib/supabase/settle';
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getTranslations())('completeSetupCopy.title') };
@@ -37,12 +39,29 @@ export default async function CompleteSetupPage() {
   const { result, progress } = await resolveCompleteness(admin, ctx.user.id, familyId);
 
   // Pre-fill the questionnaire from any existing family_onboarding row.
+  //
+  // The error was dropped here, and that made this the most expensive false
+  // empty in the app rather than a cosmetic one. `saveFamilyDetailsAction`
+  // (app/onboarding/actions.ts) is an `upsert` on `onConflict: 'family_id'`
+  // that performs NO read of its own — so it has nothing to merge with and no
+  // read error to notice. A refused read here therefore showed a family with
+  // three children and four chosen goals a form reading "1 adult, 0 children,
+  // no goals", and whatever they submitted from that screen overwrote the real
+  // row. It then propagated: the same action pushes the household shape into
+  // the CRM through the service role and fires the onboarding automation.
+  //
+  // So this one does not get a banner-and-carry-on like the display pages. The
+  // form is the destructive part, and a form pre-filled with fabricated
+  // defaults is worse than no form: it invites exactly the submission that
+  // causes the loss. When the prefill cannot be read, the form is withheld and
+  // the reason is shown. Audit C1-S9-22.
   let initial = { adults: 1, children: 0, childAges: [] as number[], goals: [] as string[], referralSource: '' };
-  const { data: fo } = await admin
+  const { data: fo, error: foError } = await admin
     .from('family_onboarding')
     .select('household_adults, household_children, child_ages, goals, referral_source')
     .eq('family_id', familyId)
     .maybeSingle();
+  const readFailures = foError ? [`family_onboarding: ${describeReadError(foError)}`] : [];
   if (fo) {
     initial = {
       adults: fo.household_adults ?? 1,
@@ -108,7 +127,9 @@ export default async function CompleteSetupPage() {
             <Sparkles className="h-3.5 w-3.5 shrink-0 text-brand-text" />
             <span>{t('dashboardSetup.savedToYourExistingFamily')} <span className="font-medium text-fg">{ctx.active.family.name}</span>.</span>
           </div>
-          <CompleteSetupForm familyId={familyId} initial={initial} />
+          {readFailures.length > 0
+            ? <PartialReadBanner title={t('shared.someInformationCouldNotBeLoaded')} failures={readFailures} />
+            : <CompleteSetupForm familyId={familyId} initial={initial} />}
         </SectionCard>
       </div>
     </div>

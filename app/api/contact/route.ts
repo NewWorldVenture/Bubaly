@@ -9,6 +9,11 @@ import { fireAutomationEvent } from '@/lib/marketing/automation-events';
 import { eventSubjectKey } from '@/lib/marketing/automation-triggers';
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 
+/** Escape every HTML-significant character, not just `<`. */
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+}
+
 export const runtime = 'nodejs';
 const MAX_CONTACT_REQUEST_BYTES = 16_384;
 
@@ -98,7 +103,13 @@ export async function POST(req: Request) {
     to,
     replyTo: email,
     subject: `[${topicLabel}] New Bubaly contact from ${name}`,
-    html: `<p><strong>${name}</strong> (${email}) — <em>${topicLabel}</em> — wrote:</p><p>${message.replace(/</g, '&lt;')}</p>`,
+    // Every interpolated value is escaped, not just the message body. `name` was
+    // dropped in raw while `message` was escaped ON THE SAME LINE, so the intent
+    // was clearly there — and `contactSchema` bounds `name` only by length
+    // (2–120), not by character. An anonymous visitor could put arbitrary markup
+    // into a mail the support team trusts: a tracking pixel, or an anchor whose
+    // text and href disagree. Audit C1-S9-24.
+    html: `<p><strong>${escapeHtml(name)}</strong> (${escapeHtml(email)}) — <em>${escapeHtml(topicLabel)}</em> — wrote:</p><p>${escapeHtml(message)}</p>`,
   });
 
   if (!result.ok) {
