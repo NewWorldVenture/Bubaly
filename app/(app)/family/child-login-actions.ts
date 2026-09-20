@@ -46,6 +46,23 @@ export async function createChildLoginAction(input: {
   const { data: taken } = await admin.from('child_logins').select('id').eq('username', username).limit(1);
   if (taken && taken.length > 0) return { ok: false, error: t('childLoginActions.thatUsernameIsTakenTry') };
 
+  // A username can be reused after an earlier child login was removed, so clear
+  // any stale throttle row: without this the brand-new child inherits whatever
+  // lockout the previous holder of this username left behind.
+  //
+  // Done HERE, before anything is created, and its error is no longer dropped.
+  // As the last step with a discarded result it failed silently and the parent
+  // was told the login was ready — while the child could not sign in at all,
+  // for a reason nothing on screen mentioned. It fails SAFE (more locked, never
+  // less), which is why this is a usability defect rather than a security one,
+  // but "your child's new login is ready" was simply untrue. Running it first
+  // means a failure costs nothing: no auth user, no rows, an honest error.
+  // Audit C1-S9-16.
+  const { error: staleThrottleErr } = await admin.from('child_login_throttle')
+    .update({ fails: 0, locked_until: null, window_start: new Date().toISOString() })
+    .eq('username', username);
+  if (staleThrottleErr) return { ok: false, error: t('childLoginActions.couldNotCreateTheLogin') };
+
   const email = syntheticChildEmail(username);
   const password = deriveChildPassword(sec, username, input.pin);
 
@@ -80,13 +97,6 @@ export async function createChildLoginAction(input: {
     return { ok: false, error: t('childLoginActions.couldNotFinishSettingUp') };
   }
 
-  // A username can be reused after an earlier child login was removed. Clear any
-  // stale throttle row so the brand-new child doesn't inherit a leftover lockout
-  // from whoever held this username before.
-  await admin.from('child_login_throttle')
-    .update({ fails: 0, locked_until: null, window_start: new Date().toISOString() })
-    .eq('username', username);
-
   await logAudit(admin, {
     familyId: member.family_id, actorId: ctx.user.id, action: 'create',
     resource: 'child_logins', resourceId: member.id, metadata: { username },
@@ -108,15 +118,28 @@ export async function resetChildPinAction(input: { memberId: string; pin: string
     .select('user_id, username, family_id').eq('member_id', input.memberId).maybeSingle();
   if (!row || row.family_id !== ctx.active.familyId) return { ok: false, error: t('childLoginActions.loginNotFound') };
 
+  // A parent reset must also lift any brute-force lockout on that username, so
+  // the child can sign in immediately with the new PIN — that is the POINT of
+  // the reset, not a tidy-up after it.
+  //
+  // So it runs BEFORE the password change and its error is no longer dropped.
+  // Afterwards, with the result discarded, a failed clear left the child locked
+  // out with a PIN that was genuinely changed, and the parent was told the reset
+  // worked; the only visible symptom was a child who still could not sign in.
+  // Reporting a hard failure at that point would have been its own lie, because
+  // the PIN really had changed. Ordering it first makes the outcome
+  // all-or-nothing: nothing has happened yet, so an error here is truthful, and
+  // a lockout cleared just before a password change that then fails is harmless
+  // — it lifts a lockout slightly early on credentials that still work.
+  // Audit C1-S9-16.
+  const { error: throttleErr } = await admin.from('child_login_throttle')
+    .update({ fails: 0, locked_until: null, window_start: new Date().toISOString() })
+    .eq('username', normalizeUsername(row.username));
+  if (throttleErr) return { ok: false, error: t('childLoginActions.couldNotResetThePin') };
+
   const password = deriveChildPassword(sec, row.username, input.pin);
   const { error } = await admin.auth.admin.updateUserById(row.user_id, { password });
   if (error) return { ok: false, error: t('childLoginActions.couldNotResetThePin') };
-
-  // A parent reset should also lift any brute-force lockout on that username, so
-  // the child can sign in immediately with the new PIN.
-  await admin.from('child_login_throttle')
-    .update({ fails: 0, locked_until: null, window_start: new Date().toISOString() })
-    .eq('username', normalizeUsername(row.username));
 
   await logAudit(admin, {
     familyId: row.family_id, actorId: ctx.user.id, action: 'update',

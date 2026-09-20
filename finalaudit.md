@@ -31890,6 +31890,81 @@ metadata, which looked like a fourth instance until the prefix list was read —
 `/auth` covers it. Recorded because the first pass over these pages counted it
 as a finding, and it was not one.
 
+---
+
+### `[CLAUDE-1][MEDIUM][SERVER ACTIONS]` C1-S9-16 — two actions that reported success for work that may not have happened
+
+**Files:** `app/(app)/wallet/hub-actions.ts`, `app/(app)/family/child-login-actions.ts`
+
+**Found by** scanning all 135 `'use server'` files — every one of which is a
+public POST endpoint — for mutations with no confirmation. 124 real Supabase
+`update`/`delete` chains lack a `.select()`. Most are low-consequence marks
+(`is_read: true`) where nobody is told anything; these two are not.
+
+#### (a) A household's money records, deleted or not
+
+`deleteWalletRowAction` fans a five-table allowlist — `wallet_cards`,
+`wallet_passes`, `wallet_rewards`, `financial_accounts`, `transactions` —
+through `.delete().eq('id', …).eq('family_id', …)` and answered
+`{ ok: true }` whenever there was no error. PostgREST returns affected rows only
+when asked, so without `.select()` `data` is null whether ONE row was deleted or
+NONE were; the action could not tell even in principle.
+
+Matching nothing is ordinary here: a stale tab, a row another manager removed a
+moment earlier, an id from a different family, or an RLS refusal that yields
+zero rows rather than an error. The user was then told their payment card or
+transaction was deleted while it was still there, with only a refresh to
+contradict it. On `financial_accounts` and `transactions` that is the
+household's money.
+
+**Fix.** `.select('id')` on all five branches plus `wroteNoRows`, reusing the
+repository's own helper and the existing translated failure message — a
+zero-row delete IS a failure to delete from where the user stands. The
+distinction is kept in the logs, where it matters: an error means the database
+objected; this means it did as asked and nothing matched.
+
+#### (b) A child left locked out by a reset meant to let them in
+
+Both `child_login_throttle` clears were bare `await`s with their result
+discarded, and both ran LAST.
+
+`resetChildPinAction` exists so a parent can get a locked-out child signing in
+again. It changed the PIN, then tried to clear the lockout. If that clear
+failed, the PIN really had changed but the child stayed locked out — and the
+parent was told the reset worked. The only symptom was a child who still could
+not sign in, for a reason nothing on screen mentioned. `createChildLoginAction`
+had the same shape: a brand-new login inheriting a previous holder's lockout,
+reported as ready.
+
+Both fail SAFE — more locked, never less — which is why this is a usability
+defect rather than a security one. "Your child can sign in now" was still untrue.
+
+**Fix, by ordering rather than by reporting.** Returning a hard failure after the
+password had changed would have been its own lie. Both clears now run FIRST,
+before anything is created or changed, with their errors checked. A failure then
+costs nothing and an error is truthful; a lockout lifted just before a password
+change that then fails is harmless, since it lifts a lockout slightly early on
+credentials that still work.
+
+**Status:** FIXED. Guard:
+`tests/a-write-the-user-is-told-about-is-confirmed.test.ts`, six cases, proved
+red by removing one branch's `.select('id')` and by restoring the reset's
+original ordering. It also pins the manager-only gate on the two money tables,
+so confirmation work cannot quietly cost the authorization sitting beside it.
+
+**Checked and NOT a finding:** the two throttle clears match `username`
+differently — one bare, one through `normalizeUsername`. The create path's
+variable is already normalised at the top of the function, so the two agree in
+effect. It read like a guard that could never match and is not one.
+
+**The scan's own limits, stated rather than implied:** 124 unconfirmed mutations
+remain, triaged by consequence rather than all fixed. The instrument also
+produced false positives twice — it flagged `crypto.update()` as a database
+write, and its look-back window reported the wallet deletes as discarding their
+error when the destructure simply sat on a later line. Both were caught by
+reading the code, which is the only reason this entry describes two findings
+rather than five.
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,

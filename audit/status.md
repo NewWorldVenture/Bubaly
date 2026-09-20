@@ -1145,5 +1145,14 @@ four are not named actions.ts, so the original derivation encoded two
 assumptions the codebase does not honour. `C1-S9-15` came out of the same
 re-derivation — /kid-login was the one sign-in form neither disallowed in
 robots.txt nor marked noindex.
-OPEN: nothing outstanding from this pass.
+SERVER-ACTIONS PASS: scanned all 135 'use server' files (every one a public POST
+endpoint) for unconfirmed mutations; 124 real Supabase update/delete chains lack
+a .select(). Triaged by consequence rather than fixed wholesale. `C1-S9-16`
+fixes the two that tell the user it worked: the five-table wallet delete
+(financial_accounts and transactions among them) and both child-login lockout
+clears, the second by REORDERING so the outcome is all-or-nothing rather than a
+half-success reported as success.
+OPEN: the remaining 122 unconfirmed mutations are mostly low-consequence marks
+(is_read and similar) where nothing is reported to a user; they are recorded as
+triaged, not cleared.
 LAST-UPDATE: 2026-09-20
