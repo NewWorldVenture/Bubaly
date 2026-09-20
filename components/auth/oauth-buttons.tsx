@@ -1,11 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
+import { signInWithOwnedOAuth } from '@/lib/auth/pkce-initiation-client';
 import { useToast } from '@/components/ui/toast';
 import { GoogleIcon } from '@/components/auth/google-icon';
-import { safeInternalRedirect } from '@/lib/auth/redirect';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
 // Shared style for every auth provider button (Google · phone · email) so the
@@ -23,31 +22,43 @@ export function OAuthButtons({ next }: { next?: string }) {
   const t = useTranslations();
   const { error: toastError } = useToast();
   const [pending, setPending] = useState(false);
+  const mounted = useRef(false);
+  const busy = useRef(false);
+  const attempt = useRef(0);
+  const currentNext = useRef(next);
+
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; attempt.current += 1; };
+  }, []);
+  useLayoutEffect(() => {
+    if (currentNext.current !== next) {
+      currentNext.current = next;
+      attempt.current += 1;
+      busy.current = false;
+      setPending(false);
+    }
+  }, [next]);
 
   async function signInWithGoogle() {
-    if (pending) return;
+    if (!mounted.current || currentNext.current !== next || busy.current) return;
+    busy.current = true;
+    const thisAttempt = ++attempt.current;
+    const canCommit = () => mounted.current && currentNext.current === next && attempt.current === thisAttempt;
     setPending(true);
     try {
-      const supabase = createClient();
-      const destination = safeInternalRedirect(next, '');
-      const nextParam = destination ? `?next=${encodeURIComponent(destination)}` : '';
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback${nextParam}`,
-          // Offline access so calendar sync can refresh the token later.
-          queryParams: { access_type: 'offline', prompt: 'consent' },
-        },
-      });
-      if (error) throw error;
+      await signInWithOwnedOAuth(next, canCommit);
       // On success the browser is redirected to the provider — keep the spinner.
     } catch (err) {
+      if (!canCommit()) return;
+      busy.current = false;
+      setPending(false);
+      if (err instanceof Error && err.name === 'AuthSessionInterruptedError') return;
       const msg = err instanceof Error ? err.message : 'Could not continue with Google';
       // Surface a clearer hint when the provider isn't enabled in Supabase yet.
       toastError(/provider is not enabled|unsupported provider/i.test(msg)
         ? "Google sign-in isn't enabled yet. Try email instead."
         : msg);
-      setPending(false);
     }
   }
 

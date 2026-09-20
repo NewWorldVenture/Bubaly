@@ -5,7 +5,6 @@ import { isTwilioBodyTooLarge, isValidGuardianEventId } from '@/lib/guardian/cal
 
 const root = process.cwd();
 const callbackRoutes = [
-  'app/api/guardian/inbound/sms/route.ts',
   'app/api/guardian/inbound/whatsapp/route.ts',
   'app/api/guardian/inbound/voice/route.ts',
   'app/api/guardian/screen/route.ts',
@@ -29,19 +28,41 @@ describe('Guardian callback replay and input boundaries', () => {
 
   it.each(callbackRoutes)('claims %s before downstream side effects', (relativePath) => {
     const source = readFileSync(resolve(root, relativePath), 'utf8');
-    expect(source).toContain('claimGuardianCallback');
+    const voicemail = relativePath.endsWith('/status/voicemail/route.ts');
+    const claim = voicemail ? 'claimGuardianVoicemail' : 'claimGuardianCallback';
+    expect(source).toContain(claim);
     expect(source).toContain('readBoundedRequestFormData');
-    expect(source).toContain('markGuardianCallbackProcessed');
+    expect(source).toContain(voicemail ? 'finishGuardianVoicemail' : 'markGuardianCallbackProcessed');
 
-    const claimIndex = source.indexOf('await claimGuardianCallback');
+    const claimIndex = source.indexOf(`await ${claim}`);
     expect(claimIndex).toBeGreaterThanOrEqual(0);
     const sideEffectIndexes = [
       source.indexOf('runDecisionPipeline('),
       source.indexOf('detectScamWithAI('),
       source.indexOf('screeningTurn({'),
       source.indexOf("from('notifications')"),
+      source.indexOf('notifyGuardianSms('),
     ].filter((index) => index >= 0);
     expect(sideEffectIndexes.every((index) => claimIndex < index)).toBe(true);
+  });
+
+  it('keeps signed SMS parsing before the shared leased processor for both ingress and recovery', () => {
+    const route = readFileSync(resolve(root, 'app/api/guardian/inbound/sms/route.ts'), 'utf8');
+    expect(route.indexOf('await readBoundedRequestFormData')).toBeLessThan(route.indexOf('validateTwilioSignature(sig'));
+    expect(route.indexOf('validateTwilioSignature(sig')).toBeLessThan(route.indexOf('await receiveGuardianSms('));
+    expect(route).not.toMatch(/runDecisionPipeline\(|detectScamWithAI\(|from\('notifications'\)/);
+    const processor = readFileSync(resolve(root, 'lib/guardian/sms-processing.ts'), 'utf8');
+    for (const entry of ['receiveGuardianSms', 'resumeGuardianSms']) {
+      const source = processor.slice(processor.indexOf(`export async function ${entry}`));
+      expect(source.indexOf('await claimGuardianSms(')).toBeGreaterThanOrEqual(0);
+      expect(source.indexOf('await claimGuardianSms(')).toBeLessThan(source.indexOf('await processOwned('));
+    }
+    const recovery = processor.slice(processor.indexOf('export async function resumeGuardianSms'));
+    expect(recovery.indexOf('await readGuardianSmsReceiptById(')).toBeLessThan(recovery.indexOf('await claimGuardianSms('));
+    expect(processor).toContain('await finishGuardianSms(');
+    expect(processor).toContain('await markGuardianSmsCompleted(');
+    // Real signed HTTP execution tests also assert no classifier/write precedes
+    // a verified lease, including stale workers and trusted-receipt recovery.
   });
 
   it('keeps screening callbacks bounded to five exact turns', () => {

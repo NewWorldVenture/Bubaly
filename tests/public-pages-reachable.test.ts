@@ -138,12 +138,14 @@ describe('every self-authenticating API route is past the middleware', () => {
     .filter((line) => !line.trim().startsWith('//'))
     .join('\n');
   const publicPrefixes = Array.from(entries.matchAll(/'([^']+)'/g), (m) => m[1]);
-  // The assistant bridge is exempted by exact path and POST only, not by prefix.
+  // Some groups are exempted by EXACT path rather than by prefix — the
+  // assistant bridge (POST only) and the Contact Center callbacks — because a
+  // prefix would also open any settings or data endpoint added under it later.
+  // Every such allowlist is read, not just the ones that existed when this was
+  // written, so a third one does not silently fail every route it covers.
   const exactPublic = Array.from(
-    /const PUBLIC_ASSISTANT_CALLBACKS = new Set\(\[([\s\S]*?)\]\)/.exec(middleware)?.[1]
-      .matchAll(/'([^']+)'/g) ?? [],
-    (m) => m[1],
-  );
+    middleware.matchAll(/const PUBLIC_\w+ = new Set\(\[([\s\S]*?)\]\)/g),
+  ).flatMap((set) => Array.from(set[1].matchAll(/'([^']+)'/g), (m) => m[1]));
   const isPublic = (path: string) =>
     exactPublic.includes(path) || publicPrefixes.some((p) => path === p || path.startsWith(p + '/'));
 
@@ -179,6 +181,10 @@ describe('every self-authenticating API route is past the middleware', () => {
   it('found the routes it is supposed to be checking', () => {
     expect(all.length).toBeGreaterThan(100);
     expect(providerCalled.length).toBeGreaterThanOrEqual(18);
+    // An allowlist parse that silently found nothing would fail every route it
+    // covers and read as a middleware defect rather than a test one.
+    expect(exactPublic.length, 'no exact-path allowlist parsed out of the middleware')
+      .toBeGreaterThanOrEqual(2);
     expect(providerCalled, 'the Contact Center webhooks are the canonical case')
       .toContain('/api/contact-center/sms');
     expect(providerCalled, 'a session-derived OAuth callback is not provider-called')

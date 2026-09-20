@@ -8,8 +8,8 @@ import { sendReactEmail, emailEnabled } from '@/lib/email';
 import { NotificationDigestEmail } from '@/lib/emails/notification-digest';
 import { iconForType, groupByUser } from '@/lib/notifications/digest';
 import * as React from 'react';
+import { listAllAuthUsers } from './list-all-auth-users';
 import { childrenBlockedOn } from '@/lib/notifications/child-channels';
-import { readAllAuthUsers } from '@/lib/supabase/read-all-auth-users';
 
 type DB = SupabaseClient<Database>;
 export type NotificationEmailResult = { sent: number; failed: number; skipped: number };
@@ -63,19 +63,18 @@ export async function deliverNotificationEmails(supabase: DB): Promise<Notificat
   const childEmailOff = await childrenBlockedOn(supabase, 'email', userIds);
   for (const id of childEmailOff) emailOff.add(id);
 
-  // Resolve recipient emails + names. Mirrors the weekly-digest cron's approach,
-  // including its pagination: listUsers() with no arguments is fifty users, and
-  // every recipient past that resolved to `skipped` here — settled with a
-  // `sent_at` stamp, so their notification was never retried either.
-  const { users: authUsers, error: authUsersError } = await readAllAuthUsers((params) =>
-    supabase.auth.admin.listUsers(params),
-  );
+  // Resolve recipient emails + names. EVERY auth user, not the first page:
+  // a bare listUsers() returns GoTrue's default 50, and a recipient missing from
+  // this map takes the "no email on file" branch below, which stamps sent_at.
+  // Truncation there is not a delayed email, it is a deleted one — the
+  // notification is settled as `skipped` and never retried.
+  const { users: allAuthUsers, error: authUsersError } = await listAllAuthUsers(supabase);
   if (authUsersError) {
     console.error('[notification-email] recipient lookup failed', authUsersError);
     return { sent: 0, failed: 1, skipped: 0 };
   }
   const userMeta = new Map(
-    authUsers.map((u) => [
+    allAuthUsers.map((u) => [
       u.id,
       {
         email: u.email ?? null,

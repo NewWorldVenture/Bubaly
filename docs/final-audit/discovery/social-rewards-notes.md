@@ -1,0 +1,11 @@
+# Social and rewards incremental discovery
+
+`social-rewards-inventory.json` compares fixed baseline **19a6907fdf906de3d44da583f2aa87a88298e697** with frozen source **6094eb04045326fdd18a1a67785188cc805c2612**. The first source snapshot was d8b276db; 6094eb04 adds the type-only `provider_account_id` Update declarations for the existing social account/token SQL fields. No SQL changed. Root committed source during discovery; the baseline remained 19a6907f, rather than accidentally comparing the newly committed work with itself.
+
+The refreshed snapshot contains **28 changed files**: 15 production source files, 6 tests, and 7 locale catalogues. Nine files are new: four production files and five tests. The new production files expose 16 top-level functions and one HTTP route, **GET /api/social/x/callback**. Existing master `id`, `key` and `source` mappings were copied for all 28 files after root integrated its records; this inventory assigned no IDs or audit statuses.
+
+Exact working-file, baseline-blob and inspected-head-blob SHA256 values are included. After both API and UI owners confirmed freeze and root added the type alignment, a separate verification compared the complete committed changed-path set, reread all 28 hashes, verified HEAD, and confirmed no tracked production delta from 6094eb04. Generated audit documents, master files and discovery itself are excluded from product counts. New untracked Contact Center/medication reproduction tests belong to the next cycle and are listed separately as outside this frozen checkpoint. Later fixes or commits require a new hash verification; this artifact records a particular source snapshot.
+
+Five production environment names occur in changed files: `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SITE_URL`, `SYNC_TOKEN_KEY`, `X_CLIENT_ID`, and `X_CLIENT_SECRET`. All already occur in baseline production/configuration references. No environment values or local secret files were read. `.env.example` did not change in this cycle.
+
+This discovery does not establish a live provider workflow, deployed policy state or completed production verification. See the separate access, X, pipeline, consumer, rewards and independent security cycle notes for evidence and limits. Root owns permanent inventory integration and combined verification.

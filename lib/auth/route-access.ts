@@ -95,16 +95,17 @@ export const PUBLIC = ['/', '/features', '/how-it-works', '/pricing', '/security
   '/api/cron',
   '/api/concierge-calls',
   '/api/guardian',
-  // The Family Contact Center's four inbound webhooks. Omitted when the rest of
-  // this group was added, which made every one of them unreachable: middleware
-  // answered the provider's POST with a 307 to /login, so the route — and its
-  // own authentication — never ran at all. Inbound email, SMS, voice and
-  // transcription therefore could not work however the numbers and MX were
-  // configured, and the failure looked like a provider problem rather than a
-  // routing one. Each authenticates itself exactly as this comment requires:
-  // /email demands CONTACT_CENTER_INBOUND_SECRET and is fail-closed in
-  // production, the other three verify the x-twilio-signature and answer 401.
-  '/api/contact-center',
+  // NOTE: the Family Contact Center's inbound webhooks are deliberately NOT a
+  // prefix here. They must be reachable without a session — omitted once, every
+  // one of them was answered with a 307 to /login, so the route and its own
+  // authentication never ran, and inbound email/SMS/voice could not work however
+  // the numbers and MX were configured. But a prefix would also expose any
+  // future session-backed route under /api/contact-center (settings, history).
+  // So middleware.ts exempts the five callback paths EXACTLY, via
+  // PUBLIC_CONTACT_CALLBACKS, and tests/middleware-public-api-boundary.test.ts
+  // fails if this file ever widens that back into a prefix. Each of the five
+  // authenticates itself: /email demands CONTACT_CENTER_INBOUND_SECRET and is
+  // fail-closed in production; the rest verify x-twilio-signature and answer 401.
   '/api/email/welcome',
   // Provider webhooks (signature-verified) and the signed unsubscribe link must
   // be reachable without a session.

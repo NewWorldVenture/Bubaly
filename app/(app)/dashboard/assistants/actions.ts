@@ -11,6 +11,7 @@ import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { logAudit } from '@/lib/server/audit';
 import { issueAssistantToken } from '@/lib/assistant/link-token';
+import { isAdmin } from '@/lib/constants/roles';
 
 const PAGE = '/dashboard/assistants';
 
@@ -24,9 +25,11 @@ const createSchema = z.object({
   allowCapture: z.boolean(),
 });
 
-/** Only a parent or admin can hand out a standing grant. */
+/** Only a parent can hand out a standing grant. */
 function canManage(role: string): boolean {
-  return role === 'parent' || role === 'admin';
+  // This read `role === 'parent' || role === 'admin'`, and 'admin' is not one
+  // of this product's member roles — it matched nobody. Say what it means.
+  return isAdmin(role);
 }
 
 export async function createAssistantLinkAction(formData: FormData): Promise<AssistantActionResult> {

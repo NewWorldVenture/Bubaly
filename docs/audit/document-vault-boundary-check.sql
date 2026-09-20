@@ -5,7 +5,12 @@
 -- a file back out were all reachable by every family member. This asserts the
 -- database now decides.
 grant usage on schema public to authenticated;
-grant select, insert, update, delete on all tables in schema public to authenticated;
+-- No blanket `grant ... on all tables in schema public` here. The bootstrap's
+-- `alter default privileges` already gives `authenticated` full DML on every
+-- table a migration creates, so the restatement was redundant — and once
+-- migrations began revoking DML deliberately (0300 takes the paywall columns
+-- away from the client), it stopped being redundant and started undoing them
+-- for every probe that runs after this one against the shared database.
 
 do $$
 declare
@@ -73,7 +78,12 @@ begin
   begin
     insert into public.documents (family_id, title, category, storage_path, is_secure, created_by)
     values (fam, 'Smuggled', 'other', fam || '/smuggled.pdf', true, teen_uid);
-  exception when others then refused := true;
+  -- Catch ONLY the RLS refusal, as check 5 above already does. `when others`
+  -- also swallows a typo in this statement: rename a column here and the insert
+  -- raises 42703, is caught, and the vault reports itself shut while nothing was
+  -- tested. Verified against this file: renaming storage_path leaves the probe
+  -- printing "document vault boundary check passed".
+  exception when insufficient_privilege then refused := true;
   end;
   if not refused then raise exception 'a teen filed a document into the vault'; end if;
 

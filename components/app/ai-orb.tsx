@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Sparkles, X, Loader2 } from 'lucide-react';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useDialogBehavior } from '@/lib/a11y/use-dialog-behavior';
 
 // Lazy-load the (large) assistant only when the mobile overlay opens, so the
 // globally-mounted orb doesn't ship the assistant bundle on every page.
@@ -26,22 +27,16 @@ export function AIOrb() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
-  // Lock background scroll while the mobile overlay is open.
-  useEffect(() => {
-    if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
-  }, [open]);
+  // Scroll lock, Escape, focus trap and focus restore. The two effects this
+  // replaces did the first two only, while the overlay below declared
+  // `aria-modal="true"` — telling a screen reader the page behind it is inert
+  // when Tab still walked straight into it.
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeSheet = useCallback(() => setOpen(false), []);
+  useDialogBehavior(dialogRef, open, { onClose: closeSheet });
 
-  // Close the sheet on navigation and on Escape.
+  // Close the sheet on navigation.
   useEffect(() => { setOpen(false); }, [pathname]);
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open]);
 
   if (pathname?.startsWith('/dashboard/assistant')) return null;
 
@@ -69,7 +64,7 @@ export function AIOrb() {
 
       {/* Mobile overlay — the assistant hovers over the current screen. */}
       {open && (
-        <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label={t('aiOrb.aiAssistant')}>
+        <div ref={dialogRef} tabIndex={-1} className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label={t('aiOrb.aiAssistant')}>
           <button
             aria-label={t('aiOrb.closeAssistant')}
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"

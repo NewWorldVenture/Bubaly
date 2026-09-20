@@ -39,9 +39,14 @@ function monthsBetween(from: string, to: number): number {
 export async function getMarketingCustomersWithError(supabase: DB): Promise<{ customers: MarketingCustomer[]; error: unknown | null }> {
   const [familiesResult, subsResult, membersResult, profilesResult] = await settleAll([
     readAllAsQuery((from, to) => supabase.from('families').select('id, name, created_at, updated_at').order('created_at', { ascending: false }).order('id').range(from, to), { max: 2000 }),
-    supabase.from('subscriptions').select('family_id, plan, status, created_at, current_period_end'),
-    supabase.from('family_members').select('family_id, user_id, role, is_active'),
-    supabase.from('profiles').select('id, email'),
+    // The three sibling reads below page for the same reason the families read
+    // does: each is joined BACK onto the families list, so a read capped at
+    // db-max-rows does not shorten the table — it silently mislabels customers
+    // whose rows fell off the end (no subscription found reads as 'free', no
+    // members reads as a household of zero, no profile as an unknown owner).
+    readAllAsQuery((from, to) => supabase.from('subscriptions').select('family_id, plan, status, created_at, current_period_end').order('family_id').range(from, to), { max: 2000 }),
+    readAllAsQuery((from, to) => supabase.from('family_members').select('family_id, user_id, role, is_active').order('family_id').order('user_id').range(from, to), { max: 20000 }),
+    readAllAsQuery((from, to) => supabase.from('profiles').select('id, email').order('id').range(from, to), { max: 20000 }),
   ]);
 
   const error = familiesResult.error ?? subsResult.error ?? membersResult.error ?? profilesResult.error;

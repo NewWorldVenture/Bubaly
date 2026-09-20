@@ -11,6 +11,7 @@ import {
   type SimResult, type SimBudget, type SimEvent, type ActivityDecision, type ProjectionResult,
 } from '@/lib/twin/simulate';
 import { readAll } from '@/lib/supabase/read-all';
+import { escapeLike } from '@/lib/supabase/escape-like';
 
 // Decision Simulator server action (Digital Twin, pillar #2). Assembles the real
 // household context for the proposed decision and runs the pure simulator. All
@@ -81,7 +82,7 @@ export async function simulateDecisionAction(input: SimFormInput): Promise<SimRe
     // PostgREST caps a response at db-max-rows whatever the client asks for.
     const { rows: tx } = await readAll((from, to) => supabase
       .from('transactions').select('amount').eq('family_id', familyId)
-      .eq('type', 'expense').ilike('category', b.category).gte('date', start)
+      .eq('type', 'expense').ilike('category', escapeLike(b.category)).gte('date', start)
       .order('id').range(from, to), { max: 2000 });
     const spentCents = Math.round((tx ?? []).reduce((s, t) => s + Number(t.amount ?? 0), 0) * 100);
     budgets = [{ category: b.category, limitCents: Math.round(Number(b.amount) * 100), spentCents }];
@@ -137,7 +138,7 @@ export async function projectActivityAction(input: ActivityProjectionInput): Pro
       const start = periodStart(b.period, now);
       // Same total, same reason as above.
       const { rows: tx } = await readAll((from, to) => supabase.from('transactions').select('amount')
-        .eq('family_id', familyId).eq('type', 'expense').ilike('category', b.category).gte('date', start)
+        .eq('family_id', familyId).eq('type', 'expense').ilike('category', escapeLike(b.category)).gte('date', start)
         .order('id').range(from, to), { max: 2000 });
       const spentCents = Math.round((tx ?? []).reduce((s, t) => s + Number(t.amount ?? 0), 0) * 100);
       budgets = [{ category: b.category, limitCents: Math.round(Number(b.amount) * 100), spentCents }];

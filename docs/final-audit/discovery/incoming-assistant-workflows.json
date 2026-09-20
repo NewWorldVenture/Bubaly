@@ -1,0 +1,116 @@
+{
+  "sourceCommit": "1aa4d6fb4b8c3b59e69a8da291fa136d4922a72f",
+  "incomingBaseline": "9719a4868b73d819a94865ec2cd480516104aa87",
+  "incomingCommit": "217c7be464c30f4f10a1bf672a07b5a9fca67e6a",
+  "counts": {
+    "workflows": 17,
+    "newTables": 5,
+    "newFunctions": 0,
+    "newPages": 2,
+    "newPostRoutes": 2
+  },
+  "workflows": [
+    {
+      "id": "FLOW-3723821555C2",
+      "name": "Assistant linked-device key lifecycle",
+      "source": "app/(app)/dashboard/assistants/actions.ts; app/(app)/dashboard/assistants/controls.tsx; lib/assistant/service.ts",
+      "expected": "Parent/adult/child role parity, one-time display, copy failures, scoped revoke, issuer membership and in-flight revocation."
+    },
+    {
+      "id": "FLOW-BD81210051CD",
+      "name": "Generic speaker and Shortcut setup and answers",
+      "source": "app/(app)/dashboard/assistants/page.tsx; app/api/assistant/route.ts",
+      "expected": "Setup, bearer/body token, missing or revoked links, speech responses and rate limits; provider labels do not establish integration."
+    },
+    {
+      "id": "FLOW-91E55857762B",
+      "name": "Alexa setup and session responses",
+      "source": "app/(app)/dashboard/assistants/page.tsx; app/api/assistant/alexa/route.ts; lib/assistant/alexa.ts",
+      "expected": "Provider setup and account linking, token locations, launch/help/stop/empty slots, cards and session closure. No provider setup artifacts are supplied by this incoming change."
+    },
+    {
+      "id": "FLOW-DD4AB5249908",
+      "name": "Spoken family schedule and task queries",
+      "source": "lib/assistant/service.ts; lib/assistant/answers.ts",
+      "expected": "Today, tomorrow, next event, overdue tasks, timezone/DST and all-day events."
+    },
+    {
+      "id": "FLOW-04ADFC7C2C4C",
+      "name": "Assistant voice capture to calendar",
+      "source": "lib/assistant/service.ts",
+      "expected": "Capture permission, interpretation, verified calendar persistence, repeated and lost responses before spoken success."
+    },
+    {
+      "id": "FLOW-7CE5F9B09FEF",
+      "name": "Assistant voice capture to notes",
+      "source": "lib/assistant/service.ts",
+      "expected": "Capture permission, interpretation, verified note persistence, repeated and lost responses before spoken success."
+    },
+    {
+      "id": "FLOW-971B74BDBB88",
+      "name": "Assistant voice capture to shopping",
+      "source": "lib/assistant/service.ts",
+      "expected": "Capture permission, first-list creation, exact shopping persistence, repeated and lost responses before spoken success."
+    },
+    {
+      "id": "FLOW-3A987D0CF188",
+      "name": "Assistant voice capture to tasks",
+      "source": "lib/assistant/service.ts",
+      "expected": "Capture permission, interpretation, verified task persistence, repeated and lost responses before spoken success."
+    },
+    {
+      "id": "FLOW-A1E41A38B8AC",
+      "name": "Assistant usage and audit visibility",
+      "source": "lib/assistant/service.ts; app/(app)/dashboard/assistants/page.tsx; supabase/migrations/0283_assistant_links.sql",
+      "expected": "Bounded utterance logging, family isolation, last-used state, and distinction between that state and event history."
+    },
+    {
+      "id": "FLOW-08C013145EE8",
+      "name": "Family library feed subscription and import",
+      "source": "app/(app)/dashboard/library/actions.ts; lib/library/feed-parse.ts; lib/server/public-document-fetch.ts",
+      "expected": "RSS/Atom URL validation, redirects/DNS/MIME/size guards, parsing, owned items and shared document-fetch regressions."
+    },
+    {
+      "id": "FLOW-FC0793CC25BB",
+      "name": "Family library feed refresh and removal",
+      "source": "app/(app)/dashboard/library/actions.ts; supabase/migrations/0284_library_books_podcasts.sql",
+      "expected": "Retained errors and retries, GUID collisions, updates, unsubscribe cascade, and book-feed item classification."
+    },
+    {
+      "id": "FLOW-DF3B648131E3",
+      "name": "Family library manual books and audio",
+      "source": "app/(app)/dashboard/library/actions.ts; app/(app)/dashboard/library/player.tsx",
+      "expected": "Title/book/page/audio input, invalid URLs, persisted readback and player selection."
+    },
+    {
+      "id": "FLOW-924FCA80F514",
+      "name": "Family library personal bookmarks and progress",
+      "source": "app/(app)/dashboard/library/actions.ts; supabase/migrations/0284_library_books_podcasts.sql",
+      "expected": "Personal saved/position/completed state versus shared feed ownership, foreign item/feed IDs and role matrix."
+    },
+    {
+      "id": "FLOW-EDED6C374ACF",
+      "name": "Family library playback and resume",
+      "source": "app/(app)/dashboard/library/player.tsx; app/(app)/dashboard/library/page.tsx",
+      "expected": "Resume, pause, seek fifteen seconds, media errors, time/end events, unmount writes and duplicate player instances."
+    },
+    {
+      "id": "FLOW-E85C224E3831",
+      "name": "Family library offline audio storage and playback",
+      "source": "app/(app)/dashboard/library/player.tsx",
+      "expected": "Request flag, actual Cache API bytes, offline consumption/removal, CORS, quota/device storage and family/account changes."
+    },
+    {
+      "id": "FLOW-5338E663827A",
+      "name": "New-family inbound address provisioning",
+      "source": "app/onboarding/actions.ts; lib/contact-center/provision.ts",
+      "expected": "Existing-address preservation, unique-name contention, optional-provisioning timeout/retry, completion and manual fallback."
+    },
+    {
+      "id": "FLOW-E72FA1A98568",
+      "name": "Reserved mailbox namespace and provider ingress",
+      "source": "lib/contact-center/address.ts; app/(app)/dashboard/contact-center/actions.ts; middleware.ts",
+      "expected": "Alias normalization, reserved names, legacy addresses, provider MX/forwarding setup and signed email/SMS/voice/transcription ingress."
+    }
+  ]
+}

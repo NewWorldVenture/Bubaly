@@ -17,9 +17,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Keep CI and local verification on the same declared Node release.
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
 
       - name: Install dependencies
@@ -44,14 +45,36 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      # scripts/i18n-gate.mjs says of itself: "Nothing else in the build would
-      # notice, so this does." It was never wired in, so for every surface it
-      # declares translated the promise was checked by nobody.
-      - name: i18n gate (surfaces declared translated)
+      # scripts/i18n-gate.mjs describes itself as "CI gate for surfaces declared
+      # translated", and ends "Nothing else in the build would notice, so this
+      # does." It was in no workflow, so nothing ran it — the guard that cannot
+      # fail, in its purest form: a check that cannot fail because it is never
+      # invoked. finalaudit.md meanwhile listed it as a passing check.
+      #
+      # It is load-bearing, verified rather than assumed: a JSX text node planted
+      # in components/marketing/site-header.tsx is caught by name, file and line
+      # across both surfaces that cover it, exit 1. Removed, exit 0 across all
+      # eight declared surfaces.
+      #
+      # Cheap (a static scan, no network, no database), so it runs beside lint
+      # rather than in the slower jobs.
+      - name: i18n gate (declared surfaces carry no hardcoded copy)
         run: npm run i18n:gate
 
       - name: Unit tests
         run: npm test
+
+      # The same suite on a DST-OBSERVING host. lib/capture/parse.ts does its
+      # date arithmetic on Date fields, and a Date built from LOCAL fields is
+      # normalised by the runtime's own DST rules: on the spring-forward morning
+      # a 02:30 appointment became 03:30 instead of moving to 03:00, the first
+      # minute that exists. Production runs UTC, so the whole suite passed on
+      # every run while the bridge was host-dependent — this job is the only
+      # thing that would have caught it, and is what keeps it caught.
+      - name: Unit tests (DST-observing host)
+        run: npm test
+        env:
+          TZ: America/Los_Angeles
 
       # Build BEFORE Typecheck, deliberately. next.config.mjs turns off the
       # type-check and lint passes inside `next build` — they were a duplicate
@@ -95,7 +118,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: mobile/package-lock.json
 
@@ -232,7 +255,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
 
       - name: Install dependencies
@@ -253,6 +276,56 @@ jobs:
         run: node scripts/ci-dedupe-migration-versions.mjs
         env:
           CI: '1'
+
+      - name: Configure disposable Auth redirects and phone test codes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('supabase/config.toml')
+          source = path.read_text()
+          original = '''[auth]
+          enable_signup = true
+          site_url = "http://localhost:3000"
+          additional_redirect_urls = ["http://localhost:3000/auth/callback"]'''
+          replacement = '''[auth]
+          enable_signup = true
+          site_url = "http://localhost:3107"
+          additional_redirect_urls = ["http://localhost:3107/**"]
+
+          [auth.sms]
+          enable_signup = true
+          enable_confirmations = true
+          max_frequency = "1s"
+
+          [auth.sms.test_otp]
+          12025550101 = "483921"
+          12025550102 = "483922"
+          12025550103 = "483923"
+
+          [auth.sms.twilio]
+          enabled = true
+          account_sid = "ci-only-unused-account"
+          message_service_sid = "ci-only-unused-service"
+          auth_token = "ci-only-unused-token"
+
+          [auth.hook.send_sms]
+          enabled = true
+          uri = "http://127.0.0.1:1/ci-sms-must-not-send"
+          secrets = "v1,whsec_Y2ktb25seS1waG9uZS1ob29rLXNlY3JldC0wMDAwMDA="'''
+          # This checkout and GoTrue are disposable. Keep the product defaults,
+          # other sections and credentials untouched; stop if their shape drifts.
+          assert source.count(original) == 1, 'Unexpected disposable Auth config'
+          # CLI 2.109.1 disables phone login unless a provider flag is enabled,
+          # even with test_otp or a send_sms hook. These invalid placeholders
+          # satisfy that local config check. Keep the hook mandatory: fixed
+          # codes bypass it; every other number fails at closed container
+          # loopback. GoTrue 2.192.0 returns hook errors without provider fallback.
+          assert '[auth.sms' not in source, 'Unexpected disposable SMS config'
+          assert '[auth.hook' not in source, 'Unexpected disposable Auth hook config'
+          path.write_text(source.replace(original, replacement, 1))
+          PY
 
       - name: Start isolated Supabase
         run: supabase start
@@ -318,6 +391,15 @@ jobs:
           E2E_AUTHENTICATED: '1'
           # Each durable-session test owns a unique local-only account/household.
           E2E_DURABLE_SESSION: '1'
+          # Synthetic, disposable-only input shared by the child fixture/server.
+          CHILD_LOGIN_SECRET: ci-only-child-pin-session-fixture
+          # Signed Guardian ingress against the disposable server only. A token
+          # alone cannot configure outbound Twilio; the fixture refuses real keys.
+          TWILIO_AUTH_TOKEN: ci-only-guardian-signed-ingress-fixture
+          # Authenticates only the disposable server's recovery job.
+          CRON_SECRET: ci-only-guardian-recovery-fixture
+          ANTHROPIC_API_KEY: ''
+          OPENAI_API_KEY: ''
           NEXT_PUBLIC_SITE_URL: http://localhost:3107
           E2E_AUTH_EMAIL: bubaly-e2e-${{ github.run_id }}-${{ github.run_attempt }}@example.test
           E2E_AUTH_PASSWORD: Bubaly-E2E-2026!

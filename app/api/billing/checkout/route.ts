@@ -70,7 +70,12 @@ export async function POST(req: NextRequest) {
       });
       customerId = customer.id;
 
-      const { error: customerWriteError } = await supabase.from('billing_customers').upsert({
+      // The customer id comes from Stripe's own response and the family from
+      // requireUserContext above, so this write is server-decided end to end.
+      // It goes through the service client because 0300 took the client's write
+      // grant away: billing_customers chooses whose Stripe portal opens, and
+      // that is not a row a browser should be able to PATCH.
+      const { error: customerWriteError } = await createServiceClient().from('billing_customers').upsert({
         family_id: familyId,
         provider: 'stripe',
         customer_ref: customerId,

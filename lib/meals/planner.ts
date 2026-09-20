@@ -6,6 +6,7 @@
 import type { MealType } from '@/lib/database.types';
 import { parseModelJSON } from '@/lib/meals/nutrition';
 import { quickMealHint, type BusyNight } from '@/lib/meals/week-context';
+import { mealWeekDays } from '@/lib/meals/week';
 
 export const PLAN_MEAL_TYPES: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
@@ -61,11 +62,12 @@ export function buildPlannerSystem(): string {
     'You are a practical family meal planner. Fill a 7-day plan for the requested meal slots.',
     'Prefer dishes from the provided CANDIDATES list (reference them by their exact ref id).',
     'You may also invent a small number of new, simple dishes when variety helps — mark those with ref "new".',
+    'For each new dish include ingredients as {name, quantity, unit} objects, using quantity strings for fractions. Saved dishes use their saved ingredients; omit ingredients for those.',
     'Honor every dietary constraint strictly. When pantry items are expiring, prefer dishes that use them and say so.',
     'On any night listed as busy, choose something that is ready in about 20 minutes, cooks in one pan, or can be made ahead — and say which in the reason.',
     'Avoid repeating the same dish twice in the week unless told otherwise.',
     'Respond with ONLY a JSON object of this exact shape (no prose, no markdown fences):',
-    '{ "assignments": [ { "date": "YYYY-MM-DD", "meal_type": "dinner", "ref": "recipe:<id>" | "meal:<id>" | "new", "name": "Dish name", "reason": "short why" } ] }',
+    '{ "assignments": [ { "date": "YYYY-MM-DD", "meal_type": "dinner", "ref": "recipe:<id>" | "meal:<id>" | "new", "name": "Dish name", "reason": "short why", "ingredients": [{ "name": "Ingredient", "quantity": "1", "unit": "cup" }] } ] }',
   ].join('\n');
 }
 
@@ -98,12 +100,7 @@ export function buildPlannerUser(req: PlannerRequest): string {
 
 /** Monday→Sunday ISO dates for a week-start. */
 export function weekDates(weekStart: string): string[] {
-  const base = new Date(`${weekStart}T00:00:00`);
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(base);
-    d.setDate(base.getDate() + i);
-    return d.toISOString().slice(0, 10);
-  });
+  return mealWeekDays(weekStart);
 }
 
 export interface PlanAssignment {
@@ -112,6 +109,7 @@ export interface PlanAssignment {
   ref: string | null;       // candidate ref, or null for a brand-new dish
   name: string;
   reason?: string;
+  ingredients?: { name: string; quantity: string | null; unit: string | null }[];
 }
 
 /**
@@ -140,10 +138,29 @@ export function parsePlan(text: string, req: PlannerRequest): PlanAssignment[] {
     if (!validDates.has(date) || !validTypes.has(meal_type)) continue;
     if (ref && !validRefs.has(ref)) ref = null;          // unknown ref → treat as new
     if (!name && !ref) continue;
+    let ingredients: PlanAssignment['ingredients'];
+    if (!ref && o.ingredients !== undefined) {
+      if (!Array.isArray(o.ingredients) || o.ingredients.length > 100) continue;
+      ingredients = [];
+      let valid = true;
+      for (const value of o.ingredients) {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) { valid = false; break; }
+        const line = value as Record<string, unknown>;
+        const ingredientName = typeof line.name === 'string' ? line.name.trim() : '';
+        const quantity = line.quantity ?? line.qty;
+        if (!ingredientName || ingredientName.length > 200
+          || (quantity != null && typeof quantity !== 'string' && typeof quantity !== 'number')
+          || (typeof quantity === 'number' && !Number.isFinite(quantity))
+          || (quantity != null && String(quantity).length > 100)
+          || (line.unit != null && (typeof line.unit !== 'string' || line.unit.length > 60))) { valid = false; break; }
+        ingredients.push({ name: ingredientName, quantity: quantity == null ? null : String(quantity).trim() || null, unit: typeof line.unit === 'string' ? line.unit.trim() || null : null });
+      }
+      if (!valid) continue;
+    }
     const slot = `${date}__${meal_type}`;
     if (seen.has(slot)) continue;                        // one dish per slot
     seen.add(slot);
-    out.push({ date, meal_type, ref, name, reason: typeof o.reason === 'string' ? o.reason : undefined });
+    out.push({ date, meal_type, ref, name, reason: typeof o.reason === 'string' ? o.reason : undefined, ...(ingredients ? { ingredients } : {}) });
   }
   return out;
 }

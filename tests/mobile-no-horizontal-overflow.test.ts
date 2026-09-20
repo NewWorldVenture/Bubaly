@@ -8,7 +8,21 @@ import path from 'node:path';
 // bounded box instead of pushing the whole page sideways. This guard ratchets that
 // invariant so a future change can't drop a raw, page-widening table in.
 
-const MODULES_DIR = 'components/modules';
+// Scoped to `components/modules`, non-recursively, until a sweep of the sibling
+// mobile guards found one of them (M-006, inputMode) missing 26 offenders that
+// way. The tree is clean for tables today; it is scanned whole so it stays that
+// way outside that one directory too.
+const ROOTS = ['app', 'components'];
+
+function walk(dir: string, out: string[] = []): string[] {
+  for (const entry of fs.readdirSync(dir)) {
+    if (entry === 'node_modules' || entry === '.next' || entry.startsWith('.')) continue;
+    const p = path.join(dir, entry);
+    if (fs.statSync(p).isDirectory()) walk(p, out);
+    else if (entry.endsWith('.tsx')) out.push(p);
+  }
+  return out;
+}
 
 function tablesAreWrapped(src: string): number[] {
   const lines = src.split('\n');
@@ -24,11 +38,7 @@ function tablesAreWrapped(src: string): number[] {
 }
 
 describe('dashboard tables scroll inside a bounded container (no horizontal page overflow)', () => {
-  const files = fs
-    .readdirSync(MODULES_DIR)
-    .filter((f) => f.endsWith('.tsx'))
-    .map((f) => path.join(MODULES_DIR, f))
-    .filter((p) => fs.readFileSync(p, 'utf8').includes('<table'));
+  const files = ROOTS.flatMap((r) => walk(r)).filter((p) => fs.readFileSync(p, 'utf8').includes('<table'));
 
   it('covers the modules that render tables', () => {
     // Sanity: we are actually scanning real table-bearing modules.

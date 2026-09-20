@@ -9,6 +9,7 @@ import { PlatformBadge } from '@/components/social/platform';
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
+import { safeSocialLink } from '@/lib/social/links';
 
 export const metadata: Metadata = { title: 'Feed · Social' };
 export const dynamic = 'force-dynamic';
@@ -76,7 +77,7 @@ export default async function FeedPage({ searchParams }: { searchParams: Promise
         <div className="space-y-3">
           {items.map((item) => {
             const meta = (item.metadata ?? {}) as Record<string, unknown>;
-            const url = item.permalink_url ?? (typeof meta.profile_url === 'string' ? meta.profile_url : null);
+            const url = safeSocialLink(item.permalink_url) ?? safeSocialLink(meta.profile_url);
             const metrics = (item.metrics ?? {}) as Record<string, number>;
             const inner = (
               <>

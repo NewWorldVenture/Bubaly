@@ -25,9 +25,12 @@ describe('shared Modal is a mobile-correct bottom sheet (Phase 11)', () => {
   });
   it('traps + restores focus, closes on ESC, and locks body scroll', () => {
     expect(modal).toContain('aria-modal="true"');
-    expect(modal).toContain("e.key === 'Escape'");
-    expect(modal).toContain("document.body.style.overflow = 'hidden'");
-    expect(modal).toContain('previouslyFocused?.focus?.()');
+    // Behaviour lives in the shared hook; Modal must delegate to it.
+    expect(modal).toContain('useDialogBehavior');
+    const hook = fs.readFileSync('lib/a11y/use-dialog-behavior.ts', 'utf8');
+    expect(hook).toContain("e.key === 'Escape'");
+    expect(hook).toContain("document.body.style.overflow = 'hidden'");
+    expect(hook).toContain('previouslyFocused?.focus?.()');
   });
 });
 

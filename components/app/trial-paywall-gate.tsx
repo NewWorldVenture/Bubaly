@@ -3,7 +3,7 @@
 // Shown over the whole app when a family's 5-day free trial has ended and they
 // haven't subscribed. Offers Family Basic or Family+ (no downgrade to free), a
 // link to full pricing, log out, and soft account closure. Nothing is deleted.
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import Link from 'next/link';
 import { Crown, Sparkles, Check, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -13,10 +13,14 @@ import { BASIC_ANNUAL_CENTS, PLUS_ANNUAL_CENTS } from '@/lib/constants/plans';
 import { cn } from '@/lib/utils/cn';
 import { useLockBodyScroll } from '@/lib/hooks/use-lock-body-scroll';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { SignOutForm } from '@/components/auth/sign-out-form';
+import { useDialogBehavior } from '@/lib/a11y/use-dialog-behavior';
 
 const fmt = (cents: number) => (cents % 100 === 0 ? `$${cents / 100}` : `$${(cents / 100).toFixed(2)}`);
 
 export function TrialPaywallGate({ trialEndsAt }: { trialEndsAt?: string | null }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogBehavior(dialogRef, true, { lockScroll: false });
   const t = useTranslations();
   const [busy, setBusy] = useState<string | null>(null);
   const { error: toastError, success } = useToast();
@@ -52,7 +56,7 @@ export function TrialPaywallGate({ trialEndsAt }: { trialEndsAt?: string | null 
   }
 
   return (
-    <div role="dialog" aria-modal="true" aria-labelledby="paywall-title"
+    <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="paywall-title"
       className="fixed inset-0 z-[200] grid place-items-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm">
       <div className="w-full max-w-lg rounded-3xl border border-white/10 bg-surface p-6 shadow-2xl sm:p-8">
         <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-violet-500/15 text-violet-400 ring-1 ring-violet-400/30">
@@ -79,12 +83,9 @@ export function TrialPaywallGate({ trialEndsAt }: { trialEndsAt?: string | null 
         <div className="mt-5 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm">
           <Link href="/pricing" className="text-brand-text hover:underline">{t('trialPaywallGate.seeAllPlansMonthlyPricing')}</Link>
           <span className="text-muted/40">·</span>
-          {/* A form, not a link: /auth/signout is POST-only, so an <a href> was
-              a GET the route answers 405 — leaving a paywalled user with no way
-              out of the gate at all. */}
-          <form action="/auth/signout" method="post" className="contents">
-            <button type="submit" className="text-muted hover:text-fg">{t('trialPaywallGate.logOut')}</button>
-          </form>
+          <SignOutForm className="contents">
+            {({ signingOut }) => <button type="submit" disabled={signingOut} className="text-muted hover:text-fg">{t('trialPaywallGate.logOut')}</button>}
+          </SignOutForm>
           <span className="text-muted/40">·</span>
           <button type="button" onClick={close} disabled={!!busy} className="text-muted hover:text-fg disabled:opacity-50">
             {t('trialPaywallGate.closeAccount')}

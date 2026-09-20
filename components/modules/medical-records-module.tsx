@@ -23,6 +23,7 @@ import { cn } from '@/lib/utils/cn';
 import type { Tables, RecordKind } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
 import { useConfirm } from '@/components/ui/confirm';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 type Provider = Tables<'health_providers'>;
 type Policy = Tables<'insurance_policies'>;
@@ -133,11 +134,15 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       is_primary: providerForm.is_primary,
       notes: providerForm.notes || null,
     };
-    const { error: err } = providerForm.id
-      ? await sb.from('health_providers').update(fields).eq('id', providerForm.id)
-      : await sb.from('health_providers').insert({ ...fields, family_id: familyId, kind, created_by: userId });
+    // A refused write is not an error: a manager-only RLS policy FILTERS the
+    // update/delete, so it matches nothing and succeeds. `.select('id')` asks
+    // for the rows back, which is the only way to tell.
+    const { data: rows, error: err } = providerForm.id
+      ? await sb.from('health_providers').update(fields).eq('id', providerForm.id).select('id')
+      : await sb.from('health_providers').insert({ ...fields, family_id: familyId, kind, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(`Could not save ${providerWord.toLowerCase()}`); return; }
+    if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(`${providerWord} saved`);
     setProviderForm(null);
   }
@@ -145,8 +150,9 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
   async function deleteProvider(id: string) {
     if (!(await askConfirm({ title: t('medicalRecords.deleteProviderQ'), body: t('confirm.cannotBeUndone') }))) return;
     const sb = createClient();
-    const { error: err } = await sb.from('health_providers').delete().eq('id', id);
+    const { data: rows, error: err } = await sb.from('health_providers').delete().eq('id', id).select('id');
     if (err) { toastError(t('medicalRecordsModule.couldNotDelete')); return; }
+    if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('medicalRecordsModule.deleted'));
   }
 
@@ -182,11 +188,12 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       back_image_path: policyForm.back_image_path || null,
       notes: policyForm.notes || null,
     };
-    const { error: err } = policyForm.id
-      ? await sb.from('insurance_policies').update(fields).eq('id', policyForm.id)
-      : await sb.from('insurance_policies').insert({ ...fields, family_id: familyId, kind, created_by: userId });
+    const { data: rows, error: err } = policyForm.id
+      ? await sb.from('insurance_policies').update(fields).eq('id', policyForm.id).select('id')
+      : await sb.from('insurance_policies').insert({ ...fields, family_id: familyId, kind, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(t('medicalRecordsModule.couldNotSaveInsurance')); return; }
+    if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('medicalRecordsModule.insuranceSaved'));
     setPolicyForm(null);
   }
@@ -194,8 +201,9 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
   async function deletePolicy(id: string) {
     if (!(await askConfirm({ title: t('medicalRecords.deletePolicyQ'), body: t('medicalRecords.deletePolicyBody') }))) return;
     const sb = createClient();
-    const { error: err } = await sb.from('insurance_policies').delete().eq('id', id);
+    const { data: rows, error: err } = await sb.from('insurance_policies').delete().eq('id', id).select('id');
     if (err) { toastError(t('medicalRecordsModule.couldNotDelete')); return; }
+    if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('medicalRecordsModule.deleted'));
   }
 

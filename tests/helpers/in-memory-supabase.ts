@@ -37,6 +37,18 @@ export type InMemoryOptions = {
   rpc?: Record<string, (args: Record<string, unknown>, db: InMemorySupabase) => unknown | Promise<unknown>>;
   /** Auth user id for `auth.getUser()`. */
   userId?: string | null;
+  /**
+   * PostgREST's `db-max-rows` — the server's own ceiling on ONE response,
+   * 1,000 on a default Supabase project.
+   *
+   * The real server applies it silently: no error, no short-read signal, just
+   * fewer rows than the table holds. Without it here, a fake answers every
+   * unbounded select with the whole table and a job that reads the first
+   * 1,000 households looks identical to one that reads them all. Set it and
+   * the difference becomes visible. Unset means no cap, which is what every
+   * existing test assumes.
+   */
+  maxRows?: number;
 };
 
 function pgError(code: string, message: string): PostgrestError {
@@ -77,8 +89,27 @@ function jsonContains(value: unknown, wanted: unknown): boolean {
 }
 
 function operatorPredicate(column: string, op: string, wanted: unknown): Predicate {
+  if (column.includes('->')) {
+    const path = /^([a-zA-Z_]\w*)((?:->>?[a-zA-Z_]\w*)+)$/.exec(column);
+    if (!path) throw new Error('[in-memory-supabase] unsupported JSON path');
+    const steps = [...path[2].matchAll(/(->>?)([a-zA-Z_]\w*)/g)];
+    if (steps.some((step, index) => step[1] === '->>' && index !== steps.length - 1)) throw new Error('[in-memory-supabase] unsupported JSON path');
+    const predicate = operatorPredicate('__json_value', op, wanted);
+    return row => {
+      let value: unknown = row[path[1]];
+      for (const step of steps) value = value && typeof value === 'object' && !Array.isArray(value) ? (value as Row)[step[2]] : null;
+      return predicate({ __json_value: value == null ? null : steps.at(-1)?.[1] !== '->>' ? value
+        : typeof value === 'object' ? JSON.stringify(value) : String(value) });
+    };
+  }
   switch (op) {
-    case 'eq': return (row) => looseEq(row[column], wanted);
+    case 'eq': return (row) => {
+      const value = row[column];
+      if (value && typeof value === 'object' && typeof wanted === 'string') {
+        try { return equalJson(value, JSON.parse(wanted)); } catch { return false; }
+      }
+      return looseEq(value, wanted);
+    };
     case 'neq': return (row) => !looseEq(row[column], wanted);
     case 'is': return (row) => (row[column] ?? null) === wanted;
     case 'gt': return (row) => row[column] != null && compare(row[column], wanted) > 0;
@@ -122,6 +153,19 @@ function operatorPredicate(column: string, op: string, wanted: unknown): Predica
     default:
       throw new Error(`[in-memory-supabase] unsupported filter operator "${op}"`);
   }
+}
+
+/** jsonb equality ignores object-key order but preserves array order and scalar types. */
+function equalJson(left: unknown, right: unknown): boolean {
+  if (left === right) return true;
+  if (!left || !right || typeof left !== 'object' || typeof right !== 'object') return false;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return Array.isArray(left) && Array.isArray(right) && left.length === right.length
+      && left.every((value, index) => equalJson(value, right[index]));
+  }
+  const keys = Object.keys(left);
+  return keys.length === Object.keys(right).length && keys.every(key => Object.hasOwn(right, key)
+    && equalJson((left as Row)[key], (right as Row)[key]));
 }
 
 /** `a.eq.1,b.is.null,c.in.(x,y)`, plus the nested `and(...)` groups used to
@@ -241,7 +285,11 @@ class QueryBuilder implements PromiseLike<Reply> {
     this.ignoreDuplicates = opts?.ignoreDuplicates === true;
     return this;
   }
-  update(patch: Row) { this.op = 'update'; this.payload = [patch]; return this; }
+  update(patch: Row, opts?: { count?: 'exact' | 'planned' | 'estimated' }) {
+    this.op = 'update'; this.payload = [patch];
+    if (opts?.count) this.countMode = opts.count;
+    return this;
+  }
   delete() { this.op = 'delete'; return this; }
 
   eq(column: string, value: unknown) { this.predicates.push(operatorPredicate(column, value === null ? 'is' : 'eq', value)); return this; }
@@ -273,6 +321,8 @@ class QueryBuilder implements PromiseLike<Reply> {
   limit(count: number) { this.limitCount = count; return this; }
   range(from: number, to: number) { this.rangeBounds = { from, to }; return this; }
   abortSignal() { return this; }
+  // Execution is synchronous and never retried. Do not imply retry support.
+  retry(enabled: boolean) { if (enabled) throw new Error('[in-memory-supabase] retries are unsupported'); return this; }
   throwOnError() { return this; }
 
   single(): Promise<Reply> { this.mode = 'single'; return Promise.resolve(this.execute()); }
@@ -308,6 +358,11 @@ class QueryBuilder implements PromiseLike<Reply> {
     const total = out.length;
     if (this.rangeBounds) out = out.slice(this.rangeBounds.from, this.rangeBounds.to + 1);
     if (this.limitCount !== null) out = out.slice(0, this.limitCount);
+    // Applied LAST and to every read alike: `db-max-rows` caps the response the
+    // server is about to send, so it truncates a `.limit(5000)` exactly as
+    // readily as an unbounded select. That is why `.limit()` is not a bound.
+    const cap = this.db.maxRows;
+    if (this.op === 'select' && cap !== undefined && out.length > cap) out = out.slice(0, cap);
     const projected = this.selectList ? out.map((row) => project(this.db, row, this.selectList as string)) : out.map((row) => ({ ...row }));
     const count = this.countMode ? total : null;
     if (this.headOnly) return { data: null, error: null, count, status: 200, statusText: 'OK' };
@@ -397,6 +452,9 @@ export class InMemorySupabase {
   readonly log: { table: string }[] = [];
 
   constructor(private readonly options: InMemoryOptions = {}) {}
+
+  /** The server's per-response row ceiling, or undefined for no cap. */
+  get maxRows(): number | undefined { return this.options.maxRows; }
 
   from(table: string): QueryBuilder {
     this.log.push({ table });

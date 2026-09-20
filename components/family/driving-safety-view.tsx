@@ -137,7 +137,7 @@ function TripModal({ members, familyId, userId, onClose }: { members: Tables<'fa
         </div>
         <Field label={tr('drivingSafety.label')} hint={tr('drivingSafetyView.optional')}>{(id) => <Input id={id} value={v.label} onChange={(e) => setV({ ...v, label: e.target.value })} placeholder={tr('drivingSafetyView.schoolRun')} />}</Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label={tr('drivingSafety.distanceMi')}>{(id) => <Input id={id} type="number" step="0.1" value={v.distance_miles} onChange={(e) => setV({ ...v, distance_miles: e.target.value })} placeholder="8.4" />}</Field>
+          <Field label={tr('drivingSafety.distanceMi')}>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.1" value={v.distance_miles} onChange={(e) => setV({ ...v, distance_miles: e.target.value })} placeholder="8.4" />}</Field>
           <Field label={tr('drivingSafety.maxSpeedMph')}>{(id) => <Input id={id} type="number" value={v.max_mph} onChange={(e) => setV({ ...v, max_mph: e.target.value })} placeholder="68" />}</Field>
         </div>
         <div className="grid grid-cols-3 gap-3">

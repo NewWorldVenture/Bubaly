@@ -192,7 +192,17 @@ describe('in-product referral prompts (source)', () => {
   it('the invite-success CTA appears only after an invite is actually sent, and links to /referrals', () => {
     // The flag is raised by the invite dialog's onSent callback, nothing else.
     expect(settings.match(/setShowReferralCta\(true\)/g)).toHaveLength(1);
-    expect(settings).toContain('onSent={() => { setInviteOpen(false); setShowReferralCta(true);');
+    // Asserted by shape, not by exact formatting: the flag must be raised inside
+    // the invite dialog's onSent callback and nowhere else. The previous version
+    // matched the whole line verbatim, so it broke when onSent gained a parameter
+    // (it now reports whether the invite EMAIL actually went out) even though the
+    // property it exists to protect was untouched.
+    const at = settings.indexOf('onSent={(');
+    expect(at, 'the invite dialog still has an onSent callback').toBeGreaterThan(-1);
+    const onSent = settings.slice(at, settings.indexOf('}}', at) + 2);
+    expect(onSent).toMatch(/onSent=\{\(emailed\)\s*=>/);
+    expect(onSent).toContain('setInviteOpen(false)');
+    expect(onSent).toContain('setShowReferralCta(true)');
     expect(settings).toContain('href="/referrals"');
     expectSays(settings, 'settingsModule.knowAnotherFamily', 'Know another family?');
     expectSays(settings, 'settingsModule.referAFamily', 'Refer a family');

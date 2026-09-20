@@ -4,7 +4,44 @@ import { pathToFileURL } from 'node:url';
 import { CATALOG_QUERY, readProductionMigrationState } from './audit-production-migration-state.mjs';
 
 const PROJECT = 'ltcxlbipiihclxwioyqj';
-const RELEASE_VERSIONS = Array.from({ length: 15 }, (_, index) => String(240 + index).padStart(4, '0'));
+// The pinned release range is stated ONCE, in supabase/production-forward-release.json.
+//
+// It used to be stated twice: here as a hardcoded 0240-0254, and again in the
+// manifest, with a third copy in the filename regex below. Re-pinning therefore
+// meant editing three literals AND regenerating the manifest, and any
+// disagreement between them made readReleaseFiles refuse outright. That is the
+// mechanism behind F-C08: the repository moved 38 migrations past 0254, the
+// guard fired correctly on every run, and moving the pin was a code change
+// rather than a manifest change. Deriving the range from the manifest makes
+// re-pinning a reviewed data change, which is what it always was.
+//
+// Nothing here is relaxed. The sha256 of every file is still verified, the
+// project ref is still checked, the filename is still constrained to a shape
+// that cannot escape supabase/migrations/, and the range must still be a
+// contiguous ascending block — a property the hardcoded list could only assert
+// by being written out by hand.
+const RELEASE_FILENAME = /^(\d{4})_[a-z0-9_]+\.sql$/;
+
+export function releaseVersionsOf(manifest) {
+  const versions = manifest.migrations.map(({ file }) => file.slice(0, 4));
+  if (!versions.length) throw new Error('The release manifest pins no migrations.');
+  const ascending = [...versions].sort();
+  if (new Set(versions).size !== versions.length) {
+    throw new Error('The release manifest pins a duplicate migration version.');
+  }
+  for (let i = 1; i < ascending.length; i += 1) {
+    if (Number(ascending[i]) !== Number(ascending[i - 1]) + 1) {
+      throw new Error('The pinned release must be a contiguous range; it jumps ' +
+        ascending[i - 1] + ' -> ' + ascending[i] + '.');
+    }
+  }
+  return ascending;
+}
+
+export const releaseRangeOf = (manifest) => {
+  const v = releaseVersionsOf(manifest);
+  return v[0] + '-' + v.at(-1);
+};
 const canonical = (value) => JSON.stringify(value, (_, item) =>
   item && typeof item === 'object' && !Array.isArray(item)
     ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item);
@@ -13,12 +50,13 @@ const literal = (value) => "'" + String(value).replaceAll("'", "''") + "'";
 const textArray = (values) => 'ARRAY[' + values.map(literal).join(',') + ']::text[]';
 
 export function readReleaseFiles(manifest, read = (file) => readFileSync(file, 'utf8')) {
-  if (manifest.projectRef !== PROJECT ||
-      !sameRows(manifest.migrations.map(({ file }) => file.slice(0, 4)), RELEASE_VERSIONS)) {
-    throw new Error('Only the pinned 0240-0254 production release is supported.');
+  if (manifest.projectRef !== PROJECT) {
+    throw new Error('Only the audited Bubaly production project is supported.');
   }
+  const versions = releaseVersionsOf(manifest);
   return manifest.migrations.map(({ file, sha256 }) => {
-    if (!/^0(?:24\d|25[0-4])_[a-z0-9_]+\.sql$/.test(file)) throw new Error('Invalid release filename.');
+    const match = RELEASE_FILENAME.exec(file);
+    if (!match || !versions.includes(match[1])) throw new Error('Invalid release filename.');
     const sql = read('supabase/migrations/' + file).replace(/\r\n/g, '\n');
     if (createHash('sha256').update(sql).digest('hex') !== sha256) {
       throw new Error('Reviewed migration checksum changed: ' + file);
@@ -39,14 +77,17 @@ export function releaseModeFromArgs(args) {
   return { apply, requireApplied };
 }
 
-export function assertNoNewerMigrations(migrationNames) {
-  const latestReviewedVersion = Number(RELEASE_VERSIONS.at(-1));
+export function assertNoNewerMigrations(migrationNames, manifest) {
+  const versions = releaseVersionsOf(manifest);
+  const latestReviewedVersion = Number(versions.at(-1));
   const newer = migrationNames.filter((file) => {
     const match = /^(\d+)_.*\.sql$/i.exec(file);
     return match && Number(match[1]) > latestReviewedVersion;
   }).sort();
   if (newer.length) {
-    throw new Error('Production forward release is held: repository migrations outside the pinned 0240-0254 release: ' + newer.join(', '));
+    throw new Error('Production forward release is held: repository migrations outside the pinned ' +
+      versions[0] + '-' + versions.at(-1) + ' release: ' + newer.join(', ') +
+      '. Re-pin by regenerating supabase/production-forward-release.json; see docs/PENDING_PROD_MIGRATIONS.md.');
   }
 }
 
@@ -199,7 +240,7 @@ export async function runForwardRelease({
     throw new Error('--apply and --require-applied cannot be combined.');
   }
   // Preview and already-applied results must not conceal a newer unreviewed migration.
-  assertNoNewerMigrations(listMigrationFiles());
+  assertNoNewerMigrations(listMigrationFiles(), manifest);
   if (projectRef !== PROJECT || projectRef !== manifest.projectRef || !token) {
     throw new Error('This release requires the audited Bubaly production project and access token.');
   }

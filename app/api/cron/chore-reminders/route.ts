@@ -1,22 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { listAllAuthUsers } from '@/lib/server/list-all-auth-users';
 import { readAll } from '@/lib/supabase/read-all';
+import { readInChunks } from '@/lib/supabase/chunked-in';
 import { sendReactEmail } from '@/lib/email';
 import { ChoreReminderEmail } from '@/lib/emails/chore-reminder';
 import * as React from 'react';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
-import { readAllAuthUsers } from '@/lib/supabase/read-all-auth-users';
-
-export const runtime = 'nodejs';
-// A chosen budget rather than the platform default. The loop is one family (or
-// one member) at a time with a network send in it, and a run killed mid-loop
-// always walks the same ordered prefix, so the tail of the customer base would
-// never be reached — silently, since nothing records where a run stopped.
-export const maxDuration = 300;
 
 // Runs every Sunday at 18:00 UTC via Vercel Cron.
 // Finds every family member who has open chore assignments due this week and emails them.
+//
+// Budgeted and bounded, for the same reason as weekly-digest: the send loop is
+// serial and one email API call deep per recipient, `byMember` preserves the
+// order the assignments came back in, and there is no cursor. A run killed
+// mid-loop therefore serves the same prefix of members every week and never
+// reaches the tail — the members in it simply stop getting reminders, and the
+// 200 says everything went fine. A declared budget is a chosen limit rather
+// than one inherited from the platform default.
+export const runtime = 'nodejs';
+export const maxDuration = 300;
+
+// Below maxDuration with room to finish the sends already in flight.
+const BUDGET_MS = 260_000;
+// Concurrency against provider latency, not CPU.
+const CONCURRENCY = 8;
 export async function GET(req: NextRequest) {
   const t = await getTranslations();
   if (!hasCronAuthorization(req)) {
@@ -92,13 +101,22 @@ export async function GET(req: NextRequest) {
   }
 
   // Fetch family names
+  // Batched: the assignments read above is paged and unbounded, so this id list
+  // is every family with an open chore. One `.in()` carrying a thousand uuids
+  // builds a URL of roughly 40 KB — past the gateway's request-line limit the
+  // read fails outright, and the branch below turns that into a 500 for the
+  // whole run, so nobody gets a chore reminder rather than one family losing
+  // its name from the copy.
   const familyIds = [...new Set((assignments ?? []).map((a) => a.family_id))];
-  const { data: families, error: familiesError } = await supabase.from('families').select('id, name').in('id', familyIds);
+  const { data: families, error: familiesError } = await readInChunks<{ id: string; name: string }, { message: string }>(
+    familyIds,
+    (chunk) => supabase.from('families').select('id, name').in('id', chunk),
+  );
   if (familiesError) {
     console.error('Cron chore family read error:', familiesError);
     return NextResponse.json({ error: t('choreReminders.choreReminderProcessingFailed') }, { status: 500 });
   }
-  const familyNameById = new Map((families ?? []).map((f) => [f.id, f.name]));
+  const familyNameById = new Map(families.map((f) => [f.id, f.name]));
 
   // Patch family names back in
   for (const a of assignments ?? []) {
@@ -108,16 +126,17 @@ export async function GET(req: NextRequest) {
 
   // Fetch emails
   const userIds = [...byMember.values()].map((v) => v.userId);
-  // Every auth user, not the first fifty — see lib/supabase/read-all-auth-users.
-  const { users: authUsers, error: authUsersError } = await readAllAuthUsers((params) =>
-    supabase.auth.admin.listUsers(params),
-  );
+  // Every auth user, not GoTrue's default first 50 — `listUsers()` with no
+  // arguments is ONE page. The filter below narrows to the members who have a
+  // reminder due, but it can only narrow what was read: a member past the first
+  // page has no email here and was skipped silently.
+  const { users: allAuthUsers, error: authUsersError } = await listAllAuthUsers(supabase);
   if (authUsersError) {
     console.error('Cron chore user read error:', authUsersError);
     return NextResponse.json({ error: t('choreReminders.choreReminderProcessingFailed') }, { status: 500 });
   }
   const emailByUserId = new Map(
-    authUsers
+    allAuthUsers
       .filter((u) => userIds.includes(u.id))
       .map((u) => [u.id, u.email ?? null]),
   );
@@ -125,11 +144,17 @@ export async function GET(req: NextRequest) {
   let sent = 0;
   let failed = 0;
   // A member with no email on file is neither sent nor failed. Counting it is
-  // the difference between "nobody was due" and "nobody could be reached".
+  // the difference between "nobody was due" and "nobody could be reached" — and
+  // it is not a failed run, because there is nothing here to retry.
   let skipped = 0;
-  for (const [, { userId, memberName, familyName, chores }] of byMember) {
+  // Recipients this run never ATTEMPTED, because the budget ran out. That one
+  // IS a failed run, so it decides the status below.
+  let unserved = 0;
+  const startedAt = Date.now();
+
+  const remind = async ({ userId, memberName, familyName, chores }: MemberBucket) => {
     const email = emailByUserId.get(userId);
-    if (!email) { skipped++; continue; }
+    if (!email) { skipped++; return; }
     const { ok } = await sendReactEmail({
       to: email,
       subject: `${chores.length} chore${chores.length !== 1 ? 's' : ''} coming up this week`,
@@ -137,7 +162,25 @@ export async function GET(req: NextRequest) {
     });
     if (ok) sent++;
     else failed++;
+  };
+
+  const recipients = [...byMember.values()];
+  for (let i = 0; i < recipients.length; i += CONCURRENCY) {
+    if (Date.now() - startedAt > BUDGET_MS) {
+      unserved = recipients.length - i;
+      console.error(`[chore-reminders] budget reached with ${unserved} recipients unreminded`);
+      break;
+    }
+    await Promise.all(recipients.slice(i, i + CONCURRENCY).map(remind));
   }
 
-  return NextResponse.json({ sent, failed, skipped }, { status: failed === 0 ? 200 : 502 });
+  // `unserved` counts recipients this run never attempted. A 200 here would
+  // make an unreminded tail look like a clean run. A `skipped` member has no
+  // address to reach and nothing to retry, so it is reported without making the
+  // run a failure.
+  const ok = failed === 0 && unserved === 0;
+  return NextResponse.json(
+    { sent, failed, skipped, ...(unserved > 0 ? { unserved } : {}) },
+    { status: ok ? 200 : 502 },
+  );
 }

@@ -4,7 +4,7 @@
 // notifications already created for the same item. Deterministic by design:
 // notifications must be trustworthy, so this is rule-based, not AI-generated.
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { settleAll } from '@/lib/supabase/settle';
+import { settle, settleAll, describeReadError } from '@/lib/supabase/settle';
 import type { Database, NotificationType } from '@/lib/database.types';
 import { renewalReminders, opportunityReminders } from '@/lib/notifications/deadline-reminders';
 import { approvalReminders, type ApprovalInput } from '@/lib/notifications/approval-reminders';
@@ -15,6 +15,7 @@ import { dueFamilyReminderNotices, reminderFetchHorizonIso, type FamilyReminderR
 import { onThisDayNotice } from '@/lib/memories/on-this-day';
 import { imminentMomentNotices } from '@/lib/moments/notify';
 import { deliveryTimeFor } from '@/lib/services/notifications';
+import { asWallClockIn, isValidTimezone } from '@/lib/time/zoned';
 import { addDaysToDayKey, dayKeyInTz, systemScopeForFamily, zonedDayBoundsMs } from '@/lib/services/scope';
 import { readInChunks } from '@/lib/supabase/chunked-in';
 
@@ -58,34 +59,62 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   // starts at 09:00 the PREVIOUS local day, so yesterday's dose is mistaken for
   // today's and the reminder never fires. A missed medication reminder is the
   // worse of the two, and neither is acceptable.
-  const { data: familyRow } = await supabase
-    .from('families').select('timezone').eq('id', familyId).maybeSingle();
+  // ...which is why the ERROR here is not dropped. This read used to be
+  // `const { data: familyRow }`, so a failed read fell through to exactly the
+  // `'UTC'` the paragraph above spends ten lines explaining is unacceptable —
+  // silently, and most damagingly for the medication reminder that then never
+  // fires. Throwing instead skips this family for this tick: all three callers
+  // wrap each family in try/catch and count `generationFailures`, so the family
+  // is retried next tick and a broken tick still reads differently from a quiet
+  // one. Late is recoverable; a dose reminder that never fires is not.
+  const { data: familyRow, error: familyZoneError } = await settle(
+    supabase.from('families').select('timezone').eq('id', familyId).maybeSingle());
+  if (familyZoneError) {
+    throw new Error(`Could not read the family timezone for ${familyId}: ${describeReadError(familyZoneError)}`);
+  }
+  // A family row with no zone set is a different thing from one we could not
+  // read, and keeps the long-standing default.
   const tz = familyRow?.timezone || 'UTC';
   const todayKey = dayKeyInTz(now, tz);
   const todayStartIso = new Date(zonedDayBoundsMs(todayKey, tz).start).toISOString();
+
+  // Doses are fetched from 24h BEFORE the family's day start, so a dose logged
+  // late last night still counts when deciding whether today's is outstanding.
+  // This bound came from the branch side of the merge; it is kept, but computed
+  // from the family-zone day start above rather than the UTC one it used to
+  // slice — which is the defect that side carried.
+  const doseFetchFromIso = new Date(Date.parse(todayStartIso) - 24 * HOUR).toISOString();
 
   // These two only bound 90- and 7-day windows, where a day either way changes
   // nothing; they use the same key for consistency rather than out of need.
   const renewalMaxKey = addDaysToDayKey(todayKey, 90);
   const signupMaxKey = addDaysToDayKey(todayKey, 7);
 
-  const sourceResults = await settleAll([
-    supabase.from('family_members').select('id, user_id, display_name, role, birthday').eq('family_id', familyId).eq('is_active', true),
-    supabase.from('calendar_events').select('id, title, starts_at, all_day, location, assignee_id').eq('family_id', familyId).gte('starts_at', nowIso).lte('starts_at', in48),
-    supabase.from('chore_assignments').select('id, due_at, member_id, chore_id, status').eq('family_id', familyId).in('status', ['todo', 'in_progress']).not('due_at', 'is', null).lte('due_at', in24).gte('due_at', nowIso),
-    supabase.from('school_events').select('id, title, starts_at, member_id, event_type').eq('family_id', familyId).gte('starts_at', nowIso).lte('starts_at', in48),
-    supabase.from('sports_events').select('id, title, starts_at, member_id, sport, location').eq('family_id', familyId).gte('starts_at', nowIso).lte('starts_at', in48),
-    supabase.from('reminders').select('id, title, remind_at, member_id, is_done').eq('family_id', familyId).eq('is_done', false).gte('remind_at', nowIso).lte('remind_at', in24),
-    supabase.from('documents').select('id, title, expires_at').eq('family_id', familyId).not('expires_at', 'is', null).gte('expires_at', nowIso).lte('expires_at', in14d),
-    // Renewals within ~90d (per-item reminder window applied in code) and open signups within 7d.
-    supabase.from('renewals').select('id, title, expires_at, reminder_days, status').eq('family_id', familyId).eq('status', 'active').gte('expires_at', todayKey).lte('expires_at', renewalMaxKey),
-    supabase.from('opportunities').select('id, title, deadline, status').eq('family_id', familyId).in('status', ['interested', 'waitlisted']).not('deadline', 'is', null).gte('deadline', todayKey).lte('deadline', signupMaxKey),
-    // Active meds + their schedules + today's logged doses → "dose due today" reminders.
-    supabase.from('medications').select('id, name, dosage, member_id, is_active').eq('family_id', familyId).eq('is_active', true),
-    supabase.from('medication_schedules').select('id, medication_id, time_of_day, days_of_week, starts_on, ends_on').eq('family_id', familyId),
-    supabase.from('medication_doses').select('schedule_id, scheduled_for, status').eq('family_id', familyId).gte('scheduled_for', todayStartIso),
-    // Pending money approvals → a "decision is waiting on you" ping for parents.
-    supabase.from('parent_approvals').select('id, kind, amount_cents, created_at').eq('family_id', familyId).eq('status', 'pending').limit(50),
+  const [scope, sourceResults] = await Promise.all([
+    // Read once: the medication match needs the family's zone before the
+    // reminders are built, and quiet hours needs the same scope after.
+    systemScopeForFamily(supabase, familyId),
+    settleAll([
+      supabase.from('family_members').select('id, user_id, display_name, role, birthday').eq('family_id', familyId).eq('is_active', true),
+      supabase.from('calendar_events').select('id, title, starts_at, all_day, location, assignee_id').eq('family_id', familyId).gte('starts_at', nowIso).lte('starts_at', in48),
+      supabase.from('chore_assignments').select('id, due_at, member_id, chore_id, status').eq('family_id', familyId).in('status', ['todo', 'in_progress']).not('due_at', 'is', null).lte('due_at', in24).gte('due_at', nowIso),
+      supabase.from('school_events').select('id, title, starts_at, member_id, event_type').eq('family_id', familyId).gte('starts_at', nowIso).lte('starts_at', in48),
+      supabase.from('sports_events').select('id, title, starts_at, member_id, sport, location').eq('family_id', familyId).gte('starts_at', nowIso).lte('starts_at', in48),
+      supabase.from('reminders').select('id, title, remind_at, member_id, is_done').eq('family_id', familyId).eq('is_done', false).gte('remind_at', nowIso).lte('remind_at', in24),
+      supabase.from('documents').select('id, title, expires_at').eq('family_id', familyId).not('expires_at', 'is', null).gte('expires_at', nowIso).lte('expires_at', in14d),
+      // Renewals within ~90d (per-item reminder window applied in code) and open signups within 7d.
+      supabase.from('renewals').select('id, title, expires_at, reminder_days, status').eq('family_id', familyId).eq('status', 'active').gte('expires_at', todayKey).lte('expires_at', renewalMaxKey),
+      supabase.from('opportunities').select('id, title, deadline, status').eq('family_id', familyId).in('status', ['interested', 'waitlisted']).not('deadline', 'is', null).gte('deadline', todayKey).lte('deadline', signupMaxKey),
+      // Active meds + their schedules + today's logged doses → "dose due today" reminders.
+      supabase.from('medications').select('id, name, dosage, member_id, is_active').eq('family_id', familyId).eq('is_active', true),
+      supabase.from('medication_schedules').select('id, medication_id, time_of_day, days_of_week, starts_on, ends_on').eq('family_id', familyId),
+      // A day earlier than UTC midnight: the family's own 00:00 lands up to 14h
+      // before it (UTC+14) and the dose rows for today's early slots would
+      // otherwise be filtered out before the zone-aware match ever sees them.
+      supabase.from('medication_doses').select('schedule_id, scheduled_for, status').eq('family_id', familyId).gte('scheduled_for', doseFetchFromIso),
+      // Pending money approvals → a "decision is waiting on you" ping for parents.
+      supabase.from('parent_approvals').select('id, kind, amount_cents, created_at').eq('family_id', familyId).eq('status', 'pending').limit(50),
+    ]),
   ]);
   // Degrade-but-log: a failed source read skips only its own notification
   // category (partial delivery beats all-or-nothing for a "who needs to know"
@@ -318,7 +347,12 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   // ── Medication doses recur daily, so they dedup against TODAY's medication_due
   //    notifications only (related_id stays the medication's real uuid).
   let medRows: NotificationRow[] = [];
-  const medReminders = medicationDueReminders(meds ?? [], medSchedules ?? [], medDoses ?? [], userByMember, managerLites, now);
+  // A dose slot belongs to the family's clock. Reading it on the cron's clock
+  // matches no logged dose at all for a household outside UTC, so every dose
+  // already taken looks pending and the family is reminded to take it again.
+  const familyZone = scope?.tz && isValidTimezone(scope.tz) ? scope.tz : null;
+  const medNow = familyZone ? asWallClockIn(now, familyZone) : now;
+  const medReminders = medicationDueReminders(meds ?? [], medSchedules ?? [], medDoses ?? [], userByMember, managerLites, medNow, familyZone);
   if (medReminders.length > 0) {
     const { data: existingMed, error: existingMedErr } = await supabase
       .from('notifications')
@@ -348,7 +382,6 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   // Not urgent: everything this generator produces is a courtesy notice about a
   // day's events, reminders and medications. A run at 06:30 UTC is 23:30 for a
   // family on US Pacific time.
-  const scope = await systemScopeForFamily(supabase, familyId);
   if (scope) {
     const { sendAt } = await deliveryTimeFor(scope);
     for (const row of allRows) row.send_at = sendAt;

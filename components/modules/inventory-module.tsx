@@ -357,7 +357,6 @@ function ItemForm({ familyId, userId, members, locations, item, defaultLocationI
     if (file.size > 25 * 1024 * 1024) { toastError('Photo is too large (max 25 MB)'); return; }
     setUploading(true);
     try {
-      const ext = file.name.split('.').pop() || 'jpg';
       const path = familyMediaPath(familyId, 'inventory', file.name);
       const { data: stored, error: upErr } = await createClient().storage.from('family-media').upload(path, file, { upsert: false });
       if (upErr || !stored) { toastError(describeDbError(upErr)); return; }

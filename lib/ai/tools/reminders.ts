@@ -15,6 +15,7 @@ import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '
 import { describeDbError } from '@/lib/supabase/errors';
 import { resolveAssigneeId } from './family';
 import { defineTool, describeWhen, plural, type ToolDefinition } from './types';
+import { escapeLike } from '@/lib/supabase/escape-like';
 
 const KINDS = ['time', 'location', 'recurring', 'medication', 'bill', 'school', 'chore'] as const;
 const RECURRENCES = ['none', 'daily', 'weekdays', 'weekly', 'biweekly', 'monthly', 'yearly'] as const;
@@ -38,7 +39,12 @@ const reminderOutput = z.object({
  * than asking them to try again.
  */
 async function findReminder(scope: ServiceScope, title: string): Promise<ServiceResult<{ id: string; title: string }>> {
-  const term = title.trim().replace(/[%_]/g, (m) => `\\${m}`);
+  // Escaped ONCE, at the call site below. Escaping here as well produced
+  // `50\\\%`, which LIKE reads as a literal backslash followed by a literal
+  // percent — so a reminder actually titled "50% off groceries" stopped being
+  // findable. Verified in Postgres 16: `ilike '%50\% off groceries%'` is true,
+  // `ilike '%50\\\% off groceries%'` is false.
+  const term = title.trim();
   if (!term) return fail('Which reminder did you mean?', { code: SERVICE_CODES.invalidInput });
 
   const { data, error } = await scope.db
@@ -46,7 +52,7 @@ async function findReminder(scope: ServiceScope, title: string): Promise<Service
     .select('id, title')
     .eq('family_id', scope.familyId)
     .in('status', ['active', 'snoozed'])
-    .ilike('title', `%${term}%`)
+    .ilike('title', `%${escapeLike(term)}%`)
     .order('remind_at', { ascending: true, nullsFirst: false })
     .limit(1);
   if (error) {

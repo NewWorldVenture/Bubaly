@@ -30,6 +30,7 @@ import {
 import { listPending } from '@/lib/services/approvals';
 import { listMemories } from '@/lib/services/memory';
 import { scopeFromUserContext } from '@/lib/services/scope';
+import { settle } from '@/lib/supabase/settle';
 
 export const metadata: Metadata = { title: 'Needs your decision' };
 export const dynamic = 'force-dynamic';
@@ -51,24 +52,24 @@ export default async function NeedsYouPage() {
     // does (sensitive categories are for managers), so a child's queue never
     // carries a medical inference to confirm.
     listMemories(scope),
-    supabase.from('family_automation_runs').select('id, summary, state, updated_at, created_at')
-      .eq('family_id', familyId).in('state', ['awaiting_approval', 'awaiting_context']).order('updated_at', { ascending: false }).limit(50),
-    supabase.from('family_ai_recommendations').select('id, title, body, priority, cta_href, created_at')
-      .eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(50),
+    settle(supabase.from('family_automation_runs').select('id, summary, state, updated_at, created_at')
+      .eq('family_id', familyId).in('state', ['awaiting_approval', 'awaiting_context']).order('updated_at', { ascending: false }).limit(50)),
+    settle(supabase.from('family_ai_recommendations').select('id, title, body, priority, cta_href, created_at')
+      .eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(50)),
     manager
-      ? supabase.from('parent_approvals').select('id, kind, amount_cents, created_at')
-          .eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(50)
+      ? settle(supabase.from('parent_approvals').select('id, kind, amount_cents, created_at')
+          .eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(50))
       : Promise.resolve({ data: [] as ParentApprovalRow[], error: null }),
     manager
-      ? supabase.from('chore_assignments').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('status', 'submitted')
+      ? settle(supabase.from('chore_assignments').select('id', { count: 'exact', head: true }).eq('family_id', familyId).eq('status', 'submitted'))
       : Promise.resolve({ count: 0, error: null }),
-    supabase.from('family_reminders').select('id', { count: 'exact', head: true })
-      .eq('family_id', familyId).eq('status', 'active').not('remind_at', 'is', null).lt('remind_at', now.toISOString()),
-    supabase.from('family_inbox_messages').select('id, direction, from_addr, subject, ai_summary, body, ai_intent, status, occurred_at')
+    settle(supabase.from('family_reminders').select('id', { count: 'exact', head: true })
+      .eq('family_id', familyId).eq('status', 'active').not('remind_at', 'is', null).lt('remind_at', now.toISOString())),
+    settle(supabase.from('family_inbox_messages').select('id, direction, from_addr, subject, ai_summary, body, ai_intent, status, occurred_at')
       .eq('family_id', familyId).eq('status', 'new').eq('direction', 'inbound').in('ai_intent', [...REPLY_INTENTS])
-      .order('occurred_at', { ascending: false }).limit(50),
-    supabase.from('paperwork_items').select('id, title, status, urgency, due_on, actions, created_at')
-      .eq('family_id', familyId).in('status', ['needs_action', 'in_progress']).order('created_at', { ascending: false }).limit(100),
+      .order('occurred_at', { ascending: false }).limit(50)),
+    settle(supabase.from('paperwork_items').select('id, title, status, urgency, due_on, actions, created_at')
+      .eq('family_id', familyId).in('status', ['needs_action', 'in_progress']).order('created_at', { ascending: false }).limit(100)),
   ]);
 
   const failures: { label: string; error: unknown }[] = [];

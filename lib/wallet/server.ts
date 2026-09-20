@@ -109,16 +109,34 @@ export async function fundGoal(supabase: DB, params: {
   return { ok: true, txnId: result.transaction_id };
 }
 
-export type CreditResult = { ok: boolean; error?: string; credited: number };
+export type CreditResult = {
+  ok: boolean;
+  error?: string;
+  credited: number;
+  /**
+   * The ledger already holds this exact credit. Set when the insert hits a
+   * unique violation — today that is `uq_wallet_txn_chore_payout` (0316),
+   * which is what stops two simultaneous "Pay" clicks from crediting a chore
+   * twice. A caller that has its own "already paid?" read should report this
+   * the same way it reports that read finding a row, not as a failure.
+   */
+  duplicate?: boolean;
+};
 
-// A `childSpendableCents` helper used to sit here, exported, and its docstring
-// said "This is what a card authorization is checked against in real time."
-// Nothing called it, and the sentence was false: a card authorization goes
-// through `reserveCardAuth` below, which re-checks the balance in SQL under a
-// per-child lock — the whole point being that two concurrent authorizations
-// cannot each approve against the same balance. A TypeScript sum read outside
-// that lock cannot give the same answer, so a future caller trusting the comment
-// for a money decision would have had a race, not a balance.
+// `childSpendableCents` used to live here, exported. It summed the SPEND
+// bucket's ledger in TypeScript and its doc comment said "this is what a card
+// authorization is checked against in real time" — which was not true of it, and
+// had not been since 0155. The live check is `reserveCardAuth` below, whose
+// `wallet_reserve_card_auth` RPC sums in SQL under `for update` on the bucket,
+// so it reads every row and serialises concurrent authorizations. A TypeScript
+// sum taken outside that lock cannot give the same answer. This one had no
+// callers anywhere in the repository.
+//
+// It was removed rather than fixed because leaving it was the hazard: an
+// unbounded `select` is answered with at most `db-max-rows` (1,000), so a child
+// past a thousand ledger rows would have been given a balance summed over an
+// arbitrary subset — and the comment invited the next author to wire it into
+// exactly the decision that must not use it.
 //
 // Use `bucketBalanceCents` (below) for DISPLAY, and `reserveCardAuth` for a
 // decision that spends.
@@ -253,7 +271,21 @@ export async function creditChildWallet(supabase: DB, params: {
   if (rows.length === 0) return { ok: false, error: 'Nothing to allocate', credited: 0 };
 
   const { error } = await supabase.from('wallet_transactions').insert(rows);
-  if (error) return { ok: false, error: walletFailure(error, 'Could not credit that wallet.'), credited: 0 };
+  if (error) {
+    // A unique violation here means the ledger already carries this credit —
+    // the other half of a race the caller's own "already paid?" read cannot
+    // win on its own. The rows of one credit go in as a single multi-row
+    // INSERT, so this refuses all of them together: no half-credited wallet.
+    const duplicate = (error as { code?: string }).code === '23505';
+    return {
+      ok: false,
+      error: duplicate
+        ? 'That reward has already been paid.'
+        : walletFailure(error, 'Could not credit that wallet.'),
+      credited: 0,
+      duplicate,
+    };
+  }
 
   await logWalletAudit(supabase, {
     family_id: params.familyId, actor_user_id: params.createdBy, action: `credit_${params.type}`,

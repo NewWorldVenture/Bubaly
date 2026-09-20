@@ -13,6 +13,7 @@ import { useTranslations } from '@/components/i18n/locale-provider';
 import { Button } from '@/components/ui/button';
 import { OtpInput } from '@/components/ui/otp-input';
 import { MfaErrorNotice } from '@/components/auth/mfa-error-copy';
+import { SignOutForm } from '@/components/auth/sign-out-form';
 import {
   classifyMfaError,
   isValidTotpCode,
@@ -45,6 +46,13 @@ export function StepUpForm({ next, serverReadFailed }: { next: string; serverRea
         return;
       }
       setFactors(data.all as MfaFactor[]);
+    }).catch((cause: unknown) => {
+      // `listFactors` converts network failures into `{ error }`, but rethrows
+      // anything that is NOT an AuthError — a path with no handler here, which
+      // left the form on its loading state forever and logged nothing.
+      if (!active) return;
+      console.error('[step-up] mfa factors read threw', cause);
+      setLoadError(classifyMfaError(cause instanceof Error ? cause : new Error(String(cause))));
     });
     return () => { active = false; };
   }, [reloadKey]);
@@ -105,9 +113,9 @@ export function StepUpForm({ next, serverReadFailed }: { next: string; serverRea
           <Button onClick={() => submit()} loading={busy} disabled={busy || !isValidTotpCode(code)}>{t('stepUp.continue')}</Button>
         )}
         <Button variant="ghost" onClick={() => router.push('/dashboard')} disabled={busy}>{t('stepUp.back')}</Button>
-        <form action="/auth/signout" method="post" className="ml-auto">
-          <button type="submit" className="text-xs text-muted hover:text-fg">{t('stepUp.signOut')}</button>
-        </form>
+        <SignOutForm className="ml-auto">
+          {({ signingOut }) => <button type="submit" disabled={signingOut} className="text-xs text-muted hover:text-fg">{t('stepUp.signOut')}</button>}
+        </SignOutForm>
       </div>
     </div>
   );

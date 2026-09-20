@@ -40,20 +40,20 @@ describe('Supabase migration filename safety', () => {
   // generation (00100 and 00101 both live in 0010). nextVersion reads the first
   // four digits, so those do not drag the next free number up to 1422.
   it('points new migrations at the next unused version', () => {
-    // Bumped whenever a migration lands — 0295 is the reward-redemption
-    // decision guard (#542), 0296 the social-access DELETE grant, 0297 the
-    // family-credentials write boundary, 0298 the invites UPDATE check, 0299
-    // the child_logins write boundary, 0300 the audit_logs actor pin, and 0301 the family-erasure indexes. Both branches independently claimed 0295;
-    // stating the number rather than deriving it is exactly what caught that, so
-    // a file that quietly reuses one, or a rebase that drops one, fails here.
+    // Bumped whenever a migration lands — 0302 keeps one live system policy
+    // per family per name. Stating it rather than deriving it is
+    // the point: the number is how a new migration announces itself, so a file
+    // that quietly reuses one, or a rebase that drops one, fails here.
     //
-    // 0318 (guardian safety config is manager-only) and 0319 (allowance rules
-    // are not self-served) skip past 0302-0317 DELIBERATELY. main carries its
-    // own 0296-0317, so this branch's 0296-0301 already collide with six of
-    // them; numbering the new pair from 0318 keeps them out of that pile rather
-    // than deepening it. The collision itself is real and still has to be
-    // resolved when the branches meet — see finalaudit.md.
-    expect(audit.nextVersion).toBe('0320');
+    // 0318 guardian safety config is manager-only (AUTHZ-005); 0319 the
+    // social-access DELETE grant; 0320 the audit_logs actor pin; 0321 the
+    // family-erasure indexes. The last three arrived from the audit branch,
+    // which had numbered them 0296, 0300 and 0301 before main claimed those —
+    // this pin is exactly what surfaced that six-way collision on the merge.
+    // Three of that branch's six were dropped rather than renumbered, because
+    // main had already fixed the same subjects: family_credentials (0296),
+    // sensitive tables incl. child_logins (0297) and invites (0298).
+    expect(audit.nextVersion).toBe('0322');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

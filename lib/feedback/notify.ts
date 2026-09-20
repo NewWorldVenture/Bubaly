@@ -38,11 +38,17 @@ export async function notifySuperAdmins(admin: Admin, input: {
   email?: boolean;
 }): Promise<void> {
   try {
-    await admin.from('admin_notifications').insert({
+    // The result is read. A PostgREST call RESOLVES with { data, error } and
+    // rejects only under .throwOnError(), so this catch could never fire for the
+    // failure its own message names — it saw a client that could not be built,
+    // and nothing else. Best-effort is right here; silent is not, because the
+    // /admin feed is where a super admin finds out at all.
+    const { error } = await admin.from('admin_notifications').insert({
       kind: input.kind, title: input.title, body: input.body ?? null, url: input.url ?? null,
       related_type: input.relatedType ?? null, related_id: input.relatedId ?? null,
       meta: (input.meta ?? {}) as never,
     });
+    if (error) console.error('[feedback-notify] admin_notifications insert failed', error);
   } catch (e) {
     console.error('[feedback-notify] admin_notifications insert failed', e);
   }
@@ -83,12 +89,21 @@ export async function syncIdeaToGithub(admin: Admin, idea: IdeaForIssue): Promis
       body: issueBody(idea, `${appUrl()}/feedback`),
       labels: githubLabels(idea),
     });
-    await admin.from('feedback_ideas').update({
+    // This one is not best-effort. The issue EXISTS at GitHub by here, and this
+    // row is the only record that it does — so a discarded failure returns
+    // { ok: true } for a sync that left no trace, and the next run files a
+    // SECOND issue for the same idea. The catch below names the issue creation,
+    // which does throw; it never covered this write, which does not.
+    const { error } = await admin.from('feedback_ideas').update({
       github_issue_number: issue.number,
       github_issue_url: issue.html_url,
       github_state: issue.state,
       github_synced_at: new Date().toISOString(),
     }).eq('id', idea.id);
+    if (error) {
+      console.error('[feedback-notify] GitHub issue created but the link was not recorded', { ideaId: idea.id, issue: issue.number, error });
+      return { ok: false, skipped: false, error: 'The GitHub issue was created but could not be recorded.' };
+    }
     return { ok: true, issue };
   } catch (e) {
     console.error('[feedback-notify] GitHub issue create failed', e);

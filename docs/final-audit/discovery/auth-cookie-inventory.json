@@ -1,0 +1,875 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-12T17:34:31.212Z",
+  "baselineCommit": "bc22dbc9ca7bb16535dbb7d2df788cf0eb3e1bcf",
+  "sourceCommit": "effe6a2edddba707d2bbc5b11cd790071080822a",
+  "methodology": [
+    "Exact committed changed blobs, excluding audit documents. Source SHA256 is over Git blob bytes.",
+    "Exported declarations and static environment names parsed using installed TypeScript. No secret values.",
+    "New page routes are derived without route-group segments. Discovery does not establish workflow completion."
+  ],
+  "counts": {
+    "files": 23,
+    "newFiles": 8,
+    "production": 9,
+    "tests": 14,
+    "addedExportedFunctions": 6,
+    "newPageRoutes": [],
+    "removedExportedFunctions": 5
+  },
+  "files": [
+    {
+      "path": "app/(auth)/auth/recovery/actions.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "f21a41cd750f27650008e833e361a405d967c6bcd32dcd9f44c2d6b86b113b7e",
+      "sourceSha256": "04c0a5e81409aeb0fc46c740e1db671164de4272233dcd8e3e2c3ce5a2ce8ea0",
+      "bytes": 2435,
+      "baselineExportedSymbols": [
+        {
+          "name": "prepareRecoveryAction",
+          "line": 29,
+          "kind": "function"
+        },
+        {
+          "name": "consumeRecoveryAction",
+          "line": 34,
+          "kind": "function"
+        },
+        {
+          "name": "inspectRecoveryAction",
+          "line": 49,
+          "kind": "function"
+        },
+        {
+          "name": "saveRecoveryAction",
+          "line": 54,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "prepareRecoveryAction",
+          "line": 19,
+          "kind": "function"
+        },
+        {
+          "name": "consumeRecoveryAction",
+          "line": 24,
+          "kind": "function"
+        },
+        {
+          "name": "inspectRecoveryAction",
+          "line": 39,
+          "kind": "function"
+        },
+        {
+          "name": "saveRecoveryAction",
+          "line": 44,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-5B00CA3C214D",
+        "SERVICE-616ECD0B139E",
+        "SERVICE-C837852680A0",
+        "SERVICE-F52FD7C3A46F",
+        "SERVICE-D9DE0BA020AA"
+      ],
+      "removedExportedFunctions": []
+    },
+    {
+      "path": "app/auth/callback/route.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "3c75b0f79233aeb004f0ab523eea7905a43565462b8c906fa8e6a8afd37dad48",
+      "sourceSha256": "2480fac3c4badb9ce87ef7479826a652412ef972aa32f461b520fa66cf8fef0b",
+      "bytes": 9706,
+      "baselineExportedSymbols": [
+        {
+          "name": "GET",
+          "line": 17,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "GET",
+          "line": 18,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [
+        "NODE_ENV"
+      ],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "ROLE-7394A5416880",
+        "API-9A739F355ACF",
+        "FLOW-B9D906284539",
+        "AUTH-001",
+        "AUTH-003"
+      ],
+      "removedExportedFunctions": []
+    },
+    {
+      "path": "app/onboarding/actions.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "92c33269aef92dcbe15cbfa14c852d7cbc8c00f13250be63c2a7b474ba594af8",
+      "sourceSha256": "5594a63133af379dd63b0953613f7d873a31656b86df22c8a573466bfba6ae60",
+      "bytes": 40052,
+      "baselineExportedSymbols": [
+        {
+          "name": "previewCalendarImportAction",
+          "line": 112,
+          "kind": "function"
+        },
+        {
+          "name": "saveOnboardingProfileAction",
+          "line": 168,
+          "kind": "function"
+        },
+        {
+          "name": "createFamilyAction",
+          "line": 192,
+          "kind": "function"
+        },
+        {
+          "name": "saveFamilyDetailsAction",
+          "line": 253,
+          "kind": "function"
+        },
+        {
+          "name": "completeProfileOnboardingAction",
+          "line": 338,
+          "kind": "function"
+        },
+        {
+          "name": "resetOnboardingAction",
+          "line": 471,
+          "kind": "function"
+        },
+        {
+          "name": "addLocalMemberAction",
+          "line": 507,
+          "kind": "function"
+        },
+        {
+          "name": "inviteMemberAction",
+          "line": 535,
+          "kind": "function"
+        },
+        {
+          "name": "finalizeOnboardingAction",
+          "line": 582,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "previewCalendarImportAction",
+          "line": 110,
+          "kind": "function"
+        },
+        {
+          "name": "saveFamilyDetailsAction",
+          "line": 166,
+          "kind": "function"
+        },
+        {
+          "name": "resetOnboardingAction",
+          "line": 249,
+          "kind": "function"
+        },
+        {
+          "name": "finalizeOnboardingAction",
+          "line": 313,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "INCOMPLETE-54F2B68C42D8",
+        "INCOMPLETE-1CCD32B4639E",
+        "INCOMPLETE-0A2E6362C2A9",
+        "INCOMPLETE-3EF41FA1F5B7",
+        "ACTION-478E5E023D7F",
+        "ACTION-AA600E5AC1E4",
+        "ACTION-344AA8CFAD46",
+        "ACTION-2C0D1DC16D66",
+        "ACTION-E9901AA42D31",
+        "ACTION-7FE88226F6DE",
+        "ACTION-07F38B234F9E",
+        "ACTION-0BA933FFD4A3",
+        "ACTION-03BB5F5C118E",
+        "FLOW-A4963C49961A",
+        "UI-WF-002"
+      ],
+      "removedExportedFunctions": [
+        {
+          "name": "saveOnboardingProfileAction",
+          "line": 168,
+          "kind": "function"
+        },
+        {
+          "name": "createFamilyAction",
+          "line": 192,
+          "kind": "function"
+        },
+        {
+          "name": "completeProfileOnboardingAction",
+          "line": 338,
+          "kind": "function"
+        },
+        {
+          "name": "addLocalMemberAction",
+          "line": 507,
+          "kind": "function"
+        },
+        {
+          "name": "inviteMemberAction",
+          "line": 535,
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "path": "components/auth/signup-form.tsx",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "e4bf5c85d19d4dc8e0da68d57341a1b509dc78f212dd785a7cbc0b63c3b6e5b7",
+      "sourceSha256": "cb5b7c9759e30e3bff7a734729b0d40725973482f8d2ab4f26b2ff4677b83561",
+      "bytes": 10964,
+      "baselineExportedSymbols": [
+        {
+          "name": "SignupForm",
+          "line": 25,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "SignupForm",
+          "line": 26,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "COMPONENT-FF9788DC39FD",
+        "CONTROL-EA8C05AD98B0",
+        "CONTROL-E16A93B038A0",
+        "CONTROL-64F6D0A181CB",
+        "CONTROL-86A8B5905D82",
+        "CONTROL-0EBAC7C4D62C",
+        "CONTROL-6A16625C3448",
+        "CONTROL-95558D9B7672",
+        "CONTROL-AF52E1DE7367",
+        "CONTROL-5AD3B5FC5D7C",
+        "CONTROL-0B2F397BA1FE",
+        "CONTROL-2632817B34FE",
+        "ROLE-FF9788DC39FD",
+        "INCOMPLETE-41B07CEE48EC",
+        "INCOMPLETE-D6D0416A8C95",
+        "INCOMPLETE-78E6FC309665",
+        "AUTH-001",
+        "UI-WF-001"
+      ],
+      "removedExportedFunctions": []
+    },
+    {
+      "path": "lib/auth/recovery-cookies.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "0d79a95fe6887f0dfcd8fa94e9ee7484e2818aafb73e34a8e24ec27cdcc38e71",
+      "bytes": 4756,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "readRecoveryCookieToken",
+          "line": 32,
+          "kind": "function"
+        },
+        {
+          "name": "createRecoveryCookieExchange",
+          "line": 72,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "readRecoveryCookieToken",
+          "line": 32,
+          "kind": "function"
+        },
+        {
+          "name": "createRecoveryCookieExchange",
+          "line": 72,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [
+        "NEXT_PUBLIC_SITE_URL",
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        "NEXT_PUBLIC_SUPABASE_URL"
+      ],
+      "addedEnvironmentNames": [
+        "NEXT_PUBLIC_SITE_URL",
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        "NEXT_PUBLIC_SUPABASE_URL"
+      ],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [],
+      "removedExportedFunctions": []
+    },
+    {
+      "path": "lib/auth/signup-client.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "caf4c440616a6d9f41578b37afe56cd42b1f14a09f9d69832c954f817bd40c3a",
+      "bytes": 6745,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "signUpWithOwnedVerifier",
+          "line": 21,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "signUpWithOwnedVerifier",
+          "line": 21,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        "NEXT_PUBLIC_SUPABASE_URL"
+      ],
+      "addedEnvironmentNames": [
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        "NEXT_PUBLIC_SUPABASE_URL"
+      ],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [],
+      "removedExportedFunctions": []
+    },
+    {
+      "path": "lib/onboarding/family.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "b5b464806d8946532787fb84699fb311fc871c454f6afeba911b174d63f675d6",
+      "sourceSha256": "172c7f5f14288b6334c5255f10917d7267bd5c237bcf80d3f21b7b4fdaaba913",
+      "bytes": 4288,
+      "baselineExportedSymbols": [
+        {
+          "name": "GoalOption",
+          "line": 5,
+          "kind": "type"
+        },
+        {
+          "name": "FAMILY_GOALS",
+          "line": 8,
+          "kind": "value"
+        },
+        {
+          "name": "ReferralOption",
+          "line": 20,
+          "kind": "type"
+        },
+        {
+          "name": "REFERRAL_SOURCES",
+          "line": 23,
+          "kind": "value"
+        },
+        {
+          "name": "cleanGoals",
+          "line": 36,
+          "kind": "function"
+        },
+        {
+          "name": "cleanReferralSource",
+          "line": 46,
+          "kind": "function"
+        },
+        {
+          "name": "parseChildAges",
+          "line": 51,
+          "kind": "function"
+        },
+        {
+          "name": "householdSummary",
+          "line": 60,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "GoalOption",
+          "line": 5,
+          "kind": "type"
+        },
+        {
+          "name": "FAMILY_GOALS",
+          "line": 8,
+          "kind": "value"
+        },
+        {
+          "name": "ReferralOption",
+          "line": 20,
+          "kind": "type"
+        },
+        {
+          "name": "REFERRAL_SOURCES",
+          "line": 23,
+          "kind": "value"
+        },
+        {
+          "name": "cleanGoals",
+          "line": 36,
+          "kind": "function"
+        },
+        {
+          "name": "cleanReferralSource",
+          "line": 46,
+          "kind": "function"
+        },
+        {
+          "name": "parseChildAges",
+          "line": 51,
+          "kind": "function"
+        },
+        {
+          "name": "householdSummary",
+          "line": 60,
+          "kind": "function"
+        },
+        {
+          "name": "autoOwnerName",
+          "line": 77,
+          "kind": "function"
+        },
+        {
+          "name": "autoFamilyName",
+          "line": 93,
+          "kind": "function"
+        },
+        {
+          "name": "DEFAULT_OWNER_DISPLAY_NAME",
+          "line": 100,
+          "kind": "value"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "autoOwnerName",
+          "line": 77,
+          "kind": "function"
+        },
+        {
+          "name": "autoFamilyName",
+          "line": 93,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "LIBRARY-CCE4B2E456F1"
+      ],
+      "removedExportedFunctions": []
+    },
+    {
+      "path": "lib/server/ensure-family.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "d935c11d613094d97198cbc1658d2b84771cd942ae2a5af742a93637e37c4501",
+      "sourceSha256": "dbca2c30539e1e03976be3bfe4755b85108e55301b7bfeef9e6329d1c0e7a127",
+      "bytes": 8410,
+      "baselineExportedSymbols": [
+        {
+          "name": "ensureActiveFamily",
+          "line": 45,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "ensureActiveFamily",
+          "line": 54,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "LIBRARY-C4B8529EB129"
+      ],
+      "removedExportedFunctions": []
+    },
+    {
+      "path": "middleware.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "18c355f8c59d11bfb948d58dc67e154912b243cd0b6753497b38c8560c50d51d",
+      "sourceSha256": "5043b8898b2f1794e99f6d15dbb2f49d5ff9ac788681dcaf0532057575a4d331",
+      "bytes": 10354,
+      "baselineExportedSymbols": [
+        {
+          "name": "middleware",
+          "line": 78,
+          "kind": "function"
+        },
+        {
+          "name": "config",
+          "line": 190,
+          "kind": "value"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "middleware",
+          "line": 78,
+          "kind": "function"
+        },
+        {
+          "name": "config",
+          "line": 200,
+          "kind": "value"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        "NEXT_PUBLIC_SUPABASE_URL"
+      ],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-3C67EB27B539",
+        "INT-001"
+      ],
+      "removedExportedFunctions": []
+    },
+    {
+      "path": "tests/account-creation-integrity.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "361330dbd4e88d47153b4559f02655402f33d71d704fb0c81d4ec81c79042049",
+      "bytes": 10439,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "codeLines",
+          "line": 42,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "codeLines",
+          "line": 42,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [],
+      "removedExportedFunctions": []
+    },
+    {
+      "path": "tests/auth-recovery-actions.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "a19226ca6f5e268523c55d822248158829bf349d5e8af4b12aa917b3b7b0bf4b",
+      "sourceSha256": "6f0e44edd8c1316b41170fcee330bc19c08af550c65fde4591e50f2d5079a5fd",
+      "bytes": 6311,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-1AAEB1090625"
+      ],
+      "removedExportedFunctions": []
+    },
+    {
+      "path": "tests/auth-recovery-callback-execution.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "c368557c2e258a0d6846fa7fd3f22dde90d28859a1e5edfcfda0b77d6d4aab15",
+      "sourceSha256": "4757c86612617e244f7e037a787c2ff04624dad67c07e2965584c6c2a7e23f34",
+      "bytes": 9436,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-011E67642B80"
+      ],
+      "removedExportedFunctions": []
+    },
+    {
+      "path": "tests/auth-recovery-cookie-execution.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "73086785fbae710364a8c98651ddd0ec87e5f00f87fb6e4d1db7203a92595fe4",
+      "bytes": 12360,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [],
+      "removedExportedFunctions": []
+    },
+    {
+      "path": "tests/auth-recovery-cookies.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "3a4777f8c4937e74834c7fb384d2d86a4c4e86af6d4e71b7f7fa8cc1fd32a17a",
+      "bytes": 13584,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [],
+      "removedExportedFunctions": []
+    },
+    {
+      "path": "tests/auth-review-selection-forms.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "0944bf5fd3ca6a91ab766b81ca08cc635ccbb73932cb65160358278c12c4cb3d",
+      "sourceSha256": "cb7a179fa621fe178314de0dcec49c12de3397dc3781589e988f39898759fec8",
+      "bytes": 16282,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-11C68E6218DB"
+      ],
+      "removedExportedFunctions": []
+    },
+    {
+      "path": "tests/e2e/signup-boundaries.spec.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "6bb82d636fcd58022c70562136453025848176f3ce05de2781adfdd4c07bb759",
+      "sourceSha256": "978524658502d5f883c9166755df1b20f40283a548829d864c3207cb604a8644",
+      "bytes": 42491,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-6283844F982C"
+      ],
+      "removedExportedFunctions": []
+    },
+    {
+      "path": "tests/ensure-family-naming.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "5993ad7213e109490c6d85da761c0974a0003e58b3d6d6d841196b0fefb56c89",
+      "bytes": 6464,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [],
+      "removedExportedFunctions": []
+    },
+    {
+      "path": "tests/i18n-locale-resolution.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "2a04197be7f12f10256054bf0113a0490070673ed4280cdad83eb9decd66db1c",
+      "sourceSha256": "bf67505fe3549246de97d83f9b5fa0721250edbe2101e2eaee10040395b433b6",
+      "bytes": 9668,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-9BF272338C09"
+      ],
+      "removedExportedFunctions": []
+    },
+    {
+      "path": "tests/middleware-recovery-session.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "d43c655e15309add0efd3ebdcfd21eb47b540c54490daabb0a5fe9c1b9caebaf",
+      "bytes": 3537,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [],
+      "removedExportedFunctions": []
+    },
+    {
+      "path": "tests/onboarding-calendar-runtime.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "b7244f90ba225f133f26af7604380b04e88e2444504cf1e033b625320f2c52dd",
+      "sourceSha256": "e60a110a9d936cf2f4affc05227614479725683ef30164636e0baf0af144a826",
+      "bytes": 39393,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-FEBEE9290E10"
+      ],
+      "removedExportedFunctions": []
+    },
+    {
+      "path": "tests/onboarding-failure-safety.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "65dd2dfc030f55b093ec66ee9ac053d65e8ba44f590b43ba465dfbbbb56a72fe",
+      "sourceSha256": "a64a3dc5c989fbcdd599a514b5116b68964366066562a001e5bb8b78ba69f953",
+      "bytes": 3823,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-F3D8B6BD284E"
+      ],
+      "removedExportedFunctions": []
+    },
+    {
+      "path": "tests/persistent-login.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "0f3795078a6e40442a90412f53e3d3397e2c63ad3b0179c41ce8dad5292fb419",
+      "sourceSha256": "b2cae1339ef78bba631ec3dbab7713ea80de45cae443207460e4556720a0234c",
+      "bytes": 15173,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        "NEXT_PUBLIC_SUPABASE_URL"
+      ],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-45879E8D96C5"
+      ],
+      "removedExportedFunctions": []
+    },
+    {
+      "path": "tests/signup-account-creation.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "4bc3cc1b40d351b59617082afd94128ce52d49b6e1423341199cb820967766d3",
+      "bytes": 14813,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [],
+      "removedExportedFunctions": []
+    }
+  ]
+}

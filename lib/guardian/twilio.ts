@@ -104,6 +104,39 @@ export async function sendSms(to: string, body: string, from = TWILIO_PHONE_NUMB
   await twilioFetch('/Messages.json', { To: to, From: from, Body: body });
 }
 
+/** Acceptance is a provider receipt, not proof that a handset received the SMS. */
+export type SmsReceiptResult =
+  | { kind: 'accepted'; messageSid: string; providerStatus: string }
+  | { kind: 'retryable'; code: 'rate_limited' }
+  | { kind: 'rejected'; code: 'provider_rejected' | 'invalid_message' }
+  | { kind: 'unconfigured' }
+  | { kind: 'unknown' };
+
+/** A single attempt for durable callers; never retries an ambiguous external send. */
+export async function sendSmsWithReceipt(to: string, body: string, signal?: AbortSignal): Promise<SmsReceiptResult> {
+  if (!isTwilioConfigured()) return { kind: 'unconfigured' };
+  if (!/^\+[1-9]\d{7,14}$/.test(to) || !body.trim() || body.length > 1600) return { kind: 'rejected', code: 'invalid_message' };
+  let response: Response | undefined;
+  try {
+    response = await fetchExternal(`https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`, {
+      method: 'POST', redirect: 'manual', cache: 'no-store', headers: { authorization: authHeader(), 'content-type': 'application/x-www-form-urlencoded' },
+      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(15_000)]) : undefined,
+      body: new URLSearchParams({ To: to, From: TWILIO_PHONE_NUMBER, Body: body }).toString(),
+    }, 15_000);
+    if (response.status === 429) return { kind: 'retryable', code: 'rate_limited' };
+    if (response.status === 408) return { kind: 'unknown' };
+    if (response.status >= 400 && response.status < 500) return { kind: 'rejected', code: 'provider_rejected' };
+    if (response.status !== 201) return { kind: 'unknown' };
+    const data = await readBoundedResponseJson<{ sid?: unknown; status?: unknown }>(response, 64 * 1024);
+    if (typeof data?.sid !== 'string' || !/^(SM|MM)[0-9a-f]{32}$/i.test(data.sid) || typeof data.status !== 'string' ||
+        !['accepted', 'queued', 'sending', 'sent', 'delivered', 'read'].includes(data.status)) return { kind: 'unknown' };
+    return { kind: 'accepted', messageSid: data.sid, providerStatus: data.status };
+  } catch { return { kind: 'unknown' }; }
+  finally {
+    if (response?.body && !response.body.locked) await response.body.cancel().catch(() => undefined);
+  }
+}
+
 /** Initiate an outbound call (e.g., emergency escalation). */
 export async function initiateCall(params: {
   to: string;

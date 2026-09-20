@@ -134,7 +134,11 @@ describe('CONTRIBUTE — one banded row per consenting family', () => {
           if (table !== 'transactions') return target.from(table);
           const builder: Record<string, unknown> = {};
           const chain = () => builder;
-          for (const m of ['select', 'in', 'eq', 'gte', 'lte']) builder[m] = chain;
+          // `order` and `range` belong here too: the contribution reads page
+          // inside each chunk, so the stub has to answer the same builder the
+          // real one does or it fails on the missing method instead of on the
+          // transport error this test is about.
+          for (const m of ['select', 'in', 'eq', 'gte', 'lte', 'order', 'range']) builder[m] = chain;
           builder.then = (resolve: (v: unknown) => void) => resolve({ data: null, error: { message: 'connection reset' } });
           return builder;
         };

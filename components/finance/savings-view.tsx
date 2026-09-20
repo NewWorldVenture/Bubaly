@@ -28,7 +28,7 @@ export function SavingsView() {
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
-  const { data: goals, loading, error: readError, refresh } = useRealtimeQuery<Goal>({
+  const { data: goals, loading, error: readError, stale, refresh } = useRealtimeQuery<Goal>({
     table: 'savings_goals', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('savings_goals').select('*').eq('family_id', familyId).order('created_at', { ascending: false }),
   });
@@ -57,9 +57,9 @@ export function SavingsView() {
       <PageHeader title={t('savings.savingsGoals')} description={t('savingsView.setTargetsAndWatchYour')}
         action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('savings.addGoal')}</Button>} />
 
-      {loading ? <SkeletonList /> : readError ? (
+      {readError ? (
         <ErrorState message={t('savingsView.couldNotLoadSavingsGoals')} onRetry={() => { void refresh(); }} />
-      ) : rows.length === 0 ? (
+      ) : loading || stale ? <SkeletonList /> : rows.length === 0 ? (
         <EmptyState icon={Target} title={t('savings.noSavingsGoals')} description={t('savingsView.createAGoalToStart')}
           action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('savings.addGoal')}</Button>} />
       ) : (
@@ -130,8 +130,8 @@ function GoalModal({ familyId, userId, onClose }: { familyId: string; userId: st
           <div className="flex flex-wrap gap-1.5">{EMOJIS.map((e) => <button key={e} type="button" onClick={() => setV({ ...v, emoji: e })} className={`rounded-lg p-1.5 text-lg transition hover:bg-elevated ${v.emoji === e ? 'bg-brand/15 ring-2 ring-brand/40' : ''}`}>{e}</button>)}</div>
         </div>
         <div className="grid grid-cols-3 gap-3">
-          <Field label={t('savings.target')}>{(id) => <Input id={id} type="number" step="0.01" value={v.target_amount} onChange={(e) => setV({ ...v, target_amount: e.target.value })} placeholder="3000" required />}</Field>
-          <Field label={t('savings.saved')} hint={t('savingsView.optional')}>{(id) => <Input id={id} type="number" step="0.01" value={v.current_amount} onChange={(e) => setV({ ...v, current_amount: e.target.value })} placeholder="0" />}</Field>
+          <Field label={t('savings.target')}>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" value={v.target_amount} onChange={(e) => setV({ ...v, target_amount: e.target.value })} placeholder="3000" required />}</Field>
+          <Field label={t('savings.saved')} hint={t('savingsView.optional')}>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" value={v.current_amount} onChange={(e) => setV({ ...v, current_amount: e.target.value })} placeholder="0" />}</Field>
           <Field label="By" hint={t('savingsView.optional')}>{(id) => <Input id={id} type="date" value={v.target_date} onChange={(e) => setV({ ...v, target_date: e.target.value })} />}</Field>
         </div>
         <div className="flex justify-end gap-2 pt-2">
@@ -149,7 +149,7 @@ function ContributeModal({ goal, onAdd, onClose }: { goal: Goal; onAdd: (delta: 
   return (
     <Modal open onClose={onClose} title={`Add to ${goal.name}`}>
       <form onSubmit={(e) => { e.preventDefault(); onAdd(Math.abs(parseFloat(amt) || 0)); }} className="space-y-4">
-        <Field label={t('savings.amount')}>{(id) => <Input id={id} type="number" step="0.01" value={amt} onChange={(e) => setAmt(e.target.value)} placeholder="50" required autoFocus />}</Field>
+        <Field label={t('savings.amount')}>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" value={amt} onChange={(e) => setAmt(e.target.value)} placeholder="50" required autoFocus />}</Field>
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="outline" onClick={onClose}>{t('savings.cancel')}</Button>
           <Button type="submit" disabled={!amt}>{t('savings.addFunds')}</Button>

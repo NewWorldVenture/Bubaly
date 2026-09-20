@@ -388,6 +388,17 @@ export async function createChoreAction(formData: FormData): Promise<void> {
   const familyId = ctx.active.familyId;
   const title = str(formData, 'title');
   if (!title) return;
+
+  // What a chore PAYS is a manager's number, not the submitter's.
+  // payChoreRewardAction credits a wallet with `chores.cash_cents` whenever the
+  // assignment carries no override, and the board copies `chores.points` into
+  // points_awarded on approval — so a member pricing their own chore writes the
+  // figure a parent's Pay click hands over. 0307 is the database boundary; this
+  // refuses the same submission here rather than letting it fail silently.
+  const pricing = ['points', 'points_min', 'points_max', 'cash_cents', 'cash_min_cents', 'cash_max_cents'];
+  const priced = pricing.some((field) => intVal(formData, field) != null);
+  if (priced && !isManager(ctx.active.role)) return;
+
   const memberIds = formData.getAll('member_ids').map((v) => String(v)).filter(Boolean);
 
   const { data: chore, error: choreError } = await supabase.from('chores').insert({

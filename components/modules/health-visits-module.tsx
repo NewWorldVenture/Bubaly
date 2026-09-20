@@ -16,16 +16,17 @@ import { fmtDate } from '@/lib/utils/format';
 import { VISIT_KINDS, visitKindMeta, sortByVisitDate, upcomingFollowUps, daysUntilFollowUp, type VisitKind } from '@/lib/health/visits';
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { todayInZone } from '@/lib/schedule/zoned';
 
 type Visit = Tables<'health_visits'>;
 
-const blank = (kind: VisitKind) => ({ id: '', member_id: '', kind, title: '', provider_name: '', location: '', visit_date: new Date().toISOString().slice(0, 10), reason: '', outcome: '', follow_up_date: '', cost: '' });
+const blank = (kind: VisitKind, tz: string) => ({ id: '', member_id: '', kind, title: '', provider_name: '', location: '', visit_date: todayInZone(tz), reason: '', outcome: '', follow_up_date: '', cost: '' });
 
 export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lockKind = false }: {
   defaultKind?: VisitKind; title?: string; lockKind?: boolean;
 }) {
   const t = useTranslations();
-  const { familyId, userId, members } = useApp();
+  const { familyId, userId, members, family } = useApp();
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
@@ -96,7 +97,7 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
               {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
             </select>
           )}
-          <Button size="sm" onClick={() => setForm(blank(defaultKind ?? 'medical'))}><Plus className="h-4 w-4" /> {t('healthVisits.addVisit')}</Button>
+          <Button size="sm" onClick={() => setForm(blank(defaultKind ?? 'medical', family?.timezone ?? 'UTC'))}><Plus className="h-4 w-4" /> {t('healthVisits.addVisit')}</Button>
         </div>
       </div>
 

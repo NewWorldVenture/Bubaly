@@ -5,7 +5,7 @@ import { History, Search, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { PageHeader } from '@/components/app/page-header';
-import { SkeletonList, EmptyState, ErrorState, Skeleton } from '@/components/ui/states';
+import { SkeletonList, EmptyState, ErrorState } from '@/components/ui/states';
 import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { usd as usdIn, fmtDueDate as fmtDueDateIn } from '@/lib/finance/hub';
@@ -22,7 +22,7 @@ export function PaymentsView() {
   const fmtDueDate = (iso: string) => fmtDueDateIn(iso, locale.code);
   const { familyId } = useApp();
 
-  const { data: rows, loading, error: readError, refresh } = useRealtimeQuery<Txn>({
+  const { data: rows, loading, error: readError, stale, refresh } = useRealtimeQuery<Txn>({
     table: 'transactions', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('transactions').select('*').eq('family_id', familyId).order('date', { ascending: false }).limit(500),
   });
@@ -70,7 +70,11 @@ export function PaymentsView() {
       <PageHeader title={tr('payments.paymentHistory')} description={tr('paymentsView.everyTransactionAcrossYourFamily')} />
 
       {/* This month at a glance */}
-      <div className="grid-stats">
+      {/* A +$0.00 is a statement about this family's money, so the whole grid
+          waits for a verified read rather than stating a figure it does not
+          have. One gate, here — no second placeholder inside the tiles, which
+          this gate would make unreachable anyway. */}
+      {!loading && !stale && !readError && <div className="grid-stats">
         {[
           { label: 'In · this month', value: `+${usd(summary.income)}`, icon: '📥', color: 'text-emerald-400' },
           { label: 'Out · this month', value: `-${usd(summary.expense)}`, icon: '📤', color: 'text-fg' },
@@ -80,19 +84,12 @@ export function PaymentsView() {
           <div key={s.label} className="stat-card">
             <span className="text-2xl">{s.icon}</span>
             <div>
-              {/* +$0.00 is a statement about this family's money. Until the read
-                  that produced it has come back — or once it has failed — there
-                  is no figure to state, and a placeholder says so honestly. */}
-              {loading ? (
-                <Skeleton className="h-7 w-20" />
-              ) : (
-                <div className={cn('text-xl font-bold tabular-nums', s.color)}>{readError ? '—' : s.value}</div>
-              )}
+              <div className={cn('text-xl font-bold tabular-nums', s.color)}>{s.value}</div>
               <div className="text-[11px] text-muted">{s.label}</div>
             </div>
           </div>
         ))}
-      </div>
+      </div>}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex gap-1">
@@ -108,9 +105,9 @@ export function PaymentsView() {
         </div>
       </div>
 
-      {loading ? <SkeletonList /> : readError ? (
+      {readError ? (
         <ErrorState message={tr('paymentsView.couldNotLoadPayments')} onRetry={() => { void refresh(); }} />
-      ) : filtered.length === 0 ? (
+      ) : loading || stale ? <SkeletonList /> : filtered.length === 0 ? (
         <EmptyState icon={History} title={tr('payments.noPayments')} description={q || filter !== 'all' ? 'No transactions match your filters.' : 'Transactions will appear here as they are added.'} />
       ) : (
         <div className="space-y-5">

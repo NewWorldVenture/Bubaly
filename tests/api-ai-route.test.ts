@@ -11,6 +11,7 @@ const createAssistantStream = vi.fn();
 const rateLimit = vi.fn();
 const rateLimitDb = vi.fn();
 const assertAIAccess = vi.fn();
+const refuseUnlessEntitled = vi.fn();
 
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => cookieClient }));
 vi.mock('@/lib/supabase/auth', () => ({ getUserContext: () => getUserContext() }));
@@ -23,6 +24,12 @@ vi.mock('@/lib/ai/provider', () => ({
   isAIConfigured: () => isAIConfigured(),
   describeAIError: (e: unknown) => ({ code: 'x', message: e instanceof Error ? e.message : String(e), detail: '' }),
 }));
+// The plan gate resolves entitlement through real reads, which this file's
+// minimal client cannot answer — it would 503 every case below. The gate's own
+// behaviour is covered by tests/route-plan-gate.test.ts and
+// tests/insight-kinds-are-gated-like-their-pages.test.ts; here it is driven, so
+// the entitled path is the default and the refusal still has a case.
+vi.mock('@/lib/server/route-feature-gate', () => ({ refuseUnlessEntitled: (...a: unknown[]) => refuseUnlessEntitled(...a) }));
 vi.mock('@/lib/server/rate-limit', () => ({ rateLimit: (...a: unknown[]) => rateLimit(...a) }));
 vi.mock('@/lib/server/rate-limit-db', () => ({ rateLimitDb: (...a: unknown[]) => rateLimitDb(...a) }));
 // Only the question is stubbed; `accessDeniedResponse` and the feature key stay
@@ -79,6 +86,7 @@ beforeEach(() => {
   rateLimit.mockReturnValue({ ok: true });
   rateLimitDb.mockResolvedValue({ ok: true });
   assertAIAccess.mockResolvedValue({ ok: true, planLevel: 2, monthlyUsed: null, monthlyAllowance: null });
+  refuseUnlessEntitled.mockResolvedValue(null);
   prepareAssistantTurn.mockResolvedValue({ ok: true, turn: { system: 's', messages: [], tools: [], provider: { model: 'm' } } });
   runAssistantTurn.mockResolvedValue({ content: 'Planned.', actions: [{ name: 'create_meal_plan_entry', ok: true, summary: 'Planned.' }], persisted: true, model: 'm' });
   createAssistantStream.mockReturnValue(new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode('data: {"type":"done"}\n\n')); c.close(); } }));
@@ -156,6 +164,21 @@ describe('POST /api/ai transports', () => {
 
 describe('POST /api/ai guards', () => {
   beforeEach(() => getUserContext.mockResolvedValue(ctx));
+
+  it('returns the plan refusal, and never reaches the engine', async () => {
+    const { NextResponse } = await import('next/server');
+    refuseUnlessEntitled.mockResolvedValue(NextResponse.json({ error: 'upgrade' }, { status: 403 }));
+    const { POST } = await import('@/app/api/ai/route');
+
+    const res = await POST(post({ conversationId: CONVERSATION, message: 'hi' }));
+
+    expect(res.status).toBe(403);
+    // The refusal is worth nothing if the turn was prepared anyway: this route
+    // is the one that costs money per request.
+    expect(prepareAssistantTurn).not.toHaveBeenCalled();
+    expect(runAssistantTurn).not.toHaveBeenCalled();
+    expect(rateLimitDb).not.toHaveBeenCalled();
+  });
 
   it('validates the body', async () => {
     const { POST } = await import('@/app/api/ai/route');

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Plus, Search, Pencil, Trash2, Phone, Mail, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import {
@@ -11,6 +11,7 @@ import { upsertContactAction, deleteContactAction, updateContactTrustAction } fr
 import { useToast } from '@/components/ui/toast';
 import { formatPhone } from '@/lib/guardian/phone';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useDialogBehavior } from '@/lib/a11y/use-dialog-behavior';
 
 type Contact = {
   id: string;
@@ -260,6 +261,11 @@ function ContactModal({
   onClose: () => void;
 }) {
   const tr = useTranslations();
+  // The markup below declares `aria-modal="true"`. This is what makes that true:
+  // focus enters the dialog, Tab cycles inside it, Escape closes, and focus
+  // returns to the control that opened it.
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogBehavior(dialogRef, true, { onClose });
   const [form, setForm] = useState({
     name: contact?.name ?? '',
     phone: contact?.phone ?? '',
@@ -285,6 +291,8 @@ function ContactModal({
     <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} aria-hidden />
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="contact-editor-title"

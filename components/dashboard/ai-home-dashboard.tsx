@@ -3,7 +3,7 @@ import {
   Sparkles, Calendar, ArrowRight, Bell, ChevronRight, Sun, Clock, MessageSquare, Plane, PhoneCall,
 } from 'lucide-react';
 import { createServer } from '@/lib/supabase/server';
-import { settleAll } from '@/lib/supabase/settle';
+import { settle, settleAll } from '@/lib/supabase/settle';
 import type { UserContext } from '@/lib/supabase/auth';
 import { isSuperAdmin } from '@/lib/supabase/auth';
 import { isManager } from '@/lib/constants/roles';
@@ -417,14 +417,15 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
       const blocked = new Set(((existingIns ?? []) as { kind: string; status: string }[]).filter((r) => r.status !== 'active').map((r) => r.kind));
       const toUpsert = candidates.filter((c) => !blocked.has(c.kind));
       if (toUpsert.length > 0) {
-        await supabase.from('daily_insights').upsert(
+        const { error: insightError } = await settle(supabase.from('daily_insights').upsert(
           toUpsert.map((c) => ({
             family_id: familyId, as_of_date: today, kind: c.kind,
             title: c.title, detail: c.detail, href: c.href, impact: c.impact,
             status: 'active', created_by: ctx.user.id,
           })),
           { onConflict: 'family_id,as_of_date,kind' },
-        );
+        ));
+        if (insightError) console.error('[home] daily_insights upsert failed', { message: insightError.message });
       }
       // Re-read active rows so the DB id (needed to dismiss) + persisted dismissals win.
       const { data: activeRows } = await supabase.from('daily_insights')

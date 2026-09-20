@@ -8,7 +8,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
@@ -121,19 +121,24 @@ export function TripsModule() {
       start_date: tripForm.start_date || null, end_date: tripForm.end_date || null,
       status: tripForm.status, traveler_ids: tripForm.traveler_ids, notes: tripForm.notes.trim() || null,
     };
-    const { error: err } = tripForm.id
-      ? await sb.from('trips').update(fields).eq('id', tripForm.id)
-      : await sb.from('trips').insert({ ...fields, family_id: familyId, created_by: userId });
+    // A restrictive RLS policy FILTERS an update/delete rather than raising, so
+    // a refused write returns zero rows and no error. `.select('id')` is what
+    // makes the difference visible — without it `data` is null either way.
+    const { data: rows, error: err } = tripForm.id
+      ? await sb.from('trips').update(fields).eq('id', tripForm.id).select('id')
+      : await sb.from('trips').insert({ ...fields, family_id: familyId, created_by: userId }).select('id');
     setSavingTrip(false);
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(rows)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }
     success(tripForm.id ? 'Trip updated' : 'Trip created');
     setTripModal(false);
   }
   async function removeTrip(t: Trip) {
     if (!(await askConfirm({ title: tr('confirm.deleteNamed', { name: t.name }), body: tr('trips.deleteTripBody') }))) return;
     const sb = createClient();
-    const { error: err } = await sb.from('trips').delete().eq('id', t.id);
+    const { data: rows, error: err } = await sb.from('trips').delete().eq('id', t.id).select('id');
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(rows)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }
     success(tr('tripsModule.tripDeleted'));
     if (selectedId === t.id) setSelectedId(null);
   }
@@ -161,13 +166,15 @@ export function TripsModule() {
   }
   async function toggleItem(it: TripItem) {
     const sb = createClient();
-    const { error: err } = await sb.from('trip_items').update({ is_done: !it.is_done }).eq('id', it.id);
-    if (err) toastError(describeDbError(err));
+    const { data: rows, error: err } = await sb.from('trip_items').update({ is_done: !it.is_done }).eq('id', it.id).select('id');
+    if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(rows)) toastError(tr('errors.thatChangeWasNotSaved'));
   }
   async function removeItem(it: TripItem) {
     const sb = createClient();
-    const { error: err } = await sb.from('trip_items').delete().eq('id', it.id);
-    if (err) toastError(describeDbError(err));
+    const { data: rows, error: err } = await sb.from('trip_items').delete().eq('id', it.id).select('id');
+    if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(rows)) toastError(tr('errors.thatChangeWasNotSaved'));
   }
 
   const fmtRange = (t: Trip) => {

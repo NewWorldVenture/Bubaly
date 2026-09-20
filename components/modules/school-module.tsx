@@ -8,6 +8,7 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { settleAll } from '@/lib/supabase/settle';
+import { todayInZone } from '@/lib/schedule/zoned';
 import { classify, type FrontDeskSubKind } from '@/lib/front-desk/school-sports';
 import { proposeFrontDeskAction } from '@/app/(app)/dashboard/school/actions';
 import { useToast } from '@/components/ui/toast';
@@ -121,7 +122,7 @@ export function SchoolModule() {
   const tr = useTranslations();
   // One time-ago, and it follows the reader (lib/utils/format.ts fmtTimeAgo).
   const { fmtTimeAgo } = useFormat();
-  const { familyId, userId, members } = useApp();
+  const { familyId, userId, members, family } = useApp();
   const { toast, success, error: toastError } = useToast();
   const [tab, setTab] = useState<Tab>('Overview');
   const [scheduleIdx, setScheduleIdx] = useState(0);
@@ -392,7 +393,7 @@ export function SchoolModule() {
       title: gradeForm.title || null, grade: gradeForm.grade || null,
       grade_type: gradeForm.grade_type, score: gradeForm.score ? parseFloat(gradeForm.score) : null,
       max_score: gradeForm.max_score ? parseFloat(gradeForm.max_score) : null,
-      date: gradeForm.date || new Date().toISOString().split('T')[0], created_by: userId,
+      date: gradeForm.date || todayInZone(family?.timezone ?? 'UTC'), created_by: userId,
     });
     setSaving(false);
     if (err) { toastError(tr('schoolModule.failedToSaveGrade')); return; }

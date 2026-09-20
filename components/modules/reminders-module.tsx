@@ -632,7 +632,6 @@ function ReminderModal({ reminder, familyId, userId, members, lists, onClose, on
     setUploading(true);
     try {
       const supabase = createClient();
-      const ext = file.name.split('.').pop();
       const path = familyMediaPath(familyId, 'reminders', file.name);
       const { data: stored, error: upErr } = await supabase.storage.from('family-media').upload(path, file, { upsert: false });
       if (upErr || !stored) { toastError(describeDbError(upErr)); return; }

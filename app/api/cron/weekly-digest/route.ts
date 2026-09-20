@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { listAllAuthUsers } from '@/lib/server/list-all-auth-users';
 import { readAll } from '@/lib/supabase/read-all';
-import { readAllAuthUsers } from '@/lib/supabase/read-all-auth-users';
 import { settleAll } from '@/lib/supabase/settle';
 import { sendReactEmail } from '@/lib/email';
 import { WeeklyDigestEmail } from '@/lib/emails/weekly-digest';
@@ -11,15 +11,34 @@ import { hasCronAuthorization } from '@/lib/server/cron-auth';
 import { loadCompareLine } from '@/lib/network/compare-line-server';
 import { renderCompareLine } from '@/lib/network/compare-line';
 
-export const runtime = 'nodejs';
-// A chosen budget rather than the platform default. The loop is one family (or
-// one member) at a time with a network send in it, and a run killed mid-loop
-// always walks the same ordered prefix, so the tail of the customer base would
-// never be reached — silently, since nothing records where a run stopped.
-export const maxDuration = 300;
-
 // Runs every Monday at 08:00 UTC via Vercel Cron.
 // Sends each family a summary of the week ahead: events, due chores, meal count.
+//
+// Budgeted and bounded, because an unbounded serial loop over every family is
+// not merely slow here — it is silently unfair. The loop walks `families` in the
+// same `order('id')` every week and keeps no cursor, so when the run is killed
+// mid-loop the SAME prefix is served every time and the tail is never served at
+// all: a stable, invisible partition of the customer base, and the families in
+// it simply never receive a digest.
+//
+// Two changes follow from that. A declared budget, matching provider-sync,
+// library-feeds and marketing, so the limit is chosen rather than inherited from
+// the platform default. And bounded concurrency, because each family costs two
+// to four sequential round trips plus an email API call, which serially is what
+// makes the run outgrow any budget at all.
+//
+// If the budget is reached anyway, the run reports what it did NOT reach and
+// answers 502 rather than 200 — the tail being unserved is exactly the thing
+// that must not look like a clean run.
+export const runtime = 'nodejs';
+export const maxDuration = 300;
+
+// Below maxDuration with room to finish the families already in flight and to
+// write the response.
+const BUDGET_MS = 260_000;
+// Each family is mostly waiting on Supabase and the email provider, so this is
+// concurrency against latency, not CPU.
+const CONCURRENCY = 8;
 export async function GET(req: NextRequest) {
   const t = await getTranslations();
   if (!hasCronAuthorization(req)) {
@@ -43,25 +62,33 @@ export async function GET(req: NextRequest) {
   }
   if (!families?.length) return NextResponse.json({ sent: 0, failed: 0, skipped: 0 });
 
-  // Every auth user, not the first fifty. `listUsers()` with no arguments is one
-  // page, and a family whose admin fell outside it had no email on file and was
-  // skipped below without counting a failure.
-  const { users: authUsers, error: authUsersError } = await readAllAuthUsers((params) =>
-    supabase.auth.admin.listUsers(params),
-  );
+  // Every auth user, not GoTrue's default first 50. `listUsers()` with no
+  // arguments is ONE page, and `families` above is read with readAll — so a
+  // truncated recipient map silently drops the digest for every family whose
+  // admin sits past that page, without counting a failure.
+  const { users: allAuthUsers, error: authUsersError } = await listAllAuthUsers(supabase);
   if (authUsersError) {
     console.error('Weekly digest user read error:', authUsersError);
     return NextResponse.json({ error: t('weeklyDigest.weeklyDigestProcessingFailed') }, { status: 500 });
   }
-  const emailByUserId = new Map(authUsers.map((u) => [u.id, u.email ?? null]));
+  const emailByUserId = new Map(
+    allAuthUsers.map((u) => [u.id, u.email ?? null]),
+  );
 
   let sent = 0;
   let failed = 0;
   // A family nobody could be emailed for is neither a send nor a send failure,
   // and reporting it as neither is how this route answered 200 while most of
-  // the customer base got nothing.
+  // the customer base got nothing. It is NOT a failed run, though — there is
+  // nothing to retry — so it is reported without turning the status into 502.
   let skipped = 0;
-  for (const family of families) {
+  // Families this run never ATTEMPTED, because the budget ran out. That one is
+  // a failed run: the tail being unserved is precisely what must not look
+  // clean, so it decides the status below.
+  let unserved = 0;
+  const startedAt = Date.now();
+
+  const digestFor = async (family: (typeof families)[number]) => {
     // An open chore is an ASSIGNMENT that is still todo/in_progress. `chores` is
     // the definition table — it carries neither `status` nor `assignee_id`, so
     // reading those from it errors and skipped every family's digest. Counts,
@@ -81,10 +108,10 @@ export async function GET(req: NextRequest) {
     if (familyDataError) {
       console.error(`[weekly-digest] Family data read failed for ${family.id}:`, familyDataError);
       failed++;
-      continue;
+      return;
     }
 
-    if (!members?.length) { skipped++; continue; }
+    if (!members?.length) { skipped++; return; }
 
     const { data: adminMember, error: adminMemberError } = await supabase
       .from('family_members')
@@ -98,12 +125,12 @@ export async function GET(req: NextRequest) {
     if (adminMemberError) {
       console.error(`[weekly-digest] Admin member read failed for ${family.id}:`, adminMemberError);
       failed++;
-      continue;
+      return;
     }
 
-    if (!adminMember?.user_id) { skipped++; continue; }
+    if (!adminMember?.user_id) { skipped++; return; }
     const adminEmail = emailByUserId.get(adminMember.user_id);
-    if (!adminEmail) { skipped++; continue; }
+    if (!adminEmail) { skipped++; return; }
 
     const { ok } = await sendReactEmail({
       to: adminEmail,
@@ -122,7 +149,24 @@ export async function GET(req: NextRequest) {
     });
     if (ok) sent++;
     else failed++;
+  };
+
+  for (let i = 0; i < families.length; i += CONCURRENCY) {
+    if (Date.now() - startedAt > BUDGET_MS) {
+      unserved = families.length - i;
+      console.error(`[weekly-digest] budget reached with ${unserved} families unserved`);
+      break;
+    }
+    await Promise.all(families.slice(i, i + CONCURRENCY).map(digestFor));
   }
 
-  return NextResponse.json({ sent, failed, skipped }, { status: failed === 0 ? 200 : 502 });
+  // `unserved` counts families this run never attempted. Reporting 200 here
+  // would make an unserved tail indistinguishable from a complete run. A
+  // `skipped` family has no recipient to reach and nothing to retry, so it is
+  // reported but does not make the run a failure.
+  const ok = failed === 0 && unserved === 0;
+  return NextResponse.json(
+    { sent, failed, skipped, ...(unserved > 0 ? { unserved } : {}) },
+    { status: ok ? 200 : 502 },
+  );
 }

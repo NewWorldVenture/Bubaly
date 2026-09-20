@@ -38,10 +38,15 @@ insert into auth.users (id, email) values
   on conflict do nothing;
 insert into public.family_members (family_id, user_id, display_name, role, is_active)
   values (:'FA', :'UC', 'Trail Child', 'child', true) on conflict do nothing;
+-- No blanket `grant ... on all tables in schema public` here. The bootstrap's
+-- `alter default privileges` already gives `authenticated` full DML on every
+-- table a migration creates, so the restatement was redundant — and once
+-- migrations began revoking DML deliberately (0300 takes the paywall columns
+-- away from the client), it stopped being redundant and started undoing them
+-- for every probe that runs after this one against the shared database.
 insert into public.families (id, name, created_by) values (:'FO','Unrelated Family',:'UO')
   on conflict do nothing;
 
-grant select, insert, update, delete on all tables in schema public to authenticated;
 
 do $$
 declare

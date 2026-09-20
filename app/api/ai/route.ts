@@ -17,6 +17,7 @@ import { getUserContext, type UserContext } from '@/lib/supabase/auth';
 import { extractBearerToken, getBearerUserContext } from '@/lib/supabase/bearer';
 import { ensureActiveFamily } from '@/lib/server/ensure-family';
 import { describeAIError, isAIConfigured } from '@/lib/ai/provider';
+import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { rateLimit } from '@/lib/server/rate-limit';
 import { AI_ASSISTANT_FEATURE_KEY, accessDeniedResponse, assertAIAccess } from '@/lib/server/ai-access';
 import { rateLimitDb } from '@/lib/server/rate-limit-db';
@@ -76,6 +77,10 @@ export async function GET(req: NextRequest) {
     const { supabase, ctx } = authed;
     const familyError = assertAIRequestFamily(req, ctx.active.familyId, await getAIRequestTranslations(req));
     if (familyError) return familyError;
+    // The manifest describes a gated feature's tool roster, so it answers only
+    // to a family entitled to it.
+    const refusedManifest = await refuseUnlessEntitled(supabase, ctx.active.familyId, ['/dashboard/assistant']);
+    if (refusedManifest) return refusedManifest;
     const scope = { familyId: ctx.active.familyId, userId: ctx.user.id };
     const tools = mergeToolSets(
       // Listing only: this GET reports tool names and descriptions and never
@@ -106,6 +111,16 @@ export async function POST(req: NextRequest) {
     const familyError = assertAIRequestFamily(req, ctx.active.familyId, tr);
     if (familyError) return familyError;
     const familyId = ctx.active.familyId;
+
+    // The page in front of this endpoint is `requireFeature`-gated and the
+    // endpoint was not, so the fetch was the bypass — the same finding that
+    // gated fourteen sibling routes. It matters most here: this is the full
+    // assistant turn, tools and model included, on the surface that costs money
+    // per request. Refused BEFORE the rate limiter and the provider, so a
+    // family below the plan never spends either.
+    const refused = await refuseUnlessEntitled(supabase, familyId, ['/dashboard/assistant']);
+    if (refused) return refused;
+
     const tz = ctx.active.family.timezone || 'America/New_York';
 
     // Shared bucket with /api/ai/chat so web + mobile draw from one allowance.

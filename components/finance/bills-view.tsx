@@ -15,6 +15,8 @@ import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { usd as usdIn, billDueStatus, DUE_META, fmtDueDate as fmtDueDateIn } from '@/lib/finance/hub';
 import { useLocale, useTranslations } from '@/components/i18n/locale-provider';
+import { wroteNoRows } from '@/lib/supabase/errors';
+import { todayInZone } from '@/lib/schedule/zoned';
 
 type Bill = Tables<'bills'>;
 export type BillsMode = 'all' | 'autopay' | 'due';
@@ -37,7 +39,7 @@ export function BillsView({ mode }: { mode: BillsMode }) {
   const { success, error: toastError } = useToast();
   const meta = MODE_META[mode];
 
-  const { data: rows, loading, error: readError, refresh } = useRealtimeQuery<Bill>({
+  const { data: rows, loading, error: readError, stale, refresh } = useRealtimeQuery<Bill>({
     table: 'bills', familyId, deps: [familyId],
     fetcher: (sb) => sb.from('bills').select('*').eq('family_id', familyId).order('due_date', { ascending: true }),
   });
@@ -55,17 +57,26 @@ export function BillsView({ mode }: { mode: BillsMode }) {
 
   async function markPaid(b: Bill) {
     const next = b.status === 'paid' ? 'upcoming' : 'paid';
-    const { error } = await createClient().from('bills').update({ status: next }).eq('id', b.id);
-    if (error) toastError(error.message); else success(next === 'paid' ? 'Marked paid' : 'Reopened');
+    // A restrictive RLS policy FILTERS an update/delete rather than raising, so
+    // a refused write returns zero rows and no error. `.select('id')` is what
+    // makes the difference visible — without it `data` is null either way.
+    const { data: rows, error } = await createClient().from('bills').update({ status: next }).eq('id', b.id).select('id');
+    if (error) { toastError(error.message); return; }
+    if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
+    success(next === 'paid' ? 'Marked paid' : 'Reopened');
   }
   async function toggleAutopay(b: Bill) {
-    const { error } = await createClient().from('bills').update({ autopay: !b.autopay }).eq('id', b.id);
-    if (error) toastError(error.message); else success(b.autopay ? 'Auto Pay off' : 'Auto Pay on');
+    const { data: rows, error } = await createClient().from('bills').update({ autopay: !b.autopay }).eq('id', b.id).select('id');
+    if (error) { toastError(error.message); return; }
+    if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
+    success(b.autopay ? 'Auto Pay off' : 'Auto Pay on');
   }
   async function remove(id: string) {
     if (!confirm(t('billsView.deleteThisBill'))) return;
-    const { error } = await createClient().from('bills').delete().eq('id', id);
-    if (error) toastError(error.message); else success(t('billsView.deleted'));
+    const { data: rows, error } = await createClient().from('bills').delete().eq('id', id).select('id');
+    if (error) { toastError(error.message); return; }
+    if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
+    success(t('billsView.deleted'));
   }
 
   const Row = ({ b }: { b: Bill }) => {
@@ -112,20 +123,22 @@ export function BillsView({ mode }: { mode: BillsMode }) {
       <PageHeader title={meta.title} description={meta.desc}
         action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('bills.addBill')}</Button>} />
 
-      {mode !== 'autopay' && visible.length > 0 && (
+      {!loading && !stale && !readError && mode !== 'autopay' && visible.length > 0 && (
         <div className="rounded-2xl border border-border bg-surface/40 p-4">
           <p className="text-xs text-muted">{mode === 'due' ? 'Outstanding' : 'Total unpaid'}</p>
           <p className="text-2xl font-black tabular-nums">{usd(totalDue)}</p>
         </div>
       )}
 
-      {loading ? <SkeletonList /> : readError ? (
-        // A failed read is not an empty bill list. Telling a family "no bills"
-        // when the query never came back is the one answer this page must not
-        // give: they stop looking, and the payment they were owed a reminder
-        // about is the one they miss.
+      {/* A failed read is not an empty bill list. Telling a family "no bills"
+          when the query never came back is the one answer this page must not
+          give: they stop looking, and the payment they were owed a reminder
+          about is the one they miss. The error is checked before `loading`
+          because `stale` already covers a refetch in flight — so a failure
+          stays on screen instead of flickering back to a skeleton. */}
+      {readError ? (
         <ErrorState message={t('billsView.couldNotLoadBills')} onRetry={() => { void refresh(); }} />
-      ) : visible.length === 0 ? (
+      ) : loading || stale ? <SkeletonList /> : visible.length === 0 ? (
         <EmptyState icon={meta.icon} title={mode === 'autopay' ? 'No Auto Pay bills' : mode === 'due' ? 'Nothing due' : 'No bills yet'}
           description={mode === 'autopay' ? 'Turn on Auto Pay for a bill to see it here.' : 'Add a bill to start tracking due dates.'}
           action={<Button onClick={() => setForm(true)}><Plus className="h-4 w-4" /> {t('bills.addBill')}</Button>} />
@@ -149,9 +162,10 @@ export function BillsView({ mode }: { mode: BillsMode }) {
 
 function BillModal({ familyId, userId, defaultAutopay, onClose }: { familyId: string; userId: string; defaultAutopay: boolean; onClose: () => void }) {
   const t = useTranslations();
+  const { family } = useApp();
   const { success, error: toastError } = useToast();
   const [saving, setSaving] = useState(false);
-  const [v, setV] = useState({ name: '', amount: '', due_date: new Date().toISOString().slice(0, 10), category: 'Utilities', is_recurring: true, autopay: defaultAutopay });
+  const [v, setV] = useState({ name: '', amount: '', due_date: todayInZone(family?.timezone ?? 'UTC'), category: 'Utilities', is_recurring: true, autopay: defaultAutopay });
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -173,7 +187,7 @@ function BillModal({ familyId, userId, defaultAutopay, onClose }: { familyId: st
       <form onSubmit={submit} className="space-y-4">
         <Field label={t('bills.billName')}>{(id) => <Input id={id} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} placeholder={t('billsView.electricBill')} required autoFocus />}</Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label={t('bills.amount')}>{(id) => <Input id={id} type="number" step="0.01" value={v.amount} onChange={(e) => setV({ ...v, amount: e.target.value })} placeholder="120.00" required />}</Field>
+          <Field label={t('bills.amount')}>{(id) => <Input id={id} type="number" inputMode="decimal" step="0.01" value={v.amount} onChange={(e) => setV({ ...v, amount: e.target.value })} placeholder="120.00" required />}</Field>
           <Field label={t('bills.dueDate')}>{(id) => <Input id={id} type="date" value={v.due_date} onChange={(e) => setV({ ...v, due_date: e.target.value })} />}</Field>
         </div>
         <Field label={t('bills.category')}>{(id) => <Select id={id} value={v.category} onChange={(e) => setV({ ...v, category: e.target.value })}>{CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}</Select>}</Field>

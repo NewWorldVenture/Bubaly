@@ -9,6 +9,7 @@ import { isMissingRelationError } from '@/lib/supabase/errors';
 import type { Split } from '@/lib/wallet/ledger';
 import { hasCronAuthorization } from '@/lib/server/cron-auth';
 import { readAll } from '@/lib/supabase/read-all';
+import { readInChunks } from '@/lib/supabase/chunked-in';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -52,17 +53,29 @@ export async function GET(req: NextRequest) {
     const families = Array.from(new Set((rules ?? []).map((r) => r.family_id)));
     const planByFamily = new Map<string, string | null>();
     if (families.length > 0) {
-      const { data: subs, error: subscriptionsError } = await supabase
-        .from('subscriptions')
-        .select('family_id, plan, status')
-        .in('family_id', families)
-        .in('status', ['active', 'trialing']);
+      // Batched for the same reason the read above pages. The rules read is
+      // bounded at 2,000, so this `.in()` can carry more families than one
+      // response may return — and a plan that does not come back is not read as
+      // "unknown", it is read as free, which SKIPS the child's allowance and
+      // reports the run clean. It also keeps the URL inside the gateway's
+      // request-line limit, the other way an `.in()` of that size fails.
+      const { data: subs, error: subscriptionsError } = await readInChunks<
+        { family_id: string; plan: string | null; status: string }, { message: string }
+      >(
+        families,
+        (chunk) => supabase
+          .from('subscriptions')
+          .select('family_id, plan, status')
+          .in('family_id', chunk)
+          .in('status', ['active', 'trialing']),
+      );
       if (subscriptionsError) throw subscriptionsError;
-      for (const s of subs ?? []) planByFamily.set(s.family_id, s.plan);
+      for (const s of subs) planByFamily.set(s.family_id, s.plan);
     }
 
     let paid = 0;
     let skippedFree = 0;
+    let failed = 0;
     for (const rule of rules ?? []) {
       const tier = walletTierForPlanLevel(planLevel(planByFamily.get(rule.family_id) ?? null));
       if (!walletFeatureEnabled(tier, 'allowances')) { skippedFree++; continue; }
@@ -85,7 +98,18 @@ export async function GET(req: NextRequest) {
         .lte('next_run_on', today)
         .select('id')
         .maybeSingle();
-      if (scheduleError) throw scheduleError;
+      if (scheduleError) {
+        // Same isolation as the credit failure below: one rule's claim error is
+        // that rule's problem. Throwing here ended the platform's run for every
+        // rule ordered after it, and a claim error that recurs (a constraint or
+        // a poisoned row rather than a blip) would do so every night. Nothing
+        // was written, so the rule stays due and retries on its own.
+        failed++;
+        console.error('Allowance schedule claim failed; leaving it retryable.', {
+          ruleId: rule.id, familyId: rule.family_id, error: scheduleError,
+        });
+        continue;
+      }
       if (!claimed) continue; // another concurrent run already claimed this rule — do not double-pay
 
       const res = await creditChildWallet(supabase, {
@@ -108,12 +132,32 @@ export async function GET(req: NextRequest) {
         if (rollbackError) {
           console.error('Allowance schedule rollback error:', rollbackError);
         }
-        throw new Error(`Allowance credit failed: ${res.error}`);
+        // Degrade-but-log, as the other batch crons do: one family's rule must
+        // not end the platform's run. This used to `throw`, which the outer
+        // catch turned into a 500 — and because the rollback restores
+        // `next_run_on`, the same rule was due again the next night and threw
+        // at the same point. Rules ordered after it were never reached, so a
+        // SINGLE unpayable rule stopped allowances for every family after it,
+        // permanently, with nothing in the response naming the cause.
+        //
+        // Reaching this is not exotic. `creditChildWallet` resolves buckets by
+        // (family_id, child_wallet_id), so it reports "not fully provisioned"
+        // for any wallet missing a bucket — and for a rule whose
+        // `child_wallet_id` belongs to ANOTHER family, which RLS permits
+        // because the foreign key names `child_wallets(id)` alone and the
+        // insert policy only checks the row's own `family_id`. 0311 closes that
+        // second door; this one keeps the run alive whatever the reason.
+        failed++;
+        console.error('Allowance credit failed; leaving it retryable.', {
+          ruleId: rule.id, familyId: rule.family_id, error: res.error,
+        });
+        continue;
       }
       paid++;
     }
 
-    return NextResponse.json({ ok: true, due: (rules ?? []).length, paid, skippedFree });
+    const ok = failed === 0;
+    return NextResponse.json({ ok, due: (rules ?? []).length, paid, skippedFree, failed }, { status: ok ? 200 : 502 });
   } catch (err) {
     console.error('Allowance cron error:', err);
     return NextResponse.json({ error: t('walletAllowance.allowanceRunFailed') }, { status: 500 });

@@ -207,6 +207,13 @@ export async function payChoreRewardAction(input: { choreAssignmentId: string })
   if (amount <= 0) return { ok: false, error: t('actions.thisChoreHasNoCash') };
 
   // Already paid? (one wallet credit per assignment)
+  //
+  // This read catches the ordinary case — a parent opening the page on an
+  // assignment that was paid yesterday. It cannot catch two "Pay" clicks that
+  // arrive together: both read zero rows and both credit. What makes the
+  // invariant true rather than likely is `uq_wallet_txn_chore_payout` (0316);
+  // the loser of that race comes back as `duplicate` below and is reported
+  // here as what it is, not as a failure.
   const { data: existing, error: existingError } = await supabase
     .from('wallet_transactions').select('id')
     .eq('family_id', familyId).eq('related_type', 'chore_assignments').eq('related_id', assignment.id).limit(1);
@@ -231,6 +238,10 @@ export async function payChoreRewardAction(input: { choreAssignmentId: string })
     description: `Chore: ${chore?.title ?? 'completed'}`, createdBy: ctx.user.id,
     relatedType: 'chore_assignments', relatedId: assignment.id,
   });
+  // The index refused it because the credit is already in the ledger. Say the
+  // same thing the read above says, so a parent who double-clicks sees "already
+  // paid" rather than a database error.
+  if (res.duplicate) return { ok: false, error: t('actions.thisChoreWasAlreadyPaid') };
   if (!res.ok) return { ok: false, error: res.error };
 
   revalidatePath('/wallet');
@@ -335,6 +346,10 @@ export async function runDueAllowancesAction(): Promise<Result & { ranCount?: nu
     // idempotent with each other — that was only true if they never overlapped,
     // and `components/wallet/allowance-view.tsx` is a plain button, so two tabs
     // or a double-tap during the nightly cron is all it takes.
+    //
+    // This is also the exact regression tests/allowance-cron-idempotency.test.ts
+    // was written to prevent — "so the claim can't regress to a blind
+    // (double-crediting) update" — on the sibling path that test does not cover.
     //
     // A loser is not an error: it means the period is already paid, so `continue`
     // rather than actionFailure. `maybeSingle`, because `single` treats zero rows

@@ -9,7 +9,7 @@ import { DEFAULT_REFERRAL_CONFIG, type ReferralConfig } from '@/lib/referrals/co
 import { useFormat } from '@/components/i18n/use-format';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -170,9 +170,10 @@ export function SettingsModule({ referralConfig }: { referralConfig?: ReferralCo
     if (!name) return toastError(t('settingsModule.nameIsRequired'));
     setSavingFamily(true);
     const supabase = createClient();
-    const { error } = await supabase.from('families').update({ name }).eq('id', family.id);
+    const { data: rows, error } = await supabase.from('families').update({ name }).eq('id', family.id).select('id');
     setSavingFamily(false);
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(rows)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(t('settingsModule.familyNameUpdated'));
   }
 
@@ -415,7 +416,14 @@ export function SettingsModule({ referralConfig }: { referralConfig?: ReferralCo
           familyId={family.id}
           userId={userId}
           onClose={() => setInviteOpen(false)}
-          onSent={() => { setInviteOpen(false); setShowReferralCta(true); success(t('settingsModule.inviteSent')); }}
+          onSent={(emailed) => {
+            setInviteOpen(false);
+            setShowReferralCta(true);
+            // The invite exists either way — it is the row, not the email, that
+            // grants access. Saying "sent" when it was not is the defect.
+            if (emailed) success(t('settingsModule.inviteSent'));
+            else toastError(t('actions.couldNotSendTheInvite'));
+          }}
         />
       )}
 
@@ -483,7 +491,7 @@ function EditMemberModal({ member, isSelf, onClose }: {
 
 function InviteModal({ familyId, userId, onClose, onSent }: {
   familyId: string; userId: string;
-  onClose: () => void; onSent: () => void;
+  onClose: () => void; onSent: (emailed: boolean) => void;
 }) {
   const t = useTranslations();
   return (

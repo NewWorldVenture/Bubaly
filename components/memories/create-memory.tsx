@@ -10,7 +10,6 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Image as ImageIcon, Plus, X, Check, Sparkles, Loader2, ArrowLeft, Camera } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
-import { familyMediaPath } from '@/lib/storage/family-media';
 import { progressBarA11y } from '@/lib/ui/a11y';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
@@ -19,7 +18,7 @@ import { CameraCapture } from '@/components/ui/camera-capture';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useJourney } from '@/lib/analytics/use-journey';
-import { partitionBySize, oversizeMessage } from '@/lib/storage/family-media';
+import { partitionBySize, oversizeMessage, familyMediaPath } from '@/lib/storage/family-media';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
 type Pick = { file: File; preview: string };

@@ -22,10 +22,20 @@ describe('wallet allowance persistence boundaries', () => {
   // the subject of tests/allowance-cron-idempotency.test.ts, which now discovers
   // every site that advances a schedule rather than reading one hardcoded file.
   it('checks the schedule advance and rolls it back when crediting fails', () => {
+    // The advance used to be a single blind statement ending `.single()`, and
+    // that WAS the bug: with no `.lte('next_run_on', today)` predicate the update
+    // always matched, so two overlapping runs both advanced the rule and both
+    // credited it. The intent this file is about — the advance is checked before
+    // the credit and rolled back if the credit fails — is kept and strengthened:
+    // the advance is now a CLAIM, matching the cron. See
+    // tests/manual-allowance-run-claims-like-the-cron.test.ts.
     const advance = source.slice(source.indexOf('.update({ next_run_on: next'));
     expect(advance.slice(0, 400)).toContain(".eq('id', rule.id)");
     expect(advance.slice(0, 400)).toContain(".eq('family_id', familyId)");
     expect(advance.slice(0, 400)).toContain('.select(');
+    expect(source).toContain(".update({ next_run_on: next, last_run_on: today })");
+    expect(source).toContain(".lte('next_run_on', today)");
+    expect(source).toContain(".select('id').maybeSingle()");
     expect(source).toContain("const { error: rollbackError } = await supabase.from('allowance_rules').update({ next_run_on: rule.next_run_on, last_run_on: rule.last_run_on })");
     expect(source).toContain("return { ok: false, error: res.error, ranCount, paidCents };");
   });

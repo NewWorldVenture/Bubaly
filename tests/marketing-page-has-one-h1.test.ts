@@ -103,7 +103,7 @@ describe('every public marketing page declares a top-level heading', () => {
     const missing: string[] = [];
 
     for (const file of marketingPages()) {
-      const rel = path.relative(MARKETING_ROOT, path.dirname(file)) || '.';
+      const rel = path.relative(MARKETING_ROOT, path.dirname(file)).split(path.sep).join('/') || '.';
       if (RENDERS_TITLE_ELSEWHERE.has(rel)) continue;
       const source = sourcesFor(file);
       const declaresH1 = /<h1[\s>]/.test(source) || /as="h1"/.test(source);

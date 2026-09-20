@@ -1,0 +1,333 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-12T19:23:36.600Z",
+  "baselineCommit": "1956a9e0074b81c348eaa865d29d1366d16813a7",
+  "sourceCommit": "237933c1e17e0db43732557254aeaf3c9cb2016f",
+  "methodology": [
+    "Exact committed changed blobs, excluding audit documents. Source SHA256 is over Git blob bytes.",
+    "Exported declarations and static environment names parsed using installed TypeScript. No secret values.",
+    "New page routes are derived without route-group segments. Discovery does not establish workflow completion."
+  ],
+  "counts": {
+    "files": 8,
+    "newFiles": 2,
+    "production": 4,
+    "tests": 4,
+    "addedExportedFunctions": 0,
+    "newPageRoutes": []
+  },
+  "files": [
+    {
+      "path": "app/api/guardian/inbound/sms/route.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "00acc145027a80d074a5202a1c28e035dc7a58b81f1cc33e3e460b9c68958884",
+      "sourceSha256": "bb55dae6f8ba4d8c0c37ebce30a677e0e8a348892a10089ea361583bc2952c68",
+      "bytes": 16329,
+      "baselineExportedSymbols": [
+        {
+          "name": "runtime",
+          "line": 17,
+          "kind": "value"
+        },
+        {
+          "name": "POST",
+          "line": 31,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "runtime",
+          "line": 18,
+          "kind": "value"
+        },
+        {
+          "name": "POST",
+          "line": 52,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [
+        "NEXT_PUBLIC_APP_URL",
+        "NODE_ENV"
+      ],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": "/api/guardian/inbound/sms",
+      "httpMethods": [
+        "POST"
+      ],
+      "existingMasterIds": [
+        "API-BBD0A5DB630F",
+        "FLOW-DDE6E8974B46",
+        "CALLBACK-07F1FB3AED21"
+      ]
+    },
+    {
+      "path": "app/api/guardian/inbound/voice/route.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "5bd096317104cbc0feae31402b726ba99b0bb5100287995afd1c3c788f8f2269",
+      "sourceSha256": "8b1fcc51e96229016c5dcf66037a6276ea61c5a05e8d7337d94c224a04674c5c",
+      "bytes": 8443,
+      "baselineExportedSymbols": [
+        {
+          "name": "runtime",
+          "line": 20,
+          "kind": "value"
+        },
+        {
+          "name": "POST",
+          "line": 25,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "runtime",
+          "line": 20,
+          "kind": "value"
+        },
+        {
+          "name": "POST",
+          "line": 25,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [
+        "NEXT_PUBLIC_APP_URL",
+        "NODE_ENV"
+      ],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": "/api/guardian/inbound/voice",
+      "httpMethods": [
+        "POST"
+      ],
+      "existingMasterIds": [
+        "API-262DB8655008",
+        "FLOW-DDE6E8974B46",
+        "CALLBACK-F03F4B342194"
+      ]
+    },
+    {
+      "path": "app/api/guardian/inbound/whatsapp/route.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "6205e87c3904101f818d72c7a99dcb17466cb5ed4dfaa5a9bb9ddda9460eb516",
+      "sourceSha256": "056d9d79baba9b51dae3b08b59269eb424b169008005d95cebb956f9b3d9b9e6",
+      "bytes": 5904,
+      "baselineExportedSymbols": [
+        {
+          "name": "runtime",
+          "line": 18,
+          "kind": "value"
+        },
+        {
+          "name": "POST",
+          "line": 29,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "runtime",
+          "line": 18,
+          "kind": "value"
+        },
+        {
+          "name": "POST",
+          "line": 29,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [
+        "NEXT_PUBLIC_APP_URL",
+        "NODE_ENV"
+      ],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": "/api/guardian/inbound/whatsapp",
+      "httpMethods": [
+        "POST"
+      ],
+      "existingMasterIds": [
+        "API-90346B8397DA",
+        "FLOW-DDE6E8974B46",
+        "CALLBACK-8B2E6E7A70BF"
+      ]
+    },
+    {
+      "path": "lib/guardian/pipeline.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "fa55507feab4668a01007e15d5cb563ae52a19cf9c10951d13d34a2229ce4960",
+      "sourceSha256": "b4efc2065aadff94f312beaf6b4d50f7a631ee87b1460ec13f460efc87e19856",
+      "bytes": 14422,
+      "baselineExportedSymbols": [
+        {
+          "name": "RoutingMode",
+          "line": 11,
+          "kind": "type"
+        },
+        {
+          "name": "ROUTING_MODE_LABELS",
+          "line": 19,
+          "kind": "value"
+        },
+        {
+          "name": "ROUTING_MODE_DESCRIPTIONS",
+          "line": 28,
+          "kind": "value"
+        },
+        {
+          "name": "PipelineInput",
+          "line": 37,
+          "kind": "type"
+        },
+        {
+          "name": "PipelineResult",
+          "line": 46,
+          "kind": "type"
+        },
+        {
+          "name": "MemberProfile",
+          "line": 60,
+          "kind": "type"
+        },
+        {
+          "name": "runDecisionPipeline",
+          "line": 167,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "RoutingMode",
+          "line": 11,
+          "kind": "type"
+        },
+        {
+          "name": "ROUTING_MODE_LABELS",
+          "line": 19,
+          "kind": "value"
+        },
+        {
+          "name": "ROUTING_MODE_DESCRIPTIONS",
+          "line": 28,
+          "kind": "value"
+        },
+        {
+          "name": "PipelineInput",
+          "line": 37,
+          "kind": "type"
+        },
+        {
+          "name": "PipelineResult",
+          "line": 46,
+          "kind": "type"
+        },
+        {
+          "name": "MemberProfile",
+          "line": 60,
+          "kind": "type"
+        },
+        {
+          "name": "GuardianPolicyUnavailableError",
+          "line": 78,
+          "kind": "class"
+        },
+        {
+          "name": "runDecisionPipeline",
+          "line": 244,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "LIBRARY-5BA7FEA22007"
+      ]
+    },
+    {
+      "path": "tests/guardian-pipeline.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "802bfd8a333c9fbe0109a62cdfaaf7ed85faf9b6fd63f1c193ce1f1b723bb94b",
+      "sourceSha256": "0f783dcf1fd32c9052c92133ed521bcf063147203588ac3a5d0ea0e9c5c12cb9",
+      "bytes": 6455,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-9B2C6145A160"
+      ]
+    },
+    {
+      "path": "tests/guardian-policy-callers.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "f9b7a92d96fd6332e0378b38f9eb50d5d35dddfeec3004b0cc11fe97f2780202",
+      "bytes": 6302,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "tests/guardian-policy-execution.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "f2a916cbeb090227b24d2984c33581fc7bb0b6906c5dde6feb5fa74f0be87f4d",
+      "bytes": 13022,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "tests/guardian-sms-intake-execution.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "64bb057daef2f241f964540852c060b543d4970e3dcf47ab2bf58759bd8d61ee",
+      "sourceSha256": "43badd2d05429d4888f93ee0e014b7ed26f4691b9ccd6da0b14478c9366e5edb",
+      "bytes": 39982,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-322C46B32414"
+      ]
+    }
+  ]
+}

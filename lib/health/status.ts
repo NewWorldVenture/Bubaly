@@ -67,6 +67,12 @@ export type EnvCheck = { ok: boolean; missing: string[] };
  */
 export const FEATURE_ENV = [
   'CRON_SECRET',
+  // Every outbound email: notification digests, family invites, marketing sends.
+  // Worse than merely silent — `lib/email.ts` reports success when it is unset,
+  // so notification rows are marked delivered for mail that was never sent, and
+  // the dedupe then suppresses the retry. Env-only across five read sites, no
+  // stored fallback, so absence here does prove it is unconfigured.
+  'RESEND_API_KEY',
   'CHILD_LOGIN_SECRET',
   'INTERNAL_SECRET',
   'CONTACT_CENTER_INBOUND_SECRET',

@@ -77,7 +77,7 @@ export default async function PipelinePage() {
         <h2 className="mb-3 text-base font-semibold">{t('adminMarketingPipeline.addADeal')}</h2>
         <form action={saveDealAction} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <input name="name" required placeholder={t('adminMarketingPipeline.dealName')} className={`${inputCls} lg:col-span-2`} />
-          <input name="amount" type="number" min="0" step="0.01" placeholder={t('adminMarketingPipeline.amount')} className={inputCls} />
+          <input name="amount" type="number" inputMode="decimal" min="0" step="0.01" placeholder={t('adminMarketingPipeline.amount')} className={inputCls} />
           <select name="stage" defaultValue="lead" className={inputCls}>
             {DEAL_STAGES.map((s) => <option key={s} value={s}>{DEAL_STAGE_LABELS[s]}</option>)}
           </select>

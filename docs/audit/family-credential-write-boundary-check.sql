@@ -70,12 +70,22 @@ begin
   get diagnostics n = row_count;
   if n <> 0 then failures := array_append(failures, format('a child DELETED %s credential row(s)', n)); end if;
 
-  -- The read half is still open, and this records it rather than asserting it
-  -- is right. If it ever closes, this line fails and the document is updated —
-  -- which is the point: a finding half-fixed must not read as fixed.
+  -- O-02 IS NOW CLOSED, and this line is the record of the moment it closed.
+  --
+  -- It used to say the opposite: the read half was open, a child could still SEE
+  -- the family's stored passwords and card PINs, and this probe asserted that
+  -- state so a half-fixed finding could not read as fixed. It failed on the
+  -- merge with main — which is exactly what it was written to do —
+  -- because main's `0296_family_credentials_manager_only.sql` closed the read
+  -- side as well as the write side, going further than the audit branch's own
+  -- `family_credentials` migration, which is why that one was dropped rather
+  -- than renumbered.
+  --
+  -- The assertion is inverted rather than deleted: a child must NOT be able to
+  -- read a credential, and if that ever regresses this line fails again.
   select count(*) into n from public.family_credentials where id = row_id;
-  if n = 0 then
-    failures := array_append(failures, 'a child can no longer READ a credential — O-02 has been addressed; update finalaudit.md and this probe');
+  if n <> 0 then
+    failures := array_append(failures, format('a child READ %s credential row(s) — O-02 has regressed; the vault holds passwords and card PINs', n));
   end if;
 
   -- ── As the parent: the positive control ─────────────────────────────────
@@ -107,7 +117,7 @@ begin
   if array_length(failures, 1) is not null then
     raise exception 'family credential write boundary failed: %', array_to_string(failures, ' | ');
   end if;
-  raise notice 'OK family credentials: a child cannot write the vault, a parent can, and the read half is still open (O-02)';
+  raise notice 'OK family credentials: a child can neither write nor read the vault, and a parent can (O-02 closed by main 0296)';
 end $$;
 
 rollback;

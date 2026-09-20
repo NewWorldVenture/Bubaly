@@ -13,15 +13,24 @@ describe('family media persistence boundaries', () => {
     // place that decides this — see tests/family-media-paths-are-not-guessable.ts
     // for why it has to be unguessable rather than merely collision-resistant,
     // and for the sweep that stops a seventh caller rolling its own again.
+    //
+    // The inline call itself now lives in lib/storage/object-name.ts, because
+    // four OTHER modules were naming objects `${Date.now()}.${ext}` in the same
+    // public bucket. So the assertion follows the subject rather than the old
+    // spelling: each uploader must route through a collision-resistant namer.
+    // tests/public-bucket-objects-are-unguessable.ts enforces that across every
+    // uploader and checks the namer behaviourally.
     const createMemory = read('components/memories/create-memory.tsx');
     const photosModule = read('components/modules/photos-module.tsx');
     expect(createMemory).toContain('familyMediaPath(');
     expect(photosModule).toContain('familyMediaPath(');
 
     // The marketplace uploads to a DIFFERENT bucket (marketplace-photos) and
-    // still rolls its own, so it keeps the original assertion.
+    // still rolls its own, so it keeps the original assertion — as does the
+    // namer the family-media callers now share.
     const marketplaceUpload = read('components/marketplace/photo-upload.tsx');
     expect(marketplaceUpload).toContain('crypto.randomUUID');
+    expect(read('lib/storage/object-name.ts')).toContain('crypto.randomUUID');
   });
 
   it('cleans up family-media objects when Create Memory metadata fails', () => {

@@ -10,6 +10,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Camera, X, SwitchCamera, ImagePlus, Check } from 'lucide-react';
 import { useLockBodyScroll } from '@/lib/hooks/use-lock-body-scroll';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { useDialogBehavior } from '@/lib/a11y/use-dialog-behavior';
 
 type FacingMode = 'environment' | 'user';
 
@@ -77,13 +78,11 @@ export function CameraCapture({
     return () => { cancelled = true; stop(); };
   }, [facing, stop, tr]);
 
-  // Close on Escape.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') handleClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Escape, plus the Tab trap and focus restore the markup already promised with
+  // `aria-modal="true"`. A full-screen viewfinder is exactly the case that could
+  // not take the shared Modal's chrome, and so took none of its behaviour.
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogBehavior(dialogRef, true, { onClose: handleClose });
 
   function handleClose() {
     stop();
@@ -109,7 +108,7 @@ export function CameraCapture({
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col bg-black pt-[var(--safe-top)] pb-[var(--safe-bottom)] pl-[var(--safe-left)] pr-[var(--safe-right)]" role="dialog" aria-modal="true" aria-label={tr('cameraCapture.takeAPhoto')}>
+    <div ref={dialogRef} tabIndex={-1} className="fixed inset-0 z-[100] flex flex-col bg-black pt-[var(--safe-top)] pb-[var(--safe-bottom)] pl-[var(--safe-left)] pr-[var(--safe-right)]" role="dialog" aria-modal="true" aria-label={tr('cameraCapture.takeAPhoto')}>
       {/* Top bar */}
       <div className="flex items-center justify-between px-4 py-3 text-white">
         <button type="button" onClick={handleClose} aria-label={tr('cameraCapture.closeCamera')} className="grid h-10 w-10 place-items-center rounded-full bg-white/10 hover:bg-white/20">

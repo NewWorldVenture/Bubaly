@@ -31,7 +31,9 @@ export async function GET(req: NextRequest) {
   //
   // That is the same defect as the marketing unsubscribe (C-07). It survived
   // that pass because the guard there watches four tables it could name readers
-  // for, and `blog_subscribers` was not one of them.
+  // for, and `blog_subscribers` was not one of them. Consent is the one thing
+  // this endpoint exists to record, and a page the recipient reached from an
+  // email they asked to stop is the last place to be confidently wrong.
   const supabase = createServiceClient();
   const { data, error: lookupError } = await supabase
     .from('blog_subscribers')

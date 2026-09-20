@@ -28,10 +28,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 
-const mocks = vi.hoisted(() => ({ send: vi.fn(), setVapid: vi.fn() }));
+const mocks = vi.hoisted(() => ({ send: vi.fn(), setVapid: vi.fn(), blocked: vi.fn() }));
 vi.mock('web-push', () => ({
   default: { sendNotification: mocks.send, setVapidDetails: mocks.setVapid },
 }));
+// Consent resolution is a separate concern with its own tests; stub it so these
+// cases are about the prune counter and nothing else.
+vi.mock('@/lib/notifications/child-channels', () => ({ childrenBlockedOn: mocks.blocked }));
 
 type DeleteOutcome = { error: { code: string; message: string } | null };
 
@@ -43,15 +46,21 @@ function pushClient(outcome: DeleteOutcome) {
     endpoint: 'https://fcm.googleapis.com/fcm/send/abc', p256dh: 'p'.repeat(20), auth: 'a'.repeat(20), token: null,
   };
   const client = {
-    from: () => {
+    // sendPushToUsers resolves consent for the whole batch before any send, so
+    // the client has to answer user_preferences as well as push_devices.
+    from: (table: string) => {
       const b: Record<string, unknown> = {};
       let mode: 'select' | 'delete' = 'select';
+      const rows = () => (table === 'user_preferences'
+        ? [{ user_id: 'user-1', push_enabled: true }]
+        : [device]);
       Object.assign(b, {
         select: () => { mode = 'select'; return b; },
         delete: () => { mode = 'delete'; return b; },
+        in: () => b,
         eq: (col: string, v: unknown) => { if (mode === 'delete' && col === 'id') deletes.push(String(v)); return b; },
         then: (resolve: (v: unknown) => void) =>
-          resolve(mode === 'delete' ? { data: null, ...outcome } : { data: [device], error: null }),
+          resolve(mode === 'delete' ? { data: null, ...outcome } : { data: rows(), error: null }),
       });
       return b;
     },
@@ -64,6 +73,7 @@ beforeEach(() => {
   logged = [];
   vi.resetModules();
   mocks.send.mockReset();
+  mocks.blocked.mockResolvedValue([]);
   vi.stubEnv('NEXT_PUBLIC_VAPID_PUBLIC_KEY', 'BPublicKeyForTestsOnly');
   vi.stubEnv('VAPID_PRIVATE_KEY', 'PrivateKeyForTestsOnly');
   vi.stubEnv('VAPID_SUBJECT', 'mailto:test@bubaly.test');
@@ -168,6 +178,18 @@ describe('no claimed write discards its result', () => {
     // checked. A sweep scoped to tables it can name readers for is right, but
     // the scope has to grow when a new reader is found.
     blog_subscribers: 'the digest sends to every row that still says subscribed',
+    // The seventh through thirteenth instances of the same shape. Each of these
+    // sat inside a try/catch whose message named this very write — and a
+    // PostgREST call RESOLVES with { data, error }, rejecting only under
+    // .throwOnError(), so those catches saw a client that could not be built and
+    // nothing else. The handler existed and could not fire.
+    feedback_ideas: 'it is the only record that a GitHub issue exists, so a lost write files a SECOND one next sync',
+    admin_notifications: 'the /admin feed is where a super admin finds out at all',
+    mkt_consent_events: 'the consent ledger is what api/privacy/export cites',
+    expense_splits: 'the rollback is what keeps "never leave a parent without shares" true',
+    onboarding_progress: 'the onboarding funnel is read from it',
+    crm_contacts: 'the contact its owner and lifecycle are read from',
+    mkt_visitors: 'the visitor spine that attributes a person to a contact',
   };
 
   it.each(Object.entries(WATCHED))('%s is never written in statement position', async (table) => {
@@ -180,7 +202,9 @@ describe('no claimed write discards its result', () => {
       }
       return out;
     };
-    const files = [...walk('app'), ...walk('lib')];
+    // components/ too: the expense rollback is a client component, and a
+    // discarded write is no less discarded for running in a browser.
+    const files = [...walk('app'), ...walk('lib'), ...walk('components')];
     expect(files.length, 'the walk found nothing, so it proves nothing').toBeGreaterThan(100);
 
     const offenders: string[] = [];

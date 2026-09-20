@@ -22,7 +22,12 @@ import { describe, expect, it } from 'vitest';
 // honoured by paging to it. A `.limit()` at or below the cap is a real bound and
 // is left alone.
 const ROW_CAP = 1000;
-const ROOTS = ['app', 'lib'];
+// `components` belongs here too: a client component reaches PostgREST through
+// the same browser client and is capped by the same `db-max-rows`. It was left
+// out, and two over-cap limits survived there — a vocab deck and the calendar
+// busyness strip, the latter ordered ASCENDING so truncation dropped the most
+// recent weeks, which is the half the strip exists to show.
+const ROOTS = ['app', 'lib', 'components'];
 const CODE = new Set(['.ts', '.tsx']);
 
 function sourceFiles(dir: string): string[] {
@@ -51,7 +56,7 @@ function overCapLimits(source: string): { line: number; text: string; n: number 
 }
 
 describe('no read asks for more rows than the server will return', () => {
-  it('has no .limit() above the row cap anywhere in app/ or lib/', () => {
+  it('has no .limit() above the row cap anywhere in app/, lib/ or components/', () => {
     const offenders: string[] = [];
     for (const root of ROOTS) {
       for (const file of sourceFiles(root)) {

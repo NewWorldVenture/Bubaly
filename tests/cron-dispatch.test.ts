@@ -46,9 +46,11 @@ describe('vercel.json ↔ dispatcher table', () => {
     const slowed = vercel.crons.filter((c) => c.schedule !== SCHEDULES[c.path as keyof typeof SCHEDULES]).map((c) => c.path);
     expect(slowed.sort()).toEqual([
       '/api/cron/ai-runs',
-      '/api/cron/autopilot-scan', '/api/cron/checkout-abandoned', '/api/cron/close-auctions', '/api/cron/family-routines',
+      '/api/cron/autopilot-scan', '/api/cron/checkout-abandoned', '/api/cron/close-auctions', '/api/cron/contact-center-urgent', '/api/cron/family-routines',
       '/api/cron/feedback-github-sync',
+      '/api/cron/guardian-sms-recovery',
       '/api/cron/journey-recovery', '/api/cron/library-feeds', '/api/cron/marketing', '/api/cron/marketing-providers', '/api/cron/marketing-social', '/api/cron/model-refresh', '/api/cron/provider-sync', '/api/cron/push-scan',
+      '/api/cron/social-publish',
     ]);
     for (const path of slowed) expect(runsAtMostDaily(SCHEDULES[path as keyof typeof SCHEDULES]), path).toBe(false);
   });

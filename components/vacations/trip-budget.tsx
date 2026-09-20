@@ -92,7 +92,7 @@ export function TripBudget({ vacationId }: { vacationId: string }) {
                   <span className="text-sm font-medium">{cat.emoji} {cat.label}</span>
                   {editing === cat.value ? (
                     <span className="flex items-center gap-1">
-                      <Input type="number" step="0.01" autoFocus value={draft} onChange={(e) => setDraft(e.target.value)} onBlur={() => savePlanned(cat.value)} onKeyDown={(e) => e.key === 'Enter' && savePlanned(cat.value)} className="h-8 w-28" />
+                      <Input type="number" inputMode="decimal" step="0.01" autoFocus value={draft} onChange={(e) => setDraft(e.target.value)} onBlur={() => savePlanned(cat.value)} onKeyDown={(e) => e.key === 'Enter' && savePlanned(cat.value)} className="h-8 w-28" />
                     </span>
                   ) : (
                     <button onClick={() => { setEditing(cat.value); setDraft(planned ? String(planned / 100) : ''); }} className="text-sm text-muted hover:text-brand-text">

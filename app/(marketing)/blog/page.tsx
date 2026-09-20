@@ -172,7 +172,10 @@ export default async function BlogPage({ searchParams }: Props) {
             {unsubscribed === 'done'
               ? 'You’ve been unsubscribed from blog updates. Sorry to see you go — you can rejoin anytime below.'
               : unsubscribed === 'error'
-                ? 'We couldn’t complete that just now, so you may still receive blog emails. Please open the link again in a few minutes.'
+                // Distinct from 'invalid' on purpose: the link was fine, we were not.
+                // Telling someone their link is wrong when the database refused sends
+                // them to check the one thing that was never the problem.
+                ? 'We couldn’t complete that just now — your link is fine. Please try again in a moment, and contact support if the emails keep arriving.'
                 : 'That unsubscribe link doesn’t look right. If you keep getting emails, contact support and we’ll sort it out.'}
           </div>
         </Container>

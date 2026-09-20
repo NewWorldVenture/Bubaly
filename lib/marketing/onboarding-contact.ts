@@ -1,6 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
+import { escapeLike } from '@/lib/supabase/escape-like';
 
 type DB = SupabaseClient<Database>;
 
@@ -47,9 +48,14 @@ export async function upsertOnboardingContact(admin: DB, p: {
 
   // Dedupe: an existing contact with the same email, else one already tied to
   // this family. `.limit(1)` (not maybeSingle) so a duplicate never throws.
+  //
+  // The pattern is ESCAPED. This runs as the service role against a table whose
+  // RLS is admin-only, and the match decides which row the update below
+  // overwrites — so an unescaped `%` here matched an arbitrary stranger's
+  // contact and rewrote it with this caller's name, email and family.
   let existingId: string | null = null;
   if (email) {
-    const { data } = await admin.from('crm_contacts').select('id').ilike('email', email).limit(1);
+    const { data } = await admin.from('crm_contacts').select('id').ilike('email', escapeLike(email)).limit(1);
     existingId = data?.[0]?.id ?? null;
   }
   if (!existingId && p.familyId) {
@@ -57,9 +63,15 @@ export async function upsertOnboardingContact(admin: DB, p: {
     existingId = data?.[0]?.id ?? null;
   }
 
+  // Both results are read. This function decides who a CRM contact IS — the
+  // same row the identity fix was about — so a write that did not land leaves
+  // the record saying something other than what the caller just established,
+  // with nothing to say so.
   if (existingId) {
-    await admin.from('crm_contacts').update(row).eq('id', existingId);
+    const { error } = await admin.from('crm_contacts').update(row).eq('id', existingId);
+    if (error) console.error('[onboarding-contact] contact update failed', { contactId: existingId, error });
   } else {
-    await admin.from('crm_contacts').insert({ ...row, created_by: p.userId });
+    const { error } = await admin.from('crm_contacts').insert({ ...row, created_by: p.userId });
+    if (error) console.error('[onboarding-contact] contact insert failed', error);
   }
 }

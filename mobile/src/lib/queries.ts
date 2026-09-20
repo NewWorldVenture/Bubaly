@@ -48,7 +48,9 @@ export type GroceryItemRow = { id: string; name: string; quantity: string | null
 
 export async function fetchGroceryList(supabase: Db, familyId: string): Promise<{ listId: string | null; items: GroceryItemRow[] }> {
   const { data: list, error: listError } = await supabase
-    .from('grocery_lists').select('id').eq('family_id', familyId).eq('is_archived', false)
+    // Both archive columns: only `archived_at` is written, so asking
+    // `is_archived` alone shows the phone a list the web app has archived.
+    .from('grocery_lists').select('id').eq('family_id', familyId).eq('is_archived', false).is('archived_at', null)
     .order('created_at', { ascending: true }).limit(1).maybeSingle();
   if (listError) throw listError;
   if (!list) return { listId: null, items: [] };

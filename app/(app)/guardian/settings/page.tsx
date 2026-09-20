@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { settleAll } from '@/lib/supabase/settle';
+import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { RoutingSettings } from '@/components/guardian/routing-settings';
@@ -22,21 +22,23 @@ export default async function GuardianSettingsPage() {
   const supabase = await createServer();
   const db = withGuardianTables(supabase);
 
-  // settleAll, not Promise.all: a transport failure REJECTS rather than
-  // resolving with { error }, so one unreachable table used to take the whole
-  // page to the error boundary instead of to the branch below.
-  const [{ data: profile, error: profileError }, { data: member }] = await settleAll([
-    (db.from('guardian_member_profiles') as ReturnType<typeof supabase.from>)
+  // Both settled: the guardian-tables read was not, so a transport failure —
+  // DNS, TCP, TLS, a timed-out fetch — rejected the batch and took the page to
+  // the error boundary rather than degrading. See lib/supabase/settle.ts. The
+  // error itself is kept, because the branch below turns on it.
+  const [{ data: profile, error: profileError }, { data: member }] = await Promise.all([
+    // Same cast, same erasure — see the note in guardian/contacts.
+    settle<{ data: Record<string, unknown> | null; error: { message: string } | null }>((db.from('guardian_member_profiles') as ReturnType<typeof supabase.from>)
       .select('*')
       .eq('family_id', familyId)
       .eq('member_id', memberId)
-      .maybeSingle(),
+      .maybeSingle()),
 
-    supabase
+    settle(supabase
       .from('family_members')
       .select('id, display_name')
       .eq('id', memberId)
-      .maybeSingle(),
+      .maybeSingle()),
   ]);
 
   const twilioEnabled = isTwilioConfigured();

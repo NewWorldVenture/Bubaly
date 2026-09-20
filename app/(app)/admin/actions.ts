@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { isSuperAdmin, getUser } from '@/lib/supabase/auth';
 import { createServiceClient } from '@/lib/supabase/server';
 import { logAudit } from '@/lib/server/audit';
+import { listAllAuthUsers } from '@/lib/server/list-all-auth-users';
 import { sendReactEmail, APP_URL } from '@/lib/email';
 import { InviteEmail } from '@/lib/emails/invite';
 import { emailSchema } from '@/lib/validation';
@@ -15,6 +16,7 @@ import type { MemberRole } from '@/lib/constants/roles';
 import type { PlanId } from '@/lib/constants/plans';
 import { isSuperAdminEmail } from '@/lib/constants/super-admins';
 import { describeActionError } from '@/lib/supabase/errors';
+import { isValidTimezone } from '@/lib/time/zoned';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -100,13 +102,53 @@ export async function adminCreateFamilyAction(input: {
   if (!parsedEmail.success) return { ok: false, error: t('actions.enterTheOwnerSEmail') };
 
   const supabase = createServiceClient();
-  const { data: owner, error: ownerLookupError } = await supabase
-    .from('profiles').select('id, full_name, email').eq('email', parsedEmail.data).maybeSingle();
+
+  // The owner is resolved from the VERIFIED address in auth.users, not from
+  // `profiles.email`. profiles.email is a plain text column its own subject may
+  // set to anything — `profiles_update_self` constrains which ROW you may
+  // update, not which columns — and it is not unique. So a lookup keyed on it
+  // answers with whoever last claimed the string, and an operator provisioning
+  // a family for a customer could bind it to that account instead: the
+  // `created_by` below, and the parent seat upserted after it, would be theirs.
+  // Same root cause as the CRM identity fix, at the last call site that still
+  // trusted that column.
+  //
+  // listAllAuthUsers returns an error rather than a short list, and that
+  // distinction is load-bearing here: an incomplete read must not become "no
+  // account found with that email", which is the same false answer wearing a
+  // different hat.
+  const { users: authUsers, error: ownerLookupError } = await listAllAuthUsers(supabase);
   if (ownerLookupError) return actionFailure(ownerLookupError, t('actions.couldNotLookUpThe'));
-  if (!owner) return { ok: false, error: t('actions.noAccountFoundWithThat') };
+  const wantedEmail = parsedEmail.data.trim().toLowerCase();
+  const matches = authUsers.filter((u) => (u.email ?? '').trim().toLowerCase() === wantedEmail);
+  if (matches.length === 0) return { ok: false, error: t('actions.noAccountFoundWithThat') };
+  // Supabase keeps auth emails unique per project, so this is a "cannot happen"
+  // that must not silently pick one if it ever does.
+  if (matches.length > 1) {
+    return actionFailure(
+      new Error(`${matches.length} auth users share ${wantedEmail}`),
+      t('actions.couldNotLookUpThe'),
+    );
+  }
+  const authOwner = matches[0];
+
+  // The display name still comes from the profile — a self-chosen name is
+  // exactly what that column is for. Only the IDENTITY moved.
+  const { data: ownerProfile } = await supabase
+    .from('profiles').select('full_name').eq('id', authOwner.id).maybeSingle();
+  const owner = {
+    id: authOwner.id,
+    full_name: ownerProfile?.full_name ?? null,
+    email: authOwner.email ?? null,
+  };
+
+  // An unknown zone is indistinguishable from UTC once stored, silently and
+  // permanently, so it is refused here rather than written.
+  const timezone = (input.timezone || 'UTC').trim();
+  if (!isValidTimezone(timezone)) return { ok: false, error: t('actions.unknownTimeZone') };
 
   const { data: family, error } = await supabase.from('families').insert({
-    name, timezone: input.timezone || 'UTC', created_by: owner.id,
+    name, timezone, created_by: owner.id,
   }).select('id').single();
   if (error) return actionFailure(error, t('actions.couldNotCreateTheFamily'));
 
@@ -443,22 +485,51 @@ export async function adminSetUserBanAction(userId: string, banned: boolean): Pr
 }
 
 /** Sends a password-reset email to an existing account (e.g. to help a locked-out user). */
-export async function adminSendPasswordResetAction(email: string): Promise<Result> {
+export async function adminSendPasswordResetAction(email: string): Promise<
+  | { ok: true; outcome: 'accepted'; audit: 'recorded' | 'unconfirmed'; warning?: string }
+  | { ok: false; outcome: 'failed' | 'uncertain'; error: string }
+> {
   const t = await getTranslations();
-  const guard = await assertSuperAdmin();
-  if (!guard.ok) return guard;
+  let dispatched = false;
+  const uncertain = () => ({ ok: false as const, outcome: 'uncertain' as const, error: t('userSecurityActions.resetUncertain') });
+  try {
+    const guard = await assertSuperAdmin();
+    if (!guard.ok) return { ...guard, outcome: 'failed' };
+    const parsedEmail = emailSchema.safeParse(email);
+    if (!parsedEmail.success) return { ok: false, outcome: 'failed', error: t('actions.enterAValidEmailAddress') };
 
-  const parsedEmail = emailSchema.safeParse(email);
-  if (!parsedEmail.success) return { ok: false, error: t('actions.enterAValidEmailAddress') };
+    const supabase = createServiceClient();
+    dispatched = true;
+    const response = await supabase.auth.resetPasswordForEmail(parsedEmail.data, {
+      redirectTo: `${APP_URL}/auth/recovery`,
+    });
+    if (response.error) {
+      const status = response.error.status;
+      // A request timeout or server failure cannot establish non-acceptance.
+      if (typeof status !== 'number' || status < 400 || status >= 500 || status === 408) return uncertain();
+      return { ok: false, outcome: 'failed', error: describeActionError(response.error, t('actions.couldNotSendThePassword')) };
+    }
+    if (response.error !== null || !response.data || typeof response.data !== 'object' || Array.isArray(response.data)) return uncertain();
 
-  const supabase = createServiceClient();
-  const { error } = await supabase.auth.resetPasswordForEmail(parsedEmail.data, {
-    redirectTo: `${APP_URL}/login`,
-  });
-  if (error) return actionFailure(error, t('actions.couldNotSendThePassword'));
-
-  await adminAuditLog({ familyId: null, action: 'password_reset', resource: 'users', metadata: { email: parsedEmail.data } });
-  return { ok: true };
+    // Provider acceptance survives a later actor/read/audit failure. This action
+    // needs a checked receipt; the shared best-effort helper returns no evidence.
+    try {
+      const actor = await getUser();
+      if (!actor?.id) throw new Error('Audit actor unavailable');
+      const { data, error } = await supabase.from('audit_logs').insert({
+        family_id: null, actor_id: actor.id, action: 'password_reset', resource: 'users', resource_id: null,
+        metadata: { email: parsedEmail.data, via: 'site_admin' },
+      }).select('id').abortSignal(AbortSignal.timeout(5000));
+      if (error || data?.length !== 1 || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data[0].id)) {
+        throw new Error('Audit receipt unavailable');
+      }
+      return { ok: true, outcome: 'accepted', audit: 'recorded' };
+    } catch {
+      return { ok: true, outcome: 'accepted', audit: 'unconfirmed', warning: t('userSecurityActions.resetAuditUnconfirmed') };
+    }
+  } catch (error) {
+    return dispatched ? uncertain() : { ok: false, outcome: 'failed', error: describeActionError(error, t('actions.couldNotSendThePassword')) };
+  }
 }
 
 const TICKET_STATUSES = ['open', 'pending', 'resolved', 'closed'] as const;

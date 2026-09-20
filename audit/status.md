@@ -7,6 +7,45 @@
 ## From `main`
 
 
+## Pull request 510 integration — 2026-09-19
+
+CURRENT: Published phone/signout repair; AUTH-001/002 remain IN PROGRESS.
+FROZEN: f75e7febdf01bf944fa35a505745001533c80028; 9 source/test/workflow files.
+REPAIRS: Owned SMS verification and lifecycle guards; exact pending-cookie bridge.
+LOCAL: Combined 459/459 controlled browser cases across 17 files pass (1.1m).
+Both full unit zones pass 16,703/16,703 across 1,305 files. Lint (3 existing
+warnings), all 8 localization surfaces and query audit (491/86/146) pass.
+Final combined 252-page build passes; full strict types pass.
+VERIFIED APPLICATION: 2a5e7e7a, dpl_8oWh1TNVFNbmGissmnvmA11P6ECT, 21:28:59 UTC.
+Exact deployed public auth/phone readiness passes; no auth action or SMS sent.
+BASELINE: Published d954 public deployment checks PASS; hosted CI 1,251/1,252,
+sole durable-signout completion failure. Web/Database/Mobile pass. No rerun.
+HOSTED: CI 35470363378 Web/Database/Mobile SUCCESS. Web passes both full unit
+zones (16,703/1,305), build252/lint/types. E2E 105970089707 FAILS:1,293/1,296.
+Full discovery: 1,296 tests/54 files; authenticated/durable enabled, three real
+Next/GoTrue phone cases and repaired signout. All3 phone cases stop before code
+entry after Continue; verification unexecuted. Durable signout and six callbacks
+pass by exact-source all-other-cases inference, not individual success entries.
+Disposable test SMS configuration only; product config/SQL unchanged.
+INVENTORY: All 14,035 prior IDs retained. Only PhoneAuth COMPONENT NS→IN PROGRESS;
+ROLE stays NOT STARTED. Three new helper/test obligations IN PROGRESS.
+Current total14,038: 13,842 NOT STARTED, 192 IN PROGRESS, 1 FIXED+PASS, 3 FAIL (0.01%).
+AUTH-001/002/003 stay open; only existing narrow SEC-005 is closed.
+REPAIR: Pinned CLI disables SMS signup without a concrete provider even with a
+send-SMS hook; disposable test OTP config alone is insufficient. Existing workflow
+DEPLOY NS→IN PROGRESS. CI-only provider/hook repair passes types/lint/discovery3,
+guards66 and exact rewrite/negative controls. New hosted proof remains pending.
+NEXT: Publish two-file CI repair and four evidence docs; await new hosted phone run.
+Physical devices, production SMS delivery and full workflows remain open.
+DISCOVERY: SEC-001 six-writer/media-consumer map; no privacy repair applied.
+Actual worker handlers/Chromium cache/logout reproduce synthetic A image served
+offline to B after logout (desired RED). Existing SW SUPPORT NS→IN PROGRESS;
+no native worker installation, real optimizer or private production content.
+RECORD: docs/final-audit/auth-phone-ownership-cycle.md.
+MAPPING: docs/final-audit/discovery/auth-phone-ownership-inventory.json.
+RELEASE: NO full audit/phone/production workflow PASS.
+LAST-UPDATE: 2026-09-19T21:47:17.467Z
+
 Four workers audit this repository in parallel. Each worker maintains ONLY its
 own section below. Read this file before touching any source file: if another
 worker lists it under FILES-TOUCHED, audit it and record a recommendation in
@@ -44,59 +83,119 @@ as genuinely separate checkouts, neither is necessary.
 ---
 
 ## Claude-1
-CURRENT: Architecture/integration seams. Done: config contract, cron auth, cron failure visibility, service-role boundary. Next: push/APNs, calendar feeds, AI provider fallbacks.
-COMPLETED:
-  - F-020 migration-idempotency defect: found, fixed (18 migrations + 0226), made a permanent CI gate. On main.
-  - Version collision 0295 between main (#542) and #541; renumbered to 0296.
-  - #510 merged with main; three conflicts resolved toward the stricter side.
-  - /audit scaffolding + finalaudit.md Part 0 consolidated view. On main.
-  - F13 marked superseded — it was telling future workers to revert main #544.
-  - Service-role boundary probed by planting a violating client page: boundary HOLDS,
-    key value absent from all client chunks. Declared the boundary explicitly in the
-    two modules that inherited it. LOW / hardening, not a vulnerability.
-  - HIGH: /api/health reported `ok` while a missing CRON_SECRET silently 401'd all 24
-    scheduled jobs, and a missing CHILD_LOGIN_SECRET disabled child sign-in. Added a
-    FEATURE_ENV tier reported as degraded/200 (never 503), with 10 tests proved
-    load-bearing by reverting.
-  - HIGH: 5 of 24 cron routes answered 200 while counting their own failures (4 via
-    `{ ok: true, ...summary }`). 0 of 24 write a durable run record, so the HTTP status
-    is the only signal. Fixed; each revert proved load-bearing individually.
-NEXT: env/config contract (what happens in prod when a var is missing); cron-route auth consistency; push/APNs + calendar-feed integration seams.
-FILES-TOUCHED:
-  - finalaudit.md (Claude-1 owns exclusively), audit/claude-1.md, audit/status.md
-  - docs/audit/rehearse-ledger-repair.sh, .github/workflows/ci.yml
-  - lib/supabase/server.ts, lib/network/benchmarks-server.ts  (server-only declarations)
-  - lib/health/status.ts, app/api/health/route.ts, tests/health-feature-secrets.test.ts
-  - app/api/cron/{feedback-github-sync,library-feeds,automations,marketing-social,marketing}/route.ts
-  - tests/cron-failed-runs-are-visible.test.ts
-  - tests/mobile-imports-stay-bundleable.test.ts
-  - supabase/migrations/* (idempotency guards — landed on main, do not re-edit)
-BLOCKERS:
-  - F-001: applying migrations to production needs operator credentials. Agents must not
-    (docs/PENDING_PROD_MIGRATIONS.md, LB-016 §4). Permanent for agent workers.
-NOTE FOR OTHER WORKERS:
-  - The recurring defect class here is the guard that cannot fail (8 instances; see
-    audit/claude-1.md). Break what a guard protects and confirm it goes red. Run the
-    NEGATIVE case too — it is what stopped me reporting a vulnerability that was never open.
-  - A Next folder starting with `_` is excluded from routing. A probe page placed there
-    is never compiled, and the build passes for the wrong reason. I lost two builds to it.
-LAST-UPDATE: 2026-09-13
+CURRENT: Continuous audit loop. Scope: Coordinator + Architecture/Integration,
+  and the applier of every fix.
+COMPLETED (this round): five findings, each found by hunting the GUARD SHAPE
+  rather than another instance of a bug.
+  1. Nine forms wrote Greenwich's day into a DATE column (HIGH).
+  2. Two reads capped at 1,000 rows in components/, one of them also dropping
+     its error and lacking a rejection path (HIGH).
+  3. Twenty-six money inputs could not take a decimal point on iOS (HIGH).
+  4. Five reads that handled every database failure and no network one,
+     including App Lock presenting a configured lock as never set up (HIGH).
+  5. The admin console reported the first thousand of everything (HIGH).
+  Three NEW guards added; five existing guards widened. Every fix proved
+  load-bearing by reverting it and watching the guard go red.
+NEXT: the OPEN items recorded at the end of audit/claude-1.md — a database
+  aggregate for the admin growth/storage figures, ~20 unbounded admin LIST
+  reads, and the 95-site awaited-destructure population (unverified, and
+  explicitly not 95 findings).
+FILES-TOUCHED: audit/claude-1.md, audit/status.md, and the source files named
+  in the commits on main between 358b1e6d and ea9bf3da. Chief among them:
+  lib/schedule/zoned.ts, components/modules/{school,expenses,trip-memories,
+  health-visits,finances,pets,subscriptions,meals,language,event-detail-modal}*,
+  components/{finance,wallet,settings,marketplace,calendar,auth}/*,
+  app/(app)/admin/{reports,backup}/page.tsx, app/(app)/dashboard/calm/page.tsx,
+  and tests/ (3 new guards, 5 widened).
+BLOCKERS: F5/F-001 and F-C08 still need an owner — no working path exists to
+  apply a migration to production. Unchanged, and not a blocker on the audit.
+
+### Three distinct ways a guard fails, all found this round
+
+Worth separating, because the fix for each differs:
+
+1. **Scope gap** — the rule is right, the walk is too small.
+   `family-day-not-greenwich-day` and `no-limit-above-the-row-cap` skipped
+   `components`; `mobile-numeric-inputmode` read ONE flat directory and its
+   own coverage assertion was satisfied by that directory, so it passed
+   honestly on every CI run while 26 offenders sat outside it.
+2. **Premise gap** — the guard covers the blessed helper, not the bypass.
+   `read-error-surfaced` checks `useRealtimeQuery` call sites; all five reads
+   in finding 4 hand-rolled a fetch instead, putting them outside its premise.
+   *A guard on the safe path does not cover the path taken to avoid it.*
+3. **Enumerated with no scan** — `whole-table-reads-are-not-capped` pins four
+   named jobs against a capped fake. It cannot be wrong about those four; it
+   just never grew to a fifth surface.
+
+A coverage assertion calibrated to the scanned subset cannot detect that the
+subset is the problem. Every widened guard here got a bound past what its old
+scope could satisfy, plus a case asserting the walk still reaches past it.
+LAST-UPDATE: 2026-09-18T20:05Z
 
 ## Claude-2
-CURRENT: RUNNING — launched by Claude-1 as a parallel worker. Status block lives at the top of audit/claude-2.md; mirrored here on completion.
-COMPLETED:
-NEXT:
-FILES-TOUCHED:
-BLOCKERS:
-LAST-UPDATE:
+CURRENT: COMPLETE for this round. Scope: Frontend · UI/UX · Responsive · Accessibility.
+COMPLETED: audit/claude-2.md holds this worker's findings (populated across parallel sessions; see the file for the per-finding record).
+NEXT: nothing outstanding for this round. Claude-1 has applied the HIGH findings it raised — see the consolidation section in audit/claude-1.md.
+FILES-TOUCHED: audit/claude-2.md only. Audit-only — no source file was modified by this worker.
+BLOCKERS: none.
+LAST-UPDATE: 2026-09-14
+
 
 ## Claude-3
-CURRENT: RUNNING — launched by Claude-1 as a parallel worker. Status block lives at the top of audit/claude-3.md; mirrored here on completion.
-COMPLETED:
-NEXT:
-FILES-TOUCHED:
-BLOCKERS:
-LAST-UPDATE:
+CURRENT: COMPLETE for this round. Scope: Backend · API · Database · Auth · Security.
+COMPLETED: audit/claude-3.md holds this worker's findings (populated across parallel sessions; see the file for the per-finding record).
+NEXT: nothing outstanding for this round. Claude-1 has applied the HIGH findings it raised — see the consolidation section in audit/claude-1.md.
+FILES-TOUCHED: audit/claude-3.md only. Audit-only — no source file was modified by this worker.
+BLOCKERS: none.
+LAST-UPDATE: 2026-09-14
+
+
+## Claude-4
+CURRENT: COMPLETE for this round. Scope: QA · Features · Flows · Performance · Edge cases.
+COMPLETED: audit/claude-4.md holds this worker's findings (populated across parallel sessions; see the file for the per-finding record).
+NEXT: nothing outstanding for this round. Claude-1 has applied the HIGH findings it raised — see the consolidation section in audit/claude-1.md.
+FILES-TOUCHED: audit/claude-4.md only. Audit-only — no source file was modified by this worker.
+BLOCKERS: none.
+LAST-UPDATE: 2026-09-14
+
+
+## Claude-1
+CURRENT: complete — all six passes merged and the consolidated index built
+COMPLETED: scaffolding; workers dispatched; architecture+integration sweep
+  (CSP vs real outbound hosts, server/client boundary, env contract, workflow
+  health, dependency audit, mobile gate); Pass C written into finalaudit.md as
+  F-C01–F-C10 with all 41 prior findings preserved; #526/#540/#543/#544/#546
+  shipped and verified in production
+NEXT: nothing outstanding in the audit itself. The open work is the owner's:
+  unblock the migration path (F5/F-C08), then apply 0296. Two gaps are named in
+  the Verification Checklist rather than left implied — no browser was run, and
+  0237/0239/0292 did not replay.
+FILES-TOUCHED: audit/status.md, audit/claude-1.md, finalaudit.md,
+  supabase/migrations/0296_family_credentials_manager_only.sql,
+  docs/audit/family-credentials-boundary-check.sql,
+  tests/migration-version-safety.test.ts
+BLOCKERS: F5/F-001 and F-C08 need an owner — together they mean NO working
+  path exists to apply a migration to production. Not a blocker on the audit.
+  F-E01 is CRITICAL and needs an owner decision tonight, not a queue slot.
+LAST-UPDATE: 2026-09-13T22:50Z
+
+## Claude-2
+CURRENT: COMPLETE for this round. Scope: Frontend · UI/UX · Responsive · Accessibility.
+COMPLETED: audit/claude-2.md holds this worker's findings (populated across parallel sessions; see the file for the per-finding record).
+NEXT: nothing outstanding for this round. Claude-1 has applied the HIGH findings it raised — see the consolidation section in audit/claude-1.md.
+FILES-TOUCHED: audit/claude-2.md only. Audit-only — no source file was modified by this worker.
+BLOCKERS: none.
+LAST-UPDATE: 2026-09-14
+
+
+## Claude-3
+CURRENT: COMPLETE for this round. Scope: Backend · API · Database · Auth · Security.
+COMPLETED: audit/claude-3.md holds this worker's findings (populated across parallel sessions; see the file for the per-finding record).
+NEXT: nothing outstanding for this round. Claude-1 has applied the HIGH findings it raised — see the consolidation section in audit/claude-1.md.
+FILES-TOUCHED: audit/claude-3.md only. Audit-only — no source file was modified by this worker.
+BLOCKERS: none.
+LAST-UPDATE: 2026-09-14
+
 
 ## Claude-4
 CURRENT: RUNNING — launched by Claude-1 as a parallel worker. Status block lives at the top of audit/claude-4.md; mirrored here on completion.
@@ -119,16 +218,19 @@ anything, and before you touch a file.
 ## Claude-1
 CURRENT: Passes P-Y done. CI green on 604d5b00, d2d138eb, cbd35299, 7f4f5a6b, 77be4f55, 880b8469 — six green, none ever failed (5a4ca5ca and 53f6362e were cancelled by the next push; their content is covered by the green runs after them). 57b659b9 (Pass X) was in progress at the time of writing. Pass Y closes U-05's other half.
 COMPLETED: Passes A-P (16 passes) · P-01 merged from Claude-4 (verified independently, fixed, two guards added) · architecture sweeps 1-3 · U-02 fixed with a page-level behavioural proof: against the pre-fix code the failed-read page and the absent-row page are BYTE-IDENTICAL strings · P-02: three of six routing rows had no writer anywhere in the application; `default_mode_immediate/close/trusted` only ever held their column DEFAULT while lib/guardian/pipeline.ts:144 routes immediate/close/trusted calls through them · P-03: a cleared greeting came back, because `value || undefined` omitted the key · finalaudit.md restructured to the 19-section layout with every original sub-heading preserved byte-identical
-CURRENT (Claude-1): every OPEN finding from Claude-2/3/4 that was mine is now closed (AV-BD). Moving to gaps none of the four workers reached, starting with ARCH-001 — the react@18 / next@15 split found in Pass BD, which is mine by area and is the one defect that makes every other component test less trustworthy than it looks.
+CURRENT (Claude-1, 2026-09-20): MERGED origin/main INTO THIS BRANCH — 198 commits, 99 conflict hunks across 61 files. The two audits are now one tree. finalaudit.md is the UNION of both control documents (main's leads and is authoritative for the counts; the Claude branch's 19 sections and Part II evidence are preserved beneath it). Nothing from either side was dropped — audit/*.md were union-merged per rule 2, not chosen between.
+MIGRATION COLLISION RESOLVED EMPIRICALLY, NOT BY FILENAME: the branches had independently numbered six different files into 0296-0301. Kept and renumbered the three main lacks — 0319 social-access DELETE (AUTHZ-003), 0320 audit_logs actor pin, 0321 family-erasure indexes — plus the new 0318 guardian safety config (AUTHZ-005). DROPPED three as genuinely redundant: family_credentials (main's 0296, which goes FURTHER and closes O-02's read half), child_logins (main's 0297), invites (main's 0298). PROOF, not assertion: 334 migrations applied / 0 failed and 46/46 boundary probes pass ON A FRESH DATABASE — each dropped migration's probe still passes, which it could only do if main's version enforces the same boundary. None of 0318-0321 is applied; applying remains a human action.
+THREE OF MY OWN ERRORS, CORRECTED IN THE RECORD RATHER THAN QUIETLY DROPPED: (1) PASS-BK WITHDRAWN — allowance_rules was real and reproduced, but main's 0306 already closed it, found the same way and fixed BETTER with restrictive policies; I had searched main's document for open FAIL rows and concluded nobody had looked, when absence from a failure list can mean ALREADY REPAIRED. (2) My sensitive-table census printed BASENAMES, collapsing three actions.ts files into one label and under-reporting six defects as four — in the reassuring direction. (3) PASS-BF SUPERSEDED — main BUILT the FCM HTTP v1 + APNs transport I declined to build blind, so my guard asserting "native push has no transport" now asserted a falsehood and was deleted with the reason recorded; main's native-push-provider.test.ts (31 cases) covers the real thing.
+AND A PROBE EARNED ITS KEEP: family-credential-write-boundary-check.sql FAILED the first post-merge sweep saying "a child can no longer READ a credential — O-02 has been addressed". That line was written to fail on purpose if that decision ever changed. Main's 0296 closed the read half, so O-02 IS NOW CLOSED; the assertion is inverted rather than deleted, so a regression fails it again.
+STILL OPEN AND NOT MINE: SEC-001's bucket half (needs provider config + a consumer migration to signed URLs, in that order — the cache half is fixed); the six sensitive tables where a server action gates on isManager and RLS does not (babysitter_payments, babysitter_profiles, compliance_disclosures, gift_links, gift_payments, vacation_documents) — NONE repaired, and each must be checked against main's 0296-0317 FIRST, which is exactly the step I skipped on allowance_rules; and five tables with no app write path this sweep could find.
+PREVIOUS: every OPEN finding from Claude-2/3/4 that was mine is now closed (AV-BD). Moving to gaps none of the four workers reached, starting with ARCH-001 — the react@18 / next@15 split found in Pass BD, which is mine by area and is the one defect that makes every other component test less trustworthy than it looks.
 NEXT: I18N-004 CLOSED (AW); Guardian's 33 UI labels CLOSED and gated (AX), 11 of its strings blocked on I18N-001. Only 3 convertible lib/ formatter sites remain (ratchet now 70). Otherwise keep re-reading audit/claude-2.md, claude-3.md and claude-4.md for anything still OPEN that is mine, and to sweeping for gaps none of the four workers reached: assistant/tools, autopilot/engine, chores/dashboard, intelligence/hard-signals, marketing/{crm,format}, meals/pantry-chef, memories/memories, messages/overview, moments/prep, purchases/answer. Plus 8 blocked on I18N-001 (emails, notifications, deadline reminders). I18N-002 is CLOSED except the one email blocked on I18N-001, and private time-ago ladders are down to the two that should stay. THE FLOOR WAS WRONG TWICE AND IS CORRECTED: (Pass AI) 16 sites are TIMEZONE-AND-PARTS ENGINES, not display — lib/services/scope.ts parses the hour with parseInt and its own comment says 'en-US' renders midnight as '24' in some ICU versions; lib/schedule/zoned.ts reads formatToParts for a DST offset; lib/time/zoned.ts uses the CONSTRUCTOR as a validity probe; lib/guardian/rules.ts parses hour/minute to decide CALL ROUTING. (Pass AJ) lib/services/finances/index.ts formatDollars is a 17th non-display site: all 27 callers are model-read AI tool strings or activity-ledger rows it WRITES. Floor is 56. The mechanism count is PINNED (not minimised) because localising a parser makes a ceiling go DOWN — the one failure a ceiling cannot see. So: 93 = 56 correct + 8 blocked (I18N-001) + 29 convertible.
 READ THIS BEFORE TRUSTING THE RATCHET: it counts 'en-US' in a formatter position and is STRUCTURALLY BLIND to English-literal time labels. Pass AK found ELEVEN private "time ago" ladders (five different names, three different wordings) built from 'just now' and `${m}m ago` — no locale in them to find, green here throughout. All eleven now delegate to one shared fmtTimeAgo, and scripts/audit-time-ago-ladders.mjs + tests/one-time-ago-and-it-follows-the-reader.test.ts hold it. Also found: I18N-002, 14 sites calling toLocaleDateString() with NO argument, which follows the BROWSER's locale rather than the family's Bubaly choice — the hardest flavour to spot, because the source LOOKS locale-aware.
-PASS-BK (a child could set the amount of their own allowance) — CRITICAL, FIXED in the repo as 0319, UNAPPLIED. NEW: in no worker's file and NOT in main's master control document.
-  [CLAUDE-1][CRITICAL][SECURITY]: allowance_rules carries child_wallet_id, amount_cents, cadence and next_run_on; app/api/cron/wallet-allowance reads the due rules and credits the named wallet. Its ONLY policy was `for all to authenticated using (is_family_member(family_id))`. Every write path in app/(app)/wallet/actions.ts gates on isManager — but a server action is no boundary against a JWT holder, and a PATCH to /rest/v1/allowance_rules never passes through app/.
-  REPRODUCED ON THE REPLAYED DATABASE, AS THE CHILD: `update public.allowance_rules set amount_cents = 100000, next_run_on = current_date;` -> UPDATE 1. $5.00/week became $1,000.00, scheduled for today. No exploit, no race — one authenticated request against the row that pays you.
-  FOUND BY SWEEPING THE CLASS, NOT THE INSTANCE, which having a replayed database made possible (the other agent records "Current environment exposes no Supabase credentials"). 167 tables share AUTHZ-005's permissive FOR ALL shape — emphatically NOT 167 defects: it is a policy DEFAULT and for most it is right (habit_logs, game_results, family_polls, dining_out are a household sharing its own data). The severity in AUTHZ-005 came from the SUBJECT, not the shape. Narrowing to sensitive subjects with NO restrictive guard layered on top leaves 22: allowance_rules, babysitter_payments, babysitter_profiles, behavior_logs, compliance_disclosures, family_emergency_contacts, family_emergency_plans, family_insurance_policies, gift_links, gift_payments, grades, guardian_suggestions, health_goals, health_metrics, health_visits, home_security_events, immunizations, medication_doses, tax_documents, vacation_documents, vacation_emergency_contacts, vacation_medical_information. ONLY allowance_rules is fixed; the other 21 are RECORDED NOT REPAIRED because each needs its own read of who legitimately writes it — a teen logging their own health_metrics is probably correct, and I will not mass-apply a predicate to 21 tables on the strength of their names. CHECKED ONE OF THEM AND IT IS CORRECT BY DESIGN: medication_doses is written by components/modules/medications-module.tsx, a CLIENT component going straight to the browser Supabase client with no server action and no role gate anywhere — so the permissive member policy IS the intended boundary, not an oversight. THE LIST OF 22 IS A LIST OF THINGS TO READ, NOT A LIST OF DEFECTS. The test is not the table's name but whether the application's own write path enforces something RLS does not: for allowance_rules it did (isManager in every wallet action vs RLS on bare membership) and that gap is the defect; for medication_doses there is no gate to disagree with. APPLIED THAT TEST MECHANICALLY TO THE REMAINING 20 — AND GOT IT WRONG THE FIRST TIME, CORRECTED HERE. My first pass printed BASENAMES, so three different actions.ts files collapsed into one label: it reported four defects, filed vacation_documents under 'no write path', and marked gift_payments ungated when its wallet path gates on isManager like the rest. An identifier that is not unique is not an identifier, and a census keyed on one under-reports in exactly the direction that looks reassuring. Re-run with FULL PATHS: SIX carry the same defect as allowance_rules (server action gates on isManager, RLS on bare membership) — babysitter_payments, babysitter_profiles, compliance_disclosures, gift_links, gift_payments (via app/(app)/wallet/actions.ts) and vacation_documents (via lib/services/documents/index.ts). TEN are correct by design (client component writing straight to the browser client) — behavior_logs, family_insurance_policies, grades, health_goals, health_metrics, health_visits, home_security_events, immunizations, tax_documents, plus medication_doses. FIVE have no app write path this sweep could find — family_emergency_contacts, family_emergency_plans, guardian_suggestions, vacation_emergency_contacts, vacation_medical_information: either something outside app/lib/components writes them or nothing does, and it is not safe to conclude from silence. gift_payments also has a SECOND ungated server path in app/gift/actions.ts, which is the public gift-link flow where the giver is not signed in — probably correct, recorded because 'ungated' and 'wrong' are not the same claim. NONE OF THE SIX ARE FIXED HERE: allowance_rules earned its fix by being REPRODUCED on a live database, not by matching a pattern, and the next pass should reproduce each of the six the same way before writing a line of SQL.
-  A CORRECTION TO MY OWN EARLIER WORK: W-01/W-02 closed the allowance DOUBLE-PAY race and I re-raced it on two connections for the exact ledger numbers. That pass examined how an allowance is PAID and never asked WHO MAY SET THE AMOUNT. The execution path was made correct while its input stayed writable by the beneficiary. Auditing a mechanism is not the same as auditing its inputs.
-  FIX 0319 mirrors 0318 (writes -> can_manage_family, the same set isManager already enforces) and grants SELECT EXPLICITLY, because the FOR ALL being replaced was also what allowed reads — dropping it without that would blank the allowance surfaces for everyone, and "you get $5 on Fridays" is the feature. 316 migrations applied / 0 failed; 25/25 probes pass on a FRESH database including the new one, which carries its own negative control.
-  AND MY OWN GATE CAUGHT ME: tests/migration-version-safety.test.ts went red with `expected '0320' to be '0302'`. That is F-020 working as designed — the pin exists so a new migration cannot land without someone reading the list. Updating it is the maintenance it compels, not a weakening; the comment now names both files and why they skip 0302-0317 (main holds its own 0296-0317, so this branch's 0296-0301 already collide with six of them; numbering from 0318 keeps the new pair out of that pile rather than deepening it).
+PASS-BK — WITHDRAWN. I DUPLICATED WORK MAIN HAD ALREADY DONE. The defect was real and I reproduced it on a replayed database (`update public.allowance_rules set amount_cents = 100000, next_run_on = current_date;` -> UPDATE 1, $5/week becoming $1,000 due today) — but main already carried 0306_money_instructions_are_not_member_writable.sql, which closes it, found THE SAME WAY ("Measured on a replayed database ... the child INSERTED an allowance rule of 100000 cents a week pointing at their own wallet") and fixed BETTER, with RESTRICTIVE policies that AND with the union of the permissive ones so no future permissive policy can grant past them. Main also already has money-instruction-write-check.sql covering the same table with the same value. My 0319 and my probe were DELETED.
+  THE MISTAKE, WHICH IS THE PART WORTH KEEPING: I searched main's control document for open ❌ FAIL rows, found no row for allowance_rules, and concluded nobody had looked at it. A THING CAN BE ABSENT FROM THE FAILURE LIST PRECISELY BECAUSE SOMEONE REPAIRED IT. "Not listed as broken" and "not looked at" are different claims and I collapsed them. The check I should have run first — and ran too late — is one `git grep` for the table name across main's migrations.
+  WHAT SURVIVES IS THE METHOD, NOT THE FINDING: 167 tables share the permissive FOR ALL ... is_family_member shape (a policy DEFAULT, right for most — habit_logs, game_results, family_polls). Narrowed to sensitive subjects with no restrictive guard: 22. Classified by the real test (does the app's own write path enforce something RLS does not?): SIX carry the defect — babysitter_payments, babysitter_profiles, compliance_disclosures, gift_links, gift_payments, vacation_documents; TEN are correct by design, the write path being a client component going straight to the browser client (medication_doses checked individually — no server action, no role gate, so the permissive policy IS the intended boundary); FIVE have no app write path this sweep could find — family_emergency_contacts, family_emergency_plans, guardian_suggestions, vacation_emergency_contacts, vacation_medical_information — and silence is not evidence either way. NONE ARE REPAIRED, and after this pass none should be touched before checking main's 0296-0317 first, which is exactly the step I skipped.
+  THAT CENSUS WAS ALSO WRONG ON ITS FIRST RUN: it printed BASENAMES, so three different actions.ts files collapsed into one label — four defects reported instead of six, vacation_documents filed under "no write path", gift_payments marked ungated when its wallet path gates on isManager. An identifier that is not unique is not an identifier, and such a census fails in the reassuring direction.
+  THE ONE CORRECTION TO EARLIER WORK THAT STILL STANDS: W-01/W-02 closed the allowance DOUBLE-PAY race and never asked who may set the AMOUNT. True, and worth keeping even though someone else acted on it first — auditing a mechanism is not the same as auditing its inputs.
 PASS-BJ (a child could rewrite the screening that protects them) — HIGH, FIXED in the repo as 0318, UNAPPLIED. Cross-ref: AUTHZ-005 on main (❌ FAIL, High).
   [CLAUDE-1][HIGH][SECURITY]: 01370_ai_call_guardian.sql gave guardian_contacts and guardian_member_profiles `FOR ALL TO authenticated USING (is_family_member(family_id))`. FOR ALL covers INSERT/UPDATE/DELETE, so the rule deciding who may change a CHILD'S PROTECTION asked only whether the caller was in the household — and the child is in the household. The tables hold per-contact TRUST LEVELS and each member's per-band ROUTING MODES (default_mode_unknown decides whether a never-seen caller reaches them): the configuration of the AI Call Guardian, whose whole purpose is protecting a child from scam and grooming contact. 0215 hardened the routing RULES table and stopped there.
   THE APPLICATION ALREADY SAID SO. app/(app)/guardian/actions.ts on main: "RLS on the guardian tables is family-scoped (any member), and children have real logins, so these server actions are the authorization boundary: only a family manager (parent/adult) may change safety config." Both halves true; together they ARE the defect. A server action is not a boundary against a JWT holder — a request to /rest/v1/guardian_contacts never passes through app/ at all. One HTTP request, not a defeated UI.
@@ -386,3 +488,9 @@ FOR CLAUDE-1 — read in this order:
 
 NOTE: my earlier HIGH on /dashboard/vacations + /dashboard/weekend is FIXED (your commit c8a7d576). Re-verified: both now resolve to `basic`. Marked FIXED in my file. Worth knowing: tests/route-plan-gate.test.ts was green before the fix and green after it, 37 passed both times, identical output — the guard never moved.
 LAST-UPDATE: 2026-09-14T01:05Z
+CURRENT: COMPLETE for this round. Scope: QA · Features · Flows · Performance · Edge cases.
+COMPLETED: audit/claude-4.md holds this worker's findings (populated across parallel sessions; see the file for the per-finding record).
+NEXT: nothing outstanding for this round. Claude-1 has applied the HIGH findings it raised — see the consolidation section in audit/claude-1.md.
+FILES-TOUCHED: audit/claude-4.md only. Audit-only — no source file was modified by this worker.
+BLOCKERS: none.
+LAST-UPDATE: 2026-09-14

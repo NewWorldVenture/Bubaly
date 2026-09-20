@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { requireUserContext } from '@/lib/supabase/auth';
-import { settleAll } from '@/lib/supabase/settle';
+import { settle } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { withGuardianTables } from '@/lib/supabase/guardian-tables';
 import { ContactList } from '@/components/guardian/contact-list';
@@ -20,18 +20,29 @@ export default async function ContactsPage() {
 
   // The trust graph decides which callers reach a child. "0 contacts" and an
   // empty list on a failed read says the family has trusted nobody, which is a
-  // claim about their safety settings rather than a missing screen.
-  const [{ data: contacts, error: contactsError }, { data: members }] = await settleAll([
-    (db.from('guardian_contacts') as ReturnType<typeof supabase.from>)
+  // claim about their safety settings rather than a missing screen — so the
+  // error is kept and rendered, rather than dropped into an empty list.
+  //
+  // The second read was already settled and the first was not, which made the
+  // batch reject on a transport failure — DNS, TCP, TLS, a timed-out fetch —
+  // and take the whole page to the error boundary. That is the failure that
+  // took out /dashboard while the database was reporting CONNECT_TIMEOUT; see
+  // lib/supabase/settle.ts. Settling both means one unreachable table costs its
+  // own list, not the page.
+  const [{ data: contacts, error: contactsError }, { data: members }] = await Promise.all([
+    // The `as ReturnType<typeof supabase.from>` cast erases the row type, so
+    // settle's inference has nothing to carry through — the shape is named here
+    // instead. The page already re-casts at the consumption site below.
+    settle<{ data: unknown[] | null; error: { message: string } | null }>((db.from('guardian_contacts') as ReturnType<typeof supabase.from>)
       .select('id, name, phone, email, trust_level, trust_override, notes, total_calls, total_sms, last_contact_at, spam_score')
       .eq('family_id', familyId)
-      .order('name', { ascending: true }),
+      .order('name', { ascending: true })),
 
-    supabase
+    settle(supabase
       .from('family_members')
       .select('id, display_name')
       .eq('family_id', familyId)
-      .eq('is_active', true),
+      .eq('is_active', true)),
   ]);
 
   return (
