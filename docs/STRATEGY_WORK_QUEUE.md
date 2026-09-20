@@ -176,6 +176,37 @@ webpack and was dying at 4,471 MB against a 4,096 MB cap; standalone it peaks at
 > whole scope — only `S-05` was checked that way, item by item, and it passed.
 > So treat a section here as *probably landed* and verify before claiming.
 >
+> ### That gap has now been closed for 18 of the 20 sections.
+>
+> A verification pass put **one agent on each section**, reading its own
+> "Done when" list clause by clause against the tree rather than against this
+> file's summary. `S-05` was already checked that way. Results:
+>
+> * **16 LANDED with every clause met** — `S-01`, `S-02`, `S-03`, `S-04`,
+>   `S-06`, `S-07`, `S-08`, `S-09`, `S-10`, `S-11`, `S-12`, `S-13`, `S-16`,
+>   `S-17`, `S-18`, `S-19`. Each returned file-and-line evidence per clause.
+> * **`S-14` — 5 of 6.** The unmet clause asks for onboarding answers to land
+>   with `family_facts.source = 'onboarding'`. The database refuses that value:
+>   `family_facts_source_check` admits only
+>   `('user','ai_conversation','ai_inferred','import')`. The feature is built —
+>   the memory gate, the confirmed lane and the provenance (in `notes`) are all
+>   there and tested. This is a **clause-versus-schema** mismatch, recorded as
+>   `SPEC-001` in `finalaudit.md`; closing it means amending the clause or
+>   widening the constraint by migration, and §6 forbids an agent creating one.
+> * **`S-15` — was 4 of 5, now 5 of 5.** The unmet clause was a **real defect**,
+>   on a file `S-15` itself owns: the six platform tiles on `/admin/reports`
+>   rendered a failed read as `0`. Fixed and mutation-tested (`METRIC-001`).
+>
+> * **`S-20` has not been verified this way yet** — its agent had not returned
+>   when this was written. It remains *probably landed*, on the acceptance-test
+>   evidence above and nothing stronger.
+>
+> **The one lesson worth carrying.** Two sections came back PARTIAL and they
+> failed in *opposite* directions: `S-15` was a genuine defect the acceptance
+> tests did not catch, and `S-14` was a clause the code was right to disobey.
+> A verification pass that assumed either shape would have been wrong half the
+> time — which is why each clause was read rather than scored.
+>
 > **Re-derive it, do not trust this paragraph:**
 >
 > ```bash
