@@ -21,6 +21,15 @@
 \set KID '00000000-0000-4000-8000-0000000000c8'
 
 -- Provision a child member of the anchor family (idempotent).
+--
+-- Idempotent is not the same as clean. These rows went into the SEEDED ANCHOR
+-- FAMILY and stayed there — a "Probe Kid" member and an auth user that outlived
+-- every run, found a week later by a sweep that counted a family member no
+-- fixture in that sweep had created. A probe that leaves a child in the family
+-- everything else is measured against changes what the next measurement sees.
+-- The fixtures are removed at the END of this file; the `on conflict do
+-- nothing` here stays, so a run that dies mid-way still starts the next one
+-- cleanly.
 insert into auth.users (id, email) values (:'KID','kid-probe@example.com') on conflict do nothing;
 insert into public.family_members (id, family_id, user_id, role, display_name, is_active)
   values ('a8c00000-0000-4000-8000-0000000000c8', :'FA', :'KID', 'child', 'Probe Kid', true)
@@ -412,5 +421,24 @@ begin
   end if;
   raise notice 'A-08 OK: every money table has RLS on and three manager-gated restrictive write guards';
 end $$;
+
+-- Leave the anchor family exactly as it was found: the member, the auth user
+-- and every audit row this probe wrote, and nothing else.
+--
+-- There are three kinds, not one. Besides the seed, the probe APPENDS two rows
+-- on every run to prove `wallet_audit_logs` is append-only — a child may add to
+-- it and may not rewrite it — and those are as deliberate as they are permanent.
+-- They had accumulated 31 copies each, one per suite run, in the family the
+-- erasure probe deletes and the demos render. Matched on their exact detail
+-- strings so nothing a real family wrote is touched.
+delete from public.wallet_audit_logs
+  where family_id = :'FA'
+    and (
+      (actor_user_id = :'PARENT' and detail = 'probe seed')
+      or (actor_user_id = :'KID'    and action = 'ai_coach_call'    and entity_type = 'ai_wallet_coach' and detail = 'child append')
+      or (actor_user_id = :'PARENT' and action = 'wallet_activated' and entity_type = 'family_wallets'  and detail = 'manager control')
+    );
+delete from public.family_members where id = 'a8c00000-0000-4000-8000-0000000000c8';
+delete from auth.users where id = :'KID';
 
 select 'A-08 wallet write-RLS probe (0217 mint-lock + 0224 audit append-only + 0254 drift resilience + 0275 stray sweep): ALL INVARIANTS PASSED' as result;

@@ -54,6 +54,40 @@ fi
 # Postgres narrating `drop policy if exists`. A detector that reads either as
 # "this probe did nothing" is worse than no detector, because it would train
 # everyone to ignore the SKIP line.
+# ── the anchor family must be the same afterwards ───────────────────────────
+#
+# Probes are free to create their own families — several do, and their names say
+# what they test ("Offer Makers", "Auction Bidders"). What they must not do is
+# leave rows in the SEEDED ANCHOR FAMILY, which holds tens of thousands of rows
+# across ~199 tables and is what the erasure probe deletes, what demos render,
+# and what other probes assert household shape against.
+#
+# Two did. `wallet-concurrency-check` left a member called "Race Child" and
+# `wallet-write-rls-check` left one called "Probe Kid" — the latter for a week,
+# across many runs. Both cleared their fixtures at the START of a run, which
+# makes a probe repeatable and does not make it clean. Neither was found by
+# looking for it: a cross-family sweep counted a member in the anchor family
+# that none of its own fixtures had created.
+#
+# So the suite notices now. Reported rather than failed, because a probe may one
+# day have a good reason to seed there — but it will have to say so out loud
+# instead of leaving it for someone to find a week later.
+ANCHOR_FID=${ANCHOR_FID:-00000000-0000-4000-8000-0000000000f1}
+anchor_snapshot() {
+  psql -At -F'=' -v ON_ERROR_STOP=0 <<SQL 2>/dev/null
+select c.relname, (xpath('/row/c/text()',
+         query_to_xml(format('select count(*) as c from public.%I where family_id = ''%s''',
+                             c.relname, '$ANCHOR_FID'), false, true, '')))[1]::text::bigint as n
+from pg_class c
+join pg_namespace ns on ns.oid = c.relnamespace
+join pg_attribute a on a.attrelid = c.oid and a.attname = 'family_id'
+                    and a.attnum > 0 and not a.attisdropped
+where ns.nspname = 'public' and c.relkind = 'r'
+order by c.relname;
+SQL
+}
+ANCHOR_BEFORE=$(anchor_snapshot)
+
 failed=()
 skipped=()
 for f in "${probes[@]}"; do
@@ -73,6 +107,14 @@ for f in "${probes[@]}"; do
     echo "$out" | grep -iE "ERROR|FATAL" | head -5 | sed 's/^/        /'
   fi
 done
+
+ANCHOR_AFTER=$(anchor_snapshot)
+if [ -n "$ANCHOR_BEFORE" ] && [ "$ANCHOR_BEFORE" != "$ANCHOR_AFTER" ]; then
+  echo
+  echo "ANCHOR FAMILY CHANGED — a probe seeded or removed rows in the shared seeded family:"
+  diff <(printf '%s\n' "$ANCHOR_BEFORE") <(printf '%s\n' "$ANCHOR_AFTER") | grep -E '^[<>]' | sed 's/^/        /'
+  echo "        (probes should create their own family, or clear their fixtures at the END of the run as well as the start)"
+fi
 
 echo
 echo "== probes: $(( ${#probes[@]} - ${#failed[@]} - ${#skipped[@]} ))/${#probes[@]} passed, ${#skipped[@]} skipped, ${#failed[@]} failed =="

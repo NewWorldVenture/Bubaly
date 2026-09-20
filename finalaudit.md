@@ -2,12 +2,12 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-20T12:28:55.241Z
-- Total Audit Items: 14053
+- Last Updated: 2026-09-20T12:33:27.748Z
+- Total Audit Items: 14054
 - Not Started: 13842
 - In Progress: 192
 - Passed: 4
-- Fixed + Passed: 12
+- Fixed + Passed: 13
 - Blocked: 1
 - Failed: 2
 - Overall Completion: 0.04%
@@ -14185,6 +14185,7 @@ PRODUCTION READY: NO
 | TEST-008 | Testing | Unfinished-work markers in shipping code | 🛠 FIXED + PASS | Medium | 6/6 | Guard now scans comments instead of stripping them, and requires every marker to lead its comment and carry a tracker reference | 3/3; red when a bare marker is appended to a real file | It stripped comments before searching for comment markers, so it reported 0 while 19 existed. All 19 are properly owned. |
 | SEC-007 | SEC | Private document vault over real HTTP | ✅ PASS | Critical | 8/8 | None required | B refused read, sign, upload and delete against A's vault; both controls pass; A's document intact; all fixtures removed | Tested with real user tokens over the Storage service, reaching the signing endpoint that SQL-level probes structurally cannot. The read refusal is NoSuchKey, so the vault is not an existence oracle. |
 | AUTHZ-006 | AUTHZ | Cross-family isolation at the real API layer | ✅ PASS | Critical | 6/6 | None required | 396/396 tables read as an outsider with 1 hit (the Idea Board, by design); 0 of 26 sensitive tables writable; fixtures removed, anchor intact | Run through PostgREST with a real password-obtained token against the seeded anchor family's 71,192 rows — the layer the SQL probes do not reach. |
+| TEST-009 | Testing | Probe fixtures left in the seeded anchor family | 🛠 FIXED + PASS | Medium | 6/6 | Both probes now clear their fixtures at the end as well as the start | Each passes twice; suite 47/47 on both databases; anchor family holds only its seeded members | "Race Child" and "Probe Kid" had been living in the 71,192-row anchor family, the latter for a week. Found by the AUTHZ-006 sweep counting a member no fixture of its own had created. |
 
 ## Inventory and evidence rules
 
@@ -21064,6 +21065,66 @@ So the suite holds, and the count went 22 → 5 → 0 as each candidate was actu
 
 #### Evidence
 Executed. The nineteen markers were enumerated and each classified by hand before the rule was written, rather than the rule being written first and the tree made to fit it. The suite sweep was settled by mutation — introducing the violation and watching the guard go red — rather than by the static filter that produced the candidates.
+
+#### Final Status
+🛠 FIXED + PASS
+
+### TEST-009 — Two probes left fixtures in the family everything else is measured against
+
+Status: 🛠 FIXED + PASS
+Severity: Medium
+Route(s), components, actions, tables and providers: docs/audit/wallet-concurrency-check.sql, docs/audit/wallet-write-rls-check.sql, public.family_members, public.child_wallets, public.wallet_buckets, public.wallet_transactions, public.wallet_audit_logs, auth.users
+
+#### Expected Behavior
+A probe leaves the database as it found it. The seeded anchor family, which other probes and screenshots and demos are measured against, contains what the seed put there and nothing else.
+
+#### Test Cases
+- [x] The anchor family carries no probe-created member after a full suite run
+- [x] No `family_members` row with a null `user_id` remains in the anchor family
+- [x] No probe-created `auth.users` row remains
+- [x] No probe-seeded `wallet_audit_logs` row remains
+- [x] Both probes still pass, twice in succession
+- [x] The whole suite still passes on both databases
+
+#### Issues Found
+Two probes seeded rows into the **seeded anchor family** and cleared them only at the START of a run. That makes them repeatable, which is what the start-of-run delete was for — and repeatable is not the same as clean. After every run the fixtures stayed until the next one.
+
+- `wallet-concurrency-check.sql` left a `family_members` row named **"Race Child"**, with a null `user_id`, plus a child wallet, a bucket and its transactions.
+- `wallet-write-rls-check.sql` left a member named **"Probe Kid"**, an `auth.users` row (`kid-probe@example.com`), and a `wallet_audit_logs` row marked `'probe seed'` — dated a week earlier, so it had been sitting there across many runs.
+
+A **third** leak was then found by the drift check described below, on its very first run — and it was the largest. The same probe APPENDS two audit rows per run to prove `wallet_audit_logs` is append-only (a child may add to it and may not rewrite it), which is as deliberate as it is permanent:
+
+    ai_coach_call    | ai_wallet_coach | child append     | 31
+    wallet_activated | family_wallets  | manager control  | 31
+
+Thirty-one copies of each — one per suite run — in the family the erasure probe deletes and the demos render. Removing them is matched on the exact `detail` strings so nothing a real family wrote is touched.
+
+Neither was found by looking for it. The cross-family sweep in AUTHZ-006 counted a `family_members` row with a null `user_id` in the anchor family that none of its own fixtures had created, and tracing that row led to the first probe; enumerating the anchor family's members to make sure nothing else was lingering found the second.
+
+This matters because of what the anchor family is for. It carries 71,192 rows across 199 tables and is what the erasure probe deletes, what demos render, and what other probes assert household shape against. A phantom child in it means anything counting members, listing children or checking a household's composition sees somebody nobody added — and the next person to investigate that has to rediscover which probe put it there.
+
+#### Fixes Applied
+Both probes now delete the same fixtures at the END of the file, in the same order as the seed, so the pair reads as one unit. The start-of-run deletes stay: a run that dies mid-way still has to leave the next one a clean slate, and that is what they were always for.
+
+No assertion changed in either probe. The cleanup is additive.
+
+**And the suite now notices by itself**, which matters more than the two fixes. `docs/audit/run-probes.sh` snapshots the anchor family's row counts across all 396 family-scoped tables before and after the run, and names any table whose count moved. It is a report rather than a failure, because a probe may one day have a good reason to seed there — but it will have to say so out loud instead of leaving it for somebody to find a week later.
+
+It earned itself immediately: the third leak above was invisible to the two manual fixes and the drift check printed it on the first run it ever made.
+
+    ANCHOR FAMILY CHANGED — a probe seeded or removed rows in the shared seeded family:
+            < wallet_audit_logs=58
+            > wallet_audit_logs=60
+
+A first draft of the check did not work at all — it tried to carry a temp table between separate `psql` invocations, which do not share a session, and read a GUC that was never set. It was rewritten as one query returning `table=count` lines, diffed before and after, and then tested by deliberately removing a cleanup and watching the drift appear.
+
+#### Retest Results
+Each probe passes twice in succession. The whole suite passes **47/47, 0 skipped** on both the local Supabase stack and the CI replica, and reports **no anchor drift** on two consecutive runs on each. After a full suite run the anchor family holds only its seeded members — 2 on the Supabase stack, 1 on the replica — with no null-`user_id` rows, no probe-created auth users and no accumulating audit rows.
+
+The replica's first run after the fix reported drift *downward* (`wallet_audit_logs` 26 → 13) as the new cleanup removed what earlier runs had left; it was clean from the next run onward, which is what confirms the fix rather than merely the absence of a complaint.
+
+#### Evidence
+Executed. The residue was verified gone by re-enumerating the anchor family's members after a complete suite run, not by reading the cleanup statements.
 
 #### Final Status
 🛠 FIXED + PASS

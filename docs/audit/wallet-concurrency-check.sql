@@ -44,6 +44,21 @@
 create extension if not exists dblink;
 
 -- Committed seed: a fresh $10 wallet, isolated from the sequential probe's.
+--
+-- These rows go into the SEEDED ANCHOR FAMILY, and they are committed, because
+-- the dblink sessions below have to see them. Clearing them at the start makes
+-- the probe repeatable — but repeatable is not the same as clean, and this one
+-- was not: after every run a phantom "Race Child" member stayed in the anchor
+-- family until the next run cleared it. It was found by a cross-family sweep
+-- that counted a `family_members` row with a null `user_id` that no fixture in
+-- that sweep had created.
+--
+-- A probe that leaves a member behind in the family everything else is measured
+-- against is a probe that changes what the next measurement sees: anything
+-- counting members, listing children, or asserting a household's shape gets a
+-- child nobody added. So the same fixtures are cleared again at the END of the
+-- file. The start-of-run delete stays, because a run that dies mid-way still
+-- has to leave the next one a clean slate.
 delete from public.wallet_transactions where child_wallet_id = 'd0000000-0000-4000-8000-0000000000c9';
 delete from public.wallet_buckets      where child_wallet_id = 'd0000000-0000-4000-8000-0000000000c9';
 delete from public.child_wallets       where id              = 'd0000000-0000-4000-8000-0000000000c9';
@@ -154,5 +169,12 @@ begin
 
   raise notice 'A-15 OK: 1 of 2 simultaneous $8 authorizations approved against $10; $8.00 held';
 end $$;
+
+-- Leave the anchor family exactly as it was found. Same rows, same order as the
+-- seed above, so the pair reads as one unit.
+delete from public.wallet_transactions where child_wallet_id = 'd0000000-0000-4000-8000-0000000000c9';
+delete from public.wallet_buckets      where child_wallet_id = 'd0000000-0000-4000-8000-0000000000c9';
+delete from public.child_wallets       where id              = 'd0000000-0000-4000-8000-0000000000c9';
+delete from public.family_members      where id              = 'e0000000-0000-4000-8000-0000000000c9';
 
 select 'A-15 wallet concurrency probe: ALL INVARIANTS PASSED' as result;
