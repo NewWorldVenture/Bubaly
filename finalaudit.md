@@ -21029,8 +21029,20 @@ Proved load-bearing against the real tree by appending `// TODO: fix this before
 
 The file was restored and `git diff` confirms it unchanged.
 
+#### The rest of the guard suite, swept for the same property
+Finding one blind guard raised the obvious question: how many others are there? A guard passes vacuously when it asserts a derived list is empty and nothing proves the list could ever have been non-empty.
+
+A static sweep over the 1,305 test files for scanners that assert emptiness with no non-vacuity check returned 22, then 5 once the filter was widened to count the forms it had missed — a matcher sanity test on known inputs (`toHaveLength(1)`), a per-file positive assertion (`expect(src).toMatch(/fetch\(/)`), a `.not.toBe('')`. Each of the five was then checked against reality rather than against the regex:
+
+- `mobile-video-playsinline` — scans 2 real `<video>` tags, both correct. Adding a `<video src="x" controls />` to `components/ui/modal.tsx` turns it red, naming the file. Works.
+- `seed-tls-safety-contract` — filters `scripts/` for `seed*.mjs` and finds 8, none of which disables certificate verification. A real, non-empty watch.
+- `mobile-hover-reveal-tablet` — carries `expect(block, 'coarse-pointer media block must exist').not.toBe('')`.
+- `catalogue-key-not-rendered-raw`, `catalogue-key-rendered-through-t` — scan `app/`, `lib/` and `components/` for catalogue keys, which are everywhere.
+
+So the suite holds, and the count went 22 → 5 → 0 as each candidate was actually examined. Worth recording for the same reason as the counts in DB-002: a detector's output is a list of things to look at, not a list of findings. The one genuinely blind guard in this repository was found by reading it, not by the sweep.
+
 #### Evidence
-Executed. The nineteen markers were enumerated and each classified by hand before the rule was written, rather than the rule being written first and the tree made to fit it.
+Executed. The nineteen markers were enumerated and each classified by hand before the rule was written, rather than the rule being written first and the tree made to fit it. The suite sweep was settled by mutation — introducing the violation and watching the guard go red — rather than by the static filter that produced the candidates.
 
 #### Final Status
 🛠 FIXED + PASS
