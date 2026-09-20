@@ -32007,8 +32007,11 @@ moment the harness changed shape. The new guard also pins a floor on how many
 files the walk reaches, so an instrument that stopped walking cannot read as a
 clean result.
 
-**Status:** FIXED. The unit guard was proved red by removing the same line —
-it reports the identical missing module.
+**Status:** FIXED and **CI-CONFIRMED**. The unit guard was proved red by
+removing the same line — it reports the identical missing module. CI run
+35508571343 then went from 13 failures to 3 (**1,293 passed**), with all ten
+`voice-capture-boundaries` failures gone. That confirmation took three attempts
+to obtain, for a reason that is this session's own doing: see `C1-S9-20`.
 
 **The other three E2E failures are not this branch's.**
 `tests/e2e/phone-auth-http.spec.ts` fails three cases that stall before code
@@ -32190,9 +32193,12 @@ The practical effect is the same cadence discipline without the hostage-taking:
 fewer, larger pushes, timed so a pipeline has room to finish, but never at the
 price of leaving completed work on a container that can vanish.
 
-**Status:** RECORDED as a method correction. The E2E fix in `C1-S9-17` remains
-*locally reproduced and not yet CI-confirmed*, and is described that way rather
-than as verified, here and in the PR comment that accompanied it.
+**Status:** RECORDED as a method correction, and **since resolved**: run
+35508571343 completed on head `f9820169` and confirmed `C1-S9-17` — 13 failures
+down to 3, all ten voice ones gone. So the fix was right all along; what was
+wrong was claiming to know that before an instrument had said so. The interval
+during which this audit could not tell a working fix from a hopeful one lasted
+three pushes, and the only thing that ended it was letting a pipeline finish.
 
 ---
 
@@ -32460,14 +32466,22 @@ files.** The three failures are `C1-S9-09`, BLOCKED: this container runs Node
 Node 24 distribution here. Not counted as passing.
 
 ## End-to-End (browser)
-Status: ⚠️ **NOT CONFIRMED** — and this is the honest entry, not a hedge.
-`C1-S9-17` fixed a genuine 13-failure E2E run and was verified by reproducing
-the harness's import-graph walk standalone, but the CI runs that would confirm
-it were **cancelled three times by this session's own pushes** (`C1-S9-20`):
-`ci.yml` sets `concurrency: cancel-in-progress`, and the E2E job takes ~15
-minutes. E2E cannot be run in this container (it needs a Next production build
-plus a Supabase stack). Until a run completes, the fix is *locally reproduced,
-not CI-confirmed*.
+Status: ✅ **CONFIRMED GREEN for this branch's own tests** — run 35508571343 on
+head `f9820169`: **1,293 passed, 3 failed in 11.2m**, down from 13 failures.
+All ten `voice-capture-boundaries` failures are gone, which confirms `C1-S9-17`
+against the real browser harness rather than against my standalone reproduction
+of its import-graph walk.
+
+The three remaining are `tests/e2e/phone-auth-http.spec.ts` and are **not this
+branch's**: they belong to the parallel session's `AUTH-001`/`AUTH-002`, whose
+own register records them as open and failing on its published heads
+independently of this work. This branch touches no phone-auth code. Commented
+once on the PR; no fix exists to port.
+
+E2E still cannot be run inside this container (it needs a Next production build
+plus a Supabase stack), so this entry rests on CI's result rather than a local
+one — which is the correct source for it, unlike the Build and Lint entries
+above, which were wrongly delegated before this session ran them here.
 
 ## Authentication
 Status: ✅ PASS (static + fake-driven) — every server action reaches auth
