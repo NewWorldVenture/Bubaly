@@ -60,3 +60,5 @@ probe in this directory:
 | `ai-surface-role-privacy-check.sql` | A child cannot read or create AI plans, memory or routines; the asking parent still can. |
 | `dead-letter-reconcile-check.sql` | A dead-lettered run leaves no step, request or legacy status claiming success. |
 | `approval-dedupe-check.sql` | A resent request cannot file a second *pending* approval card; a re-ask after a decision still can. |
+| `wallet-side-table-write-check.sql` | The five wallet side-tables whose server actions gate on `isManager` (`babysitter_profiles`, `babysitter_payments`, `gift_links`, `gift_payments`, `compliance_disclosures`) refuse a child's writes and still accept a manager's — 0322. |
+| `safety-record-write-check.sql` | Emergency contacts, emergency plans and Guardian suggestions are manager-written, and a child cannot retarget a pending suggestion so that a parent's approval applies the child's value — 0323. |

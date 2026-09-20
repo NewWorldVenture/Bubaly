@@ -53,7 +53,17 @@ describe('Supabase migration filename safety', () => {
     // Three of that branch's six were dropped rather than renumbered, because
     // main had already fixed the same subjects: family_credentials (0296),
     // sensitive tables incl. child_logins (0297) and invites (0298).
-    expect(audit.nextVersion).toBe('0322');
+    //
+    // 0322 the five wallet side-tables (babysitter_profiles/_payments,
+    // gift_links, gift_payments, compliance_disclosures), whose server actions
+    // in app/(app)/wallet/actions.ts gate on isManager while 0088's blanket
+    // `FOR ALL … is_family_member` did not; 0323 the three safety records
+    // (family_emergency_contacts, family_emergency_plans, guardian_suggestions)
+    // — the first two named in lib/family/actions.ts's MANAGER_ONLY set, the
+    // third the table that FEEDS the contacts 0318 had already closed, so a
+    // child could retarget a pending proposal and let a parent's approval apply
+    // it. Both moved the number by one file each; neither renumbered anything.
+    expect(audit.nextVersion).toBe('0324');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {
