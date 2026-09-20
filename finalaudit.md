@@ -34205,6 +34205,29 @@ Re-confirmed twice since, on `a7ba8f1f` (1,293 / 3) and on `9c9f3a43`
 (**1,292 passed, 3 failed, 1 flaky**), so Passes AG and the `C1-S9-25` AI-route
 fixes introduced no browser regression.
 
+**Sixth re-confirmation, on `65ad3da8` (run 35532988909): 1,293 passed, 3 failed
+in 10.7m**, with Typecheck/Lint/Test/Build, Database and Mobile all green. Same
+three `phone-auth-http` cases; nothing else.
+
+This one matters more than the count suggests. **Four consecutive E2E runs were
+CANCELLED** before it — `concurrency: cancel-in-progress` plus a push roughly
+every fifteen minutes — so `C1-S9-45` through `C1-S9-55` had no browser
+verification at all, eleven findings resting on local `vitest` alone. That is
+`C1-S9-20` repeating, recognised and stopped: pushes were held until this run
+completed. The CI `Typecheck · Lint · Test · Build` job passing on the same head
+also confirms that the three local failures are Node-version-only (`B7`), since
+CI resolves Node 24 from `.nvmrc` and passes them.
+
+One NEW symptom, recorded rather than diagnosed: the retry of
+*"held genuine SMS verification cannot replace newer-password"* failed
+differently from its first attempt — `Test timeout of 120000ms exceeded` and
+*"Durable-session E2E could not close its browser context"* from
+`tests/e2e/helpers/durable-session.ts:130`. That is the third distinct
+intermittent seen in the parallel session's auth area (after
+`durable-session.spec.ts:286` and `auth-initiation-order.spec.ts:175`), and it
+appears on a test that was already failing, so it does not change the count.
+Flagged for whoever owns `AUTH-001`/`AUTH-002`.
+
 Re-confirmed a fifth time on `790ac96e` (run 35521432191), the head carrying
 `C1-S9-35` through `C1-S9-44` — including the **App Lock fail-open fix**, which
 changes the layout wrapping every authenticated route and was therefore the
