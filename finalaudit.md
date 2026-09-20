@@ -2,11 +2,11 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-20T11:42:42.347Z
-- Total Audit Items: 14048
+- Last Updated: 2026-09-20T11:57:19.996Z
+- Total Audit Items: 14049
 - Not Started: 13842
 - In Progress: 192
-- Passed: 0
+- Passed: 1
 - Fixed + Passed: 11
 - Blocked: 1
 - Failed: 2
@@ -14180,6 +14180,7 @@ PRODUCTION READY: NO
 | DATA-008 | DATA | Single-choice family poll integrity | 🛠 FIXED + PASS | Medium | 7/7 | 0322 adds a trigger (the rule spans two tables, so no index can express it) taking `for update` on the poll, firing on INSERT and UPDATE | Probe passes twice; 2 assertions fail with the trigger dropped; suite 44/44 | One member cast 3 votes across 3 options of a single-choice poll. The module enforced it client-side and said so in a comment. |
 | DATA-009 | DATA | families.timezone validity | 🛠 FIXED + PASS | Medium | 6/6 | 0323 adds a trigger accepting pg_timezone_names UNION pg_timezone_abbrevs, which matches Intl exactly | Probe passes twice; 4 assertions fail with the trigger dropped; suite 45/45 | No constraint of any kind; a typo saved silently and put the family on Greenwich time. A names-only guard would have wrongly rejected CST and PST. |
 | TEST-007 | Testing | CI database fidelity and skip reporting | 🛠 FIXED + PASS | Critical | 9/9 | Bootstrap puts pgcrypto in `extensions` with Supabase's search_path; runner separates SKIP from PASS; CI installs plpgsql_check and sets PROBES_REQUIRE_ALL | 45/45 with 0 skipped on both a CI replica and the Supabase stack; the circle probe now fails on the broken definition where it used to pass | The probe for DB-FN-001 ran on every PR and passed while the feature was dead, because CI's pgcrypto sat in a different schema than production's. |
+| DB-002 | Database | Family erasure and cascade completeness | ✅ PASS | High | 6/6 | None — verification, not repair | 71,192 rows across 199 tables deleted with 0 survivors; probe reports both halves when a cascade is removed; suite 46/46 | 387 of 396 family_id columns cascade; the 9 exceptions are user-owned, business-owned or an idempotency ledger, and are now named in the probe. |
 
 ## Inventory and evidence rules
 
@@ -20971,6 +20972,88 @@ Executed against a local Supabase stack, not inferred from source. The probe tha
 
 #### Final Status
 🛠 FIXED + PASS
+
+### DB-002 — Deleting a family removes the family's data, all of it
+
+Status: ✅ PASS
+Severity: High
+Route(s), components, actions, tables and providers: docs/audit/family-erasure-leaves-nothing-check.sql, public.families and the 396 tables carrying `family_id`, supabase/migrations/0287
+
+#### Expected Behavior
+Deleting a family succeeds and leaves nothing of that family behind, in any table.
+
+#### Test Cases
+- [x] Every `family_id` column has ON DELETE CASCADE, or is a named exception
+- [x] The scan is non-vacuous (fails if it finds fewer than 200 cascading columns)
+- [x] A populated family deletes without error, including the sync tables whose AFTER DELETE trigger aborted the cascade before 0287
+- [x] Zero rows survive across every family-scoped table
+- [x] The probe reports the structural break when a cascade is removed
+- [x] The probe reports the execution failure when that break blocks the delete
+
+#### Issues Found
+None. This is a verification, not a repair — recorded because the spec asks for cascading behaviour and orphan data to be audited, and because the existing `family-delete-cascade-check.sql` answers a different question: it proves a family *can* be deleted (0287 fixed `sync_log_change()` firing AFTER DELETE and writing a row whose foreign key the just-removed parent could no longer satisfy). It names one table. Nothing asked whether anything was left behind.
+
+Measured on a replayed database against the fully seeded anchor family:
+
+    BEFORE: the anchor family has 71192 rows across 199 family-scoped tables
+    DELETE succeeded in 00:00:00.638609
+    AFTER:  0 row(s) survive across 0 table(s)
+
+The structure agrees: of 396 tables carrying `family_id`, 387 cascade, 8 use ON DELETE SET NULL and one has no foreign key. All nine exceptions are deliberate and are now named in the probe so that adding a tenth is a decision somebody makes on purpose:
+
+- `push_devices` (a device belongs to a user, who may join another family), `onboarding_progress`, `activation_events` — per-user state and analytics
+- `support_tickets`, `reviews`, `crm_contacts`, `feedback_ideas`, `affiliate_referrals` — records belonging to a person or to the business, which outliving the household is the point of
+- `move_date_recalculations` — an idempotency ledger holding its own snapshot; a foreign key would either delete the receipt with the family or block the delete
+
+#### Fixes Applied
+No product change. A new probe, `docs/audit/family-erasure-leaves-nothing-check.sql`, enumerates every table carrying `family_id` **at run time** rather than naming them, because the failure mode is a table added later without a cascade and a pinned list is exactly the guard that stops growing while the schema keeps going.
+
+It does both halves. The structural half alone cannot see a trigger that fires AFTER DELETE and aborts the cascade — which is precisely the defect 0287 fixed — so it also performs a real delete of a populated family inside a subtransaction it then rolls back.
+
+#### Retest Results
+Passes twice in succession on both the local Supabase stack and a container replicating the CI job. Suite 46/46, 0 skipped, on both.
+
+Proved load-bearing by removing the cascade from `notes.family_id` and re-running; it reports both halves and fails:
+
+    BREACH: family_id without ON DELETE CASCADE and not a named exception: notes (on delete: a)
+    BREACH: deleting a populated family failed: update or delete on table "families"
+            violates foreign key constraint "notes_family_id_fkey" on table "notes"
+
+That revert test earned its keep twice over, because it found two bugs in the probe itself. `confdeltype` is `"char"`, not `text`, so building the offender message raised `operator is not unique: text || "char"` — on the reporting branch only, which never ran while everything cascaded. And the handler caught `raise_exception` when a broken cascade actually surfaces as a foreign-key violation (23503), so the diagnosis came out as an unhandled error instead of the message the probe exists to print. A guard whose failure path has never executed is a guard whose failure path does not work.
+
+#### Evidence
+Executed against two databases: the local Supabase stack and a fresh container matching the CI job. The 71,192-row measurement used the seeded anchor family and was rolled back; the family was confirmed intact afterwards.
+
+#### Also checked in this pass, and clean
+The server-action layer was examined for the same refused-write asymmetry that
+`a-refused-write-is-not-a-success.test.ts` enforces in `components/`. That guard
+scopes itself to `components`, which looks like a scope gap — a server action
+runs under the user's JWT too, so a restrictive policy filters its UPDATE just
+as silently.
+
+54 server-side `update`/`delete` calls touch a manager-gated table without asking
+for rows back. Tracing each one's client and authorization: they are either on a
+**service-role client**, where RLS cannot refuse at all, or they **check the role
+server-side before writing** — `savePlace`, `deletePlace` and `setGeofenceEnabled`
+open with `if (!isManager(c.active.role)) return managerOnlyPlace()`, the economy
+actions with `if (!isManager(ctx.active.role))`, `deleteWalletRowAction` with a
+`MANAGER_ONLY_DELETES` set, and `forgetFact` reads the row first and then requires
+`canManage(scope) || fact.member_id === scope.memberId`.
+
+So the guard's scope is a defensible boundary rather than an oversight: components
+had no other gate — a hidden button was the whole of it, which is why that guard
+exists — while these paths carry a real server-side check. The residual is narrow:
+an id that matches nothing (stale, already deleted, another family's) reports
+success. No instance was found of a user-scoped, ungated write to a manager-gated
+table, and none is claimed.
+
+Recorded as a negative result rather than left unstated, because three successive
+static passes over this gave three different counts (54, then 28, then uncertain)
+before the client provenance was traced properly — the number a detector prints is
+not a finding until each site has been read.
+
+#### Final Status
+✅ PASS
 
 ### TEST-007 — CI's database was not shaped like production, so a dead feature stayed green
 
