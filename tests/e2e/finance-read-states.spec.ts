@@ -12,6 +12,8 @@ const sources = Object.fromEntries([
   'components/finance/payments-view.tsx', 'components/finance/savings-view.tsx',
   'components/ui/states.tsx', 'components/ui/states-client.tsx', 'components/ui/button.tsx',
   'components/ui/input.tsx', 'components/app/page-header.tsx', 'lib/finance/hub.ts',
+  // hub.ts reads the locale catalogue for its default currency locale.
+  'lib/i18n/locales.ts',
   'lib/supabase/errors.ts', 'lib/schedule/zoned.ts',
 ].map(file => [`@/${file.replace(/\.tsx?$/, '')}`, ts.transpileModule(fs.readFileSync(file, 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.React },
