@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-189 finding IDs from four workers and two parallel sessions; none of it was
+190 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -12,7 +12,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 > source-and-migration audit run without production credentials. Session B
 > (Register B, 14,038 items, `AUTH-001` / `API-<hash>` / `DB-TBL-nnn`) is a
 > hosted-CI and deployed-release audit. Their finding-ID sets are **disjoint**:
-> 911 IDs from A, 684 from B, 1,592 in union — verified mechanically at each
+> 912 IDs from A, 684 from B, 1,593 in union — verified mechanically at each
 > merge. The three literals both files contain (`LB-009`, `LB-016`, `SHA-256`)
 > are not counter-examples: the first two are pre-existing *runbook* names each
 > register cites, and the third is a hash algorithm the ID regex matches. No
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 199 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 200 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -33663,6 +33663,54 @@ best-effort approval stamp.
 
 ---
 
+### `[CLAUDE-1][MEDIUM][SERVER ACTIONS]` C1-S9-49 — paperwork, leftovers, feeds, and the line between a write that must be confirmed and one that must not
+
+Five more, and the pass where the *other* half of the rule got as much attention
+as the first. Three writes were confirmed; two that look identical to a scanner
+were deliberately left alone, and are now pinned so they stay that way.
+
+**Confirmed.** `setPaperworkStatusAction` is the one action that takes an item
+out of the deadline inbox `C1-S9-30` had to stop lying about — a silent no-op
+leaves a parent believing the permission slip is handled while it keeps its
+deadline. `setLeftoverStatusAction` and `deleteLeftoverAction` are the ordinary
+form of the class.
+
+**Recorded rather than raised.** The two `library_feeds.last_error`
+annotations discarded their result entirely. The intent is documented and right
+— *"A feed that failed once is usually worth retrying, and a row that says why
+is more use than one that silently disappeared"* — but a failed annotation left
+a subscription saying nothing about why it is not updating. Now bound and
+logged, and **not** escalated: the user already has the feed error in their
+hand, because the action returns it. Failing here would replace a useful message
+with a useless one.
+
+**Left alone, and pinned.** `draftPaperworkReplyAction` persists the AI draft
+best-effort, with a comment saying why: *the draft is returned to the caller
+regardless*. Gating it would fail an action whose entire product the user
+already has.
+
+#### The pattern worth stating
+
+Across `C1-S9-46` through `C1-S9-49`, six writes have now been deliberately left
+unconfirmed, each with a guard asserting the absence of a bail:
+`home_assets.last_serviced_on`, two `approval_requests` stamps, the paperwork
+draft, and the two feed annotations. They share one property: **the thing the
+user came for has already succeeded by the time these run.** Confirming them
+would convert a succeeded action into a reported failure.
+
+That is why every pass in this sweep has mutation-tested the
+**over-tightening** direction as well as the under-tightening one. A sweep that
+only ever adds checks would eventually break all six, and it would look like
+progress while doing it — the same failure mode as a scan whose small number
+looks like a small problem.
+
+**Status:** FIXED. Guard: six cases, each proved red by mutation, three of them
+in the over-tightening direction.
+
+**Remaining: 82 of the 102, OPEN.**
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -33732,8 +33780,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,081 passing / 17,084 across 1,351
-files.** (Re-run after `C1-S9-48`; was 16,950 / 16,953 across 1,349 before this
+Status: ✅ PASS — `npx vitest run`: **17,087 passing / 17,090 across 1,351
+files.** (Re-run after `C1-S9-49`; was 16,950 / 16,953 across 1,349 before this
 batch.) The three failures are `C1-S9-09`, BLOCKED: this container runs Node
 22.22.2 against the repository's `.nvmrc` 24.21.0, and nvm cannot fetch the
 Node 24 distribution here. Not counted as passing.

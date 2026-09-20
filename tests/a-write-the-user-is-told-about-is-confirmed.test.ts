@@ -482,3 +482,72 @@ describe('an autopilot run is not left queued over work already done (C1-S9-48)'
     expect(at(concierge, 'if (runReadErr)')).toBeLessThan(at(concierge, "t('actions.runNotFoundOrAlready')"));
   });
 });
+
+/**
+ * Audit C1-S9-49 — paperwork, kitchen and library, and the line between a write
+ * that must be confirmed and one that must not be.
+ */
+const paperwork = readFileSync('app/(app)/dashboard/paperwork/actions.ts', 'utf8');
+const kitchen = readFileSync('app/(app)/dashboard/kitchen/actions.ts', 'utf8');
+const library = readFileSync('app/(app)/dashboard/library/actions.ts', 'utf8');
+
+describe('marking paperwork done is confirmed (C1-S9-49)', () => {
+  it('the status move asks what it changed', () => {
+    // This is the one action that takes an item out of the deadline inbox that
+    // C1-S9-30 had to stop lying about. A silent no-op leaves the parent
+    // believing the permission slip is handled while it keeps its deadline.
+    expect(paperwork).toContain('wroteNoRows(moved)');
+    const body = bodyOf(paperwork, 'export async function setPaperworkStatusAction', 'revalidatePath(PATH);');
+    expect(body).toContain(".select('id')");
+    expect(body).toContain("eq('family_id', ctx.active.familyId)");
+  });
+
+  it('the AI draft persist stays best-effort', () => {
+    // Explicitly documented as best-effort because the draft is returned to the
+    // caller regardless. Gating it would fail an action whose product — the
+    // draft — the user already has.
+    expect(paperwork).toContain('Persisting the draft is best-effort');
+    const block = bodyOf(paperwork, 'draft_reply persist failed', ');');
+    expect(block).not.toContain('throw');
+    expect(block).not.toContain('wroteNoRows');
+  });
+});
+
+describe('leftovers are confirmed before they are reported (C1-S9-49)', () => {
+  it('both the status change and the delete are confirmed', () => {
+    for (const binding of ['updated', 'removed']) {
+      expect(kitchen, binding).toContain(`wroteNoRows(${binding})`);
+    }
+    // Three `.select('id')` in the file, not two: an insert already had one to
+    // return the new row's id to the caller. Counted by BINDING instead, so the
+    // number says what it means.
+    expect(kitchen.match(/wroteNoRows\(/g) ?? []).toHaveLength(2);
+  });
+
+  it('both stay scoped to the acting family', () => {
+    // The scoping and the confirmation on one line, so a `.select()` cannot be
+    // bought by widening the filter.
+    expect(kitchen.match(/eq\('family_id', ctx\.active\.familyId\)\.select\('id'\)/g) ?? []).toHaveLength(2);
+  });
+});
+
+describe('a feed error annotation is recorded, not raised (C1-S9-49)', () => {
+  it('both annotations bind and log their error', () => {
+    // The row staying, carrying the reason, is the documented intent. What was
+    // wrong is that the result was discarded entirely, so a failed annotation
+    // left a subscription that says nothing about why it is not updating.
+    // `error: annotateError` appears twice per site — the destructure and the
+    // log payload — so the destructure is counted on its own.
+    expect(library.match(/const \{ error: annotateError \}/g) ?? []).toHaveLength(2);
+    expect(library.match(/could not record the feed error/g) ?? []).toHaveLength(2);
+  });
+
+  it('neither is escalated into a failure the user already knows about', () => {
+    // The user has the feed error in their hand — the action returns it. Failing
+    // on a failed annotation would replace a useful message with a useless one.
+    expect(library).toContain('A feed that failed once');
+    const blocks = library.split('could not record the feed error').slice(1);
+    expect(blocks).toHaveLength(2);
+    for (const b of blocks) expect(b.slice(0, 200)).not.toContain('return { ok: false, error: annotateError');
+  });
+});

@@ -7,7 +7,7 @@ import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import type { SubScore } from '@/lib/food/score';
 
 type Result<T = unknown> = { ok: true; data?: T } | { ok: false; error: string };
@@ -56,22 +56,26 @@ export async function updateLeftoverStatusAction(input: { id: string; status: st
   const supabase = await createServer();
   if (!STATUSES.includes(input.status as never)) return { ok: false, error: t('actions.invalidStatus') };
 
-  const { error } = await supabase
+  // Audit C1-S9-49.
+  const { data: updated, error } = await supabase
     .from('leftover_inventory')
     .update({ status: input.status, updated_by: ctx.user.id })
-    .eq('id', input.id).eq('family_id', ctx.active.familyId);
+    .eq('id', input.id).eq('family_id', ctx.active.familyId).select('id');
 
   if (error) return { ok: false, error: describeDbError(error) };
+  if (wroteNoRows(updated)) return { ok: false, error: t('actions.couldNotUpdateThatLeftover') };
   revalidatePath('/dashboard/kitchen');
   return { ok: true };
 }
 
 export async function deleteLeftoverAction(input: { id: string }): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const { error } = await supabase
-    .from('leftover_inventory').delete().eq('id', input.id).eq('family_id', ctx.active.familyId);
+  const { data: removed, error } = await supabase
+    .from('leftover_inventory').delete().eq('id', input.id).eq('family_id', ctx.active.familyId).select('id');
   if (error) return { ok: false, error: describeDbError(error) };
+  if (wroteNoRows(removed)) return { ok: false, error: t('actions.couldNotDeleteThatLeftover') };
   revalidatePath('/dashboard/kitchen');
   return { ok: true };
 }

@@ -12,7 +12,7 @@ import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { createReminder } from '@/lib/services/reminders';
 import { fenceUntrustedBlock, UNTRUSTED_CONTENT_RULE } from '@/lib/ai/safety/untrusted';
-import { describeActionError } from '@/lib/supabase/errors';
+import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { isPaperworkExtractionPartial } from '@/lib/paperwork/extraction';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 
@@ -215,9 +215,14 @@ export async function setPaperworkStatusAction(input: {
   const tr = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const { error } = await supabase.from('paperwork_items')
+  // Marking a permission slip done is the one action that takes it out of the
+  // deadline inbox C1-S9-30 had to stop lying about. A silent no-op leaves the
+  // parent believing it is handled while the item keeps its deadline.
+  // Audit C1-S9-49.
+  const { data: moved, error } = await supabase.from('paperwork_items')
     .update({ status: input.status })
-    .eq('id', input.itemId).eq('family_id', ctx.active.familyId);
+    .eq('id', input.itemId).eq('family_id', ctx.active.familyId).select('id');
   if (error) throw new Error(describeActionError(error, tr('actions.couldNotUpdateThatPaperwork')));
+  if (wroteNoRows(moved)) throw new Error(tr('actions.couldNotUpdateThatPaperwork'));
   revalidatePath(PATH);
 }

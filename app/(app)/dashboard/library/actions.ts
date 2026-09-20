@@ -60,7 +60,12 @@ export async function subscribeFeedAction(formData: FormData): Promise<LibraryRe
     // The subscription row stays, carrying the reason. A feed that failed once
     // is usually worth retrying, and a row that says why is more use than one
     // that silently disappeared.
-    await supabase.from('library_feeds').update({ last_error: result.error }).eq('id', feed.id);
+    // Best-effort by design — the comment above says why the row stays — but the
+    // result was discarded entirely, so a failed annotation left a subscription
+    // that says nothing about why it is not updating. Logged, not raised: the
+    // user already has the error in their hand. Audit C1-S9-49.
+    const { error: annotateError } = await supabase.from('library_feeds').update({ last_error: result.error }).eq('id', feed.id);
+    if (annotateError) console.error('[library] could not record the feed error', { feedId: feed.id, error: annotateError.message });
     return { ok: false, error: result.error };
   }
   return { ok: true, message: `Subscribed. ${result.added} ${result.added === 1 ? 'item' : 'items'} added.` };
@@ -98,7 +103,12 @@ export async function refreshFeedAction(feedId: string): Promise<LibraryResult> 
   const result = await ingestFeed(supabase, ctx.active.familyId, ctx.user.id, feed.id, feed.feed_url);
   revalidatePath(PAGE);
   if ('error' in result) {
-    await supabase.from('library_feeds').update({ last_error: result.error }).eq('id', feed.id);
+    // Best-effort by design — the comment above says why the row stays — but the
+    // result was discarded entirely, so a failed annotation left a subscription
+    // that says nothing about why it is not updating. Logged, not raised: the
+    // user already has the error in their hand. Audit C1-S9-49.
+    const { error: annotateError } = await supabase.from('library_feeds').update({ last_error: result.error }).eq('id', feed.id);
+    if (annotateError) console.error('[library] could not record the feed error', { feedId: feed.id, error: annotateError.message });
     return { ok: false, error: result.error };
   }
   return { ok: true, message: `Refreshed. ${result.added} ${result.added === 1 ? 'item' : 'items'} up to date.` };
