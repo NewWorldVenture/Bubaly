@@ -6510,3 +6510,54 @@ safe to remove once its replacement is shown to assert the same thing** — the
 rule that stopped me deleting anything else in this merge.
 
 The finding was right and is now held by a better instrument than mine.
+
+---
+
+## Pass BA corrected by the merge — I put a service-role write in front of the auth check
+
+**[CLAUDE-1][HIGH][SECURITY] `/api/assistant` and `/api/assistant/alexa` ran a
+durable, service-role-backed rate limiter BEFORE the caller was authenticated.
+— FIXED by adopting `main`'s design.**
+
+Pass BA's claim was *"all seven now use `enforceRequestRateLimit`"*, and on these
+two routes that was the wrong instrument in the wrong place.
+
+`enforceRequestRateLimit` takes the **service-role client** and writes a ledger
+row. Placed above the token check it means:
+
+- an **unauthenticated** request causes a **service-role write** — the caller
+  makes the server act as the service role before proving anything; and
+- **429 becomes the answer to a request that was never authenticated**, so the
+  401 boundary is reachable only when the limiter happens to let the request
+  through.
+
+On `/api/assistant` it sat above the token check outright. On the Alexa route it
+sat after signature verification but **before the access token was read**, so a
+signed request carrying no token still caused the write — the same defect one
+step later, which is exactly how I missed it.
+
+`main` had deliberately kept both routes on the cheap in-memory `rateLimit`, and
+its `tests/middleware-assistant-boundary.test.ts` pins the property directly:
+a missing token must reach 401 with `createServiceClient` **never called** and
+zero service reads. That guard is what caught this.
+
+**Main's design is taken.** Not because the merge made it convenient — because
+mine is unproven in production and demonstrably mis-placed, and its guard states
+the boundary more sharply than my own did. What I had actually built was a
+narrower version of the very defect I fixed in the Alexa pass and wrote up as a
+lesson: *"putting `enforceRequestRateLimit(createServiceClient(), …)` at the top
+meant an UNVERIFIED request wrote to the DB."* I wrote that down and then did it
+again on the route next door.
+
+### The cost is recorded rather than hidden
+
+An in-memory limiter is **per serverless instance**, and the number of instances
+is the caller's to raise by sending in parallel — so "30 per minute" is 30 per
+minute per lambda. That is a real limit and both routes now say so in place,
+along with where the durable version belongs: **after `resolveAssistantLink`,
+keyed on the caller**, so the write is only ever made for a request that has
+already proved who it is. Improvising that during a merge is how the first
+version went wrong; it is left as a recorded decision for its own pass.
+
+**Verified:** `tests/middleware-assistant-boundary.test.ts` and
+`tests/alexa-request-verification.test.ts` — **70/70**.

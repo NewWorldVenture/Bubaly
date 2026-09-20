@@ -6,7 +6,6 @@ import { readPresentedToken } from '@/lib/assistant/link-token';
 import { classifyAssistantUtterance } from '@/lib/assistant/intent';
 import { ERROR_SPEECH } from '@/lib/assistant/answers';
 import { answerAssistant, recordAssistantEvent, resolveAssistantLink } from '@/lib/assistant/service';
-import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 
 export const runtime = 'nodejs';
 
@@ -38,7 +37,19 @@ export async function POST(req: NextRequest) {
   // stored as a SHA-256 (lib/assistant/link-token.ts), so the keyspace is the
   // defence. What the limit is actually for is COST — every accepted POST runs
   // answerAssistant, which reads the family and calls a model.
-  const limited = await enforceRequestRateLimit(createServiceClient(), `assistant:${clientIp(req.headers)}`, { limit: 30, windowMs: 60_000 });
+  // In-memory, and BEFORE any service-role client is constructed. That ordering
+  // is the point: `enforceRequestRateLimit` writes a ledger row through the
+  // service role, so running a durable limiter here would let an
+  // UNAUTHENTICATED request cause a service-role write and make 429 the answer
+  // to a request that was never authenticated. This branch tried that and the
+  // boundary guard caught it.
+  //
+  // The cost: this counter is per serverless instance, and the number of
+  // instances is the caller's to raise by sending in parallel. Recorded in
+  // finalaudit.md as an accepted limit rather than hidden — the keyspace is what
+  // defends the token (32 CSPRNG bytes stored as a SHA-256), and a durable
+  // per-caller limit belongs after `resolveAssistantLink`, not before it.
+  const limited = rateLimit(`assistant:${clientIp(req.headers)}`, { limit: 30, windowMs: 60_000 });
   if (!limited.ok) {
     return NextResponse.json(
       { error: 'Too many requests' },
@@ -62,6 +73,7 @@ export async function POST(req: NextRequest) {
   // One answer for unknown, revoked and malformed alike: telling them apart
   // would make this a way to check whether a guessed token exists.
   if (!link) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
 
   const utterance = typeof payload.utterance === 'string' ? payload.utterance.slice(0, MAX_UTTERANCE_CHARS) : '';
   const intent = classifyAssistantUtterance(utterance, new Date(), link.timezone);
