@@ -2,8 +2,8 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-20T19:40:00.000Z
-- Total Audit Items: 14043 — **+5 this pass**: AUTHZ-022, CENSUS-004, DOC-001, COVERAGE-001, AUTHZ-023
+- Last Updated: 2026-09-20T21:30:00.000Z
+- Total Audit Items: 14046 — **+8 this pass**: AUTHZ-022, AUTHZ-023, AUTHZ-024, CENSUS-004, DOC-001, COVERAGE-001, SEC-002, AUDIT-005
 - Not Started: 13842
 - In Progress: 196
 - Passed: 0
@@ -16,16 +16,48 @@
 > enumeration of the whole target space — every route, table, policy, component
 > and flow it intends to reach — not a count of work anyone has done. *Overall
 > Completion: 0.01%* is therefore a statement about that denominator and says
-> almost nothing about the state of the product: the same tree passes 349/349
-> migration replays, 61/61 RLS boundary probes and every CI job but the one E2E
+> almost nothing about the state of the product: the same tree passes 351/351
+> migration replays, 63/63 RLS boundary probes and every CI job but the one E2E
 > spec inherited from `main`. Reading 0.01% as "the audit has barely started"
 > would be wrong; reading it as "most of the enumerated surface has never been
 > individually signed off" is correct. The numbers that carry information are
 > the per-finding rows in §2–§5 and the gates in the Final Regression sections,
 > and they are the ones this pass moved. **COVERAGE-001 adds the missing middle**:
-> 140/146 API routes, 84/130 server-action files and 127/491 tables are *named*
-> by something under `tests/` or by a boundary probe — an upper bound on
-> coverage, but the first figure in this document that can be acted on.
+> **145/146** API routes (was 140 — the five nothing reached now have tests),
+> 84/130 server-action files and 127/491 tables are *named* by something under
+> `tests/` or by a boundary probe — an upper bound on coverage, but the first
+> figure in this document that can be acted on.
+>
+> **What "done" means for the finding rows, stated so it is checkable rather
+> than argued.** `docs/audit/finding-index.py` derives the tally from the
+> document itself: **FIXED 65 · CHECKED 2 · PARTIAL 4 · OWNER'S 6 · OPEN 12**.
+> Each of the twelve OPEN rows was re-read against its own status cell, and
+> none is a defect awaiting a fix this audit can write:
+>
+> - **Eight are decisions that belong to the owner**, each saying so in its own
+>   words: `W-03` (raising the gate takes a screen away from Basic families who
+>   have it today — a comms decision), `SEC-002` (closing the enumeration oracle
+>   costs the welcome-back message), `I18N-006` (what the banner is *for*),
+>   `I18N-009` (four empty locale catalogues — content, and the fallback chain
+>   is working as designed), `AUTHZ-020` (whether sixteen unreferenced tables
+>   are dead), `O-03` (**which** of the tables behind the 19 `requireAal2` pages
+>   carry the boundary — the design, the `security definer` helper, the CI shim
+>   and a four-case probe with a negative control are all done), `F6` (operator
+>   config) and `F19` (a pricing decision).
+> - **Three are measurements kept deliberately as measurements**, not targets:
+>   `COVERAGE-001` and `AUTHZ-011` say so in their own rows, and `AUDIT-005` is
+>   one observation a second reviewer could not reproduce — a lead, not a
+>   diagnosis.
+> - **One is deliberately pinned**: `AQ-01 / I18N-003`. Converting 51 currency
+>   literals without first threading a locale or moving the English prose to the
+>   catalogue would lower a number while changing nothing a family sees — the
+>   "optional parameter nobody passes" this audit has refused since Pass Z.
+>
+> So the finding rows are at the state an audit reaches on its own. What keeps
+> **PRODUCTION READY: NO** is not those twelve: it is the 22 Critical Blockers
+> below, nearly all of which read *"deployed / hosted / real provider remains
+> unverified"* and need a live environment, plus the fact that **none of
+> `0318`–`0340` has been applied to production**.
 
 > **Merge note (2026-09-20).** This file is the union of two audits that ran in
 > parallel and have now been merged: the Codex cycle's control document, which
