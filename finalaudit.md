@@ -2,11 +2,11 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-20T12:41:46.548Z
-- Total Audit Items: 14056
+- Last Updated: 2026-09-20T12:45:05.511Z
+- Total Audit Items: 14057
 - Not Started: 13842
 - In Progress: 192
-- Passed: 6
+- Passed: 7
 - Fixed + Passed: 13
 - Blocked: 1
 - Failed: 2
@@ -14188,6 +14188,7 @@ PRODUCTION READY: NO
 | TEST-009 | Testing | Probe fixtures left in the seeded anchor family | 🛠 FIXED + PASS | Medium | 6/6 | Both probes now clear their fixtures at the end as well as the start | Each passes twice; suite 47/47 on both databases; anchor family holds only its seeded members | "Race Child" and "Probe Kid" had been living in the 71,192-row anchor family, the latter for a week. Found by the AUTHZ-006 sweep counting a member no fixture of its own had created. |
 | DATA-010 | DATA | Resource lifecycle through the real API | ✅ PASS | High | 8/8 | None required | CREATE/READ/UPDATE/VERIFY/DELETE/VERIFY all pass as a real member; a child's refused write returns HTTP 204 without Prefer, 200 [] with it, dosage unchanged | Shows at the HTTP layer why .select() + wroteNoRows was needed: 204 No Content is a success for a write that changed nothing. |
 | SEC-008 | SEC | Realtime broadcast isolation and publication drift | ✅ PASS | Critical | 5/5 | None required | Publication and code agree exactly (61 = 61, empty diff both ways); a live socket received its own family's row and not another's | The first attempt used an unpublished table and received nothing — a run that would have read as a clean refusal while proving nothing. Controls decided it. |
+| PERF-003 | PERF | Unindexed foreign keys on cascade paths | ✅ PASS | Medium | 7/7 | None, deliberately | Member delete 0.50s before 158 indexes, 0.58s after; unchanged at 200,500 rows; a 0-FK delete takes 0.000174s | The half-second is 178 referential-integrity checks, not scans. An index cannot remove a check. Measuring first avoided a 158-index migration for no gain. |
 
 ## Inventory and evidence rules
 
@@ -21070,6 +21071,54 @@ Executed. The nineteen markers were enumerated and each classified by hand befor
 
 #### Final Status
 🛠 FIXED + PASS
+
+### PERF-003 — 872 foreign keys have no supporting index, and it does not currently matter
+
+Status: ✅ PASS
+Severity: Medium
+Route(s), components, actions, tables and providers: public.family_members and the 178 tables referencing it, public.families and the 36 referencing it without an index, public.agent_activity, public.notes
+
+#### Expected Behavior
+Removing a family member, or a family, completes in a time a person would accept, and the schema does not carry a latent scan that grows with the data.
+
+#### Test Cases
+- [x] Count foreign keys whose referencing column has no leading index
+- [x] Group them by the table they reference, to find the ones on a cascade path
+- [x] Time the operation they would slow down
+- [x] Create the missing indexes and time it again
+- [x] Repeat with a child table holding real volume, not an empty one
+- [x] Isolate the cost against a table with no inbound foreign keys
+- [x] Remove every index the experiment created
+
+#### Issues Found
+**872** foreign keys in `public` have no index leading with the referencing column. Grouped by what they point at: 481 → `users`, **158 → `family_members`**, 36 → `families`, then a long tail. The two middle groups sit on cascade paths that the product actually walks — removing a child, a caregiver leaving, a household closing.
+
+That looked like a straightforward production defect. It is not, and the measurement is the reason this record exists rather than a migration adding 158 indexes.
+
+**Deleting one family member took 0.50s. With all 158 indexes created, 0.58s.** No improvement. Repeated with `agent_activity` holding **200,500 rows** rather than a handful, in case the empty tables were hiding the effect: 0.445s without the index, 0.507s with. Still nothing.
+
+The cause is not scanning. Isolating against a table with no inbound foreign keys:
+
+    deleting a NOTE           (0 inbound FKs)   -> 0.000174s
+    deleting a FAMILY MEMBER  (178 inbound FKs) -> ~0.5s
+
+The whole half-second is the referential-integrity checks themselves — 178 of them at roughly 2.8 ms each — and an index cannot remove a check, only make it cheaper. At the volumes involved the per-check overhead dominates the scan it contains, which is why 200,000 rows in one child table moved the total by a few percent, inside the run-to-run noise.
+
+So: a real observation, not a defect worth acting on. 0.5 s to remove a household member is acceptable for an operation that happens rarely, and 158 extra indexes would cost write throughput and storage on every insert into those tables in exchange for nothing measurable. The cost here is structural — 178 tables reference `family_members` — and that is a schema shape, not an omission.
+
+What would change the answer is several child tables growing large at once, since each unindexed check then carries a scan proportional to its own table. The reasoning is written down here so the next person meeting the 872 does not have to re-derive it.
+
+#### Fixes Applied
+None, deliberately. The experiment's 158 indexes were created on a disposable replica and removed afterwards (`probe indexes remaining: 0`), along with the 200,000 probe rows.
+
+#### Retest Results
+Not applicable — nothing was changed. The measurements above are the result.
+
+#### Evidence
+Executed on a container replicating the CI job, with every timing taken inside a transaction that was then rolled back, so no measurement altered the database it measured.
+
+#### Final Status
+✅ PASS — investigated, measured, and deliberately not acted on.
 
 ### SEC-008 — Realtime broadcasts, and whether RLS reaches the websocket
 
