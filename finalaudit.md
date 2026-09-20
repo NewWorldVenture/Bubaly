@@ -2,11 +2,11 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-20T12:33:27.748Z
-- Total Audit Items: 14054
+- Last Updated: 2026-09-20T12:39:12.593Z
+- Total Audit Items: 14055
 - Not Started: 13842
 - In Progress: 192
-- Passed: 4
+- Passed: 5
 - Fixed + Passed: 13
 - Blocked: 1
 - Failed: 2
@@ -14186,6 +14186,7 @@ PRODUCTION READY: NO
 | SEC-007 | SEC | Private document vault over real HTTP | ✅ PASS | Critical | 8/8 | None required | B refused read, sign, upload and delete against A's vault; both controls pass; A's document intact; all fixtures removed | Tested with real user tokens over the Storage service, reaching the signing endpoint that SQL-level probes structurally cannot. The read refusal is NoSuchKey, so the vault is not an existence oracle. |
 | AUTHZ-006 | AUTHZ | Cross-family isolation at the real API layer | ✅ PASS | Critical | 6/6 | None required | 396/396 tables read as an outsider with 1 hit (the Idea Board, by design); 0 of 26 sensitive tables writable; fixtures removed, anchor intact | Run through PostgREST with a real password-obtained token against the seeded anchor family's 71,192 rows — the layer the SQL probes do not reach. |
 | TEST-009 | Testing | Probe fixtures left in the seeded anchor family | 🛠 FIXED + PASS | Medium | 6/6 | Both probes now clear their fixtures at the end as well as the start | Each passes twice; suite 47/47 on both databases; anchor family holds only its seeded members | "Race Child" and "Probe Kid" had been living in the 71,192-row anchor family, the latter for a week. Found by the AUTHZ-006 sweep counting a member no fixture of its own had created. |
+| DATA-010 | DATA | Resource lifecycle through the real API | ✅ PASS | High | 8/8 | None required | CREATE/READ/UPDATE/VERIFY/DELETE/VERIFY all pass as a real member; a child's refused write returns HTTP 204 without Prefer, 200 [] with it, dosage unchanged | Shows at the HTTP layer why .select() + wroteNoRows was needed: 204 No Content is a success for a write that changed nothing. |
 
 ## Inventory and evidence rules
 
@@ -21068,6 +21069,57 @@ Executed. The nineteen markers were enumerated and each classified by hand befor
 
 #### Final Status
 🛠 FIXED + PASS
+
+### DATA-010 — A resource's full lifecycle through the API the browser uses
+
+Status: ✅ PASS
+Severity: High
+Route(s), components, actions, tables and providers: PostgREST /rest/v1, /auth/v1/token, public.notes, public.medications, lib/supabase/errors.ts (`wroteNoRows`), tests/a-refused-write-is-not-a-success.test.ts
+
+#### Expected Behavior
+CREATE → READ → UPDATE → VERIFY → DELETE → VERIFY completes for a family member through the real API, and a write that changes nothing is distinguishable from one that worked.
+
+#### Test Cases
+- [x] CREATE returns the created row
+- [x] READ returns the stored values
+- [x] UPDATE returns the changed row
+- [x] The update is verified by a fresh read, not by the response
+- [x] DELETE returns the removed row
+- [x] A fresh read confirms it is gone
+- [x] UPDATE of a deleted row reports zero rows rather than success
+- [x] A child's write to a manager-gated table, with and without asking for rows back
+
+#### Issues Found
+None. Recorded for the last two cases, which demonstrate at the HTTP layer the thing this whole cycle has been about.
+
+The lifecycle itself, run as a real family member with a token from a genuine password sign-in:
+
+    CREATE  -> id fa955313-…                     READ -> [{"title":"Lifecycle note","body":"first"}]
+    UPDATE  -> the changed row                   READ -> [{"body":"second"}]
+    DELETE  -> the removed row                   READ -> []
+    UPDATE a deleted row                         ->     []
+
+**Then the case that matters.** A child, in their own family, updating their own prescription — a `medications` row, manager-gated since 0309 — through PostgREST exactly as the browser would:
+
+    PATCH /medications?id=eq.…                               -> HTTP 204, response body 0 bytes
+    PATCH /medications?id=eq.…  Prefer: return=representation -> HTTP 200, []
+    the stored dosage afterwards                              -> 10 mg
+
+**204 No Content is a success.** Without asking for its rows back, the client is told the write worked; the dosage is untouched and nothing anywhere says so. Add `Prefer: return=representation` — which is precisely what `.select()` appends — and the same request answers `[]`, which the caller can act on.
+
+That is the entire justification for the `.select('id')` + `wroteNoRows()` work across 39 call sites and the guard that holds it, shown at the layer the browser actually talks to rather than argued from a policy definition. The earlier SQL measurement showed `UPDATE 0` with no error; this shows what the HTTP client sees, which is a 204.
+
+#### Fixes Applied
+None required — the repairs this demonstrates were made earlier in the cycle.
+
+#### Retest Results
+All eight cases in one pass. Every fixture removed afterwards and the removal verified: the probe family deleted, both auth users deleted, zero families and zero members remaining.
+
+#### Evidence
+Executed against the running local Supabase stack over HTTP, with tokens from real password sign-in. The manager-gated case used a genuine child member of the same family, so the refusal came from the 0309 policy rather than from cross-family scoping.
+
+#### Final Status
+✅ PASS
 
 ### TEST-009 — Two probes left fixtures in the family everything else is measured against
 
