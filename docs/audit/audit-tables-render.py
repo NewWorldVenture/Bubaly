@@ -18,8 +18,11 @@ three cells, and `(12 tests, 1 failed | 11 passed)` became two.
 
     python3 docs/audit/audit-tables-render.py [file ...]
 
-Exits non-zero if any table has a row whose cell count differs from its header,
-naming the line. Defaults to finalaudit.md. This is a legibility check on the
+Exits non-zero only for rows that LOSE content — more cells than the header
+declares. A row with FEWER cells is reported too, but does not fail: GFM pads it
+with blanks, so everything written still renders. Conflating the two would make
+the check cry wolf over a table whose columns were merged but whose text is all
+on the page. Defaults to finalaudit.md. This is a legibility check on the
 DOCUMENT, deliberately not wired into CI: other agents edit this file too, and a
 red build over someone's prose is not the point. Run it after editing a table.
 """
@@ -38,7 +41,8 @@ def cell_count(line: str) -> int:
     return len(parts) - 1
 
 
-def check(path: str) -> list[str]:
+def check(path: str, shortfall: list[str]) -> list[str]:
+    """Return the rows that LOSE content; append merely-short rows to shortfall."""
     problems: list[str] = []
     lines = open(path, encoding='utf-8').read().split('\n')
     i = 0
@@ -59,13 +63,24 @@ def check(path: str) -> list[str]:
         j = i + 2
         while j < len(lines) and lines[j].strip().startswith('|'):
             got = cell_count(lines[j])
-            if got != want:
-                verb = 'dropped by the renderer' if got > want else 'left empty'
+            if got > want:
+                # Content loss: GFM discards every cell past the header count.
                 problems.append(
-                    f'{path}:{j + 1}: row has {got} cells, header declares {want} '
-                    f'— {abs(got - want)} {verb}. '
-                    f'An unescaped | inside a cell splits it; write \\| instead. '
-                    f'First 90 chars: {lines[j][:90]}')
+                    f'{path}:{j + 1}: LOSS — row has {got} cells, header declares '
+                    f'{want}, so {got - want} cell(s) are DISCARDED by the renderer. '
+                    f'A | inside a cell splits it even within a code span; write \\| '
+                    f'instead. First 90 chars: {lines[j][:90]}')
+            elif got < want:
+                # Not content loss: GFM pads a short row with empty cells, so
+                # everything written still renders. Reported because a column
+                # that is empty on most rows usually means two columns were
+                # merged when the row was written — but nothing is missing, and
+                # splitting it again is a judgement about meaning that this
+                # script has no business making.
+                shortfall.append(
+                    f'{path}:{j + 1}: short — row has {got} cells, header declares '
+                    f'{want}; the renderer pads the missing {want - got} with blanks, '
+                    f'so no text is lost. First 90 chars: {lines[j][:90]}')
             j += 1
         i = j
     return problems
@@ -74,12 +89,16 @@ def check(path: str) -> list[str]:
 def main() -> int:
     paths = sys.argv[1:] or ['finalaudit.md']
     problems: list[str] = []
+    shortfall: list[str] = []
     for path in paths:
-        problems.extend(check(path))
+        problems.extend(check(path, shortfall))
     for p in problems:
         print(p)
-    print(f'\n{len(problems)} table row(s) would not render as written '
-          f'across {len(paths)} file(s).')
+    for s_ in shortfall:
+        print(s_)
+    print(f'\n{len(problems)} row(s) lose content; {len(shortfall)} row(s) are '
+          f'short but lose none, across {len(paths)} file(s).')
+    # Only content loss fails. A short row renders everything it holds.
     return 1 if problems else 0
 
 
