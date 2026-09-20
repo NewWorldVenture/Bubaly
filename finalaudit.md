@@ -32168,9 +32168,27 @@ passed; this is a check configured and never completed.
 **Correction, not a code change.** Nothing in `ci.yml` is wrong —
 `cancel-in-progress` is right for a branch under active development, and
 removing it would burn runners on superseded commits. The defect is in the
-working method: **after a push that is meant to prove a CI failure fixed, stop
-pushing until that run reports.** Local work and local commits continue; the
-push is what waits. This session now holds pushes until run 3283 completes.
+working method.
+
+**The first version of this rule was wrong, and is corrected here rather than
+quietly abandoned.** It read: *"after a push that is meant to prove a CI failure
+fixed, stop pushing until that run reports."* Within the hour the repository's
+own stop-hook pointed out the cost: an unpushed commit exists only on an
+ephemeral container, and this session had already accepted exactly that
+trade-off earlier and written down the reasoning — *a cancelled CI run costs a
+re-run; a lost commit costs the work.* Holding pushes trades a CERTAIN risk for
+an UNCERTAIN benefit, and the commit being held was, with some irony, the
+write-up of this finding.
+
+The rule that survives contact with both concerns:
+
+> **Do not push a change whose only purpose is to keep working — batch it.
+> Always push work that would be lost. And when a verification run matters,
+> plan the batch around it rather than holding finished work hostage to it.**
+
+The practical effect is the same cadence discipline without the hostage-taking:
+fewer, larger pushes, timed so a pipeline has room to finish, but never at the
+price of leaving completed work on a container that can vanish.
 
 **Status:** RECORDED as a method correction. The E2E fix in `C1-S9-17` remains
 *locally reproduced and not yet CI-confirmed*, and is described that way rather
