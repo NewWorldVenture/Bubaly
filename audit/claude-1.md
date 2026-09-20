@@ -6964,3 +6964,123 @@ UUIDs, its `on conflict do nothing` silently skips, and the member its row
 points at never exists. CI is green because it bootstraps a fresh container per
 run. Pre-existing, out of scope, untouched, queued separately. "It failed after
 I changed something" is still not "my change broke it".
+
+## Pass BQ — the class, not the instance: 170 tables measured, and AUTHZ-006 has a twin
+
+Pass BN closed eleven tables that earlier passes had *recorded*. It said plainly
+what it had not done: *"I did not audit the other ~160 tables sharing the
+permissive `FOR ALL … is_family_member` shape."* This is that sweep, and it
+found the same defect class twice more — once in the money domain, with a real
+outside person's payment at the end of it.
+
+### The class is 170, and three things the framing got wrong
+
+Derived from `pg_policies` on a replayed database (336 migrations, 0 failed),
+not from grep over migration text. 1,044 policies over 491 tables; 202
+permissive `FOR ALL`; **184 role-blind**, less 14 already carrying restrictive
+manager guards, gives **170**.
+
+- **Three role-blind shapes, not one.** `is_family_member(family_id)` covers
+  166, but a `family_id IN (SELECT …)` membership subquery covers 9 and an
+  `EXISTS (… user_id = auth.uid() AND is_active)` covers 8. A grep for the
+  helper name alone misses seventeen tables — and seventeen is more than the
+  eleven Pass BN examined.
+- **A third guard mechanism nobody had named: `BEFORE` triggers.** Nine
+  role-aware trigger guards exist (`0295`, `0305`, `0310`, `0317`), two of them
+  over class tables. A census reading only `pg_policies` files
+  `chore_submissions` and `reward_redemptions` as defects. They are not.
+- **`trip_items` has insert and delete guards and no UPDATE guard** — covered
+  anyway by `trg_trip_item_content_guard`, which raises on any non-manager
+  change to its content columns. Correct, and the asymmetry deserves a comment
+  so the next reader does not "fix" it.
+
+### AUTHZ-009 — the same deputy, in the money domain
+
+`wallet_fund_goal` is `SECURITY DEFINER` and checks
+`auth.uid() = p_actor_id AND can_manage_family(p_family_id)`. Correctly — like
+`guardian_review_suggestion` before it. It then reads a `wallet_goals` row and
+uses **that row's own fields**: `child_wallet_id` decides which child's Save
+bucket is debited, `title` becomes the ledger line and the `wallet_audit_logs`
+detail the parent reads afterwards.
+
+    child:  insert wallet_transactions (debit sibling's save bucket) -> BLOCKED
+            "new row violates row-level security policy"   (0322 holds)
+    child:  insert wallet_goals (child_wallet_id = SIBLING's wallet,
+                                 title='New bike for me')  -> INSERT 1
+    parent: select wallet_fund_goal(family, <goal>, 5000, parent) -> ok
+    result: sibling's Save balance 5000 -> 0
+            ledger the parent reads: "Into goal: New bike for me"
+
+One rolled-back transaction on a live replay. Two instances now, two domains,
+and they were found by asking the same question of a **whole class** rather than
+of one table — which is the argument for this pass existing at all.
+
+### AUTHZ-010 — and this one reaches outside the family
+
+`pay_handles` is four columns and only managers write it in the app. What makes
+it the first repair rather than the fourth is that
+`app/pay/[handle]/page.tsx` resolves `/pay/<handle>` with
+`createServiceClient()` — **RLS off on that path**, correctly, because a public
+payment page cannot carry the visitor's session. It reads `child_wallet_id` and
+redirects to that wallet's newest active gift link.
+
+    child: update pay_handles set child_wallet_id = <mine>
+           where handle = 'siblingpay'                    -> UPDATE 1
+
+A grandparent following the Pay ID they were given for one child now lands on a
+gift link for another. The child mints nothing — `0322` already closed
+`gift_links` — they repoint the handle at a link that already exists. The
+service-role read is right and stays; that is precisely why the row it trusts
+has to be manager-written.
+
+### What is NOT a defect, and why saying so is the work
+
+**133 tables are consistent-open**: no app manager rule either, so the app and
+the database agree. That is `PROD-001` generalised from three tables to a
+hundred and thirty-three, and restricting them would be inventing product
+policy inside an audit.
+
+Four of those *looked* manager-gated at file level and were checked call by call
+instead — `medication_doses` (the `canMutate(true)` gate is for `medications`,
+not doses), `moves`/`move_tasks`/`move_boxes` (`canRecalculate` gates one RPC
+button, not CRUD), `subscriptions_tracked` (`canReview` gates the AI finder) and
+`member_locations` (`isManager` guards `family_places`). That is `CENSUS-001`'s
+error mode caught before it could repeat.
+
+**28 have no app write path**, and two of them are the trap in reverse:
+`family_knowledge_nodes` and `family_knowledge_edges` appear in a `WRITABLE`
+list, but `graphWrite()` redirects every write aimed at them to
+`graph_entities`/`graph_edges`. Present in the code and never written.
+
+### PROD-002 — four agreements that look wrong
+
+Recorded, not repaired, exactly as `PROD-001` was. `screen_time_limits` is
+upserted by a client module with no role gate: a child can raise their own
+screen-time limit. **A parental control with no parent in it.** Also `grades`,
+`tax_documents`, `family_insurance_policies`, `household_info`. And
+`member_locations` on a different axis — the app enforces *ownership*, the
+database only *membership*, so a child can forge or disable a sibling's location
+row.
+
+### AUTHZ-011 — the number that is not zero
+
+The census covered permissive `FOR ALL`. **125 further tables** carry role-blind
+permissive `INSERT`/`UPDATE`/`DELETE` policies written separately — the same
+blindness, a different shape — and are **unaudited**. Some are constrained
+otherwise, so it is not a defect count. It is stated as a number because 295
+tables in total have a role-blind write policy with no restrictive guard, this
+audit has now examined 170, and the difference between *"we checked"* and
+*"we could not see"* is whether the remainder is written down.
+
+### Confined honestly
+
+The deputy sweep parsed all 55 `SECURITY DEFINER` functions granted to
+`authenticated`, intersecting their reads against 295 child-writable sources and
+their writes against 94 privileged sinks. Four matched; three
+(`wallet_decide_spend`, `economy_decide_redemption`, `invest_decide_order`) are
+**already closed** — their source tables' UPDATE is `can_manage_family` and
+INSERT is pinned to `status='pending' AND decided_by IS NULL`, so no TOCTOU.
+The same pattern at the *application* layer (`autopilot_suggestions` →
+`trust_policies`) was found in the one place the data pointed, and a systematic
+sweep of manager-gated server actions for read-class-table/write-guarded-table
+flows was **not** done. That is queued, not claimed.
