@@ -159,9 +159,20 @@ describe('every wallet audit write goes through the one helper', () => {
 // guardian_escalations row and returned to the caller. An emergency was
 // permanently recorded as having alerted the parents when nothing was written.
 describe('an emergency notification that was not written says so', () => {
+  // The two Guardian routes still write the row inline. The two Contact Center
+  // ones no longer write it at all: on this branch the urgent path goes through
+  // captureInboundWithUrgency/attemptUrgentDelivery, and the notification write
+  // lives in lib/contact-center/urgent-delivery.ts. The invariant follows the
+  // write rather than being dropped with the line that used to carry it — and it
+  // is checked harder there, because that implementation does more than log.
   const ROUTES = [
     'app/api/guardian/escalate/route.ts',
     'app/api/guardian/screen/route.ts',
+  ];
+
+  // Whoever writes it, nobody may write it silently.
+  const URGENT_DELIVERY = 'lib/contact-center/urgent-delivery.ts';
+  const CONTACT_ROUTES = [
     'app/api/contact-center/sms/route.ts',
     'app/api/contact-center/voice/transcription/route.ts',
   ];
@@ -171,6 +182,39 @@ describe('an emergency notification that was not written says so', () => {
     const source = readFileSync(file, 'utf8');
     const takesError = /const \{[^}]*\berror[^}]*\} = await [\w.]*\.from\('notifications'\)\.insert/.test(source);
     expect(takesError, 'the insert result is discarded, so a refused write is invisible').toBe(true);
+  });
+
+  it.each(CONTACT_ROUTES)('%s has no silent inline notifications insert left', async (file) => {
+    const { readFileSync } = await import('node:fs');
+    const source = readFileSync(file, 'utf8');
+    // Either it does not write the row, or it reads the outcome. What it may
+    // never do is insert and walk away.
+    for (const match of source.matchAll(/await [\w.]*\.from\('notifications'\)\.insert/g)) {
+      const line = source.slice(0, match.index).split('\n').length;
+      const prefix = source.slice(0, match.index!).split('\n').pop() ?? '';
+      expect(/const \{[^}]*\berror[^}]*\} = $/.test(prefix),
+        `${file}:${line} inserts a notification and discards the result`).toBe(true);
+    }
+  });
+
+  it(`${URGENT_DELIVERY} refuses to let a failed urgent notification pass as sent`, async () => {
+    const { readFileSync } = await import('node:fs');
+    const source = readFileSync(URGENT_DELIVERY, 'utf8');
+    // Stronger than the routes it replaced. Those logged; this throws, which
+    // leaves notificationDone false, which makes attemptUrgentDelivery answer
+    // 'failed', which makes both routes answer 503 so the provider retries.
+    expect(source).toMatch(/if \(saved\.error\) throw new Error\('Urgent notification write failed'\);/);
+    expect(source, 'a write nobody reads back is a write nobody can trust')
+      .toMatch(/if \(found\.error[\s\S]{0,300}throw new Error\('Urgent notification identity invalid'\);/);
+    expect(source).toMatch(/if \(!notificationDone\) return 'failed';/);
+  });
+
+  it.each(CONTACT_ROUTES)('%s turns a failed urgent delivery into a retry, not a 200', async (file) => {
+    const { readFileSync } = await import('node:fs');
+    const source = readFileSync(file, 'utf8');
+    expect(source).toContain('attemptUrgentDelivery');
+    expect(source, 'answering 200 tells the provider it was handled and there is no second chance')
+      .toMatch(/if \(urgentOutcome === 'failed'\) return new NextResponse\([^)]*status: 503/);
   });
 
   it('the escalation claims a push only when the row landed', async () => {

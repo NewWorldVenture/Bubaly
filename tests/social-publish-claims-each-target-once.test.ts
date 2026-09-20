@@ -43,14 +43,16 @@ type DB = SupabaseClient<Database>;
 const FAMILY = '00000000-0000-4000-8000-0000000000f1';
 const POST = '00000000-0000-4000-8000-0000000000e1';
 const TARGET = '00000000-0000-4000-8000-0000000000d1';
+const ACCOUNT = '00000000-0000-4000-8000-0000000000c1';
 
 let db: ReturnType<typeof createInMemorySupabase<DB>>;
 
 beforeEach(() => {
   calls.published.length = 0;
   db = createInMemorySupabase<DB>();
-  db.seed('social_posts', [{ id: POST, family_id: FAMILY, status: 'scheduled', body: 'Sports day photos!', link: null }]);
-  db.seed('social_post_targets', [{ id: TARGET, post_id: POST, family_id: FAMILY, platform: 'facebook', account_id: null, status: 'pending' }]);
+  db.seed('social_posts', [{ id: POST, family_id: FAMILY, status: 'scheduled', body: 'Sports day photos!', link: null, kind: 'text', approval_status: 'not_required', metadata: {}, deleted_at: null }]);
+  db.seed('social_accounts', [{ id: ACCOUNT, family_id: FAMILY, platform: 'facebook', provider_account_id: 'synthetic-provider-account', deleted_at: null }]);
+  db.seed('social_post_targets', [{ id: TARGET, post_id: POST, family_id: FAMILY, platform: 'facebook', account_id: ACCOUNT, status: 'pending', metadata: {} }]);
   db.seed('social_post_variants', []);
 });
 
@@ -94,7 +96,7 @@ describe('a social post is published to each target once', () => {
     // The other control: the claim's filter must match the SELECT above it, or
     // a genuine retry of a failed target stops working.
     db.replace('social_post_targets', [
-      { id: TARGET, post_id: POST, family_id: FAMILY, platform: 'facebook', account_id: null, status: 'failed' },
+      { id: TARGET, post_id: POST, family_id: FAMILY, platform: 'facebook', account_id: ACCOUNT, status: 'failed', metadata: {} },
     ]);
     await runPublishNow(db as unknown as DB, FAMILY, POST, 'user-1');
     expect(calls.published).toEqual(['facebook:Sports day photos!']);

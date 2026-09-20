@@ -36,7 +36,10 @@ const CALL_ONLY = [
   'hasInternalSecret',
   'logMarketingAudit',
   'logWalletAudit',
-  'markFailedAndThrow',
+  // Renamed from `markFailedAndThrow` by the parallel session, which also made it
+  // distinguish a failure before the provider boundary (retryable) from one
+  // after it (status stays 'sending', outcome 'unknown').
+  'markFailure',
   'marketingActionFailure',
   'readBoundedRequestBytes',
   'readBoundedRequestFormData',

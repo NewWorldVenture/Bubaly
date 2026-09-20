@@ -126,6 +126,22 @@ describe('the marketing customer view', () => {
 });
 
 describe('the push campaign suppression list', () => {
+  it.each([CAP, 17])('the actual audience helper completes devices, profiles and suppressions under cap %i', async cap => {
+    const { loadPushCampaignAudience } = await import('@/lib/marketing/push-audience');
+    const db = createInMemorySupabase({ maxRows: cap });
+    const users = ids('user', OVER);
+    const devices = ids('device', OVER);
+    db.seed('push_devices', users.map((user_id, index) => ({ id: devices[index], user_id, enabled: true })));
+    db.seed('profiles', users.map(id => ({ id, email: `${id}@example.test` })));
+    db.seed('marketing_suppressions', users.slice(0, -1).map(id => ({ email: `${id}@example.test` })));
+    // A single-page device scan cannot see the only eligible owner. A partial
+    // suppression scan would incorrectly include opted-out owners near the end.
+    const short = await (db as unknown as DB).from('push_devices').select('user_id').eq('enabled', true);
+    expect(short.data).toHaveLength(cap);
+    expect(short.data?.map(row => row.user_id)).not.toContain(users.at(-1));
+    expect(await loadPushCampaignAudience(db as unknown as DB)).toEqual([users.at(-1)]);
+  });
+
   it('excludes an opted-out address that sits past the cap', async () => {
     // The send path itself needs a marketing admin session; what this pins is
     // the property that makes the read load-bearing — `selectPushRecipients`
@@ -274,8 +290,8 @@ describe('no delivery-contract read is left unbounded', () => {
     { file: 'lib/marketing/customers.ts', table: 'subscriptions', why: 'joined onto every family row' },
     { file: 'lib/marketing/customers.ts', table: 'family_members', why: 'joined onto every family row' },
     { file: 'lib/marketing/customers.ts', table: 'profiles', why: 'joined onto every family row' },
-    { file: 'app/(app)/admin/marketing/push/actions.ts', table: 'push_devices', why: 'the campaign audience' },
-    { file: 'app/(app)/admin/marketing/push/actions.ts', table: 'marketing_suppressions', why: 'a missing row sends to someone who opted out' },
+    { file: 'lib/marketing/push-audience.ts', table: 'push_devices', why: 'the campaign audience' },
+    { file: 'lib/marketing/push-audience.ts', table: 'marketing_suppressions', why: 'a missing row sends to someone who opted out' },
     { file: 'lib/marketing/send.ts', table: 'marketing_suppressions', why: 'a missing row emails someone who unsubscribed' },
     { file: 'lib/marketing/automation-runner.ts', table: 'marketing_automation_runs', why: 'the only guard against re-running a workflow for the same family' },
     // Source-level rather than behavioural, because the cron routes read their

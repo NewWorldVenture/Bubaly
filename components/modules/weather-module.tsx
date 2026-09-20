@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { MapPin, Plus, Search, Star, Trash2, LocateFixed, Wind, Droplets, X } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
+import { settle } from '@/lib/supabase/settle';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
@@ -175,13 +176,19 @@ export function WeatherModule() {
   }
 
   async function makeDefault(id: string) {
-    // Clearing the old default is half of "set default", not a fire-and-forget.
-    // Its error was discarded, so a refused or failed clear left TWO rows
-    // flagged default — and the screen still said "Default city set".
-    const { error: clearErr } = await supabase.from('weather_locations').update({ is_default: false }).eq('family_id', familyId);
+    // "One default city" is enforced HERE and nowhere else — no unique index
+    // backs it. The clear used to be a bare statement, so if it failed and the
+    // set below succeeded the family ended up with TWO defaults, and if it
+    // succeeded while the set failed they ended up with none. Same shape as the
+    // meal-vote ballot: an invariant a comment states and only an unchecked
+    // write keeps.
+    const { error: clearErr } = await settle(
+      supabase.from('weather_locations').update({ is_default: false }).eq('family_id', familyId));
     if (clearErr) return toastError(describeDbError(clearErr));
-    const { error: err } = await supabase.from('weather_locations').update({ is_default: true }).eq('id', id);
+    const { data: rows, error: err } = await supabase.from('weather_locations')
+      .update({ is_default: true }).eq('id', id).select('id');
     if (err) return toastError(describeDbError(err));
+    if (!rows?.length) return toastError(t('errors.thatChangeWasNotSaved'));
     success(t('weatherModule.defaultCitySet'));
     await loadSaved();
   }

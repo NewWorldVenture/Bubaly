@@ -41,5 +41,9 @@ export async function POST() {
     url: '/dashboard/notifications',
   });
 
-  return NextResponse.json({ ok: true, result, configured: cfg });
+  const ok = result.sent > 0 && result.failed === 0 && result.skipped === 0;
+  return NextResponse.json(
+    { ok, result, configured: cfg },
+    { status: ok ? 200 : result.failed > 0 ? 502 : result.skipped > 0 ? 503 : 409 },
+  );
 }

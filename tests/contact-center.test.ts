@@ -108,7 +108,7 @@ describe('concierge routing', () => {
 describe('contact center persistence boundaries', () => {
   it('does not collapse channel and inbox failures into empty state', () => {
     expect(contactCenterServer).toContain('getOrCreateChannelResult');
-    expect(contactCenterServer).toContain('inbound message persistence failed');
+    expect(contactCenterServer).toContain("throw new Error('Inbound message persistence failed')");
     expect(contactCenterServer).toContain('outbound message persistence failed');
     expect(contactCenterPage).toContain('channelResult.error || messagesResult.error');
   });
@@ -116,7 +116,8 @@ describe('contact center persistence boundaries', () => {
   it('fails Twilio routing closed when family lookup fails', () => {
     expect(smsRoute).toContain('Routing temporarily unavailable');
     expect(voiceRoute).toContain('Routing temporarily unavailable');
-    expect(smsRoute).toContain('channelResult.error || familyResult.error');
+    expect(smsRoute).toContain('if (channelResult.error)');
+    expect(smsRoute).toContain('if (familyResult.error)');
     expect(voiceRoute).toContain('channelResult.error || familyResult.error');
   });
 

@@ -25,7 +25,9 @@ vi.mock('web-push', () => ({
 
 const NOW = new Date('2026-09-14T12:00:00Z');
 const NOTIFICATION = {
-  id: 'n1', family_id: 'f1', user_id: 'u1',
+  // A real UUID: main's dispatch cursor (PUSH-003) interpolates this id into a
+  // PostgREST `or(...)` filter and rejects anything that is not one.
+  id: '11111111-1111-4111-8111-111111111111', family_id: 'f1', user_id: 'u1',
   title: 'Chore due', body: 'Take the bins out', related_type: null, related_id: null,
   created_at: '2026-09-14T11:00:00Z',
 };
@@ -45,7 +47,15 @@ function fakeSupabase(updates: Record<string, unknown>[], createdAt = NOTIFICATI
   const from = (table: string) => {
     const chain: Record<string, unknown> = {
       select: () => chain, is: () => chain, lte: () => chain, eq: () => chain,
-      in: () => chain, order: () => chain, limit: () => chain,
+      in: () => chain, order: () => chain, limit: () => chain, or: () => chain,
+      // main added a compare-and-set dispatch cursor in `app_settings` (PUSH-003)
+      // after this guard was written. Served as "no cursor stored yet", which is
+      // the first-run path: the batch is claimed with a plain upsert and the
+      // subject of this file — how a send OUTCOME is counted — is unchanged.
+      maybeSingle: () => Promise.resolve({ data: null, error: null }),
+      upsert: (row: Record<string, unknown>) => ({
+        select: () => ({ maybeSingle: () => Promise.resolve({ data: { key: row.key }, error: null }) }),
+      }),
       update: (patch: Record<string, unknown>) => {
         updates.push({ table, ...patch });
         return { eq: () => Promise.resolve({ error: null }) };

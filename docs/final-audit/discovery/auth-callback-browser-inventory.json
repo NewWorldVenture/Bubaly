@@ -1,0 +1,1020 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-19T19:29:20.076Z",
+  "baselineCommit": "4ccc57fc884306f0482d8566a05508e461cb33a8",
+  "sourceTree": "8966b9747f61acb3be181a1f6042142fc1920013",
+  "methodology": [
+    "Exact Git blob bytes from the frozen pre-evidence index tree; application source freeze, not a deployment or whole-workflow PASS.",
+    "TypeScript AST exported function and rendered control discovery. Only new distinct surfaces add permanent IDs; retired functions retain their prior ID.",
+    "AUTH-001/AUTH-002/AUTH-003 remain the existing workflow records. Source hashes exclude local line-ending differences. Later test-only deltas are reported separately.",
+    "Final source tree includes later test-only scanner/transport additions; production blobs remain identical to applicationSourceFreeze."
+  ],
+  "counts": {
+    "files": 35,
+    "newFiles": 10,
+    "production": 21,
+    "tests": 14,
+    "newPageRoutes": [
+      "/auth/complete"
+    ],
+    "addedExportedFunctions": 11,
+    "newPermanentRecords": 21
+  },
+  "files": [
+    {
+      "path": "app/(auth)/auth/complete/actions.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "9706ed6b9362618e6a544093da2b30868c20b161b480f350109d763cfc592fca",
+      "bytes": 520,
+      "exportedFunctions": [
+        {
+          "name": "completeCallbackAction",
+          "line": 9
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "completeCallbackAction",
+          "line": 9
+        }
+      ],
+      "removedExportedFunctions": [],
+      "controls": [],
+      "pageRoute": null,
+      "existingMasterIds": [],
+      "newMasterIds": [
+        "ACTION-6AED5815E8B4"
+      ]
+    },
+    {
+      "path": "app/(auth)/auth/complete/page.tsx",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "89d09588da2fc3285d1771abf57a07b0ab34bcc9f1f208829e75577f632ff383",
+      "bytes": 1195,
+      "exportedFunctions": [
+        {
+          "name": "CallbackCompletionPage",
+          "line": 7
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "CallbackCompletionPage",
+          "line": 7
+        }
+      ],
+      "removedExportedFunctions": [],
+      "controls": [],
+      "pageRoute": "/auth/complete",
+      "existingMasterIds": [],
+      "newMasterIds": [
+        "UI-01BBE09DFD14"
+      ]
+    },
+    {
+      "path": "app/auth/callback/route.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "551fbcabbb2757862e771709d13b983e98e664062ff2f8af6fc537d8065bad44",
+      "sourceSha256": "56f3dda8d7883e6b9ebc5471fa489c44b916f1b69267d8995c5ec890a78934ba",
+      "bytes": 1002,
+      "exportedFunctions": [
+        {
+          "name": "GET",
+          "line": 5
+        }
+      ],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "controls": [],
+      "pageRoute": null,
+      "existingMasterIds": [
+        "ROLE-7394A5416880"
+      ],
+      "newMasterIds": []
+    },
+    {
+      "path": "components/auth/callback-completion.tsx",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "5de22cbbc45626d1f1e977a3135c5d79d5ee93ee46aac928ef75bf58d241e8b0",
+      "bytes": 10700,
+      "exportedFunctions": [
+        {
+          "name": "CallbackCompletion",
+          "line": 46
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "CallbackCompletion",
+          "line": 46
+        }
+      ],
+      "removedExportedFunctions": [],
+      "controls": [
+        {
+          "tag": "Button",
+          "line": 182,
+          "id": "CONTROL-B2804105A459"
+        },
+        {
+          "tag": "Link",
+          "line": 183,
+          "id": "CONTROL-372258ED85CC"
+        }
+      ],
+      "pageRoute": null,
+      "existingMasterIds": [],
+      "newMasterIds": [
+        "COMPONENT-798709A427DB",
+        "CONTROL-B2804105A459",
+        "CONTROL-372258ED85CC"
+      ]
+    },
+    {
+      "path": "components/auth/recovery-form.tsx",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "1aa1c2082158976ade88c6e1000f5dcd0c109ff222c15851384961280f5bf5f3",
+      "sourceSha256": "3a9da4ff214a566d91e51d43c806523b1fe013f9f546a6b286b6b6ba80a8bf54",
+      "bytes": 23319,
+      "exportedFunctions": [
+        {
+          "name": "RecoveryForm",
+          "line": 102
+        }
+      ],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "controls": [],
+      "pageRoute": null,
+      "existingMasterIds": [
+        "SUPPORT-D18688096008"
+      ],
+      "newMasterIds": []
+    },
+    {
+      "path": "lib/auth/browser-session-storage.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "b43a14473f51bb6235bd562af617efc9ee1834c359e9b13551625a4d65f60e80",
+      "sourceSha256": "9b7d1a3d393f33572a87b4850f7fad9cf908acad83daea34845cf766e790910a",
+      "bytes": 11121,
+      "exportedFunctions": [
+        {
+          "name": "captureBrowserSessionSnapshot",
+          "line": 51
+        },
+        {
+          "name": "clearBrowserSessionSnapshot",
+          "line": 70
+        },
+        {
+          "name": "createBrowserSessionStorage",
+          "line": 92
+        }
+      ],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "controls": [],
+      "pageRoute": null,
+      "existingMasterIds": [
+        "LIBRARY-9B09B8DA2334"
+      ],
+      "newMasterIds": []
+    },
+    {
+      "path": "lib/auth/callback-client.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "69f809469119aeff1d3033f9b0089f07e75c6ca16592a0f151f3e4fa574864a0",
+      "bytes": 6311,
+      "exportedFunctions": [
+        {
+          "name": "captureCallbackOwnership",
+          "line": 43
+        },
+        {
+          "name": "isCallbackOwnershipCurrent",
+          "line": 51
+        },
+        {
+          "name": "isAdoptedCallbackSessionCurrent",
+          "line": 64
+        },
+        {
+          "name": "callbackVerifierFingerprint",
+          "line": 68
+        },
+        {
+          "name": "adoptCallbackSession",
+          "line": 77
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "captureCallbackOwnership",
+          "line": 43
+        },
+        {
+          "name": "isCallbackOwnershipCurrent",
+          "line": 51
+        },
+        {
+          "name": "isAdoptedCallbackSessionCurrent",
+          "line": 64
+        },
+        {
+          "name": "callbackVerifierFingerprint",
+          "line": 68
+        },
+        {
+          "name": "adoptCallbackSession",
+          "line": 77
+        }
+      ],
+      "removedExportedFunctions": [],
+      "controls": [],
+      "pageRoute": null,
+      "existingMasterIds": [],
+      "newMasterIds": [
+        "LIBRARY-09F9DBC855B8",
+        "SERVICE-6D46420A6185",
+        "SERVICE-918858B252D0",
+        "SERVICE-88D2FDF11A7B",
+        "SERVICE-2C99F390935E",
+        "SERVICE-AF9B3804A627"
+      ]
+    },
+    {
+      "path": "lib/auth/callback-server.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "98db932849942c44b79382d4625038728d39166c0169e760d2e880094a94c54d",
+      "bytes": 10277,
+      "exportedFunctions": [
+        {
+          "name": "completeCallback",
+          "line": 81
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "completeCallback",
+          "line": 81
+        }
+      ],
+      "removedExportedFunctions": [],
+      "controls": [],
+      "pageRoute": null,
+      "existingMasterIds": [],
+      "newMasterIds": [
+        "LIBRARY-8A76C6A6E9CF",
+        "SERVICE-5734898A2FF3"
+      ]
+    },
+    {
+      "path": "lib/auth/callback.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "fdcc7143229832ab51a1f9a9fbbf4a0dd52f8b21aec6562772dd854cc5a7c4f5",
+      "bytes": 730,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "controls": [],
+      "pageRoute": null,
+      "existingMasterIds": [],
+      "newMasterIds": [
+        "LIBRARY-A688D34D7B8C"
+      ]
+    },
+    {
+      "path": "lib/auth/password-client.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "9b96d57524eaf262ad95c64207fdc34ffaed4dd1434d44dc5fe2cd42653fd1f3",
+      "sourceSha256": "8aa0e2910000680400092fde30c683d2fc1fe944052455ff4203384d73a399a1",
+      "bytes": 9281,
+      "exportedFunctions": [
+        {
+          "name": "isPasswordSessionCurrent",
+          "line": 40
+        },
+        {
+          "name": "signInWithOwnedSession",
+          "line": 145
+        },
+        {
+          "name": "signInWithOwnedSessionTokens",
+          "line": 150
+        }
+      ],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "controls": [],
+      "pageRoute": null,
+      "existingMasterIds": [
+        "LIBRARY-01DF23C3CC40"
+      ],
+      "newMasterIds": []
+    },
+    {
+      "path": "lib/auth/recovery-cookies.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "0378a235efbf3deeec931bce42a68288c609ad69ba952e63b96cc8d83a479a67",
+      "sourceSha256": "a574d3e3d454009b1c4dbb5f9bff28538ffa02b9df6ed57288a88f66f35d8d75",
+      "bytes": 5716,
+      "exportedFunctions": [
+        {
+          "name": "readRecoveryCookieToken",
+          "line": 31
+        },
+        {
+          "name": "createPkceCookieExchange",
+          "line": 71
+        }
+      ],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "controls": [],
+      "pageRoute": null,
+      "existingMasterIds": [
+        "LIBRARY-13A39C7EECC8"
+      ],
+      "newMasterIds": [
+        "SERVICE-53E5EBACB86B"
+      ],
+      "removedExportedAliases": [
+        "createRecoveryCookieExchange"
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/de-DE.json",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "486b3b1873375950fae6e567edc72042f0ef314f87460afe9e83368013c9cf11",
+      "sourceSha256": "78dfb9c408183b19f563abfdcea944ff78cf89b5408c276d2748cf533d81e45a",
+      "bytes": 991027,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "controls": [],
+      "pageRoute": null,
+      "existingMasterIds": [
+        "SUPPORT-88F1E3670486"
+      ],
+      "newMasterIds": []
+    },
+    {
+      "path": "lib/i18n/messages/en-US.json",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "cfbf0f7f0863b9b0936589e47262a09c827f55809081451b87e1d3135ee203f3",
+      "sourceSha256": "a6854e90797eeddbb3214928348f6e26ae307ad8a9de857299f7908550bc0d92",
+      "bytes": 884447,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "controls": [],
+      "pageRoute": null,
+      "existingMasterIds": [
+        "SUPPORT-C346841E8649"
+      ],
+      "newMasterIds": []
+    },
+    {
+      "path": "lib/i18n/messages/es-ES.json",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "6fcce04c0b7c1adbaedc0eb92b22febf62d3d970ad70bb909a243447b3144188",
+      "sourceSha256": "e9834c9bc0b160477f557a06cef30bbe0c64cd79cb89e0c509efe8fde553e9c0",
+      "bytes": 974327,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "controls": [],
+      "pageRoute": null,
+      "existingMasterIds": [
+        "SUPPORT-DC666FC0E80F"
+      ],
+      "newMasterIds": []
+    },
+    {
+      "path": "lib/i18n/messages/fr-FR.json",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "3f3ff757557367cb5a2dac087019577b9c9b9e444e11381180651cc25ddbaffd",
+      "sourceSha256": "d376a0237c53a10fce2c73ae5c678f714f16d9a7a1f25db5a4811067d1df5d2e",
+      "bytes": 999850,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "controls": [],
+      "pageRoute": null,
+      "existingMasterIds": [
+        "SUPPORT-24D39068AF0B"
+      ],
+      "newMasterIds": []
+    },
+    {
+      "path": "lib/i18n/messages/it-IT.json",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "fa01593152286a1f6180fc18f48d3a8b591c889f90fa24c8faa2bc6c994e8ae1",
+      "sourceSha256": "7af815740673d606787d3f6ec519d9201824e8f0bea9ade6efbc076669e72cb7",
+      "bytes": 961913,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "controls": [],
+      "pageRoute": null,
+      "existingMasterIds": [
+        "SUPPORT-9E9B391BC4E5"
+      ],
+      "newMasterIds": []
+    },
+    {
+      "path": "lib/i18n/messages/nl-NL.json",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "6913fec40a2ce556fcd7a7eadc5f7ec29ed19580c3c9e970e868364a87d76beb",
+      "sourceSha256": "72448e963d7fea1b00f080bd8f37311ade6e74315a7639469a2781685c2a0961",
+      "bytes": 946277,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "controls": [],
+      "pageRoute": null,
+      "existingMasterIds": [
+        "SUPPORT-6F4C71EB2624"
+      ],
+      "newMasterIds": []
+    },
+    {
+      "path": "lib/i18n/messages/pt-PT.json",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "ad8cb9483d4c68fe5e36c8c938a58b8c3182105098bd9242fb1668a1a83b99dc",
+      "sourceSha256": "003d3b716ab78012014bf8d3a45f9c8e1a7865c418f661aa50141f3f0806bb67",
+      "bytes": 976457,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "controls": [],
+      "pageRoute": null,
+      "existingMasterIds": [
+        "SUPPORT-091D62717E32"
+      ],
+      "newMasterIds": []
+    },
+    {
+      "path": "lib/i18n/scopes.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "6e7c2a9f39e0741a10105076f1e5526833de2091e63150f29366db015ed890e1",
+      "sourceSha256": "17e3467b7dbd12324ee71a849c691193a8eb4241f1047c95b5e2846a6883c04c",
+      "bytes": 3980,
+      "exportedFunctions": [
+        {
+          "name": "scopeMessages",
+          "line": 73
+        }
+      ],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "controls": [],
+      "pageRoute": null,
+      "existingMasterIds": [],
+      "newMasterIds": []
+    },
+    {
+      "path": "lib/marketing/visitor.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "d4c1caa56e437b8c2aa1edcd5dfe0a4af94dc3b204a847b2bcf635a735ca04ce",
+      "sourceSha256": "9fe4b9471bf168fbd696d30eee112031652a369790395f30beae5c4d05e1311b",
+      "bytes": 6808,
+      "exportedFunctions": [
+        {
+          "name": "getAnonymousId",
+          "line": 39
+        },
+        {
+          "name": "captureAnonymousId",
+          "line": 50
+        },
+        {
+          "name": "resetAnonymousId",
+          "line": 55
+        },
+        {
+          "name": "detectGPC",
+          "line": 65
+        },
+        {
+          "name": "readLocalConsent",
+          "line": 72
+        },
+        {
+          "name": "writeLocalConsent",
+          "line": 83
+        },
+        {
+          "name": "initialConsent",
+          "line": 89
+        },
+        {
+          "name": "postConsent",
+          "line": 94
+        },
+        {
+          "name": "trackTouchOnce",
+          "line": 115
+        },
+        {
+          "name": "trackConversion",
+          "line": 145
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "captureAnonymousId",
+          "line": 50
+        },
+        {
+          "name": "resetAnonymousId",
+          "line": 55
+        }
+      ],
+      "removedExportedFunctions": [],
+      "controls": [],
+      "pageRoute": null,
+      "existingMasterIds": [
+        "LIBRARY-D500696E9C72"
+      ],
+      "newMasterIds": [
+        "SERVICE-A87F2955B7BC",
+        "SERVICE-000ACBDF5B33"
+      ]
+    },
+    {
+      "path": "middleware.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "917b85b0152cce1bae6124b4a1843f23ff0fe0cbf0ad2dc6481749fe8a8a5d6c",
+      "sourceSha256": "ae6a8130c8c568167095a488a6fb32d344b28d0b5245c740933247ba640bee1a",
+      "bytes": 10651,
+      "exportedFunctions": [
+        {
+          "name": "middleware",
+          "line": 48
+        }
+      ],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "controls": [],
+      "pageRoute": null,
+      "existingMasterIds": [
+        "SUPPORT-3C67EB27B539"
+      ],
+      "newMasterIds": []
+    },
+    {
+      "path": "tests/auth-callback-admission.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "7e0a8c004529a378ac58e5d95b50e35abdc0656039562e215f7eac56c7cbb5c7",
+      "bytes": 3897,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "controls": [],
+      "pageRoute": null,
+      "existingMasterIds": [],
+      "newMasterIds": [
+        "SUPPORT-BB2C96FD0C17"
+      ]
+    },
+    {
+      "path": "tests/auth-callback-boundary.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "580b154ecdd9b8be713793429b9bb26c95c586ba5fdbcea1ebc90bdb72c160dc",
+      "sourceSha256": "5677b716425c3d639d330f5f5d3dc0894ddc19278592613393c89812e8433427",
+      "bytes": 5346,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "controls": [],
+      "pageRoute": null,
+      "existingMasterIds": [
+        "SUPPORT-15B340D0D4FE"
+      ],
+      "newMasterIds": []
+    },
+    {
+      "path": "tests/auth-callback-completion-page.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "1376969934f71f8ec6f968078fc681a831fe04b8b9e6735fc63264404bcd27b7",
+      "bytes": 4216,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "controls": [],
+      "pageRoute": null,
+      "existingMasterIds": [],
+      "newMasterIds": [
+        "SUPPORT-3F1BD3465BEE"
+      ]
+    },
+    {
+      "path": "tests/auth-callback-failed-signin-keeps-session.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "b51d661aad47fc462e80843f1fbfba4bad308e87807cd4ccfe63f3a2efafcfd6",
+      "sourceSha256": "8ff4b926d60ccae6248448678fe838aa446b93dd8299bde6761d309141806e60",
+      "bytes": 2381,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "controls": [],
+      "pageRoute": null,
+      "existingMasterIds": [
+        "SUPPORT-A26C72713D42"
+      ],
+      "newMasterIds": []
+    },
+    {
+      "path": "tests/auth-callback-transport.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "eb22c00bf6faa1653b91a612ba87056128cbbbc5fbd59bab9e239f9fe171f5f6",
+      "bytes": 2467,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "controls": [],
+      "pageRoute": null,
+      "existingMasterIds": [],
+      "newMasterIds": [
+        "SUPPORT-74A7A9EC5811"
+      ]
+    },
+    {
+      "path": "tests/auth-pkce-callback-execution.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "c82da1c04379b50a14f3b9811997c328ee47b702078d0080b52381469911e537",
+      "sourceSha256": "b185e01cb14f5251954f6fbf6cc8416809609be4227ed442b3b2ed90b1acdbb3",
+      "bytes": 17139,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "controls": [],
+      "pageRoute": null,
+      "existingMasterIds": [],
+      "newMasterIds": []
+    },
+    {
+      "path": "tests/auth-recovery-callback-execution.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "463a158b563d36012cdacdd5cc941b809b60b85e3b46b3393132cd7ae27e41df",
+      "sourceSha256": "dd48d684c1b5904f2f4fc19e6c7f5ce7f4753ba76a81fe0904c599a0d82b6357",
+      "bytes": 8113,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "controls": [],
+      "pageRoute": null,
+      "existingMasterIds": [
+        "SUPPORT-011E67642B80"
+      ],
+      "newMasterIds": []
+    },
+    {
+      "path": "tests/auth-recovery-cookie-execution.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "73086785fbae710364a8c98651ddd0ec87e5f00f87fb6e4d1db7203a92595fe4",
+      "sourceSha256": "206c488dbaa3d62781aca9cdac769db50d9a7cfbf719f7b61283c1c474e3ce8a",
+      "bytes": 12352,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "controls": [],
+      "pageRoute": null,
+      "existingMasterIds": [
+        "SUPPORT-38258764A34F"
+      ],
+      "newMasterIds": []
+    },
+    {
+      "path": "tests/auth-review-selection-routes.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "75048cf89608dbd29db01e8c6af72176889964621045bf7a76a5858afcefd16b",
+      "sourceSha256": "38488ae2c1aaa57306b8b7a05d770d9c67212b5f02818551695777fcc26549be",
+      "bytes": 14022,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "controls": [],
+      "pageRoute": null,
+      "existingMasterIds": [
+        "SUPPORT-2D7E14C6D439"
+      ],
+      "newMasterIds": []
+    },
+    {
+      "path": "tests/e2e/callback-completion-ui.spec.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "efdeaf24c12465d1b55b43e98a11191052162c5765d1d664d7b0b9062b29db5e",
+      "bytes": 26943,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "controls": [],
+      "pageRoute": null,
+      "existingMasterIds": [],
+      "newMasterIds": [
+        "SUPPORT-0F66F092FCD3"
+      ]
+    },
+    {
+      "path": "tests/e2e/password-session-ownership.spec.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "15ba22c505f6172b2f8d03e7890894ed735c024a9caaaa573d872e7885c03939",
+      "sourceSha256": "1537abdbb531e0309ca16b0b3a8c53ffd40aa4efca5b9f6a9578ff447fcaaa89",
+      "bytes": 48616,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "controls": [],
+      "pageRoute": null,
+      "existingMasterIds": [
+        "SUPPORT-AF285E96F2C7"
+      ],
+      "newMasterIds": []
+    },
+    {
+      "path": "tests/grandparent-multi-household.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "ccaf3ebc702a733120ca98f7501cec90837389ccd30d12a2d6d6419c84627be0",
+      "sourceSha256": "0b95f8825609e97f2c12e244316002bbf6b24890348f4ee56eedf1bf1731f72b",
+      "bytes": 13464,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "controls": [],
+      "pageRoute": null,
+      "existingMasterIds": [
+        "SUPPORT-98D40DCDFD04"
+      ],
+      "newMasterIds": []
+    },
+    {
+      "path": "tests/middleware-recovery-session.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "e9dd53365b08e07e226b1c36a65673e81984edfdae76be04e210750470e463f9",
+      "sourceSha256": "d0629a96bc85fce1c4efa4dc3f969edc780768f9320d15b9d74eed478e4ebadf",
+      "bytes": 4357,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "controls": [],
+      "pageRoute": null,
+      "existingMasterIds": [
+        "SUPPORT-B9ACA2B99320"
+      ],
+      "newMasterIds": []
+    },
+    {
+      "path": "tests/user-urls-are-fetched-through-the-guard.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "916975f2dcb3b65db70f89d891169335f6de35e215b4633d66c4a27a223f478a",
+      "sourceSha256": "e4a1763a42211cc0b63ca2405a02725fe12960e24baeb946ebe84a11d0595388",
+      "bytes": 15108,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "controls": [],
+      "pageRoute": null,
+      "existingMasterIds": [],
+      "newMasterIds": []
+    }
+  ],
+  "newRecords": [
+    {
+      "id": "ACTION-6AED5815E8B4",
+      "area": "ACTION",
+      "key": "app/(auth)/auth/complete/actions.ts:completeCallbackAction",
+      "name": "completeCallbackAction",
+      "source": "app/(auth)/auth/complete/actions.ts",
+      "status": "NOT STARTED",
+      "line": 9
+    },
+    {
+      "id": "UI-01BBE09DFD14",
+      "area": "UI",
+      "key": "app/(auth)/auth/complete/page.tsx",
+      "name": "/auth/complete",
+      "source": "app/(auth)/auth/complete/page.tsx",
+      "status": "NOT STARTED"
+    },
+    {
+      "id": "COMPONENT-798709A427DB",
+      "area": "COMPONENT",
+      "key": "components/auth/callback-completion.tsx",
+      "name": "components/auth/callback-completion.tsx",
+      "source": "components/auth/callback-completion.tsx",
+      "status": "NOT STARTED"
+    },
+    {
+      "id": "CONTROL-B2804105A459",
+      "area": "CONTROL",
+      "key": "components/auth/callback-completion.tsx:182:Button:0",
+      "name": "Button at line 182",
+      "source": "components/auth/callback-completion.tsx",
+      "status": "NOT STARTED",
+      "line": 182
+    },
+    {
+      "id": "CONTROL-372258ED85CC",
+      "area": "CONTROL",
+      "key": "components/auth/callback-completion.tsx:183:Link:1",
+      "name": "Link at line 183",
+      "source": "components/auth/callback-completion.tsx",
+      "status": "NOT STARTED",
+      "line": 183
+    },
+    {
+      "id": "LIBRARY-09F9DBC855B8",
+      "area": "LIBRARY",
+      "key": "lib/auth/callback-client.ts",
+      "name": "lib/auth/callback-client.ts",
+      "source": "lib/auth/callback-client.ts",
+      "status": "NOT STARTED"
+    },
+    {
+      "id": "SERVICE-6D46420A6185",
+      "area": "SERVICE",
+      "key": "lib/auth/callback-client.ts:captureCallbackOwnership",
+      "name": "captureCallbackOwnership",
+      "source": "lib/auth/callback-client.ts",
+      "status": "NOT STARTED",
+      "line": 43
+    },
+    {
+      "id": "SERVICE-918858B252D0",
+      "area": "SERVICE",
+      "key": "lib/auth/callback-client.ts:isCallbackOwnershipCurrent",
+      "name": "isCallbackOwnershipCurrent",
+      "source": "lib/auth/callback-client.ts",
+      "status": "NOT STARTED",
+      "line": 51
+    },
+    {
+      "id": "SERVICE-88D2FDF11A7B",
+      "area": "SERVICE",
+      "key": "lib/auth/callback-client.ts:isAdoptedCallbackSessionCurrent",
+      "name": "isAdoptedCallbackSessionCurrent",
+      "source": "lib/auth/callback-client.ts",
+      "status": "NOT STARTED",
+      "line": 64
+    },
+    {
+      "id": "SERVICE-2C99F390935E",
+      "area": "SERVICE",
+      "key": "lib/auth/callback-client.ts:callbackVerifierFingerprint",
+      "name": "callbackVerifierFingerprint",
+      "source": "lib/auth/callback-client.ts",
+      "status": "NOT STARTED",
+      "line": 68
+    },
+    {
+      "id": "SERVICE-AF9B3804A627",
+      "area": "SERVICE",
+      "key": "lib/auth/callback-client.ts:adoptCallbackSession",
+      "name": "adoptCallbackSession",
+      "source": "lib/auth/callback-client.ts",
+      "status": "NOT STARTED",
+      "line": 77
+    },
+    {
+      "id": "LIBRARY-8A76C6A6E9CF",
+      "area": "LIBRARY",
+      "key": "lib/auth/callback-server.ts",
+      "name": "lib/auth/callback-server.ts",
+      "source": "lib/auth/callback-server.ts",
+      "status": "NOT STARTED"
+    },
+    {
+      "id": "SERVICE-5734898A2FF3",
+      "area": "SERVICE",
+      "key": "lib/auth/callback-server.ts:completeCallback",
+      "name": "completeCallback",
+      "source": "lib/auth/callback-server.ts",
+      "status": "NOT STARTED",
+      "line": 81
+    },
+    {
+      "id": "LIBRARY-A688D34D7B8C",
+      "area": "LIBRARY",
+      "key": "lib/auth/callback.ts",
+      "name": "lib/auth/callback.ts",
+      "source": "lib/auth/callback.ts",
+      "status": "NOT STARTED"
+    },
+    {
+      "id": "SERVICE-A87F2955B7BC",
+      "area": "SERVICE",
+      "key": "lib/marketing/visitor.ts:captureAnonymousId",
+      "name": "captureAnonymousId",
+      "source": "lib/marketing/visitor.ts",
+      "status": "NOT STARTED",
+      "line": 50
+    },
+    {
+      "id": "SERVICE-000ACBDF5B33",
+      "area": "SERVICE",
+      "key": "lib/marketing/visitor.ts:resetAnonymousId",
+      "name": "resetAnonymousId",
+      "source": "lib/marketing/visitor.ts",
+      "status": "NOT STARTED",
+      "line": 55
+    },
+    {
+      "id": "SUPPORT-BB2C96FD0C17",
+      "area": "SUPPORT",
+      "key": "tests/auth-callback-admission.test.ts",
+      "name": "tests/auth-callback-admission.test.ts",
+      "source": "tests/auth-callback-admission.test.ts",
+      "status": "NOT STARTED"
+    },
+    {
+      "id": "SUPPORT-3F1BD3465BEE",
+      "area": "SUPPORT",
+      "key": "tests/auth-callback-completion-page.test.ts",
+      "name": "tests/auth-callback-completion-page.test.ts",
+      "source": "tests/auth-callback-completion-page.test.ts",
+      "status": "NOT STARTED"
+    },
+    {
+      "id": "SUPPORT-0F66F092FCD3",
+      "area": "SUPPORT",
+      "key": "tests/e2e/callback-completion-ui.spec.ts",
+      "name": "tests/e2e/callback-completion-ui.spec.ts",
+      "source": "tests/e2e/callback-completion-ui.spec.ts",
+      "status": "NOT STARTED"
+    },
+    {
+      "id": "SERVICE-53E5EBACB86B",
+      "area": "SERVICE",
+      "key": "lib/auth/recovery-cookies.ts:createPkceCookieExchange",
+      "name": "createPkceCookieExchange",
+      "source": "lib/auth/recovery-cookies.ts",
+      "status": "NOT STARTED",
+      "line": 71,
+      "discoveryNote": "Existing exported function on baseline4ccc lacked a master ID; newly recorded here. This cycle removes its old createRecoveryCookieExchange alias and response-cookie publication method."
+    },
+    {
+      "id": "SUPPORT-74A7A9EC5811",
+      "area": "SUPPORT",
+      "key": "tests/auth-callback-transport.test.ts",
+      "name": "tests/auth-callback-transport.test.ts",
+      "source": "tests/auth-callback-transport.test.ts",
+      "status": "NOT STARTED"
+    }
+  ],
+  "retainedRetirements": [
+    {
+      "id": "SERVICE-86704CB6F260",
+      "name": "createRecoveryCookieExchange",
+      "replacement": "createPkceCookieExchange",
+      "note": "The prior createRecoveryCookieExchange alias and response-cookie publication method are retired. Preserve alias ID; existing createPkceCookieExchange receives a newly discovered distinct service record."
+    }
+  ],
+  "applicationSourceFreeze": "2af81377bad3f91849d6edac7823b2cf352ba4c3"
+}

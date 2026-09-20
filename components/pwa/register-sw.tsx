@@ -24,42 +24,72 @@ export function RegisterSW() {
       return;
     }
 
+    const serviceWorker = navigator.serviceWorker;
+    let disposed = false;
+    let started = false;
     let reg: ServiceWorkerRegistration | undefined;
-    const markUpdate = () => setUpdateReady(true);
+    const cleanups: Array<() => void> = [];
+    const watchedWorkers = new Set<ServiceWorker>();
+    const markUpdate = () => { if (!disposed) setUpdateReady(true); };
+
+    const watchInstalling = (installing: ServiceWorker | null) => {
+      if (!installing || watchedWorkers.has(installing)) return;
+      watchedWorkers.add(installing);
+      const onStateChange = () => {
+        // "installed" + an existing controller ⇒ this is an UPDATE, not the
+        // first install, so prompt the user to reload.
+        if (installing.state === 'installed' && serviceWorker.controller) markUpdate();
+      };
+      installing.addEventListener('statechange', onStateChange);
+      cleanups.push(() => installing.removeEventListener('statechange', onStateChange));
+      onStateChange();
+    };
 
     const watch = (r: ServiceWorkerRegistration) => {
+      // Registration can finish after navigation or a StrictMode teardown.
+      // The persistent worker belongs to the browser; these observers belong
+      // only to the still-mounted component.
+      if (disposed) return;
       reg = r;
       // A worker already waiting (installed while the page was closed).
-      if (r.waiting && navigator.serviceWorker.controller) markUpdate();
-      r.addEventListener('updatefound', () => {
-        const installing = r.installing;
-        if (!installing) return;
-        installing.addEventListener('statechange', () => {
-          // "installed" + an existing controller ⇒ this is an UPDATE, not the
-          // first install, so prompt the user to reload.
-          if (installing.state === 'installed' && navigator.serviceWorker.controller) markUpdate();
-        });
-      });
+      if (r.waiting && serviceWorker.controller) markUpdate();
+      const onUpdateFound = () => watchInstalling(r.installing);
+      r.addEventListener('updatefound', onUpdateFound);
+      cleanups.push(() => r.removeEventListener('updatefound', onUpdateFound));
+      // updatefound may have fired before register() resolved.
+      onUpdateFound();
     };
 
     const onLoad = () => {
-      navigator.serviceWorker.register('/sw.js').then(watch).catch(() => {});
+      if (disposed || started) return;
+      started = true;
+      // A denied/unavailable worker must not break the online application or
+      // display a false update prompt. A later mount can attempt registration.
+      serviceWorker.register('/sw.js').then(watch).catch(() => {});
     };
-    window.addEventListener('load', onLoad);
+    // Sign-in and client navigation can mount AppFrame after window.load.
+    if (document.readyState === 'complete') onLoad();
+    else window.addEventListener('load', onLoad, { once: true });
 
     // The SW self-activates (skipWaiting), so a controller swap while the page is
     // open also signals a fresh version is now in charge.
-    const hadController = !!navigator.serviceWorker.controller;
-    const onControllerChange = () => { if (hadController) markUpdate(); };
-    navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
+    let hadController = !!serviceWorker.controller;
+    const onControllerChange = () => {
+      if (hadController) markUpdate();
+      hadController = !!serviceWorker.controller;
+    };
+    serviceWorker.addEventListener('controllerchange', onControllerChange);
 
     // Poll for updates hourly so a long-lived tab isn't left on stale code.
     const poll = window.setInterval(() => reg?.update().catch(() => {}), 60 * 60 * 1000);
 
     return () => {
+      disposed = true;
       window.removeEventListener('load', onLoad);
-      navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
+      serviceWorker.removeEventListener('controllerchange', onControllerChange);
       window.clearInterval(poll);
+      cleanups.forEach((cleanup) => cleanup());
+      watchedWorkers.clear();
     };
   }, []);
 

@@ -2,27 +2,51 @@
 // Server-side push dispatch. Delivers a notification payload to all of a user's
 // registered devices:
 //   - Web Push (installed PWA): real delivery via the `web-push` library + VAPID.
-//   - Native (iOS/Android via Capacitor): delivered through FCM/APNs. A real FCM
-//     HTTP send is wired when FCM credentials are present; otherwise native sends
-//     are honestly skipped (reported, never silently "succeeded").
+//   - Android (Capacitor): FCM HTTP v1 with service-account authorization.
+//   - iOS (Capacitor): APNs HTTP/2 with token-based authorization.
+//     Unconfigured native sends remain pending and are reported as skipped.
 //
 // Stale Web Push subscriptions (404/410) are pruned automatically.
 import 'server-only';
 import webpush from 'web-push';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
+import { nativePushConfigured, sendNativePush } from '@/lib/server/native-push';
 import { childrenBlockedOn } from '@/lib/notifications/child-channels';
-import { readBoundedResponseText } from '@/lib/server/bounded-response-body';
-import { isDeliverablePushEndpoint } from '@/lib/server/push-endpoint';
 
 type DB = SupabaseClient<Database>;
 
-export type PushPayload = { title: string; body?: string | null; url?: string | null };
-export type PushResult = { sent: number; skipped: number; failed: number; pruned: number };
-
-/** How long a totally-failed push keeps being retried before it is given up on. */
+/**
+ * How long a notification that reached NOBODY keeps being retried before it is
+ * given up on and stamped.
+ *
+ * Restored after a merge that took main's `push.ts` wholesale. main's rule —
+ * `if (r.failed > 0 || r.skipped > 0) continue;` — is kept exactly as its
+ * retry CONDITION (it is the more generous one: a partial delivery is retried
+ * rather than written off), but it had no age bound at all, so one permanently
+ * dead endpoint kept the row pending and re-buzzed the healthy devices on every
+ * scan, for ever, with nothing in the logs ever saying the notification had not
+ * been delivered. The scan is two-hourly, so this window is roughly a dozen
+ * attempts before the row is stamped and the failure is logged at error level.
+ */
 export const PUSH_RETRY_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+import { isDeliverablePushEndpoint } from '@/lib/server/push-endpoint';
+
+export type PushPayload = { title: string; body?: string | null; url?: string | null };
+export type PushResult = {
+  sent: number; skipped: number; failed: number; pruned: number;
+  /** Recipient opt-outs, distinct from unconfigured/skipped device attempts. */
+  withheld: number;
+};
+
+/** Raised only while resolving consent, before this batch can contact a provider. */
+export class PushPreparationError extends Error {
+  constructor(error: unknown) {
+    super(error instanceof Error ? error.message : 'Push preference read failed.');
+    this.name = 'PushPreparationError';
+  }
+}
 
 let vapidReady: boolean | null = null;
 function ensureVapid(): boolean {
@@ -43,84 +67,18 @@ function ensureVapid(): boolean {
   return vapidReady;
 }
 
-/** True when native push (FCM) is configured; APNs is delivered via FCM too. */
-function fcmConfigured(): boolean {
-  return Boolean(process.env.FCM_SERVER_KEY);
-}
-
-/**
- * The outcome of one FCM send.
- *
- * `res.ok` is NOT the answer. FCM's legacy endpoint reports a dead token in the
- * response BODY with HTTP 200:
- *
- *     { "failure": 1, "results": [{ "error": "NotRegistered" }] }
- *
- * so reading the status alone counted an uninstalled app's token as **sent**,
- * forever, on every notification. `unregistered` is the half that lets the
- * caller prune, exactly as the web branch already does for a 404/410.
- * Audit C1-S6-04.
- */
-type FcmOutcome = { ok: true } | { ok: false; unregistered: boolean; reason: string };
-
-/** FCM's names for "this token will never work again". */
-const FCM_DEAD_TOKEN = new Set(['NotRegistered', 'InvalidRegistration', 'MismatchSenderId']);
-
-async function sendFcm(token: string, payload: PushPayload): Promise<FcmOutcome> {
-  const key = process.env.FCM_SERVER_KEY;
-  if (!key) return { ok: false, unregistered: false, reason: 'not_configured' };
-  // FCM legacy HTTP send. Swap for HTTP v1 (service-account OAuth) in production.
-  const res = await fetchWithDeadline('https://fcm.googleapis.com/fcm/send', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `key=${key}` },
-    body: JSON.stringify({
-      to: token,
-      notification: { title: payload.title, body: payload.body ?? '' },
-      data: { url: payload.url ?? '/dashboard' },
-    }),
-  }, 15_000);
-  // A 401 here is the server key, not the token: never prune a device because
-  // our own credential is wrong.
-  if (!res.ok) return { ok: false, unregistered: false, reason: `http_${res.status}` };
-
-  const bounded = await readBoundedResponseText(res, 64 * 1024);
-  if (!bounded.ok) return { ok: false, unregistered: false, reason: 'oversized_response' };
-  let parsed: { failure?: number; results?: { error?: string }[] };
-  try {
-    parsed = JSON.parse(bounded.text) as typeof parsed;
-  } catch {
-    // A 200 we cannot read is not evidence of a dead token either way.
-    return { ok: false, unregistered: false, reason: 'unparsable_response' };
-  }
-  const error = parsed.results?.[0]?.error;
-  if (!parsed.failure && !error) return { ok: true };
-  return { ok: false, unregistered: !!error && FCM_DEAD_TOKEN.has(error), reason: error ?? 'unknown' };
-}
-
-/**
- * Send a push to every enabled device for a user. Returns delivery counts.
- * Requires a service-role client to read across users when called from cron.
- */
-export async function sendPushToUser(supabase: DB, userId: string, payload: PushPayload): Promise<PushResult> {
-  const result: PushResult = { sent: 0, skipped: 0, failed: 0, pruned: 0 };
+/** Private transport: callers must first resolve the recipient's push consent. */
+async function sendPushDevicesToUser(supabase: DB, userId: string, payload: PushPayload): Promise<PushResult> {
+  const result: PushResult = { sent: 0, skipped: 0, failed: 0, pruned: 0, withheld: 0 };
   const { data: devices, error: devicesError } = await supabase
     .from('push_devices')
     .select('id, platform, provider, endpoint, p256dh, auth, token')
     .eq('user_id', userId)
     .eq('enabled', true);
-  // A roster we could not READ is not a person with no phone. This error was
-  // discarded, so a refused read fell into the `!devices` branch below and
-  // answered an all-zero PushResult — no sends, and no failures either. That is
-  // the one shape `dispatchPendingPushes` reads as success: `failed === 0`
-  // means "something got through", so it stamped `pushed_at`, which is the only
-  // column the pending query filters on and which nothing ever clears. One blip
-  // on this table marked a whole batch delivered without sending any of it, and
-  // the cron answered 200 because it had nothing to count. Counting it as a
-  // failed send puts the row back on the retry path the caller already has.
+
   if (devicesError) {
-    console.error('[push] device roster read failed', { userId, error: devicesError });
-    result.failed++;
-    return result;
+    console.error('[push] device read failed', { userId, error: devicesError });
+    return { ...result, failed: 1 };
   }
 
   if (!devices || devices.length === 0) return result;
@@ -145,6 +103,7 @@ export async function sendPushToUser(supabase: DB, userId: string, payload: Push
           await webpush.sendNotification(
             { endpoint: d.endpoint, keys: { p256dh: d.p256dh, auth: d.auth } },
             body,
+            { timeout: 15_000 },
           );
           result.sent++;
         } catch (err: unknown) {
@@ -168,59 +127,104 @@ export async function sendPushToUser(supabase: DB, userId: string, payload: Push
             result.failed++;
           }
         }
-      } else {
-        // Native FCM/APNs. Held to the same standard as the web branch above:
-        // a token FCM calls dead is pruned, and `pruned` still only counts a
-        // delete that landed. Without this, an uninstalled app was retried on
-        // every notification forever — and, because FCM reports a dead token
-        // with HTTP 200, counted as SENT each time. Audit C1-S6-04.
-        if (!fcmConfigured() || !d.token) { result.skipped++; continue; }
-        const outcome = await sendFcm(d.token, payload);
-        if (outcome.ok) {
-          result.sent++;
-        } else if (outcome.unregistered) {
+      } else if (d.provider === 'fcm' || d.provider === 'apns') {
+        if (!d.token) { result.skipped++; continue; }
+        const outcome = await sendNativePush(d.provider, d.token, payload);
+        if (outcome === 'sent') result.sent++;
+        else if (outcome === 'unconfigured') result.skipped++;
+        else if (outcome === 'unregistered') {
           const { error: pruneError } = await supabase.from('push_devices').delete().eq('id', d.id);
-          if (pruneError) {
-            console.error('[push] dead native device could not be pruned', { deviceId: d.id, reason: outcome.reason }, pruneError);
-            result.failed++;
-          } else {
-            result.pruned++;
-          }
-        } else {
-          console.error('[push] native send failed', { deviceId: d.id, reason: outcome.reason });
-          result.failed++;
-        }
-      }
-    } catch (err) {
-      // A counted failure with no cause is an operator staring at a number.
-      // Audit C1-S6-05.
-      console.error('[push] device send threw', { deviceId: d.id, provider: d.provider }, err);
+          if (pruneError) result.failed++;
+          else result.pruned++;
+        } else result.failed++;
+      } else result.failed++;
+    } catch {
       result.failed++;
     }
   }
   return result;
 }
 
-/** Fan out a payload to many users (e.g. a whole family). */
-export async function sendPushToUsers(supabase: DB, userIds: string[], payload: PushPayload): Promise<PushResult> {
-  const totals: PushResult = { sent: 0, skipped: 0, failed: 0, pruned: 0 };
+/** Batch consent is mandatory for every public sender, including marketing/test pushes. */
+async function blockedPushRecipients(supabase: DB, userIds: string[]): Promise<Set<string>> {
+  const candidates = [...new Set(userIds.filter(Boolean))];
+  const blocked = new Set<string>();
+  // Bound generated IN URLs. Resolve every chunk before any provider send, so
+  // a failed later permission read cannot partially deliver an unchecked batch.
+  for (let offset = 0; offset < candidates.length; offset += 200) {
+    const batch = candidates.slice(offset, offset + 200);
+    for (const id of await childrenBlockedOn(supabase, 'push', batch)) blocked.add(id);
+    const { data: preferences, error } = await supabase.from('user_preferences')
+      .select('user_id, push_enabled').in('user_id', batch);
+    if (error) {
+      console.error('[push] preference read failed', { error });
+      throw new Error('Push preference read failed.');
+    }
+    for (const preference of preferences ?? []) {
+      if (preference.push_enabled === false) blocked.add(preference.user_id);
+    }
+  }
+  return blocked;
+}
+
+/** Private fanout for a batch whose permission reads have already succeeded. */
+async function sendPermittedPushes(supabase: DB, userIds: string[], payload: PushPayload): Promise<PushResult> {
+  const totals: PushResult = { sent: 0, skipped: 0, failed: 0, pruned: 0, withheld: 0 };
   for (const uid of [...new Set(userIds)]) {
-    const r = await sendPushToUser(supabase, uid, payload);
+    const r = await sendPushDevicesToUser(supabase, uid, payload);
     totals.sent += r.sent; totals.skipped += r.skipped; totals.failed += r.failed; totals.pruned += r.pruned;
   }
   return totals;
 }
 
+/** Send only after recipient and parental push settings can be read and permit delivery. */
+export async function sendPushToUser(supabase: DB, userId: string, payload: PushPayload): Promise<PushResult> {
+  return sendPushToUsers(supabase, [userId], payload);
+}
+
+/** Fan out with one consent resolution for the complete batch. Read failures throw before any send. */
+export async function sendPushToUsers(supabase: DB, userIds: string[], payload: PushPayload): Promise<PushResult> {
+  const candidates = [...new Set(userIds.filter(Boolean))];
+  let blocked: Set<string>;
+  try { blocked = await blockedPushRecipients(supabase, candidates); }
+  catch (error) { throw new PushPreparationError(error); }
+  const allowed = candidates.filter(id => !blocked.has(id));
+  const result = await sendPermittedPushes(supabase, allowed, payload);
+  result.withheld = candidates.length - allowed.length;
+  return result;
+}
+
 export function pushConfigured(): { web: boolean; native: boolean } {
-  return { web: ensureVapid(), native: fcmConfigured() };
+  const native = nativePushConfigured();
+  return { web: ensureVapid(), native: native.fcm || native.apns };
+}
+
+type PushCursor = { version: 1; createdAt: string; id: string };
+
+function parsePushCursor(value: unknown): PushCursor | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const cursor = value as Record<string, unknown>;
+  // Keep PostgreSQL's fractional-second precision: Date.toISOString() would
+  // truncate microseconds and revisit/skip rows at the page boundary.
+  if (cursor.version !== 1 || typeof cursor.createdAt !== 'string'
+    || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(cursor.createdAt)
+    || !Number.isFinite(Date.parse(cursor.createdAt)) || typeof cursor.id !== 'string'
+    || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cursor.id)) return null;
+  return { version: 1, createdAt: cursor.createdAt, id: cursor.id };
 }
 
 /**
  * Deliver pushes for notification rows that are DUE (`send_at` has passed) and
- * haven't been pushed yet (pushed_at is null), then stamp pushed_at so they're
- * never pushed twice. Whole-family notifications (user_id null) fan out to every
+ * haven't been resolved yet (pushed_at is null), then stamp successful or
+ * deliberately withheld notifications. Whole-family notifications fan out to every
  * active member. Call after the notification engine runs (cron + on-demand).
- * Idempotent.
+ * Failed or unconfigured delivery stays pending for retry. Partial delivery or
+ * an acknowledgement failure can repeat a successful send; this column alone
+ * does not provide a per-device delivery receipt or a distributed worker claim.
+ * A service-only app_settings cursor advances through stable created_at/id
+ * pages, then wraps, so permanently failing devices cannot monopolize the
+ * oldest batch. Global and family-scoped scans keep separate progress. The
+ * cursor records traversal, never successful delivery or an exclusive claim.
  *
  * Push tracks its own pushed_at (separate from the email digest's sent_at) so a
  * notification can be both pushed AND emailed in the same cron run.
@@ -239,24 +243,72 @@ export async function dispatchPendingPushes(
   supabase: DB,
   opts: { familyId?: string; limit?: number; now?: Date } = {},
 ): Promise<{ notifications: number; result: PushResult }> {
-  let q = supabase
-    .from('notifications')
-    .select('id, family_id, user_id, title, body, related_type, related_id, created_at')
-    .is('pushed_at', null)
-    .lte('send_at', (opts.now ?? new Date()).toISOString())
-    .order('created_at', { ascending: true })
-    .limit(opts.limit ?? 200);
-  if (opts.familyId) q = q.eq('family_id', opts.familyId);
-  const { data: rows, error: rowsError } = await q;
-  // Fail closed on the pending-push read: a swallowed error would return "0
-  // notifications" indistinguishable from a genuinely empty queue, silently
-  // dropping every push. The caller (cron / on-demand) counts a thrown dispatch
-  // failure, so this surfaces instead of hiding.
-  if (rowsError) {
-    console.error('[push] pending-push read failed', { familyId: opts.familyId ?? null, error: rowsError });
-    throw new Error('Pending-push read failed.');
+  const limit = opts.limit ?? 200;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw new Error('Push batch limit must be an integer from 1 to 200.');
+  const cursorKey = `push_dispatch_cursor:v1:${opts.familyId ? `family:${opts.familyId}` : 'global'}`;
+  const { data: stored, error: cursorReadError } = await supabase.from('app_settings')
+    .select('value').eq('key', cursorKey).maybeSingle();
+  if (cursorReadError) throw new Error('Push cursor read failed.');
+  const cursor = stored ? parsePushCursor(stored.value) : null;
+  if (stored && !cursor) throw new Error('Push cursor is invalid.');
+  const dueAt = (opts.now ?? new Date()).toISOString();
+  async function page(size: number, wrap = false) {
+    let q = supabase.from('notifications')
+      .select('id, family_id, user_id, title, body, related_type, related_id, created_at')
+      .is('pushed_at', null).lte('send_at', dueAt)
+      .order('created_at', { ascending: true }).order('id', { ascending: true }).limit(size);
+    if (opts.familyId) q = q.eq('family_id', opts.familyId);
+    if (cursor) {
+      // Strictly validated timestamp/UUID values cannot inject filter syntax.
+      q = q.or(`created_at.${wrap ? 'lt' : 'gt'}.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.${wrap ? 'lte' : 'gt'}.${cursor.id})`);
+    }
+    const { data, error } = await q;
+    if (error) {
+      console.error('[push] pending-push read failed', { familyId: opts.familyId ?? null, error });
+      throw new Error('Pending-push read failed.');
+    }
+    return data ?? [];
   }
-  if (!rows || rows.length === 0) return { notifications: 0, result: { sent: 0, skipped: 0, failed: 0, pruned: 0 } };
+  const rows = await page(limit);
+  if (cursor && rows.length < limit) rows.push(...await page(limit - rows.length, true));
+  if (rows.length === 0) return { notifications: 0, result: { sent: 0, skipped: 0, failed: 0, pruned: 0, withheld: 0 } };
+  const last = rows[rows.length - 1];
+  const nextCursor = parsePushCursor({ version: 1, createdAt: last.created_at, id: last.id });
+  if (!nextCursor) throw new Error('Push notification cursor fields are invalid.');
+  // Save progress before any external send. A write failure sends nothing;
+  // a later delivery failure stays pending and is revisited on wrap-around.
+  //
+  // Once a cursor exists the write is a compare-and-set against the value THIS
+  // run read, which is what stops two overlapping workers delivering the same
+  // batch. The plain upsert took the last writer, so both advanced the cursor,
+  // both kept their rows, and every device in the batch buzzed twice. The loser
+  // now matches no row and returns having sent nothing; the winner owns the batch.
+  //
+  // The very first run for a scope has no cursor to compare against and still
+  // upserts. Two workers racing that one batch remains possible exactly once per
+  // scope, before any cursor exists; after that the guard holds.
+  const stamp = new Date().toISOString();
+  if (stored) {
+    const { data: claimed, error: claimError } = await supabase.from('app_settings')
+      .update({ value: nextCursor, updated_at: stamp })
+      .eq('key', cursorKey).eq('value', stored.value as never)
+      .select('key').maybeSingle();
+    if (claimError) throw new Error('Push cursor write failed.');
+    if (claimed?.key !== cursorKey) {
+      // Lost the claim: another worker advanced the cursor after this run read
+      // it, so it owns these rows. Send nothing rather than deliver them twice.
+      // Distinct from an unconfirmed write below — here a missing row is the
+      // expected answer for the loser, not an unverified write to assume away.
+      return { notifications: 0, result: { sent: 0, skipped: 0, failed: 0, pruned: 0, withheld: 0 } };
+    }
+  } else {
+    const { data: saved, error: cursorWriteError } = await supabase.from('app_settings')
+      .upsert({ key: cursorKey, value: nextCursor, updated_at: stamp }, { onConflict: 'key' })
+      .select('key').maybeSingle();
+    // No prior value to compare against, so a missing row here is an unconfirmed
+    // write. Nothing may be sent on the strength of one.
+    if (cursorWriteError || saved?.key !== cursorKey) throw new Error('Push cursor write failed.');
+  }
 
   // Cache family member user ids for whole-family notifications.
   const familyMembers = new Map<string, string[]>();
@@ -267,9 +319,10 @@ export async function dispatchPendingPushes(
       .select('user_id')
       .eq('family_id', familyId)
       .eq('is_active', true);
-    // Degrade (skip this family's fan-out) but log — a broken member read would
-    // otherwise silently drop whole-family pushes with no signal.
-    if (error) console.error('[push] family_members read failed for fan-out', { familyId, error });
+    if (error) {
+      console.error('[push] family_members read failed for fan-out', { familyId, error });
+      throw new Error('Push recipient read failed.');
+    }
     const ids = (data ?? []).map((m) => m.user_id).filter((id): id is string => Boolean(id));
     familyMembers.set(familyId, ids);
     return ids;
@@ -285,56 +338,51 @@ export async function dispatchPendingPushes(
     if (n.user_id) candidates.add(n.user_id);
     else for (const id of await membersOf(n.family_id)) candidates.add(id);
   }
-  const pushBlocked = await childrenBlockedOn(supabase, 'push', [...candidates]);
+  const pushBlocked = await blockedPushRecipients(supabase, [...candidates]);
 
-  const totals: PushResult = { sent: 0, skipped: 0, failed: 0, pruned: 0 };
+  const totals: PushResult = { sent: 0, skipped: 0, failed: 0, pruned: 0, withheld: 0 };
   for (const n of rows) {
-    const addressed = n.user_id ? [n.user_id] : await membersOf(n.family_id);
+    const addressed = n.user_id ? [n.user_id] : [...new Set(await membersOf(n.family_id))];
     const recipients = addressed.filter((id) => !pushBlocked.has(id));
     // Still stamped below even when everyone was filtered out: the notification
     // was handled, and leaving `pushed_at` null would re-consider it every run.
     const url = n.related_type === 'social' ? '/dashboard/social' : '/dashboard/notifications';
-    const r = await sendPushToUsers(supabase, recipients, { title: n.title, body: n.body, url });
+    const r = await sendPermittedPushes(supabase, recipients, { title: n.title, body: n.body, url });
     totals.sent += r.sent; totals.skipped += r.skipped; totals.failed += r.failed; totals.pruned += r.pruned;
-
-    // A failed send is not a delivery. `pushed_at` is the ONLY thing the pending
-    // query filters on, nothing ever clears it, and there is no retry — so
-    // stamping after a failure dropped the notification permanently. The cron
-    // route already answers 502 on `failed > 0`, which made the failure visible
-    // and still left it unrecoverable: the run went red and the row said
-    // delivered, and the row is what the next run reads.
-    //
-    // Retry ONLY when nothing got through at all (`sent` and `pruned` both 0 and
-    // something failed). A partial success must still stamp: those devices have
-    // the notification, and re-sending would buzz them a second time. Telling
-    // partial from total is the most this can do without per-device delivery
-    // state, which is a schema change — see F-001 in finalaudit.md for why a new
-    // migration cannot reach production today.
-    //
-    // Bounded by age so a permanently broken endpoint cannot retry forever: the
-    // scan is two-hourly, so this is roughly a dozen attempts before giving up.
-    const nothingGotThrough = r.failed > 0 && r.sent === 0 && r.pruned === 0;
-    // A row we cannot date is treated as brand new rather than as expired: the
-    // failure mode of the first is one extra attempt, of the second a silently
-    // dropped notification.
+    totals.withheld += addressed.length - recipients.length;
+    // Missing credentials/invalid registration are not intentional opt-outs.
+    // Keep the row pending so a later healthy run can deliver it — but only
+    // inside the retry window, so a permanently broken endpoint cannot hold the
+    // row pending for ever (and re-buzz the devices that DID receive it on
+    // every scan). A row whose date is unreadable is treated as brand new
+    // rather than expired: the cost of the first is one extra attempt, of the
+    // second a silently dropped notification.
+    const incomplete = r.failed > 0 || r.skipped > 0;
     const createdMs = new Date(n.created_at ?? '').getTime();
     const ageMs = Number.isNaN(createdMs) ? 0 : (opts.now ?? new Date()).getTime() - createdMs;
-    const retryable = nothingGotThrough && ageMs < PUSH_RETRY_WINDOW_MS;
-    if (retryable) {
-      console.warn('[push] every send failed; leaving pushed_at null to retry', {
-        notificationId: n.id, failed: r.failed, ageMs,
+    // The window bounds genuine delivery FAILURES only. A `skipped` row was not
+    // refused by a provider — it is missing VAPID/FCM/APNs configuration, or a
+    // device with no credentials, and that is an operator problem which gets
+    // repaired; a dead endpoint does not. Expiring those too would silently
+    // drop every notification raised during a misconfiguration, and nothing is
+    // being sent meanwhile, so none of them can be buzzing anyone twice.
+    const expired = r.failed > 0 && ageMs >= PUSH_RETRY_WINDOW_MS;
+    if (incomplete && !expired) {
+      console.warn('[push] delivery incomplete; leaving pushed_at null to retry', {
+        notificationId: n.id, failed: r.failed, skipped: r.skipped, ageMs,
       });
       continue;
     }
-    if (nothingGotThrough) {
-      console.error('[push] giving up after the retry window; notification never delivered', {
-        notificationId: n.id, failed: r.failed, ageMs,
+    if (incomplete) {
+      console.error('[push] giving up after the retry window; notification never fully delivered', {
+        notificationId: n.id, failed: r.failed, skipped: r.skipped, ageMs,
       });
     }
-    // Stamp pushed_at so this notification isn't pushed again next run. If the
-    // stamp is silently lost the same push re-fires every cron — log it.
     const { error: stampError } = await supabase.from('notifications').update({ pushed_at: new Date().toISOString() }).eq('id', n.id);
-    if (stampError) console.error('[push] pushed_at stamp failed', { notificationId: n.id, error: stampError });
+    if (stampError) {
+      totals.failed++;
+      console.error('[push] pushed_at stamp failed', { notificationId: n.id, error: stampError });
+    }
   }
   return { notifications: rows.length, result: totals };
 }

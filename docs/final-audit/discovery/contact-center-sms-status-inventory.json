@@ -1,0 +1,821 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-12T21:00:40.309Z",
+  "baselineCommit": "5648447cff4352d6f3dde6a5460a0eb0983dbc5c",
+  "sourceCommit": "302c908bba8899f97c8b0ce51e0a285422fb6e8c",
+  "methodology": [
+    "Exact committed changed blobs, excluding audit documents. Source SHA256 is over Git blob bytes.",
+    "Exported declarations and static environment names parsed using installed TypeScript. No secret values.",
+    "New page routes are derived without route-group segments. Discovery does not establish workflow completion."
+  ],
+  "counts": {
+    "files": 21,
+    "newFiles": 4,
+    "production": 6,
+    "tests": 8,
+    "addedExportedFunctions": 2,
+    "newPageRoutes": []
+  },
+  "files": [
+    {
+      "path": "app/api/contact-center/sms/route.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "e9e65c9eb5275b7a5f7d0f677d8fcbb53db635b555633bbf55861d4643893530",
+      "sourceSha256": "bbcd5404c29d074f00923f9efa52b08c0b13a08755cfdbc3c0bd3c2ee29754e7",
+      "bytes": 9846,
+      "baselineExportedSymbols": [
+        {
+          "name": "runtime",
+          "line": 18,
+          "kind": "value"
+        },
+        {
+          "name": "dynamic",
+          "line": 19,
+          "kind": "value"
+        },
+        {
+          "name": "POST",
+          "line": 33,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "runtime",
+          "line": 18,
+          "kind": "value"
+        },
+        {
+          "name": "dynamic",
+          "line": 19,
+          "kind": "value"
+        },
+        {
+          "name": "POST",
+          "line": 33,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [
+        "NEXT_PUBLIC_APP_URL",
+        "NODE_ENV",
+        "TWILIO_ACCOUNT_SID"
+      ],
+      "addedEnvironmentNames": [
+        "TWILIO_ACCOUNT_SID"
+      ],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": "/api/contact-center/sms",
+      "httpMethods": [
+        "POST"
+      ],
+      "existingMasterIds": [
+        "API-387E2B30BCD7",
+        "FLOW-D82B9410319A",
+        "CALLBACK-24807E48E6E6",
+        "INT-001",
+        "INT-002",
+        "OPS-INT-007",
+        "SMS-001"
+      ]
+    },
+    {
+      "path": "app/api/contact-center/sms/status/route.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "2c32b5fb02d77af28308212d04615c6c2d04075327499fb534677d664353ef6c",
+      "bytes": 4372,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [
+        {
+          "name": "runtime",
+          "line": 7,
+          "kind": "value"
+        },
+        {
+          "name": "dynamic",
+          "line": 8,
+          "kind": "value"
+        },
+        {
+          "name": "POST",
+          "line": 19,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "POST",
+          "line": 19,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [
+        "NEXT_PUBLIC_APP_URL",
+        "TWILIO_ACCOUNT_SID"
+      ],
+      "addedEnvironmentNames": [
+        "NEXT_PUBLIC_APP_URL",
+        "TWILIO_ACCOUNT_SID"
+      ],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": "/api/contact-center/sms/status",
+      "httpMethods": [
+        "POST"
+      ],
+      "existingMasterIds": []
+    },
+    {
+      "path": "components/modules/contact-center-module.tsx",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "e32295c2421bcc8121d3452d1486bb9075940a5f22682ef2a20d3192a40e9e78",
+      "sourceSha256": "ff49840052dc3ee48a613e6791c07b3684c11883d32296009f7aaa5c92423260",
+      "bytes": 14950,
+      "baselineExportedSymbols": [
+        {
+          "name": "ContactCenterModule",
+          "line": 46,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "ContactCenterModule",
+          "line": 52,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "COMPONENT-F2F9908ECC39",
+        "CONTROL-35755D1779E0",
+        "CONTROL-8A433A5EB547",
+        "CONTROL-9DDE4642F54C",
+        "CONTROL-F21B24576A3B",
+        "CONTROL-F8F8C24D54E9",
+        "CONTROL-6FA749283ECE",
+        "CONTROL-509413DAD018",
+        "CONTROL-65722FE51488",
+        "CONTROL-E9ACBDDCA8D1",
+        "CONTROL-1C2298E2BF9B",
+        "CONTROL-41208E513D9A",
+        "CONTROL-387EE936D56F"
+      ]
+    },
+    {
+      "path": "lib/contact-center/sms-reply-status.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "015851a67349f817b87ab6c2614de8f3452e3f2f052a459c99518960f13a1457",
+      "sourceSha256": "5498145131c25e0e304690d14b846a54f7c51e258feec54094de86847cbd1a98",
+      "bytes": 8489,
+      "baselineExportedSymbols": [
+        {
+          "name": "SmsReplyStatus",
+          "line": 10,
+          "kind": "type"
+        },
+        {
+          "name": "readSmsReplyStatuses",
+          "line": 62,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "SmsReplyStatus",
+          "line": 10,
+          "kind": "type"
+        },
+        {
+          "name": "readSmsReplyStatuses",
+          "line": 63,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "LIBRARY-F0E055BB4D37",
+        "SERVICE-59D864A5ECA3"
+      ]
+    },
+    {
+      "path": "lib/contact-center/sms-reply.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "9cf9f8382a86926bb1b3ed44328009cf6b2d06abd1ed5287913fb740174a19f1",
+      "sourceSha256": "694fb9c767a735e99d0521b47bc207acc0a75c662c7633ff3e3b561a37055b72",
+      "bytes": 28352,
+      "baselineExportedSymbols": [
+        {
+          "name": "SmsReplyBinding",
+          "line": 44,
+          "kind": "type"
+        },
+        {
+          "name": "SmsReplyCandidate",
+          "line": 45,
+          "kind": "type"
+        },
+        {
+          "name": "SmsReplyReceipt",
+          "line": 46,
+          "kind": "type"
+        },
+        {
+          "name": "SMS_REPLY_COLUMNS",
+          "line": 47,
+          "kind": "value"
+        },
+        {
+          "name": "SmsReplyUnavailableError",
+          "line": 50,
+          "kind": "class"
+        },
+        {
+          "name": "smsReplyReceiptId",
+          "line": 63,
+          "kind": "function"
+        },
+        {
+          "name": "smsReplyOutboundId",
+          "line": 64,
+          "kind": "function"
+        },
+        {
+          "name": "smsReplyOutboundRef",
+          "line": 65,
+          "kind": "function"
+        },
+        {
+          "name": "validateSmsReplyReceipt",
+          "line": 75,
+          "kind": "function"
+        },
+        {
+          "name": "readSmsReply",
+          "line": 132,
+          "kind": "function"
+        },
+        {
+          "name": "prepareSmsReply",
+          "line": 159,
+          "kind": "function"
+        },
+        {
+          "name": "attachSmsReply",
+          "line": 222,
+          "kind": "function"
+        },
+        {
+          "name": "reserveSmsReply",
+          "line": 271,
+          "kind": "function"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "SmsReplyBinding",
+          "line": 49,
+          "kind": "type"
+        },
+        {
+          "name": "SmsReplyCandidate",
+          "line": 50,
+          "kind": "type"
+        },
+        {
+          "name": "SmsReplyDelivery",
+          "line": 51,
+          "kind": "type"
+        },
+        {
+          "name": "SmsReplyDeliveryStatus",
+          "line": 52,
+          "kind": "type"
+        },
+        {
+          "name": "SmsReplyReceipt",
+          "line": 53,
+          "kind": "type"
+        },
+        {
+          "name": "SMS_REPLY_COLUMNS",
+          "line": 57,
+          "kind": "value"
+        },
+        {
+          "name": "SmsReplyUnavailableError",
+          "line": 60,
+          "kind": "class"
+        },
+        {
+          "name": "SmsReplyInvalidDeliveryError",
+          "line": 63,
+          "kind": "class"
+        },
+        {
+          "name": "smsReplyReceiptId",
+          "line": 77,
+          "kind": "function"
+        },
+        {
+          "name": "smsReplyOutboundId",
+          "line": 78,
+          "kind": "function"
+        },
+        {
+          "name": "smsReplyOutboundRef",
+          "line": 79,
+          "kind": "function"
+        },
+        {
+          "name": "validateSmsReplyReceipt",
+          "line": 89,
+          "kind": "function"
+        },
+        {
+          "name": "readSmsReply",
+          "line": 149,
+          "kind": "function"
+        },
+        {
+          "name": "prepareSmsReply",
+          "line": 178,
+          "kind": "function"
+        },
+        {
+          "name": "attachSmsReply",
+          "line": 242,
+          "kind": "function"
+        },
+        {
+          "name": "reserveSmsReply",
+          "line": 292,
+          "kind": "function"
+        },
+        {
+          "name": "SmsReplyDeliveryInput",
+          "line": 327,
+          "kind": "type"
+        },
+        {
+          "name": "recordSmsReplyDelivery",
+          "line": 352,
+          "kind": "function"
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "recordSmsReplyDelivery",
+          "line": 352,
+          "kind": "function"
+        }
+      ],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "LIBRARY-6D75A91D859B",
+        "SERVICE-7E7A8343706D",
+        "SERVICE-75FFA88DEC4A",
+        "SERVICE-0CE48F76F7B9",
+        "SERVICE-CFEA96036DA0",
+        "SERVICE-8D18854C1FA6",
+        "SERVICE-E20B1C0C21E0",
+        "SERVICE-FCEC4C48B45D",
+        "SERVICE-CEBCD095E1DD"
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/de-DE.json",
+      "kind": "locale",
+      "isNew": false,
+      "baselineSha256": "f3477e92d30612c32d0182f484e418af24ceeb62c03324c5595a003ed3f215d0",
+      "sourceSha256": "7d60836b80a10b2e7b10405f3c83b2cdcdc76a7812053221a651a26157fb48aa",
+      "bytes": 989235,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-88F1E3670486"
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/en-US.json",
+      "kind": "locale",
+      "isNew": false,
+      "baselineSha256": "6d9caaf758dca59991c6981a88f043a5ed8b4ca0fcc3bc7bf04cbf5b4e971e40",
+      "sourceSha256": "bc2d092cd8eec8f7c4324c56f8bf7cf0513417093ff380d6879be10b891deaa5",
+      "bytes": 883007,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-C346841E8649"
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/es-ES.json",
+      "kind": "locale",
+      "isNew": false,
+      "baselineSha256": "af1140c379d7ff4ce65db10199ad7a59ba963edceedc2fe8ee7be19275c177ca",
+      "sourceSha256": "8e1bb53bf68340026fff69f1883ae98cbd041dd0aa8ac1371b56013a636e1db7",
+      "bytes": 972703,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-DC666FC0E80F"
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/fr-FR.json",
+      "kind": "locale",
+      "isNew": false,
+      "baselineSha256": "34bd97c2b0b7a42556447bc9f6c83f82749eccbd7e6b4b057265201468376e4d",
+      "sourceSha256": "68c68484a292027756674045f975a0d17564bd6b3363858f471873d2972e1658",
+      "bytes": 998218,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-24D39068AF0B"
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/it-IT.json",
+      "kind": "locale",
+      "isNew": false,
+      "baselineSha256": "ac21b494f6274137cb515b1ca2966fc92d3f98960ed68eba07479026048fd56c",
+      "sourceSha256": "b8f77a26cc85791cbd996b4199819e09885a0c31450eb6f95a7d8f524e7eabbe",
+      "bytes": 960392,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-9E9B391BC4E5"
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/nl-NL.json",
+      "kind": "locale",
+      "isNew": false,
+      "baselineSha256": "a1d555e9a2ce68557d3e361daaa8cf68fcc92719d6f497a97490fd70df6c0ac5",
+      "sourceSha256": "9dc2a96df6fa02e1d2ff6345764fc30c95929fd19038690492bc054c6fb74b33",
+      "bytes": 944681,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-6F4C71EB2624"
+      ]
+    },
+    {
+      "path": "lib/i18n/messages/pt-PT.json",
+      "kind": "locale",
+      "isNew": false,
+      "baselineSha256": "a697ce0952dd4f696f860970c6d4021f8cac3dc3894993d542075df1c2c78619",
+      "sourceSha256": "d5ecb475f3682e1a810fc3e11743e78d2cf1dfcb2b2ab9295a04d4c776e7e499",
+      "bytes": 974758,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-091D62717E32"
+      ]
+    },
+    {
+      "path": "middleware.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "c0ccaace6e0fb8e49c3a1ccaa878b358300b161e44594a54d40f642a025d8c83",
+      "sourceSha256": "6a8ce661284ef4a852f0ca56a9c954f70e2f0ef1268dd2ca29720d7683a39c7d",
+      "bytes": 11347,
+      "baselineExportedSymbols": [
+        {
+          "name": "middleware",
+          "line": 85,
+          "kind": "function"
+        },
+        {
+          "name": "config",
+          "line": 215,
+          "kind": "value"
+        }
+      ],
+      "exportedSymbols": [
+        {
+          "name": "middleware",
+          "line": 86,
+          "kind": "function"
+        },
+        {
+          "name": "config",
+          "line": 216,
+          "kind": "value"
+        }
+      ],
+      "addedExportedFunctions": [],
+      "environmentNames": [
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        "NEXT_PUBLIC_SUPABASE_URL"
+      ],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-3C67EB27B539",
+        "INT-001",
+        "FLOW-E72FA1A98568"
+      ]
+    },
+    {
+      "path": "tests/contact-center-callback-boundary.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "f92f41d57854a485b093421c37d010130d64fe6157b51a70f7417ba6edc8b6d6",
+      "sourceSha256": "129ac6a5f926ca63ce227c4d0b8b0fdc29ddab8194b18f5928cc3995d469525d",
+      "bytes": 24810,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-97318DE46875"
+      ]
+    },
+    {
+      "path": "tests/contact-center-sms-delivery.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "68a2c4e0f8613536d2f1956c011b85871363da30d457fc56a737dcd08d93650b",
+      "bytes": 22689,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "tests/contact-center-sms-reply-display.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "64f17eaf15ecd86a057916cf69ad23e796ecde687639733564f2a6fdd1b0064a",
+      "sourceSha256": "f3e28c722d21a56ed654786d45bfc3e7020638332cd579cbd714ac6d3f8729d9",
+      "bytes": 7306,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-77C90065803C"
+      ]
+    },
+    {
+      "path": "tests/contact-center-sms-reply-status.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "6f10b9b84a9cdecba8e031ccb3472f700cf89c5c2b6b923d69078ef226d3249e",
+      "sourceSha256": "7cf497fa83ead139f1e7582abadad059bc4eda07a87bb821a61ab8d04e7040e0",
+      "bytes": 14061,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-1CC87D898C7B"
+      ]
+    },
+    {
+      "path": "tests/contact-center-sms-status.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "699dba79cffa21156cb392887acd03ef1b6194e01e106fa74bb94f1a0a6b8ed7",
+      "bytes": 15657,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "tests/contact-center-urgent-durability-repro.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "9ef99a178acacad879339c0d4c885771d9773b18502246e19afb38e1e9c6323f",
+      "sourceSha256": "d4ac5c73578bb2ee04a3ba10c6233a1333a868f88cfce3ac5eacab46c1408ccd",
+      "bytes": 11263,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-A2BC9AB7B5A4"
+      ]
+    },
+    {
+      "path": "tests/e2e/contact-center-sms-delivery.spec.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "0e14a9e621037804117a9ce75292f7b8f300b719213cfdeee941c0902ee31913",
+      "bytes": 11517,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [
+        "ANTHROPIC_API_KEY",
+        "E2E_DURABLE_SESSION",
+        "NEXT_PUBLIC_SUPABASE_URL",
+        "OPENAI_API_KEY",
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "TWILIO_ACCOUNT_SID",
+        "TWILIO_AUTH_TOKEN"
+      ],
+      "addedEnvironmentNames": [
+        "ANTHROPIC_API_KEY",
+        "E2E_DURABLE_SESSION",
+        "NEXT_PUBLIC_SUPABASE_URL",
+        "OPENAI_API_KEY",
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "TWILIO_ACCOUNT_SID",
+        "TWILIO_AUTH_TOKEN"
+      ],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": []
+    },
+    {
+      "path": "tests/e2e/contact-center-sms-reservation.spec.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "42b7ae883ac11e42fed23f510e3265ea07c1681ece8c59b23064cade28ce3c86",
+      "sourceSha256": "8d2b4dc0b7188a508bcc7dda7e06d3a4148f20304fb8ac8d008363d93d8cec17",
+      "bytes": 6732,
+      "baselineExportedSymbols": [],
+      "exportedSymbols": [],
+      "addedExportedFunctions": [],
+      "environmentNames": [
+        "ANTHROPIC_API_KEY",
+        "E2E_DURABLE_SESSION",
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        "NEXT_PUBLIC_SUPABASE_URL",
+        "OPENAI_API_KEY",
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "TWILIO_ACCOUNT_SID",
+        "TWILIO_AUTH_TOKEN"
+      ],
+      "addedEnvironmentNames": [],
+      "controls": [],
+      "databaseTables": [],
+      "databaseFunctions": [],
+      "pageRoute": null,
+      "apiRoute": null,
+      "httpMethods": [],
+      "existingMasterIds": [
+        "SUPPORT-ABE163EE3BE6"
+      ]
+    }
+  ]
+}

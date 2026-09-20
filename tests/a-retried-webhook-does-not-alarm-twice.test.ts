@@ -28,6 +28,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { at } from './helpers/source-order';
 
 const read = (p: string) => readFileSync(join(process.cwd(), p), 'utf8');
 
@@ -47,35 +48,60 @@ const CLAIMING_WEBHOOKS = [
 ];
 
 describe('a retried webhook does not alarm the family twice (C1-S7-04)', () => {
-  it.each(ESCALATING_WEBHOOKS)('%s gates its escalation on a NEW delivery', (path) => {
+  // HOW THIS INVARIANT IS NOW ENFORCED. The original fix was a boolean:
+  // `if (filed.inserted && shouldNotifyFamily(...))` around an inline
+  // `sendSms(channel.forward_to_phone, ...)`. The parallel session replaced
+  // that with a durable urgent-delivery RECEIPT, and the receipt is strictly
+  // stronger: `filed.inserted` is a read-then-act race (two concurrent retries
+  // can both observe "new" before either files), whereas the receipt CLAIMS the
+  // dispatch — a compare-and-set into phase `dispatching` — before it can send.
+  // So this guard now pins the receipt path, and additionally pins the ABSENCE
+  // of the inline send, because re-adding one would restore the original defect
+  // beside a mechanism that looks like it is preventing it.
+  it.each(ESCALATING_WEBHOOKS)('%s escalates only through the urgent-delivery receipt', (path) => {
     const src = read(path);
-    // The escalation must be reached only when this delivery was not already
-    // filed. Matching the guard on the same condition as the send, rather than
-    // "the file mentions filed.inserted somewhere", is the point: every one of
-    // these files already mentioned it — for the planner.
-    const sends = /sendSms\(channel\.forward_to_phone/.test(src);
-    expect(sends, `${path} no longer escalates; update this list`).toBe(true);
     expect(
-      /if \(filed\.inserted && shouldNotifyFamily\(/.test(src),
-      `${path} sends an urgent SMS without checking the delivery was new — a Twilio retry alarms the family again`,
-    ).toBe(true);
+      /sendSms\(channel[?.]*\.forward_to_phone/.test(src),
+      `${path} escalates inline again; a Twilio retry alarms the family twice`,
+    ).toBe(false);
+    expect(src, `${path} no longer escalates at all; update this list`).toContain('attemptUrgentDelivery(');
+    // The receipt id comes from the de-duplicating intake, so a replay reaches
+    // the SAME receipt rather than opening a second escalation.
+    expect(src).toContain('captureInboundWithUrgency(');
+    expect(src).toMatch(/filed\.urgentReceiptId\s*\?\s*await attemptUrgentDelivery\(/);
   });
 
-  it.each(ESCALATING_WEBHOOKS)('%s writes its urgent notification under the same guard', (path) => {
+  it.each(ESCALATING_WEBHOOKS)('%s writes no urgent notification of its own', (path) => {
     const src = read(path);
-    // The notification row and the SMS are the same event. If the insert drifts
-    // outside the guard the family's bell rings twice even when the SMS does not.
-    const guardAt = src.indexOf('if (filed.inserted && shouldNotifyFamily(');
-    const insertAt = src.indexOf("from('notifications').insert(");
-    if (insertAt === -1) return; // email notifies by its own path
-    expect(guardAt, `${path} lost its escalation guard`).toBeGreaterThan(-1);
-    expect(insertAt, `${path} inserts the urgent notification outside the new-delivery guard`).toBeGreaterThan(guardAt);
+    // The notification row and the SMS are the same event, and both now belong
+    // to the receipt (`ensureNotification`). A direct insert here would ring the
+    // family's bell on every retry even while the SMS stayed correctly claimed.
+    expect(
+      /from\('notifications'\)\.insert\(/.test(src),
+      `${path} inserts an urgent notification outside the receipt`,
+    ).toBe(false);
+  });
+
+  it('the receipt only dispatches from a claimed queue slot', () => {
+    // This is where the idempotency actually lives now, so it is asserted here
+    // rather than taken on trust from the routes above.
+    const src = read('lib/contact-center/urgent-delivery.ts');
+    // Anything already dispatching is never re-sent.
+    expect(src).toContain("if (receipt.outputs.phase === 'dispatching')");
+    // Only a queued receipt proceeds; every other phase returns before the send.
+    expect(src).toContain("if (receipt.outputs.phase !== 'queued')");
+    // And the claim is a transition, taken BEFORE the provider call.
+    const claimAt = at(src, "phase: 'dispatching'");
+    expect(claimAt).toBeLessThan(at(src, 'await sendSmsWithReceipt('));
+    expect(src).toContain('if (!claimed) return');
   });
 
   it.each(CLAIMING_WEBHOOKS)('%s still claims its callback before acting', (path) => {
     // The other half of the rule, pinned so the guardian routes cannot quietly
-    // lose it: these have no `filed.inserted` to fall back on.
-    expect(read(path)).toMatch(/claimGuardianCallback\(/);
+    // lose it: these have no filed-once intake to fall back on. The voicemail
+    // route claims through its own `claimGuardianVoicemail`, and the signed SMS
+    // route through the leased `receiveGuardianSms` processor; both are claims.
+    expect(read(path)).toMatch(/claimGuardianCallback\(|claimGuardianVoicemail\(|receiveGuardianSms\(/);
   });
 
   it('the de-duplicating read still reports whether it inserted', () => {

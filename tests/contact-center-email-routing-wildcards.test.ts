@@ -25,7 +25,10 @@ function captureIlikePattern() {
       select: () => ({
         ilike: (column: string, pattern: string) => {
           seen.push({ column, pattern });
-          return { maybeSingle: async () => ({ data: null, error: null }) };
+          return { limit: (count: number) => {
+            expect(count).toBe(2);
+            return { maybeSingle: async () => ({ data: null, error: null }) };
+          } };
         },
       }),
     }),

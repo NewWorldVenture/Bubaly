@@ -17,11 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Read from .nvmrc rather than pinning a floating major here. `node-version: 22`
-      # let the runner drift within 22.x independently of contributors, which is
-      # how a runtime-sensitive test came to pass in CI and fail locally on
-      # 22.22.2 — the suite's result depended on which patch each machine had.
-      # One file now decides it for CI, nvm and `engines`.
+      # Keep CI and local verification on the same declared Node release.
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
@@ -281,6 +277,56 @@ jobs:
         env:
           CI: '1'
 
+      - name: Configure disposable Auth redirects and phone test codes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('supabase/config.toml')
+          source = path.read_text()
+          original = '''[auth]
+          enable_signup = true
+          site_url = "http://localhost:3000"
+          additional_redirect_urls = ["http://localhost:3000/auth/callback"]'''
+          replacement = '''[auth]
+          enable_signup = true
+          site_url = "http://localhost:3107"
+          additional_redirect_urls = ["http://localhost:3107/**"]
+
+          [auth.sms]
+          enable_signup = true
+          enable_confirmations = true
+          max_frequency = "1s"
+
+          [auth.sms.test_otp]
+          12025550101 = "483921"
+          12025550102 = "483922"
+          12025550103 = "483923"
+
+          [auth.sms.twilio]
+          enabled = true
+          account_sid = "ci-only-unused-account"
+          message_service_sid = "ci-only-unused-service"
+          auth_token = "ci-only-unused-token"
+
+          [auth.hook.send_sms]
+          enabled = true
+          uri = "http://127.0.0.1:1/ci-sms-must-not-send"
+          secrets = "v1,whsec_Y2ktb25seS1waG9uZS1ob29rLXNlY3JldC0wMDAwMDA="'''
+          # This checkout and GoTrue are disposable. Keep the product defaults,
+          # other sections and credentials untouched; stop if their shape drifts.
+          assert source.count(original) == 1, 'Unexpected disposable Auth config'
+          # CLI 2.109.1 disables phone login unless a provider flag is enabled,
+          # even with test_otp or a send_sms hook. These invalid placeholders
+          # satisfy that local config check. Keep the hook mandatory: fixed
+          # codes bypass it; every other number fails at closed container
+          # loopback. GoTrue 2.192.0 returns hook errors without provider fallback.
+          assert '[auth.sms' not in source, 'Unexpected disposable SMS config'
+          assert '[auth.hook' not in source, 'Unexpected disposable Auth hook config'
+          path.write_text(source.replace(original, replacement, 1))
+          PY
+
       - name: Start isolated Supabase
         run: supabase start
 
@@ -345,6 +391,15 @@ jobs:
           E2E_AUTHENTICATED: '1'
           # Each durable-session test owns a unique local-only account/household.
           E2E_DURABLE_SESSION: '1'
+          # Synthetic, disposable-only input shared by the child fixture/server.
+          CHILD_LOGIN_SECRET: ci-only-child-pin-session-fixture
+          # Signed Guardian ingress against the disposable server only. A token
+          # alone cannot configure outbound Twilio; the fixture refuses real keys.
+          TWILIO_AUTH_TOKEN: ci-only-guardian-signed-ingress-fixture
+          # Authenticates only the disposable server's recovery job.
+          CRON_SECRET: ci-only-guardian-recovery-fixture
+          ANTHROPIC_API_KEY: ''
+          OPENAI_API_KEY: ''
           NEXT_PUBLIC_SITE_URL: http://localhost:3107
           E2E_AUTH_EMAIL: bubaly-e2e-${{ github.run_id }}-${{ github.run_attempt }}@example.test
           E2E_AUTH_PASSWORD: Bubaly-E2E-2026!

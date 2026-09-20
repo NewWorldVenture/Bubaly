@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { at } from './helpers/source-order';
 
 /**
  * Audit C3-S5-01.
@@ -57,8 +58,28 @@ describe('the social OAuth token store is reachable only by the service role', (
       // policy.ts names the table precisely to forbid it, and the generated
       // types name every table there is. Neither is access.
       if (f.endsWith('lib/ai/context/policy.ts') || f.endsWith('lib/database.types.ts')) return false;
+      // The parallel session's X token store is THE service-role gateway this
+      // guard's name asks for, not a breach of it — checked below rather than
+      // waved through, so it cannot later swap in a user-scoped client.
+      if (f.endsWith('lib/social/account-tokens.ts')) return false;
       return /from\(['"`]social_account_tokens['"`]\)/.test(readFileSync(f, 'utf8'));
     });
     expect(offenders, 'reach this table through the service-role client only').toEqual([]);
+  });
+
+  it('the one gateway that does touch it uses the service role and checks the caller first', () => {
+    const gateway = readFileSync('lib/social/account-tokens.ts', 'utf8');
+    // Service role only: an anon/user-scoped client here would put a credential
+    // store behind RLS policies the table deliberately does not have.
+    expect(gateway).toContain("import { createServiceClient } from '@/lib/supabase/server'");
+    expect(gateway).toMatch(/type Db = ReturnType<typeof createServiceClient>/);
+    expect(gateway, 'a browser client must never reach this table')
+      .not.toMatch(/from '@\/lib\/supabase\/client'/);
+    // Bypassing RLS is only safe if the module does the authorization itself.
+    expect(gateway).toContain('requireUserContext()');
+    expect(gateway).toContain('requireSocialPermission(');
+    const actor = gateway.slice(at(gateway, 'export async function requireXActor'));
+    expect(at(actor, 'requireUserContext()')).toBeLessThan(at(actor, 'requireSocialPermission('));
+    expect(actor.slice(0, at(actor, 'requireSocialPermission('))).toContain("xFailure('permissionDenied')");
   });
 });

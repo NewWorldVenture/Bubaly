@@ -322,7 +322,7 @@ describe('onboarding OAuth routes and Finish integration', () => {
       if (table === failedTable && !failed) {
         const method = table === 'sync_accounts' ? 'update' : 'upsert';
         const write = query[method].bind(query) as typeof query.upsert;
-        vi.spyOn(query, method).mockImplementation((value, options) => {
+        vi.spyOn(query, method).mockImplementation((value: Parameters<typeof query.upsert>[0], options?: Parameters<typeof query.upsert>[1] & Parameters<typeof query.update>[1]) => {
           if (failed || (table === 'onboarding_progress' && (value as { status?: string }).status !== 'completed')) return write(value, options);
           failed = true; throw new Error('required write unavailable');
         });

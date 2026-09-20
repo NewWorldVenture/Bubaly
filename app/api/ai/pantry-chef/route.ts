@@ -88,6 +88,12 @@ export async function POST(req: NextRequest) {
         .from('grocery_lists')
         .select('id')
         .eq('family_id', familyId)
+        // The OLDEST list is the one most likely to have been archived and
+        // replaced, so an unfiltered lookup files the whole shop where nobody
+        // looks. `grocery_lists` answers "archived" with two columns and only
+        // `archived_at` is ever written — ask both.
+        .eq('is_archived', false)
+        .is('archived_at', null)
         .order('created_at', { ascending: true })
         .limit(1)
         .maybeSingle();

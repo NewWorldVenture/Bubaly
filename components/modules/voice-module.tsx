@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Mic, MicOff, Sparkles, CheckSquare, StickyNote, CalendarPlus, ShoppingCart,
   Send, RotateCcw, Trash2, Info, Loader2,
@@ -9,7 +9,6 @@ import { useApp } from '@/components/app/app-context';
 import { useSpeechRecognition } from '@/lib/hooks/use-speech-recognition';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { settle } from '@/lib/supabase/settle';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
@@ -17,7 +16,7 @@ import { Textarea } from '@/components/ui/input';
 import { SkeletonList, ErrorState } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
 import { cn } from '@/lib/utils/cn';
-import { saveCapture, undoCapture, tableForKind } from '@/lib/capture/save';
+import { CaptureSaveError, saveCapture, undoCapture, tableForKind } from '@/lib/capture/save';
 import { useJourney } from '@/lib/analytics/use-journey';
 import { classifyVoiceCommand, describeRoute } from '@/lib/voice/command-router';
 import { recordVoiceCommand } from '@/lib/voice/history';
@@ -26,6 +25,7 @@ import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
 type VoiceCommand = Tables<'voice_commands'>;
+
 
 const KIND_META: Record<CaptureKind, { label: string; icon: typeof Mic; cls: string }> = {
   task: { label: 'Task', icon: CheckSquare, cls: 'text-emerald-300 bg-emerald-500/10 border-emerald-500/30' },
@@ -54,6 +54,11 @@ function ago(iso: string): string {
 }
 
 export function VoiceModule() {
+  const { familyId, userId } = useApp();
+  return <VoiceCaptureSession key={JSON.stringify([familyId, userId])} />;
+}
+
+function VoiceCaptureSession() {
   const tr = useTranslations();
   const { familyId, userId, selfMember } = useApp();
   const { success, error: toastError } = useToast();
@@ -61,10 +66,19 @@ export function VoiceModule() {
   const journey = useJourney('voice_command');
   const [text, setText] = useState('');
   const [running, setRunning] = useState(false);
+  const [uncertainHref, setUncertainHref] = useState<string | null>(null);
+  const operation = useRef({ mounted: true, pending: false, uncertain: false });
+  useEffect(() => {
+    const lifetime = operation.current;
+    lifetime.mounted = true;
+    return () => { lifetime.mounted = false; };
+  }, []);
 
   // Mirror the recognized transcript into the editable field so the user can
   // tweak before running (and so unsupported browsers can type instead).
-  useEffect(() => { if (speech.transcript) setText(speech.transcript); }, [speech.transcript]);
+  useEffect(() => {
+    if (speech.transcript && !operation.current.pending && !operation.current.uncertain) setText(speech.transcript);
+  }, [speech.transcript]);
 
   const { data: history, loading, error, refresh } = useRealtimeQuery<VoiceCommand>({
     table: 'voice_commands', familyId, deps: [familyId],
@@ -80,6 +94,7 @@ export function VoiceModule() {
   }, [text]);
 
   function toggleMic() {
+    if (!operation.current.mounted || operation.current.pending || operation.current.uncertain) return;
     if (speech.listening) { speech.stop(); return; }
     setText('');
     speech.reset();
@@ -88,54 +103,79 @@ export function VoiceModule() {
 
   async function run(commandText: string) {
     const raw = commandText.trim();
-    if (!raw || running) return;
-    if (speech.listening) speech.stop();
+    const lifetime = operation.current;
+    if (!raw || !lifetime.mounted || lifetime.pending || lifetime.uncertain) return;
+    lifetime.pending = true;
+    const isCurrent = () => lifetime.mounted && operation.current === lifetime && lifetime.pending;
     setRunning(true);
-    journey.start();
     const route = classifyVoiceCommand(raw);
-    if (!route.text) { setRunning(false); journey.abandon(); toastError("Didn't catch a command — try again."); return; }
-    const sb = createClient();
+    let sb: ReturnType<typeof createClient> | undefined;
     try {
+      if (speech.listening) speech.stop();
+      journey.start();
+      if (!route.text) { journey.abandon(); toastError("Didn't catch a command — try again."); return; }
+      sb = createClient();
       const res = await saveCapture(sb, {
-        kind: route.kind, text: route.text, familyId, userId, memberId: selfMember?.id ?? null,
+        kind: route.kind, text: route.text, familyId, userId, memberId: selfMember?.id ?? null, isCurrent,
       });
-      // Log the command to the family's voice history. Best-effort, but not
-      // SILENT: a history that quietly stops recording looks identical to a
-      // family that stopped using voice. (main's wording, kept — it says it
-      // better.) `recordVoiceCommand` cannot reject and logs a dropped row.
-      await recordVoiceCommand(sb, {
+      if (!isCurrent()) return;
+      // Log the command to the family's voice history (best-effort — a logging
+      // failure must not lose or delay the thing we just created). Best-effort
+      // is not SILENT: `recordVoiceCommand` cannot reject and logs a dropped
+      // row, so a history that stopped recording looks different from a family
+      // that stopped speaking.
+      void recordVoiceCommand(sb, {
         family_id: familyId, member_id: selfMember?.id ?? null, transcript: route.text,
         resolved_kind: route.kind, action_table: tableForKind(route.kind),
         action_count: res.count, status: 'routed', created_by: userId,
       });
+      if (!isCurrent()) return;
+      let undoState: 'ready' | 'pending' | 'done' | 'uncertain' = 'ready';
       success(
         `${describeRoute(route.kind)}${res.count > 1 ? ` · ${res.count} items` : ''}`,
-        { label: 'Undo', onClick: () => {
-          undoCapture(createClient(), res.undo).then(() => success(tr('voiceModule.undone'))).catch(() => toastError(tr('voiceModule.couldNotUndo')));
+        { label: 'Undo', onClick: async () => {
+          if (undoState !== 'ready') return;
+          undoState = 'pending';
+          try {
+            await undoCapture(createClient(), res.undo);
+            undoState = 'done';
+            success(tr('voiceModule.undone'));
+          } catch (error) {
+            undoState = error instanceof CaptureSaveError && error.outcome === 'uncertain' ? 'uncertain' : 'ready';
+            toastError(tr('voiceModule.couldNotUndo'));
+          }
         } },
       );
       journey.complete();
       setText('');
       speech.reset();
     } catch (err) {
+      if (!isCurrent() || (err instanceof CaptureSaveError && err.outcome === 'retired')) return;
+      if (err instanceof CaptureSaveError && err.outcome === 'uncertain') {
+        lifetime.uncertain = true;
+        setText(raw);
+        setUncertainHref(err.href);
+        toastError(tr('quickCapture.saveUncertain'));
+        return;
+      }
       journey.abandon();
       // TELL THE USER FIRST. This used to run after the history write, and
       // supabase-js rejects when the fetch fails — so with the network down,
       // which is the usual reason a command fails at all, the rejection escaped
       // this catch and the user was told nothing whatsoever. main reached the
-      // same defect from the other side, making the write non-rejecting with
-      // `settle`; both halves are kept, because the report should not sit
-      // downstream of a call that fails for the same reason EVEN IF that call
-      // is safe today.
+      // same defect from the other side, making the write non-rejecting; both
+      // halves are kept, because the report should not sit downstream of a call
+      // that fails for the same reason EVEN IF that call is safe today.
       toastError(describeDbError(err, tr('voiceModule.couldNotRunThatCommand')));
-      // Record the failed attempt so the history is honest. recordVoiceCommand
-      // cannot reject, so nothing below it can be lost either.
-      await recordVoiceCommand(sb, {
+      // Record the failed attempt so the history is honest. `sb` is guarded:
+      // `createClient()` itself can throw, and this catch also covers that.
+      if (sb) void recordVoiceCommand(sb, {
         family_id: familyId, member_id: selfMember?.id ?? null, transcript: raw,
         resolved_kind: route.kind, status: 'failed', created_by: userId,
       });
     } finally {
-      setRunning(false);
+      if (isCurrent()) setRunning(false);
+      lifetime.pending = false;
     }
   }
 
@@ -157,7 +197,7 @@ export function VoiceModule() {
         <div className="flex flex-col items-center gap-3 py-2">
           <button
             onClick={toggleMic}
-            disabled={!speech.supported}
+            disabled={!speech.supported || running || Boolean(uncertainHref)}
             aria-label={speech.listening ? 'Stop listening' : 'Start listening'}
             className={cn(
               'grid h-20 w-20 place-items-center rounded-full text-white shadow-glow transition active:scale-95 disabled:opacity-40',
@@ -175,6 +215,7 @@ export function VoiceModule() {
 
         <Textarea
           value={text}
+          disabled={running || Boolean(uncertainHref)}
           onChange={(e) => setText(e.target.value)}
           rows={2}
           placeholder={tr('voice.eGRemindMeToPack')}
@@ -197,18 +238,22 @@ export function VoiceModule() {
             })()}
           </div>
           <div className="flex items-center gap-2">
-            {text && <Button variant="ghost" onClick={() => { setText(''); speech.reset(); }} className="gap-1"><RotateCcw className="h-4 w-4" /> {tr('voice.clear')}</Button>}
-            <Button onClick={() => run(text)} disabled={!text.trim() || running} className="gap-1.5">
+            {text && <Button variant="ghost" disabled={running || Boolean(uncertainHref)} onClick={() => { setText(''); speech.reset(); }} className="gap-1"><RotateCcw className="h-4 w-4" /> {tr('voice.clear')}</Button>}
+            <Button onClick={() => run(text)} disabled={!text.trim() || running || Boolean(uncertainHref)} className="gap-1.5">
               {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} {tr('voice.runCommand')}
             </Button>
           </div>
         </div>
+        {uncertainHref && <p role="status" className="mt-3 text-sm text-muted">
+          {tr('quickCapture.saveUncertain')}{' '}
+          <a href={uncertainHref} className="underline">{tr('quickCapture.reviewCapture')}</a>
+        </p>}
       </div>
 
       {/* Examples */}
       <div className="mt-4 flex flex-wrap gap-2">
         {EXAMPLES.map((ex) => (
-          <button key={ex} onClick={() => setText(ex)}
+          <button key={ex} onClick={() => setText(ex)} disabled={running || Boolean(uncertainHref)}
             className="rounded-lg border border-border bg-surface/50 px-2.5 py-1 text-xs text-muted transition hover:bg-elevated hover:text-fg">
             {ex}
           </button>
@@ -246,7 +291,7 @@ export function VoiceModule() {
                       {failed ? 'Failed' : describeRoute(kind)}{c.action_count > 1 ? ` · ${c.action_count} items` : ''} · {ago(c.created_at)}
                     </p>
                   </div>
-                  <button onClick={() => run(c.transcript)} aria-label={tr('voice.runAgain')} title={tr('voice.runAgain')}
+                  <button onClick={() => run(c.transcript)} disabled={running || Boolean(uncertainHref)} aria-label={tr('voice.runAgain')} title={tr('voice.runAgain')}
                     className="rounded-lg p-1.5 text-muted transition hover:bg-elevated hover:text-brand-text"><RotateCcw className="h-4 w-4" /></button>
                   <button onClick={() => remove(c)} aria-label={tr('voice.remove')} title={tr('voice.remove')}
                     className="rounded-lg p-1.5 text-muted transition hover:bg-elevated hover:text-rose-400"><Trash2 className="h-4 w-4" /></button>

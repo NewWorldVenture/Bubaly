@@ -73,7 +73,7 @@ describe('both child-login lookups match on value, not pattern', () => {
   const create = readFileSync('app/(app)/family/child-login-actions.ts', 'utf8');
 
   it('resolves the account for sign-in with eq', () => {
-    expect(signIn).toContain(".from('child_logins').select('username').eq('username', username)");
+    expect(signIn).toContain(".from('child_logins').select('username,user_id').eq('username', username)");
     expect(signIn).not.toContain(".ilike('username'");
   });
 

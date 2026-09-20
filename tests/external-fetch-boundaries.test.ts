@@ -11,7 +11,7 @@ const serverFiles = [
   'lib/guardian/twilio.ts',
   'lib/marketing/send.ts',
   'lib/server/email.ts',
-  'lib/server/push.ts',
+  'lib/server/native-push.ts',
   'lib/sync/providers/google.ts',
   'lib/sync/providers/microsoft.ts',
   'lib/vacations/weather-fetch.ts',

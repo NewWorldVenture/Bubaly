@@ -198,6 +198,19 @@ describe('pantry preference', () => {
 });
 
 describe('merging', () => {
+  it.each([
+    ['1 cup', '1 cup', '1 cup + 1 cup'],
+    ['12 oz', '2 oz', '12 oz + 2 oz'],
+    [null, '1 cup', 'amount unspecified + 1 cup'],
+    ['1/2 cup', '1 1/2 cups', '1/2 cup + 1 1/2 cups'],
+  ])('preserves convergent requirements %s and %s', (first, second, expected) => {
+    const result = applySubstitutions([
+      { name: 'milk', quantity: first }, { name: 'whole milk', quantity: second },
+    ], { allergies: ['dairy'] });
+    expect(result.items).toEqual([{ name: 'oat milk', quantity: expected }]);
+    expect(result.substitutions).toHaveLength(2);
+  });
+
   it('two lines that become the same thing merge, keeping both quantities', () => {
     const result = applySubstitutions(
       [{ name: 'whole milk', quantity: '1 gal' }, { name: 'heavy cream', quantity: '1 cup' }],

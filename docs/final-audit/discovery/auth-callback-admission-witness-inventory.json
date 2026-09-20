@@ -1,0 +1,460 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-19T19:42:05.470Z",
+  "baselineCommit": "dc99dc83976e7b3d6270e51dcaf44060a7423d7c",
+  "applicationSourceFreeze": "ee0038989221edfaf148150f6e1dc28301f7f6bf",
+  "sourceTree": "d0adca170e65ca15ce48d678ce1d6ac1b2273ef6",
+  "methodology": [
+    "Exact Git blob bytes from the frozen pre-evidence application/index tree. Not a deployment or workflow PASS.",
+    "TypeScript AST discovery; permanent prior IDs/statuses are preserved and only new distinct source/export/test obligations are added.",
+    "Witness metadata only compares ownership. It has no MAC/TTL and is never authentication authority. AUTH-001/AUTH-002/AUTH-003 retain the workflow evidence.",
+    "Final source tree includes a four-case HTTP/Mailpit fixture and existing CI workflow redirect setup. All six application files remain identical to applicationSourceFreeze. Runtime hosted acceptance is pending; local tests do not execute the new fixture."
+  ],
+  "counts": {
+    "files": 15,
+    "newFiles": 5,
+    "production": 6,
+    "tests": 8,
+    "newPageRoutes": [],
+    "addedExportedFunctions": 7,
+    "newPermanentRecords": 12,
+    "support": 1
+  },
+  "files": [
+    {
+      "path": ".github/workflows/ci.yml",
+      "kind": "support",
+      "isNew": false,
+      "baselineSha256": "5df603ff46e9001cfbe571f202e06c6d723cd53a554842cb6d32d16852499c1e",
+      "sourceSha256": "0c200c0133884cb944910df07e339f7665090a1b1319d404747e9d9c9b5447e4",
+      "bytes": 18398,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "existingMasterIds": [
+        "DEPLOY-B803FCB7F17E"
+      ],
+      "newMasterIds": [],
+      "scope": "Disposable CI-only localhost:3107 Auth redirect setup. Product supabase/config.toml unchanged; no SQL."
+    },
+    {
+      "path": "app/(auth)/auth/complete/page.tsx",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "89d09588da2fc3285d1771abf57a07b0ab34bcc9f1f208829e75577f632ff383",
+      "sourceSha256": "6eef7457752fd53ffc57fa61c7328cf252718cbd789fee9ab1d8ae4b1a0a92ce",
+      "bytes": 2004,
+      "exportedFunctions": [
+        {
+          "name": "CallbackCompletionPage",
+          "line": 10
+        }
+      ],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "existingMasterIds": [],
+      "newMasterIds": []
+    },
+    {
+      "path": "app/auth/callback/route.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "56f3dda8d7883e6b9ebc5471fa489c44b916f1b69267d8995c5ec890a78934ba",
+      "sourceSha256": "3f375ad27563e1882855eb67705a1131c4db9d268800bd8237b0918261bac8b7",
+      "bytes": 1493,
+      "exportedFunctions": [
+        {
+          "name": "GET",
+          "line": 7
+        }
+      ],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "existingMasterIds": [
+        "ROLE-7394A5416880"
+      ],
+      "newMasterIds": []
+    },
+    {
+      "path": "components/auth/callback-completion.tsx",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "5de22cbbc45626d1f1e977a3135c5d79d5ee93ee46aac928ef75bf58d241e8b0",
+      "sourceSha256": "dd100c2f8e101650faca8791281900ac75ef1d8c11328ff9b26871efa0cd606c",
+      "bytes": 11164,
+      "exportedFunctions": [
+        {
+          "name": "CallbackCompletion",
+          "line": 47
+        }
+      ],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "existingMasterIds": [
+        "COMPONENT-798709A427DB"
+      ],
+      "newMasterIds": []
+    },
+    {
+      "path": "lib/auth/callback-client.ts",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "69f809469119aeff1d3033f9b0089f07e75c6ca16592a0f151f3e4fa574864a0",
+      "sourceSha256": "02344cc59baee3bdbb6731d75824efeb976137cc3429deb40af1725c56a02f68",
+      "bytes": 7833,
+      "exportedFunctions": [
+        {
+          "name": "captureCallbackOwnership",
+          "line": 49
+        },
+        {
+          "name": "isCallbackOwnershipCurrent",
+          "line": 57
+        },
+        {
+          "name": "assertAdmissionOwnership",
+          "line": 70
+        },
+        {
+          "name": "isAdoptedCallbackSessionCurrent",
+          "line": 89
+        },
+        {
+          "name": "callbackVerifierFingerprint",
+          "line": 93
+        },
+        {
+          "name": "adoptCallbackSession",
+          "line": 102
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "assertAdmissionOwnership",
+          "line": 70
+        }
+      ],
+      "removedExportedFunctions": [],
+      "existingMasterIds": [
+        "LIBRARY-09F9DBC855B8"
+      ],
+      "newMasterIds": [
+        "SERVICE-118DEFCC43F9"
+      ]
+    },
+    {
+      "path": "lib/auth/callback-witness-server.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "b4d904dbe081d7c79b6550131b0efd74c3a09f842ff0b724a9015b6a6b8c6e6b",
+      "bytes": 1641,
+      "exportedFunctions": [
+        {
+          "name": "captureCallbackAdmissionWitness",
+          "line": 8
+        },
+        {
+          "name": "captureCallbackRequestWitness",
+          "line": 24
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "captureCallbackAdmissionWitness",
+          "line": 8
+        },
+        {
+          "name": "captureCallbackRequestWitness",
+          "line": 24
+        }
+      ],
+      "removedExportedFunctions": [],
+      "existingMasterIds": [],
+      "newMasterIds": [
+        "LIBRARY-615C54B15D45",
+        "SERVICE-99FF286411D7",
+        "SERVICE-B27C32F0ADB8"
+      ]
+    },
+    {
+      "path": "lib/auth/callback-witness.ts",
+      "kind": "production-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "58d3e764b5e1e8c69c43e74435bafba98ac07bd80302ee397fcdbdb09029fd8c",
+      "bytes": 5176,
+      "exportedFunctions": [
+        {
+          "name": "parseCallbackAdmissionCookies",
+          "line": 14
+        },
+        {
+          "name": "callbackAdmissionMaterial",
+          "line": 44
+        },
+        {
+          "name": "encodeCallbackAdmissionWitness",
+          "line": 70
+        },
+        {
+          "name": "parseCallbackAdmissionWitness",
+          "line": 76
+        }
+      ],
+      "addedExportedFunctions": [
+        {
+          "name": "parseCallbackAdmissionCookies",
+          "line": 14
+        },
+        {
+          "name": "callbackAdmissionMaterial",
+          "line": 44
+        },
+        {
+          "name": "encodeCallbackAdmissionWitness",
+          "line": 70
+        },
+        {
+          "name": "parseCallbackAdmissionWitness",
+          "line": 76
+        }
+      ],
+      "removedExportedFunctions": [],
+      "existingMasterIds": [],
+      "newMasterIds": [
+        "LIBRARY-C52DA8D0705C",
+        "SERVICE-BD47B8FAA6AB",
+        "SERVICE-106CAC65B25F",
+        "SERVICE-E9929D170878",
+        "SERVICE-7600D41D12BC"
+      ]
+    },
+    {
+      "path": "tests/auth-callback-admission-witness.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "473df92d25b0b7411f405312115b7e09175e743fa0eaa9f7632c810add562af3",
+      "bytes": 9653,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "existingMasterIds": [],
+      "newMasterIds": [
+        "SUPPORT-DFABC196C99D"
+      ]
+    },
+    {
+      "path": "tests/auth-callback-completion-page.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "1376969934f71f8ec6f968078fc681a831fe04b8b9e6735fc63264404bcd27b7",
+      "sourceSha256": "30f62a980c77568d6aea3e9eb8266ad795278365797ae1b11de9046cd92195c7",
+      "bytes": 4570,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "existingMasterIds": [
+        "SUPPORT-3F1BD3465BEE"
+      ],
+      "newMasterIds": []
+    },
+    {
+      "path": "tests/auth-callback-witness.test.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "632e0ffb9b7cae67bd2b8ad521ca70f919215a4a0eba548e9149e8d9cf8db335",
+      "bytes": 4923,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "existingMasterIds": [],
+      "newMasterIds": [
+        "SUPPORT-593757D575E4"
+      ]
+    },
+    {
+      "path": "tests/auth-review-selection-routes.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "38488ae2c1aaa57306b8b7a05d770d9c67212b5f02818551695777fcc26549be",
+      "sourceSha256": "78da20f60a2433301b13c7bb90f9353bd7b3f0825a3876fbdcc8903cf55cb9a2",
+      "bytes": 14089,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "existingMasterIds": [
+        "SUPPORT-2D7E14C6D439"
+      ],
+      "newMasterIds": []
+    },
+    {
+      "path": "tests/e2e/callback-admission.spec.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "2d451541fe6d83c38295f6fd70163daec526e85273c7762c069ee4dd0541aa29",
+      "bytes": 17563,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "existingMasterIds": [],
+      "newMasterIds": [
+        "SUPPORT-B5476F3ECEA4"
+      ],
+      "acceptance": "Four cases discovered/typechecked/linted; actual HTTP/Mailpit execution pending hosted CI."
+    },
+    {
+      "path": "tests/e2e/callback-completion-ui.spec.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "efdeaf24c12465d1b55b43e98a11191052162c5765d1d664d7b0b9062b29db5e",
+      "sourceSha256": "643cc066c9f3a7282317c50f89771d59ac54ae297f4f5f04eacdb603ea2d1155",
+      "bytes": 31641,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "existingMasterIds": [
+        "SUPPORT-0F66F092FCD3"
+      ],
+      "newMasterIds": []
+    },
+    {
+      "path": "tests/e2e/password-session-ownership.spec.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "1537abdbb531e0309ca16b0b3a8c53ffd40aa4efca5b9f6a9578ff447fcaaa89",
+      "sourceSha256": "06f45c3bb0082a51816247d8e893bfb176847650bf309a9f6635700636c0c742",
+      "bytes": 59919,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "existingMasterIds": [
+        "SUPPORT-AF285E96F2C7"
+      ],
+      "newMasterIds": []
+    },
+    {
+      "path": "tests/middleware-recovery-session.test.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "d0629a96bc85fce1c4efa4dc3f969edc780768f9320d15b9d74eed478e4ebadf",
+      "sourceSha256": "3f1a3c9d02adca0bd565b102823d8697a954c277455d1798f347b4dbbcad9154",
+      "bytes": 4486,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "existingMasterIds": [
+        "SUPPORT-B9ACA2B99320"
+      ],
+      "newMasterIds": []
+    }
+  ],
+  "newRecords": [
+    {
+      "id": "SERVICE-118DEFCC43F9",
+      "area": "SERVICE",
+      "key": "lib/auth/callback-client.ts:assertAdmissionOwnership",
+      "name": "assertAdmissionOwnership",
+      "source": "lib/auth/callback-client.ts",
+      "status": "NOT STARTED",
+      "line": 70
+    },
+    {
+      "id": "LIBRARY-615C54B15D45",
+      "area": "LIBRARY",
+      "key": "lib/auth/callback-witness-server.ts",
+      "name": "lib/auth/callback-witness-server.ts",
+      "source": "lib/auth/callback-witness-server.ts",
+      "status": "NOT STARTED"
+    },
+    {
+      "id": "SERVICE-99FF286411D7",
+      "area": "SERVICE",
+      "key": "lib/auth/callback-witness-server.ts:captureCallbackAdmissionWitness",
+      "name": "captureCallbackAdmissionWitness",
+      "source": "lib/auth/callback-witness-server.ts",
+      "status": "NOT STARTED",
+      "line": 8
+    },
+    {
+      "id": "SERVICE-B27C32F0ADB8",
+      "area": "SERVICE",
+      "key": "lib/auth/callback-witness-server.ts:captureCallbackRequestWitness",
+      "name": "captureCallbackRequestWitness",
+      "source": "lib/auth/callback-witness-server.ts",
+      "status": "NOT STARTED",
+      "line": 24
+    },
+    {
+      "id": "LIBRARY-C52DA8D0705C",
+      "area": "LIBRARY",
+      "key": "lib/auth/callback-witness.ts",
+      "name": "lib/auth/callback-witness.ts",
+      "source": "lib/auth/callback-witness.ts",
+      "status": "NOT STARTED"
+    },
+    {
+      "id": "SERVICE-BD47B8FAA6AB",
+      "area": "SERVICE",
+      "key": "lib/auth/callback-witness.ts:parseCallbackAdmissionCookies",
+      "name": "parseCallbackAdmissionCookies",
+      "source": "lib/auth/callback-witness.ts",
+      "status": "NOT STARTED",
+      "line": 14
+    },
+    {
+      "id": "SERVICE-106CAC65B25F",
+      "area": "SERVICE",
+      "key": "lib/auth/callback-witness.ts:callbackAdmissionMaterial",
+      "name": "callbackAdmissionMaterial",
+      "source": "lib/auth/callback-witness.ts",
+      "status": "NOT STARTED",
+      "line": 44
+    },
+    {
+      "id": "SERVICE-E9929D170878",
+      "area": "SERVICE",
+      "key": "lib/auth/callback-witness.ts:encodeCallbackAdmissionWitness",
+      "name": "encodeCallbackAdmissionWitness",
+      "source": "lib/auth/callback-witness.ts",
+      "status": "NOT STARTED",
+      "line": 70
+    },
+    {
+      "id": "SERVICE-7600D41D12BC",
+      "area": "SERVICE",
+      "key": "lib/auth/callback-witness.ts:parseCallbackAdmissionWitness",
+      "name": "parseCallbackAdmissionWitness",
+      "source": "lib/auth/callback-witness.ts",
+      "status": "NOT STARTED",
+      "line": 76
+    },
+    {
+      "id": "SUPPORT-DFABC196C99D",
+      "area": "SUPPORT",
+      "key": "tests/auth-callback-admission-witness.test.ts",
+      "name": "tests/auth-callback-admission-witness.test.ts",
+      "source": "tests/auth-callback-admission-witness.test.ts",
+      "status": "NOT STARTED"
+    },
+    {
+      "id": "SUPPORT-593757D575E4",
+      "area": "SUPPORT",
+      "key": "tests/auth-callback-witness.test.ts",
+      "name": "tests/auth-callback-witness.test.ts",
+      "source": "tests/auth-callback-witness.test.ts",
+      "status": "NOT STARTED"
+    },
+    {
+      "id": "SUPPORT-B5476F3ECEA4",
+      "area": "SUPPORT",
+      "key": "tests/e2e/callback-admission.spec.ts",
+      "name": "tests/e2e/callback-admission.spec.ts",
+      "source": "tests/e2e/callback-admission.spec.ts",
+      "status": "NOT STARTED"
+    }
+  ]
+}

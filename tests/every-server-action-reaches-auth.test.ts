@@ -1,5 +1,5 @@
 // Every exported function in a 'use server' module is a POST endpoint, and this
-// asserts that each one reaches an authentication call — with six named
+// asserts that each one reaches an authentication call — with a short list of named
 // exceptions, each of which is public or pre-auth on purpose.
 //
 // The repository measured this once (439 exported actions, 9 reaching no auth)
@@ -54,6 +54,31 @@ const PUBLIC_BY_DESIGN: Record<string, string> = {
   'app/reviews/new/actions.ts::submitReviewAction': 'public review submission behind an unguessable token',
   'app/s/[slug]/actions.ts::submitResponseAction': 'public survey response behind an unguessable slug',
   'lib/i18n/actions.ts::setLocale': 'sets the locale cookie; touches no family data',
+  // Added by the parallel session's auth work. All five run BEFORE a session
+  // exists — that is the point of them — so no `requireUser`-shaped call can
+  // appear and this scan cannot credit them. They are not unauthenticated:
+  // each one's credential is the thing it was handed. CREDENTIAL_GATED below
+  // pins that, so "pre-auth" cannot quietly become "unchecked".
+  'app/(auth)/auth/complete/actions.ts::completeCallbackAction': 'completes a sign-in; the owned PKCE verifier IS the credential, and there is no session yet by definition',
+  'app/(auth)/auth/recovery/actions.ts::prepareRecoveryAction': 'password recovery before any session; the emailed implicit tokens are the credential',
+  'app/(auth)/auth/recovery/actions.ts::consumeRecoveryAction': 'password recovery; timing-safe compare of the handoff against the recovery cookie, then a grant verification',
+  'app/(auth)/auth/recovery/actions.ts::inspectRecoveryAction': 'password recovery; reads identity only after verifying the grant against the cookie token',
+  'app/(auth)/auth/recovery/actions.ts::saveRecoveryAction': 'password recovery; the grant plus the cookie token are verified inside updateRecoveryPassword before any write',
+};
+
+/**
+ * A pre-auth action is exempt from "reaches an auth call", NOT from having a
+ * credential. This table names the check each one must still reach. Without it
+ * the exception list above would be the only thing standing between a password
+ * change and an unauthenticated caller — an allow-list entry is a sentence in a
+ * test file, and sentences do not fail builds.
+ */
+const CREDENTIAL_GATED: Record<string, RegExp> = {
+  'app/(auth)/auth/complete/actions.ts::completeCallbackAction': /completeCallback\s*\(/,
+  'app/(auth)/auth/recovery/actions.ts::prepareRecoveryAction': /prepareImplicitRecovery\s*\(/,
+  'app/(auth)/auth/recovery/actions.ts::consumeRecoveryAction': /timingSafeEqual\s*\([\s\S]*?verifyRecoveryGrant\s*\(/,
+  'app/(auth)/auth/recovery/actions.ts::inspectRecoveryAction': /verifyRecoveryGrant\s*\(/,
+  'app/(auth)/auth/recovery/actions.ts::saveRecoveryAction': /updateRecoveryPassword\s*\(/,
 };
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -155,7 +180,7 @@ describe("every 'use server' export reaches an auth call", () => {
     expect(admin!.guarded, 'must be credited through the private assertSuperAdmin helper').toBe(true);
   });
 
-  it('leaves exactly the six that are public or pre-auth on purpose', () => {
+  it('leaves exactly the actions that are public or pre-auth on purpose', () => {
     const unguarded = actions.filter((a) => !a.guarded).map((a) => a.key).sort();
     expect(unguarded).toEqual(Object.keys(PUBLIC_BY_DESIGN).sort());
   });
@@ -164,5 +189,20 @@ describe("every 'use server' export reaches an auth call", () => {
     for (const [key, reason] of Object.entries(PUBLIC_BY_DESIGN)) {
       expect(reason.length, `${key} needs a reason a reviewer can weigh`).toBeGreaterThan(20);
     }
+  });
+
+  it('still requires a credential check in every pre-auth action that claims one', () => {
+    for (const [key, pattern] of Object.entries(CREDENTIAL_GATED)) {
+      const [rel, name] = key.split('::');
+      const src = readFileSync(join(process.cwd(), rel), 'utf8');
+      const start = src.indexOf(`export async function ${name}`);
+      expect(start, `${key} is listed as credential-gated but no longer exists`).toBeGreaterThan(-1);
+      const next = src.indexOf('\nexport ', start + 1);
+      const body = src.slice(start, next === -1 ? src.length : next);
+      expect(pattern.test(body), `${key} no longer reaches its credential check (${pattern})`).toBe(true);
+    }
+    // Every credential-gated action must also be a declared exception, so one
+    // cannot be quietly dropped from PUBLIC_BY_DESIGN and left only here.
+    for (const key of Object.keys(CREDENTIAL_GATED)) expect(PUBLIC_BY_DESIGN).toHaveProperty(key);
   });
 });

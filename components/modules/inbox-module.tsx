@@ -10,6 +10,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { settle } from '@/lib/supabase/settle';
 import { createReminderAction } from '@/app/(app)/dashboard/reminders/actions';
 import { newSubmissionId } from '@/lib/utils/submission-id';
 import { describeDbError } from '@/lib/supabase/errors';
@@ -119,7 +120,9 @@ export function InboxModule() {
   async function markRead(comm: Comm) {
     if (comm.status !== 'unread') return;
     const supabase = createClient();
-    await supabase.from('family_communications').update({ status: 'read' }).eq('id', comm.id);
+    const { error: readError } = await settle(
+      supabase.from('family_communications').update({ status: 'read' }).eq('id', comm.id));
+    if (readError) console.error('[inbox] read receipt write failed', { message: readError.message });
     void refreshComms();
   }
 
@@ -440,7 +443,12 @@ function CommDetail({ comm, familyId, userId, onClose, onArchive, onRefresh }: {
       status: 'replied',
     });
     if (!error) {
-      await supabase.from('family_communications').update({ status: 'replied' }).eq('id', comm.id);
+      // The toast below says the reply was logged to the thread. If this write
+      // is dropped the thread never moves to 'replied', and the sentence is
+      // wrong about the thing it is describing.
+      const { error: statusError } = await settle(
+        supabase.from('family_communications').update({ status: 'replied' }).eq('id', comm.id));
+      if (statusError) console.error('[inbox] reply status write failed', { message: statusError.message });
     }
     setSendingReply(false);
     if (error) { toastError(describeDbError(error)); return; }

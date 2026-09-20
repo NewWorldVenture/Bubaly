@@ -5,6 +5,7 @@ import { CalendarHeart, MapPin, Search, ExternalLink, Star, Clock, Navigation, S
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { settle } from '@/lib/supabase/settle';
 import { describeDbError } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Input, Select } from '@/components/ui/input';
@@ -123,11 +124,16 @@ export function WeekendModule() {
     if (error) toastError(describeDbError(error)); else { success(t('weekendModule.sourceAdded')); setFeedForm({ label: '', url: '', kind: 'ics' }); }
   }
   async function toggleFeed(f: Feed) {
-    await createClient().from('weekend_feeds').update({ is_active: !f.is_active }).eq('id', f.id);
+    const { error } = await settle(
+      createClient().from('weekend_feeds').update({ is_active: !f.is_active }).eq('id', f.id));
+    if (error) return toastError(describeDbError(error));
+    void refreshFeeds();
   }
   async function removeFeed(id: string) {
     if (!confirm(t('weekendModule.removeThisSource'))) return;
-    await createClient().from('weekend_feeds').delete().eq('id', id);
+    const { error } = await settle(createClient().from('weekend_feeds').delete().eq('id', id));
+    if (error) return toastError(describeDbError(error));
+    void refreshFeeds();
   }
 
   return (

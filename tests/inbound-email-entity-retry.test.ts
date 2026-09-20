@@ -6,7 +6,10 @@ const mocks = vi.hoisted(() => ({ admin: vi.fn(), submit: vi.fn(), sendEmail: vi
 vi.mock('@/lib/supabase/server', async (original) => ({ ...await original<typeof import('@/lib/supabase/server')>(), createServiceClient: mocks.admin }));
 vi.mock('@/lib/ai/runs/intake', () => ({ submitRequest: mocks.submit }));
 vi.mock('@/lib/server/email', () => ({ sendEmail: mocks.sendEmail }));
-vi.mock('@/lib/guardian/twilio', async (original) => ({ ...await original<typeof import('@/lib/guardian/twilio')>(), sendSms: mocks.sendSms }));
+vi.mock('@/lib/guardian/twilio', async (original) => ({ ...await original<typeof import('@/lib/guardian/twilio')>(), sendSms: mocks.sendSms,
+  isTwilioConfigured: () => true,
+  sendSmsWithReceipt: async (to: string, body: string) => { await mocks.sendSms(to, body); return { kind: 'accepted', messageSid: `SM${'1'.repeat(32)}`, providerStatus: 'queued' }; },
+}));
 vi.mock('@/lib/contact-center/concierge', async (original) => ({ ...await original<typeof import('@/lib/contact-center/concierge')>(), runConcierge: mocks.concierge }));
 const { POST } = await import('@/app/api/contact-center/email/route');
 let db: ReturnType<typeof createInMemorySupabase>;
@@ -19,7 +22,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv('CONTACT_CENTER_INBOUND_SECRET', 'secret');
   vi.spyOn(console, 'error').mockImplementation(() => {});
-  db = createInMemorySupabase({ defaults: { paperwork_items: { updated_at: '2026-09-09T12:00:00Z' }, family_inbox_messages: { ai_handled: false } } });
+  db = createInMemorySupabase({ uniques: { notifications: [['id']], ai_tool_calls: [['id'], ['family_id', 'idempotency_key']], family_inbox_messages: [['channel', 'provider_ref']] },
+    defaults: { paperwork_items: { updated_at: '2026-09-09T12:00:00Z' }, family_inbox_messages: { ai_handled: false } } });
   mocks.admin.mockReturnValue(db);
   mocks.concierge.mockResolvedValue({ intent: 'school', summary: 'Please sign', reply: 'Thank you', aiUsed: false });
   mocks.submit.mockResolvedValue({ ok: true, data: { requestId: 'request-1', runId: 'run-1', planId: null, outcome: 'plan', summary: 'Ready', redirect: null } });

@@ -1,0 +1,157 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-19T20:13:40.226Z",
+  "baselineCommit": "a70d27c48e46f40a5ad71f3aa3c4743f5047d174",
+  "applicationSourceFreeze": "1536752b12c9c87e4dfd63a748228810e33879b6",
+  "sourceTree": "1536752b12c9c87e4dfd63a748228810e33879b6",
+  "methodology": [
+    "Six shipping app/test files only; exact Git blob bytes from the source freeze. Initiation design and OAuth RED fixture are excluded.",
+    "TypeScript AST confirms no new exported functions or routes. Existing permanent IDs/statuses are preserved.",
+    "SEC-005 is the precise native credential-URL security obligation; AUTH-002 remains the broader authentication workflow. New test-file discovery remains NOT STARTED.",
+    "Local synthetic SSR/native and installed-SDK browser evidence is distinct from hosted successful-login and deployed SSR/native acceptance."
+  ],
+  "counts": {
+    "files": 6,
+    "newFiles": 1,
+    "production": 4,
+    "tests": 2,
+    "newPageRoutes": [],
+    "addedExportedFunctions": 0,
+    "newPermanentRecords": 2
+  },
+  "files": [
+    {
+      "path": "components/auth/kid-login-form.tsx",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "45b45fb0069efb964e7653f398fb576a7e11ccb820f76f51a89e0f266f6c6e38",
+      "sourceSha256": "2ac46ccff3639dccc6e79def2edd57bde5fdac78f57a9a41e789d4a888777a58",
+      "bytes": 6407,
+      "exportedFunctions": [
+        {
+          "name": "KidLoginForm",
+          "line": 15
+        }
+      ],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "existingMasterIds": [
+        "COMPONENT-8B7ECBCBD636",
+        "ROLE-8B7ECBCBD636"
+      ],
+      "newMasterIds": []
+    },
+    {
+      "path": "components/auth/login-form.tsx",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "6906ce2736aa03d8b17e629bbdba1a86681a7ad37b0df97002dac36da652f1c9",
+      "sourceSha256": "65d33eac605586ba2d0ec9b2e8c51e38390dc8ef1b12fcf67d8cf1fa28fc2875",
+      "bytes": 9378,
+      "exportedFunctions": [
+        {
+          "name": "LoginForm",
+          "line": 23
+        }
+      ],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "existingMasterIds": [
+        "COMPONENT-041133211BF5",
+        "ROLE-041133211BF5"
+      ],
+      "newMasterIds": [
+        "SEC-005"
+      ]
+    },
+    {
+      "path": "components/auth/recovery-form.tsx",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "3a9da4ff214a566d91e51d43c806523b1fe013f9f546a6b286b6b6ba80a8bf54",
+      "sourceSha256": "b1298d11de885da83ba65e72af4a542e1e3a452a22491d3e434d94dbd844fafa",
+      "bytes": 23347,
+      "exportedFunctions": [
+        {
+          "name": "RecoveryForm",
+          "line": 102
+        }
+      ],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "existingMasterIds": [
+        "SUPPORT-D18688096008"
+      ],
+      "newMasterIds": []
+    },
+    {
+      "path": "components/auth/signup-form.tsx",
+      "kind": "production-source",
+      "isNew": false,
+      "baselineSha256": "cb5b7c9759e30e3bff7a734729b0d40725973482f8d2ab4f26b2ff4677b83561",
+      "sourceSha256": "d95df03e7c139706a62011c5f43751eb56557c46cbb8be7997e4b6a335d8ed0e",
+      "bytes": 10978,
+      "exportedFunctions": [
+        {
+          "name": "SignupForm",
+          "line": 26
+        }
+      ],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "existingMasterIds": [
+        "COMPONENT-FF9788DC39FD",
+        "ROLE-FF9788DC39FD"
+      ],
+      "newMasterIds": []
+    },
+    {
+      "path": "tests/e2e/callback-admission.spec.ts",
+      "kind": "test-source",
+      "isNew": false,
+      "baselineSha256": "6d1348095b2a566ff6aa093f6d88741a6d2fec49c7c4ada6274679f62cf6391a",
+      "sourceSha256": "3069d85e2a850dc20e7bb375f04485145e5915ff12b856e4437f6eb1ce36282f",
+      "bytes": 18435,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "existingMasterIds": [
+        "SUPPORT-B5476F3ECEA4"
+      ],
+      "newMasterIds": []
+    },
+    {
+      "path": "tests/e2e/login-readiness.spec.ts",
+      "kind": "test-source",
+      "isNew": true,
+      "baselineSha256": null,
+      "sourceSha256": "3d5f353fa9edd57e4963095c646470fb9ae82e913bff81ad93a1a035f806bb91",
+      "bytes": 10423,
+      "exportedFunctions": [],
+      "addedExportedFunctions": [],
+      "removedExportedFunctions": [],
+      "existingMasterIds": [],
+      "newMasterIds": [
+        "SUPPORT-6C0575881A8C"
+      ]
+    }
+  ],
+  "newRecords": [
+    {
+      "id": "SEC-005",
+      "area": "SEC",
+      "key": "native-authentication-credential-url",
+      "name": "Credential-free native sign-in URLs before hydration",
+      "source": "components/auth/login-form.tsx",
+      "status": "IN PROGRESS"
+    },
+    {
+      "id": "SUPPORT-6C0575881A8C",
+      "area": "SUPPORT",
+      "key": "tests/e2e/login-readiness.spec.ts",
+      "name": "tests/e2e/login-readiness.spec.ts",
+      "source": "tests/e2e/login-readiness.spec.ts",
+      "status": "NOT STARTED"
+    }
+  ]
+}
