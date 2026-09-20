@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { at, between } from './helpers/source-order';
+import { at, between, bodyOf } from './helpers/source-order';
 
 /**
  * Audit C1-S9-19 — a refused read must not render as "you have nothing".
@@ -233,6 +233,63 @@ describe('a failed Pay-ID lookup is not a dead Pay-ID (C1-S9-31)', () => {
     for (const locale of ['en-US', 'de-DE', 'es-ES', 'fr-FR', 'it-IT', 'nl-NL', 'pt-PT']) {
       const catalogue = JSON.parse(readFileSync(`lib/i18n/messages/${locale}.json`, 'utf8')) as Record<string, string>;
       for (const key of ['pay.couldNotCheckThisPayId', 'pay.pleaseTryAgainInAMoment']) {
+        expect(catalogue[key], `${locale} is missing ${key}`).toBeTruthy();
+      }
+    }
+  });
+});
+
+describe('a security control the user chose does not fail open (C1-S9-44)', () => {
+  const layout = () => readFileSync('app/(app)/layout.tsx', 'utf8');
+
+  it('the app-lock preference read is checked before the gate decision', () => {
+    // This read decides whether App Lock is applied across the ENTIRE
+    // authenticated app. A refused read left `prefs` null, `appLock` null, and
+    // the gate simply not rendered — so a user who set a PIN to protect their
+    // family's data on a shared or stolen device had that protection silently
+    // removed, with nothing on screen to say so.
+    const source = layout();
+    expect(source).toContain('error: prefsError');
+    expect(source).toContain('if (prefsError)');
+    expect(at(source, 'if (prefsError)')).toBeLessThan(at(source, 'const appLockRaw'));
+  });
+
+  it('the closed answer withholds the app instead of rendering it', () => {
+    // The only thing that makes this a fix rather than a message: the bail must
+    // not fall through to `children`. A banner above an unlocked app would be
+    // the defect with an apology attached.
+    const bail = bodyOf(layout(), 'if (prefsError)', 'return <AppLockUnavailable />;');
+    expect(bail).toContain('console.error');
+    expect(bail).not.toContain('{children}');
+    const fallback = bodyOf(layout(), 'async function AppLockUnavailable', '\n}');
+    expect(fallback).not.toContain('children');
+    expect(fallback).not.toContain('SessionKeeper');
+  });
+
+  it('it does not impersonate the lock screen it cannot verify against', () => {
+    // `AppLockGate` checks the PIN against the `salt` and `hash` from this very
+    // read, so a gate rendered without them could only ever reject — locking
+    // the user out permanently rather than asking for their PIN.
+    const fallback = bodyOf(layout(), 'async function AppLockUnavailable', '\n}');
+    expect(fallback).not.toContain('AppLockGate');
+    expect(fallback).not.toContain('salt');
+    expect(fallback).not.toContain('hash');
+  });
+
+  it('the billing gates above still fail OPEN, which is their correct direction', () => {
+    // The contrast is the point, and pinning it stops a later sweep from
+    // "consistently" hardening these too: locking a paying family out of their
+    // own data over a billing outage is the worse error, and `resolveEntitlement`
+    // is documented as failing open for that reason.
+    const source = layout();
+    expect(source).toContain('resolveEntitlement fails open');
+    expect(source).not.toMatch(/const \{[^}]*error: entError/);
+  });
+
+  it('the copy exists in every base catalogue', () => {
+    for (const locale of ['en-US', 'de-DE', 'es-ES', 'fr-FR', 'it-IT', 'nl-NL', 'pt-PT']) {
+      const catalogue = JSON.parse(readFileSync(`lib/i18n/messages/${locale}.json`, 'utf8')) as Record<string, string>;
+      for (const key of ['appLock.weCouldNotConfirmYourLockSettings', 'appLock.stayingLockedUntilWeCanCheck']) {
         expect(catalogue[key], `${locale} is missing ${key}`).toBeTruthy();
       }
     }

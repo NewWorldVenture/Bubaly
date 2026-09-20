@@ -2047,6 +2047,8 @@
   "app.bubalyQuietlyHandlesTheLogistics": "Bubaly regelt op de achtergrond de logistiek van het gezinsleven — telefoontjes, e-mails, planning, papierwerk, herinneringen en de dagelijkse afstemming — zodat je gezin minder tijd kwijt is aan het regelen van het leven en meer tijd overhoudt om het te leven.",
   "app.bubalyTheAiOperatingSystem": "Bubaly — Het AI-besturingssysteem voor het gezinsleven",
   "app.theAiOperatingSystemFor": "Het AI-besturingssysteem voor het gezinsleven.",
+  "appLock.stayingLockedUntilWeCanCheck": "Je app blijft vergrendeld totdat we dit kunnen controleren. Vernieuw zo meteen om het opnieuw te proberen.",
+  "appLock.weCouldNotConfirmYourLockSettings": "We konden je vergrendelinstellingen niet bevestigen",
   "appLockActions.couldNotLoadAppLockSettings": "Kan de app-vergrendelinstellingen niet laden.",
   "appLockActions.couldNotSaveAppLockSettings": "Kan de app-vergrendelinstellingen niet opslaan.",
   "appLockActions.invalidLockConfiguration": "Ongeldige vergrendelconfiguratie",

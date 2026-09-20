@@ -2047,6 +2047,8 @@
   "app.bubalyQuietlyHandlesTheLogistics": "Bubaly s’occupe discrètement de la logistique de la vie de famille — appels, e-mails, planning, paperasse, rappels et coordination quotidienne — pour que votre famille passe moins de temps à gérer la vie et plus de temps à la vivre.",
   "app.bubalyTheAiOperatingSystem": "Bubaly — Le système d'exploitation par l'IA pour la vie de famille",
   "app.theAiOperatingSystemFor": "Le système d’exploitation par l’IA pour la vie de famille.",
+  "appLock.stayingLockedUntilWeCanCheck": "Votre application reste verrouillée le temps de la vérification. Actualisez dans un instant pour réessayer.",
+  "appLock.weCouldNotConfirmYourLockSettings": "Nous n’avons pas pu vérifier vos réglages de verrouillage",
   "appLockActions.couldNotLoadAppLockSettings": "Impossible de charger les paramètres de verrouillage de l’app.",
   "appLockActions.couldNotSaveAppLockSettings": "Impossible d’enregistrer les paramètres de verrouillage de l’app.",
   "appLockActions.invalidLockConfiguration": "Configuration de verrouillage invalide",

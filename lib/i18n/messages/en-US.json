@@ -2047,6 +2047,8 @@
   "app.bubalyQuietlyHandlesTheLogistics": "Bubaly quietly handles the logistics of family life so your family can spend less time managing life and more time living it.",
   "app.bubalyTheAiOperatingSystem": "Bubaly — The AI Operating System for Family Life",
   "app.theAiOperatingSystemFor": "The AI operating system for family life.",
+  "appLock.stayingLockedUntilWeCanCheck": "Your app is staying locked until we can check. Refresh in a moment to try again.",
+  "appLock.weCouldNotConfirmYourLockSettings": "We could not confirm your lock settings",
   "appLockActions.couldNotLoadAppLockSettings": "Could not load App Lock settings.",
   "appLockActions.couldNotSaveAppLockSettings": "Could not save App Lock settings.",
   "appLockActions.invalidLockConfiguration": "Invalid lock configuration",

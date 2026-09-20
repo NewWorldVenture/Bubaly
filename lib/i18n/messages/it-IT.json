@@ -2047,6 +2047,8 @@
   "app.bubalyQuietlyHandlesTheLogistics": "Bubaly gestisce in silenzio la logistica della vita di famiglia — telefonate, e-mail, appuntamenti, scartoffie, promemoria e il coordinamento di ogni giorno — così la tua famiglia passa meno tempo a organizzare la vita e più tempo a viverla.",
   "app.bubalyTheAiOperatingSystem": "Bubaly — Il sistema operativo con IA per la vita di famiglia",
   "app.theAiOperatingSystemFor": "Il sistema operativo con IA per la vita di famiglia.",
+  "appLock.stayingLockedUntilWeCanCheck": "L’app resta bloccata finché non riusciamo a verificare. Aggiorna tra un momento per riprovare.",
+  "appLock.weCouldNotConfirmYourLockSettings": "Non è stato possibile confermare le impostazioni di blocco",
   "appLockActions.couldNotLoadAppLockSettings": "Impossibile caricare le impostazioni del blocco app.",
   "appLockActions.couldNotSaveAppLockSettings": "Impossibile salvare le impostazioni del blocco app.",
   "appLockActions.invalidLockConfiguration": "Configurazione di blocco non valida",

@@ -2047,6 +2047,8 @@
   "app.bubalyQuietlyHandlesTheLogistics": "Bubaly erledigt im Hintergrund die Logistik des Familienlebens – Anrufe, E-Mails, Terminplanung, Papierkram, Erinnerungen und die alltägliche Abstimmung –, damit Ihre Familie weniger Zeit mit dem Organisieren und mehr Zeit mit dem Leben verbringt.",
   "app.bubalyTheAiOperatingSystem": "Bubaly – Das KI-Betriebssystem für das Familienleben",
   "app.theAiOperatingSystemFor": "Das KI-Betriebssystem für das Familienleben.",
+  "appLock.stayingLockedUntilWeCanCheck": "Ihre App bleibt gesperrt, bis wir das prüfen können. Laden Sie die Seite gleich neu, um es erneut zu versuchen.",
+  "appLock.weCouldNotConfirmYourLockSettings": "Ihre Sperreinstellungen konnten nicht bestätigt werden",
   "appLockActions.couldNotLoadAppLockSettings": "Die App-Sperre-Einstellungen konnten nicht geladen werden.",
   "appLockActions.couldNotSaveAppLockSettings": "Die App-Sperre-Einstellungen konnten nicht gespeichert werden.",
   "appLockActions.invalidLockConfiguration": "Ungültige Sperrkonfiguration",

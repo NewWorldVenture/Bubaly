@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-184 finding IDs from four workers and two parallel sessions; none of it was
+185 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -12,7 +12,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 > source-and-migration audit run without production credentials. Session B
 > (Register B, 14,038 items, `AUTH-001` / `API-<hash>` / `DB-TBL-nnn`) is a
 > hosted-CI and deployed-release audit. Their finding-ID sets are **disjoint**:
-> 906 IDs from A, 684 from B, 1,587 in union — verified mechanically at each
+> 907 IDs from A, 684 from B, 1,588 in union — verified mechanically at each
 > merge. The three literals both files contain (`LB-009`, `LB-016`, `SHA-256`)
 > are not counter-examples: the first two are pre-existing *runbook* names each
 > register cites, and the third is a hash algorithm the ID regex matches. No
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 194 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 195 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -117,6 +117,8 @@ PRODUCTION READY: NO
 | B5 | **No real screen reader, no `forced-colors`** | Accessibility findings are axe-derived plus static analysis. |
 | B6 | **The `family-media` bucket is public, and both audits found it independently** | Session A recorded it as `F-E03` (deferred behind runbook `LB-009`); Session B reached the same object from the deployed side as `SEC-001` and rates it **FAIL** — six uploaders and their consumers publish public URLs, so unguessable object names are the only thing standing between a family's photos and anyone with the link. Migration `0330` narrowed what the bucket will *accept* (16 MIME types, no `svg`/`html`) but deliberately did **not** flip `public` to false: that turns every already-published URL dead and requires signed URLs at six call sites plus the reminder/message/photo consumers. It is a product decision with a migration attached, not a repo-local fix, so it is named here rather than silently deferred. |
 | B7 | **This container runs Node 22.22.2; the repository declares 24.21.0** | `.nvmrc` and `engines.node` were bumped by the parallel session. `nvm` cannot fetch the Node 24 distribution from here, so `tests/node-version-is-pinned.test.ts` and `tests/stream-cancellation-runtime.test.ts` cannot pass locally. CI resolves Node from `.nvmrc`, so hosted runs use 24. Not counted as PASS. Audit `C1-S9-09`. |
+
+| B8 | **App Lock failed open in production until this branch merges** | `C1-S9-44`: a refused `user_preferences` read removed the user's PIN screen from every authenticated route. FIXED here and guarded, but production runs the unmerged code, so the exposure is live until this branch lands. Named as a blocker rather than filed as a fixed finding, because "fixed on a branch" is not fixed for anyone holding the device. |
 
 *Per the brief: a BLOCKED item does not count as PASS, and while B1 affects
 security-critical functionality the release gate stays NO.*
@@ -33353,6 +33355,73 @@ ratchet actually catches regrowth.
 
 ---
 
+### `[CLAUDE-1][CRITICAL][SECURITY]` C1-S9-44 — App Lock failed open: a refused read silently removed the user's PIN screen from the entire app
+
+**File:** `app/(app)/layout.tsx:45`
+
+**This is the most serious finding of the session, and it is the same defect
+class as everything above it — a dropped read error — landing on a security
+control instead of a list.**
+
+```ts
+const { data: prefs } = await supabase
+  .from('user_preferences').select('notification_prefs')
+  .eq('user_id', user.id).maybeSingle();
+
+const appLockRaw = (prefs?.notification_prefs as Record<string, unknown> | null)?.appLock;
+const appLock = isAppLockConfig(appLockRaw) ? appLockRaw : null;
+// ...
+{appLock?.enabled ? <AppLockGate …>{children}</AppLockGate> : children}
+```
+
+**Impact.** App Lock is the opt-in PIN screen a user sets to protect their
+family's data on a shared, borrowed or stolen device, and this layout applies it
+to **every authenticated route** — dashboard, wallet, family, admin, all of it.
+The error was dropped, so a refused or failed `user_preferences` read left
+`prefs` null, `appLock` null, and the ternary fell to the bare `children`
+branch: **the app rendered unlocked.** No gate, no message, nothing on screen to
+indicate the protection the user deliberately turned on was not applied. Someone
+holding that device sees the family's data.
+
+A false-empty on a list page is a lie about data. Here the same line of code is
+the difference between a lock and no lock.
+
+**Fix — and why it is not "render the gate".** `AppLockGate` verifies the
+entered PIN against the `salt` and `hash` that come from *this very read*, so a
+gate rendered without them could only ever reject: it would lock the user out
+permanently instead of asking for their PIN. The honest closed answer is to
+withhold the protected thing — `children` — and say why. Retryable, leaks
+nothing, and renders no navigation into the app. A guard asserts that the bail
+contains no `{children}` and that the fallback references neither `AppLockGate`
+nor `salt`/`hash`, because "a banner above an unlocked app" is the defect with
+an apology attached.
+
+**The contrast in the same function is deliberate and is now pinned.** Ten lines
+above, `resolveEntitlement` **fails open**, and the comment there says so:
+locking a paying family out of their own data because a billing lookup blipped
+is the worse error. App Lock is the opposite case — what it withholds is exactly
+what the user asked to have withheld. A guard pins the billing gate's open
+failure too, so that a later "consistency" sweep hardening everything in one
+direction goes red rather than quietly locking families out of their own data.
+
+**Status:** FIXED. Guard: five cases in
+`tests/a-refused-read-is-not-an-empty-page.test.ts`, each proved red by mutation
+— removing the check (fails open again), returning `{children}` from the bail,
+making the fallback impersonate the lock screen, and hardening the billing gate
+to fail closed.
+
+**Found by re-running the corrected `C1-S9-37` heuristic over pages**, which the
+original page sweep (`C1-S9-19`) had not used: 427 pages and layouts, 21 reads
+binding only `data`. The earlier sweep required a `?? []` fallback, and this
+read has none — it feeds a ternary. **The most severe finding in this register
+was invisible to the instrument that was supposed to find it**, for exactly the
+reason recorded under `C1-S9-37`, and it was found only because that instrument
+was rebuilt and re-run rather than trusted. The remaining 20 page reads are
+triaged and OPEN; `app/onboarding/page.tsx:45` is confirmed benign (it pre-fills
+a name field, and the user's own submission is the write).
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -33422,8 +33491,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,037 passing / 17,040 across 1,351
-files.** (Re-run after `C1-S9-43`; was 16,950 / 16,953 across 1,349 before this
+Status: ✅ PASS — `npx vitest run`: **17,042 passing / 17,045 across 1,351
+files.** (Re-run after `C1-S9-44`; was 16,950 / 16,953 across 1,349 before this
 batch.) The three failures are `C1-S9-09`, BLOCKED: this container runs Node
 22.22.2 against the repository's `.nvmrc` 24.21.0, and nvm cannot fetch the
 Node 24 distribution here. Not counted as passing.
