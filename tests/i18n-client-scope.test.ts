@@ -84,13 +84,104 @@ const CALLS_TRANSLATOR = new RegExp(
   'g',
 );
 
+/** Any key-shaped string literal. Judged against the catalogue by the caller. */
+const KEY_SHAPED = /['"]([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)['"]/g;
+
+/** The balanced argument text of a call starting at `open` (the '(' index). */
+function argumentText(source: string, open: number): string {
+  let depth = 0;
+  for (let i = open; i < source.length; i += 1) {
+    if (source[i] === '(') depth += 1;
+    else if (source[i] === ')') { depth -= 1; if (depth === 0) return source.slice(open + 1, i); }
+  }
+  return '';
+}
+
+/** A translator call whose first argument does not begin with a quote. */
+const CALLS_TRANSLATOR_WITH_EXPRESSION = new RegExp(
+  String.raw`(?<![A-Za-z0-9_$.])(?:${TRANSLATOR_NAMES.join('|')})\(\s*([^)\s])`,
+  'g',
+);
+
 function translationKeys(modules: Set<string>): Map<string, string> {
   const keys = new Map<string, string>(); // key → the file that asked for it
+  const add = (key: string, file: string) => {
+    if (!keys.has(key)) keys.set(key, file.replace(`${ROOT}/`, ''));
+  };
   for (const file of modules) {
     const source = readFileSync(file, 'utf8');
     if (!/useTranslations/.test(source)) continue;
-    for (const m of source.matchAll(CALLS_TRANSLATOR)) {
-      if (!keys.has(m[1])) keys.set(m[1], file.replace(`${ROOT}/`, ''));
+    for (const m of source.matchAll(CALLS_TRANSLATOR)) add(m[1], file);
+
+    // ── Expression-keyed calls, resolved as far as a reading can honestly go ──
+    //
+    // `CALLS_TRANSLATOR` above only sees a call whose first argument OPENS with
+    // a quote, so it misses every `t(cond ? 'a.b' : 'c.d')` — and those are
+    // literal keys in every branch, sitting on a scoped public surface, which
+    // is precisely what must be in scope before PERF-001 deletes the fallback.
+    //
+    // Two sweeps, in order of confidence:
+    //
+    //   1. Every key-shaped literal INSIDE the call's own balanced argument.
+    //      A ternary over literals is fully resolved by this, exactly.
+    //   2. If the file still has a call this cannot resolve — `t(view.error)`,
+    //      `t(item.labelKey)` — every key-shaped literal ANYWHERE in the file.
+    //      Deliberately over-broad: `view.error` is assigned from literals
+    //      elsewhere in the same module, and requiring MORE keys to be in scope
+    //      than a surface strictly needs errs in the safe direction. A raw key
+    //      at a visitor is the failure this guards; a slightly wider scope is
+    //      some bytes.
+    //
+    // Non-keys swept in by either pass are harmless: the surface case below
+    // filters to `key in messages`, so a literal like 'session-changed' that is
+    // not in the catalogue is ignored rather than reported as missing.
+    const unresolved: string[] = [];
+    for (const m of source.matchAll(CALLS_TRANSLATOR_WITH_EXPRESSION)) {
+      if (m[1] === "'" || m[1] === '"') continue;
+      const open = source.indexOf('(', m.index!);
+      const arg = argumentText(source, open);
+      let resolvedHere = false;
+      for (const lit of arg.matchAll(KEY_SHAPED)) { add(lit[1], file); resolvedHere = true; }
+      if (!resolvedHere) unresolved.push(arg.trim());
+    }
+    if (unresolved.length > 0) {
+      for (const lit of source.matchAll(KEY_SHAPED)) add(lit[1], file);
+      // …and the ONE module each unresolved call's key table actually lives in.
+      //
+      // `t(item.labelKey)` renders keys held in ANOTHER file — MARKETING_NAV in
+      // lib/constants/navigation.ts, CONSENT_UI in lib/marketing/consent-ui.ts,
+      // CONTACT_TOPICS in lib/validation.ts — and those are not "use client",
+      // so the walk above never opens them. `consentUi` sits in MARKETING_SCOPE
+      // by hand with a comment saying it was listed because nothing could see
+      // it; this is that comment turned into a check.
+      //
+      // Traced to the IDENTIFIER rather than swept over every import, because
+      // sweeping every import is wrong in a way that is easy to miss: the auth
+      // recovery form has an unresolved `t(view.error)` and also imports
+      // lib/validation.ts for its field rules, so a blanket sweep demanded the
+      // eight contactTopic.* keys be in AUTH_SCOPE — which the sign-in surface
+      // never renders. Over-wide is safer than under-wide for a RAW KEY, but a
+      // scope that carries keys its surface cannot reach is a scope nobody will
+      // trust to be minimal, and it is how AUTH_SCOPE came to carry 478
+      // `actions` keys to render two.
+      for (const expr of unresolved) {
+        const root = /([A-Za-z_$][A-Za-z0-9_$]*)/.exec(expr)?.[1];
+        if (!root) continue;
+        // Either the identifier is imported, or it is the parameter of a
+        // `.map()` over something that is.
+        const owner = new RegExp(
+          String.raw`([A-Za-z_$][A-Za-z0-9_$]*)\s*(?:\.filter\([^)]*\))?\s*\.map\s*\(\s*\(?\s*${root}\b`,
+        ).exec(source)?.[1] ?? root;
+        const imported = new RegExp(
+          String.raw`^\s*import\s[^'"]*\b${owner}\b[^'"]*from\s*['"]([^'"]+)['"]`, 'm',
+        ).exec(source)?.[1];
+        if (!imported) continue;
+        const dep = resolveSpec(imported, file);
+        if (!dep) continue;
+        let depSource: string;
+        try { depSource = readFileSync(dep, 'utf8'); } catch { continue; }
+        for (const lit of depSource.matchAll(KEY_SHAPED)) add(lit[1], dep);
+      }
     }
   }
   return keys;
@@ -318,12 +409,6 @@ const EXPRESSION_KEYED = [
   'components/marketing/pricing-value-block.tsx',
   'components/marketing/site-header.tsx',
 ];
-
-/** A translator call whose first argument does not begin with a quote. */
-const CALLS_TRANSLATOR_WITH_EXPRESSION = new RegExp(
-  String.raw`(?<![A-Za-z0-9_$.])(?:${TRANSLATOR_NAMES.join('|')})\(\s*([^)\s])`,
-  'g',
-);
 
 describe('the scoped surfaces still ask for keys no static reading can name', () => {
   it('names every expression-keyed translator call, and finds no new one', () => {

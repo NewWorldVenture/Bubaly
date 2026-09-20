@@ -81,10 +81,32 @@ export const MARKETING_SCOPE = [
   'pricingContent', 'pricingPricingContent', 'shareButtons', 'socialProof',
   'switching', 'trustStrip',
   // `consentUi` is reached ONLY through the CONSENT_UI table in
-  // lib/marketing/consent-ui.ts, via `t(c.labelKey)` — a non-literal call the
-  // scan above cannot resolve. It is listed by hand for that reason, and a new
-  // entry in that table under a new namespace would need the same treatment.
+  // lib/marketing/consent-ui.ts, via `t(c.labelKey)`. It was listed by hand
+  // because the scan could not resolve a non-literal call, with a note that
+  // "a new entry in that table under a new namespace would need the same
+  // treatment". That is no longer true, and the note is kept rather than
+  // deleted because it is what asked for the fix: the guard now follows an
+  // expression-keyed call to the module its identifier comes from, so removing
+  // this line makes tests/i18n-client-scope.test.ts fail naming all five
+  // consentUi.* keys and lib/marketing/consent-ui.ts. The hand-listing is no
+  // longer load-bearing; it stays only because the scope is still the thing
+  // that ships.
   'consentUi',
+  // `heroOutcomes` renders on /pricing as well as the homepage, and the guard
+  // could not see it until its extractor learned to read the key literals
+  // INSIDE an expression-keyed call. pricing-content.tsx holds a table of six
+  // `titleKey: 'heroOutcomes.*'` entries and renders them with `tr(o.titleKey)`,
+  // so the six were resolving through translate()'s English fallback on a
+  // PUBLIC pricing page — the fallback PERF-001 intends to delete. Its own
+  // comment says why they live there: "the bodies are the heroOutcomes.* keys
+  // the homepage rail renders, so a copy fix reaches both."
+  'heroOutcomes',
+  // `contactTopic` is the eight-entry CONTACT_TOPICS table in lib/validation.ts,
+  // rendered as the topic <option> list on the PUBLIC /contact page by
+  // `CONTACT_TOPICS.map((t) => … tr(t.labelKey))`. Found only once the guard
+  // learned to follow an expression-keyed call to the module its identifier
+  // comes from — the same shape `consentUi` above was hand-listed for.
+  'contactTopic',
 ] as const;
 
 /** Sign-in, sign-up and the consent screens. */
