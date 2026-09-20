@@ -164,7 +164,9 @@ land there rather than through a claim branch. **Do not claim one of these** —
 if the list is stale and the section is still open when you look, the branch's
 history will say so.
 
-`S-02` · `S-09` · `S-13` · `S-15` · `S-16` · `S-17` · `S-19` · `S-20`
+`S-02` · `S-05` · `S-09` · `S-13` · `S-15` · `S-16` · `S-17` · `S-19` · `S-20`
+
+**`S-05` was added to this list on 2026-09-20 rather than claimed with a branch**, and the reason is a constraint rather than a preference: the agent working it is restricted to `claude/roadmap-implementation-ld8bon` and may not push `claude/strategy-S-05`. Since the branch name is the claim and that claim cannot be made, this line is the claim instead — it is pushed before any of the work, so it is visible to anyone who looks. If you want S-05, check this branch's history first; if nothing is there, take it.
 
 Everything else in §7 is yours to take.
 
