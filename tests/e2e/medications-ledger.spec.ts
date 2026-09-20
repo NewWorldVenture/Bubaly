@@ -19,7 +19,7 @@ const sources = Object.fromEntries([
   // adherence.ts resolves a dose slot in the family's zone; the in-page loader
   // below throws on any module missing from this list, so its imports belong here.
   'lib/time/zoned.ts',
-  'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts',
+  'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts', 'lib/i18n/translate.ts',
   'components/ui/states.tsx', 'components/ui/states-client.tsx', 'components/ui/button.tsx',
   'components/ui/input.tsx', 'components/ui/modal.tsx',
   // medications-module.tsx asks before a destructive write via useConfirm; the

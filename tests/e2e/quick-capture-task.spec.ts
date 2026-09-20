@@ -14,7 +14,7 @@ const sources = Object.fromEntries([
   'components/app/quick-capture.tsx', 'components/capture/capture-shell.tsx', 'lib/capture/document-link.ts', 'components/app/app-context.tsx', 'components/ui/toast.tsx', 'lib/analytics/use-journey.ts',
   'lib/offline/cache.ts', 'lib/offline/cache-scope.tsx', 'lib/auth/cache-session.ts', 'lib/auth/session-change.ts',
   'lib/supabase/errors.ts', 'lib/realtime/published-tables.ts', 'lib/constants/roles.ts', 'lib/capture/save.ts', 'lib/capture/parse.ts', 'lib/capture/shortcut.ts',
-  'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts',
+  'components/i18n/locale-provider.tsx', 'lib/i18n/locales.ts', 'lib/i18n/messages.ts', 'lib/i18n/translate.ts',
   // QuickCapture's preview formats through useFormat, which the loader reaches
   // from quick-capture.tsx, and useFormat builds the real formatters.
   'components/i18n/use-format.ts', 'lib/utils/format.ts',

@@ -123,6 +123,24 @@ describe('Supabase migration filename safety', () => {
     // finding and says so: care-module.tsx:253 RENDERS the name, so a child
     // could write a `medication` entry reading "Gave Grandma her tablets" and
     // the timeline showed it as the parent's own record.
+    //
+    // A second tranche took the remaining 28 names off the triage list and
+    // wrote NO migration, which is why this number did not move. Five of its
+    // seven batches found nothing at all — home, ai, planning and household are
+    // consistent-open, with no application rule for the database to be failing
+    // to mirror. Across both tranches: 41 names verified, 10 real, 31 false
+    // positives.
+    //
+    // The three that looked real — 0339 calendar_events, 0340 the school/task
+    // group, 0342 notes — were written, adversarially reviewed, and REJECTED
+    // before they reached this tree. All three pinned `created_by = auth.uid()`
+    // on INSERT, and that predicate is wrong on these tables: lib/services/
+    // approvals/index.ts:618 `scopeForApprovedWork` deliberately runs approved
+    // work as the ASKER, so `created_by` names the person who wanted the thing
+    // while the session belongs to the approver. lib/trust/ai-gate.ts:36 states
+    // the invariant in words and a test guards it. A bare identity pin breaks
+    // it — CENSUS-002 for the third time, caught by review rather than by CI.
+    // See AUTHZ-021 in finalaudit.md; the files are not in this tree.
     expect(audit.nextVersion).toBe('0339');
   });
 
