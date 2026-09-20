@@ -14,9 +14,9 @@
 --   PGHOST=… PGPORT=… PGUSER=… PGDATABASE=bubaly \
 --     psql -v ON_ERROR_STOP=1 -f docs/audit/social-access-symmetry-check.sql
 
-\set FS '00000000-0000-4000-8000-0000000000c1'
-\set UP '00000000-0000-4000-8000-0000000000c2'
-\set UA '00000000-0000-4000-8000-0000000000c3'
+\set FS '00000000-0000-4000-8000-000000005a01'
+\set UP '00000000-0000-4000-8000-000000005a02'
+\set UA '00000000-0000-4000-8000-000000005a03'
 
 -- Seed: one family, its parent, and an adult the parent has pinned to read_only.
 insert into auth.users (id, email) values (:'UP','c-parent@example.com') on conflict do nothing;
@@ -36,13 +36,13 @@ do $$
 declare gone int;
 begin
   perform set_config('role','authenticated', true);
-  perform set_config('request.jwt.claim.sub','00000000-0000-4000-8000-0000000000c3', true);
+  perform set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000005a03', true);
   perform set_config('request.jwt.claim.role','authenticated', true);
 
   with removed as (
     delete from public.social_access_permissions
-     where family_id = '00000000-0000-4000-8000-0000000000c1'
-       and user_id   = '00000000-0000-4000-8000-0000000000c3'
+     where family_id = '00000000-0000-4000-8000-000000005a01'
+       and user_id   = '00000000-0000-4000-8000-000000005a03'
     returning 1
   ) select count(*) into gone from removed;
 
@@ -59,13 +59,13 @@ do $$
 declare gone int;
 begin
   perform set_config('role','authenticated', true);
-  perform set_config('request.jwt.claim.sub','00000000-0000-4000-8000-0000000000c2', true);
+  perform set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000005a02', true);
   perform set_config('request.jwt.claim.role','authenticated', true);
 
   with removed as (
     delete from public.social_access_permissions
-     where family_id = '00000000-0000-4000-8000-0000000000c1'
-       and user_id   = '00000000-0000-4000-8000-0000000000c3'
+     where family_id = '00000000-0000-4000-8000-000000005a01'
+       and user_id   = '00000000-0000-4000-8000-000000005a03'
     returning 1
   ) select count(*) into gone from removed;
 
@@ -103,12 +103,12 @@ do $$
 declare gone int;
 begin
   perform set_config('role','authenticated', true);
-  perform set_config('request.jwt.claim.sub','00000000-0000-4000-8000-0000000000c3', true);
+  perform set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000005a03', true);
   perform set_config('request.jwt.claim.role','authenticated', true);
   with removed as (
     delete from public.social_access_permissions
-     where family_id = '00000000-0000-4000-8000-0000000000c1'
-       and user_id   = '00000000-0000-4000-8000-0000000000c3'
+     where family_id = '00000000-0000-4000-8000-000000005a01'
+       and user_id   = '00000000-0000-4000-8000-000000005a03'
     returning 1
   ) select count(*) into gone from removed;
   perform set_config('role','postgres', true);

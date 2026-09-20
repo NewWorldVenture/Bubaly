@@ -15,7 +15,7 @@ grant usage on schema public to authenticated;
 
 do $$
 declare
-  fam        uuid := 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  fam        uuid := 'ccccaaaa-cccc-4ccc-8ccc-cccccccccccc';
   parent_uid uuid := 'c0000000-0000-4000-8000-000000000001';
   adult_uid  uuid := 'c0000000-0000-4000-8000-000000000002';
   child_uid  uuid := 'c0000000-0000-4000-8000-000000000003';

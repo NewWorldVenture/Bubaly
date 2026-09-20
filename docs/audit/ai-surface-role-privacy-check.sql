@@ -4,6 +4,21 @@
 -- child. This asserts the database refuses too — for the plan ledger (whose
 -- `input_json` is the verbatim tool arguments), for the routine rules a worker
 -- turns into prompts, and for medical/account memory.
+-- Wrapped in a transaction that is always rolled back.
+--
+-- This probe COMMITTED everything it seeded, and its own assertions count rows
+-- — "a child should still read ordinary preferences, saw 2" is what a SECOND
+-- run against the same database says, because run one's rows are still there.
+-- It was masked for as long as it existed: this file and
+-- reward-redemption-decision-check.sql shared the family id
+-- `dddddddd-…`, so whichever ran second had its whole seed skipped by
+-- `on conflict do nothing` and never reached its own defect. Giving each probe
+-- its own ids (tests/boundary-probes-are-rerunnable.test.ts pins that) is what
+-- surfaced it.
+--
+-- CI never saw any of this, because the Database job bootstraps a fresh
+-- container every time and the suite had only ever been run ONCE per database.
+begin;
 grant usage on schema public to authenticated;
 -- No blanket `grant ... on all tables in schema public` here. The bootstrap's
 -- `alter default privileges` already gives `authenticated` full DML on every
@@ -84,3 +99,5 @@ begin
   reset role;
   raise notice '0264 AI-surface role privacy: OK';
 end $$;
+
+rollback;
