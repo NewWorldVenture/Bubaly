@@ -2,11 +2,11 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-20T12:24:40.983Z
-- Total Audit Items: 14051
+- Last Updated: 2026-09-20T12:26:31.732Z
+- Total Audit Items: 14052
 - Not Started: 13842
 - In Progress: 192
-- Passed: 2
+- Passed: 3
 - Fixed + Passed: 12
 - Blocked: 1
 - Failed: 2
@@ -14183,6 +14183,7 @@ PRODUCTION READY: NO
 | DB-002 | Database | Family erasure and cascade completeness | ✅ PASS | High | 6/6 | None — verification, not repair | 71,192 rows across 199 tables deleted with 0 survivors; probe reports both halves when a cascade is removed; suite 46/46 | 387 of 396 family_id columns cascade; the 9 exceptions are user-owned, business-owned or an idempotency ledger, and are now named in the probe. |
 | AI-002 | AI | AI routes outside the context slices | ✅ PASS | High | 7/7 | None required | Rate limiter exercised: 5 allowed / 2 denied, namespace scoping enforced | The policy guard scopes to lib/ai/context/slices; the other 39 routes were checked directly. Three use a service client; each is correctly scoped or token-authorized. |
 | TEST-008 | Testing | Unfinished-work markers in shipping code | 🛠 FIXED + PASS | Medium | 6/6 | Guard now scans comments instead of stripping them, and requires every marker to lead its comment and carry a tracker reference | 3/3; red when a bare marker is appended to a real file | It stripped comments before searching for comment markers, so it reported 0 while 19 existed. All 19 are properly owned. |
+| SEC-007 | SEC | Private document vault over real HTTP | ✅ PASS | Critical | 8/8 | None required | B refused read, sign, upload and delete against A's vault; both controls pass; A's document intact; all fixtures removed | Tested with real user tokens over the Storage service, reaching the signing endpoint that SQL-level probes structurally cannot. The read refusal is NoSuchKey, so the vault is not an existence oracle. |
 
 ## Inventory and evidence rules
 
@@ -21065,6 +21066,54 @@ Executed. The nineteen markers were enumerated and each classified by hand befor
 
 #### Final Status
 🛠 FIXED + PASS
+
+### SEC-007 — The private document vault, tested over real HTTP with real user tokens
+
+Status: ✅ PASS
+Severity: Critical
+Route(s), components, actions, tables and providers: the `documents` storage bucket, storage.objects policies, /storage/v1/object, /storage/v1/object/sign, /auth/v1/token, docs/audit/document-vault-boundary-check.sql, docs/audit/document-bytes-boundary-check.sql
+
+#### Expected Behavior
+A family's documents are readable and writable only by that family. Another family cannot read them, cannot mint a signed URL for them, cannot write into their folder, and cannot delete them — and cannot learn whether a given object exists.
+
+#### Test Cases
+- [x] A reads A's own document (control)
+- [x] B cannot read A's document
+- [x] The refusal does not disclose that the object exists
+- [x] B cannot mint a signed URL for A's document
+- [x] B cannot upload into A's folder
+- [x] B cannot delete A's document
+- [x] B can upload into B's own folder (control)
+- [x] A's document is intact after all of it
+
+#### Issues Found
+None. The boundary holds.
+
+This is recorded because it was tested differently from the existing probes. `document-vault-boundary-check.sql` and `document-bytes-boundary-check.sql` assert the boundary in SQL, as a database session. That is the right place to start and it is not the path a user takes. The Storage service applies RLS itself, on its own connection, and it exposes a **signing endpoint** that SQL never touches — if signing were unguarded, any authenticated user could mint a URL for any path and the object policies would be irrelevant.
+
+So it was exercised the way the product is: two real users created through `/auth/v1/admin/users`, each signed in through `/auth/v1/token?grant_type=password` for a genuine access token, and every request made over HTTP against the running Storage service.
+
+    A reads A's own document          -> HTTP 200, "secret passport scan for family A"
+    B reads A's document              -> HTTP 400  {"statusCode":"404","error":"not_found","code":"NoSuchKey"}
+    B signs a URL for A's document    -> HTTP 400  {"statusCode":"404","error":"not_found","code":"NoSuchKey"}
+    B uploads into A's folder         -> HTTP 400  {"statusCode":"403","message":"new row violates row-level security policy"}
+    B deletes A's document            -> HTTP 400  {"statusCode":"403","error":"Unauthorized","message":"Access denied"}
+    B uploads into B's own folder     -> HTTP 200  (control)
+    A's document after all of it      -> HTTP 200, unchanged
+
+Two details worth keeping. The read refusal comes back as **`NoSuchKey`, not "forbidden"** — B cannot tell A's document apart from one that was never there, so the vault is not an existence oracle. And the signing endpoint refuses on the same terms as the read, which is the part SQL-level probes structurally cannot reach.
+
+#### Fixes Applied
+None required.
+
+#### Retest Results
+All eight assertions above, executed in one pass. Every fixture was removed afterwards — both objects, both families, both auth users — and the removal verified (`probe families remaining: 0`).
+
+#### Evidence
+Executed against the running local Supabase stack over HTTP, with tokens obtained by real password sign-in rather than minted or stubbed. This complements rather than replaces the SQL probes: they run in CI against a bare Postgres, where no Storage service exists, and this reaches the parts they cannot.
+
+#### Final Status
+✅ PASS — for the private buckets. The public `family-media` bucket is a separate and unresolved matter; see SEC-001, where the same HTTP method showed an unauthenticated read returning 200 and the bytes.
 
 ### AI-002 — The AI surface outside the context slices
 
