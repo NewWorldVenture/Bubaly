@@ -93,6 +93,44 @@
 # an ATTRIBUTION defect, not a role-gate mismatch. This instrument answers one
 # question and its silence on the others means nothing.
 #
+# ── The enclosing-function pass, also reported, also not used to narrow ────
+# Proximity's weakness is obvious: sixty lines is an arbitrary window. The
+# principled version asks whether a manager gate appears anywhere in the
+# top-level function CONTAINING the write. Run over the same 46 it finds SEVEN
+# — the three wallet tables plus medication_doses, daily_insights,
+# maintenance_tasks and routine_templates. It correctly drops
+# subscriptions_tracked, whose only nearby match was an import line.
+#
+# All seven were read. None is a defect. That is twelve distinct candidate hits
+# across two independent heuristics and zero findings, and it adds a FOURTH
+# false-positive mechanism to the three above — the most interesting one:
+#
+#   4. THE GATE IS A DIFFERENT CODE PATH WITH A DIFFERENT INTENT.
+#      `routine_templates` looked like the real thing: `forgetRoutine`
+#      (lib/services/memory/index.ts:607) is documented "Family-scoped and
+#      manager-only" and enforces `if (!canManage(scope)) return fail('Only a
+#      parent or adult can forget a routine.')`, while the table's DELETE policy
+#      is bare `is_family_member`. A textbook AUTHZ-011 shape.
+#      It is not one. `components/modules/routines-panel.tsx:177` — the panel
+#      the family actually uses — deletes the same rows through
+#      `createClient()` with NO role gate, and that file contains no isManager,
+#      canManage, manager or role check at all. The application does not claim
+#      the rule: `forgetRoutine` is the Settings → Bubaly AI "forget what you
+#      learned" path, manager-only because it is an AI-memory action, not
+#      because routine templates belong to parents. Restricting the table would
+#      refuse every child and teen on the routines panel.
+#      Its component-scale variant produced the other three: a gate anywhere in
+#      a 700-line React component flags every write in it, which is how
+#      medication_doses (AUTHZ-017 already recorded it as a false positive for
+#      this class), daily_insights (a system-generated insight upsert; the
+#      `manager` there is passed as a prop to a child component) and
+#      maintenance_tasks (`completeTask` — a teen marking a chore done is the
+#      point) arrived.
+#
+# The conclusion both passes support: these heuristics do not find the real
+# ones. The ten real findings this audit has made on this list were all found by
+# READING the call sites, and the list is what says which sites to read.
+#
 # Exits 0 whichever way the counts fall. This measures; it does not gate.
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -154,4 +192,63 @@ done
 # unwritten: a call chained across lines, or built through a variable, is
 # invisible to it. Six of the SUSPECT names read that way and each still has a
 # writer that put it in this bucket.
+echo
+
+# ── Enclosing-function pass: evidence for the reader, never a filter ────────
+printf '\n-- ENCLOSING FUNCTION over the %d SUSPECT names (evidence only; see header) -----\n' "${#suspect[@]}"
+SUSPECT_LIST="${suspect[*]:-}"
+[ -n "$SUSPECT_LIST" ] && python3 - $SUSPECT_LIST <<'ENCLOSING'
+import re, subprocess, sys
+
+GATE = re.compile(r'\b(isManager|requireManager|canManage|can_manage_family|assertManager|managerOnly)\b')
+IMPORT = re.compile(r'^\s*import\b')
+# Every top-level declaration in this codebase starts at column 0.
+TOPLEVEL = re.compile(r'^(export\s+)?(default\s+)?(async\s+)?(function|const|class|type|interface)\b')
+
+def enclosing(lines, idx):
+    start = 0
+    for i in range(idx, -1, -1):
+        if TOPLEVEL.match(lines[i]):
+            start = i
+            break
+    end = len(lines)
+    for i in range(idx + 1, len(lines)):
+        if TOPLEVEL.match(lines[i]):
+            end = i
+            break
+    return start, end
+
+rows = []
+for t in sys.argv[1:]:
+    out = subprocess.run(
+        ['grep', '-rn', '--include=*.ts', '--include=*.tsx', '-E',
+         rf"from\((['\"]){re.escape(t)}\1\)", 'app', 'lib', 'components', 'hooks'],
+        capture_output=True, text=True).stdout
+    sites, hits = 0, []
+    for line in out.splitlines():
+        try:
+            f, ln, _ = line.split(':', 2)
+        except ValueError:
+            continue
+        sites += 1
+        try:
+            src = open(f, encoding='utf-8').read().split('\n')
+        except OSError:
+            continue
+        i = int(ln) - 1
+        # A PostgREST call is chained across lines here, so look ahead a little
+        # before calling it a write.
+        if not re.search(r'\.(insert|upsert|update|delete)\(', '\n'.join(src[i:i + 4])):
+            continue
+        a, b = enclosing(src, i)
+        if any(GATE.search(l) for l in src[a:b] if not IMPORT.match(l)):
+            hits.append(f'{f}:{ln}  in  {src[a][:66]}')
+    rows.append((t, sites, hits))
+
+rows.sort(key=lambda r: (-len(r[2]), r[0]))
+for t, sites, hits in rows:
+    print(f"{'GATED' if hits else '  -  '} {t:<28} sites={sites:<4} gated_fns={len(hits)}")
+    for h in hits:
+        print(f'          {h}')
+ENCLOSING
 echo
