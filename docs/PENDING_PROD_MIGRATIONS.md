@@ -559,6 +559,92 @@ stronger mechanism.
 Nothing here authorizes applying any of them; this section exists so the gap is
 visible rather than inferred from the absence of a row.
 
+### `0322`-`0328`, the write-boundary sweep — all unapplied
+
+Seven more, from the class census that measured **170 tables** carrying a
+role-blind permissive `FOR ALL` write policy. Every one repairs a table where
+the **application** enforces a manager-only rule and the **database** does not —
+and a server action is not a boundary against a JWT holder, because children
+have real logins and a request to `/rest/v1/<table>` never passes through
+`app/`.
+
+- **`0322_wallet_side_tables_are_manager_written.sql`** closes **AUTHZ-007**.
+  `0088` created fourteen wallet tables in one `DO` loop with the same
+  role-blind policy; nine were narrowed one at a time since, and these five were
+  never reached — `babysitter_profiles`, `babysitter_payments`, `gift_links`,
+  `gift_payments`, `compliance_disclosures`. The one that costs a real person
+  money is `gift_payments`: the approval queue lists `status = 'pending'`, so a
+  child flipping a gift to `completed` makes a grandparent's gift **leave the
+  queue uncredited and unannounced**. It mints nothing — `wallet_approve_gift`
+  is `SECURITY DEFINER` and checks the manager predicate.
+- **`0323_safety_records_are_manager_written.sql`** closes **AUTHZ-006**, and
+  this is the one to read. `0318` closed `guardian_contacts` and **it holds**.
+  But `guardian_suggestions` did not, and `guardian_review_suggestion` (0198) is
+  `SECURITY DEFINER`, correctly checks `can_manage_family`, and on approval
+  copies **the suggestion's own fields** into `guardian_contacts`. A child
+  rewrites the pending proposal — including the `title` the parent reads — the
+  parent approves in the product's own UI, and a `suspected_spam` caller becomes
+  `immediate_family`. The child never wrote the forbidden table; they wrote the
+  row telling a privileged function what to write there. Also covers
+  `family_emergency_contacts` and `family_emergency_plans`.
+- **`0324_pay_ids_and_savings_goals_are_manager_written.sql`** closes
+  **AUTHZ-010** and **AUTHZ-009**. `pay_handles` is the one that reaches
+  **outside the family**: `/pay/<handle>` resolves with `createServiceClient()`
+  — RLS off, correctly, since a public payment page cannot carry the visitor's
+  session — reads `child_wallet_id` and redirects to that wallet's newest gift
+  link. A child repointing it sends a grandparent following a Pay ID to a
+  different child's gift link. `wallet_goals` is AUTHZ-006's shape in the money
+  domain: `wallet_fund_goal` reads the goal's own `child_wallet_id` to decide
+  whose Save bucket to debit, so a child's goal aimed at a sibling's wallet
+  drains it on a parent's click.
+- **`0325_dashboard_and_twin_writes_match_the_app.sql`** covers
+  `family_digital_twin_profiles` (what Bubaly "knows" about a person, read by
+  the AI surfaces) and `family_dashboard_settings` (which holds the very flags
+  `canCustomizeDashboard()` consults, so writing it turns the rule off).
+  `dashboard_layouts` gets a **scope-shaped** rule, not a blanket one — a member
+  legitimately writes their own `scope='user'` row; only the family default is
+  manager-only.
+  **One accepted cost, stated rather than hidden:** the autopilot scan's
+  digital-twin trait writes will no-op for a non-manager-triggered scan. They
+  are explicitly best-effort in the code and the nightly cron redoes them on the
+  service client.
+- **`0326_chore_dispute_resolution_is_a_managers_call.sql`** is a **`BEFORE`
+  trigger, not a policy**, following `0222`/`0295` — because raising a dispute
+  has no role gate at all and its rollback paths delete the row on the same
+  client, so INSERT and DELETE must stay open. Only movement into `'resolved'`
+  and writes to the four resolution columns are guarded, **including clearing
+  them**, because the approval path's failure branch clears the same fields.
+- **`0327_autopilot_suggestions_are_not_erasable.sql`** is deliberately
+  **narrow, and the reason is a correction**. This table was recorded as a
+  defect and is not one: the autopilot scan runs on the **caller's own
+  RLS-bound client** behind a gate that is **plan-level, not role-level**, and
+  fires automatically on page open for any member — so a manager-only guard
+  would return 500 from `/dashboard/autopilot` for every child in a Plus family.
+  It therefore closes only what the app never does: DELETE refused for every
+  client role, and `resolved_by` pinned to `auth.uid()` so a child cannot record
+  that a *parent* dismissed a suggestion. **Its header states that the
+  policy-suggestion deputy chain remains open** — RLS cannot distinguish a
+  child's `kind='policy'` row from the one the scan writes, same member, same
+  client, same columns. That fix is an application decision, not a migration.
+- **`0328_wallet_audit_logs_say_who_wrote_them.sql`** applies `0320`'s treatment
+  to the wallet trail, which never got it: a child could insert a wallet audit
+  row naming a **parent** as `actor_user_id`. No UPDATE/DELETE policy exists, so
+  the existing trail could be polluted but not erased.
+
+`SELECT` is untouched on every table in this set, and each read path was named
+before anything was restricted — the wallet pages, the family-emergency page
+(which shows the meeting point to every member on purpose), the Guardian page,
+and the home dashboard, which reads **both** layout scopes for the whole family
+in one query. Each migration has a probe under `docs/audit/` carrying a
+**negative control** that drops only the new guard and requires the escalation
+to succeed again; all were proved red before green.
+
+**Read this next line against production, not against the repository.** These
+seven are files. Until they are applied, the Pay ID redirect, the savings goal
+that drains a sibling, and the Guardian suggestion are **live**. The same
+applies to the audit's own notes: where `finalaudit.md` says a path is
+"defeated by `0322`", that is true of this tree and not yet of production.
+
 The same caution as the rest of this document applies without exception: a
 missing ledger entry does not establish that the schema is absent, and a local
 verification is not production evidence. Production's ledger records only
