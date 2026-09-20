@@ -2,7 +2,7 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-20T16:52:49.163Z
+- Last Updated: 2026-09-20T16:59:47.224Z
 - Total Audit Items: 14059
 - Not Started: 13842
 - In Progress: 192
@@ -21114,6 +21114,15 @@ The feed route itself is unchanged and was already sound: 32 bytes of entropy fr
 4/4. Restoring the fallback fails 2 of them.
 
 The second of those two only started failing after the test was rewritten. Its first draft asserted that a **genuine** signature is rejected while the key is missing — which returns false either way, so it passed against the very bug it was written for. The assertion that matters is the forgery: compute `HMAC('', token)` the way an attacker would, and require it to be refused.
+
+#### The class, swept
+One instance is an anecdote, so the pattern was searched for across `app/`, `lib/` and `components/`: any `process.env.<…SECRET|KEY|TOKEN|PASSWORD|SIGNATURE|SALT…>` falling back to `''`. Thirteen matches, each read:
+
+- **Nine are outbound credentials** — `OPENAI_API_KEY` (×5), `GITHUB_TOKEN`, `TWILIO_AUTH_TOKEN` (an outbound Basic auth header, not an inbound signature check), `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, and the marketing platform's key. An empty value means the remote call fails, which is fail-closed in effect: nothing is admitted, something is refused.
+- **Three are guarded on the very next line.** Both Stripe webhooks read the secret with `?? ''` and then `if (!secret) return 503` before `constructEvent` is ever reached. `lib/social/x-oauth.ts` does the same in a stricter form — the key must match `^[0-9a-f]{64}$` or decode to 32 bytes of base64, or `xFailure('setupRequired')` fires.
+- **One was not**: `lib/sync/feed-token.ts`, above.
+
+So the codebase's convention is already right and this was a single omission rather than a habit — which is worth stating, because the opposite conclusion would have justified a much larger change than the evidence supports.
 
 #### Evidence
 Executed. The absence of callers was established by grep across `app/`, `lib/`, `components/` and `tests/` before the fix was chosen, because "delete it" and "make it safe" are different answers and which one is right depends on that.
