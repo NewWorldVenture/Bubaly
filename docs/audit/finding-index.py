@@ -50,6 +50,16 @@ STATUS = [
     ('OPEN',     re.compile(r'^\*{0,2}Open\b', re.I)),
     ('CHECKED',  re.compile(r'^\*{0,2}(Checked|Verified)\b', re.I)),
     ("OWNER'S",  re.compile(r"^\*{0,2}(Owner'?s|Deliberately NOT|a product decision|needs a|needs an|the naive fix)", re.I)),
+    # BLOCKED and SUPERSEDED are the last two shapes, added once the six blank
+    # rows were read one at a time rather than guessed at. Both READ a word the
+    # row already uses, which is the rule the rest of this table follows:
+    # F5/F-001's cell is literally "BLOCKED — operator" (a credentialed human
+    # must run it; the guard is correct and must not be disabled), and F13's is
+    # "SUPERSEDED — see below". Neither is OPEN and neither is FIXED, and
+    # forcing either into one of those would have been the only way to reach
+    # zero blanks by relabelling rather than by reading.
+    ('BLOCKED',  re.compile(r'^\*{0,2}BLOCKED\b', re.I)),
+    ('SUPERSEDED', re.compile(r'^\*{0,2}SUPERSEDED\b', re.I)),
 ]
 
 
