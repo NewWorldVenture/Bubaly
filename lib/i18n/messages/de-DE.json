@@ -9681,6 +9681,7 @@
   "returnReminders.returnRemindersCronFailed": "Der Cronjob für Rückgabeerinnerungen ist fehlgeschlagen",
   "returnReminders.unauthorized": "Nicht autorisiert",
   "reviewCard.proof": "Nachweis",
+  "reviewCard.proofCouldNotBeLoaded": "Ein Nachweis wurde eingereicht, konnte aber nicht geladen werden. Nicht genehmigen, ohne ihn gesehen zu haben.",
   "reviewForm.pleaseChooseAStarRating": "Bitte wählen Sie eine Sternebewertung.",
   "reviewForm.somethingWentWrong": "Etwas ist schiefgelaufen.",
   "reviews.bubaly": "Bubaly",

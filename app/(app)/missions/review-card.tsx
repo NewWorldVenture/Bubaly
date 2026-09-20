@@ -17,6 +17,8 @@ export type ReviewItem = {
   note: string | null;
   status: string;
   mediaUrls: string[];
+  /** Proof WAS submitted, but at least one item could not be signed for viewing. */
+  proofUnavailable?: boolean;
   aiScore: number | null;
   aiStatus: string | null;
   aiKidFeedback: string | null;
@@ -64,6 +66,12 @@ export function ReviewCard({ item }: { item: ReviewItem }) {
       </div>
 
       {item.instructions && <p className="mt-2 text-sm text-muted">{item.instructions}</p>}
+
+      {item.proofUnavailable && (
+        <p role="status" className="mt-3 rounded-xl border border-danger/30 bg-danger/10 p-3 text-xs font-medium text-danger">
+          {t('reviewCard.proofCouldNotBeLoaded')}
+        </p>
+      )}
 
       {item.mediaUrls.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2">

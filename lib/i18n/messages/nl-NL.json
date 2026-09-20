@@ -9681,6 +9681,7 @@
   "returnReminders.returnRemindersCronFailed": "Cron voor retourherinneringen mislukt",
   "returnReminders.unauthorized": "Niet geautoriseerd",
   "reviewCard.proof": "Bewijs",
+  "reviewCard.proofCouldNotBeLoaded": "Er is bewijs ingediend, maar het kon niet worden geladen. Keur niet goed zonder het te bekijken.",
   "reviewForm.pleaseChooseAStarRating": "Kies een sterbeoordeling.",
   "reviewForm.somethingWentWrong": "Er ging iets mis.",
   "reviews.bubaly": "Bubaly",

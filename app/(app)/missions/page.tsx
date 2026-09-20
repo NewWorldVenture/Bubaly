@@ -70,13 +70,27 @@ export default async function MissionsPage() {
   for (const s of subs) {
     const chore = choreById.get(s.chore_id ?? '');
     const member = memberById.get(s.member_id);
+    // A failed signing used to be indistinguishable from no proof at all.
+    // `ReviewCard` renders the proof block only under `mediaUrls.length > 0`,
+    // so a submission WITH `media_paths` whose signing failed showed no proof
+    // section and no explanation — and this is the one screen whose entire job
+    // is evidence review. A parent reviewing a `proof_required` mission would
+    // see what looks like a proof-less submission and approve it, releasing
+    // points or real cash.
+    //
+    // The page already KNOWS `media_paths` was non-empty; that is precisely the
+    // information that was being thrown away. Counting what could not be signed
+    // costs nothing and turns a silent gap into a stated one. Audit C1-S9-29.
+    const expectedProof = (s.media_paths ?? []).slice(0, 4);
     const mediaUrls: string[] = [];
-    for (const path of (s.media_paths ?? []).slice(0, 4)) {
+    for (const path of expectedProof) {
       const { data } = await supabase.storage.from('chore-proof').createSignedUrl(path, 600);
       if (data?.signedUrl) mediaUrls.push(data.signedUrl);
     }
+    const proofUnavailable = expectedProof.length > mediaUrls.length;
     const v = valBySub.get(s.id);
     items.push({
+      proofUnavailable,
       submissionId: s.id,
       choreTitle: chore?.title ?? 'Chore',
       instructions: chore?.instructions ?? chore?.description ?? null,

@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-169 finding IDs from four workers and two parallel sessions; none of it was
+170 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -12,7 +12,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 > source-and-migration audit run without production credentials. Session B
 > (Register B, 14,038 items, `AUTH-001` / `API-<hash>` / `DB-TBL-nnn`) is a
 > hosted-CI and deployed-release audit. Their finding-ID sets are **disjoint**:
-> 891 IDs from A, 684 from B, 1,572 in union — verified mechanically at each
+> 892 IDs from A, 684 from B, 1,573 in union — verified mechanically at each
 > merge. The three literals both files contain (`LB-009`, `LB-016`, `SHA-256`)
 > are not counter-examples: the first two are pre-existing *runbook* names each
 > register cites, and the third is a hash algorithm the ID regex matches. No
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 179 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 180 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -32574,6 +32574,73 @@ this), and the second time the right answer was to tighten rather than relax.
 The distinguishing question each time: *is this test describing a behaviour, or
 a spelling?*
 
+---
+
+### `[CLAUDE-1][HIGH][PAGES]` C1-S9-29 — unloadable proof looked exactly like no proof, on the one screen whose job is evidence
+
+**File:** `app/(app)/missions/page.tsx:84-93`, `app/(app)/missions/review-card.tsx:70-74`
+
+**Problem.** The approval queue signs each submission's proof media out of the
+private `chore-proof` bucket:
+
+```ts
+const { data } = await supabase.storage.from('chore-proof').createSignedUrl(path, 600);
+if (data?.signedUrl) mediaUrls.push(data.signedUrl);
+```
+
+The `error` was dropped, and `ReviewCard` renders the proof block only under
+`item.mediaUrls.length > 0`. So a submission WITH `media_paths` whose signing
+failed — an expired key, a bucket policy change, a storage outage, a path the
+uploader wrote but the reader cannot reach — produced no proof section and no
+explanation. It was pixel-for-pixel a submission that arrived with no proof at
+all.
+
+**Impact.** This is the one screen in the product whose entire purpose is
+looking at evidence before releasing value. A parent reviewing a
+`proof_required` mission sees a card with a note, a title, an AI score, and no
+images, concludes the child simply did not attach anything, and either approves
+anyway or rejects work that was in fact done. Approval is not cosmetic: it
+releases points or, on a cash-mode chore, real money. And the failure is
+systematic rather than per-item — whatever breaks signing breaks it for every
+submission in the queue at once, so the queue does not look anomalous, it looks
+uniformly proof-less.
+
+**Evidence.** `review-card.tsx` gates the entire `<img>` grid on
+`item.mediaUrls.length > 0`; `page.tsx` pushed `mediaUrls` with no record of how
+many paths it started from. The page already KNEW `media_paths` was non-empty —
+that was precisely the information being thrown away.
+
+**Fix.** Count what was expected and compare:
+
+```ts
+const expectedProof = (s.media_paths ?? []).slice(0, 4);
+const mediaUrls: string[] = [];
+for (const path of expectedProof) { ... }
+const proofUnavailable = expectedProof.length > mediaUrls.length;
+```
+
+`proofUnavailable` reaches the card, which renders a `role="status"` notice
+BEFORE the proof block — before, because the block is hidden in exactly the case
+the notice exists for, and `role="status"` because a reviewer using a screen
+reader is the one person who cannot see that the images are absent. Copy:
+*"Proof was submitted but could not be loaded. Do not approve without viewing
+it."* Added in place to all 7 base catalogues as
+`reviewCard.proofCouldNotBeLoaded`.
+
+Deliberately NOT an error page: the queue also carries disputes and AI safety
+flags, and withholding all of them because some media would not sign trades one
+false negative for a worse one. The submission is shown, with the gap stated.
+
+**Status:** FIXED. Guard: `tests/a-refused-read-is-not-an-empty-page.test.ts`
+grown from 15 cases to 18, each proved red by mutation — dropping
+`proofUnavailable` from the page's `items.push`, deleting the notice from the
+card, moving the notice BELOW the proof block (the ordering is the fix), and
+removing the key from one catalogue. Full gate: `tsc --noEmit` exit 0;
+`vitest run` 16,965 passed, 3 failed — the known `C1-S9-09` Node-version
+failures only (running 22.22.2 against a declared 24.21.0).
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -32643,8 +32710,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **16,950 passing / 16,953 across 1,349
-files.** The three failures are `C1-S9-09`, BLOCKED: this container runs Node
+Status: ✅ PASS — `npx vitest run`: **16,965 passing / 16,968 across 1,351
+files.** (Re-run after `C1-S9-29`; was 16,950 / 16,953 across 1,349.) The three failures are `C1-S9-09`, BLOCKED: this container runs Node
 22.22.2 against the repository's `.nvmrc` 24.21.0, and nvm cannot fetch the
 Node 24 distribution here. Not counted as passing.
 

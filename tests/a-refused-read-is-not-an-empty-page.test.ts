@@ -121,3 +121,40 @@ describe('a destructive path is not opened by a false empty (C1-S9-27)', () => {
     expect(page).toMatch(/readFailures\.length === 0 \? <p[^>]*>\{count \?\? 0\} total/);
   });
 });
+
+describe('unloadable evidence is not shown as absent evidence (C1-S9-29)', () => {
+  it('the missions page counts proof it could not sign', () => {
+    // This is the one screen whose whole job is evidence review. A failed
+    // `createSignedUrl` used to drop out silently, and ReviewCard renders the
+    // proof block only under `mediaUrls.length > 0` — so a submission WITH
+    // media_paths whose signing failed looked exactly like one with no proof,
+    // and a parent could approve a proof-required mission blind, releasing
+    // points or real cash.
+    const page = readFileSync('app/(app)/missions/page.tsx', 'utf8');
+    expect(page).toContain('const expectedProof =');
+    expect(page).toContain('const proofUnavailable = expectedProof.length > mediaUrls.length;');
+    // It has to reach the card, not just be computed.
+    expect(page).toContain('proofUnavailable,');
+  });
+
+  it('the review card says so, in the user\'s language', () => {
+    const card = readFileSync('app/(app)/missions/review-card.tsx', 'utf8');
+    expect(card).toContain('item.proofUnavailable');
+    expect(card).toContain("t('reviewCard.proofCouldNotBeLoaded')");
+    // Announced, not merely styled — a reviewer using a screen reader is
+    // exactly the person who cannot see that the images are missing.
+    expect(card).toMatch(/role="status"[\s\S]{0,220}?reviewCard\.proofCouldNotBeLoaded/);
+    // And it must render independently of the proof block, which is hidden in
+    // precisely the case this notice exists for.
+    const notice = card.indexOf('item.proofUnavailable');
+    const block = card.indexOf('item.mediaUrls.length > 0');
+    expect(notice).toBeLessThan(block);
+  });
+
+  it('the copy exists in every base catalogue', () => {
+    for (const locale of ['en-US', 'de-DE', 'es-ES', 'fr-FR', 'it-IT', 'nl-NL', 'pt-PT']) {
+      const catalogue = JSON.parse(readFileSync(`lib/i18n/messages/${locale}.json`, 'utf8')) as Record<string, string>;
+      expect(catalogue['reviewCard.proofCouldNotBeLoaded'], `${locale} is missing it`).toBeTruthy();
+    }
+  });
+});

@@ -9681,6 +9681,7 @@
   "returnReminders.returnRemindersCronFailed": "Cron dei promemoria di reso non riuscito",
   "returnReminders.unauthorized": "Non autorizzato",
   "reviewCard.proof": "Prova",
+  "reviewCard.proofCouldNotBeLoaded": "Una prova è stata inviata ma non è stato possibile caricarla. Non approvare senza averla vista.",
   "reviewForm.pleaseChooseAStarRating": "Scegli una valutazione a stelle.",
   "reviewForm.somethingWentWrong": "Si è verificato un problema.",
   "reviews.bubaly": "Bubaly",
