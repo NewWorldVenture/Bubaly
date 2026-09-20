@@ -1117,5 +1117,11 @@ SWEEP: the symbol-and-log diff has now been run against all five files this
 merge took with `--theirs`, and comes back clean — every apparent loss is a
 rename or a subsumption, each named individually in Pass AF. It is the
 instrument that found `C1-S9-02`, so it is not a sweep that cannot fail.
-OPEN: `C2-13` remains contradicted and still needs writing up.
+REFUTED: `C2-13` is written up as `C1-S9-11`. The cleanup increments a
+monotonic invalidation counter rather than reading a stale ref, and C2's
+proposed remedy would reset that counter and let an in-flight save commit under
+a family the component has already left. Per rule 1, `audit/claude-2.md` was
+not edited. Guarded by tests/a-capture-generation-counter-only-goes-up.test.ts,
+which rejects the proposed change.
+OPEN: nothing outstanding for this session.
 LAST-UPDATE: 2026-09-20

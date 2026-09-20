@@ -31607,6 +31607,58 @@ short enough to return early, and was lengthened until it exercised the cut.
 
 ---
 
+---
+
+### `[CLAUDE-1][REFUTED][FRONTEND]` C1-S9-11 — C2-13 is wrong, and its proposed fix is the bug
+
+**File:** `components/capture/document-capture.tsx:20-25`
+
+**The claim.** Claude-2 recorded `C2-13`: that line 24 carries "a genuine
+ref-in-cleanup bug", on the strength of the `react-hooks/exhaustive-deps`
+warning there, and proposed the rule's standard remedy — copy
+`generation.current` into a variable inside the effect and use that variable in
+the cleanup.
+
+**Why it is wrong.** The warning exists for a cleanup that **reads** a ref
+expecting the value it held at effect time, typically a DOM node React has since
+detached. This cleanup **writes**:
+
+```ts
+useEffect(() => {
+  generation.current++;
+  setSelection(null); setResult(null); setSender(''); setBusy(false); setCamera(false);
+  return () => { generation.current++; };
+}, [familyId, userId]);
+```
+
+`generation` is a monotonic invalidation counter. Incrementing it at cleanup
+time is the entire intent: the counter must move when the effect tears down, and
+"the value it had when the effect ran" is precisely what must NOT be restored.
+
+**Why the proposed fix would introduce a real defect.** `save()` takes
+`const current = ++generation.current`, passes
+`isCurrent: () => generation.current === current` into the upload, and re-checks
+`generation.current !== current` after the await. Writing `captured + 1` back in
+the cleanup RESETS the counter to a stale number. An in-flight `save()` that had
+taken a higher `current` would then pass both checks and commit its result —
+under a family or user the component has already switched away from. That is the
+use-after-invalidate the counter exists to prevent, and it is a cross-tenant
+write, not a cosmetic one.
+
+**Verification.** The proposed change was applied as a mutation and the new
+guard rejects it (two of three cases red); reverted, green.
+
+**Status:** REFUTED. `C2-13` is a false positive; the lint warning at this line
+is one of the three the repository carries knowingly. Per audit rule 1,
+`audit/claude-2.md` was not edited — the contradiction is recorded here, in
+Claude-1's own file, which is where a disagreement between workers belongs.
+
+**Guard:** `tests/a-capture-generation-counter-only-goes-up.test.ts` — pins that
+the counter is only ever incremented, never assigned from a captured local, and
+that `save()`'s bail precedes the state write it protects. Written so the next
+reader who sees the lint warning and reaches for the obvious remedy is stopped
+by a failing test with the reason in it.
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -31646,12 +31698,8 @@ short enough to return early, and was lengthened until it exercised the cut.
   The instrument is a `comm -23` of declared symbols and of string literals of
   twelve characters or more, pre-merge against post-merge, per file. It is what
   found `C1-S9-02`, so it is not a sweep that cannot fail.
-- `C2-13` (Claude-2's claim that `components/capture/document-capture.tsx:24`
-  has a genuine ref-in-cleanup bug) remains contradicted and unwritten-up. The
-  cleanup does `generation.current++`, which increments AT cleanup time rather
-  than capturing a stale value — correct as an invalidation counter, and C2's
-  proposed fix of copying to a local would introduce the bug it describes. The
-  lint warning is a false positive here. Still to be written up in full.
+- Nothing else. `C2-13` is now written up below as `C1-S9-11`, which was the
+  last item this pass had left open.
 
 
 # Final Regression
