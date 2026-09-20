@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
-import { settleAll } from '@/lib/supabase/settle';
+import { settleAll, describeReadError } from '@/lib/supabase/settle';
 import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { resolveProvider } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
@@ -31,13 +31,22 @@ export async function POST(_req: Request, { params }: { params: Promise<{ childI
     );
 
     // Verify the child wallet belongs to this family (RLS also enforces this)
-    const { data: cw } = await supabase
+    // A refused read left the binding null and took the same branch as a row
+    // that genuinely is not there, so the caller was told their own child wallet
+    // does not exist. "Not found" is a claim about their data; it has to come
+    // from an answer, not from the absence of one. Fails closed either way —
+    // this changes WHICH closed answer is given, not whether one is. C1-S9-38.
+    const { data: cw, error: cwError } = await supabase
       .from('child_wallets')
       .select('id, member_id')
       .eq('id', childId)
       .eq('family_id', familyId)
       .eq('is_active', true)
       .maybeSingle();
+    if (cwError) {
+      console.error('[ai/wallet/child] wallet read failed', { familyId, error: describeReadError(cwError) });
+      return NextResponse.json({ error: tr('child.walletDataIsTemporarilyUnavailable') }, { status: 503 });
+    }
     if (!cw) return NextResponse.json({ error: tr('child.childWalletNotFound') }, { status: 404 });
 
     // Tier gate

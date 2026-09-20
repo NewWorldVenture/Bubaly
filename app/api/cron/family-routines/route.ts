@@ -364,12 +364,26 @@ async function releaseWedgedOccurrence(
   now: Date,
   tz: string,
 ): Promise<void> {
-  const { data: reservation } = await db
+  // Every WRITE below already checks its error, with comments saying why. The
+  // read that decides whether to attempt them did not, and it is the one that
+  // decides whether this recovery runs at all: a refused read left `reservation`
+  // null and took the same early return as "there is nothing to release". So a
+  // permission or RLS failure here turned the un-wedging path into a permanent
+  // no-op — the rule stays stuck on one `due_at`, arrives back here every tick,
+  // and nothing anywhere says so, because the function exits down its success
+  // path. Returning early is still right (acting on an unknown reservation state
+  // is worse), but it must be distinguishable from a clean nothing-to-do.
+  // Audit C1-S9-38.
+  const { data: reservation, error: reservationError } = await db
     .from('routine_runs')
     .select('status, request_id, created_at')
     .eq('rule_id', rule.id)
     .eq('due_at', dueAt)
     .maybeSingle();
+  if (reservationError) {
+    console.error('[cron:family-routines] could not read the reservation; rule stays wedged', rule.id, reservationError);
+    return;
+  }
   if (!reservation || reservation.request_id) return;
   const age = now.getTime() - Date.parse(String(reservation.created_at ?? ''));
   if (!Number.isFinite(age) || age < STALE_RESERVATION_MS) return;

@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-178 finding IDs from four workers and two parallel sessions; none of it was
+179 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -12,7 +12,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 > source-and-migration audit run without production credentials. Session B
 > (Register B, 14,038 items, `AUTH-001` / `API-<hash>` / `DB-TBL-nnn`) is a
 > hosted-CI and deployed-release audit. Their finding-ID sets are **disjoint**:
-> 900 IDs from A, 684 from B, 1,581 in union — verified mechanically at each
+> 901 IDs from A, 684 from B, 1,582 in union — verified mechanically at each
 > merge. The three literals both files contain (`LB-009`, `LB-016`, `SHA-256`)
 > are not counter-examples: the first two are pre-existing *runbook* names each
 > register cites, and the third is a hash algorithm the ID regex matches. No
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 188 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 189 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -33040,6 +33040,79 @@ results — two misses inside a file it had already flagged.
 
 ---
 
+### `[CLAUDE-1][MEDIUM][API]` C1-S9-38 — six more refused reads answered as "not found", and a cron recovery that could not report its own failure
+
+**Files:** `app/api/ai/wallet/child/[childId]/route.ts:33`,
+`app/api/email/invite/route.ts:24`, `app/api/forms/submit/route.ts:47`,
+`app/api/recipes/transform/route.ts:37`, `app/api/vacations/weather/route.ts:34`,
+`app/api/cron/family-routines/route.ts:359`
+
+Taken from the corrected `C1-S9-37` inventory: the five routes in the
+"dropped error → 404" bucket, plus the highest-risk entry from the remainder.
+
+**The five 404s.** Each read bound only `data`, so a refused read left the
+binding null and took the same branch as a row that genuinely is not there.
+**All five fail CLOSED, so none of them is or was a bypass** — what each got
+wrong is *which* closed answer it gives:
+
+- `recipes/transform` → *"Recipe not found"* for a recipe the family owns.
+- `vacations/weather` → *"Trip not found"* for a trip on their own itinerary.
+- `email/invite` → *"Invite not found"*.
+- `ai/wallet/child/[childId]` → *"Child wallet not found"*.
+- `forms/submit` → *"This form is no longer available."* The most exposed of
+  the five: this is a public marketing form, so the person misled is a
+  prospect who is told the company took the form down. The lead is lost and
+  nothing anywhere records why.
+
+Each now returns 503 with a translated `…IsTemporarilyUnavailable` message
+matching the catalogue's existing convention, logs the failure, and **keeps its
+404 for a genuine absence**.
+
+**One behaviour change, deliberate.** `email/invite` used `.single()`, which
+makes a MISSING ROW an error (`PGRST116`) rather than a null. Checking the error
+first while keeping `.single()` would have turned every real 404 into a 503 —
+the new guard breaking the exact case the old code got right by accident.
+Switched to `.maybeSingle()`, which is what makes "absent" and "refused"
+separable at all, and pinned by its own test case.
+
+**The cron recovery.** `releaseWedgedOccurrence` exists because a worker dying
+between reserving an occurrence and rescheduling it wedges that routine on one
+`due_at` forever. Every WRITE in it already checked its error, each with a
+comment saying why. The READ that decides whether the recovery runs at all did
+not:
+
+```ts
+const { data: reservation } = await db.from('routine_runs')...maybeSingle();
+if (!reservation || reservation.request_id) return;
+```
+
+A refused read left `reservation` null and took the same early return as
+"there is nothing to release" — so a permission or RLS failure turned the
+un-wedging path into a permanent no-op. The rule stays stuck, arrives back here
+every tick, and nothing says so, because the function exits down its success
+path. The same shape as `C1-S9-35`: a recovery whose failure is invisible
+precisely because it is a recovery.
+
+Returning early is still correct — acting on an unknown reservation state is
+worse, since the writes below step a rule past an occurrence another worker may
+still own — so the fix is to make it *distinguishable*, not to make it act. It
+now logs and returns, and a guard asserts both halves: that the bail exists, and
+that it still contains no `.update(`.
+
+**Status:** FIXED. Guard: eight cases in
+`tests/an-ai-answer-is-not-built-on-a-read-that-failed.test.ts`, each proved red
+by mutation — dropping each guard in turn, reverting the invite to `.single()`,
+replacing the 404 with the 503 (which would lose the real absence), and making
+the cron bail act instead of return.
+
+**Inventory: 17 of the 39 now fixed, 22 remain OPEN.** The `auth.getUser()`
+bucket (5) stays classified NOT this class. The remaining 17 are the
+insert/upsert bucket (4, which is the `C1-S9-16` write class) and 13 in
+"everything else" — chiefly `guardian/*` and `google/calendar/*`. Locations are
+recorded under `C1-S9-37`; none is counted as passing.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -33109,8 +33182,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **16,997 passing / 17,000 across 1,351
-files.** (Re-run after `C1-S9-37`; was 16,950 / 16,953 across 1,349 before this
+Status: ✅ PASS — `npx vitest run`: **17,005 passing / 17,008 across 1,351
+files.** (Re-run after `C1-S9-38`; was 16,950 / 16,953 across 1,349 before this
 batch.) The three failures are `C1-S9-09`, BLOCKED: this container runs Node
 22.22.2 against the repository's `.nvmrc` 24.21.0, and nvm cannot fetch the
 Node 24 distribution here. Not counted as passing.

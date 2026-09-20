@@ -208,3 +208,68 @@ describe('the sweep that found these leaves nothing behind (C1-S9-37)', () => {
     }
   });
 });
+
+/**
+ * Audit C1-S9-38 — the "dropped error → not found" bucket from the C1-S9-37
+ * inventory, plus the one read in a cron recovery path.
+ *
+ * All five of these already failed CLOSED, so none was a bypass. What each got
+ * wrong was WHICH closed answer it gave: a refused read produced "your recipe
+ * does not exist", "trip not found", "this form is no longer available". Those
+ * are claims about the caller's data, and they have to come from an answer.
+ */
+const notFoundRoutes = [
+  ['ai/wallet/child', 'app/api/ai/wallet/child/[childId]/route.ts', 'cwError', 'child.childWalletNotFound'],
+  ['email/invite', 'app/api/email/invite/route.ts', 'inviteError', 'invite.inviteNotFound'],
+  ['forms/submit', 'app/api/forms/submit/route.ts', 'formError', 'submit.thisFormIsNoLonger'],
+  ['recipes/transform', 'app/api/recipes/transform/route.ts', 'recipeError', 'transform.recipeNotFound'],
+  ['vacations/weather', 'app/api/vacations/weather/route.ts', 'tripError', 'weather.tripNotFound'],
+] as const;
+
+describe('a refused read is not "not found" (C1-S9-38)', () => {
+  it.each(notFoundRoutes)('%s distinguishes a refusal from an absence', (_name, file, binding, notFoundKey) => {
+    const source = readFileSync(file, 'utf8');
+    expect(source).toContain(`error: ${binding}`);
+    expect(source).toContain(`if (${binding})`);
+    expect(bodyOf(source, `if (${binding})`, '{ status: 503 }')).toContain('console.error');
+    // The 404 is KEPT — it is the right answer for a row that really is gone.
+    expect(source).toContain(notFoundKey);
+    expect(at(source, `if (${binding})`)).toBeLessThan(at(source, notFoundKey));
+  });
+
+  it('the invite route uses maybeSingle, or the fix would invert itself', () => {
+    // `.single()` makes a MISSING ROW an error (PGRST116). Checking the error
+    // first and keeping `.single()` would have turned every genuine 404 into a
+    // 503 — the new guard breaking the case the old code got right by accident.
+    // `.maybeSingle()` is what makes "absent" and "refused" separable at all.
+    const source = readFileSync('app/api/email/invite/route.ts', 'utf8');
+    expect(source).toContain('.maybeSingle()');
+    expect(bodyOf(source, "from('invites')", '.maybeSingle();')).not.toContain('.single()');
+  });
+});
+
+describe('a cron recovery path says when it could not run (C1-S9-38)', () => {
+  const cron = readFileSync('app/api/cron/family-routines/route.ts', 'utf8');
+
+  it('the reservation read is checked, not silently treated as nothing-to-do', () => {
+    // Every WRITE in this function already checked its error. The read that
+    // decides whether the recovery runs at all did not: a refusal left
+    // `reservation` null and took the same early return as "nothing to release",
+    // so the rule stayed wedged on one due_at, came back every tick, and nothing
+    // said so — the function exited down its success path.
+    const body = bodyOf(cron, 'async function releaseWedgedOccurrence', '\n}');
+    expect(body).toContain('error: reservationError');
+    expect(body).toContain('if (reservationError)');
+    expect(body).toContain('rule stays wedged');
+    // Before the early return that a null reservation would take.
+    expect(at(body, 'if (reservationError)')).toBeLessThan(at(body, 'if (!reservation || reservation.request_id) return;'));
+  });
+
+  it('it still returns rather than acting on an unknown reservation', () => {
+    // Acting blind here is worse than not acting: the writes below step a rule
+    // past an occurrence somebody else's worker may still own.
+    const bail = bodyOf(cron, 'if (reservationError)', '\n  }');
+    expect(bail).toContain('return;');
+    expect(bail).not.toContain('.update(');
+  });
+});
