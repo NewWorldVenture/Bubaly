@@ -65,11 +65,11 @@ function unconfirmedPerFile(): Map<string, number> {
   return counts;
 }
 
-// Known unconfirmed writes as of C1-S9-55. ONLY REMOVE or DECREASE entries as
+// Known unconfirmed writes as of C1-S9-56. ONLY REMOVE or DECREASE entries as
 // they are fixed — never add, never increase.
 //
 // Burn-down since the ratchet went in: 82 across 39 files (C1-S9-50) → 74/37
-// (C1-S9-51) → 61/35 (C1-S9-53) → 54/34 (C1-S9-55). Each step edited this baseline DOWN, and the
+// (C1-S9-51) → 61/35 (C1-S9-53) → 54/34 (C1-S9-55) → 43/32 (C1-S9-56). Each step edited this baseline DOWN, and the
 // stale-entry case below is what forced the edit rather than leaving fixed
 // files sitting here quietly.
 const BASELINE = new Map<string, number>([
@@ -94,14 +94,12 @@ const BASELINE = new Map<string, number>([
   ['app/(app)/dashboard/playbook/playbook-actions.ts', 1],
   ['app/(app)/dashboard/recipes/vote/actions.ts', 2],
   ['app/(app)/dashboard/relationship/actions.ts', 2],
-  ['app/(app)/dashboard/social-feed/actions.ts', 4],
+  ['app/(app)/dashboard/social-feed/actions.ts', 1],
   ['app/(app)/dashboard/sync/feeds/actions.ts', 1],
-  ['app/(app)/dashboard/trip-intel/actions.ts', 4],
   ['app/(app)/dashboard/trust/actions.ts', 1],
   ['app/(app)/dashboard/workload/actions.ts', 1],
   ['app/(app)/family/child-login-actions.ts', 3],
   ['app/(app)/feedback/actions.ts', 1],
-  ['app/(app)/marketplace/actions.ts', 4],
   ['app/(app)/marketplace/alerts/actions.ts', 2],
   ['app/(app)/marketplace/community/actions.ts', 1],
   ['app/(app)/marketplace/handoff/actions.ts', 1],
@@ -137,6 +135,6 @@ describe('the unconfirmed-write class only shrinks (C1-S9-50)', () => {
     // If this number moves without finalaudit.md moving with it, one of the two
     // is wrong — and the register is the thing other workers read.
     const total = [...BASELINE.values()].reduce((a, b) => a + b, 0);
-    expect(total).toBe(54);
+    expect(total).toBe(43);
   });
 });

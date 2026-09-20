@@ -797,3 +797,84 @@ describe('the generic family record helpers confirm (C1-S9-55)', () => {
       .toHaveLength(4);
   });
 });
+
+/**
+ * Audit C1-S9-56 — marketplace orders, the social reader, and trip departures.
+ *
+ * One of these is not a confirmation finding at all: the marketplace order
+ * transition was a read-then-write race, and the fix is the same predicated
+ * claim the wallet allowance already uses. The others are the ordinary class,
+ * plus one write that must deliberately stay ungated.
+ */
+const marketplaceActions = readFileSync('app/(app)/marketplace/actions.ts', 'utf8');
+const socialFeed = readFileSync('app/(app)/dashboard/social-feed/actions.ts', 'utf8');
+const tripIntel = readFileSync('app/(app)/dashboard/trip-intel/actions.ts', 'utf8');
+
+describe('an order transition is claimed, not assumed (C1-S9-56)', () => {
+  it('the update is predicated on the status it was validated against', () => {
+    // `ORDER_FLOW` was checked against `order.status` read a moment earlier, and
+    // nothing stopped that changing in between: two concurrent calls could both
+    // read `requested` and both advance, or take divergent branches. Predicating
+    // the write makes check and write one atomic step.
+    const body = bodyOf(marketplaceActions, 'export async function setOrderStatusAction', 'return { ok: true };');
+    expect(body).toContain(".eq('status', order.status)");
+    expect(body).toContain('wroteNoRows(advanced)');
+  });
+
+  it('the order write carries its own family scope', () => {
+    // Ownership is already proven by the read above and by RLS. Carrying the
+    // scope on the write too means a later edit cannot detach it from its guard.
+    const body = bodyOf(marketplaceActions, 'export async function setOrderStatusAction', 'return { ok: true };');
+    expect(body.match(/eq\('family_id', ctx\.active\.familyId\)/g) ?? []).toHaveLength(2);
+  });
+
+  it('the match, save and follow writes are confirmed', () => {
+    for (const binding of ['matched', 'unsaved', 'unfollowed']) {
+      expect(marketplaceActions, binding).toContain(`wroteNoRows(${binding})`);
+    }
+  });
+});
+
+describe('the social reader confirms what it can, and not what it cannot (C1-S9-56)', () => {
+  it('the three single-row writes are confirmed', () => {
+    for (const binding of ['removed', 'favorited', 'marked']) {
+      expect(socialFeed, binding).toContain(`wroteNoRows(${binding})`);
+    }
+  });
+
+  it('mark-all-read is deliberately NOT gated on rows', () => {
+    // Its `.eq('is_read', false)` predicate makes zero rows the ordinary
+    // "everything is already read" case. Gating it would report an error for a
+    // button that simply had nothing to do — the over-tightening direction, and
+    // the reason this assertion exists.
+    const body = bodyOf(socialFeed, 'export async function markAllReadAction', 'return { ok: true };');
+    expect(body).toContain(".eq('is_read', false)");
+    expect(body).not.toContain('wroteNoRows');
+    expect(body).not.toContain(".select('id')");
+  });
+});
+
+describe('a departure time the family is given is confirmed (C1-S9-56)', () => {
+  it('the refresh confirms before returning leaveBy', () => {
+    // It returns `leaveBy` — the time the family is told to leave. An update
+    // matching nothing means that time was never stored, so the reminder still
+    // fires against the old drive estimate while the screen shows the new one.
+    expect(tripIntel).toContain('wroteNoRows(refreshed)');
+    expect(at(tripIntel, 'wroteNoRows(refreshed)'))
+      .toBeLessThan(at(tripIntel, 'return { ok: true, data: { leaveBy: plan.leaveByISO } };'));
+  });
+
+  it('the reminder cleanup is confirmed before the plan it belongs to is deleted', () => {
+    // The departure plan is deleted either way, so a reminder left behind
+    // becomes an orphan calendar event the family cannot reach from the trip
+    // that created it.
+    expect(tripIntel).toContain('wroteNoRows(removedEvent)');
+    expect(at(tripIntel, 'wroteNoRows(removedEvent)')).toBeLessThan(at(tripIntel, 'wroteNoRows(removedDeparture)'));
+  });
+
+  it('both plan deletes are confirmed', () => {
+    for (const binding of ['removedPlan', 'removedDeparture']) {
+      expect(tripIntel, binding).toContain(`wroteNoRows(${binding})`);
+    }
+  });
+});

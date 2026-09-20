@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-196 finding IDs from four workers and two parallel sessions; none of it was
+197 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -12,7 +12,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 > source-and-migration audit run without production credentials. Session B
 > (Register B, 14,038 items, `AUTH-001` / `API-<hash>` / `DB-TBL-nnn`) is a
 > hosted-CI and deployed-release audit. Their finding-ID sets are **disjoint**:
-> 918 IDs from A, 684 from B, 1,599 in union — verified mechanically at each
+> 919 IDs from A, 684 from B, 1,600 in union — verified mechanically at each
 > merge. The three literals both files contain (`LB-009`, `LB-016`, `SHA-256`)
 > are not counter-examples: the first two are pre-existing *runbook* names each
 > register cites, and the third is a hash algorithm the ID regex matches. No
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 206 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 207 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -34016,6 +34016,67 @@ re-pointed: **eight now this session**, every one written as
 
 ---
 
+### `[CLAUDE-1][MEDIUM][SERVER ACTIONS]` C1-S9-56 — an order transition that was a race, not a confirmation
+
+Eleven more from the `C1-S9-50` baseline, and one of them turned out not to be a
+confirmation defect at all.
+
+#### `setOrderStatusAction` was a read-then-write race
+
+```ts
+const { data: order } = await supabase.from('marketplace_orders')
+  .select('id, status').eq('id', orderId).eq('family_id', …).maybeSingle();
+…
+if (!(ORDER_FLOW[order.status] ?? []).includes(status)) return { ok: false, … };
+const { error } = await supabase.from('marketplace_orders').update({ status }).eq('id', orderId);
+```
+
+The transition is validated against `order.status` read a moment earlier, and
+**nothing stopped that changing in between.** Two concurrent calls could both
+read `requested` and both advance, or take divergent branches of `ORDER_FLOW`
+— `confirmed` and `cancelled` from the same starting state. The missing
+`.select()` hid it; the missing predicate *caused* it.
+
+Fixed by predicating the update on the status it was validated against, which
+makes the check and the write one atomic step — **the same fix the wallet
+allowance claim already carries** to stop a double credit (`C1-S9-53` pins it).
+That the two arrived at the identical shape independently is worth noting: it is
+the repository's own answer to this problem, and it was already written down.
+
+The write also gained its own `family_id` filter. Ownership was already proven
+by the read and by RLS, so this is defence in depth — a write that carries its
+own scope cannot be detached from its guard by a later edit.
+
+#### The rest
+
+`marketplace_matches`, the save/follow toggles, three social-reader writes, and
+four trip-intel writes. Two are worth naming:
+
+- **The departure refresh returns `leaveBy`** — the time the family is told to
+  leave. An update matching nothing meant that time was never stored, so the
+  reminder still fires against the old drive estimate while the screen shows the
+  new one.
+- **The reminder cleanup runs before its departure plan is deleted either way.**
+  A calendar event left behind becomes an orphan the family cannot reach from
+  the trip that created it: a notification with nothing behind it.
+
+#### And one that must stay ungated
+
+`markAllReadAction` updates `.eq('is_read', false)`, so **zero rows is the
+ordinary "everything is already read" case.** Gating it would report an error
+for a button that simply had nothing to do. A guard asserts the absence of both
+`.select()` and `wroteNoRows` there, and the mutation that adds them is one of
+the seven proved red. That is the seventh write in this sweep deliberately left
+unconfirmed.
+
+**Status:** FIXED. Guard: eleven cases, each proved red by mutation — including
+removing the order predicate (which restores the race), detaching the order
+write from its family scope, and the over-tightening of mark-all-read.
+
+**Ratchet: 54 → 43 across 32 files.**
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -34085,8 +34146,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,123 passing / 17,126 across 1,352
-files.** (Re-run after `C1-S9-55`; was 16,950 / 16,953 across 1,349 before this
+Status: ✅ PASS — `npx vitest run`: **17,131 passing / 17,134 across 1,352
+files.** (Re-run after `C1-S9-56`; was 16,950 / 16,953 across 1,349 before this
 batch.) The three failures are `C1-S9-09`, BLOCKED: this container runs Node
 22.22.2 against the repository's `.nvmrc` 24.21.0, and nvm cannot fetch the
 Node 24 distribution here. Not counted as passing.
