@@ -29031,3 +29031,73 @@ NO
 
 ## Final Sign-Off
 Pending
+
+# Final Regression — 2026-09-20, branch `claude/roadmap-implementation-ld8bon`
+
+The section above is the Codex cycle's, pinned to its own frozen trees, and is
+left exactly as it was. This one covers **this branch**, which is 122 commits
+ahead of `main` and 0 behind — its merge-base **is** `main`'s head `ad742c2b`.
+
+Each gate below names where its evidence comes from. Where a gate's most recent
+run was on an earlier commit of this branch, that is said rather than implied,
+and what changed since is named so the reader can judge whether it matters.
+
+| gate | result | evidence |
+|---|---|---|
+| Typecheck · Lint · Test · Build | ✅ PASS | CI run [35530585750](https://github.com/NewWorldVenture/Bubaly/actions/runs/35530585750) on `70b07286` |
+| Database — migration replay | ✅ PASS | **349 applied, 0 failed**. CI Database job, green on every head of this branch including `2ec2b936`, the one carrying the `auth.mfa_factors` shim change |
+| Database — RLS boundary probes | ✅ PASS | **61 / 61**, run locally three times against a freshly bootstrapped database, and green in CI's Database job |
+| Mobile (Expo) · Typecheck · Config | ✅ PASS | green on every head of this branch |
+| E2E (public · a11y · authenticated · mobile matrix) | ❌ **3 failures, none this branch's** | **1293 passed / 3 failed**. See **E2E-001** |
+| Vercel preview | ✅ PASS | preview comments job green |
+| Supabase preview | — skipped | not configured for this branch |
+
+## What the E2E failures are, and why they are not a gate this branch can pass
+
+All three are `tests/e2e/phone-auth-http.spec.ts`. The merge-base of this branch
+**is** `main`'s head, and `main`'s own CI on that exact commit
+([35472721507](https://github.com/NewWorldVenture/Bubaly/actions/runs/35472721507))
+fails **the same three plus a fourth** — 1292 passed / 4 failed there against
+1293 / 3 here. This branch is strictly better on E2E than the branch it merges
+into.
+
+The Codex cycle found them first and diagnosed them better: *"each stalls before
+code-entry heading after Continue, so real OTP verification is not reached"*,
+with *"new hosted phone acceptance remains open"*. They are tracked under
+**AUTH-001 / AUTH-002 / AUTH-003**. Nothing was skipped, quarantined or
+disabled, and no re-run was spent, because a base branch failing identically is
+stronger evidence than a re-run.
+
+## Measurements this pass added, all re-runnable
+
+| what | number | script |
+|---|---|---|
+| tables taking a write from any household member | **248** tables / **719** (table, verb) pairs | `docs/audit/role-blind-write-census.sh` |
+| … triaged | **46** suspect / **18** no-writer / **184** consistent | `docs/audit/role-blind-write-triage.sh` |
+| API routes named by a test | **140 / 146** | `docs/audit/coverage-census.sh` |
+| server-action files named by a test | **84 / 130** | `docs/audit/coverage-census.sh` |
+| public tables named by a boundary probe | **127 / 491** | `docs/audit/coverage-census.sh` |
+| public tables with RLS enabled | **491 / 491** | `docs/audit/coverage-census.sh` |
+| markdown table rows that would not render as written | **0**, across 403 tracked files | `docs/audit/audit-tables-render.py` |
+
+## Production Readiness
+
+**NO**, and the reason has not changed: **PROD-001**. None of `0318`–`0338` has
+been applied. They replay cleanly from nothing and pass every probe in CI, and
+production's ledger still records only `0001`–`0003`, so every row in §3 reading
+*"fixed by 0322"* is fixed **in the repository** and open **in production**.
+Applying them is a human action (`docs/PENDING_PROD_MIGRATIONS.md`), and `0321`
+must **not** be applied as written — it needs `create index concurrently`.
+
+**AUTHZ-021** remains open by choice rather than by obstacle. It now has a
+reproduced defect, a shipped and test-pinned precedent (`0272`), a verified
+writer census, a measured NULL requirement, a named CI ratchet to update and a
+one-line repair to `attribution_is_immutable()` (**AUTHZ-022**) that must land
+with it. No migration is written, because the last time this class was rushed it
+produced three files that passed 64 probes and were rejected on review.
+
+## Final Sign-Off
+
+Pending. Not withheld for want of work on this branch — withheld because
+PROD-001 is a human action and SEC-001's bucket half, I18N-001 and the two
+Google client-secret rotations are the owner's.
