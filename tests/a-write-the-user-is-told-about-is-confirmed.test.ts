@@ -230,7 +230,12 @@ describe('a rollback that fails is not reported as a clean failure (C1-S9-35)', 
   });
 
   it('the single-step link failure is checked too', () => {
-    const link = between(childLogin, 'const { error: linkErr }', 'const { error: rowErr }');
+    // Anchored on the FILTER, not the destructure. C1-S9-57 bound the link's
+    // rows as well as its error, and this guard — one I wrote myself under
+    // C1-S9-35 — went red on that improvement. Ninth of the session, and the
+    // first of mine: `toContain("<exact statement>")` is a trap regardless of
+    // who writes it.
+    const link = between(childLogin, "update({ user_id: childUserId, is_active: true })", 'const { error: rowErr }');
     expect(link).toContain('const { error: deleteError } = await admin.auth.admin.deleteUser(childUserId);');
     expect(link).toContain("t('childLoginActions.couldNotFinishAndCouldNotUndo')");
   });
@@ -876,5 +881,50 @@ describe('a departure time the family is given is confirmed (C1-S9-56)', () => {
     for (const binding of ['removedPlan', 'removedDeparture']) {
       expect(tripIntel, binding).toContain(`wroteNoRows(${binding})`);
     }
+  });
+});
+
+/**
+ * Audit C1-S9-57 — three writes in one file that look identical to a scanner,
+ * and only one of which may be confirmed.
+ *
+ * `child-login-actions.ts` contains two `child_login_throttle` clears and one
+ * `family_members` link. All three are filtered updates with a checked error
+ * and no `.select()`, so the C1-S9-50 scan counts all three. Confirming all
+ * three would break the feature.
+ */
+describe('a throttle clear and a member link are not the same write (C1-S9-57)', () => {
+  const childLoginSource = readFileSync('app/(app)/family/child-login-actions.ts', 'utf8');
+
+  it('the member link IS confirmed, and takes the rollback on zero rows', () => {
+    // `member` was read moments earlier, so the row exists — a link matching
+    // nothing leaves the child holding an auth user that resolves to no member:
+    // they sign in successfully and have no identity, no family, nothing.
+    expect(childLoginSource).toContain('if (linkErr || wroteNoRows(linked))');
+    // The same rollback as a link error, not a fall-through to the insert.
+    const bail = bodyOf(childLoginSource, 'if (linkErr || wroteNoRows(linked))', "t('childLoginActions.couldNotLinkTheLogin') };");
+    expect(bail).toContain('deleteUser(childUserId)');
+  });
+
+  it('neither throttle clear is confirmed', () => {
+    // A brand-new username has no throttle row, and a child who has never
+    // failed a sign-in has none either — so zero rows is the ORDINARY case.
+    // Gating them would refuse to create a login for every child whose username
+    // nobody has used before. Their errors are checked, which is the part that
+    // matters.
+    const clears = childLoginSource.match(/from\('child_login_throttle'\)[\s\S]{0,220}?;/g) ?? [];
+    expect(clears, 'the create path and the reset path').toHaveLength(2);
+    for (const clear of clears) {
+      expect(clear, 'a throttle clear must not be gated on rows').not.toContain('.select(');
+    }
+    expect(childLoginSource).toContain('if (staleThrottleErr) return { ok: false');
+    expect(childLoginSource).toContain('if (throttleErr) return { ok: false');
+  });
+
+  it('the reason each way is written down beside it', () => {
+    // Three writes that a scanner cannot tell apart need the distinction in the
+    // file, or the next sweep makes them consistent and breaks two of them.
+    expect(childLoginSource).toContain('Deliberately NOT confirmed');
+    expect(childLoginSource).toContain('Zero rows is a real failure here');
   });
 });

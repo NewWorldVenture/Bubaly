@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-197 finding IDs from four workers and two parallel sessions; none of it was
+198 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -12,7 +12,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 > source-and-migration audit run without production credentials. Session B
 > (Register B, 14,038 items, `AUTH-001` / `API-<hash>` / `DB-TBL-nnn`) is a
 > hosted-CI and deployed-release audit. Their finding-ID sets are **disjoint**:
-> 919 IDs from A, 684 from B, 1,600 in union — verified mechanically at each
+> 920 IDs from A, 684 from B, 1,601 in union — verified mechanically at each
 > merge. The three literals both files contain (`LB-009`, `LB-016`, `SHA-256`)
 > are not counter-examples: the first two are pre-existing *runbook* names each
 > register cites, and the third is a hash algorithm the ID regex matches. No
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 207 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 208 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -34077,6 +34077,52 @@ write from its family scope, and the over-tightening of mark-all-read.
 
 ---
 
+### `[CLAUDE-1][MEDIUM][SERVER ACTIONS]` C1-S9-57 — three writes a scanner cannot tell apart, and confirming all three would break the feature
+
+`app/(app)/family/child-login-actions.ts` contains two `child_login_throttle`
+clears and one `family_members` link. All three are filtered updates with a
+checked error and no `.select()`, so the `C1-S9-50` scan counts all three
+identically. **Two of them must stay exactly as they are.**
+
+**The link must be confirmed.** `member` was read moments earlier, so the row
+exists — a link matching nothing leaves the child holding an auth user that
+resolves to no member: they sign in successfully and have **no identity, no
+family, nothing**. It now takes the same rollback as a link error (delete the
+orphaned auth user) rather than falling through to the `child_logins` insert.
+
+**Neither throttle clear may be.** The create path's own comment says *"clear
+ANY stale throttle row"* — a brand-new username usually has none, so zero rows
+is the ordinary case. Gating it would **refuse to create a login for every child
+whose username nobody has used before.** The reset path is the same: a child who
+has never failed a sign-in has no throttle row. Their errors are checked, which
+is the part that matters.
+
+Both directions are mutation-proved: removing the link check, and "making
+consistent" either throttle clear.
+
+#### Why this one is recorded separately
+
+It is the clearest demonstration of what the ratchet is and is not. A count can
+say *these 42 writes do not ask what they changed*. It cannot say *these 42 are
+defects* — and a sweep that treats the number as a to-do list would, in this
+file, break child login for exactly the families whose children have never
+logged in before.
+
+**Nine writes across this sweep are now deliberately unconfirmed**, each with a
+guard asserting the absence of a check, and the reasoning is written beside the
+code rather than only in this register — because the next person to run a
+consistency pass reads the file, not the audit. A guard asserts those comments
+are still there, for the same reason.
+
+**Status:** FIXED. Guard: three cases plus five mutations, two of them
+over-tightening. **Ratchet: 43 → 42.**
+
+**And the ninth guard red on an improvement** — this one mine, from `C1-S9-35`,
+pinning `const { error: linkErr }`. Re-anchored on the filter.
+`toContain("<exact statement>")` is a trap regardless of who writes it.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -34146,8 +34192,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,131 passing / 17,134 across 1,352
-files.** (Re-run after `C1-S9-56`; was 16,950 / 16,953 across 1,349 before this
+Status: ✅ PASS — `npx vitest run`: **17,134 passing / 17,137 across 1,352
+files.** (Re-run after `C1-S9-57`; was 16,950 / 16,953 across 1,349 before this
 batch.) The three failures are `C1-S9-09`, BLOCKED: this container runs Node
 22.22.2 against the repository's `.nvmrc` 24.21.0, and nvm cannot fetch the
 Node 24 distribution here. Not counted as passing.

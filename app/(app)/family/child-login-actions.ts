@@ -118,6 +118,11 @@ export async function createChildLoginAction(input: {
   // but "your child's new login is ready" was simply untrue. Running it first
   // means a failure costs nothing: no auth user, no rows, an honest error.
   // Audit C1-S9-16.
+  // Deliberately NOT confirmed. The comment above says "clear ANY stale
+  // throttle row" — a brand-new username usually has none, so zero rows is the
+  // ordinary case, and gating it would refuse to create a login for every child
+  // whose username nobody has used before. Its ERROR is checked, which is the
+  // part that matters. Audit C1-S9-57.
   const { error: staleThrottleErr } = await admin.from('child_login_throttle')
     .update({ fails: 0, locked_until: null, window_start: new Date().toISOString() })
     .eq('username', username);
@@ -134,9 +139,16 @@ export async function createChildLoginAction(input: {
   const childUserId = created.user.id;
 
   // Link the member to the new auth user so they ARE this member on sign-in.
-  const { error: linkErr } = await admin.from('family_members')
-    .update({ user_id: childUserId, is_active: true }).eq('id', member.id);
-  if (linkErr) {
+  //
+  // Zero rows is a real failure here, unlike the two throttle clears in this
+  // file: `member` was read moments ago, so the row exists. A link that matched
+  // nothing leaves the child holding an auth user that resolves to no member —
+  // they sign in successfully and have no identity, no family, nothing. It
+  // therefore takes the SAME rollback as a link error rather than falling
+  // through to the `child_logins` insert. Audit C1-S9-57.
+  const { data: linked, error: linkErr } = await admin.from('family_members')
+    .update({ user_id: childUserId, is_active: true }).eq('id', member.id).select('id');
+  if (linkErr || wroteNoRows(linked)) {
     const { error: deleteError } = await admin.auth.admin.deleteUser(childUserId);
     if (deleteError) {
       console.error('[child-login] could not delete the orphaned auth user after a failed link', {
@@ -200,6 +212,8 @@ export async function resetChildPinAction(input: { memberId: string; pin: string
   // a lockout cleared just before a password change that then fails is harmless
   // — it lifts a lockout slightly early on credentials that still work.
   // Audit C1-S9-16.
+  // Same as the create path: a child who has never failed a sign-in has no
+  // throttle row, so zero rows is the common case, not a failure.
   const { error: throttleErr } = await admin.from('child_login_throttle')
     .update({ fails: 0, locked_until: null, window_start: new Date().toISOString() })
     .eq('username', normalizeUsername(row.username));
