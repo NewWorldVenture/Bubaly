@@ -5,6 +5,7 @@ import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 import { normalizeEmail, normalizeSource, normalizeVisitorId } from '@/lib/blog/engagement';
+import { describeReadError } from '@/lib/supabase/settle';
 
 export const runtime = 'nodejs';
 
@@ -51,11 +52,22 @@ export async function POST(req: NextRequest) {
   const source = normalizeSource(body.source);
   const visitorId = normalizeVisitorId(body.visitorId);
 
-  const { data: existing } = await supabase
+  // `blog_subscribers.email` is UNIQUE (0201_blog_engagement.sql:35), so a
+  // refused read here did not create a duplicate — it fell through to the
+  // insert and hit the constraint. The person affected is someone who already
+  // subscribed and, more pointedly, someone previously unsubscribed who is
+  // trying to come back: instead of being reactivated they get an error.
+  // Audit C1-S9-41.
+  const { data: existing, error: existingError } = await supabase
     .from('blog_subscribers')
     .select('id, status')
     .eq('email', email)
     .maybeSingle();
+
+  if (existingError) {
+    console.error('[blog/subscribe] subscriber lookup failed', { error: describeReadError(existingError) });
+    return NextResponse.json({ error: t('subscribe.subscriptionIsTemporarilyUnavailable') }, { status: 503 });
+  }
 
   if (existing) {
     if (existing.status !== 'active') {

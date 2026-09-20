@@ -10,6 +10,7 @@ import {
 } from '@/lib/google';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { decodeGoogleToken, encodeGoogleToken, hasStoredGoogleToken } from '@/lib/google-token-storage';
+import { describeReadError } from '@/lib/supabase/settle';
 
 // Fetches the next 3 months of events from Google Calendar primary and
 // upserts them into calendar_events with source='google'.
@@ -19,12 +20,23 @@ export async function POST() {
     const ctx = await requireUserContext();
     const supabase = await createServer();
 
-    // Load stored Google token from user_preferences
-    const { data: prefs } = await supabase
+    // Load stored Google token from user_preferences.
+    //
+    // A refused read left `np` empty, `decoded` null, and answered "Google
+    // Calendar not connected" to a user whose calendar IS connected. Verified
+    // that it is not worse than that: the `!decoded` branch returns before the
+    // write path below, so a failed read cannot reach `{ ...np,
+    // googleCalendarToken: null }` and destroy a live token. Audit C1-S9-41.
+    const { data: prefs, error: prefsError } = await supabase
       .from('user_preferences')
       .select('notification_prefs')
       .eq('user_id', ctx.user.id)
       .maybeSingle();
+
+    if (prefsError) {
+      console.error('[google/calendar/sync] preference read failed', { userId: ctx.user.id, error: describeReadError(prefsError) });
+      return NextResponse.json({ error: t('sync.calendarSettingsAreTemporarilyUnavailable') }, { status: 503 });
+    }
 
     const np = (prefs?.notification_prefs as Record<string, unknown>) ?? {};
     // Reads both the encrypted envelope and the plaintext object rows written
@@ -148,15 +160,26 @@ export async function POST() {
 
 // Returns whether the current user has Google Calendar connected.
 export async function GET() {
+  const t = await getTranslations();
   try {
     const ctx = await requireUserContext();
     const supabase = await createServer();
 
-    const { data: prefs } = await supabase
+    const { data: prefs, error: prefsError } = await supabase
       .from('user_preferences')
       .select('notification_prefs')
       .eq('user_id', ctx.user.id)
       .maybeSingle();
+
+    // The comment below says a key rotation should not make every user look
+    // disconnected. A refused read did exactly that by another route: it
+    // answered `connected: false`, which puts "Connect Google" in front of
+    // someone already connected, and reconnecting re-runs the whole OAuth
+    // grant. `unknown` is the honest third answer. Audit C1-S9-41.
+    if (prefsError) {
+      console.error('[google/calendar/sync] status read failed', { userId: ctx.user.id, error: describeReadError(prefsError) });
+      return NextResponse.json({ error: t('sync.calendarSettingsAreTemporarilyUnavailable') }, { status: 503 });
+    }
 
     const np = (prefs?.notification_prefs as Record<string, unknown>) ?? {};
     // Answered without decrypting: the status endpoint does not need the key,

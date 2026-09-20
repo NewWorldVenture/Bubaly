@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-181 finding IDs from four workers and two parallel sessions; none of it was
+184 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -12,7 +12,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 > source-and-migration audit run without production credentials. Session B
 > (Register B, 14,038 items, `AUTH-001` / `API-<hash>` / `DB-TBL-nnn`) is a
 > hosted-CI and deployed-release audit. Their finding-ID sets are **disjoint**:
-> 903 IDs from A, 684 from B, 1,584 in union — verified mechanically at each
+> 906 IDs from A, 684 from B, 1,587 in union — verified mechanically at each
 > merge. The three literals both files contain (`LB-009`, `LB-016`, `SHA-256`)
 > are not counter-examples: the first two are pre-existing *runbook* names each
 > register cites, and the third is a hash algorithm the ID regex matches. No
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 191 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 194 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -33254,6 +33254,105 @@ bucket (5, classified NOT this class and still to be verified read-by-read) and
 
 ---
 
+### `[CLAUDE-1][MEDIUM][API]` C1-S9-41/42/43 — closing the 39-read inventory, with its remainder defended rather than counted
+
+Three findings recorded together because they are one piece of work: finishing
+the sweep opened under `C1-S9-37` and leaving it in a state that cannot quietly
+regrow.
+
+#### `C1-S9-41` — five more routes stating what they could not check
+
+- **`google/calendar/sync` (both handlers).** POST answered *"Google Calendar
+  not connected"*; GET answered `connected: false`, which puts "Connect Google"
+  in front of someone already connected and makes them re-run the whole OAuth
+  grant. The GET handler's own comment says *"a key rotation should not make
+  every user look disconnected"* — a refused read did precisely that by another
+  route. **Verified, not assumed, that it was not worse:** the `!decoded` bail
+  returns at 400 *before* the `{ ...np, googleCalendarToken: null }` write, so
+  an empty `np` from a failed read can never overwrite a live token with null.
+  That ordering is now pinned by its own test case.
+- **`recipes/suggest`** returned `{ picks: [], empty: true }` — the response
+  that tells a family their recipe box is empty — to a family whose recipe box
+  is not.
+- **`weekend/discover`** already had a channel for partial failure:
+  `sourceErrors`, which every external provider reports into. The family's OWN
+  curated feeds were the single source that could vanish silently, leaving a
+  response that looks complete while omitting the only source they configured
+  themselves. Reported through the existing mechanism; no new one invented.
+- **`blog/subscribe`.** `blog_subscribers.email` is `UNIQUE`
+  (`0201_blog_engagement.sql:35`), so a refused lookup did not duplicate anyone
+  — it fell through to the insert and hit the constraint. The person affected is
+  someone already subscribed and, most pointedly, **someone previously
+  unsubscribed trying to come back**, who gets an error instead of reactivation.
+
+#### `C1-S9-42` — the `auth.getUser()` bucket, verified instead of classified
+
+Five reads were set aside under `C1-S9-37` as "a different API". That is a claim
+about authentication, so it was checked read by read rather than left as a note.
+The property that makes it true: `getUser()` resolves to
+`{ data: { user }, error }` and a failure yields `user: null`, so dropping the
+error cannot produce an AUTHENTICATED outcome — only a denial. Fail-closed by
+construction, which is the direction auth is allowed to fail. All five confirmed
+and pinned.
+
+**The check found a sixth the inventory had missed**, and it turned out to be
+the best-behaved auth read in the tree.
+`app/api/vacations/confirmation-import/route.ts:62` does not destructure, so the
+scan never saw it — and it is the only one that draws the distinction this
+entire audit is about:
+
+```ts
+if (auth.error || !auth.data.user) {
+  if (!auth.error || auth.error.name === 'AuthSessionMissingError' || ...) {
+    return errorResponse('Sign in to review a travel confirmation.', 401);
+  }
+  return errorResponse('Account context is temporarily unavailable.', 503);
+}
+```
+
+A missing session is 401; a failed auth check is 503. It is now pinned as the
+exemplar, so a regression that collapses the two is visible. My scan reported it
+as an offender before the pattern was corrected — the instrument being wrong
+about the best code in the file is worth recording alongside the finding.
+
+#### `C1-S9-43` — the last two that change the answer, and the ratchet
+
+- **`guardian/inbound/voice`'s member-phone read** does not degrade into a
+  smaller answer; it changes the routing. `immediate_ring` means the pipeline
+  decided this caller should be **put through**. A refused read left
+  `memberPhone` undefined and fell through to AI screening, so **a caller the
+  family had explicitly trusted was interrogated by a bot instead of
+  connected.** Logged rather than failed, because a screened call still reaches
+  the family and a 503 would drop it — and the no-number-on-file fall-through,
+  a genuinely different situation, is preserved and pinned.
+- **`blog/like` / `blog/save`'s `loadPostId`** returned null on a refused read,
+  and both callers answer that with a 404 for a post that is published and
+  present. Nothing downstream can tell the two apart, so the distinction is made
+  where it exists.
+
+**The inventory is closed with a ratchet, not a number.** A final guard
+enumerates every read in `app/api` that still binds only `data` and requires
+each to be one of the accepted kinds — the five verified `auth.getUser()` calls,
+eight display-name lookups whose fallback narrows the answer and never changes
+it (`C1-S9-40`'s rule), and one analytics lookup that already answers
+`{ ok: true, recorded: false }`, which is true. Anything new fails the test.
+Counting 39 → 17 would have been a number that looks like progress; this is the
+claim that the remainder is defensible read by read.
+
+**One note on the ratchet itself.** Its first version pinned file **line
+numbers** and broke on the same commit, because the `loadPostId` fix shifted two
+of them by seven lines. Re-keyed to file plus binding name. A ratchet that goes
+red when unrelated code moves teaches people to edit the ratchet, which is the
+one failure mode a ratchet cannot survive.
+
+**Status:** FIXED. Guards: eighteen cases across the three findings, each proved
+red by mutation — including two over-tightening mutations (making the weekend
+feed failure fatal, and making the guardian phone failure a 503 that would drop
+a live call), and one that introduces a NEW untriaged read to confirm the
+ratchet actually catches regrowth.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -33323,8 +33422,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,019 passing / 17,022 across 1,351
-files.** (Re-run after `C1-S9-40`; was 16,950 / 16,953 across 1,349 before this
+Status: ✅ PASS — `npx vitest run`: **17,037 passing / 17,040 across 1,351
+files.** (Re-run after `C1-S9-43`; was 16,950 / 16,953 across 1,349 before this
 batch.) The three failures are `C1-S9-09`, BLOCKED: this container runs Node
 22.22.2 against the repository's `.nvmrc` 24.21.0, and nvm cannot fetch the
 Node 24 distribution here. Not counted as passing.

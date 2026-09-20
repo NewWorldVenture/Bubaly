@@ -163,7 +163,20 @@ export async function POST(req: NextRequest) {
 
   if (routingMode === 'immediate_ring' || routingMode === 'immediate_ai_summary') {
     // Ring through to the family member's actual number
-    const { data: member } = await supabase.from('family_members').select('phone').eq('id', memberId).maybeSingle();
+    // This read does not degrade into a smaller answer — it changes the
+    // routing. `immediate_ring` means the pipeline decided this caller should
+    // be PUT THROUGH. A refused read left `memberPhone` undefined and fell
+    // through to AI screening, so a caller the family had explicitly trusted
+    // got interrogated by a bot instead of connected. The fall-through exists
+    // for a member with no number on file, which is a different situation, and
+    // it is preserved. Logged rather than failed, because a screened call still
+    // reaches the family and a 503 would drop it. Audit C1-S9-43.
+    const { data: member, error: memberError } = await supabase.from('family_members').select('phone').eq('id', memberId).maybeSingle();
+    if (memberError) {
+      console.error('[guardian/inbound/voice] member phone read failed; trusted caller will be screened instead of connected', {
+        familyId, memberId, callSid, error: memberError.message,
+      });
+    }
     const memberPhone = (member as { phone?: string } | null)?.phone;
 
     await updateCommStatus(supabase, commId, 'handled');

@@ -451,3 +451,243 @@ describe('smaller answer versus different answer (C1-S9-40)', () => {
     }
   });
 });
+
+/**
+ * Audit C1-S9-41 — the last of the C1-S9-37 inventory that produces a wrong
+ * answer. Five routes, each degrading into a confident statement it could not
+ * support.
+ */
+const gcalSync = readFileSync('app/api/google/calendar/sync/route.ts', 'utf8');
+const recipeSuggest = readFileSync('app/api/recipes/suggest/route.ts', 'utf8');
+const weekend = readFileSync('app/api/weekend/discover/route.ts', 'utf8');
+const blogSubscribe = readFileSync('app/api/blog/subscribe/route.ts', 'utf8');
+
+describe('a connected calendar is not reported as disconnected (C1-S9-41)', () => {
+  it('both handlers check the preference read', () => {
+    // POST answered "Google Calendar not connected"; GET answered
+    // `connected: false`, which puts "Connect Google" in front of someone
+    // already connected and makes them re-run the entire OAuth grant.
+    expect(gcalSync.match(/error: prefsError/g) ?? []).toHaveLength(2);
+    expect(gcalSync.match(/if \(prefsError\)/g) ?? []).toHaveLength(2);
+    expect(gcalSync.match(/sync\.calendarSettingsAreTemporarilyUnavailable/g) ?? []).toHaveLength(2);
+  });
+
+  it('a failed read still cannot reach the token-clearing write', () => {
+    // This is the property that makes the finding MEDIUM rather than critical,
+    // so it is pinned rather than trusted: the `!decoded` bail returns before
+    // `{ ...np, googleCalendarToken: null }`, so an empty `np` from a refused
+    // read can never overwrite a live token with null.
+    // Against the code with comments stripped: the C1-S9-41 comment at the top
+    // of the handler QUOTES `{ ...np, googleCalendarToken: null }` while
+    // explaining why it is unreachable, and a bare `at()` found the prose
+    // first. Third time this session a guard has matched its own documentation
+    // (C1-S9-34, C1-S9-37, here) — in this repository, an assertion over raw
+    // source is an assertion over the comments too.
+    const code = stripComments(gcalSync);
+    expect(at(code, 'if (!decoded) {')).toBeLessThan(at(code, 'googleCalendarToken: null }'));
+    expect(bodyOf(code, 'if (!decoded) {', '{ status: 400 });')).toContain('googleCalendarNotConnected');
+  });
+});
+
+describe('an empty answer states an absence the route confirmed (C1-S9-41)', () => {
+  it('recipes/suggest does not report an empty recipe box it could not read', () => {
+    expect(recipeSuggest).toContain('error: recipesError');
+    expect(bodyOf(recipeSuggest, 'if (recipesError)', '{ status: 503 }')).toContain('console.error');
+    // The genuine empty answer is kept for a family that really has none.
+    expect(recipeSuggest).toContain('if (!recipes || recipes.length === 0)');
+    expect(at(recipeSuggest, 'if (recipesError)')).toBeLessThan(at(recipeSuggest, 'if (!recipes || recipes.length === 0)'));
+  });
+
+  it('weekend/discover reports a failed feed read through the channel it already has', () => {
+    // Every external provider in this route reports into `sourceErrors`. The
+    // family's OWN curated feeds were the one source that could vanish
+    // silently, leaving a response that looks complete while omitting the only
+    // source they configured themselves. No new mechanism was invented for it.
+    expect(weekend).toContain('error: feedsError');
+    expect(weekend).toContain('sourceErrors.feeds =');
+    expect(at(weekend, 'if (feedsError)')).toBeLessThan(at(weekend, 'if (feeds && feeds.length)'));
+    // Still not fatal: the other sources' results must survive a feed failure.
+    expect(bodyOf(weekend, 'if (feedsError)', '\n  }')).not.toContain('return');
+  });
+
+  it('blog/subscribe does not fall through to the unique constraint', () => {
+    // `blog_subscribers.email` is UNIQUE, so a refused lookup did not duplicate
+    // anyone — it hit the constraint. The person affected is someone already
+    // subscribed, and most pointedly someone previously unsubscribed trying to
+    // come back, who gets an error instead of being reactivated.
+    expect(blogSubscribe).toContain('error: existingError');
+    expect(bodyOf(blogSubscribe, 'if (existingError)', '{ status: 503 }')).toContain('console.error');
+    expect(at(blogSubscribe, 'if (existingError)')).toBeLessThan(at(blogSubscribe, 'if (existing) {'));
+  });
+
+  it('the copy exists in every base catalogue', () => {
+    const keys = [
+      'sync.calendarSettingsAreTemporarilyUnavailable',
+      'suggest.recipeDataIsTemporarilyUnavailable',
+      'subscribe.subscriptionIsTemporarilyUnavailable',
+    ];
+    for (const locale of ['en-US', 'de-DE', 'es-ES', 'fr-FR', 'it-IT', 'nl-NL', 'pt-PT']) {
+      const catalogue = JSON.parse(readFileSync(`lib/i18n/messages/${locale}.json`, 'utf8')) as Record<string, string>;
+      for (const key of keys) expect(catalogue[key], `${locale} is missing ${key}`).toBeTruthy();
+    }
+  });
+});
+
+/**
+ * Audit C1-S9-42 — closing the `auth.getUser()` bucket by VERIFYING it rather
+ * than classifying it.
+ *
+ * Five of the 39 reads in the C1-S9-37 inventory are
+ * `supabase.auth.getUser()`, which was set aside as "a different API". That is
+ * a claim, and a claim about auth deserves a check rather than a note, so this
+ * asserts the property that makes it true: `getUser()` resolves to
+ * `{ data: { user }, error }`, and a failure yields `user: null`. Dropping the
+ * error therefore cannot produce an AUTHENTICATED outcome — it can only deny.
+ * Fail-closed by construction, which is the direction auth is allowed to fail.
+ *
+ * Verified read-by-read, and pinned here so the classification survives an edit
+ * that would quietly make one of them fail open.
+ */
+describe('every auth.getUser() in the API denies on a null user (C1-S9-42)', () => {
+  it.each([
+    ['ai', 'app/api/ai/route.ts', /if \(auth\.user && \(await ensureActiveFamily/],
+    ['blog/save (POST)', 'app/api/blog/save/route.ts', /if \(!auth\.user\)/],
+    ['gif/search', 'app/api/gif/search/route.ts', /if \(!auth\.user\) return NextResponse\.json\([\s\S]{0,80}?status: 401/],
+    ['google/calendar/callback', 'app/api/google/calendar/callback/route.ts', /if \(!userId\) return redirect\('error'\)/],
+  ])('%s gates on the user being present', (_name, file, gate) => {
+    expect(stripComments(readFileSync(file, 'utf8'))).toMatch(gate);
+  });
+
+  it('confirmation-import is the shape the rest should be measured against', () => {
+    // Found by the sweep below, which first reported it as an offender because
+    // it does not destructure. It is in fact the only auth read in the tree
+    // that draws the distinction this entire audit is about: a MISSING SESSION
+    // is 401, and a genuine auth failure is 503. Pinned as the exemplar, so
+    // that if it ever collapses the two the regression is visible.
+    const source = stripComments(readFileSync('app/api/vacations/confirmation-import/route.ts', 'utf8'));
+    expect(source).toContain('if (auth.error || !auth.data.user)');
+    expect(source).toMatch(/AuthSessionMissingError[\s\S]{0,200}?401/);
+    expect(source).toMatch(/Account context is temporarily unavailable[\s\S]{0,40}?503/);
+  });
+
+  it('the one that tolerates a null user is the anonymous-by-design path', () => {
+    // `blog/save`'s read handler computes save state for a visitor who may not
+    // be signed in at all, so `auth.user?.id ?? null` is the intended shape, not
+    // a dropped guard. The worst a transient auth failure does here is show a
+    // signed-in reader "not saved", which the next request corrects.
+    const source = readFileSync('app/api/blog/save/route.ts', 'utf8');
+    expect(source).toContain('saveState(svc, postId, auth.user?.id ?? null)');
+    // The WRITE path in the same file is gated, which is the line that matters.
+    expect(source).toContain('if (!auth.user)');
+    expect(at(source, 'saveState(svc, postId, auth.user?.id ?? null)'))
+      .toBeLessThan(at(source, 'if (!auth.user)'));
+  });
+
+  it('no API route reads a user and then proceeds without checking it', () => {
+    // The mechanical form of the claim: every `auth.getUser()` in app/api is
+    // followed, within a few lines, by a test of the user. A new one that is
+    // not will fail here rather than being discovered later.
+    const files = globSyncRoutes();
+    const offenders: string[] = [];
+    for (const file of files) {
+      const source = stripComments(readFileSync(file, 'utf8'));
+      const lines = source.split('\n');
+      lines.forEach((line, i) => {
+        if (!/auth\.getUser\(\)/.test(line)) return;
+        const window = lines.slice(i, i + 6).join('\n');
+        // `auth.data.user` as well as `auth.user`: the first version of this
+        // pattern missed `vacations/confirmation-import`, which does not
+        // destructure, and reported the best-behaved auth read in the tree as
+        // an offender. Instruments keep being the thing that needs attacking.
+        const checks = /(!auth\.user|auth\.user &&|!userId|auth\.user\?\.|user\?\.id|!user\b|auth\.error|!auth\.data\.user)/;
+        if (!checks.test(window)) offenders.push(`${file}:${i + 1}`);
+      });
+    }
+    expect(offenders, 'an auth read with no check within five lines').toEqual([]);
+  });
+});
+
+function globSyncRoutes(): string[] {
+  const { execSync } = require('node:child_process') as typeof import('node:child_process');
+  return execSync('find app/api -name route.ts', { encoding: 'utf8' }).trim().split('\n');
+}
+
+/**
+ * Audit C1-S9-43 — the last reads in the inventory that change the ANSWER
+ * rather than narrowing it, and the honest accounting of the ones that do not.
+ */
+describe('a trusted caller is not screened because a read failed (C1-S9-43)', () => {
+  const voice = readFileSync('app/api/guardian/inbound/voice/route.ts', 'utf8');
+
+  it('the member-phone read is checked, because it decides the routing', () => {
+    // `immediate_ring` means the pipeline decided this caller should be PUT
+    // THROUGH. A refused read left `memberPhone` undefined and fell through to
+    // AI screening — so a caller the family explicitly trusted got interrogated
+    // by a bot instead of connected. Not a smaller answer: a different one.
+    expect(voice).toContain('error: memberError');
+    expect(voice).toContain('if (memberError)');
+    expect(bodyOf(voice, 'if (memberError)', '\n    }')).toContain('console.error');
+    expect(at(voice, 'if (memberError)')).toBeLessThan(at(voice, 'const memberPhone ='));
+  });
+
+  it('the no-phone-on-file fall-through is preserved', () => {
+    // A member with no number is a different situation from a failed read, and
+    // screening is the right answer for it. Logging must not become a 503 here
+    // either — that would drop a live call to report a routing preference.
+    expect(voice).toContain('// Member has no phone configured — fall through to AI screening');
+    expect(bodyOf(voice, 'if (memberError)', '\n    }')).not.toContain('status: 503');
+  });
+});
+
+describe('a published post is not reported missing (C1-S9-43)', () => {
+  it.each(['app/api/blog/like/route.ts', 'app/api/blog/save/route.ts'])('%s distinguishes a refusal in loadPostId', (file) => {
+    const body = bodyOf(readFileSync(file, 'utf8'), 'async function loadPostId', '\n}');
+    expect(body).toContain('const { data, error }');
+    expect(body).toContain('if (error)');
+    expect(body).toContain('console.error');
+    // Still returns null — the callers' 404 is the only channel available from
+    // here — but the failure now exists somewhere other than nowhere.
+    expect(body).toContain('return data?.id ?? null;');
+  });
+});
+
+describe('the C1-S9-37 inventory is closed with its remainder stated (C1-S9-43)', () => {
+  it('every read still binding only `data` is one of the accepted kinds', () => {
+    // 39 at the start of C1-S9-37. What is left must be defensible read by
+    // read, not merely smaller — so this enumerates the survivors explicitly.
+    // A NEW one will fail here, which is the point: the class cannot quietly
+    // regrow behind a number that looks like progress.
+    //
+    // Keyed by file and BINDING NAME, not by line. The first version pinned
+    // line numbers and broke immediately — on this same commit — because the
+    // `loadPostId` fix shifted two of them by seven lines. A ratchet that goes
+    // red when unrelated code moves teaches people to edit the ratchet.
+    const accepted = new Set([
+      // auth.getUser() — verified fail-closed under C1-S9-42.
+      'app/api/ai/route.ts::auth', 'app/api/blog/save/route.ts::auth',
+      'app/api/gif/search/route.ts::auth', 'app/api/google/calendar/callback/route.ts::auth',
+      // Display-name lookups whose fallback narrows the answer and never
+      // changes it: "the family", "the child", "a family" (C1-S9-40's rule).
+      'app/api/ai/gift/route.ts::m',
+      'app/api/guardian/inbound/voice/route.ts::memberProfile',
+      'app/api/guardian/inbound/voice/route.ts::familyData',
+      'app/api/guardian/inbound/whatsapp/route.ts::memberProfile',
+      'app/api/guardian/screen/route.ts::memberProfile',
+      'app/api/guardian/screen/route.ts::familyData',
+      'app/api/webhooks/stripe/route.ts::fam',
+      // Analytics only, and already honest: a failed experiment lookup answers
+      // `{ ok: true, recorded: false }`, which is true — nothing was recorded.
+      'app/api/ab/track/route.ts::exp',
+    ]);
+    const files = globSyncRoutes();
+    const found = new Set<string>();
+    for (const file of files) {
+      for (const line of stripComments(readFileSync(file, 'utf8')).split('\n')) {
+        const m = line.match(/const \{ data(?:: (\w+))? \} = await/);
+        if (m) found.add(`${file}::${m[1] ?? 'data'}`);
+      }
+    }
+    const unexpected = [...found].filter((f) => !accepted.has(f)).sort();
+    expect(unexpected, 'a read binding only `data` that has not been triaged').toEqual([]);
+  });
+});

@@ -18,12 +18,19 @@ export const runtime = 'nodejs';
 const MAX_BODY_BYTES = 2_048;
 
 async function loadPostId(supabase: ReturnType<typeof createServiceClient>, slug: string): Promise<string | null> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('blog_posts')
     .select('id')
     .eq('slug', slug)
     .eq('published', true)
     .maybeSingle();
+  // A refused read returned null, and both callers answer that with a 404 for
+  // a post that is published and present. Nothing here can distinguish them
+  // afterwards, so the distinction is made where it exists. Audit C1-S9-43.
+  if (error) {
+    console.error('[blog] post lookup failed', { slug, error: error.message });
+    return null;
+  }
   return data?.id ?? null;
 }
 
