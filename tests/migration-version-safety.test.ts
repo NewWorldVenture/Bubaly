@@ -63,7 +63,24 @@ describe('Supabase migration filename safety', () => {
     // third the table that FEEDS the contacts 0318 had already closed, so a
     // child could retarget a pending proposal and let a parent's approval apply
     // it. Both moved the number by one file each; neither renumbered anything.
-    expect(audit.nextVersion).toBe('0324');
+    //
+    // The same census closed five more files, one subject each, and none of
+    // them renumbered anything either. 0324 the Pay-ID handles and the savings
+    // goals — the last two of 0088's fourteen-table DO loop, one deciding where
+    // /pay/<handle> sends an outsider and the other feeding `wallet_fund_goal`
+    // the wallet it debits; 0325 the digital-twin profiles and the dashboard
+    // settings (manager-only in lib/family/actions.ts and customize-actions.ts)
+    // plus `dashboard_layouts`, which is NOT uniform and gets a scope-shaped
+    // guard instead, because a member may legitimately write their own
+    // `scope='user'` row; 0326 the chore-dispute resolution, a BEFORE trigger
+    // in the line of 0222/0223/0295 because RAISING a dispute is open by design
+    // and only the decision is a manager's; 0327 the Autopilot queue, where the
+    // census's "manager-only" reading was wrong — /api/autopilot/scan and the
+    // resolve action are plan-gated, never role-gated, so only DELETE (which no
+    // app path performs) and the `resolved_by` attribution are closed; 0328 the
+    // `wallet_audit_logs` actor pin, which is 0320's repair applied to the
+    // money-domain sibling it did not reach.
+    expect(audit.nextVersion).toBe('0329');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {
