@@ -2,11 +2,11 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-20T11:57:19.996Z
-- Total Audit Items: 14049
+- Last Updated: 2026-09-20T12:03:39.967Z
+- Total Audit Items: 14050
 - Not Started: 13842
 - In Progress: 192
-- Passed: 1
+- Passed: 2
 - Fixed + Passed: 11
 - Blocked: 1
 - Failed: 2
@@ -14181,6 +14181,7 @@ PRODUCTION READY: NO
 | DATA-009 | DATA | families.timezone validity | 🛠 FIXED + PASS | Medium | 6/6 | 0323 adds a trigger accepting pg_timezone_names UNION pg_timezone_abbrevs, which matches Intl exactly | Probe passes twice; 4 assertions fail with the trigger dropped; suite 45/45 | No constraint of any kind; a typo saved silently and put the family on Greenwich time. A names-only guard would have wrongly rejected CST and PST. |
 | TEST-007 | Testing | CI database fidelity and skip reporting | 🛠 FIXED + PASS | Critical | 9/9 | Bootstrap puts pgcrypto in `extensions` with Supabase's search_path; runner separates SKIP from PASS; CI installs plpgsql_check and sets PROBES_REQUIRE_ALL | 45/45 with 0 skipped on both a CI replica and the Supabase stack; the circle probe now fails on the broken definition where it used to pass | The probe for DB-FN-001 ran on every PR and passed while the feature was dead, because CI's pgcrypto sat in a different schema than production's. |
 | DB-002 | Database | Family erasure and cascade completeness | ✅ PASS | High | 6/6 | None — verification, not repair | 71,192 rows across 199 tables deleted with 0 survivors; probe reports both halves when a cascade is removed; suite 46/46 | 387 of 396 family_id columns cascade; the 9 exceptions are user-owned, business-owned or an idempotency ledger, and are now named in the probe. |
+| AI-002 | AI | AI routes outside the context slices | ✅ PASS | High | 7/7 | None required | Rate limiter exercised: 5 allowed / 2 denied, namespace scoping enforced | The policy guard scopes to lib/ai/context/slices; the other 39 routes were checked directly. Three use a service client; each is correctly scoped or token-authorized. |
 
 ## Inventory and evidence rules
 
@@ -20973,6 +20974,54 @@ Executed against a local Supabase stack, not inferred from source. The probe tha
 #### Final Status
 🛠 FIXED + PASS
 
+### AI-002 — The AI surface outside the context slices
+
+Status: ✅ PASS
+Severity: High
+Route(s), components, actions, tables and providers: the 39 routes under app/api/ai, lib/ai/context/policy.ts, tests/context-policy.test.ts, app/api/ai/pantry-chef/route.ts, app/api/ai/gift/route.ts, app/api/ai/flyer/route.ts, public.rate_limits, public.rate_limit_hit, public.gift_links
+
+#### Expected Behavior
+No AI path reads a table the context policy denies, beyond the narrow projections it names. A route that bypasses RLS with a service client gates on something else. Public AI endpoints are rate-limited and cannot be enumerated.
+
+#### Test Cases
+- [x] Which AI routes use a service client, and therefore have no RLS underneath them
+- [x] What each of those reads, and how it is scoped
+- [x] `familyId` on the service-client path comes from the session, not the request (no IDOR)
+- [x] The public gift endpoint's token is unguessable
+- [x] The durable rate limiter actually limits
+- [x] A fresh key has its own budget
+- [x] An authenticated caller cannot reserve another caller's rate-limit namespace
+
+#### Issues Found
+None. Recorded because the reasoning that got here is worth keeping.
+
+`lib/ai/context/policy.ts` is a denylist of tables no prompt may read, and `tests/context-policy.test.ts` ratchets it — but **statically, over `lib/ai/context/slices` only**. The AI surface is much wider than that: 39 routes under `app/api/ai`, plus `lib/ai/planner`, `lib/ai/tools` and `lib/ai/prompts`. That is the scope-gap shape, so it was checked directly.
+
+Of the 39 routes, all but three use the user-scoped client, so RLS is underneath them and `docs/audit/ai-surface-role-privacy-check.sql` already proves the database refuses a child's read of medical and financial detail. The three exceptions:
+
+- **`pantry-chef`** reads `medical_profiles` — a denied table — with a service client. It selects **only** the `allergies` column, which is precisely the projection the denylist's `except` names, scopes it with `.eq('family_id', familyId)` where `familyId = ctx.active.familyId` (the session, never the request body), and never returns the profiles: only normalised terms reach the prompt. The route says why in a comment — allergy safety has to work for every member, and `medical_profiles` is manager-gated to clients. Correct, and the only quibble is architectural: the policy names the exception as "via services/meals foodProfile" and this route does it inline.
+- **`flyer`** uses the service client only for `getAIConfig`, which is configuration, not family data.
+- **`gift`** is genuinely public — an unauthenticated visitor follows a link to a child's savings goal — so it is service-role by necessity and the token is the whole authorization. It holds up: `crypto.randomUUID()` gives 122 bits, the link is created manager-only after verifying the wallet belongs to the caller's family, `is_active` is checked, and everything read is scoped from the token's own row rather than from input. The disclosure is deliberately minimal — the child's FIRST name (`display_name.split(' ')[0]`), the occasion, and one goal's title and progress.
+
+#### Fixes Applied
+None required.
+
+#### Retest Results
+The durable rate limiter that guards the public endpoints was exercised rather than read:
+
+    limit=5, 7 hits -> 5 allowed, 2 denied (retry_after on last: 31)
+    a fresh key is allowed: t
+    key scoping enforced: rate limit key must be scoped to the authenticated caller
+    own-namespace key allowed: t
+
+The last two matter as much as the first: `rate_limit_hit` refuses an authenticated caller a key outside their own namespace, so one account cannot exhaust another's budget, and still accepts their own.
+
+#### Evidence
+Route-by-route reading of all 39 AI routes for client provenance and role gating, plus execution of `rate_limit_hit` against the live database. The gift token's entropy and creation path were read end to end rather than assumed.
+
+#### Final Status
+✅ PASS
+
 ### DB-002 — Deleting a family removes the family's data, all of it
 
 Status: ✅ PASS
@@ -26337,7 +26386,9 @@ Status: ✅ PASS — strict post-build types pass. Log: Temp/bubaly-admission-ty
 Status: ✅ PASS — lint passes with three existing warnings: document-capture generation ref and two messages-module toastError dependencies. Log: Temp/bubaly-admission-lint-20260919.log. Localization and query audit pass (491 tables / 86 functions / 146 routes).
 
 ## Automated Tests
-Status: 🔄 IN PROGRESS — final full UTC and DST runs each pass 16,543/16,543 checks across 1,303 files, zero failed/skipped. Reports: Temp/bubaly-admission-full-{utc,dst}-20260919.json. Browser ownership passes 81 cases, completion/recovery UI 82, server/routing 147 and shared/server/page 77 in overlapping focused runs. The actual HTTP fixture is discovery/type/lint checked, not locally executed; successful Mailpit/PKCE provider completion must still run in hosted CI. Published dc99dc83 passes Web (both 16,495-check full suites, 252-page build and strict types), Database, Mobile and Finance; its E2E run35464679043 passes 1,150/1,150 with authenticated/durable flags enabled. That baseline does not include the new witness source. Current discovery lists 1,183 cases across 49 files. New-source hosted acceptance remains required.
+Status: 🔄 IN PROGRESS — current tree passes **16,705/16,705 across 1,305 files** on Node 24.21.0, the version `package.json` declares, with types clean and lint at its documented baseline of three pre-existing warnings. Note on runtime: this container ships Node 22, under which three tests fail — `node-version-is-pinned` (correctly reporting the mismatch) and two `stream-cancellation-runtime` cases, which are the already-tracked PERF-002 and disappear under 24. A run taken while the Docker daemon and eleven containers were booting alongside it showed five failures, all of them 5s timeouts from CPU contention; they pass in isolation and in a clean full run. Earlier evidence from the published baseline follows.
+
+Previous: final full UTC and DST runs each pass 16,543/16,543 checks across 1,303 files, zero failed/skipped. Reports: Temp/bubaly-admission-full-{utc,dst}-20260919.json. Browser ownership passes 81 cases, completion/recovery UI 82, server/routing 147 and shared/server/page 77 in overlapping focused runs. The actual HTTP fixture is discovery/type/lint checked, not locally executed; successful Mailpit/PKCE provider completion must still run in hosted CI. Published dc99dc83 passes Web (both 16,495-check full suites, 252-page build and strict types), Database, Mobile and Finance; its E2E run35464679043 passes 1,150/1,150 with authenticated/durable flags enabled. That baseline does not include the new witness source. Current discovery lists 1,183 cases across 49 files. New-source hosted acceptance remains required.
 
 ## Authentication
 Status: 🔄 IN PROGRESS — request-to-mount and post-mount ownership regressions pass locally. Initiation ownership, real successful hosted recipient/PKCE recovery, production Auth configuration and physical-device reopening remain unverified. Comparison witnesses carry no authentication authority, MAC or TTL.
@@ -26353,6 +26404,12 @@ Status: 🔄 IN PROGRESS — local callback/action transport and neutrality gate
 
 ## Database
 Status: 🔄 IN PROGRESS — published baseline passes 330 migrations, 38 boundary probes and 327 existing-schema reapplications against a disposable database. Production ledger, deployed policies and complete workflows remain open.
+
+Database-execution cycle (2026-09-20), additive to the above: all 336 migration files replay and **46/46 boundary probes pass with 0 skipped**, verified on TWO databases — the local Supabase stack and a fresh `pgvector/pgvector:pg16` container replicating the CI job exactly. Run under `PROBES_REQUIRE_ALL=1`, which makes a skipped probe a failure; before this cycle the runner printed a skip as a PASS and counted it as one (TEST-007).
+
+The probe count is not directly comparable to the published baseline's 38: the suite has grown by eight this cycle, and — more importantly — CI's database is now shaped like production. It installed pgcrypto into `public` while a real Supabase project puts it in `extensions`, which is why `circle-join-code-check.sql` called a function that was dead in production and passed on every pull request (DB-FN-001, TEST-007).
+
+Six migrations are written, applied locally and **pending a human applying them to production**: 0318 (marketplace_create_circle could never run), 0319 (any member could rewrite or erase another's live location), 0320 (a restricted member could delete their way back to a broader social role, closing AUTHZ-003), 0321 (no investment order could ever be approved), 0322 (a single-choice poll took every choice), 0323 (a family timezone had no constraint). Each is recorded in docs/PENDING_PROD_MIGRATIONS.md with its measurement. Until they are applied, production retains every one of those defects.
 
 ## Integrations
 Status: 🔄 IN PROGRESS — real provider delivery and production configuration remain unverified.
