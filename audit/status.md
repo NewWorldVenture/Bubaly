@@ -1123,5 +1123,18 @@ proposed remedy would reset that counter and let an in-flight save commit under
 a family the component has already left. Per rule 1, `audit/claude-2.md` was
 not edited. Guarded by tests/a-capture-generation-counter-only-goes-up.test.ts,
 which rejects the proposed change.
-OPEN: nothing outstanding for this session.
+CONTINUED (scheduled-jobs pass): took the coverage table's thinnest area at its
+word and scanned all 27 cron routes for this audit's recurring classes. Every
+route is authenticated and none answers 200 on a failure path. Three findings:
+`C1-S9-12` (the admin digest capped its 24h feed at 500 rows and reported that
+as the day's total, dropping the earliest hours — and it is a sync-error storm
+that most likely trips it), `C1-S9-13` (a publish drain built to be cancelled
+was never passed req.signal, found by asymmetry with its sibling route), and
+`C1-S9-14` (the register held 24 scheduled items against 27 real ones — it was
+complete over a stale inventory, the same defect as C1-S9-12 one level up).
+CRON-025..027 added. Verified clean and recorded as such: wallet-allowance,
+family-routines, weekly-digest, provider-sync.
+OPEN: the register's other denominators (Pages, API, Feature modules, Server
+actions) have NOT been re-derived from the tree and are likely stale the same
+way; no coverage figure for them should be quoted until they are.
 LAST-UPDATE: 2026-09-20

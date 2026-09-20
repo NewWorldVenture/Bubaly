@@ -129,7 +129,7 @@ security-critical functionality the release gate stays NO.*
 | Feature modules | 118 | 68 | 58% |
 | Server actions | 126 | 53 | 42% |
 | Database | 2 | 2 | 100% |
-| Scheduled | 24 | 9 | 38% |
+| Scheduled | 27 | 27 | 100% |
 | CI/CD | 8 | 4 | 50% |
 | Storage | 7 | 7 | 100% |
 
@@ -950,6 +950,9 @@ complete only when its full workflow is verified, and a static read is not that.
 | CRON-022 | Scheduled | `cron/return-reminders` | ⬜ NOT STARTED | — |
 | CRON-023 | Scheduled | `cron/wallet-allowance` | 🔄 IN PROGRESS | named in evidence |
 | CRON-024 | Scheduled | `cron/weekly-digest` | 🔄 IN PROGRESS | named in evidence |
+| CRON-025 | Scheduled | `cron/contact-center-urgent` | 🔄 IN PROGRESS | added by the parallel session; route audited in C1-S9-12's sweep (auth present, 503 on any non-clean count, catch returns 503). The drain it delegates to is the parallel session's INT-002. |
+| CRON-026 | Scheduled | `cron/guardian-sms-recovery` | 🔄 IN PROGRESS | added by the parallel session; route audited in C1-S9-12's sweep. Passes `req.signal`, which is what made C1-S9-13 visible. |
+| CRON-027 | Scheduled | `cron/social-publish` | 🔄 IN PROGRESS | added by the parallel session; route audited in C1-S9-12's sweep. C1-S9-13 fixed its missing `req.signal`. |
 | CI-001 | CI/CD | `ci.yml` | 🔄 IN PROGRESS | named in evidence |
 | CI-002 | CI/CD | `cron-dispatch.yml` | ⬜ NOT STARTED | — |
 | CI-003 | CI/CD | `finance-transaction-operation-runtime.yml` | ⬜ NOT STARTED | — |
@@ -31658,6 +31661,152 @@ the counter is only ever incremented, never assigned from a captured local, and
 that `save()`'s bail precedes the state write it protects. Written so the next
 reader who sees the lint warning and reaches for the obvious remedy is stopped
 by a failing test with the reason in it.
+
+---
+
+### `[CLAUDE-1][MEDIUM][SCHEDULED]` C1-S9-12 — the admin digest reported the first page of the day as the day
+
+**File:** `app/api/cron/admin-digest/route.ts`
+
+**Found by** taking the coverage table's thinnest area at its word. "Scheduled"
+sat at 38%, so all 27 cron routes were scanned mechanically for this audit's
+recurring classes — missing cron auth, a 200 on failure, an unbounded or capped
+read, and a write whose result is discarded. Every route is authenticated and
+every one answers 5xx on failure. The scan's one genuine hit was a read.
+
+**Problem.**
+
+```ts
+const { data, error: feedError } = await admin
+  .from('admin_notifications')
+  .select('kind, title, created_at')
+  .gte('created_at', since)
+  .order('created_at', { ascending: false })
+  .limit(500);
+```
+
+`buildAdminDigest` sets `total = rows.length` and derives every per-kind count
+from the same array. So `.limit(500)` did not shorten a list — it under-reported
+the day, and the email presented the remainder as the total. Because the order
+is `created_at` DESC, the rows dropped are the OLDEST in the window: the
+earliest twenty-odd hours of a busy day vanish, and the digest says nothing
+about it.
+
+**Why it matters and why it is reachable.** Only EIGHT rows are ever rendered —
+`renderAdminDigestHtml` slices `recent` to 8 — so this read exists for the
+counts alone, and the counts are exactly what the cap falsifies. The headline a
+super admin acts on is built from them: "2 new paid plans and 5 new families"
+when the real figures are higher. And 500 is not an unreachable number:
+`admin_notifications` carries sync errors (`github_error`) alongside growth
+events, so the likeliest way to exceed it is an error storm — the precise day
+the digest most needs to be accurate.
+
+**Not the same defect as the `.limit(N)` class already recorded.** Elsewhere in
+this audit `.limit(N)` was wrong because it is *not a bound at all* — PostgREST
+caps a response at `db-max-rows` whatever the client asks. Here 500 is below
+that cap and is honoured exactly; the defect is that a deliberate cap feeds a
+figure whose contract is completeness. A correct `.limit()` in the wrong place.
+
+**Fix.** The window is now paged with `readAll(..., { max: 20_000 })`.
+`readAll`'s `max` is a real ceiling — it reads one row PAST it to tell "there
+were exactly `max`" from "there were more", returning an error for the second —
+so a day that overflows lands in the same `feedError` branch as a transport
+failure and answers **502**. The scheduler retries; a confident undercount never
+reaches an inbox. Twenty thousand admin notifications in one day is itself an
+incident worth a 502.
+
+**Status:** FIXED. Guard: three cases in `tests/admin-digest.test.ts`, proved
+red by restoring the original `.limit(500)` (two of the three fail).
+
+**Verified clean in the same sweep, recorded so the sweep is not mistaken for a
+search that only looked where it already knew:**
+
+- `wallet-allowance` — claims the schedule by compare-and-set BEFORE the ledger
+  write, so overlapping runs cannot double-credit; pages its rules with a real
+  ceiling; isolates one rule's failure from the platform's run; answers 502 on
+  any failure.
+- `family-routines` — reserves each occurrence by unique key, and the three
+  discarded `routine_runs` status writes carry an explicit argument for why
+  (nothing outside the file reads `status`, and the one column that IS read
+  degrades to the reschedule's own outcome). A reasoned decision, not an
+  oversight.
+- `weekly-digest` — uses `count: 'exact', head: true` for its totals, which is
+  exact and uncapped, and its `.limit(10)` is presentational.
+- `provider-sync` — a deliberate `BATCH` of 25 oldest-synced accounts, and it
+  counts a failed audit-log insert into the response status.
+- The remaining 22 — `hasCronAuthorization` present on every one; no route
+  answers 200 on a failure path.
+
+---
+
+### `[CLAUDE-1][LOW][SCHEDULED]` C1-S9-13 — a drain built to be cancelled, never given the signal
+
+**File:** `app/api/cron/social-publish/route.ts`
+
+**Problem.** `runScheduledPublishDrain` accepts an `AbortSignal` and threads it
+into every database call it makes, via `abortSignal()` and a `boundedClient`
+wrapper. Its cron route called it with no arguments.
+
+**Impact.** The route runs under `maxDuration = 110`. When the platform reaches
+that, the invocation is killed. With a signal the in-flight work aborts
+cooperatively and the publish receipt records a state; without one it is
+severed mid-claim, leaving a receipt in `dispatching` that the next drain must
+resolve as `unknown`.
+
+**How it was found.** By comparison, not by reading. `app/api/cron/
+guardian-sms-recovery/route.ts` — added in the same batch by the same session —
+passes `req.signal` into its drain. The asymmetry between two sibling routes
+written together is what pointed at it. It is the same shape as `C1-S9-01`: a
+capability that exists, is exported, and is never called, so the tree reads as
+though the protection is in place.
+
+**Fix.** One line, plus a guard that pins the rule in both directions — a drain
+that ACCEPTS a signal must be GIVEN one, and a signal that is accepted must
+reach the database calls, so it cannot be taken and dropped.
+
+**Status:** FIXED. Guard:
+`tests/a-drain-that-can-be-cancelled-is-given-the-signal.test.ts`, proved red by
+removing the argument.
+
+**Not fixed, recorded:** `drainUrgentDeliveries` (`cron/contact-center-urgent`)
+accepts no signal at all. Each delivery attempt inside it is independently
+bounded at 25s against a 110s `maxDuration`, so the exposure is one attempt
+rather than a whole drain, and adding cancellation to that receipt machine is a
+change to the parallel session's `INT-002` surface rather than a one-line
+caller fix. Named here rather than done quietly.
+
+---
+
+### `[CLAUDE-1][MEDIUM][PROCESS]` C1-S9-14 — the discovery register was complete over a stale inventory
+
+**File:** `finalaudit.md` (the Audit Register)
+
+**Problem.** The coverage table reported `Scheduled | 24` items. The repository
+has **27** cron routes. The three missing — `contact-center-urgent`,
+`guardian-sms-recovery`, `social-publish` — are exactly the ones the parallel
+session added, and none had a permanent ID.
+
+**Why this is a finding and not a typo.** The brief's first instruction is to
+discover EVERY feature, route, job and integration and give each a permanent ID.
+A register that is built once and never re-derived reports itself complete over
+a prefix of the repository — the same defect as `C1-S9-12` one level up, and
+with the same signature: a confident total computed from a set that silently
+stopped growing. Coverage percentages measured against a stale denominator
+flatter themselves: "Scheduled 24/24" would have read as complete while three
+scheduled jobs had never been looked at.
+
+**Fix.** `CRON-025`…`CRON-027` added, all three routes audited in the same
+sweep (each is a thin, correctly-authenticated delegating shell answering 503 on
+any non-clean outcome; `C1-S9-13` came out of reading them), and the Scheduled
+denominator corrected to 27.
+
+**Status:** FIXED for the Scheduled area. **OPEN for the rest of the register**:
+the same re-derivation has not been run for Pages, API, Feature modules or
+Server actions, and the parallel session added files in at least the `app/(auth)`
+tree (five server actions, found by `C1-S9-05`) that are equally unlikely to
+carry IDs. Named as outstanding rather than assumed clean — the next pass should
+re-derive every denominator from the tree before any coverage figure is quoted
+again.
 
 ## What this pass did NOT establish
 
