@@ -3118,6 +3118,7 @@
   "childLoginActions.childLoginsArenTConfigured": "Los inicios de sesión infantiles aún no están configurados en el servidor (define CHILD_LOGIN_SECRET).",
   "childLoginActions.childLoginsArenTConfigured2": "Los inicios de sesión infantiles aún no están configurados en el servidor.",
   "childLoginActions.couldNotCreateTheLogin": "No se ha podido crear el inicio de sesión. Puede que el nombre de usuario ya esté en uso.",
+  "childLoginActions.couldNotFinishAndCouldNotUndo": "No se ha podido terminar de configurar este acceso ni deshacer del todo la configuración parcial. Contacta con soporte antes de volver a intentarlo: un nuevo intento dirá que este miembro ya tiene un acceso.",
   "childLoginActions.couldNotFinishSettingUp": "No se ha podido terminar de configurar el inicio de sesión.",
   "childLoginActions.couldNotLinkTheLogin": "No se ha podido vincular el inicio de sesión.",
   "childLoginActions.couldNotResetThePin": "No se ha podido restablecer el PIN.",

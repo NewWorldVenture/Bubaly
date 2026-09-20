@@ -3118,6 +3118,7 @@
   "childLoginActions.childLoginsArenTConfigured": "Les connexions enfant ne sont pas encore configurées sur le serveur (définissez CHILD_LOGIN_SECRET).",
   "childLoginActions.childLoginsArenTConfigured2": "Les connexions enfant ne sont pas encore configurées sur le serveur.",
   "childLoginActions.couldNotCreateTheLogin": "Impossible de créer la connexion. Le nom d’utilisateur est peut-être déjà utilisé.",
+  "childLoginActions.couldNotFinishAndCouldNotUndo": "Impossible de terminer la configuration de cet accès, et impossible d’annuler complètement la configuration partielle. Contactez le support avant de réessayer — une nouvelle tentative indiquera que ce membre a déjà un accès.",
   "childLoginActions.couldNotFinishSettingUp": "Impossible de terminer la configuration de la connexion.",
   "childLoginActions.couldNotLinkTheLogin": "Impossible de lier la connexion.",
   "childLoginActions.couldNotResetThePin": "Impossible de réinitialiser le code PIN.",

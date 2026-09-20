@@ -3118,6 +3118,7 @@
   "childLoginActions.childLoginsArenTConfigured": "Child logins aren’t configured on the server yet (set CHILD_LOGIN_SECRET).",
   "childLoginActions.childLoginsArenTConfigured2": "Child logins aren’t configured on the server yet.",
   "childLoginActions.couldNotCreateTheLogin": "Could not create the login. The username may already be in use.",
+  "childLoginActions.couldNotFinishAndCouldNotUndo": "Could not finish setting up this login, and could not fully undo the partial setup. Please contact support before trying again — a retry will report that this member already has a login.",
   "childLoginActions.couldNotFinishSettingUp": "Could not finish setting up the login.",
   "childLoginActions.couldNotLinkTheLogin": "Could not link the login.",
   "childLoginActions.couldNotResetThePin": "Could not reset the PIN.",

@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-175 finding IDs from four workers and two parallel sessions; none of it was
+177 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -12,7 +12,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 > source-and-migration audit run without production credentials. Session B
 > (Register B, 14,038 items, `AUTH-001` / `API-<hash>` / `DB-TBL-nnn`) is a
 > hosted-CI and deployed-release audit. Their finding-ID sets are **disjoint**:
-> 897 IDs from A, 684 from B, 1,578 in union — verified mechanically at each
+> 899 IDs from A, 684 from B, 1,580 in union — verified mechanically at each
 > merge. The three literals both files contain (`LB-009`, `LB-016`, `SHA-256`)
 > are not counter-examples: the first two are pre-existing *runbook* names each
 > register cites, and the third is a hash algorithm the ID regex matches. No
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 185 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 187 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -32835,6 +32835,116 @@ is a guard whose author is guessing.
 
 ---
 
+### `[CLAUDE-1][HIGH][SERVER ACTIONS]` C1-S9-35 — a failed rollback left a family permanently unable to create a child login
+
+**File:** `app/(app)/family/child-login-actions.ts:77-98`
+
+**This finding disagrees with an existing triage, which is why it is stated at
+length.** `CLAUDE-3`'s `scan8.mjs` sweep found eleven awaited writes inside
+server actions whose result is never bound, and set nine of them aside —
+including `child-login-actions.ts:68,77,78` — on the reasoning that they are
+*"compensating/rollback or best-effort writes whose primary error IS reported."*
+That reasoning is sound as a general rule and wrong for these three, for a
+reason the sweep could not see from the write alone: **what the compensating
+write leaves behind is read by a guard at the top of the same action.**
+
+**Problem.** `createChildLoginAction` provisions in four steps — create the auth
+user, link `family_members.user_id` to it, insert the `child_logins` row, upsert
+the preference. Each failure path undid the earlier steps with bare `await`s:
+
+```ts
+if (rowErr) {
+  await admin.from('family_members').update({ user_id: null }).eq('id', member.id);
+  await admin.auth.admin.deleteUser(childUserId);
+  return { ok: false, error: t('childLoginActions.couldNotSaveTheLogin') };
+}
+```
+
+Both results discarded. And `.update()` without `.select()` could not have
+reported a no-op even if the result had been bound — the `C1-S9-16` class, in
+the one position where it is invisible by construction, because the caller is
+already returning an error.
+
+**Impact — two distinct dead ends, both permanent.**
+
+1. **The member gets stuck.** Line 40 is
+   `if (member.user_id) return { ok: false, error: 'This member already has a login' }`.
+   A rollback that fails to null that column leaves the parent permanently
+   unable to create the login, being told they already have one — with no
+   `child_logins` row anywhere to back the claim, and nothing in the UI that can
+   clear it. The error message they are given invites the retry that cannot
+   work.
+2. **The username gets burned.** A failed `deleteUser` leaves the synthetic
+   email alive, so the next attempt fails inside `createUser` and reports the
+   same generic "could not create the login" — forever, for that child.
+
+Neither is recoverable by the parent, and neither leaves a trace: the action
+returned a clean, plausible error and logged nothing.
+
+**Fix.** A `rollbackChildLogin` helper that performs the same three steps and
+**reports whether the undo was complete**. Each database write asks what it
+changed (`.select('id')` + `wroteNoRows`; zero rows is a failure here, because
+on these paths the row demonstrably existed a moment ago), the `deleteUser`
+error is bound, and each failure logs with the member id — the only trace an
+operator gets of a family that cannot create a login. When the rollback is
+incomplete the parent gets a different message
+(`childLoginActions.couldNotFinishAndCouldNotUndo`) that says the state needs
+attention and explicitly warns that a retry will report a login that does not
+exist. Added in place to all 7 base catalogues.
+
+The single-step link-failure path at `:79` is checked the same way inline.
+
+**Status:** FIXED. Guard: seven cases in
+`tests/a-write-the-user-is-told-about-is-confirmed.test.ts`, each proved red by
+mutation — reverting one rollback to bare awaits, getting `removeLoginRow`
+backwards, dropping a `.select()`, dropping a `complete = false`, falling back to
+the retry-inviting message, dropping the member id from a log, and removing the
+key from a catalogue.
+
+**Converged with `C4-S4-11`.** CLAUDE-4 independently found the throttle
+discards at `:86-88` and `:117-119` in the same file and ranked them LOW. Those
+two are already FIXED under `C1-S9-16` (the clears were reordered to run first
+with their errors checked); this finding covers the *provisioning* rollbacks,
+which are a different set of statements with a different and much worse failure
+mode. Recorded here rather than in `audit/claude-3.md` or `audit/claude-4.md`,
+which are theirs (charter rules 1, 2 and 9). Neither worker's file is modified.
+
+**Verified NOT a defect, in the same read:** the `taken` username pre-check at
+`:46` also drops its error, but `01051_child_logins.sql:26` carries
+`create unique index … on public.child_logins (lower(username))`, and
+`normalizeUsername` lowercases — so the database enforces uniqueness and a
+refused pre-check degrades to a worse error message, not a duplicate login.
+Recorded because a sweep that reports nothing is worth as much as its
+instrument.
+
+---
+
+### `[CLAUDE-1][LOW][TESTING]` C1-S9-36 — a fourth guard red on an improvement
+
+`tests/child-login-persistence.test.ts:21` asserted the three rollback
+statements as inline literals:
+
+```ts
+expect(source).toContain("await admin.from('child_logins').delete().eq('user_id', childUserId)");
+```
+
+`C1-S9-35` moved them into a helper that does the same three things and checks
+each one, so the literals vanished and the guard went red on a strictly stronger
+implementation. Same species as the two under `C1-S9-28`, and the same
+resolution: re-point at the behaviour, then add the property the rewrite
+introduced so it cannot silently regress. The test now asserts that the
+preference path undoes all three steps AND that the helper confirms them
+(`wroteNoRows`), and was proved red three ways: removing the auth-user delete,
+replacing the confirmations with `Boolean(...)`, and flipping `removeLoginRow`.
+
+Fourth occurrence this session. The distinguishing question has not changed —
+*is this test describing a behaviour, or a spelling?* — and the answer has been
+"a spelling" every time. Worth stating plainly: in this repository, a guard
+written as `toContain("<exact statement>")` is a latent false failure, and the
+four found so far were all written that way.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -32904,8 +33014,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **16,979 passing / 16,982 across 1,351
-files.** (Re-run after `C1-S9-34`; was 16,950 / 16,953 across 1,349 before this
+Status: ✅ PASS — `npx vitest run`: **16,986 passing / 16,989 across 1,351
+files.** (Re-run after `C1-S9-36`; was 16,950 / 16,953 across 1,349 before this
 batch.) The three failures are `C1-S9-09`, BLOCKED: this container runs Node
 22.22.2 against the repository's `.nvmrc` 24.21.0, and nvm cannot fetch the
 Node 24 distribution here. Not counted as passing.

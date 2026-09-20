@@ -167,3 +167,77 @@ describe('an archive the parent is told about is confirmed (C1-S9-33)', () => {
     }
   });
 });
+
+/**
+ * Audit C1-S9-35 — the last item on the C1-S9-16/23 shortlist, and the one
+ * place where an unconfirmed write is worse than a lie: a COMPENSATING write.
+ *
+ * `createChildLoginAction` creates an auth user, links the member to it, then
+ * inserts the map row and the preference. Each failure path undid the earlier
+ * steps with bare `await`s whose results were discarded. The caller is already
+ * returning an error on those paths, so a failed rollback is invisible — and
+ * the state it leaves is a DEAD END rather than a retry, because the action
+ * refuses any member that already has a `user_id`.
+ */
+const createLogin = bodyOf(childLogin, 'export async function createChildLoginAction', "return { ok: true, data: { username } };");
+
+describe('a rollback that fails is not reported as a clean failure (C1-S9-35)', () => {
+  it('no failure path undoes anything with a discarded result', () => {
+    // The precise shape that was wrong: `await admin.from(...)` as a statement,
+    // with nothing destructured off it.
+    expect(createLogin).not.toMatch(/\n\s+await admin\.from\(/);
+    expect(createLogin).not.toMatch(/\n\s+await admin\.auth\.admin\.deleteUser\(/);
+  });
+
+  it('both multi-step rollbacks go through the helper that checks every step', () => {
+    const calls = createLogin.match(/rollbackChildLogin\(admin, \{[^}]*\}\)/g) ?? [];
+    expect(calls.length, 'the child_logins insert path and the preference path').toBe(2);
+    // The preference path has a row to remove; the insert path does not, because
+    // its insert is what failed. Getting this backwards would either leave the
+    // row or report a phantom failure.
+    expect(calls.some((c) => c.includes('removeLoginRow: true'))).toBe(true);
+    expect(calls.some((c) => c.includes('removeLoginRow: false'))).toBe(true);
+  });
+
+  it('the helper confirms each compensating write rather than assuming it', () => {
+    const helper = bodyOf(childLogin, 'async function rollbackChildLogin', '\n  return complete;\n}');
+    // Both database writes ask what they changed; zero rows is a failure here,
+    // because on these paths the row demonstrably existed a moment ago.
+    expect(helper.match(/\.select\('id'\)/g) ?? []).toHaveLength(2);
+    expect(helper.match(/wroteNoRows\(/g) ?? []).toHaveLength(2);
+    expect(helper).toContain('const { error: deleteError } = await admin.auth.admin.deleteUser');
+    // Every step can set it, and none may skip straight to the end.
+    expect(helper.match(/complete = false;/g) ?? []).toHaveLength(3);
+  });
+
+  it('an incomplete rollback gets its own message, not an invitation to retry', () => {
+    // The generic "could not save the login" tells the parent to try again, and
+    // the retry is already known to fail on the `member.user_id` guard.
+    expect(createLogin.match(/if \(!undone\) return \{ ok: false, error: t\('childLoginActions\.couldNotFinishAndCouldNotUndo'\) \};/g) ?? [])
+      .toHaveLength(2);
+    expect(createLogin).toContain("t('childLoginActions.couldNotSaveTheLogin')");
+    expect(createLogin).toContain("t('childLoginActions.couldNotFinishSettingUp')");
+  });
+
+  it('the single-step link failure is checked too', () => {
+    const link = between(childLogin, 'const { error: linkErr }', 'const { error: rowErr }');
+    expect(link).toContain('const { error: deleteError } = await admin.auth.admin.deleteUser(childUserId);');
+    expect(link).toContain("t('childLoginActions.couldNotFinishAndCouldNotUndo')");
+  });
+
+  it('a stuck member is logged with enough to find them', () => {
+    const helper = bodyOf(childLogin, 'async function rollbackChildLogin', '\n  return complete;\n}');
+    // Three console.error calls, each carrying the member id — this is the only
+    // trace an operator gets of a family that cannot create a login.
+    const logs = helper.match(/console\.error\('\[child-login\][\s\S]*?\}\);/g) ?? [];
+    expect(logs).toHaveLength(3);
+    for (const log of logs) expect(log).toContain('memberId: opts.memberId');
+  });
+
+  it('the copy exists in every base catalogue', () => {
+    for (const locale of ['en-US', 'de-DE', 'es-ES', 'fr-FR', 'it-IT', 'nl-NL', 'pt-PT']) {
+      const catalogue = JSON.parse(readFileSync(`lib/i18n/messages/${locale}.json`, 'utf8')) as Record<string, string>;
+      expect(catalogue['childLoginActions.couldNotFinishAndCouldNotUndo'], `${locale} is missing it`).toBeTruthy();
+    }
+  });
+});

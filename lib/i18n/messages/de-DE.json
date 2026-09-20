@@ -3118,6 +3118,7 @@
   "childLoginActions.childLoginsArenTConfigured": "Kinder-Anmeldungen sind auf dem Server noch nicht eingerichtet (CHILD_LOGIN_SECRET setzen).",
   "childLoginActions.childLoginsArenTConfigured2": "Kinder-Anmeldungen sind auf dem Server noch nicht eingerichtet.",
   "childLoginActions.couldNotCreateTheLogin": "Die Anmeldung konnte nicht erstellt werden. Der Benutzername ist möglicherweise bereits vergeben.",
+  "childLoginActions.couldNotFinishAndCouldNotUndo": "Die Einrichtung dieses Logins konnte nicht abgeschlossen und die unvollständige Einrichtung nicht vollständig rückgängig gemacht werden. Bitte wenden Sie sich an den Support, bevor Sie es erneut versuchen – ein erneuter Versuch meldet, dass dieses Mitglied bereits ein Login hat.",
   "childLoginActions.couldNotFinishSettingUp": "Die Einrichtung der Anmeldung konnte nicht abgeschlossen werden.",
   "childLoginActions.couldNotLinkTheLogin": "Die Anmeldung konnte nicht verknüpft werden.",
   "childLoginActions.couldNotResetThePin": "Die PIN konnte nicht zurückgesetzt werden.",

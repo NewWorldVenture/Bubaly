@@ -3118,6 +3118,7 @@
   "childLoginActions.childLoginsArenTConfigured": "Kinderaanmeldingen zijn nog niet ingesteld op de server (stel CHILD_LOGIN_SECRET in).",
   "childLoginActions.childLoginsArenTConfigured2": "Kinderaanmeldingen zijn nog niet ingesteld op de server.",
   "childLoginActions.couldNotCreateTheLogin": "Kan de login niet aanmaken. De gebruikersnaam is mogelijk al in gebruik.",
+  "childLoginActions.couldNotFinishAndCouldNotUndo": "Het instellen van deze login kon niet worden voltooid en de gedeeltelijke installatie kon niet volledig ongedaan worden gemaakt. Neem contact op met support voordat je het opnieuw probeert — een nieuwe poging meldt dat dit lid al een login heeft.",
   "childLoginActions.couldNotFinishSettingUp": "Kan het instellen van de login niet voltooien.",
   "childLoginActions.couldNotLinkTheLogin": "Kan de login niet koppelen.",
   "childLoginActions.couldNotResetThePin": "Kan de pincode niet opnieuw instellen.",
