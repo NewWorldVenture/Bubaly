@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-190 finding IDs from four workers and two parallel sessions; none of it was
+191 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -12,7 +12,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 > source-and-migration audit run without production credentials. Session B
 > (Register B, 14,038 items, `AUTH-001` / `API-<hash>` / `DB-TBL-nnn`) is a
 > hosted-CI and deployed-release audit. Their finding-ID sets are **disjoint**:
-> 912 IDs from A, 684 from B, 1,593 in union — verified mechanically at each
+> 913 IDs from A, 684 from B, 1,594 in union — verified mechanically at each
 > merge. The three literals both files contain (`LB-009`, `LB-016`, `SHA-256`)
 > are not counter-examples: the first two are pre-existing *runbook* names each
 > register cites, and the third is a hash algorithm the ID regex matches. No
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 200 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 201 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -33711,6 +33711,45 @@ in the over-tightening direction.
 
 ---
 
+### `[CLAUDE-1][MEDIUM][TESTING]` C1-S9-50 — a ratchet for the unconfirmed-write class, so the remaining 82 cannot become 90
+
+Both read sweeps were closed with ratchets (`C1-S9-43` for API, `C1-S9-45` for
+pages) because a number is not a claim. The write sweep had no such instrument,
+and it has the most remaining work of the three — so the class could quietly
+regrow faster than it is being burned down, and every pass would still read as
+progress.
+
+`tests/an-unconfirmed-write-ratchet.test.ts` is a **count-per-file baseline** in
+the same shape as the repository's existing `silent-empty-read-ratchet`, and
+inherits its rule verbatim: **only remove entries as they are fixed — never
+add.** 39 files, 82 writes.
+
+**Counts, not line numbers.** The page ratchet's first version pinned lines and
+broke on its own commit when an unrelated fix shifted two by seven. A ratchet
+that reddens on unrelated edits teaches people to edit the ratchet, which is the
+one failure a ratchet cannot survive.
+
+**Three verbs deliberately excluded**, each for a stated reason rather than
+convenience: `insert` (cannot match zero rows), `upsert` (conflict semantics
+need per-site reasoning, and `C1-S9-46`'s scan counts it separately), and an
+*unfiltered* `update`/`delete` (which has a larger problem than confirmation).
+
+**It bounds the class; it does not claim every remaining write is a defect.**
+The six writes left unconfirmed on purpose under `C1-S9-49` live in files inside
+this baseline and are part of its counts. That is the honest shape: the ratchet
+says *this set may only shrink*, not *every member is wrong*.
+
+**Four cases, each proved red by mutation**, covering all three directions a
+ratchet must catch: a fixed file regressing (count above baseline), a new file
+joining the class, and a file leaving the class while its baseline entry
+lingers — the stale-entry check that `C1-S9-28` showed is the one that keeps a
+ratchet honest. A fourth pins the total to the number recorded here, so the
+register and the test cannot drift apart silently.
+
+**Status:** FIXED (instrument). The 82 remain OPEN and are now bounded.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -33780,8 +33819,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,087 passing / 17,090 across 1,351
-files.** (Re-run after `C1-S9-49`; was 16,950 / 16,953 across 1,349 before this
+Status: ✅ PASS — `npx vitest run`: **17,091 passing / 17,094 across 1,352
+files.** (Re-run after `C1-S9-50`; was 16,950 / 16,953 across 1,349 before this
 batch.) The three failures are `C1-S9-09`, BLOCKED: this container runs Node
 22.22.2 against the repository's `.nvmrc` 24.21.0, and nvm cannot fetch the
 Node 24 distribution here. Not counted as passing.
