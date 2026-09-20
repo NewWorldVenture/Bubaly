@@ -2,11 +2,11 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-20T12:26:31.732Z
-- Total Audit Items: 14052
+- Last Updated: 2026-09-20T12:28:55.241Z
+- Total Audit Items: 14053
 - Not Started: 13842
 - In Progress: 192
-- Passed: 3
+- Passed: 4
 - Fixed + Passed: 12
 - Blocked: 1
 - Failed: 2
@@ -14184,6 +14184,7 @@ PRODUCTION READY: NO
 | AI-002 | AI | AI routes outside the context slices | ✅ PASS | High | 7/7 | None required | Rate limiter exercised: 5 allowed / 2 denied, namespace scoping enforced | The policy guard scopes to lib/ai/context/slices; the other 39 routes were checked directly. Three use a service client; each is correctly scoped or token-authorized. |
 | TEST-008 | Testing | Unfinished-work markers in shipping code | 🛠 FIXED + PASS | Medium | 6/6 | Guard now scans comments instead of stripping them, and requires every marker to lead its comment and carry a tracker reference | 3/3; red when a bare marker is appended to a real file | It stripped comments before searching for comment markers, so it reported 0 while 19 existed. All 19 are properly owned. |
 | SEC-007 | SEC | Private document vault over real HTTP | ✅ PASS | Critical | 8/8 | None required | B refused read, sign, upload and delete against A's vault; both controls pass; A's document intact; all fixtures removed | Tested with real user tokens over the Storage service, reaching the signing endpoint that SQL-level probes structurally cannot. The read refusal is NoSuchKey, so the vault is not an existence oracle. |
+| AUTHZ-006 | AUTHZ | Cross-family isolation at the real API layer | ✅ PASS | Critical | 6/6 | None required | 396/396 tables read as an outsider with 1 hit (the Idea Board, by design); 0 of 26 sensitive tables writable; fixtures removed, anchor intact | Run through PostgREST with a real password-obtained token against the seeded anchor family's 71,192 rows — the layer the SQL probes do not reach. |
 
 ## Inventory and evidence rules
 
@@ -21066,6 +21067,55 @@ Executed. The nineteen markers were enumerated and each classified by hand befor
 
 #### Final Status
 🛠 FIXED + PASS
+
+### AUTHZ-006 — Cross-family isolation, swept at the real API layer
+
+Status: ✅ PASS
+Severity: Critical
+Route(s), components, actions, tables and providers: PostgREST /rest/v1 against all 396 tables carrying `family_id`, /auth/v1/token, public.feedback_ideas, docs/audit/rls-isolation-check.sql
+
+#### Expected Behavior
+A signed-in member of one family can neither read nor modify another family's rows, on any table, through the API the browser actually uses.
+
+#### Test Cases
+- [x] Every one of the 396 family-scoped tables queried as an outsider, filtered to another family's id
+- [x] Every response parsed — no silent permission errors miscounted as refusals
+- [x] 26 sensitive tables PATCHed as an outsider against another family's rows
+- [x] Affected rows counted via `Prefer: return=representation`, not inferred from status
+- [x] Any table returning another family's rows investigated rather than assumed
+- [x] All fixtures removed and the anchor family confirmed intact
+
+#### Issues Found
+None. One table returns cross-family rows and it is meant to.
+
+The sweep was run the way the browser reaches the database, not in SQL: a real user created through `/auth/v1/admin/users`, placed in their own family, signed in through `/auth/v1/token?grant_type=password` for a genuine access token, then every request made against PostgREST — the service that actually applies RLS for the client, exactly as the Storage service does for objects. `docs/audit/rls-isolation-check.sql` asserts this in a database session; this reaches the layer in between.
+
+**Reads — 396 tables, 396 parsed responses, 0 permission errors:**
+
+    tables queried as an outsider: 396   (non-JSON/permission responses: 0)
+    TABLES THAT RETURNED ANOTHER FAMILY'S ROWS: 1
+      feedback_ideas :: [{"family_id":"00000000-0000-4000-8000-0000000000f1"}]
+
+`feedback_ideas` is the one hit and it is correct. Its policy is `feedback_ideas_select: auth.uid() IS NOT NULL`, and the product is **the Idea Board** — `app/(app)/feedback/layout.tsx` says so by name, and `page.tsx` selects ideas with no family filter at all, ordered by pinned then vote count, rendering `author_name` and the idea body. It is a cross-user product roadmap where everyone sees and votes on everyone's ideas. The `family_id` column rides along for attribution; the board is shared by intent. Checked before being called a leak, because a scan's one hit is a thing to look at, not a finding.
+
+**Writes — 26 sensitive tables, including medications, member_locations, family_facts, documents, wallet_transactions, allowance_rules, trust_policies, trust_delegations, social_access_permissions, families and family_members:**
+
+    tables PATCHed as an outsider: 26
+    TABLES WHERE THE OUTSIDER MODIFIED ROWS: 0
+
+Counted from the returned representation rather than from the status code, because a refused UPDATE succeeds with zero rows — the asymmetry this cycle has been chasing throughout. A 200 with `[]` is a refusal; only a non-empty array would have been a breach.
+
+#### Fixes Applied
+None required.
+
+#### Retest Results
+The sweep is the test. Every fixture was removed afterwards and the removal verified: the outsider's family deleted, the auth user deleted, `outsider rows remaining: 0`, `anchor family intact: true`.
+
+#### Evidence
+Executed against the running local Supabase stack over HTTP with a token obtained by real password sign-in. The target was the seeded anchor family, which carries 71,192 rows across 199 of those tables — so the reads were asking for data that genuinely exists, not for an empty set.
+
+#### Final Status
+✅ PASS
 
 ### SEC-007 — The private document vault, tested over real HTTP with real user tokens
 
