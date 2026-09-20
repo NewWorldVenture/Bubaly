@@ -38,7 +38,11 @@ export async function POST(req: NextRequest) {
     if (!boundedBody.ok) return NextResponse.json({ error: t('weeklyBriefing.requestBodyIsTooLarge') }, { status: 400 });
 
     const now = new Date();
-    const w = weekWindow(now);
+    // The family's week, not Greenwich's. Until this was passed, a 21:00 Saturday
+    // game in Los Angeles (04:00 Sunday UTC) appeared under SUNDAY in the grid,
+    // and the week ran 17:00 Sunday to 17:00 Sunday.
+    const tz = ctx.active.family.timezone || 'UTC';
+    const w = weekWindow(now, tz);
 
     const [
       { data: members },
@@ -71,8 +75,16 @@ export async function POST(req: NextRequest) {
     const memberName = (id: string | null) => (id ? memberMap.get(id)?.display_name ?? null : null);
 
     // Per-day look-ahead buckets so the prompt can present a true week grid.
-    const eventsByDay = bucketByDay(aheadEvents ?? [], (e) => e.starts_at, w.days);
-    const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    const eventsByDay = bucketByDay(aheadEvents ?? [], (e) => e.starts_at, w.days, tz);
+    // The clock on each line is the family's clock. Without `timeZone` this
+    // rendered in the RUNTIME's zone, which on Vercel is UTC — so the same 21:00
+    // game read "4:00 AM" in a briefing addressed to the family it belongs to.
+    const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz });
+    // `dayName` stays UTC deliberately and is NOT the same case: `key` is already
+    // a family day key, so it is parsed at UTC midnight purely to name its
+    // weekday. Reading it in `tz` would shift a western zone back a day and
+    // label Monday "Sunday" — converting a day key is the mirror defect of
+    // failing to convert an instant.
     const dayName = (key: string) => new Date(`${key}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
 
     const dayGrid = w.days.map((key) => {
