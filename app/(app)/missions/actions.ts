@@ -10,6 +10,7 @@ import { isManager } from '@/lib/constants/roles';
 import { validateChoreSubmission, generateChorePlan, type ChorePlanItem } from '@/lib/chores/ai';
 import { computeReward, canAutoApprove, type ChoreReward, type Difficulty } from '@/lib/chores/logic';
 import { applyCompletionRewards, logChoreEvent } from '@/lib/chores/server';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 const BUCKET = 'chore-proof';
 const MAX_FILE = 50 * 1024 * 1024;
@@ -266,14 +267,25 @@ async function finalizeApproval(
       difficulty: ((args.chore.difficulty as Difficulty) ?? 'medium'), qualityScore: args.score,
     });
   } catch (error) {
-    const { error: rollbackError } = await supabase.from('chore_assignments').update({
+    const { data: rolledBackAssignment, error: rollbackError } = await supabase.from('chore_assignments').update({
       status: args.assignment.status,
       approved_at: args.assignment.approved_at,
       approved_by: args.assignment.approved_by,
       points_awarded: args.assignment.points_awarded,
       cash_awarded_cents: args.assignment.cash_awarded_cents,
-    } as never).eq('id', args.assignment.id as string).eq('family_id', args.familyId);
-    if (rollbackError) console.error('[chore approval] assignment rollback failed', rollbackError);
+    } as never).eq('id', args.assignment.id as string).eq('family_id', args.familyId).select('id');
+    // Undoing an approval whose reward application threw. A rollback matching
+    // ZERO rows leaves the assignment marked approved, with points and cash
+    // recorded as awarded, when the code that actually awards them failed — the
+    // child is recorded as paid without being paid. Logged rather than raised
+    // because the original error is rethrown two lines below and is the one the
+    // caller needs. Audit C1-S9-55.
+    if (rollbackError || wroteNoRows(rolledBackAssignment)) {
+      console.error('[chore approval] assignment rollback failed — an approval may be stranded', {
+        assignmentId: args.assignment.id, familyId: args.familyId,
+        error: rollbackError?.message ?? 'no rows updated',
+      });
+    }
     throw error instanceof Error ? error : new Error('Could not apply chore rewards');
   }
 
@@ -316,9 +328,19 @@ export async function approveSubmissionAction(formData: FormData): Promise<void>
     });
   } catch {
     await setSubmissionStatus(supabase, familyId, submissionId, submission.status);
-    const { error: disputeRestoreError } = await supabase.from('chore_disputes').update({ status: 'open', resolution: null, resolved_by: null, resolved_at: null })
-      .eq('submission_id', submissionId).eq('status', 'resolved');
-    if (disputeRestoreError) console.error('[chore state] dispute rollback failed', disputeRestoreError);
+    // Reopening a dispute whose resolution failed. Zero rows here is ambiguous
+    // in the same way as the wallet hold in C1-S9-53 — the `.eq('status',
+    // 'resolved')` predicate means it is also the case where there was no
+    // resolved dispute to restore — so it is logged, not raised. What it must
+    // not be is invisible: a family's dispute left closed over a resolution
+    // that did not happen. Audit C1-S9-55.
+    const { data: reopened, error: disputeRestoreError } = await supabase.from('chore_disputes').update({ status: 'open', resolution: null, resolved_by: null, resolved_at: null })
+      .eq('submission_id', submissionId).eq('status', 'resolved').select('id');
+    if (disputeRestoreError || wroteNoRows(reopened)) {
+      console.error('[chore state] dispute rollback failed — a dispute may stay closed', {
+        submissionId, error: disputeRestoreError?.message ?? 'no rows updated',
+      });
+    }
     return;
   }
   revalidatePath('/missions');
@@ -364,8 +386,15 @@ export async function disputeSubmissionAction(formData: FormData): Promise<void>
   const { data: dispute, error: disputeError } = await supabase.from('chore_disputes').insert({ family_id: familyId, submission_id: submissionId, member_id: submission.member_id, reason: str(formData, 'reason'), status: 'open' }).select('id').single();
   if (disputeError || !dispute) return;
   if (!await setSubmissionStatus(supabase, familyId, submissionId, 'disputed')) {
-    const { error: disputeCleanupError } = await supabase.from('chore_disputes').delete().eq('id', dispute.id).eq('family_id', familyId);
-    if (disputeCleanupError) console.error('[chore state] dispute cleanup failed', disputeCleanupError);
+    const { data: cleanedDispute, error: disputeCleanupError } = await supabase.from('chore_disputes').delete().eq('id', dispute.id).eq('family_id', familyId).select('id');
+    if (disputeCleanupError || wroteNoRows(cleanedDispute)) {
+      // The dispute row was inserted moments ago on this path, so zero rows is
+      // a failure to remove it, not an absence — and it leaves an orphan
+      // dispute against an assignment that was never marked disputed.
+      console.error('[chore state] dispute cleanup failed — an orphan dispute may remain', {
+        disputeId: dispute.id, familyId, error: disputeCleanupError?.message ?? 'no rows deleted',
+      });
+    }
     return;
   }
   const { data: updatedAssignment, error: assignmentError } = await supabase.from('chore_assignments').update({ status: 'submitted', disputed: true })
@@ -431,8 +460,14 @@ export async function createChoreAction(formData: FormData): Promise<void> {
       family_id: familyId, chore_id: chore.id, member_id, due_at: str(formData, 'due_at'),
     })));
     if (assignmentError) {
-      const { error: cleanupError } = await supabase.from('chores').delete().eq('id', chore.id).eq('family_id', familyId);
-      if (cleanupError) console.error('[chore create] cleanup failed', cleanupError);
+      const { data: cleanedChore, error: cleanupError } = await supabase.from('chores').delete().eq('id', chore.id).eq('family_id', familyId).select('id');
+      if (cleanupError || wroteNoRows(cleanedChore)) {
+        // Same shape: the chore was created moments ago, so zero rows leaves a
+        // chore nobody is assigned to sitting in the family's list.
+        console.error('[chore create] cleanup failed — an unassigned chore may remain', {
+          choreId: chore.id, familyId, error: cleanupError?.message ?? 'no rows deleted',
+        });
+      }
       return;
     }
   }

@@ -13,7 +13,7 @@ import { createServer } from '@/lib/supabase/server';
 import { isSuperAdminEmail } from '@/lib/constants/super-admins';
 import { resolveFeatureEntitlement } from '@/lib/server/feature-entitlement';
 import { isManager } from '@/lib/constants/roles';
-import { describeActionError } from '@/lib/supabase/errors';
+import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { knowledgeGraphTarget, toCanonicalGraphRow } from '@/lib/twin/project';
 import { logAudit } from '@/lib/server/audit';
 
@@ -174,9 +174,15 @@ export async function updateFamilyRecord(
   // graph_entities / graph_edges have no `updated_by` column (0129); every other
   // whitelisted table does.
   const payload = target === table ? { ...mapped, updated_by: ctx.user.id } : mapped;
-  const { error } = await (supabase.from(target as any) as any)
-    .update(payload).eq('id', id).eq('family_id', ctx.active.familyId);
+  // These two generic helpers back the write path for every whitelisted table,
+  // so one missing confirmation here is the defect repeated across every surface
+  // that uses them. Both return `{ ok: true, id }` — an assertion that the
+  // record with THAT id changed — which a write matching zero rows could not
+  // support. Audit C1-S9-55.
+  const { data: updated, error } = await (supabase.from(target as any) as any)
+    .update(payload).eq('id', id).eq('family_id', ctx.active.familyId).select('id');
   if (error) return actionFailure('update that record', error);
+  if (wroteNoRows(updated as unknown[] | null)) return { ok: false, error: 'Could not update that record.' };
   revalidatePath('/dashboard', 'layout');
   return { ok: true, id };
 }
@@ -189,9 +195,10 @@ export async function deleteFamilyRecord(table: string, id: string): Promise<Act
   }
   const supabase = await createServer();
   const target = knowledgeGraphTarget(table) ?? table;
-  const { error } = await (supabase.from(target as any) as any)
-    .delete().eq('id', id).eq('family_id', ctx.active.familyId);
+  const { data: deleted, error } = await (supabase.from(target as any) as any)
+    .delete().eq('id', id).eq('family_id', ctx.active.familyId).select('id');
   if (error) return actionFailure('delete that record', error);
+  if (wroteNoRows(deleted as unknown[] | null)) return { ok: false, error: 'Could not delete that record.' };
   revalidatePath('/dashboard', 'layout');
   return { ok: true, id };
 }
@@ -203,12 +210,14 @@ export async function setRecommendationStatus(
 ): Promise<ActionResult> {
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const { error } = await supabase
+  const { data: recommended, error } = await supabase
     .from('family_ai_recommendations')
     .update({ status, updated_by: ctx.user.id })
     .eq('id', id)
-    .eq('family_id', ctx.active.familyId);
+    .eq('family_id', ctx.active.familyId)
+    .select('id');
   if (error) return actionFailure('update that recommendation', error);
+  if (wroteNoRows(recommended)) return { ok: false, error: 'Could not update that recommendation.' };
   revalidatePath('/dashboard', 'layout');
   return { ok: true, id };
 }
@@ -223,7 +232,7 @@ export async function resolveAutomationRun(
     return { ok: false, error: 'Only parents and adults can approve automations.' };
   }
   const supabase = await createServer();
-  const { error } = await supabase
+  const { data: resolved, error } = await supabase
     .from('family_automation_runs')
     .update({
       status: decision === 'approved' ? 'approved' : 'skipped',
@@ -231,8 +240,13 @@ export async function resolveAutomationRun(
       approved_at: new Date().toISOString(),
     })
     .eq('id', id)
-    .eq('family_id', ctx.active.familyId);
+    .eq('family_id', ctx.active.familyId)
+    .select('id');
   if (error) return actionFailure('resolve that automation', error);
+  // The same failure mode as the concierge autopilot in C1-S9-48: a manager
+  // approves an automation, is told it worked, and the run stays pending — so
+  // it is offered to them again, or the automation simply never executes.
+  if (wroteNoRows(resolved)) return { ok: false, error: 'Could not resolve that automation.' };
   await logAudit(supabase, {
     familyId: ctx.active.familyId, actorId: ctx.user.id,
     action: decision === 'approved' ? 'approve' : 'skip',

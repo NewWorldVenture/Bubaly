@@ -725,3 +725,75 @@ describe('Guardian trust and escalations are confirmed (C1-S9-53)', () => {
     expect(scoped.length, 'a confirmation bought by widening the filter').toBe(7);
   });
 });
+
+/**
+ * Audit C1-S9-55 — chore approvals and the generic family record helpers.
+ *
+ * Every write fixed here is either a COMPENSATING write on an already-failing
+ * path, or a generic helper whose one missing confirmation is the defect
+ * repeated across every surface that calls it.
+ */
+const missionsActions = readFileSync('app/(app)/missions/actions.ts', 'utf8');
+const familyActions = readFileSync('lib/family/actions.ts', 'utf8');
+
+describe('a chore rollback reports an empty undo (C1-S9-55)', () => {
+  it.each([
+    ['the approval rollback', 'rolledBackAssignment', 'an approval may be stranded'],
+    ['the dispute reopen', 'reopened', 'a dispute may stay closed'],
+    ['the dispute cleanup', 'cleanedDispute', 'an orphan dispute may remain'],
+    ['the chore cleanup', 'cleanedChore', 'an unassigned chore may remain'],
+  ])('%s says what was left behind', (_label, binding, message) => {
+    expect(missionsActions, binding).toContain(`wroteNoRows(${binding})`);
+    expect(missionsActions, message).toContain(message);
+  });
+
+  it('all four stay logged, not raised', () => {
+    // Each runs on a path already returning or rethrowing a failure. Raising
+    // here would replace the error the caller needs with a bookkeeping one —
+    // and the approval rollback rethrows the ORIGINAL error two lines later.
+    for (const message of [
+      'an approval may be stranded', 'a dispute may stay closed',
+      'an orphan dispute may remain', 'an unassigned chore may remain',
+    ]) {
+      const block = bodyOf(missionsActions, message, '});');
+      expect(block, message).not.toContain('return { ok: false');
+    }
+    expect(missionsActions).toContain("throw error instanceof Error ? error : new Error('Could not apply chore rewards');");
+  });
+
+  it('the approval rollback restores every awarded field', () => {
+    // The point of the rollback: leaving points or cash marked awarded while
+    // the code that awards them failed records a child as paid without paying.
+    const body = bodyOf(missionsActions, "from('chore_assignments').update({\n      status: args.assignment.status", ".select('id')");
+    for (const field of ['approved_at', 'approved_by', 'points_awarded', 'cash_awarded_cents']) {
+      expect(body, field).toContain(field);
+    }
+  });
+});
+
+describe('the generic family record helpers confirm (C1-S9-55)', () => {
+  it.each([
+    ['updateFamilyRecord', 'updated'],
+    ['deleteFamilyRecord', 'deleted'],
+    ['setRecommendationStatus', 'recommended'],
+    ['resolveAutomationRun', 'resolved'],
+  ])('%s asks what it changed', (_fn, binding) => {
+    expect(familyActions, binding).toContain(`wroteNoRows(${binding}`);
+  });
+
+  it('the two generic helpers are confirmed before they assert the id', () => {
+    // Both return `{ ok: true, id }` — an assertion that the record with THAT
+    // id changed, which a write matching zero rows cannot support. They back
+    // every whitelisted table, so one missing check is the defect repeated
+    // across every surface that calls them.
+    for (const binding of ['updated', 'deleted']) {
+      const check = at(familyActions, `wroteNoRows(${binding}`);
+      expect(familyActions.slice(check, check + 400), binding).toContain('return { ok: true, id };');
+    }
+  });
+
+  it('every one stays scoped to the acting family', () => {
+    expect(familyActions.match(/eq\('family_id', ctx\.active\.familyId\)[\s\S]{0,30}?\.select\('id'\)/g) ?? [])
+      .toHaveLength(4);
+  });
+});

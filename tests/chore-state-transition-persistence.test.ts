@@ -28,6 +28,12 @@ describe('chore state transition persistence', () => {
   it('cleans up a chore when assignment creation fails', () => {
     expect(source).toContain('const { data: chore, error: choreError }');
     expect(source).toContain('const { error: assignmentError }');
-    expect(source).toContain("await supabase.from('chores').delete().eq('id', chore.id).eq('family_id', familyId);");
+    // Same: the trailing semicolon was part of the assertion, and appending
+    // `.select('id')` moved the statement's end. The cleanup now also reports a
+    // delete that removed nothing, which would leave an unassigned chore in the
+    // family's list.
+    expect(source).toContain("from('chores').delete().eq('id', chore.id).eq('family_id', familyId)");
+    expect(source).toContain('wroteNoRows(cleanedChore)');
+    expect(source).toContain('an unassigned chore may remain');
   });
 });

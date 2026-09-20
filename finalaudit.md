@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-195 finding IDs from four workers and two parallel sessions; none of it was
+196 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -12,7 +12,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 > source-and-migration audit run without production credentials. Session B
 > (Register B, 14,038 items, `AUTH-001` / `API-<hash>` / `DB-TBL-nnn`) is a
 > hosted-CI and deployed-release audit. Their finding-ID sets are **disjoint**:
-> 917 IDs from A, 684 from B, 1,598 in union — verified mechanically at each
+> 918 IDs from A, 684 from B, 1,599 in union — verified mechanically at each
 > merge. The three literals both files contain (`LB-009`, `LB-016`, `SHA-256`)
 > are not counter-examples: the first two are pre-existing *runbook* names each
 > register cites, and the third is a hash algorithm the ID regex matches. No
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 205 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 206 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -33951,6 +33951,71 @@ guard is the most likely thing to satisfy it.
 
 ---
 
+### `[CLAUDE-1][HIGH][SERVER ACTIONS]` C1-S9-55 — a child recorded as paid without being paid, and a test that was reading the bug
+
+Four chore rollbacks and the four generic family-record helpers.
+
+#### `app/(app)/missions/actions.ts` — four compensating writes
+
+All four run on already-failing paths, all four bound and logged their `error`,
+and all four were silent when the write matched **zero rows**:
+
+| rollback | what zero rows leaves behind |
+|---|---|
+| approval rollback | the assignment still marked approved, with **points and cash recorded as awarded**, while the code that awards them threw — a child recorded as paid without being paid |
+| dispute reopen | a family's dispute left closed over a resolution that did not happen |
+| dispute cleanup | an orphan dispute against an assignment never marked disputed |
+| chore cleanup | a chore nobody is assigned to, sitting in the family's list |
+
+All four stay **logged rather than raised** — the approval rollback rethrows the
+*original* error two lines later, and that is the error the caller needs. The
+dispute reopen is predicated on `.eq('status', 'resolved')`, so zero rows is
+ambiguous there in the same way as the wallet hold in `C1-S9-53`.
+
+#### `lib/family/actions.ts` — the generic helpers
+
+`updateFamilyRecord` and `deleteFamilyRecord` back the write path for **every
+whitelisted table**, so one missing confirmation is the defect repeated across
+every surface that calls them. Both return `{ ok: true, id }` — an assertion
+that the record with *that* id changed, which a zero-row write cannot support.
+Plus `setRecommendationStatus`, and `resolveAutomationRun`, which has the
+`C1-S9-48` failure mode: a manager approves an automation, is told it worked,
+and the run stays pending.
+
+#### A test that was reading the bug rather than the behaviour
+
+`paid-features-enforced-server-side` asserted that a downgraded family can still
+delete a row — *"a gate on delete would strand a family's own data behind an
+upgrade. Access is gated; ownership is not."* Right intent. But its setup acts
+as the FREE family against a row owned by the PLUS family, deliberately, "so the
+write path is reached" without the gate in the picture — and the delete is
+scoped `.eq('family_id', …)`, so it matches **zero rows**. It could only ever
+have returned `ok: true` because a zero-row delete reported success.
+
+**The setup was right and the assertion was reading the defect.** Re-pointed at
+what the comment says is under test: the refusal that comes back is the write
+path's, not the gate's (`/could not delete that record/`, and explicitly *not*
+`/plan|upgrade|tier/`). A second case was added for the half that was missing —
+the same family, downgraded, deleting a row it actually owns, which still
+succeeds.
+
+This is a different failure from the six guards that went red on improvements.
+Those pinned a spelling. **This one encoded the bug in its expectation**, and
+would have kept doing so indefinitely, because it passed.
+
+**Status:** FIXED. Guard: eleven cases, each proved red by mutation — including
+the over-tightening direction, dropping `cash_awarded_cents` from the restored
+fields, and swallowing the original error the rollback exists to preserve.
+
+**Two more spelling-pinned tests** (`chore-reward-persistence`,
+`chore-state-transition-persistence`) went red on the improvement and were
+re-pointed: **eight now this session**, every one written as
+`toContain("<exact statement>")`, two of them pinning a trailing semicolon.
+
+**Ratchet: 61 → 54 across 34 files.**
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -34020,8 +34085,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,110 passing / 17,113 across 1,352
-files.** (Re-run after `C1-S9-54`; was 16,950 / 16,953 across 1,349 before this
+Status: ✅ PASS — `npx vitest run`: **17,123 passing / 17,126 across 1,352
+files.** (Re-run after `C1-S9-55`; was 16,950 / 16,953 across 1,349 before this
 batch.) The three failures are `C1-S9-09`, BLOCKED: this container runs Node
 22.22.2 against the repository's `.nvmrc` 24.21.0, and nvm cannot fetch the
 Node 24 distribution here. Not counted as passing.
