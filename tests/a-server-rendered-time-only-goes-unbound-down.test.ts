@@ -24,9 +24,19 @@
 // is the case that exposed it. Its only time call is `fmtDate(b.due_date)`, so
 // the coarse scan listed it as a defect, and "converting" it would have satisfied
 // this ratchet while fixing nothing at all — the exact shape of a guard that can
-// be met by going through the motions. `fmtTime`, `fmtDateTime`, `fmtRelative`
-// and `fmtTimeAgo` render a clock, and nobody renders a clock for a DATE, so
-// every one of them names an instant and every instant has a zone.
+// be met by going through the motions.
+//
+// `fmtTime`, `fmtDateTime` and `fmtRelative` render a clock, and nobody renders a
+// clock for a DATE, so each names an instant and every instant has a zone.
+// `fmtTimeAgo` is counted for a DIFFERENT reason, and the distinction is worth
+// being exact about rather than folding into the sentence above: on its own it
+// renders a DURATION through `Intl.RelativeTimeFormat` ("3h ago"), which has no
+// zone in it at all. It is here because past `absoluteAfterDays` it hands off to
+// `fmtDate` and starts rendering an absolute date, so it is CONDITIONALLY
+// zone-sensitive. Checked rather than waved at: no page under this ceiling is
+// counted on `fmtTimeAgo` alone, so including it changes no number today — it is
+// here so a page that later leans on the absolute branch is not silently outside
+// the guard.
 //
 // WHAT IS EXCLUDED, and why, because an exclusion is where a ratchet goes quietly
 // wrong:
