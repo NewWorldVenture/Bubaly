@@ -63,8 +63,26 @@ function translationKeys(modules: Set<string>): Map<string, string> {
   return keys;
 }
 
-const files = (patterns: string[]): string[] =>
-  patterns.flatMap((p) => execFileSync('git', ['ls-files', '--', p], { encoding: 'utf8' }).split(/\r?\n/)).filter(Boolean);
+/**
+ * Every page.tsx / layout.tsx under a directory — listed, then filtered by
+ * BASENAME rather than matched by a glob.
+ *
+ * This used to take git pathspecs, and one of them silently matched nothing.
+ * In a git pathspec `**\/` requires AT LEAST ONE intervening directory, so
+ * `app/(marketing)/**\/layout.tsx` does not match `app/(marketing)/layout.tsx`
+ * — and a route group's ROOT layout is exactly where its shared chrome mounts.
+ * The header, the cookie banner, the skip link and the logo were therefore
+ * never walked by this test, on any of the three scoped surfaces.
+ *
+ * It passed throughout, because `**\/page.tsx` DID match the nested pages, so
+ * `entries.length > 0` below was satisfied and the surface looked covered. A
+ * non-empty list is not a complete one, which is why the control underneath
+ * now names the root files instead of counting them.
+ */
+const entryFiles = (dirs: string[]): string[] =>
+  dirs.flatMap((d) => execFileSync('git', ['ls-files', '--', d], { encoding: 'utf8' }).split(/\r?\n/))
+    .filter(Boolean)
+    .filter((f) => /\/(page|layout)\.tsx$/.test(f));
 
 const messages = enUS as Record<string, string>;
 
@@ -76,20 +94,46 @@ const SURFACES: { name: string; entries: string[]; scope: readonly string[] }[] 
   },
   {
     name: 'the marketing site',
-    entries: files(['app/(marketing)/**/page.tsx', 'app/(marketing)/**/layout.tsx']),
+    entries: entryFiles(['app/(marketing)/']),
     scope: MARKETING_SCOPE,
   },
   {
     name: 'sign-in and sign-up',
-    entries: files(['app/(auth)/**/page.tsx', 'app/(auth)/**/layout.tsx']),
+    entries: entryFiles(['app/(auth)/']),
     scope: AUTH_SCOPE,
   },
   {
     name: 'the public link surfaces (gift, join, pay, reviews, offline)',
-    entries: files(['app/gift/**/page.tsx', 'app/join/**/page.tsx', 'app/pay/**/page.tsx', 'app/reviews/**/page.tsx', 'app/offline/**/page.tsx']),
+    entries: entryFiles(['app/gift/', 'app/join/', 'app/pay/', 'app/reviews/', 'app/offline/']),
     scope: PUBLIC_LINK_SCOPE,
   },
 ];
+
+// The control that was missing, and the reason this file passed for so long
+// while three of its four surfaces were half-walked.
+//
+// `entries.length > 0` is satisfied by PARTIAL coverage. The old globs matched
+// every nested `**\/page.tsx` and no `**\/layout.tsx` at all, so each surface
+// reported plenty of entries and none of its route-group ROOT layout — which
+// is the one file that mounts the shared chrome. A count cannot tell "walked
+// the surface" from "walked most of it", so this names the files instead.
+//
+// These four are where the header, the cookie banner, the skip link, the logo
+// and the join-invite flow live. If a refactor moves them, update this list
+// deliberately; do not delete the case.
+describe('the scan reaches each surface, named rather than counted', () => {
+  it('walks the route-group root layouts, not just the nested pages', () => {
+    const walked = new Set(SURFACES.flatMap((s) => s.entries));
+    for (const file of [
+      'app/(marketing)/layout.tsx',
+      'app/(auth)/layout.tsx',
+      'app/join/layout.tsx',
+      'app/join/page.tsx',
+    ]) {
+      expect(walked, `${file} mounts shared chrome and must be walked`).toContain(file);
+    }
+  });
+});
 
 describe('a surface ships every string its client components ask for', () => {
   for (const surface of SURFACES) {

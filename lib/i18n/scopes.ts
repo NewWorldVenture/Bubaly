@@ -42,13 +42,34 @@ import type { Messages } from '@/lib/i18n/messages';
 // intent. 28 short strings in the active locale is a few hundred bytes against
 // the marketing scope's 2 KB, and the alternative is a guard that punishes the
 // right change.
-export const ROOT_CHROME_SCOPE = ['a11y', 'error', 'globalError', 'root'] as const;
+// `logo` and `language` are here rather than repeated per surface because they
+// are demonstrably on more than one: the brand mark and the language picker
+// render in the marketing chrome, the auth chrome and the public-link chrome.
+// Everything narrower stays on the surface that actually mounts it — a scope
+// that collects "probably shared" is a scope on its way back to `all`.
+export const ROOT_CHROME_SCOPE = ['a11y', 'error', 'globalError', 'root', 'logo', 'language'] as const;
 
 /** The public marketing site, /blog and the hosted form and landing routes. */
 export const MARKETING_SCOPE = [
   ...ROOT_CHROME_SCOPE,
   'blogBlogSearch', 'blogTableOfContents', 'fFormRenderer', 'faqTabs',
   'formRenderer', 'handledProof', 'pricingValue', 'subscribe', 'tableOfContents',
+  // The shared chrome this surface mounts, which tests/i18n-client-scope.test.ts
+  // could not see until its entry globs were fixed: a git pathspec `**\/`
+  // requires at least one intervening directory, so `app/(marketing)/**\/layout.tsx`
+  // matched NOTHING and the route group's root layout — where the header, the
+  // cookie banner and the skip link mount — was never walked. Every one of
+  // these keys rendered correct English on the live site anyway, through
+  // `translate`'s SOURCE_MESSAGES fallback. That fallback is what PERF-001
+  // wants to remove from the client bundle, and removing it while these were
+  // out of scope would have put raw keys on the cookie banner's buttons.
+  'nav', 'marketing', 'consentManager', 'modal', 'registerSw', 'exitIntent',
+  'backToTop', 'skipLink',
+  // `consentUi` is reached ONLY through the CONSENT_UI table in
+  // lib/marketing/consent-ui.ts, via `t(c.labelKey)` — a non-literal call the
+  // scan above cannot resolve. It is listed by hand for that reason, and a new
+  // entry in that table under a new namespace would need the same treatment.
+  'consentUi',
 ] as const;
 
 /** Sign-in, sign-up and the consent screens. */
@@ -69,6 +90,10 @@ export const AUTH_SCOPE = [
 export const PUBLIC_LINK_SCOPE = [
   ...ROOT_CHROME_SCOPE,
   'publicGift', 'publicGiftForm', 'reviewForm', 'reviewsNewReviewForm',
+  // The join-invite flow, invisible for the same entry-glob reason: /join's
+  // own layout and page were never walked, so nine keys in the surface that
+  // brings a new member into a family were outside its scope.
+  'joinInvite',
 ] as const;
 
 /**
