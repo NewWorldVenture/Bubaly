@@ -8,8 +8,9 @@ import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { settle } from '@/lib/supabase/settle';
 import {
-  validateTwilioSignature, wrapTwiml, twimlSay, twimlDial, twimlRecord, twimlHangup,
+  wrapTwiml, twimlSay, twimlDial, twimlRecord, twimlHangup,
 } from '@/lib/guardian/twilio';
+import { twilioRefusal, verifyTwilioRequest } from '@/lib/server/twilio-ingress';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 import { resolveFamilyByNumberResult, getOrCreateChannelResult } from '@/lib/contact-center/server';
 
@@ -29,12 +30,8 @@ export async function POST(req: NextRequest) {
   if (!form.ok) return new NextResponse('Invalid callback', { status: form.reason === 'too_large' ? 413 : 400 });
   const params = Object.fromEntries(form.value.entries()) as Record<string, string>;
 
-  if (process.env.NODE_ENV === 'production') {
-    const sig = req.headers.get('x-twilio-signature') ?? '';
-    if (!validateTwilioSignature(sig, `${BASE_URL}/api/contact-center/voice`, params)) {
-      return new NextResponse('Unauthorized', { status: 401 });
-    }
-  }
+  const verdict = verifyTwilioRequest(req, params, 'contact-center/voice');
+  if (!verdict.ok) return twilioRefusal(verdict);
 
   const to = params.To ?? '';
   const admin = createServiceClient();

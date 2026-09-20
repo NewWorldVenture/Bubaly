@@ -1,12 +1,11 @@
 // Signed Twilio ingress. Recovery uses the same processor from trusted receipts.
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
-import { validateTwilioSignature } from '@/lib/guardian/twilio';
+import { twilioRefusal, verifyTwilioRequest } from '@/lib/server/twilio-ingress';
 import { receiveGuardianSms } from '@/lib/guardian/sms-processing';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 
 export const runtime = 'nodejs';
-const BASE_URL = (process.env.NEXT_PUBLIC_APP_URL ?? '').trim().replace(/\/+$/, '');
 const MAX_TWILIO_BODY_BYTES = 64 * 1024;
 
 export async function POST(req: NextRequest) {
@@ -19,13 +18,8 @@ export async function POST(req: NextRequest) {
   }
   const params = Object.fromEntries(boundedForm.value.entries()) as Record<string, string>;
 
-  if (process.env.NODE_ENV === 'production') {
-    const sig = req.headers.get('x-twilio-signature') ?? '';
-    const url = `${BASE_URL}/api/guardian/inbound/sms`;
-    if (!validateTwilioSignature(sig, url, params)) {
-      return new NextResponse('Unauthorized', { status: 401 });
-    }
-  }
+  const verdict = verifyTwilioRequest(req, params, 'guardian/inbound/sms');
+  if (!verdict.ok) return twilioRefusal(verdict);
 
   const from = params.From ?? null;
   const to = params.To ?? null;

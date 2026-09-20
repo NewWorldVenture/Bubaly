@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { validateTwilioSignature } from '@/lib/guardian/twilio';
+import { twilioSignedUrlCandidates } from '@/lib/server/twilio-ingress';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
 import { recordSmsReplyDelivery, SmsReplyInvalidDeliveryError } from '@/lib/contact-center/sms-reply';
 
@@ -42,7 +43,16 @@ export async function POST(req: NextRequest) {
   // The trusted origin is configured; query encoding/order and every form field
   // remain part of Twilio's signature, including future provider parameters.
   const query = req.url.slice(req.url.indexOf('?'));
-  if (!validateTwilioSignature(req.headers.get('x-twilio-signature') ?? '', `${origin}${PATH}${query}`, params)) {
+  // The configured URL first, then the one the platform says it received.
+  // NEXT_PUBLIC_APP_URL has to match what is typed into the Twilio console byte
+  // for byte; a `www.` or a scheme apart is a silent rejection of every genuine
+  // callback, which is F-E07's second half. Each candidate is still a full
+  // HMAC-SHA1 under the shared auth token, so offering a second one grants
+  // nothing to anyone who does not already hold it. The configured URL stays
+  // first, so every request that verifies today verifies by the same path.
+  const sig = req.headers.get('x-twilio-signature') ?? '';
+  const signedAs = [`${origin}${PATH}${query}`, ...twilioSignedUrlCandidates(req)];
+  if (!signedAs.some((url) => validateTwilioSignature(sig, url, params))) {
     return new NextResponse('Unauthorized', { status: 403 });
   }
   if (params.MessageSid !== undefined && params.SmsSid !== undefined && params.MessageSid !== params.SmsSid

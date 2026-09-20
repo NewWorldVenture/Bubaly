@@ -2,12 +2,12 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-20T17:12:40.000Z
-- Total Audit Items: 14060
+- Last Updated: 2026-09-20T17:44:10.000Z
+- Total Audit Items: 14064
 - Not Started: 13842
 - In Progress: 192
 - Passed: 9
-- Fixed + Passed: 14
+- Fixed + Passed: 18
 - Blocked: 1
 - Failed: 2
 - Overall Completion: 0.04%
@@ -14010,11 +14010,11 @@ PRODUCTION READY: NO
 | MAIN-F-F03 | UPSTREAM | F-F03: /missions issues up to 240 sequential storage round trips (High, perf) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3504). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
 | MAIN-F-D01 | UPSTREAM | F-D01: The photo lightbox strands keyboard users (High) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3281). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
 | MAIN-F21 | UPSTREAM | F21: A child could grant themselves a reward (High; half fixed and live, half awaiting the operator) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 1662). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
-| MAIN-F-E04 | UPSTREAM | F-E04: OAuth tokens in social_account_tokens are family-member readable, while the equivalent sync_tokens is service-only | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3453). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-E04 | UPSTREAM | F-E04: OAuth tokens in social_account_tokens are family-member readable, while the equivalent sync_tokens is service-only | 🛠 FIXED + PASS (pending production) | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3453). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | docs/audit/social-token-is-service-only-check.sql reports 5 breaches before 0324 and exits 0 after; the suite auto-discovers it. | This master-ledger reference preserves the original upstream label. Closed by AUTHZ-007 in this cycle (migration 0324, PENDING PRODUCTION). Two upstream claims are corrected in that record: the policies read can_manage_family rather than is_family_member, and the table is no longer unused. |
 | MAIN-F-E05 | UPSTREAM | F-E05: feedback-attachments is a public bucket holding user-uploaded screenshots | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3454). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
-| MAIN-F-E06 | UPSTREAM | F-E06: The Contact Center inbound-email secret is accepted in the query string, where it lands in logs and referrers | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3455). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
-| MAIN-F-E07 | UPSTREAM | F-E07: Twilio signature verification is off outside production and depends on NEXT_PUBLIC_APP_URL being exactly right | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3456). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
-| MAIN-F-E08 | UPSTREAM | F-E08: Shared-secret comparisons are not constant time | 🔄 IN PROGRESS | Low | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3457). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-E06 | UPSTREAM | F-E06: The Contact Center inbound-email secret is accepted in the query string, where it lands in logs and referrers | ⚠️ ACCEPTED | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3455). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | The header is now preferred over the query parameter, and the reasoning is written at the call site. | This master-ledger reference preserves the original upstream label. Recorded under SEC-011 as a deliberate product decision rather than an oversight: docs/runbooks/family-contact-center-routing.md documents the ?key= form as the primary integration for inbound-email providers that cannot set custom headers, so removing it would break the documented setup for exactly the providers it exists for. Whoever drops it is choosing which providers can integrate. |
+| MAIN-F-E07 | UPSTREAM | F-E07: Twilio signature verification is off outside production and depends on NEXT_PUBLIC_APP_URL being exactly right | 🛠 FIXED + PASS | High — raised from Medium: eight of the ten call sites were open in any deployment not built with NODE_ENV=production, and the URL inconsistency silently 401s every callback | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3456). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | 14 new cases in tests/twilio-ingress-verifies-everywhere.test.ts plus a strengthened tests/public-webhook-signature-boundary.test.ts; full suite green; tsc --noEmit clean. | This master-ledger reference preserves the original upstream label; the historical appendix row and its Medium rating are retained verbatim as evidence of what was known then. Closed by SEC-010 in this cycle: one shared gate replaces ten hand-written checks, verification is no longer conditional on the build, the signed URL is taken from the request the platform received, and an unverifiable callback is refused rather than admitted. Three mutations each turn the new guard red. |
+| MAIN-F-E08 | UPSTREAM | F-E08: Shared-secret comparisons are not constant time | 🛠 FIXED + PASS | Low | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3457). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | 10 new cases in tests/shared-secrets-compare-in-constant-time.test.ts; both mutations red (an absent secret made to match; one site returned to ===). | This master-ledger reference preserves the original upstream label. Closed by SEC-011 in this cycle: one timingSafeEqual helper at all four call sites, with bearerMatches building the prefix so an unset secret can never be matched as "Bearer undefined". |
 | MAIN-F-020 | UPSTREAM | F-020: The documented production-recovery procedure did not work | 🔄 IN PROGRESS | Unassessed | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 2803). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
 | MAIN-F15 | UPSTREAM | F15: Family Autopilot ran for every family on the platform (High, fixed) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 1298). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
 | MAIN-F16 | UPSTREAM | F16: Paid features enforced only by the sidebar padlock (High, fixed) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 1363). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
@@ -14078,7 +14078,7 @@ PRODUCTION READY: NO
 | MAIN-F-D12 | UPSTREAM | F-D12: Two admin links point at routes that exist only at runtime | 🔄 IN PROGRESS | Low | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3327). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
 | MAIN-F-D13 | UPSTREAM | F-D13: 172 index-derived React keys; the reorderable cases are worth a second look | 🔄 IN PROGRESS | Low | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3328). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
 | MAIN-F-D14 | UPSTREAM | F-D14: Three exhaustive-deps warnings, one a genuine ref-in-cleanup bug | 🔄 IN PROGRESS | Low | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3329). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
-| MAIN-F-E09 | UPSTREAM | F-E09: An authorization failure in the marketing AI route answers 500, not 403 | 🔄 IN PROGRESS | Low | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3458). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-E09 | UPSTREAM | F-E09: An authorization failure in the marketing AI route answers 500, not 403 | 🛠 FIXED + PASS | Low | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3458). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | 7 new cases in tests/marketing-refusal-is-not-an-outage.test.ts drive the real handlers; reverting the route turns three of them red. | This master-ledger reference preserves the original upstream label. Closed by API-MKT-002 in this cycle: the refusal is a type carrying its reason, so the status no longer depends on the English of a message written elsewhere. |
 | MAIN-F-F04 | UPSTREAM | F-F04: A requested local time that does not exist (DST spring-forward) is mishandled — a genuine production bug, found by running the suite under TZ=America/Los_Angeles, reproduced in two lines of node, and the suite pins no TZ at all | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3515). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
 | MAIN-F-F05 | UPSTREAM | F-F05: 96 tests across 12 files share the exact shape of the known api-ai-runs 5-second timeout — a cold await import('@/app/…') inside a default-timeout test — and no testTimeout is configured anywhere | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3516). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
 | MAIN-F-F06 | UPSTREAM | F-F06: tests/seed-failure-safety.test.ts, named "fails closed", asserts only the absence of two bad shapes, so deleting the error check makes it greener | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3517). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
@@ -14186,6 +14186,10 @@ PRODUCTION READY: NO
 | SEC-007 | SEC | Private document vault over real HTTP | ✅ PASS | Critical | 8/8 | None required | B refused read, sign, upload and delete against A's vault; both controls pass; A's document intact; all fixtures removed | Tested with real user tokens over the Storage service, reaching the signing endpoint that SQL-level probes structurally cannot. The read refusal is NoSuchKey, so the vault is not an existence oracle. |
 | AUTHZ-006 | AUTHZ | Cross-family isolation at the real API layer | ✅ PASS | Critical | 6/6 | None required | 396/396 tables read as an outsider with 1 hit (the Idea Board, by design); 0 of 26 sensitive tables writable; fixtures removed, anchor intact | Run through PostgREST with a real password-obtained token against the seeded anchor family's 71,192 rows — the layer the SQL probes do not reach. |
 | ADMIN-001 | AUTHZ | Every admin server action reaches a super-admin gate | ✅ PASS | Critical | 4/4 | No product change; a permanent check (tests/admin-actions-reach-a-gate.test.ts) walking the call graph to a fixpoint | 138 exported actions across 31 'use server' files, 0 ungated; both mutations (gate stripped from a real action; a 'use server' file the filename walk would miss) go red naming the offender, then revert clean | A layout guards a page, not a server action. Naive per-function grep says 38 ungated; one hop says 3; the fixpoint says 0 (resolveTicketAction -> updateTicket() -> guard() -> isSuperAdmin()). The walk is by directive, not filename, so it can reach a violation written outside an actions-named file. |
+| SEC-010 | Security | Twilio ingress signature verification (closes F-E07) | 🛠 FIXED + PASS | High | 14/14 new + strengthened boundary guard | One shared gate (lib/server/twilio-ingress.ts) replacing ten hand-written checks: verification no longer conditional on the build, signed URL taken from the request, unverifiable callback refused 503 rather than admitted | All three mutations go red naming the right case (NODE_ENV wrapper restored; gate made to admit with no token; trailing-slash strip removed); full suite green | Eight of ten Twilio-facing routes wrapped the check in NODE_ENV === 'production', and the ten copies disagreed three ways on trailing slashes. The existing guard asserted the source CONTAINS validateTwilioSignature and a 401 — true of all eight — so it was green throughout. |
+| SEC-011 | Security | Shared secrets compared with === (closes F-E08, documents F-E06) | 🛠 FIXED + PASS | Low | 10/10 | One helper (lib/server/secret-compare.ts) using timingSafeEqual at all four call sites; bearerMatches builds the prefix so 'Bearer undefined' cannot be minted | Both mutations red (an absent secret made to match; one site returned to ===); the fail-closed property asserted five ways | Cron, internal server-to-server, the emergency SMS/voice blast to every parent, and the inbound-email ingress all decided on string equality, which returns in time proportional to the matching prefix. F-E06 is accepted rather than fixed: the query-string form is the documented integration for providers that cannot set headers. |
+| API-MKT-002 | API | A permissions refusal reported as an OpenAI outage (closes F-E09) | 🛠 FIXED + PASS | Low | 7/7 | MarketingAuthorizationError carries reason: 'unauthenticated' | 'forbidden'; the three catch blocks ask the type instead of searching the message | Reverting the AI route to the string match turns three cases red (expected 500 to be 403); an Error carrying the same words, and a provider fault containing 'sign in', are each asserted NOT to be a refusal | The predicate searched for 'Forbidden', a word requireMarketingAdmin has never said, so a non-admin was told to check the OpenAI API key with a 500 — and the refusal was logged as an application error. |
+| AUTHZ-007 | AUTHZ | Stored OAuth credentials answered client reads (closes F-E04) | 🛠 FIXED + PASS (pending production) | Medium | 11/11 | 0324 drops all four client policies and installs sync_tokens' service-only policy under the same name; no code loses access (every path is already service-role) | 5 breaches reproduced as a parent on the pre-migration schema (read, rewrite the OAuth claim state, repoint the provider account, delete, insert), 0 after; sync_tokens parity and service-role survival both asserted as controls | Two upstream claims corrected: the policies are can_manage_family (a child was already refused), and the table is no longer unused — lib/social/account-tokens.ts runs the whole X OAuth flow against it. |
 | TEST-009 | Testing | Probe fixtures left in the seeded anchor family | 🛠 FIXED + PASS | Medium | 6/6 | Both probes now clear their fixtures at the end as well as the start | Each passes twice; suite 47/47 on both databases; anchor family holds only its seeded members | "Race Child" and "Probe Kid" had been living in the 71,192-row anchor family, the latter for a week. Found by the AUTHZ-006 sweep counting a member no fixture of its own had created. |
 | DATA-010 | DATA | Resource lifecycle through the real API | ✅ PASS | High | 8/8 | None required | CREATE/READ/UPDATE/VERIFY/DELETE/VERIFY all pass as a real member; a child's refused write returns HTTP 204 without Prefer, 200 [] with it, dosage unchanged | Shows at the HTTP layer why .select() + wroteNoRows was needed: 204 No Content is a success for a write that changed nothing. |
 | SEC-008 | SEC | Realtime broadcast isolation and publication drift | ✅ PASS | Critical | 5/5 | None required | Publication and code agree exactly (61 = 61, empty diff both ways); a live socket received its own family's row and not another's | The first attempt used an unpublished table and received nothing — a run that would have read as a clean refusal while proving nothing. Controls decided it. |
@@ -21458,6 +21462,231 @@ Executed against the running local Supabase stack over HTTP with a token obtaine
 #### Final Status
 ✅ PASS
 
+### SEC-010 — A signature check that ran only in a production build (closes F-E07)
+
+Status: 🛠 FIXED + PASS
+Severity: High
+Route(s), components, actions, tables and providers: `app/api/guardian/inbound/{sms,voice,whatsapp}`, `app/api/guardian/screen`, `app/api/guardian/status/voicemail`, `app/api/guardian/escalate/twiml`, `app/api/contact-center/voice`, `app/api/contact-center/voice/transcription`, `app/api/contact-center/sms`, `app/api/contact-center/sms/status`, `lib/server/twilio-ingress.ts` (new), `lib/guardian/twilio.ts`, `vitest.config.ts`
+
+#### Expected Behavior
+A Twilio-facing webhook is on the middleware PUBLIC allowlist because its caller is Twilio, not a person. The request signature is therefore the entire authorization boundary, and it has to be checked on every request in every environment — or the endpoint is open.
+
+#### Test Cases
+- [x] Ten Twilio-facing routes enumerated; the eight carrying a conditional check identified
+- [x] A correctly signed request accepted against the forwarded host
+- [x] A correctly signed request accepted against the configured URL when the proxy disagrees
+- [x] A signature computed for a third host refused, with the tried URLs named in the log
+- [x] A body altered after signing refused
+- [x] A missing signature refused
+- [x] No auth token and no opt-out → 503, never admitted
+- [x] The opt-out admits an unsigned request only while no token exists
+- [x] The opt-out cannot disable verification once a token exists
+- [x] The same inputs produce the same verdict under NODE_ENV production, development and test
+- [x] A trailing slash in `NEXT_PUBLIC_APP_URL` does not produce `//api/…`
+- [x] Mutation: the NODE_ENV wrapper restored on one route → red, naming it
+- [x] Mutation: the gate made to admit when no token is configured → red, three cases
+- [x] Mutation: the trailing-slash strip removed → red
+- [x] Full suite green after the change
+
+#### Issues Found
+Eight of the ten Twilio-facing routes shared one shape:
+
+    if (process.env.NODE_ENV === 'production') {
+      const sig = req.headers.get('x-twilio-signature') ?? '';
+      const url = `${BASE_URL}/api/guardian/inbound/sms`;
+      if (!validateTwilioSignature(sig, url, params)) return new NextResponse('Unauthorized', { status: 401 });
+    }
+
+**(a) The check was conditional on how the bundle was built.** Next.js inlines `NODE_ENV` at build time, so a `next build` artifact does verify — which is why this is High and not Critical. But the condition encodes "a production build" where the question is "may this caller in." Any deployment that runs without that — a self-hosted server started with `NODE_ENV` unset or set to anything else, a harness, a container that sets it to `development` — served eight unauthenticated endpoints that write guardian rows, trigger scam detection, notify families, and fan out SMS and voice calls at the operator's expense. The environment a build happens to run in is not a security decision.
+
+**(b) The signed URL was a constant somebody has to keep in sync by hand.** Twilio computes its HMAC over the exact absolute URL it requested. Every copy rebuilt that from `NEXT_PUBLIC_APP_URL`, which must match what is typed into the Twilio console byte for byte — and the ten copies did not even agree with each other on how to handle it:
+
+    guardian/inbound/sms          .trim().replace(/\/+$/, '')   — strips every trailing slash
+    contact-center/*              .replace(/\/$/, '')           — strips one
+    voice, whatsapp, screen,
+    status/voicemail, escalate    (nothing)                     — strips none
+
+So a single trailing slash in that variable yields `https://host//api/guardian/inbound/voice`, a signature that can never match, and a 401 on every inbound call and message for as long as it stays set. A `www.` or a scheme apart does the same. The failure is silent and total: Guardian and the Contact Center go dead wearing a provider-problem shape, which is precisely the failure mode this codebase keeps rediscovering. That the sms route had already been hardened to strip all trailing slashes, and no other had, is evidence somebody hit this once and fixed it where they were standing.
+
+**The guard that should have caught it was green the whole time.** `tests/public-webhook-signature-boundary.test.ts` asserted, for each inbound route, that the source *contains* `validateTwilioSignature` and *contains* a 401. Every one of the eight did. The rule was right and the search could not reach the violation — presence is not reachability, the same shape that let DB-FN-001 sit behind a passing probe. It is the fourth distinct instance this cycle of a guard that could not fail.
+
+#### Fixes Applied
+One gate, `lib/server/twilio-ingress.ts`, replacing ten hand-written copies.
+
+**On (a): the condition is gone, and the bypass is now something a person does.** The gate asks whether this deployment holds `TWILIO_AUTH_TOKEN` — the honest question, since that is what makes verification possible at all. With a token, every request is verified, in every environment. Without one, the answer is **503 `not_configured`**, not "come in": an unverifiable callback is refused. The single way to skip is `ALLOW_UNSIGNED_TWILIO_WEBHOOKS=1`, a named, greppable variable set in exactly one place — `vitest.config.ts`, so the suite's several dozen unsigned POSTs keep working — and never in a deployment.
+
+The upstream recommendation was to skip whenever the token is absent. That is not what was built, because it is the SEC-009 shape exactly: a signature check that passes because there is nothing to check against. Unsetting one variable would have reopened all ten endpoints. The opt-out is also deliberately powerless once a token exists, so it can never turn a real check off.
+
+**On (b): the URL comes from the request.** The gate offers the host the platform says it received (`x-forwarded-proto`/`x-forwarded-host`, falling back to `Host`) and then the configured value, both normalised. Offering two candidates widens nothing — each is a full HMAC-SHA1 under the shared token, so anyone who could satisfy either already holds it — and it means a proxy, a `www.`, or a stray slash no longer kills the integration. Path *and* query, because Twilio signs the whole URL and the hand-built strings included or omitted the query inconsistently. When nothing matches, the log names the URLs tried, so a hostname mismatch stops reading as a bad signature.
+
+The two Contact Center SMS routes were already unconditional and validate their configured origin strictly, refusing 503 on a malformed one — the one part of this that was right. They keep that logic untouched and simply gain the forwarded-host candidate as a fallback after it, so every request that verifies today still verifies by the same path.
+
+**The guard is now about reachability, not presence.** `no Twilio-facing route makes its signature check conditional on the build` blanks comment bodies and fails on any `NODE_ENV` in these routes; a companion case asserts the gate refuses rather than skips, that the opt-out is named, and that it is set only in the test config. The route list now covers the Contact Center webhooks too — F-E07 was open on both sets at once and the old guard only looked under `app/api/guardian`.
+
+**Mutation-tested, three ways.** Restoring a `NODE_ENV` wrapper on one route:
+
+    AssertionError: signature verification gated on NODE_ENV (it must run in every environment):
+    app/(...)/guardian/inbound/sms/route.ts
+
+Making the gate admit when no token is configured turns three cases red, including `does not consult NODE_ENV at all`. Removing the trailing-slash strip turns red exactly the case named for it: `strips a trailing slash — the single character that 401s every inbound call`.
+
+**Moving the check broke three other guards, which is the finding restated.** `tests/guardian-callback-security.test.ts` asserted an ordering by the index of the string `validateTwilioSignature`; `tests/middleware-public-api-boundary.test.ts` and `tests/public-pages-reachable.test.ts` identified a self-authenticating route by finding `x-twilio-signature` or `validateTwilioSignature` in its source. All three went red the moment the same verification happened one function call away — the behaviour was identical and the text had moved. They were matching on spelling, not on what the route does, which is precisely why the boundary guard could stay green through eight conditional checks. Each has been pointed at the shared gate, and `public-pages-reachable` now carries a note that the list has to follow the code or it silently stops finding seven routes.
+
+14 new cases in `tests/twilio-ingress-verifies-everywhere.test.ts`, plus the strengthened boundary guard. F-E07 moves from OPEN to closed on both halves.
+
+
+### SEC-011 — Shared secrets compared character by character (closes F-E08, documents F-E06)
+
+Status: 🛠 FIXED + PASS
+Severity: Low
+Route(s), components, actions, tables and providers: `lib/server/secret-compare.ts` (new), `lib/server/cron-auth.ts`, `app/api/guardian/escalate/route.ts`, `app/api/contact-center/email/route.ts`
+
+#### Expected Behavior
+A shared secret is compared in a way that does not reveal how much of it a guess got right, and an unset secret disables the endpoint rather than opening it.
+
+#### Test Cases
+- [x] An exact value matches; a value one character short, one character long, or differing only in case does not
+- [x] A guess sharing all but the last character is as false as one sharing nothing
+- [x] Absent on either side never matches — `('', '')`, `(undefined, undefined)`, `(null, secret)`, `(secret, '')`
+- [x] A length mismatch returns false instead of throwing (`timingSafeEqual` throws)
+- [x] Multi-byte values compared by bytes
+- [x] The `Bearer ` prefix is built by the helper, so `Bearer undefined` cannot be minted
+- [x] `hasCronAuthorization` / `hasInternalSecret` admit the right header and nothing else
+- [x] All three call sites reach the constant-time comparison
+- [x] No call site compares a secret with `===` any more
+- [x] Mutation: an absent secret made to match → red, two cases
+- [x] Mutation: one call site returned to `===` → red, naming the file
+
+#### Issues Found
+Four comparisons decided on `===`:
+
+    return !!secret && req.headers.get('authorization') === `Bearer ${secret}`;   // cron
+    return !!secret && req.headers.get('x-internal-secret') === secret;           // internal
+    if (!secret || authHeader !== `Bearer ${secret}`) { … }                       // guardian/escalate
+    return !!provided && provided === secret;                                     // contact-center/email
+
+String equality returns as soon as two characters differ, so the time it takes is proportional to the matching prefix and a caller who can measure it learns the secret one character at a time. What these authorize is not trivial: a cron run, an internal server-to-server call, an **emergency SMS and outbound-voice blast to every parent in a family**, and the inbound-email ingress.
+
+Low, not higher, because the signal is small over a network and each endpoint is rate-limited or internal. It is still the wrong primitive for the job, and the fix costs nothing.
+
+#### Fixes Applied
+One helper, `lib/server/secret-compare.ts`, used at all four sites. `secretsMatch` compares with `timingSafeEqual`; `bearerMatches` builds the `Bearer ` prefix itself so no call site can mint `Bearer undefined` out of an unset variable.
+
+The property that had to survive is the one these functions already had and that matters more than the timing: **an unset secret means disabled, never "everything matches."** A constant-time compare that returned true for two empty strings would be a far worse bug than the one it replaced, so `secretsMatch` returns false the moment either side is absent, and five assertions cover exactly that shape. Length is not hidden — `timingSafeEqual` throws on unequal lengths, so a length check has to come first — which is the same accepted shape `lib/sync/feed-token.ts` and the Resend webhook already use. The length of a secret is not the secret.
+
+A source-level case asserts no call site compares a secret with `===` again, with comment bodies blanked so the explanation above does not satisfy the check it is explaining.
+
+**Mutation-tested.** Making an absent secret match turns `never treats an absent secret as a match` and `is disabled, not open, when the secret is unset` red. Returning `hasInternalSecret` to `===` turns `none of them compares a secret with === any more` red, naming the file.
+
+#### F-E06 — the Contact Center secret in a query string: accepted, with reasons
+`app/api/contact-center/email/route.ts` accepts `CONTACT_CENTER_INBOUND_SECRET` as `?key=` as well as `x-inbound-secret`, and a secret in a URL lands in proxy logs, CDN logs and referrers. It was **not** removed, and this is a deliberate call rather than an oversight: the query form is what an inbound-email provider that cannot set custom headers has to use, `docs/runbooks/family-contact-center-routing.md` documents it as the primary integration (`https://www.bubaly.com/api/contact-center/email?key=<secret>`), and deleting it would break the documented setup for the very providers it exists for. The order was inverted so the header is preferred when a provider supports it, and the reasoning is now written at the call site. Whoever decides to drop the query form is choosing which providers can integrate — the same kind of product decision OPEN-001 records.
+
+
+### API-MKT-002 — A permissions refusal reported as an OpenAI outage (closes F-E09)
+
+Status: 🛠 FIXED + PASS
+Severity: Low
+Route(s), components, actions, tables and providers: `app/api/admin/marketing/ai`, `app/api/admin/marketing/email/send` (GET and POST), `lib/marketing/admin.ts`
+
+#### Expected Behavior
+A caller refused for lack of permission is told so, with the status that means it, and the event is legible as an authorization refusal rather than as a fault in an unrelated subsystem.
+
+#### Test Cases
+- [x] Signed in without permission → the AI route answers **403 Forbidden**
+- [x] Not signed in at all → **401**
+- [x] The refusal is not logged as an application error
+- [x] The response does not blame the provider
+- [x] The sibling `email/send` POST answers 403, and its recipient preview 403 rather than 502
+- [x] The refusal is a distinguishable type, and an ordinary `Error` carrying the same words is not one
+- [x] A provider fault whose message contains `sign in` is not mistaken for a refusal
+- [x] `requireMarketingAdmin` throws the reason that maps to the status
+- [x] Mutation: the AI route returned to string matching → three cases red, `expected 500 to be 403`
+
+#### Issues Found
+`requireMarketingAdmin()` throws to refuse, so every route meets that refusal in the same catch block as a genuine fault. Two routes tried to tell them apart by searching the message:
+
+    const msg = err instanceof Error && err.message.includes('Forbidden')
+      ? 'Forbidden'
+      : 'Could not generate. Check that the OpenAI API key is set.';
+    return NextResponse.json({ error: msg }, { status: 500 });
+
+`requireMarketingAdmin` has never said `Forbidden`. Its two messages are *"Please sign in to continue."* and *"You do not have permission to manage marketing settings."* So the predicate never matched, and a caller refused for lack of permission was answered:
+
+    500  { "error": "Could not generate. Check that the OpenAI API key is set." }
+
+Reproduced against the real handler: signed in, not a super admin, `expected 500 to be 403`.
+
+No access is granted either way — the request is refused, and that is why this is Low. What was wrong is that nothing downstream could tell the two apart. The operator is sent to check an API key that is fine, the page tells the user something false about why, and the event that should have been visible — someone who should not be there, asking — is filed as an outage. The refusal was also logged at `console.error` as `Marketing AI error`, which is the other half of the same confusion: an alert about a subsystem that is working.
+
+The sibling `email/send` got the *answer* right (403/502/400) by the same fragile means: matching `'sign in'`, `'permission'` and `'Forbidden'` in prose. Its 403 therefore depended on the exact English of a message written elsewhere. Rewording either string — or translating one — would have moved a status silently, in a file nobody had touched.
+
+#### Fixes Applied
+The refusal carries its own identity. `MarketingAuthorizationError` is thrown by `requireMarketingAdmin` with `reason: 'unauthenticated' | 'forbidden'`, and `isMarketingAuthorizationError` is what the three catch blocks now ask. The status comes from the reason — 401 or 403 — rather than from a substring, so it no longer depends on the wording of a sentence, and a genuine fault falls through to the branch it belongs in and is logged there.
+
+Three assertions exist specifically to stop the fix drifting back: an ordinary `Error` carrying the exact words *"You do not have permission to manage marketing settings."* is **not** a refusal, and a provider fault reading *"Provider rejected: sign in to your OpenAI account"* is **not** one either. That second case is the old predicate's failure mode in reverse — the string matching would have called a provider outage a permissions problem and answered 403, and it is the reason a type was the right fix rather than a better regular expression.
+
+The one remaining message match is the provider branch of `email/send`, which is honest about why: a provider failure arrives as whatever the SDK threw and has no type of ours to carry.
+
+
+### AUTHZ-007 — A family's stored OAuth credentials answered client reads (closes F-E04)
+
+Status: 🛠 FIXED + PASS (pending production)
+Severity: Medium
+Route(s), components, actions, tables and providers: `public.social_account_tokens`, `public.sync_tokens`, `lib/social/account-tokens.ts`, `supabase/migrations/0324_a_stored_credential_is_service_only.sql`, `docs/audit/social-token-is-service-only-check.sql`
+
+#### Expected Behavior
+A table whose whole content is third-party credentials is reachable by the service role and by nobody else, the same way `sync_tokens` already is.
+
+#### Test Cases
+- [x] A manager of the family cannot SELECT the stored credential columns
+- [x] A manager cannot UPDATE `metadata` (the OAuth claim machine)
+- [x] A manager cannot UPDATE `provider_account_id` (repoint the connection)
+- [x] A manager cannot DELETE a credential row
+- [x] A manager cannot INSERT one
+- [x] A child of the same family cannot read one
+- [x] Control: the probe is acting as a real manager (`can_manage_family` true)
+- [x] Control: the child is a real member, so their refusal means something
+- [x] Control: `sync_tokens` refuses the same manager, so the standard is the standard
+- [x] Control: the service role still reads and updates the row afterwards
+- [x] Reproduced: 5 breaches on the pre-migration schema; 0 after
+
+#### Issues Found
+Two tables hold third-party OAuth credentials in identically named columns — `access_token_enc`, `refresh_token_enc`, `scope`, `expires_at` — and were protected differently:
+
+    sync_tokens            | tokens service only          | ALL    | qual=false  check=false
+    social_account_tokens  | social_account_tokens_select | SELECT | qual=can_manage_family(family_id)
+    social_account_tokens  | social_account_tokens_update | UPDATE | qual=can_manage_family(family_id)
+    social_account_tokens  | social_account_tokens_delete | DELETE | qual=can_manage_family(family_id)
+    social_account_tokens  | social_account_tokens_insert | INSERT | check=can_manage_family(family_id)
+
+Measured as a parent of the family, through the client role:
+
+    BREACH: a manager read stored OAuth credentials through the client role (ENC-ACCESS-DO-NOT-LEAK).
+    BREACH: a manager rewrote the OAuth claim state through the client role (rows: 1)
+    BREACH: a manager repointed a connection at another provider account (rows: 1)
+    BREACH: a manager deleted a credential row through the client role (rows: 1)
+    BREACH: a manager inserted a credential row through the client role (rows: 1)
+
+**Two corrections to the upstream finding, both of which change what this is.** F-E04 recorded the policies as `is_family_member`, and concluded that "a child in the household can exfiltrate the parent's social access and refresh tokens with one anon-key request." That is **not true today**: the policies read `can_manage_family`, so a child is already refused, and the probe asserts it stays that way rather than claiming a breach that has been closed. F-E04 also recorded the table as unused — "no application code reads or writes `social_account_tokens` today… the table is empty in practice." That is **also no longer true**: `lib/social/account-tokens.ts` now runs a whole X (Twitter) OAuth flow against it. The finding was filed as latent; it is live, and the reason to fix it is better than the one originally written down.
+
+What the manager policy actually allowed is worth stating precisely rather than dramatically. The credential columns are ciphertext from `lib/sync/crypto`, so reading them does not hand anybody a usable token — it hands them ciphertext that is one key disclosure away from being one. `metadata` is **not** ciphertext, and it carries the `x_state` / `x_revision` claim machine that `account-tokens.ts` uses to make the OAuth exchange idempotent; a client that can write it directly can replay or strand a connection flow. And `provider_account_id`, `INSERT` and `DELETE` were open outright.
+
+#### Fixes Applied
+`0324` drops all four client policies and installs the one `sync_tokens` already has, under the same name so the next person comparing the two tables finds them identical:
+
+    create policy "social tokens service only" on public.social_account_tokens
+      for all using (false) with check (false);
+
+Nothing loses access. Every path that touches this table already runs as the service role — `lib/social/account-tokens.ts` types its client as `ReturnType<typeof createServiceClient>` and is the only module in `app/` or `lib/` that reads the table at all; `lib/ai/context/policy.ts` merely denylists it from AI context, by name, for this same reason. Connection **status** stays where it belongs: `social_accounts` keeps its family-facing policies, so the UI still shows what is connected without any client role touching a token.
+
+The probe's controls are the part that makes it worth having. `sync_tokens` must itself refuse the same manager, or this is not the standard it claims to match; and the service role must still read and update the row afterwards, or the guard has simply killed the X connection. The service-role control re-creates its row first — without the migration the manager's DELETE succeeds, and a control run after it would report "the service role cannot read the credential it wrote" and blame the guard for the breach. That was the probe's own first draft, and it is exactly the shape this audit keeps finding in other people's guards.
+
+    before 0324:  ERROR: social_account_tokens is reachable from a client role: 5 finding(s)   (exit 3)
+    after  0324:  exit 0
+
+**0324 is a PENDING PRODUCTION MIGRATION.** It is applied locally and recorded in `docs/PENDING_PROD_MIGRATIONS.md`; until a human applies it, anyone holding a manager seat and the anon key can read, rewrite, repoint and delete a family's stored social credentials directly.
+
+
 ### ADMIN-001 — Every admin server action reaches a super-admin gate
 
 Status: ✅ PASS
@@ -22174,7 +22403,9 @@ Status: ✅ PASS — `npm run lint` reports the four known baseline warnings and
 ## Automated Tests
 Status: ✅ PASS — 15,287 tests across 1,215 files pass, zero failures and zero skips, on Node 24.15.0 at head 92340315 (160s).
 
-Later in this cycle, on Node 24.21.0: **16,714 tests across 1,307 files, zero failures and zero skips** (214s), including the four new cases of `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001) and the four of `tests/feed-token-signing-fails-closed.test.ts` (SEC-009). `npx tsc --noEmit` exits 0.
+Later in this cycle, on Node 24.21.0: **16,747 tests across 1,310 files, zero failures and zero skips**, and **49/49 boundary probes with 0 skipped**. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007). `npx tsc --noEmit` exits 0 and the new files lint clean.
+
+Five existing guards had to be repaired rather than merely re-run, and that is itself a finding recorded under SEC-010: `guardian-callback-security`, `middleware-public-api-boundary`, `public-pages-reachable`, `health-feature-secrets` and `public-webhook-signature-boundary` each identified a control by the SPELLING of the function that implemented it. Moving identical verification one call away turned all five red while nothing about the behaviour changed — which is the same reason `public-webhook-signature-boundary` stayed green through eight signature checks that only ran in a production build.
 
 Run this on the declared engine. On Node 22 the two cases in tests/stream-cancellation-runtime.test.ts fail with `controller[kState].transformAlgorithm is not a function`; that is the runtime gap package.json's `engines: node >=24.15.0 <25` exists to prevent, not a source defect, and both pass on 24.
 
@@ -22608,11 +22839,11 @@ closed.
 | F-E01 | The family password vault, open to children, secrets in plaintext | Fixed by `0296`, unapplied |
 | F-E02 | Step-up MFA is a redirect; no policy knows `aal` | OPEN |
 | F-E03 | `family-media` is a public bucket | OPEN |
-| F-E04 | OAuth tokens family-member readable, while `sync_tokens` is service-only | OPEN |
+| F-E04 | OAuth tokens family-member readable, while `sync_tokens` is service-only | FIXED — see AUTHZ-007 (0324, pending production) |
 | F-E05 | `feedback-attachments` is a public bucket | OPEN |
-| F-E06 | The Contact Center secret is accepted in the query string, where it lands in logs | OPEN |
-| F-E07 | Twilio signature verification is off outside production | OPEN |
-| F-E08 | Shared-secret comparisons are not constant time | OPEN |
+| F-E06 | The Contact Center secret is accepted in the query string, where it lands in logs | ACCEPTED — see SEC-011; the runbook documents it as the primary integration for providers that cannot set headers, so the header is now preferred and the reasoning is written at the call site |
+| F-E07 | Twilio signature verification is off outside production | FIXED — see SEC-010 |
+| F-E08 | Shared-secret comparisons are not constant time | FIXED — see SEC-011 |
 | F16, F18, F20, F21, F-003, F-006 | authorization drawn on screen rather than in the database | fixed |
 
 ---
@@ -22660,7 +22891,10 @@ device matrix in CI covers the public routes.
   undocumented variables and is simply off until someone reads the source.
 - **F6** — family email is built but not routed. Operator config.
 - **F-E07** — Twilio signature verification depends on `NEXT_PUBLIC_APP_URL`
-  being exactly right.
+  being exactly right. **Closed by SEC-010**: the ten call sites now share one
+  gate that takes the signed URL from the request the platform received, with
+  the configured value as a fallback, and that verifies in every environment
+  rather than only in a production build.
 - **Workflow health**: `cron-dispatch`, `supabase-schema-audit`,
   `finance-transaction-operation-runtime` and `travel-confirmation-runtime` are
   all healthy. `supabase-forward-release` and `supabase-production-migrations`

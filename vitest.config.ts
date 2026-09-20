@@ -29,7 +29,17 @@ export default defineConfig({
     // `process.env.TZ ?? 'UTC'` rather than a bare 'UTC': CI runs this suite a
     // second time under TZ=America/Los_Angeles, and a hard-coded value here
     // would silently override that and make the DST job prove nothing.
-    env: { TZ: process.env.TZ ?? 'UTC' },
+    // The ONE place a Twilio-facing webhook may skip its signature check.
+    //
+    // lib/server/twilio-ingress.ts refuses an unverifiable callback (503)
+    // rather than waving it through, which is what closes F-E07 for every
+    // preview, staging and self-hosted deployment. Tests post unsigned bodies
+    // to those routes by the dozen, so the bypass has to exist somewhere —
+    // here, named and greppable, rather than as a NODE_ENV check compiled into
+    // the routes themselves. It applies only when TWILIO_AUTH_TOKEN is unset:
+    // a test that stubs a token still goes through real verification, which is
+    // how tests/guardian-*-execution.test.ts exercise the signing path.
+    env: { TZ: process.env.TZ ?? 'UTC', ALLOW_UNSIGNED_TWILIO_WEBHOOKS: '1' },
   },
   resolve: {
     alias: {

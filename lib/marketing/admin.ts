@@ -8,6 +8,36 @@ import type { Database } from '@/lib/database.types';
 type DB = SupabaseClient<Database>;
 
 /**
+ * Why a refusal is a TYPE and not a sentence.
+ *
+ * `requireMarketingAdmin` throws to refuse, so each route learns about it in a
+ * catch block alongside every genuine fault — and the two routes that handle it
+ * told them apart by searching the message for 'sign in', 'permission' or
+ * 'Forbidden'. That made the HTTP status a property of the English wording: the
+ * AI route looked for 'Forbidden', which this function has never said, so a
+ * non-admin was answered **500, "Could not generate. Check that the OpenAI API
+ * key is set."** — a permissions refusal wearing an outage's clothes, pointing
+ * whoever reads the logs at the wrong subsystem entirely (F-E09).
+ *
+ * No access was ever granted; the request is refused either way. What was wrong
+ * is that nothing could tell the difference, and rewording a message — or
+ * translating one — would silently move a status again.
+ */
+export class MarketingAuthorizationError extends Error {
+  readonly reason: 'unauthenticated' | 'forbidden';
+  constructor(reason: 'unauthenticated' | 'forbidden', message: string) {
+    super(message);
+    this.name = 'MarketingAuthorizationError';
+    this.reason = reason;
+  }
+}
+
+/** True for a refusal by `requireMarketingAdmin`, and for nothing else. */
+export function isMarketingAuthorizationError(error: unknown): error is MarketingAuthorizationError {
+  return error instanceof MarketingAuthorizationError;
+}
+
+/**
  * Defense-in-depth guard for every marketing server action / route handler.
  * The admin layout already gates /admin to super admins, but actions must
  * re-verify independently. Returns the service-role client + the actor.
@@ -18,9 +48,9 @@ export async function requireMarketingAdmin(): Promise<{
   actorEmail: string | null;
 }> {
   const user = await getUser();
-  if (!user) throw new Error('Please sign in to continue.');
+  if (!user) throw new MarketingAuthorizationError('unauthenticated', 'Please sign in to continue.');
   const ok = await isSuperAdmin();
-  if (!ok) throw new Error('You do not have permission to manage marketing settings.');
+  if (!ok) throw new MarketingAuthorizationError('forbidden', 'You do not have permission to manage marketing settings.');
   return { supabase: createServiceClient(), actorId: user.id, actorEmail: user.email ?? null };
 }
 

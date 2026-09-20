@@ -165,7 +165,12 @@ describe('every self-authenticating API route is past the middleware', () => {
   // Verifies a provider signature, an HMAC, or a shared secret — or resolves an
   // unguessable bearer token that IS the authorization, the way the assistant
   // bridge and the calendar feeds do.
-  const SELF_AUTHENTICATING = /x-twilio-signature|verifySignature|createHmac|timingSafeEqual|CRON_SECRET|INBOUND_SECRET|svix|stripe\.webhooks|verifyAlexaRequest|resolveAssistantLink|resolveFeedToken/;
+  // `verifyTwilioRequest` and `bearerMatches`/`secretsMatch` are the shared
+  // gates the Twilio ingress and the shared-secret call sites moved into
+  // (SEC-010, SEC-011). A route that reaches one of them authenticates
+  // itself just as surely as one that read the header inline, and this list
+  // has to follow the code or it quietly stops finding seven of the routes.
+  const SELF_AUTHENTICATING = /x-twilio-signature|verifyTwilioRequest|verifySignature|createHmac|timingSafeEqual|bearerMatches|secretsMatch|CRON_SECRET|INBOUND_SECRET|svix|stripe\.webhooks|verifyAlexaRequest|resolveAssistantLink|resolveFeedToken/;
   // ...and does NOT also derive the caller from a Supabase session. A route
   // that does is session-gated on purpose: /api/google/calendar/callback
   // returns a signed-in user from Google and attaches the tokens to whoever

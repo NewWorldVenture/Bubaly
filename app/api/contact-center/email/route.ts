@@ -37,6 +37,7 @@ import { FAMILY_EMAIL_MIN_PLAN_LEVEL } from '@/lib/constants/plans';
 // carries the send, with a retry and a 503 instead of a swallowed catch. The
 // decision did not move; the import did, so it is not re-added here.
 import { fileEmailAttachments, MAX_MULTIPART_EMAIL_BYTES } from '@/lib/services/paperwork/email-attachments';
+import { secretsMatch } from '@/lib/server/secret-compare';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -46,8 +47,12 @@ const MAX_BODY = 1024 * 1024; // inbound emails can carry a lot of text
 function authorized(req: NextRequest): boolean {
   const secret = process.env.CONTACT_CENTER_INBOUND_SECRET;
   if (!secret) return process.env.NODE_ENV !== 'production';
-  const provided = new URL(req.url).searchParams.get('key') ?? req.headers.get('x-inbound-secret');
-  return !!provided && provided === secret;
+  // Header first. The query-string form stays because it is what an inbound-email
+  // provider that cannot set custom headers has to use, and the runbook documents
+  // it — but a secret in a URL lands in proxy and CDN logs, so the header is the
+  // one to prefer when a provider supports it (F-E06, accepted and documented).
+  const provided = req.headers.get('x-inbound-secret') ?? new URL(req.url).searchParams.get('key');
+  return secretsMatch(provided, secret);
 }
 
 // Pull the fields we need from either a parsed form or a JSON body.

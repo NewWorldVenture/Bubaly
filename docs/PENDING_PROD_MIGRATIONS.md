@@ -1907,3 +1907,64 @@ point: five accepted zones plus `CST` and `PST` are exactly what a names-only
 guard would wrongly reject. With the trigger dropped it reports 4 failures.
 
 Until this is applied, a direct write can still put a family on Greenwich time.
+
+---
+
+## 0324 — a family's stored OAuth credentials answered client reads
+
+`supabase/migrations/0324_a_stored_credential_is_service_only.sql`
+
+Two tables hold third-party OAuth credentials in identically named columns —
+`access_token_enc`, `refresh_token_enc`, `scope`, `expires_at` — and were
+protected differently:
+
+```
+sync_tokens            | tokens service only          | ALL    | qual=false  check=false
+social_account_tokens  | social_account_tokens_select | SELECT | qual=can_manage_family(family_id)
+social_account_tokens  | social_account_tokens_update | UPDATE | qual=can_manage_family(family_id)
+social_account_tokens  | social_account_tokens_delete | DELETE | qual=can_manage_family(family_id)
+social_account_tokens  | social_account_tokens_insert | INSERT | check=can_manage_family(family_id)
+```
+
+`qual=false` is the right answer for a credential table: the service role
+bypasses RLS, so a policy that admits nobody still leaves the feature working
+while leaving the anon key with nothing to ask for.
+
+**Nothing loses access.** Every path that touches `social_account_tokens`
+already runs as the service role — `lib/social/account-tokens.ts` types its
+client as `ReturnType<typeof createServiceClient>` and is the only module in
+`app/` or `lib/` that reads the table at all. The four client policies granted
+access no feature ever used.
+
+Measured against the pre-migration schema, as a parent of the family:
+
+```
+BREACH: a manager read stored OAuth credentials through the client role (ENC-ACCESS-DO-NOT-LEAK).
+BREACH: a manager rewrote the OAuth claim state through the client role (rows: 1)
+BREACH: a manager repointed a connection at another provider account (rows: 1)
+BREACH: a manager deleted a credential row through the client role (rows: 1)
+BREACH: a manager inserted a credential row through the client role (rows: 1)
+ERROR:  social_account_tokens is reachable from a client role: 5 finding(s)
+```
+
+The credential columns are ciphertext from `lib/sync/crypto`, so the first of
+those is not by itself a usable credential. `metadata` is **not** ciphertext:
+it carries the `x_state` / `x_revision` claim machine that `account-tokens.ts`
+uses to make the OAuth exchange idempotent, so the second breach is a direct
+write to the mechanism that decides whether a connection flow may be replayed.
+
+The upstream note (F-E04) described these policies as `is_family_member`, which
+would have meant a **child** could read them. They read `can_manage_family`
+today — someone tightened them in between — so that case was already closed.
+The probe asserts it anyway, so it stays closed.
+
+Held by `docs/audit/social-token-is-service-only-check.sql`, which also carries
+two controls that matter more than the breaches: `sync_tokens` must itself
+refuse the same manager (or it is not the standard this claims to match), and
+the service role must still read and update the row afterwards (or the guard
+has simply killed the X connection). The service-role control re-creates its
+row first, because without the migration the manager's DELETE succeeds and the
+control would otherwise blame the guard for the breach.
+
+Until this is applied, anyone holding a manager seat and the anon key can read,
+rewrite, repoint and delete a family's stored social credentials directly.

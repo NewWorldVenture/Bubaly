@@ -48,8 +48,13 @@ describe('Guardian callback replay and input boundaries', () => {
 
   it('keeps signed SMS parsing before the shared leased processor for both ingress and recovery', () => {
     const route = readFileSync(resolve(root, 'app/api/guardian/inbound/sms/route.ts'), 'utf8');
-    expect(route.indexOf('await readBoundedRequestFormData')).toBeLessThan(route.indexOf('validateTwilioSignature(sig'));
-    expect(route.indexOf('validateTwilioSignature(sig')).toBeLessThan(route.indexOf('await receiveGuardianSms('));
+    // The signature check moved into the shared gate (lib/server/twilio-ingress.ts)
+    // so it can no longer be skipped by build mode; the ORDER it enforces here
+    // is unchanged — parse the form, verify it, only then hand it to the
+    // leased processor.
+    expect(route.indexOf('await readBoundedRequestFormData')).toBeLessThan(route.indexOf('verifyTwilioRequest(req'));
+    expect(route.indexOf('verifyTwilioRequest(req')).toBeGreaterThan(-1);
+    expect(route.indexOf('verifyTwilioRequest(req')).toBeLessThan(route.indexOf('await receiveGuardianSms('));
     expect(route).not.toMatch(/runDecisionPipeline\(|detectScamWithAI\(|from\('notifications'\)/);
     const processor = readFileSync(resolve(root, 'lib/guardian/sms-processing.ts'), 'utf8');
     for (const entry of ['receiveGuardianSms', 'resumeGuardianSms']) {

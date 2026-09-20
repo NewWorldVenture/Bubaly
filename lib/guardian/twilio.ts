@@ -159,6 +159,20 @@ export async function updateCall(callSid: string, twimlUrl: string): Promise<voi
   await twilioFetch(`/Calls/${callSid}.json`, { Url: twimlUrl, Method: 'POST' });
 }
 
+/**
+ * True when this environment holds the secret a Twilio signature is checked
+ * against — i.e. when `validateTwilioSignature` is capable of ever returning
+ * true. Distinct from `isTwilioConfigured`, which also wants an account SID and
+ * a phone number because it gates OUTBOUND calls; verifying an INBOUND one
+ * needs the auth token and nothing else.
+ *
+ * Read through a function rather than exported as a const so a caller sees the
+ * same captured value this module signs with.
+ */
+export function twilioSignatureConfigured(): boolean {
+  return !!TWILIO_AUTH_TOKEN;
+}
+
 /** Validate that a request came from Twilio by checking the signature. */
 export function validateTwilioSignature(
   signature: string,

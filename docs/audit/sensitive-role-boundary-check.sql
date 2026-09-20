@@ -123,13 +123,49 @@ begin
   if not found then
     raise exception '0297: an ADULT cannot manage a child login — the fix is too strict';
   end if;
-  insert into public.social_account_tokens (family_id, account_id, platform, provider_account_id, access_token_enc)
-    values (fam, acct, 'instagram', 'adult-added', 'enc');
+
+  -- ── the OAuth tokens: an adult is refused too, as of 0324 ───────────────
+  --
+  -- This block used to assert the opposite — that an adult could read and
+  -- insert token rows, on the principle that 0297 must not "lock the grown-ups
+  -- out". That principle is right and this was the wrong place to apply it.
+  -- Nothing in app/ or lib/ ever reached this table through a client role:
+  -- lib/social/account-tokens.ts types its client as
+  -- `ReturnType<typeof createServiceClient>` and is the only module that reads
+  -- it at all. So the adult's access was not a feature anyone had; it was the
+  -- shape of the policy, asserted back at itself.
+  --
+  -- 0324 closes the table to every client role, matching sync_tokens, which
+  -- has always been `qual=false`. The grown-ups are not locked out of anything
+  -- — the app that acts for them runs as the service role, and the control at
+  -- the end of this block is what actually proves that.
   select count(*) into n from public.social_account_tokens where family_id = fam;
-  if n <> 2 then
-    raise exception '0297: an ADULT sees %/2 social token rows (1 seeded + 1 they just added)', n;
+  if n <> 0 then
+    raise exception '0297/0324: an ADULT reads % social OAuth token row(s) through a client role', n;
+  end if;
+  refused := false;
+  begin
+    insert into public.social_account_tokens (family_id, account_id, platform, provider_account_id, access_token_enc)
+    values (fam, acct, 'instagram', 'adult-added', 'enc');
+  exception when insufficient_privilege then refused := true;
+  end;
+  if not refused then
+    raise exception '0297/0324: an ADULT inserted a social OAuth token row through a client role';
   end if;
 
+  -- The control that replaces the old expectation: the feature still works.
+  -- Without this, closing the table would look identical to breaking it.
   reset role;
-  raise notice '0297 OK: a child is refused a parent licence, a sibling login and the OAuth tokens; keeps their own licence; parent and adult keep everything';
+  select count(*) into n from public.social_account_tokens where family_id = fam;
+  if n <> 1 then
+    raise exception '0297/0324: the service role sees %/1 seeded token row — the social connection is broken, not secured', n;
+  end if;
+  insert into public.social_account_tokens (family_id, account_id, platform, provider_account_id, access_token_enc)
+    values (fam, acct, 'instagram', 'service-added', 'enc');
+  get diagnostics n = row_count;
+  if n <> 1 then
+    raise exception '0297/0324: the service role cannot write a token row (rows: %)', n;
+  end if;
+
+  raise notice '0297 OK: a child is refused a parent licence, a sibling login and the OAuth tokens; keeps their own licence; parent and adult keep the licences and logins; the token table answers only the service role (0324)';
 end $$;
