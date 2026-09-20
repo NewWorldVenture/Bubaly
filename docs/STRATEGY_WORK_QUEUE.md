@@ -176,7 +176,7 @@ webpack and was dying at 4,471 MB against a 4,096 MB cap; standalone it peaks at
 > whole scope — only `S-05` was checked that way, item by item, and it passed.
 > So treat a section here as *probably landed* and verify before claiming.
 >
-> ### That gap has now been closed for 18 of the 20 sections.
+> ### That gap has now been closed for all 20 sections.
 >
 > A verification pass put **one agent on each section**, reading its own
 > "Done when" list clause by clause against the tree rather than against this
@@ -197,15 +197,31 @@ webpack and was dying at 4,471 MB against a 4,096 MB cap; standalone it peaks at
 >   on a file `S-15` itself owns: the six platform tiles on `/admin/reports`
 >   rendered a failed read as `0`. Fixed and mutation-tested (`METRIC-001`).
 >
-> * **`S-20` has not been verified this way yet** — its agent had not returned
->   when this was written. It remains *probably landed*, on the acceptance-test
->   evidence above and nothing stronger.
+> * **`S-20` — 6 of 7.** Six clauses met (per-day amounts derived with `ceil`,
+>   the real card omitted below `HANDLED_PUBLIC_MIN` and never rendering a `0`,
+>   the illustrative card's sample badge, the matrix stacking on phones, the
+>   toggle's touch targets, no competitor price). The seventh asks that *"the
+>   demo family gets persisted completed runs with step events"* — and there is
+>   **no demo family**, because `3994805e` *"Remove demo mode (#414)"*
+>   deliberately deleted `lib/demo/`, `components/demo/`,
+>   `app/(marketing)/demo/`, `supabase/seed_demo_account.sql` and the pricing
+>   card, leaving only a comment at `pricing-content.tsx:507` explaining the
+>   grid change. The clause is **stale**, not unbuilt. Recorded as `SPEC-002`;
+>   the remedy is to delete the clause.
 >
-> **The one lesson worth carrying.** Two sections came back PARTIAL and they
-> failed in *opposite* directions: `S-15` was a genuine defect the acceptance
-> tests did not catch, and `S-14` was a clause the code was right to disobey.
-> A verification pass that assumed either shape would have been wrong half the
-> time — which is why each clause was read rather than scored.
+> **The lesson worth carrying.** Three sections came back PARTIAL, and the three
+> failed in three *different* directions:
+>
+> | | what PARTIAL meant | remedy |
+> |---|---|---|
+> | `S-15` | a genuine defect the acceptance tests did not catch | fix the code |
+> | `S-14` | a clause the code was **right** to disobey | amend the clause, or migrate |
+> | `S-20` | a clause describing a feature **deliberately deleted** | delete the clause |
+>
+> A pass that assumed any one of those shapes would have been wrong two times
+> in three — reporting a shipped feature as missing, or a deleted one as a
+> regression, or quietly "fixing" a spec to match a real bug. Each clause was
+> read rather than scored, which is the only reason all three came out right.
 >
 > **Re-derive it, do not trust this paragraph:**
 >
