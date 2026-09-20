@@ -6748,3 +6748,76 @@ boundary guard of its own; it needs the same relocation and a guard that pins it
 **Verified:** `no-route-gates-on-a-per-instance-limit`,
 `middleware-assistant-boundary` and `alexa-request-verification` — **76/76**
 (was 74; the two new cases are the difference). `npx tsc --noEmit` clean.
+
+## Pass BM follow-up — the two red cases were a timeout, and my hypothesis was wrong
+
+I handed this out framed as the Pass BA defect class — "something is doing real
+work before the auth check" — on the strength of a 5,016ms duration and a
+reproduction at HEAD in a clean worktree. **That framing was wrong, and it was
+measured wrong rather than argued wrong.**
+
+`/api/ai` already authenticated before every external call. The 5,016ms is
+vitest's 5,000ms default `testTimeout`, and effectively all of it is one line:
+`await import('@/app/api/ai/route')`, the first module import in the file.
+
+| import | ms |
+|---|---|
+| `@/lib/i18n/messages` alone, cold | **2,457** |
+| the whole route with the test's mocks | **3,500–3,800** |
+| the `POST()` call itself | **6** |
+
+`lib/i18n/messages.ts` statically imports all eleven catalogues — 6.6 MB of
+JSON, 13,778 keys — and the route reaches it through
+`lib/server/ai-request-context.ts`. Every other case in the file runs in 1–12ms.
+
+**And the second failure was collateral from the first, which is the part worth
+carrying forward.** Vitest fails a timed-out case but does **not** cancel its
+in-flight promise. The abandoned POST finished later, took the cookie branch,
+and called `getUserContext()` *after* `afterEach`'s `clearAllMocks()` — landing
+a call inside the NEXT case, whose whole point is
+`expect(getUserContext).not.toHaveBeenCalled()`. So a timeout in one case made a
+different case accuse the bearer path of a cookie fallback it demonstrably never
+performs. Any timed-out case in this repo can leak mock calls into its successor
+the same way.
+
+Proved three ways rather than asserted: `--testTimeout=60000` gives 28/28 with
+the first case at 3,507ms and the rest at 1–3ms; the file passes alone on a warm
+cache and reproduces exactly those two failures when run beside eight others;
+direct instrumentation puts the anonymous `POST()` at 6ms.
+
+**My own reproduction misled me in a way worth naming.** I ran the file in a
+fresh detached worktree to prove the failures predated my change. They did — but
+a fresh worktree has a **cold transform cache**, which is precisely the condition
+that makes this file time out. The reproduction was sound about *when* and
+useless about *why*, and I read it as confirming a cause it said nothing about.
+
+### What was fixed anyway
+
+Real pre-identity work existed on the route, just not enough to explain the
+timing, and it is worth closing on its own: `authenticate()` resolved the
+translator and called `createServer()` **before** asking who was calling. Both
+now sit after identity, and `POST`/`GET` no longer resolve translations above
+the auth call. The two 401s were hardcoded English already and stay that way.
+
+A dynamic-import mitigation was tried and **reverted**: vitest's mocker walks
+dynamic dependencies too, so the catalogues loaded at import regardless —
+measured at 3,789ms, no improvement. Complexity that buys nothing is worse than
+the thing it was meant to fix.
+
+### The budget, raised with the reason written down
+
+`vi.setConfig({ testTimeout: 20_000 })` in that file, with the measurement in a
+comment beside it. **No assertion changed**; every case proves exactly what it
+proved. What changed is how long a 6.6 MB module transform may take before the
+runner calls it a failure — and leaving it at 5s guarantees a false red on a
+cold CI cache, which teaches people to ignore the file.
+
+The real fix is **PERF-001**, filed rather than improvised: ten modules import
+`lib/i18n/messages.ts` and one of them is a client component, so whether those
+catalogues also reach the browser bundle is a measurement in flight, not a claim.
+
+**Verified:** `tests/api-ai-route.test.ts` 28/28; the route's neighbours —
+`ai-request-context`, `route-plan-gate`, `middleware-assistant-boundary`,
+`ai-route-rate-limit-contract`, `ai-monthly-allowance`, `ai-chat-ownership`,
+`no-route-gates-on-a-per-instance-limit`, `ai-voice-routes-auth` — 98/98; every
+other test referencing `/api/ai` 59/59. `npx tsc --noEmit` clean.

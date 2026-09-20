@@ -57,6 +57,32 @@ vi.mock('@/lib/ai/assistant-engine', async (importOriginal) => ({
 }));
 
 type Row = Record<string, unknown>;
+// The budget, not the assertions, and the difference is measured rather than
+// assumed.
+//
+// Every case in this file runs in 1-12ms. The FIRST one pays something else
+// entirely: `await import('@/app/api/ai/route')` reaches
+// lib/server/ai-request-context.ts -> lib/i18n/messages.ts, which statically
+// imports all ELEVEN catalogues — 6.6 MB of JSON, 13,778 keys — and parsing
+// them measures ~2.5s on its own, with the whole route import at 3.5-3.8s
+// against vitest's 5,000ms default. The handler itself returns in 6ms.
+//
+// So on a cold transform cache or a loaded machine the first case times out,
+// and it does NOT fail alone: vitest fails a timed-out case but does not
+// cancel its in-flight promise, so the abandoned POST finishes after
+// afterEach's clearAllMocks() and lands a getUserContext() call inside the
+// NEXT case — which is how "401s an invalid bearer token and never falls back
+// to cookies" came to see a cookie call the bearer path never makes. Two red
+// cases, one cause, and the second one accuses the wrong code.
+//
+// Raising the budget changes no assertion: every case still proves exactly
+// what it proved. The real fix is per-locale catalogue loading in
+// lib/i18n/messages.ts, which is a production cold-start cost and not only a
+// test one — recorded as PERF-001 in finalaudit.md rather than improvised
+// here, because 10 modules import that file and one of them is a client
+// component.
+vi.setConfig({ testTimeout: 20_000 });
+
 const conv: { single?: Row | null; readError?: unknown; upsertError?: unknown } = {};
 function client() {
   const c: Record<string, unknown> = {
