@@ -2,12 +2,12 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-20T16:49:03.223Z
-- Total Audit Items: 14058
+- Last Updated: 2026-09-20T16:52:49.163Z
+- Total Audit Items: 14059
 - Not Started: 13842
 - In Progress: 192
 - Passed: 8
-- Fixed + Passed: 13
+- Fixed + Passed: 14
 - Blocked: 1
 - Failed: 2
 - Overall Completion: 0.04%
@@ -14190,6 +14190,7 @@ PRODUCTION READY: NO
 | SEC-008 | SEC | Realtime broadcast isolation and publication drift | ✅ PASS | Critical | 5/5 | None required | Publication and code agree exactly (61 = 61, empty diff both ways); a live socket received its own family's row and not another's | The first attempt used an unpublished table and received nothing — a run that would have read as a clean refusal while proving nothing. Controls decided it. |
 | PERF-003 | PERF | Unindexed foreign keys on cascade paths | ✅ PASS | Medium | 7/7 | None, deliberately | Member delete 0.50s before 158 indexes, 0.58s after; unchanged at 200,500 rows; a 0-FK delete takes 0.000174s | The half-second is 178 referential-integrity checks, not scans. An index cannot remove a check. Measuring first avoided a 158-index migration for no gain. |
 | API-MKT-001 | API | The five RPCs nothing exercised (marketplace + public tracking) | ✅ PASS | High | 14/14 | No product change; a probe so three unexercised RPCs stop being unexercised | Offer/counter/accept produces an order at the countered price and claims the listing; circle create/join/leave all complete; suite 48/48 | Found by asking what else the app calls that nothing tests — the same gap DB-FN-001 hid in. The probe catches the pre-0318 dead function. |
+| SEC-009 | SEC | Feed signature verifier fails closed without its key | 🛠 FIXED + PASS | Medium | 7/7 | signFeedToken throws on a missing key; verifyFeedSignature returns false rather than throwing | 4/4; restoring the `?? ''` fallback fails 2, including the forgery case | HMAC keyed on '' is computable by anyone. Nothing calls these yet — which is why the trap was worth removing before someone wires them up. |
 
 ## Inventory and evidence rules
 
@@ -21069,6 +21070,53 @@ So the suite holds, and the count went 22 → 5 → 0 as each candidate was actu
 
 #### Evidence
 Executed. The nineteen markers were enumerated and each classified by hand before the rule was written, rather than the rule being written first and the tree made to fit it. The suite sweep was settled by mutation — introducing the violation and watching the guard go red — rather than by the static filter that produced the candidates.
+
+#### Final Status
+🛠 FIXED + PASS
+
+### SEC-009 — A signature verifier that accepted forgeries when its key was unset
+
+Status: 🛠 FIXED + PASS
+Severity: Medium
+Route(s), components, actions, tables and providers: lib/sync/feed-token.ts, lib/sync/crypto.ts, app/api/sync/feeds/[token]/route.ts, app/api/sync/[provider]/callback/route.ts, SYNC_TOKEN_KEY, tests/feed-token-signing-fails-closed.test.ts
+
+#### Expected Behavior
+`SYNC_TOKEN_KEY` is absent → nothing signs, and nothing verifies. The codebase already says so in three places; this function is the one that did not.
+
+#### Test Cases
+- [x] Signing with no key throws rather than signing with an empty secret
+- [x] A signature an attacker computes with the empty key is rejected
+- [x] An empty signature is rejected
+- [x] A genuine signature still verifies (control)
+- [x] A signature for a different token is rejected (control)
+- [x] A feed token carries 32 bytes of entropy (sanity)
+- [x] The test fails when the fallback is restored
+
+#### Issues Found
+`signFeedToken` read the key as:
+
+    const secret = process.env.SYNC_TOKEN_KEY ?? '';
+
+An HMAC keyed on the empty string is computable by anyone. On any deployment that had not set the variable, `verifyFeedSignature` would have accepted a forged signature and said nothing — the exact shape `hasCronAuthorization` exists to avoid, where a missing secret quietly becomes a usable one.
+
+Every other use of this key already fails closed, which is what makes this an omission rather than a design choice: `getKey()` in `lib/sync/crypto.ts` throws with a message telling you how to generate one, both sync callbacks carry the comment "fails closed without SYNC_TOKEN_KEY", and `architecture.md:26` records the whole mechanism as fail-closed.
+
+**Nothing calls either function.** They are exported and unreferenced anywhere in `app/`, `lib/`, `components/` or `tests/`. So this was never an active hole — and that is the reason to fix it rather than leave it. A well-documented, plausible-looking "constant-time signature verifier" is exactly the thing somebody reaches for later, and whoever wires it up first would inherit a silent fail-open.
+
+Found by asking which of the 146 API routes no test refers to. That produced 20, and most were a measurement artifact — the routes are thin wrappers over logic that IS tested (`sync/[provider]/callback` looked untested while `tests/sync-oauth-csrf.test.ts` covers its state check, which is the part that matters). Reading the rest is what turned up the dead pair.
+
+#### Fixes Applied
+`signFeedToken` throws when the key is absent, with the same shape as `getKey()`. `verifyFeedSignature` returns false — never throws — when the key or the signature is missing, so a caller using it as an authorization check fails closed on every path instead of surfacing a 500 on one and admitting the request on another.
+
+The feed route itself is unchanged and was already sound: 32 bytes of entropy from `randomBytes`, scoped to `feed_enabled = true`, revocable by rotating the column, and the token is deliberately the whole authorization — which the file says out loud.
+
+#### Retest Results
+4/4. Restoring the fallback fails 2 of them.
+
+The second of those two only started failing after the test was rewritten. Its first draft asserted that a **genuine** signature is rejected while the key is missing — which returns false either way, so it passed against the very bug it was written for. The assertion that matters is the forgery: compute `HMAC('', token)` the way an attacker would, and require it to be refused.
+
+#### Evidence
+Executed. The absence of callers was established by grep across `app/`, `lib/`, `components/` and `tests/` before the fix was chosen, because "delete it" and "make it safe" are different answers and which one is right depends on that.
 
 #### Final Status
 🛠 FIXED + PASS
