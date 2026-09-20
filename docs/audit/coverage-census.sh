@@ -108,6 +108,29 @@ fi
 # Two different questions. A probe is the only thing that proves an RLS
 # boundary; a unit test naming a table usually means a service writes it.
 section "Public tables"
+
+# A failed CONNECTION is not a measurement of zero, and this section used to
+# report it as one. `psql` would fail, the loop below would read nothing, and
+# the counters would print "named by a BOUNDARY PROBE: 0 / 0" with an empty
+# "(RLS enabled on  of them)" underneath — after which the closing paragraph
+# called that ratio "the honest shape of the proof this repository carries".
+#
+# That is the empty-vs-failed defect this census exists to help find, committed
+# by the census itself. So the connection is proved FIRST, and a failure is
+# fatal to the section rather than silent inside it.
+#
+# The two cases are kept distinct on purpose: a database that answers with zero
+# tables is a real (if strange) measurement and prints as one; a database that
+# does not answer is not a measurement at all and says so.
+if ! db_probe=$(psql -tAq -c 'select 1' 2>&1); then
+  printf '  DATABASE UNAVAILABLE — the table census did NOT run.\n'
+  printf '  psql said: %s\n' "$(printf '%s' "$db_probe" | head -2 | tr '\n' ' ')"
+  printf '  This is NOT "0 of 0 tables". No table figure is reported below,\n'
+  printf '  because none was measured. Point PGHOST/PGUSER/PGDATABASE at the\n'
+  printf '  replayed database and re-run.\n'
+  exit 2
+fi
+
 probed=0; unprobed=(); tested=0; untested=0
 while read -r tb; do
   [ -z "$tb" ] && continue
@@ -115,6 +138,12 @@ while read -r tb; do
   if grep -rqw "$tb" tests/ 2>/dev/null; then tested=$((tested+1)); else untested=$((untested+1)); fi
 done < <(psql -tAq -c "select tablename from pg_tables where schemaname='public' order by 1")
 total=$(( probed + ${#unprobed[@]} ))
+if [ "$total" -eq 0 ]; then
+  printf '  The database answered, and reported NO public tables.\n'
+  printf '  That is a measurement, not a failure — but it almost certainly means\n'
+  printf '  the migrations were never replayed into this database.\n'
+  exit 2
+fi
 printf '  named by a BOUNDARY PROBE: %d / %d\n' "$probed" "$total"
 printf '  named by any test:         %d / %d\n' "$tested" "$(( tested + untested ))"
 printf '  (RLS enabled on %s of them)\n' "$(psql -tAq -c "select count(*) from pg_tables t join pg_class c on c.relname = t.tablename join pg_namespace n on n.oid = c.relnamespace and n.nspname = 'public' where t.schemaname = 'public' and c.relrowsecurity")"
