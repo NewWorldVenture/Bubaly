@@ -18,7 +18,7 @@ import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
-import { describeActionError } from '@/lib/supabase/errors';
+import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
 import { availableWriteBackKinds, type WriteBackKind } from '@/lib/concierge/apply';
 import { materializeConciergePlan } from '@/lib/services/approvals';
@@ -190,18 +190,23 @@ export async function executeQueuedRunAction(runId: string): Promise<LoopResult>
   const sb = await createServer();
   const familyId = ctx.active.familyId;
 
-  const { data: run } = await sb
+  // A refused read left `run` null and answered "run not found or already
+  // decided" — a claim about the run's state, from a read that never saw it.
+  // Audit C1-S9-48.
+  const { data: run, error: runReadErr } = await sb
     .from('family_automation_runs').select('id, status, metadata')
     .eq('id', runId).eq('family_id', familyId).maybeSingle();
+  if (runReadErr) return { ok: false, error: describeActionError(runReadErr, t('actions.couldNotLoadThatRun')) };
   if (!run || run.status !== 'pending') return { ok: false, error: t('actions.runNotFoundOrAlready') };
 
   const meta = (run.metadata ?? {}) as { plan_id?: string; kinds?: WriteBackKind[]; approval_id?: string | null };
   if (!meta.plan_id) return { ok: false, error: t('actions.runHasNoPlanAttached') };
 
-  const { data: plan } = await sb
+  const { data: plan, error: planReadErr } = await sb
     .from('concierge_plans')
     .select('id, title, description, location, planned_for, budget_cents')
     .eq('id', meta.plan_id).eq('family_id', familyId).maybeSingle();
+  if (planReadErr) return { ok: false, error: describeActionError(planReadErr, t('actions.couldNotLoadThatPlan')) };
   if (!plan) return { ok: false, error: t('actions.planNoLongerExists') };
 
   const kinds = (meta.kinds?.length ? meta.kinds : VALID).filter((k) => VALID.includes(k));
@@ -212,13 +217,23 @@ export async function executeQueuedRunAction(runId: string): Promise<LoopResult>
   // already in concierge_plan_actions), so surfacing this failure lets the
   // manager safely retry rather than leaving the run stuck "pending" with the
   // plan already applied — which would look like the approval did nothing.
-  const { error: runErr } = await sb.from('family_automation_runs').update({
+  //
+  // The reasoning above covers the ERROR path and stops one step short of the
+  // zero-rows one, which lands in the same place: the plan is applied, the run
+  // stays `pending`, and the manager sees a queued run for work already done —
+  // so they approve it again. Idempotence makes the retry safe; reporting
+  // success here is what makes it necessary.
+  const { data: stamped, error: runErr } = await sb.from('family_automation_runs').update({
     status: 'executed', summary, result: { steps: applied } as never,
     approved_by: ctx.user.id, approved_at: new Date().toISOString(),
-  }).eq('id', runId).eq('family_id', familyId);
+  }).eq('id', runId).eq('family_id', familyId).select('id');
   if (runErr) {
     console.error('[concierge] executed-run status update failed', { runId, familyId, error: runErr });
     return { ok: false, error: describeActionError(runErr, t('actions.appliedThePlanButCould')) };
+  }
+  if (wroteNoRows(stamped)) {
+    console.error('[concierge] executed-run status update matched no rows', { runId, familyId });
+    return { ok: false, error: t('actions.appliedThePlanButCould') };
   }
 
   if (meta.approval_id) {
@@ -242,17 +257,21 @@ export async function dismissQueuedRunAction(runId: string): Promise<Result> {
   if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyParentsGuardiansCanDecline') };
   const sb = await createServer();
 
-  const { data: run } = await sb
+  const { data: run, error: runReadErr } = await sb
     .from('family_automation_runs').select('id, status, metadata')
     .eq('id', runId).eq('family_id', ctx.active.familyId).maybeSingle();
+  if (runReadErr) return { ok: false, error: describeActionError(runReadErr, t('actions.couldNotLoadThatRun')) };
   if (!run || run.status !== 'pending') return { ok: false, error: t('actions.runNotFoundOrAlready') };
 
-  const { error: dismissErr } = await sb.from('family_automation_runs').update({ status: 'dismissed' })
-    .eq('id', runId).eq('family_id', ctx.active.familyId);
+  const { data: dismissed, error: dismissErr } = await sb.from('family_automation_runs').update({ status: 'dismissed' })
+    .eq('id', runId).eq('family_id', ctx.active.familyId).select('id');
   if (dismissErr) {
     console.error('[concierge] dismiss-run status update failed', { runId, familyId: ctx.active.familyId, error: dismissErr });
     return { ok: false, error: describeActionError(dismissErr, t('actions.couldNotDismissThatRun')) };
   }
+  // A dismissal that matched nothing leaves the run queued while telling the
+  // manager it is gone — and the next tick offers it to them again.
+  if (wroteNoRows(dismissed)) return { ok: false, error: t('actions.couldNotDismissThatRun') };
 
   const meta = (run.metadata ?? {}) as { approval_id?: string | null };
   if (meta.approval_id) {

@@ -428,3 +428,57 @@ describe('the home records repeat auto\'s split, not its omission (C1-S9-47)', (
     expect(touch).not.toContain('throw');
   });
 });
+
+/**
+ * Audit C1-S9-48 — the concierge autopilot, where the file's own reasoning
+ * already covered half the hazard.
+ *
+ * `applyQueuedRunAction` materializes a plan and then stamps the run executed.
+ * The comment above that stamp explains, correctly, why a FAILED stamp must be
+ * surfaced: materializePlan is idempotent, so the manager can safely retry
+ * rather than be left with a run stuck "pending" over a plan already applied.
+ * A stamp that matched ZERO ROWS lands in exactly that state — and reported
+ * success. The reasoning was right; it just stopped one verb short.
+ */
+const concierge = readFileSync('app/(app)/dashboard/concierge/actions.ts', 'utf8');
+
+describe('an autopilot run is not left queued over work already done (C1-S9-48)', () => {
+  it('the executed stamp is confirmed, not just error-checked', () => {
+    expect(concierge).toContain('wroteNoRows(stamped)');
+    expect(at(concierge, 'wroteNoRows(stamped)')).toBeLessThan(at(concierge, "return { ok: true, mode: 'auto'"));
+  });
+
+  it('the dismissal is confirmed', () => {
+    // A dismissal that matched nothing leaves the run queued while telling the
+    // manager it is gone, and the next tick offers it to them again.
+    expect(concierge).toContain('wroteNoRows(dismissed)');
+  });
+
+  it('both keep the idempotence reasoning that makes a retry safe', () => {
+    // If this comment goes, the justification for reporting rather than
+    // swallowing goes with it — and someone will "simplify" the check away.
+    expect(concierge).toContain('materializePlan is idempotent');
+  });
+
+  it('the approval stamps stay best-effort, and are not hardened', () => {
+    // Both `approval_requests` stamps are explicitly logged-not-raised: the plan
+    // is applied and the run is recorded by then, so failing the action would
+    // report failure for work that succeeded. Asserting the ABSENCE of a bail
+    // stops a later consistency sweep from inverting that.
+    for (const marker of ['approval stamp after execution failed', 'approval decline stamp failed']) {
+      const block = bodyOf(concierge, marker, ');');
+      expect(block, marker).not.toContain('return { ok: false');
+    }
+  });
+
+  it('the run and plan lookups distinguish a refusal from an absence', () => {
+    // Both answered "run not found or already decided" / "plan no longer
+    // exists" — claims about state, from reads that never saw it.
+    for (const binding of ['runReadErr', 'planReadErr']) {
+      expect(concierge, binding).toContain(`error: ${binding}`);
+      expect(concierge).toContain(`if (${binding}) return { ok: false`);
+    }
+    expect(concierge).toContain("t('actions.runNotFoundOrAlready')");
+    expect(at(concierge, 'if (runReadErr)')).toBeLessThan(at(concierge, "t('actions.runNotFoundOrAlready')"));
+  });
+});

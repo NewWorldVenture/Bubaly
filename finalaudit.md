@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-188 finding IDs from four workers and two parallel sessions; none of it was
+189 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -12,7 +12,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 > source-and-migration audit run without production credentials. Session B
 > (Register B, 14,038 items, `AUTH-001` / `API-<hash>` / `DB-TBL-nnn`) is a
 > hosted-CI and deployed-release audit. Their finding-ID sets are **disjoint**:
-> 910 IDs from A, 684 from B, 1,591 in union — verified mechanically at each
+> 911 IDs from A, 684 from B, 1,592 in union — verified mechanically at each
 > merge. The three literals both files contain (`LB-009`, `LB-016`, `SHA-256`)
 > are not counter-examples: the first two are pre-existing *runbook* names each
 > register cites, and the third is a hash algorithm the ID regex matches. No
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 198 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 199 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -33611,6 +33611,58 @@ into a throw).
 
 ---
 
+### `[CLAUDE-1][MEDIUM][SERVER ACTIONS]` C1-S9-48 — the concierge autopilot, where the file had already reasoned out half the hazard
+
+`applyQueuedRunAction` materializes a plan and then stamps the run executed. The
+comment above that stamp is careful and correct:
+
+> *"materializePlan is idempotent (it skips kinds already in
+> `concierge_plan_actions`), so surfacing this failure lets the manager safely
+> retry rather than leaving the run stuck "pending" with the plan already
+> applied — which would look like the approval did nothing."*
+
+**It reasons about the error path and stops one verb short of the zero-rows
+one, which lands in exactly the state it describes.** A stamp matching no rows
+left the plan applied, the run `pending`, and the manager looking at a queued
+run for work already done — so they approve it again. The idempotence the
+comment relies on is what makes that retry *safe*; reporting success is what
+makes it *necessary*. Same shape as `auto/actions.ts` under `C1-S9-46`: the rule
+written down, and the last step of it missing.
+
+`dismissQueuedRunAction` is the mirror image — a dismissal that matched nothing
+leaves the run queued while telling the manager it is gone, and the next tick
+offers it to them again.
+
+Both run/plan lookups also dropped their read errors and answered *"run not
+found or already decided"* / *"plan no longer exists"* — claims about state,
+from reads that never saw it.
+
+**Two things deliberately left alone, and pinned.** Both `approval_requests`
+stamps are logged-not-raised on purpose: by the time they run, the plan is
+applied and the run is recorded, so failing the action would report failure for
+work that succeeded. Guards assert the **absence** of a bail in each, so a later
+consistency sweep cannot invert it.
+
+**And another fake modelling an impossible response.**
+`tests/concierge-run-write-boundary.test.ts` went red on the fix for the same
+reason `module-actions-write-boundary` did under `C1-S9-46`: its `client`
+hardcoded `data: null` for every update outcome. Repaired to return rows on
+success and to accept `updateRows: []`. **That is now three fakes in this
+session** — `C1-S9-26`, `C1-S9-46`, and this one — that were modelling a
+response shape the real client cannot produce, each found the same way: a fix
+went in, and what broke was the fake. The pattern is worth naming: **a fake
+built against a defective call site encodes the defect**, and stays green until
+the call site is corrected.
+
+**Status:** FIXED. Guard: five source cases plus one fake-driven case, each
+proved red by mutation — including deleting the idempotence comment (which would
+leave the confirmation looking arbitrary and invite its removal) and hardening a
+best-effort approval stamp.
+
+**Remaining: 85 of the 102, OPEN.**
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -33680,8 +33732,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,075 passing / 17,078 across 1,351
-files.** (Re-run after `C1-S9-47`; was 16,950 / 16,953 across 1,349 before this
+Status: ✅ PASS — `npx vitest run`: **17,081 passing / 17,084 across 1,351
+files.** (Re-run after `C1-S9-48`; was 16,950 / 16,953 across 1,349 before this
 batch.) The three failures are `C1-S9-09`, BLOCKED: this container runs Node
 22.22.2 against the repository's `.nvmrc` 24.21.0, and nvm cannot fetch the
 Node 24 distribution here. Not counted as passing.
