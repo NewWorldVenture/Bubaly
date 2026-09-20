@@ -1901,3 +1901,73 @@ by the roster, so a manager may still name an `auth.users` id outside the family
 
 Until this is applied, any household member can sign a calendar event with
 another member's name, and rewrite or erase the author of one already there.
+
+### `0340` makes an erasure actually erase — unapplied
+
+`0338` froze the attribution columns on four household ledgers with a BEFORE
+UPDATE trigger that **preserves** rather than refuses — correct, because the app
+never sends those columns on UPDATE and a checking policy would block a member
+legitimately editing somebody else's entry. It preserves **unconditionally**,
+and that is the defect.
+
+Five of those columns are `ON DELETE SET NULL`, read from `pg_constraint`
+(`confdeltype = 'n'`) with the **referenced** table included — the first version
+of that query omitted it and misread `care_log.logged_by` as pointing at
+`auth.users` when it points at `family_members`:
+
+| table | column | references |
+|---|---|---|
+| `behavior_logs` | `logged_by` | `auth.users` |
+| `care_log` | `created_by` | `auth.users` |
+| `care_log` | `logged_by` | `family_members` |
+| `medication_doses` | `logged_by` | `auth.users` |
+| `screen_time_entries` | `logged_by` | `auth.users` |
+
+Postgres performs a referential action as an ordinary UPDATE against the
+referencing row, so the trigger fires on it and puts the deleted id straight
+back.
+
+**Two symptoms, and production gets the silent one.** Measured holding schema,
+constraint and trigger fixed and varying nothing but the transaction mode: in
+**autocommit** the revert is silent and a dangling reference is **committed**; in
+a **transaction** the foreign key check fires and the delete is **refused**.
+`admin.auth.admin.deleteUser` issues one DELETE in its own transaction, so a real
+erasure takes the first row — the account goes, the name stays, and nothing
+reports it. The visible error is what a *probe* sees, because every probe here
+rolls back. Recording only the error would have described the instrument.
+
+`pg_trigger_depth() = 1` is an application UPDATE; a referential action arrives
+at depth 2. Guarding the preserve on depth 1 keeps every freeze `0338` shipped —
+its own probe still passes — while letting the constraint do the job it declares.
+
+This also closes **AUTHZ-022**: `logged_by` was assigned unconditionally while
+`created_by` had a presence test, so the function raised `42703` on any table
+lacking `logged_by` while its own `comment on function` called itself shared and
+general. `logged_by` now gets the same test. That changes nothing on the four
+tables `0338` attaches it to, because all four carry both columns — it is the
+comment that was wrong, and a function whose comment lies is how AUTHZ-022
+happened. Both repairs are one line on the same function, so they are one
+migration rather than two replacing it in sequence.
+
+**Verified on a database built from nothing:** 350 migrations applied / 0 failed,
+`0340` applied on top, then **63 of 63** boundary probes passed. The identical
+autocommit erasure that left a dangling reference before the repair clears the
+column after it, and an application rewrite of both columns is still refused.
+`docs/audit/an-erasure-actually-erases-check.sql` holds it, and was **shown to
+fail before being trusted**: exit **3** against the unguarded function, exit
+**0** against the repaired one.
+
+**Scope.** `0338` is itself unapplied, so this is a repair before shipping rather
+than after, and no shipped product path reaches the defect today — the three
+`admin.auth.admin.deleteUser` call sites are rollbacks on a just-created child
+user. What is exposed is deletion from the Supabase dashboard or admin API, and
+any future account-deletion or GDPR-erasure feature.
+
+**The one a future edit is most likely to undo:** dropping the depth condition
+makes the preserve unconditional again and silently reopens this. The migration
+and the probe both re-assert it, and both also re-ask whether any trigger issues
+a nested UPDATE against these four tables — because that, not the guard itself,
+is what would make `depth = 1` stop covering every application write.
+
+Until this is applied *together with* `0338`, erasing an account leaves that
+person's name on household ledger rows the care timeline still renders.

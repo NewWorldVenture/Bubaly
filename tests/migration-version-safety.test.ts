@@ -149,10 +149,26 @@ describe('Supabase migration filename safety', () => {
     // can_manage_family(family_id)` — so the NULL branch keeps ICS import and
     // subscribed-feed sync working and the manager branch keeps the
     // approval replay working, both of which the rejected draft broke. The
-    // 0340 (school/task) and 0342 (notes) drafts remain rejected and are still
-    // not in this tree; AUTHZ-021 is closed on INSERT only, and the residue is
-    // recorded in that migration's header and in finalaudit.md.
-    expect(audit.nextVersion).toBe('0340');
+    // 0342 (notes) remains rejected and is still not in this tree; AUTHZ-021 is
+    // closed on INSERT only, and the residue is recorded in that migration's
+    // header and in finalaudit.md.
+    //
+    // 0340 is likewise a re-used NUMBER, not the rejected school/task draft.
+    // 0340_an_erasure_actually_erases.sql repairs 0338's
+    // attribution_is_immutable(), which preserves the attribution columns
+    // UNCONDITIONALLY. Five of those columns are ON DELETE SET NULL, and
+    // Postgres runs a referential action as an ordinary UPDATE — so the trigger
+    // fired on it and put the deleted id back. Measured both ways: in
+    // autocommit that COMMITS a dangling reference with no error (the face a
+    // real erasure gets, since admin.deleteUser issues one DELETE in its own
+    // transaction); inside a transaction the FK check fires and the delete is
+    // refused (the face a probe gets, since every probe here rolls back).
+    // pg_trigger_depth() = 1 is an application UPDATE; a referential action is
+    // depth 2. See AUTHZ-023, and docs/audit/an-erasure-actually-erases-check.sql,
+    // whose negative control restores the unconditional preserve and requires
+    // the erasure to break — measured: exit 3 against the unguarded function,
+    // exit 0 against the repaired one.
+    expect(audit.nextVersion).toBe('0341');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {
