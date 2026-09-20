@@ -106,7 +106,12 @@ begin
   -- reference committed with no error (measured; see the header). Removing this
   -- condition re-opens AUTHZ-023.
   if pg_trigger_depth() = 1 then
-    new.logged_by := old.logged_by;
+    -- BOTH columns get the presence test. 0338 gave one to `created_by` and
+    -- not to `logged_by`, which is AUTHZ-022: the function aborts every UPDATE
+    -- on a table lacking `logged_by` while its comment calls itself general.
+    if to_jsonb(new) ? 'logged_by' then
+      new.logged_by := old.logged_by;
+    end if;
     if to_jsonb(new) ? 'created_by' then
       new.created_by := old.created_by;
     end if;
@@ -129,8 +134,17 @@ begin
   if fn_def not like '%pg_trigger_depth()%' then
     raise exception '0340: attribution_is_immutable() lost its pg_trigger_depth guard — ON DELETE SET NULL would be reverted and an account erasure would silently leave dangling references';
   end if;
+  -- BOTH presence tests are asserted. The first draft of this migration added
+  -- the guard, wrote a comment claiming both columns were tested, and left
+  -- `logged_by` unconditional -- shipping the very defect AUTHZ-022 names, with
+  -- a comment that now affirmatively stated a test that did not exist. Two
+  -- independent reviewers caught it. Asserting each one by name is what makes
+  -- the comment answerable to the code.
   if fn_def not like '%to_jsonb(new) ? ''created_by''%' then
     raise exception '0340: attribution_is_immutable() lost the created_by presence test';
+  end if;
+  if fn_def not like '%to_jsonb(new) ? ''logged_by''%' then
+    raise exception '0340: attribution_is_immutable() has no logged_by presence test — AUTHZ-022 is open and the function''s comment claims otherwise';
   end if;
 
   -- 0338's tables must still carry the trigger; this migration repairs the
