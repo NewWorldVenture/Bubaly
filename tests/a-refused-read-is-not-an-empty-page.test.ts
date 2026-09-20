@@ -17,6 +17,23 @@ import { at } from './helpers/source-order';
  */
 const PAGES = [
   {
+    file: 'app/(app)/guardian/history/page.tsx',
+    table: 'guardian_communications',
+    // The AI Call Guardian's log, often watching over an elderly relative. A
+    // refused read rendered an empty list under the heading "0 total" — a
+    // family asking whether anything had been intercepted was told, in a
+    // number, that nothing had.
+    why: 'the scam-call interception log',
+  },
+  {
+    file: 'app/(app)/family/members/page.tsx',
+    table: 'family_members',
+    // "No members yet" for a household of five, under a heading that still
+    // names the family. Nothing destructive is reachable, but it is the most
+    // alarming false empty in the set.
+    why: 'the family roster',
+  },
+  {
     file: 'app/(app)/guardian/rules/page.tsx',
     table: 'guardian_routing_rules',
     // An empty call-screening list reads as "this family has configured no
@@ -37,7 +54,10 @@ describe('a refused read is declared, not rendered as empty (C1-S9-19)', () => {
     const src = readFileSync(file, 'utf8');
     // The destructure must take `error`, not just `data`. Dropping it is the
     // whole defect: `?? []` then makes a refusal indistinguishable from none.
-    expect(src).toMatch(/const \{ data: \w+, error: \w+Error \}/);
+    // Other fields may sit between `data` and `error` (guardian/history also
+    // destructures `count`), so this requires both in one destructure rather
+    // than pinning their adjacency.
+    expect(src).toMatch(/const \{ data: \w+[^}]*, error: \w+Error \}/);
     expect(src).toContain(`${table}: \${describeReadError(`);
   });
 
@@ -66,5 +86,38 @@ describe('a refused read is declared, not rendered as empty (C1-S9-19)', () => {
       const catalogue = JSON.parse(readFileSync(`lib/i18n/messages/${locale}.json`, 'utf8')) as Record<string, string>;
       expect(catalogue['shared.someInformationCouldNotBeLoaded'], `${locale} is missing the banner title`).toBeTruthy();
     }
+  });
+});
+
+describe('a destructive path is not opened by a false empty (C1-S9-27)', () => {
+  it('the independence ladder fails closed rather than rendering empty', () => {
+    // Two things make this one different from the display pages above. The
+    // `members` read directly above it is ALREADY guarded — with a comment
+    // describing this very hazard — so a silently emptied ladder renders beside
+    // a correct roster, reading as "this child has achieved nothing" rather
+    // than as a failure. And it is destructive: `startMilestoneAction` upserts
+    // `status: 'in_progress'` on (family_id, member_id, domain, title) with no
+    // read, so a parent tapping Start on a rung the child already ACHIEVED
+    // silently reverts it.
+    const page = readFileSync('app/(app)/dashboard/independence/page.tsx', 'utf8');
+    // The try/catch that used to stand here caught nothing: supabase-js
+    // RESOLVES with { data, error } for a refused read and rejects only on a
+    // transport failure. It described a guard that was not there.
+    expect(page).not.toMatch(/try \{[\s\S]{0,200}?from\('independence_milestones'\)/);
+    expect(page).toContain('milestones.error');
+    // A genuinely absent table still degrades — that is what the original
+    // comment was for — but nothing else does.
+    expect(page).toContain('isMissingRelationError(milestones.error)');
+    expect(page).toContain('<ErrorState');
+    // And the premise: the action still has no read of its own to merge with.
+    const action = readFileSync('app/(app)/dashboard/independence/actions.ts', 'utf8');
+    expect(action).toContain("onConflict: 'family_id,member_id,domain,title'");
+    expect(action).toContain("status: 'in_progress'");
+  });
+
+  it('the guardian log withholds its count rather than asserting zero', () => {
+    // A banner beside "0 total" would still be asserting the zero.
+    const page = readFileSync('app/(app)/guardian/history/page.tsx', 'utf8');
+    expect(page).toMatch(/readFailures\.length === 0 \? <p[^>]*>\{count \?\? 0\} total/);
   });
 });

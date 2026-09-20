@@ -47,7 +47,6 @@ const BASELINE = new Set<string>([
   'app/(app)/dashboard/billing/page.tsx',
   // concierge-calls page fixed under M26 honesty (wave 3b) — a failed read now
   // renders a retryable ErrorState instead of an empty queue; removed.
-  'app/(app)/dashboard/independence/page.tsx',
   // journeys + onboarding-funnel fixed under A-05 (PLA-0790) — now capture `error`
   // and render MiniError instead of a false-empty; removed from baseline.
   'app/(app)/dashboard/money-timeline/page.tsx',

@@ -9,6 +9,8 @@ import { SectionCard, MiniEmpty } from '@/components/family/shell';
 import { Avatar } from '@/components/ui/avatar';
 import { fmtDate } from '@/lib/utils/format';
 import { getTranslations } from '@/lib/i18n/server';
+import { PartialReadBanner } from '@/components/ui/partial-read-banner';
+import { describeReadError } from '@/lib/supabase/settle';
 
 export const metadata: Metadata = { title: 'Family Members' };
 export const dynamic = 'force-dynamic';
@@ -19,12 +21,18 @@ export default async function FamilyMembersPage() {
   const supabase = await createServer();
   const manager = isManager(ctx.active.role);
 
-  const { data: members } = await supabase
+  // "No members yet" for a household of five is the most alarming false empty
+  // in the set — it is the whole content of this page, under a heading that
+  // still names the family. Nothing destructive is reachable from here (the one
+  // interactive element is a link gated on `ctx.active.role`, not on this read),
+  // so the page still renders and simply says what is missing. Audit C1-S9-27.
+  const { data: members, error: membersError } = await supabase
     .from('family_members')
     .select('*')
     .eq('family_id', ctx.active.familyId)
     .eq('is_active', true)
     .order('created_at');
+  const readFailures = membersError ? [`family_members: ${describeReadError(membersError)}`] : [];
 
   return (
     <div className="space-y-5">
@@ -37,6 +45,8 @@ export default async function FamilyMembersPage() {
           </Link>
         ) : undefined}
       />
+
+      <PartialReadBanner title={t('shared.someInformationCouldNotBeLoaded')} failures={readFailures} />
 
       <SectionCard title={t('familyMembers.members')}>
         {members && members.length > 0 ? (

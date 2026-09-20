@@ -32484,6 +32484,96 @@ form is worth having written down: *when a fix to production code breaks tests,
 the first question is not "is the fix wrong" but "what were those tests actually
 asserting" — and sometimes the answer is that the bug was holding them up.*
 
+---
+
+### `[CLAUDE-1][MEDIUM][PAGES]` C1-S9-27 — three more false empties, one of them destructive, and a try/catch that caught nothing
+
+Continuing the Pass AG worker's ranked shortlist, re-verified in source first.
+
+#### (a) The independence ladder — a false empty with a destructive next step
+
+**File:** `app/(app)/dashboard/independence/page.tsx`
+
+Two things set this apart from a display-only false empty, and both were
+confirmed by reading:
+
+1. **The read directly above it is already guarded.** The `members` read
+   returns an `ErrorState`, and its comment describes this exact hazard — "a
+   parent with three children is told they have none". So the roster renders
+   CORRECTLY beside a ladder that has silently emptied, which reads as *this
+   child has achieved nothing* rather than as a failure.
+2. **The next tap is destructive.** `startMilestoneAction` upserts
+   `status: 'in_progress'` on `(family_id, member_id, domain, title)` **with no
+   read of its own**. A parent looking at an empty ladder taps *Start* on a rung
+   the child has already ACHIEVED — and that achievement is silently reverted.
+
+**And the guard that appeared to be there was not.** The read sat inside a
+`try/catch` labelled "Degrades safely before migration 0175 is applied". A
+supabase-js query **resolves** with `{ data, error }` for anything the database
+answers, including a refused read; it rejects only when the request never
+completed. So the catch never saw an RLS refusal or a query error, and
+`data ?? []` turned one into an empty ladder. The comment described a guard that
+did not exist — the same shape as `C1-S9-01`'s uncalled SSRF helper, one level
+further in: here the protection was not merely uncalled, it was *unreachable*.
+
+**Fix.** A real error check that still tolerates a genuinely absent table via
+`isMissingRelationError` — which is what the original comment was actually for —
+and fails closed on anything else, matching the sibling read's own convention on
+the same page.
+
+#### (b) The scam-call log that asserts zero
+
+**File:** `app/(app)/guardian/history/page.tsx`
+
+The AI Call Guardian's interception log, often watching over an elderly
+relative. The error was dropped, so a refused read rendered an empty list under
+the heading **"0 total"**. A family asking whether anything had been intercepted
+was told, in a number, that nothing had.
+
+The count is **withheld** rather than merely accompanied by a banner: a banner
+sitting beside "0 total" would still be asserting the zero.
+
+#### (c) "No members yet", for a household of five
+
+**File:** `app/(app)/family/members/page.tsx`
+
+The whole content of the page, under a heading that still names the family.
+Verified that nothing destructive is reachable — the one interactive element is
+a link gated on `ctx.active.role`, not on this read — so the page renders and
+says what is missing.
+
+**Status:** FIXED. Guard: `tests/a-refused-read-is-not-an-empty-page.test.ts`
+grown from 7 cases to 15, each proved red by mutation (restoring the
+catch-that-catches-nothing, asserting the count unconditionally, dropping the
+members error capture).
+
+---
+
+### `[CLAUDE-1][LOW][TESTING]` C1-S9-28 — two guards went red because the code improved, and one was right to
+
+Fixing `C1-S9-27` broke two existing tests. They needed opposite treatment, and
+telling them apart is the point.
+
+**`tests/silent-empty-read-ratchet.test.ts` was CORRECT and needed no change to
+its logic.** It detected that a file on its BASELINE list no longer has the
+silent-empty pattern and demanded the entry be pruned — a ratchet tightening,
+exactly as designed. Pruned. A ratchet that lets fixed files linger on its
+baseline is one that quietly widens the hole it was built to close.
+
+**`tests/server-page-read-boundary.test.ts` was pinning a COMMENT.** It asserted
+the literal `/* table not applied yet */` as a stand-in for "an unapplied table
+is not a read failure to report at a parent". The fix preserved that tolerance
+exactly — via `isMissingRelationError` — and removed the comment, so the guard
+went red on an improvement. Re-pointed at the tolerance itself, plus an
+assertion that it is narrow (a missing relation, not any error), since a broad
+version would be the silent-empty defect wearing a new spelling.
+
+This is the third time this session a guard has failed because the code got
+better (`dashboard-modules-keep-prior-read`, then the C4-S5-01 literals, now
+this), and the second time the right answer was to tighten rather than relax.
+The distinguishing question each time: *is this test describing a behaviour, or
+a spelling?*
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
