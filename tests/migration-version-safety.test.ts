@@ -96,7 +96,34 @@ describe('Supabase migration filename safety', () => {
     // saying whose ask it is — 0320's repair applied a third time, restrictive
     // rather than restated so 0252's conditions stay where the source-level
     // ratchets in tests/ai-insert-authority.test.ts can still read them.
-    expect(audit.nextVersion).toBe('0334');
+    //
+    // 0335, 0336 and 0338 — and the TWO GAPS, which are the point of this
+    // paragraph. A census measured 247 tables still taking a write from any
+    // household member and triaged 41 of them as suspect because a file that
+    // writes them also carries an `isManager` gate. Four were verified one at a
+    // time. TWO WERE NOT DEFECTS and no migration was written: `wallet_cards`,
+    // because `addCardAction` has no role gate at all — the application never
+    // claimed the rule the census inferred; and `family_decisions`, whose only
+    // writer is a client module with no manager rule anywhere. 0334 and 0337
+    // are therefore permanently unused, and that is recorded rather than
+    // renumbered, because a gap says "this was looked at and refused" where a
+    // renumber says nothing. CENSUS-002 is what happens when a name on a triage
+    // list is taken for a verdict.
+    //
+    // 0335 the locator pair (`member_locations`, `location_events`), where the
+    // gap is SELF-ONLY vs role-blind rather than manager-only — a child could
+    // take a parent off the family map and file an arrival in their name at
+    // coordinates of their choosing; 0336 `home_assets`, where
+    // components/modules/home-module.tsx expresses a manager rule THREE times
+    // (the Add button, the delete button, and `disabled={!manager}` on the
+    // warranty field) and there is no server action at all, so the client wrote
+    // straight through RLS; 0338 the four household ledgers — `care_log`,
+    // `behavior_logs`, `screen_time_entries`, `medication_doses` — whose
+    // `logged_by` nothing pinned. That last one is sharper than 0333's twin
+    // finding and says so: care-module.tsx:253 RENDERS the name, so a child
+    // could write a `medication` entry reading "Gave Grandma her tablets" and
+    // the timeline showed it as the parent's own record.
+    expect(audit.nextVersion).toBe('0339');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

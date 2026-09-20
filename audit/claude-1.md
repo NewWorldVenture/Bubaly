@@ -7190,7 +7190,7 @@ forbidden — leaving only the `requested_by` residue recorded as **AUDIT-003**.
 ### The coverage limit that reframes the rest of this audit
 
 The sweep treated a migration present in the tree as closing its table. **None
-of `0318`–`0333` is applied.** Read against production, the paths it filed as
+of `0318`–`0338` is applied.** Read against production, the paths it filed as
 defeated by `0322`/`0324`/`0325` are **live** — the Pay ID redirect, the savings
 goal that drains a sibling, the Guardian suggestion. That distinction is now
 stated at the top of `finalaudit.md`, because it changes the present tense of

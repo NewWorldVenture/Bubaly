@@ -723,6 +723,65 @@ applied **346 migrations, 0 failed**, and `docs/audit/run-probes.sh` then passed
 evidence about this tree. It is **not** evidence about production, which still
 records only `0001-0003`.
 
+### `0335`, `0336`, `0338` — and the two numbers deliberately left empty
+
+A census measured **247 tables** still taking a write from any household member
+(`docs/audit/role-blind-write-census.sh`, which is re-runnable rather than
+quoted) and triaged **41** as suspect because a file that writes them also
+carries an `isManager` gate. Five were then verified one at a time, and the
+outcome matters more than the count:
+
+- **`0335_a_location_says_who_was_actually_there.sql`** (AUTHZ-018).
+  `member_locations` and `location_events` carry `00420`'s single role-blind
+  policy each, while `updateMyLocation`'s own header says *"Strictly self-only
+  — a member can only post their own location"*. Measured as a child: taking a
+  parent off the family map with one UPDATE, filing an `arrived` event in the
+  parent's name at chosen coordinates, and deleting the whole household's live
+  positions in one call (500 rows on the seed family). Sized as a **falsified
+  and erasable safety display, not a privilege escalation**, and the gap is
+  **self-only vs role-blind — NOT manager-only**: `0215` had already hardened
+  `family_places` and its header says *"self-location (member_locations) …
+  intentionally NOT changed"*, so a manager gate here would have contradicted a
+  deliberate decision and broken every child's own location post.
+- **`0336_only_a_manager_adds_edits_or_bins_an_asset.sql`** (AUTHZ-019).
+  `home_assets` carries `0004`'s role-blind four. `components/modules/home-module.tsx`
+  states a manager rule **three times** — the Add button, the per-asset delete
+  button, and `warranty_until` rendered `disabled={!manager}` with Save hidden —
+  and **there is no server action for asset create, update or delete at all**,
+  so the client writes straight through RLS and all three gates are decoration
+  against anyone not using the UI.
+- **`0338_a_care_entry_names_who_actually_logged_it.sql`** (AUTHZ-017), and it
+  is **sharper than `0333`**, which is why the two are worth reading together.
+  Four household ledgers — `care_log`, `behavior_logs`, `screen_time_entries`,
+  `medication_doses` — each carry one `FOR ALL … is_family_member` policy
+  pinning no column, so `logged_by` was the writer's choice. Unlike
+  `parent_approvals.requested_by`, **this one is rendered**:
+  `care-module.tsx:253` draws `by {memberName(e.logged_by)}` under every entry,
+  and a child's entry of type `medication` reading *"Gave Grandma her tablets"*
+  came back as **`by Dad`**. All four stay open to every member — logging is
+  what the product is for — and only the name is pinned. NULL stays accepted on
+  `care_log` because the module writes `selfMember?.id ?? null` and the renderer
+  shows no name for a NULL rather than the wrong one.
+
+**`0334` and `0337` are permanently unused, on purpose.** `wallet_cards` and
+`family_decisions` were on the triage list and are **not defects**:
+`addCardAction` carries no role gate at all, so the application never claimed
+the rule the census inferred, and `family_decisions` has exactly one writer, a
+client module with no manager rule anywhere. A gap in the numbering says *this
+was looked at and refused*; a renumber would have said nothing. CENSUS-002 is
+what happens when a name on a triage list is taken for a verdict.
+
+**The boundary-proof suite is now re-runnable, and was not before.** 36 of the
+60 probes committed everything they seeded, two of them under the same fixed
+family id, so a **second** run of `run-probes.sh` against one database failed
+with `child_logins_member_id_fkey` — a foreign-key error wearing the costume of
+a broken boundary. CI never saw it because the Database job bootstraps a fresh
+container every time. Fixed by de-duplicating the committing probes' ids and
+wrapping the two whose seeds were not idempotent against themselves, and pinned
+by `tests/boundary-probes-are-rerunnable.test.ts`. Proved from nothing: a fresh
+bootstrap of **349 migrations, 0 failed**, then **61 of 61 probes, three runs in
+a row**.
+
 ### Three of them gate features that are already merged and live in the app
 
 These shipped today (PRs #513 and #515) and their UI is deployed. Until the
