@@ -17,7 +17,7 @@
 // would still get wrong.
 import { readFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createFormat, KNOWN_DATE_PATTERNS,
   fmtDate, fmtTime, fmtMoney,
@@ -115,7 +115,34 @@ describe('the shared formatter follows the locale', () => {
     });
   });
 
+  // `fmtRelative` answers "Today" or "Tomorrow" by asking which LOCAL calendar day
+  // a moment falls on, so a case that reads the wall clock and adds an hour asserts
+  // a different thing between 23:00 and midnight than it does at any other hour.
+  // It failed in CI at 23:04 — "Morgen, 0:05" where it wanted "Heute" — having
+  // passed on every earlier head, which is what a one-hour window in a 24-hour day
+  // looks like: right 23 runs out of 24. Reproduced here at 23:11 UTC, character
+  // for character, before it was pinned.
+  //
+  // Pinned to LOCAL noon and not to a fixed UTC instant. vitest.config.ts sets
+  // `TZ: process.env.TZ ?? 'UTC'`, so it honours a TZ already in the environment,
+  // and one absolute instant is some other hour in every other zone — 12:00Z is
+  // 23:00 in UTC+11, which puts the bug straight back for anyone running there.
+  // `new Date(y, m, d, 12, ...)` is midday wherever the suite runs, so now+1h
+  // cannot cross a day boundary anywhere.
+  //
+  // This removes a nondeterminism; it does not relax what is checked. Both
+  // assertions below still fail if `fmtRelative` stops passing the label through
+  // the catalogue — mutation-tested by dropping its `t ?` branch.
   describe('a relative label is translated', () => {
+    const LOCAL_NOON = new Date(2026, 6, 14, 12, 0, 0);
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(LOCAL_NOON);
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
     it('says Today in German when given the catalogue', () => {
       const de = createFormat('de-DE', through(DE as Record<string, string>));
       const label = de.fmtRelative(new Date(Date.now() + 60 * 60_000));
