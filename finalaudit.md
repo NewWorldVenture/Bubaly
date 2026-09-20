@@ -91,6 +91,23 @@
 >   catalogue would lower a number while changing nothing a family sees — the
 >   "optional parameter nobody passes" this audit has refused since Pass Z.
 >
+> **Every OPEN row was then checked a second way: does it contain a HAZARD that
+> can be closed without making its DECISION?** That split is what `AUTHZ-020`
+> turned out to have — nobody has to choose drop-versus-revoke for a tripwire to
+> stop the sixteen tables being wired up silently — and it is worth applying
+> deliberately rather than stumbling into. Three rows have a separable hazard,
+> and two of them were **already guarded**:
+>
+> | row | the hazard | guard |
+> |---|---|---|
+> | `AUTHZ-020` | a near-miss binding (`sync_conflict_resolutions` for `sync_conflicts`) silently adopts an unguarded table | **built this pass** — `tests/authz-020-unreferenced-tables-stay-unreferenced.test.ts`, 19 assertions, mutation-tested |
+> | `AQ-01 / I18N-003` | new hardcoded `'en-US'` money formatters get added while the 51 are unconverted | **already there** — `tests/hardcoded-locales-only-go-down.test.ts`, a ratchet whose number may only go down |
+> | `BD-02 / ARCH-001` | the `useFormStatus` shim outlives the React split and nobody notices it is dead code | **already there** — `tests/a-form-in-flight-cannot-be-submitted-twice.test.ts` asserts `react-dom` is still `^18`, *"if react-dom is 19 now, this guard and the shim can go"* |
+>
+> The other twelve have no hazard separable from their decision: a measurement
+> kept as a measurement has nothing to guard, and a product choice like *"what
+> is a duplicate grocery item"* has nothing to trip on until it is made.
+>
 > So the finding rows are at the state an audit reaches on its own. What keeps
 > **PRODUCTION READY: NO** is not those fifteen: it is the 22 Critical Blockers
 > below, nearly all of which read *"deployed / hosted / real provider remains
