@@ -81,7 +81,14 @@ begin
     from pg_trigger tg join pg_proc p on p.oid = tg.tgfoid
    where not tg.tgisinternal
      and p.prokind = 'f'
-     and p.prosrc ~* 'update\s+(public\.)?(care_log|behavior_logs|screen_time_entries|medication_doses)\M';
+     -- COMMENTS ARE STRIPPED BEFORE MATCHING. Measured: a trigger function whose
+     -- body is nothing but `-- never update care_log from here` made this
+     -- migration exit 3 and the probe exit 3, with an error sending the reader
+     -- to hunt a nested UPDATE that does not exist. CI replays every migration,
+     -- so one unrelated code comment anywhere in the schema turned the Database
+     -- job red.
+     and regexp_replace(p.prosrc, '--[^\n]*', '', 'g')
+           ~* 'update\s+(public\.)?(care_log|behavior_logs|screen_time_entries|medication_doses)\M';
   if offenders is not null then
     failures := array_append(failures,
       'a trigger now issues a nested UPDATE against a guarded ledger (' || offenders || '), so depth = 1 no longer covers every application write');

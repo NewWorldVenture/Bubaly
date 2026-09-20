@@ -53,9 +53,29 @@
 -- through `family_id` CASCADE, so the rows are gone before the column matters.
 --
 -- What IS exposed: deleting an auth user from the Supabase dashboard or the
--- admin API, and any future account-deletion or GDPR-erasure feature, which
--- would fail on its first real user -- silently, leaving the name of the deleted
--- person attached to rows a `care-module.tsx:253`-style renderer still draws.
+-- admin API, and any future account-deletion or GDPR-erasure feature.
+--
+-- "SILENTLY" IS TRUE OF A MINORITY OF REAL USERS, and the first draft of this
+-- header said it flatly. Measured on pg_constraint where confrelid =
+-- 'auth.users': 432 SET NULL, 21 CASCADE, and 40 NO ACTION -- the last group
+-- including financial_accounts, transactions, budgets, bills, savings_goals,
+-- grades, teams and family_routines. So deleting a user who ever created a
+-- financial account fails LOUDLY on financial_accounts_created_by_fkey,
+-- regardless of this migration. The silent face appears only for a user whose
+-- authorship is confined to these four ledgers. For a typical parent the
+-- erasure cannot complete at all, and fails from an unrelated table.
+--
+-- That narrows the claim without weakening the fix: 0340 is still required for
+-- the users it does reach, and the rows it leaves behind are ones a
+-- `care-module.tsx:253`-style renderer still draws by name.
+--
+-- ANONYMISATION BY UPDATE REMAINS A SILENT NO-OP, which is worth stating
+-- because it is the obvious workaround someone will reach for. Measured on all
+-- four ledgers: `update public.behavior_logs set logged_by = null` at depth 1
+-- reports UPDATE 1 and leaves the column unchanged -- the freeze is doing
+-- exactly its job. Only an actual DELETE of the referenced row clears the
+-- attribution. A "forget me but keep my data" feature cannot be built on an
+-- UPDATE here, and would need its own depth-2 path or a service-role writer.
 --
 -- ── THE GUARD ────────────────────────────────────────────────────────────────
 --
@@ -79,8 +99,20 @@
 --   * the UPDATE is built by `execute format(...)` -- the table name is not in
 --     the source text at all;
 --   * and in the other direction it FALSE-POSITIVES on a COMMENT, so a trigger
---     function merely mentioning these tables in prose makes this migration
---     unreplayable.
+--     function merely mentioning these tables in prose made this migration
+--     unreplayable -- now fixed by stripping comments before matching.
+--
+-- And three ORDINARY STATIC SPELLINGS evade it, each measured against the
+-- shipped regex. These matter more than the exotic cases above, because a
+-- developer writes them without thinking:
+--
+--     update only public.care_log ...
+--     update "care_log" ...        /  update public."care_log" ...
+--     update public . care_log ...
+--
+-- `update only` is worse than an accident: it is what someone reaching for
+-- inheritance-safe SQL picks deliberately. An incomplete list of known gaps
+-- reads as a complete one, so all of them are named here.
 --
 -- It is kept because it catches the obvious shape and fails loudly, and because
 -- the alternative -- proving no nested write exists -- is not something a text
@@ -216,7 +248,14 @@ begin
     join pg_proc p on p.oid = tg.tgfoid
    where not tg.tgisinternal
      and p.prokind = 'f'
-     and p.prosrc ~* 'update\s+(public\.)?(care_log|behavior_logs|screen_time_entries|medication_doses)\M';
+     -- COMMENTS ARE STRIPPED BEFORE MATCHING. Measured: a trigger function whose
+     -- body is nothing but `-- never update care_log from here` made this
+     -- migration exit 3 and the probe exit 3, with an error sending the reader
+     -- to hunt a nested UPDATE that does not exist. CI replays every migration,
+     -- so one unrelated code comment anywhere in the schema turned the Database
+     -- job red.
+     and regexp_replace(p.prosrc, '--[^\n]*', '', 'g')
+           ~* 'update\s+(public\.)?(care_log|behavior_logs|screen_time_entries|medication_doses)\M';
   if offenders is not null then
     raise exception '0340: a trigger now issues a nested UPDATE against a table the attribution freeze guards (%), so pg_trigger_depth() = 1 no longer covers every application write — re-derive the guard rather than widening it', offenders;
   end if;
