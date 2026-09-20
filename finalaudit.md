@@ -26,12 +26,12 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 
 ## Audit Status — Session A (this register)
 - Started: 2026-09-13
-- Last Updated: 2026-09-19
+- Last Updated: 2026-09-20
 - Total Audit Items: 821
 - Not Started: 439
 - In Progress: 373
 - Passed: 9
-- Fixed + Passed: see Part 0 — 169 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 179 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -115,6 +115,7 @@ PRODUCTION READY: NO
 | B4 | **Production schema never verified** | The audit replays migrations into a local PG17/16; whether production matches is unverified. |
 | B5 | **No real screen reader, no `forced-colors`** | Accessibility findings are axe-derived plus static analysis. |
 | B6 | **The `family-media` bucket is public, and both audits found it independently** | Session A recorded it as `F-E03` (deferred behind runbook `LB-009`); Session B reached the same object from the deployed side as `SEC-001` and rates it **FAIL** — six uploaders and their consumers publish public URLs, so unguessable object names are the only thing standing between a family's photos and anyone with the link. Migration `0330` narrowed what the bucket will *accept* (16 MIME types, no `svg`/`html`) but deliberately did **not** flip `public` to false: that turns every already-published URL dead and requires signed URLs at six call sites plus the reminder/message/photo consumers. It is a product decision with a migration attached, not a repo-local fix, so it is named here rather than silently deferred. |
+| B7 | **This container runs Node 22.22.2; the repository declares 24.21.0** | `.nvmrc` and `engines.node` were bumped by the parallel session. `nvm` cannot fetch the Node 24 distribution from here, so `tests/node-version-is-pinned.test.ts` and `tests/stream-cancellation-runtime.test.ts` cannot pass locally. CI resolves Node from `.nvmrc`, so hosted runs use 24. Not counted as PASS. Audit `C1-S9-09`. |
 
 *Per the brief: a BLOCKED item does not count as PASS, and while B1 affects
 security-critical functionality the release gate stays NO.*
@@ -31278,6 +31279,356 @@ Suite: **1,253 files / 14,091 tests, 0 failures.**
 
 
 ---
+
+# Pass AF — merge #6, and what taking a file wholesale costs
+
+*Session 9, 2026-09-20. Claude-1. Merging `origin/main` into the audit branch
+for the second time, after the parallel session advanced ~10 commits. Ten
+findings, `C1-S9-01`…`C1-S9-10`. Two of them are defects this session
+INTRODUCED and then caught, which is recorded here rather than quietly fixed,
+because the mechanism that produced them will produce more.*
+
+## The shape of this merge
+
+Thirteen conflicts. The rule carried over from merge #5 held: where the two
+sessions fixed different halves of one defect class, keep both halves; where one
+is strictly better, take it and say why. Four resolutions are worth naming:
+
+- **The urgent-escalation race.** This branch fixed `C1-S7-04` with a boolean
+  (`if (filed.inserted && shouldNotifyFamily(...))`). main built a durable
+  urgent-delivery RECEIPT. main's is strictly better and this branch's was
+  dropped: a boolean read of "was this delivery new" is a read-then-act race —
+  two concurrent Twilio retries can both observe "new" before either files —
+  whereas the receipt CLAIMS the dispatch by compare-and-set into phase
+  `dispatching` before it can send. Taking the weaker fix because it was ours
+  would have been the whole point of the exercise, inverted.
+- **The focus class.** main's `focus-visible:focus-ring` and this branch's
+  `focus-ring` were not a disagreement. `C2-B01` moved the `:focus-visible`
+  scoping INTO the utility, so main's prefix is a leftover. Kept main's
+  `disabled` guard, this branch's class; the C2-B01 guard still sweeps for the
+  prefix and the tree is clean.
+- **The prompt fence.** Restored main's prompt line order, which main's test
+  pins, and kept this branch's untrusted-content fences. The inner
+  `safeContactText` at that call site is load-bearing rather than
+  belt-and-braces, for the reason `C1-S9-10` below records.
+- **Two registers, one file.** `finalaudit.md` now carries both sessions'
+  audits. Their ID schemes are disjoint — 891 IDs here, 684 there, 1,572 in
+  union, verified mechanically before and after. The three literals both files
+  contain are two shared *runbook* names and one hash algorithm the ID regex
+  matches. Neither register was trimmed to make room for the other.
+
+---
+
+### `[CLAUDE-1][HIGH][SECURITY]` C1-S9-01 — a merge deleted an SSRF control, and the helper stayed behind to look like it hadn't
+
+**File:** `lib/server/push.ts`, `lib/server/push-endpoint.ts`
+
+**Problem.** Resolving the `push.ts` conflict with `git checkout --theirs`, this
+session verified that its `C1-S8-14` device-roster fix had survived — main had
+made the identical fix independently — and moved on. It did not verify that the
+FILE had survived. The re-check that resolves a push endpoint's host before
+every send and fails closed (`C3-S5-03`) was in this branch only. It went.
+
+**Evidence.** `isDeliverablePushEndpoint` still existed and was still exported
+from `lib/server/push-endpoint.ts`; nothing in `lib/` called it. The dedicated
+guard `tests/push-endpoint-ssrf-guard.test.ts` went red on
+`expected to find: "isDeliverablePushEndpoint("` — the only reason this was
+caught at all.
+
+**Impact.** Every web-push delivery would POST to whatever host a
+`push_devices` row named, with no re-resolution. The row outlives the check
+that admitted it and DNS can change underneath it; that is precisely why the
+re-check exists.
+
+**Fix.** Restored the call and its import. main's two push tests then failed,
+because they do not stub the endpoint check and their fixture hosts do not
+resolve — so a send became a skip. Stubbed it in both, the way this branch's own
+push tests already did, with the control itself still asserted in its own file.
+
+**Status:** FIXED. Guard: `tests/push-endpoint-ssrf-guard.test.ts` (9 assertions).
+
+**Lesson, recorded because it generalises:** *verifying that one fix survived a
+file-level `--theirs` is not verifying that the file survived.* After this,
+every `--theirs` in this merge was followed by a diff of the pre-merge version's
+exported symbols and distinctive log strings against the result. That sweep
+found `C1-S9-02` immediately.
+
+---
+
+### `[CLAUDE-1][MEDIUM][DELIVERY]` C1-S9-02 — a retry with no bound is a permanent alarm
+
+**File:** `lib/server/push.ts`
+
+**Problem.** Found by the symbol/log diff described above: this branch's
+`PUSH_RETRY_WINDOW_MS` and its give-up logic were gone with the same
+`--theirs`. main's rule was `if (r.failed > 0 || r.skipped > 0) continue;` —
+retry on any incomplete delivery, with **no age bound at all**.
+
+**Impact.** One permanently dead endpoint among a family's devices holds the
+notification row pending for ever. `pushed_at` is never stamped, so every
+two-hourly scan re-sends to the devices that DID receive it. The family is
+re-buzzed indefinitely for one notification, and no log line ever says the
+notification was not delivered.
+
+**Fix, as a union rather than a revert.** main's retry CONDITION is the more
+generous one — it retries a partial delivery rather than writing it off — and is
+kept exactly. This branch's age bound is added on top, so the unbounded case
+cannot occur. One deliberate narrowing: the bound applies to genuine `failed`
+deliveries only. A `skipped` row is missing VAPID/FCM/APNs configuration, which
+is an operator problem that gets repaired, unlike a dead endpoint; expiring
+those would silently drop every notification raised during a misconfiguration
+window, and since nothing is being sent meanwhile, none of them can be buzzing
+anyone twice.
+
+**Status:** FIXED. Guards: `tests/push-failure-is-not-delivery.test.ts`,
+`tests/push-device-read-is-not-an-empty-roster.test.ts` (both stubs taught about
+main's new `app_settings` dispatch cursor), and main's
+`tests/push-delivery-retry.test.ts` / `tests/push-cursor-fairness.test.ts` kept
+green.
+
+---
+
+### `[CLAUDE-1][MEDIUM][TESTING]` C1-S9-03 — three of the parallel session's assertions were satisfied by the import line
+
+**Files:** `tests/guardian-callback-security.test.ts:34`,
+`tests/marketing-delivery-action-boundaries.test.ts:10,19`
+
+**Problem.** `tests/boundary-helpers-must-be-called.test.ts` — this branch's
+guard for `C4-S5-01` — went red on main's tests. Three assertions named a
+boundary helper WITHOUT a trailing `(`: `toContain('readBoundedRequestFormData')`,
+`toContain('marketingActionFailure')` twice. The import line satisfies each.
+
+**Impact.** Exactly the `C4-S5-01` class: the assertion survives deletion of the
+call it is named for. Here that covers a bounded form-data read on a signed
+Twilio callback and the failure path of two marketing delivery actions.
+
+**Fix.** Appended `(` to all three. All still pass, so the call sites are real —
+the assertions were weak, not wrong.
+
+**Status:** FIXED. This is the second session in which the `C4-S5-01` guard has
+caught live instances written by someone who had not read it, which is the
+argument for its existence.
+
+---
+
+### `[CLAUDE-1][MEDIUM][TESTING]` C1-S9-04 — eleven ordering assertions on bare `indexOf`
+
+**Files:** `tests/contact-center-sms-ingress-route.test.ts` (3),
+`tests/guardian-callback-security.test.ts` (5),
+`tests/guardian-sms-intake-execution.test.ts`,
+`tests/marketing-delivery-action-boundaries.test.ts`,
+`tests/social-publish-persistence.test.ts`
+
+**Problem.** `tests/ordering-guards-fail-on-absence.test.ts` (the `C4-S5-02`
+guard) found eleven ordering assertions written on bare `indexOf`, where `-1`
+is less than every real index — so the guard passes most convincingly when the
+statement it names has been deleted. Among them: the signature check preceding
+the leased processor on the signed guardian SMS route, and the claim preceding
+`processOwned`.
+
+**Fix.** All eleven converted to `at()`, which asserts presence first. Two of
+them were array call-log assertions rather than source text, which `at()` also
+covers — the sentinel is a property of `indexOf`, not of strings.
+
+**Notable:** none went red on conversion. Every needle was genuinely present, so
+this closed a latent vacuity rather than uncovering a missing statement. That is
+worth stating explicitly: the sweep's value here was proving the guards mean
+what they say, not finding a bug behind them.
+
+**Status:** FIXED (227 assertions across the six files pass).
+
+---
+
+### `[CLAUDE-1][HIGH][AUTH]` C1-S9-05 — five new pre-auth server actions, and the difference between "no session" and "no credential"
+
+**File:** `app/(auth)/auth/complete/actions.ts`, `app/(auth)/auth/recovery/actions.ts`
+
+**Problem.** `tests/every-server-action-reaches-auth.test.ts` went from six
+unguarded actions to eleven. Every `'use server'` export is a public POST
+endpoint, and five new ones reached no authentication call —
+`completeCallbackAction`, and all four recovery actions including
+`saveRecoveryAction`, which **changes a password**.
+
+**Analysis.** All five are genuinely pre-auth: a user completing a sign-in or
+recovering a password has no session by definition, so no `requireUser`-shaped
+call can appear and the scan cannot credit them. They are not unauthenticated.
+`completeCallbackAction`'s credential is the owned PKCE verifier;
+`consumeRecoveryAction` does a timing-safe compare of the handoff against the
+recovery cookie before verifying the grant; `inspectRecoveryAction` and
+`saveRecoveryAction` verify the grant against the cookie token before reading
+identity or writing a password.
+
+**Fix, and why not the obvious one.** The obvious fix is five new entries in the
+`PUBLIC_BY_DESIGN` allow-list. That is a sentence in a test file, and sentences
+do not fail builds — it would leave nothing between a password-change endpoint
+and an unauthenticated caller. Instead each is listed WITH the credential check
+it must still reach, in a new `CREDENTIAL_GATED` table, asserted against the
+action's own body. Removing `verifyRecoveryGrant` from `inspectRecoveryAction`
+was mutation-tested and fails the guard.
+
+**Status:** VERIFIED (all five are credential-gated) + FIXED (the exemption is
+now pinned, so "pre-auth" cannot quietly become "unchecked").
+
+---
+
+### `[CLAUDE-1][LOW][SECURITY]` C1-S9-06 — the credential store's new gateway
+
+**File:** `lib/social/account-tokens.ts`
+
+**Problem.** `tests/social-tokens-stay-service-role-only.test.ts` — the guard
+from `C3-S5-01`, which exists because `social_account_tokens` is a policy-less
+OAuth credential store — flagged a new file reaching the table.
+
+**Analysis.** Not a breach: the module is the service-role gateway the guard's
+name asks for. `type Db = ReturnType<typeof createServiceClient>`, and it does
+its own authorization (`requireUserContext` then `requireSocialPermission`)
+because bypassing RLS is only safe if the module authorizes for itself.
+
+**Fix.** Exempted, but pinned rather than waved through: the guard now asserts
+the service-role import, the absence of any browser client, and that the actor
+check reaches `requireUserContext` before `requireSocialPermission` and fails
+closed. A later swap to a user-scoped client fails the guard.
+
+**Status:** VERIFIED + FIXED (guard tightened).
+
+---
+
+### `[CLAUDE-1][LOW][TESTING]` C1-S9-07 — the sibling of the `-1` sentinel: a slice that is silently empty
+
+**File:** `tests/helpers/source-order.ts`, six test files
+
+**Problem.** Caught by mutation-testing this session's own re-pointed guard. A
+mutation that made the native push branch count a failure as `skipped` SURVIVED.
+Following the standing rule — *a mutation that fails to kill is a claim about
+the mutation first, and only then about the guard* — the mutation was correct
+and the guard was weak twice over:
+
+1. The assertion searched from the native branch to end-of-file and was
+   satisfied by an unrelated `else result.failed++;` further down.
+2. Fixing that with `push.slice(at(push, branchStart), at(push, '} catch {'))`
+   introduced a worse defect: `at()` searches from the START of the file, there
+   is a `} catch {` ABOVE the branch, so the end bound preceded the start and
+   the slice was the **empty string** — on which every `toContain` fails and
+   every `not.toContain` passes. The guard went red for the wrong reason and
+   would have gone green for the wrong reason just as easily.
+
+**Impact.** A whole vacuity class the `C4-S5-02` work did not name. `at()` fixed
+the `-1` sentinel; the two-bound slice reintroduces the same hazard in a shape
+that looks ordering-safe.
+
+**Fix.** Closed structurally rather than instance by instance: a new
+`between(source, start, end)` helper asserts both needles are present AND in the
+stated order, and six two-argument slices across the test suite were converted
+to it. A new rule in `tests/ordering-guards-fail-on-absence.test.ts` forbids the
+`.slice(at(…), at(…))` pattern from returning, and `between()` has its own
+self-test for the degenerate case.
+
+**Status:** FIXED. Both the original mutation and the empty-slice case are now
+killed.
+
+---
+
+### `[CLAUDE-1][LOW][TESTING]` C1-S9-08 — a fixture that expires as the calendar moves
+
+**File:** `tests/push-delivery-retry.test.ts`
+
+**Problem.** After `C1-S9-02` restored the retry window, one of main's tests
+failed: it expects a transient provider failure to stay pending for the next
+scan, but its fixture pinned `created_at` to a fixed past date while the cron
+entry points under test call `dispatchPendingPushes` WITHOUT an injected `now`.
+Eight days of wall clock had passed since that date, so the row aged out.
+
+**Analysis.** The test's intent is right and the control is right; the fixture
+is the artefact. A row described as "created now" was eight days old in real
+time, turning "retries a transient failure" into "gives up" — a different
+behaviour than the test is named for. Left unfixed it would have looked like an
+argument against the retry window.
+
+**Fix.** The fixture's `created_at` is real-clock fresh, deliberately not the
+frozen `NOW`, with the reason in a comment so it is not "tidied" back.
+
+**Status:** FIXED.
+
+---
+
+### `[CLAUDE-1][BLOCKED][ENVIRONMENT]` C1-S9-09 — two test files cannot be run here
+
+**Files:** `tests/node-version-is-pinned.test.ts`, `tests/stream-cancellation-runtime.test.ts`
+
+**Problem.** The parallel session bumped `.nvmrc` from `22.22.2` to `24.21.0`
+and `engines.node` to `>=24.21.0 <25`. This container runs Node **22.22.2**.
+
+**Evidence.** `node-version-is-pinned` fails with
+`running Node 22.22.2, repository declares 24.21.0`.
+`stream-cancellation-runtime` fails on a Node-internals error
+(`controller[kState].transformAlgorithm is not a function`) that the newer
+runtime does not raise. Both are runtime-support assertions, not application
+defects. `nvm install 24.21.0` cannot fetch the distribution from this
+container.
+
+**Why this is BLOCKED and not FAIL or PASS.** CI resolves Node from
+`node-version-file: .nvmrc` at three job sites, so hosted runs use 24.21.0 and
+the parallel session reports both zones green there. This session has not
+observed that and does not claim it. Per the brief, a BLOCKED item does not
+count as PASS.
+
+**Status:** BLOCKED — external dependency: a Node 24 runtime in the audit
+container. Everything else is green: `tsc` clean, **16,910 / 16,913 tests pass
+across 1,343 files**, lint 0 errors / 3 pre-existing warnings.
+
+---
+
+### `[CLAUDE-1][LOW][SECURITY]` C1-S9-10 — the prompt fence cut emoji in half
+
+**File:** `lib/ai/safety/untrusted.ts`
+
+**Problem.** Noticed while resolving the concierge conflict. Both fences bounded
+their content with a plain `.slice(maxChars)`. When the budget lands between the
+two halves of a surrogate pair, a **lone surrogate** goes into the prompt — the
+same defect `safeContactText` exists to prevent on the storage side, reached
+from the prompt side.
+
+**Evidence and reach.** Eight call sites use `fenceUntrustedBlock`. Exactly one
+— the Contact Center concierge — pre-bounded scalar-safely, and only because
+main's `safeContactText` and this branch's fence were composed during the merge.
+The other seven (tool results, purchase evidence, briefing data, pasted import
+text, insight payloads, paperwork OCR) pass household text straight in.
+
+**Fix.** Corrected in the helper rather than at the call sites, which fixes all
+eight at once: a `cutToScalar` bound drops a trailing unpaired high surrogate,
+used by both `sanitizeUntrusted` and `fenceUntrustedBlock`. The concierge's
+inner `safeContactText` is kept and its comment now says why it is load-bearing
+rather than redundant.
+
+**Status:** FIXED. Guard: four cases appended to
+`tests/untrusted-fence-ratchet.test.ts`, each proved red against the old slice —
+including one that initially passed against the old code because the input was
+short enough to return early, and was lengthened until it exercised the cut.
+
+---
+
+## What this pass did NOT establish
+
+- No deployed or hosted verification. Every claim here is from local `tsc`,
+  the local suite, and reading the code. Blockers B1–B5 are unchanged.
+- `C1-S9-01` and `C1-S9-02` were introduced and caught inside one session. The
+  symbol-and-log diff that caught the second was run against `push.ts` only
+  after the first was found. It has **not** been run against every file this
+  merge resolved with `--theirs`, which is the honest limit of the sweep:
+  `app/api/contact-center/sms/route.ts`,
+  `app/api/contact-center/voice/transcription/route.ts`,
+  `tests/guardian-callback-security.test.ts` and
+  `tests/marketing-delivery-action-boundaries.test.ts` were each reasoned about
+  individually and their unique contributions confirmed subsumed, but not
+  diffed symbol-by-symbol. Recorded as an open follow-up rather than described
+  as a completed sweep.
+- `C2-13` (Claude-2's claim that `components/capture/document-capture.tsx:24`
+  has a genuine ref-in-cleanup bug) remains contradicted and unwritten-up. The
+  cleanup does `generation.current++`, which increments AT cleanup time rather
+  than capturing a stale value — correct as an invalidation counter, and C2's
+  proposed fix of copying to a local would introduce the bug it describes. The
+  lint warning is a false positive here. Still to be written up in full.
+
 
 # Final Regression
 

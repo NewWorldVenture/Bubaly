@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { at } from './helpers/source-order';
+import { at, between } from './helpers/source-order';
 
 /**
  * Audit C1-S4-01.
@@ -30,7 +30,7 @@ describe('the money webhook does not consume events it cannot process', () => {
   });
 
   it('acknowledges an unhandled type without marking it processed', () => {
-    const gate = source.slice(at(source, '!HANDLED_EVENT_TYPES.has(event.type)'), at(source, 'recordEvent(supabase, event)'));
+    const gate = between(source, '!HANDLED_EVENT_TYPES.has(event.type)', 'recordEvent(supabase, event)');
     expect(gate).toContain('received: true, handled: false');
     expect(gate).not.toContain('markEventProcessed');
     expect(gate).not.toContain('recordEvent');

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { at } from './helpers/source-order';
+import { at, between } from './helpers/source-order';
 
 /**
  * Audit C1-S6-04 / C1-S6-05 — the native push branch, which Claude-3's session 5
@@ -36,12 +36,12 @@ describe('a native push token the provider calls dead is pruned', () => {
 
   it('treats only the documented provider verdict as "this registration is gone"', () => {
     // FCM: a 404 alone is a permission/project/path error and must NOT prune.
-    const fcm = native.slice(at(native, 'async function sendFcm('), at(native, 'function apnsBearer('));
+    const fcm = between(native, 'async function sendFcm(', 'function apnsBearer(');
     expect(fcm).toContain("response.status === 404");
     expect(fcm).toContain("errorCode === 'UNREGISTERED'");
     expect(fcm).toContain("'type.googleapis.com/google.firebase.fcm.v1.FcmError'");
     // Both conditions, not either: the status is necessary but not sufficient.
-    expect(fcm.slice(at(fcm, "response.status === 404"), at(fcm, "'unregistered' : 'failed'"))).toContain('&&');
+    expect(between(fcm, "response.status === 404", "'unregistered' : 'failed'")).toContain('&&');
 
     // APNs: 410 AND reason Unregistered.
     expect(native).toContain("status === 410 && reason === 'Unregistered' ? 'unregistered' : 'failed'");
@@ -58,7 +58,7 @@ describe('a native push token the provider calls dead is pruned', () => {
     const branch = push.slice(at(push, 'const outcome = await sendNativePush('));
     expect(branch).toContain('const { error: pruneError }');
     expect(at(branch, 'if (pruneError)')).toBeLessThan(at(branch, 'result.pruned++'));
-    expect(branch.slice(at(branch, 'if (pruneError)'), at(branch, 'result.pruned++'))).toContain('result.failed++');
+    expect(between(branch, 'if (pruneError)', 'result.pruned++')).toContain('result.failed++');
   });
 
   it('a swallowed provider throw still reaches the caller as a counted failure', () => {

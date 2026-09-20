@@ -23,3 +23,24 @@ export function at(source: string | readonly unknown[], needle: unknown): number
     .toBeGreaterThan(-1);
   return i;
 }
+
+/**
+ * The slice BETWEEN two needles, asserted non-empty.
+ *
+ * `at()` fixed the `-1` sentinel but not its sibling. `src.slice(at(src, a),
+ * at(src, b))` looks like an ordering-safe slice and is not: both bounds are
+ * searched from the start of the file, so if `b` occurs BEFORE `a` the slice is
+ * the empty string — and every `toContain` on an empty string fails, while
+ * every `not.toContain` passes. Found in this repository's own guard for the
+ * native push branch, where a `} catch {` above the branch under test silently
+ * emptied the slice and made three assertions vacuous.
+ *
+ * This asserts both needles are present AND in the stated order, so the
+ * degenerate case is a failure rather than a quiet pass. Audit C1-S9-07.
+ */
+export function between(source: string, start: string, end: string): string {
+  const a = at(source, start);
+  const b = at(source, end);
+  expect(b, `expected ${JSON.stringify(end)} to come after ${JSON.stringify(start)}`).toBeGreaterThan(a);
+  return source.slice(a, b);
+}

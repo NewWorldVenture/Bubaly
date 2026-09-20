@@ -1083,3 +1083,38 @@ TWO THINGS SETTLED RATHER THAN ACCEPTED:
     ways (bail removed; bail moved after the clobber).
 SUITE: 1,261 files / 14,127 tests, 0 failures. tsc clean.
 LAST-UPDATE: 2026-09-19
+
+## Claude-1 — Session 9 (merge #6, and what taking a file wholesale costs)
+COMPLETE. 10 findings, `C1-S9-01`…`C1-S9-10` (1 HIGH-security, 1 HIGH-auth,
+2 MEDIUM-testing, 1 MEDIUM-delivery, 3 LOW, 1 BLOCKED). Merged `origin/main`
+(13 conflicts) and recorded both registers in finalaudit.md without trimming
+either: 891 IDs here, 684 there, 1,572 in union, verified mechanically.
+HEADLINE: `C1-S9-01` — resolving `lib/server/push.ts` with `git checkout
+--theirs` after verifying that ONE of my fixes to it had survived deleted the
+per-send SSRF re-check (`C3-S5-03`). The helper stayed exported and uncalled,
+so the tree still looked right. Its own guard caught it. `C1-S9-02` (an
+unbounded push retry that re-buzzes healthy devices for ever) was found by the
+symbol-and-log diff added in response.
+COUNTERWEIGHT: `C1-S9-03`/`C1-S9-04` — this branch's two vacuity guards
+(`C4-S5-01`, `C4-S5-02`) caught 14 live instances in the parallel session's
+tests. None went red on conversion, so they closed latent vacuity rather than
+uncovering missing statements. `C1-S9-07` names a vacuity class neither guard
+covered — a slice between two `at()` bounds can be silently EMPTY — now closed
+with a `between()` helper and a rule forbidding the old pattern.
+FILES-TOUCHED: `lib/server/push.ts`, `lib/ai/safety/untrusted.ts`,
+`lib/contact-center/concierge.ts`, `components/modules/voice-module.tsx`,
+`components/auth/kid-login-form.tsx`, `lib/server/native-push.ts` (import
+rename only), `lib/social/x-oauth.ts` (import rename only), `tests/helpers/
+source-order.ts`, and 14 test files. Per rule 9, nothing under another worker's
+FILES-TOUCHED was modified.
+GATE: `tsc` clean. 16,910/16,913 tests pass across 1,343 files. Lint 0 errors,
+3 pre-existing warnings. The 3 failures are `C1-S9-09`: BLOCKED on this
+container running Node 22.22.2 against the repository's `.nvmrc` 24.21.0.
+BLOCKERS: B1-B5 unchanged; B6 added (the public `family-media` bucket, where
+this register's `F-E03` and the parallel session's `SEC-001` are one finding
+reached from two directions); B7 added (the Node runtime above).
+OPEN: the symbol-and-log diff has been run against `push.ts` only, not against
+every file this merge took with `--theirs`. Named as a follow-up in Pass AF
+rather than described as a completed sweep. `C2-13` remains contradicted and
+still needs writing up.
+LAST-UPDATE: 2026-09-20

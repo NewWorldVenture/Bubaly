@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { at } from './helpers/source-order';
+import { at, between } from './helpers/source-order';
 
 /**
  * Audit C1-S6-01 — generalised from C4-S4-09.
@@ -41,7 +41,7 @@ describe('a file the user deleted is really deleted', () => {
   it.each(OBJECT_FIRST)('%s reports the refusal and does not claim success', (path, _remove, rowDelete) => {
     const source = read(path);
     // Everything between the check and the row delete is the refused path.
-    const refusal = source.slice(at(source, 'if (storageError)'), at(source, rowDelete));
+    const refusal = between(source, 'if (storageError)', rowDelete);
     expect(refusal, 'the refusal must reach the user').toContain('toastError(');
     expect(refusal, 'nothing may claim success before the row is even deleted').not.toContain('success(');
   });

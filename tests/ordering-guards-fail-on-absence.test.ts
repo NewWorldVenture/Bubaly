@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { at } from './helpers/source-order';
+import { at, between } from './helpers/source-order';
 
 /**
  * The meta-guard for audit C4-S5-02.
@@ -40,5 +40,32 @@ describe('ordering guards fail when the statement they name is absent', () => {
     expect(() => at('const a = 1;', 'never written')).toThrow();
     expect(at('alpha beta', 'beta')).toBeGreaterThan(at('alpha beta', 'alpha'));
     expect(at(['a', 'b'], 'b')).toBe(1);
+  });
+
+  it('between() refuses the empty slice that bounds-in-the-wrong-order produces', () => {
+    expect(between('alpha beta gamma', 'alpha', 'gamma')).toBe('alpha beta ');
+    // The sibling of the -1 sentinel: both bounds are searched from the START,
+    // so asking for the text between a LATER needle and an EARLIER one yields
+    // '' — on which every toContain fails and every not.toContain passes.
+    expect(() => between('alpha beta gamma', 'gamma', 'alpha')).toThrow();
+    expect(() => between('alpha beta', 'alpha', 'never written')).toThrow();
+  });
+
+  it('no test slices between two at() calls, which can silently be empty', () => {
+    const offenders: string[] = [];
+    for (const file of readdirSync('tests')) {
+      if (!file.endsWith('.test.ts')) continue;
+      const lines = readFileSync(`tests/${file}`, 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
+        .replace(/\/\/[^\n]*/g, '')
+        .split('\n');
+      lines.forEach((line, i) => {
+        // `.slice(at(x, a), at(x, b))` — use between() so the degenerate case
+        // is a failure. An arithmetic bound (`at(x, a) - 60`) is deliberate and
+        // is left alone.
+        if (/\.slice\(\s*at\([^)]*\)\s*,\s*at\(/.test(line)) offenders.push(`tests/${file}:${i + 1}`);
+      });
+    }
+    expect(offenders, 'use between() from tests/helpers/source-order.ts instead').toEqual([]);
   });
 });

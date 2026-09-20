@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { at } from './helpers/source-order';
+import { at, between } from './helpers/source-order';
 
 /**
  * Audit C1-S6-06.
@@ -39,7 +39,7 @@ describe('the binder’s sensitive flag is enforced where it cannot be bypassed'
   });
 
   it('keeps both halves of the update, so the flag cannot be cleared to read the value', () => {
-    const update = sql.slice(at(sql, 'create policy household_info_update'), at(sql, 'create policy household_info_delete'));
+    const update = between(sql, 'create policy household_info_update', 'create policy household_info_delete');
     expect(update).toContain('using (');
     expect(update).toContain('with check (');
   });
