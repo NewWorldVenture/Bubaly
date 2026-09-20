@@ -42,13 +42,13 @@ declare
   checked  int := 0;
 begin
   if not exists (select 1 from pg_available_extensions where name = 'plpgsql_check') then
-    raise notice 'plpgsql-bodies-resolve: SKIP — plpgsql_check is not available on this server';
+    raise warning 'PROBE-SKIPPED: plpgsql-bodies-resolve — plpgsql_check is not available on this server';
     return;
   end if;
   begin
     create extension if not exists plpgsql_check;
   exception when others then
-    raise notice 'plpgsql-bodies-resolve: SKIP — plpgsql_check could not be installed (% %)', sqlstate, sqlerrm;
+    raise warning 'PROBE-SKIPPED: plpgsql-bodies-resolve — plpgsql_check could not be installed (% %)', sqlstate, sqlerrm;
     return;
   end;
 

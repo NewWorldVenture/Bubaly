@@ -215,10 +215,32 @@ jobs:
       - name: ON CONFLICT targets are inferable
         run: node scripts/check-conflict-targets.mjs
 
+      # `plpgsql-bodies-resolve-check.sql` resolves every plpgsql body against
+      # the real catalogue, which needs plpgsql_check. The image does not ship
+      # it, and WITHOUT THIS STEP that probe skips — which is how the class it
+      # catches stayed invisible in the first place. The package is installed
+      # into the running service container; PROBES_REQUIRE_ALL below turns a
+      # skip into a failure, so if this step ever stops working the suite says
+      # so instead of quietly running one probe fewer.
+      - name: Install plpgsql_check into the database container
+        run: |
+          docker exec ${{ job.services.postgres.id }} bash -c '
+            apt-get update -qq
+            apt-get install -y --no-install-recommends postgresql-16-plpgsql-check
+          '
+          psql -Atc "select 1 from pg_available_extensions where name = 'plpgsql_check'" | grep -q 1
+
       # Each probe asserts with RAISE EXCEPTION under ON_ERROR_STOP=1. Covers
       # both directions of the 0118 failure: another family reading your rows,
       # and your own family losing access to them.
+      #
+      # PROBES_REQUIRE_ALL makes a SKIPPED probe fatal. A probe that cannot run
+      # is not a probe that passed, and the runner used to print a skip as PASS
+      # and count it as one — the same defect this suite exists to find, in the
+      # suite itself.
       - name: Boundary probes
+        env:
+          PROBES_REQUIRE_ALL: '1'
         run: bash docs/audit/run-probes.sh
 
       # Production's ledger records only 0001-0003 while its schema carries all

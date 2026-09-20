@@ -77,7 +77,7 @@ declare
   held bigint;
 begin
   if to_regprocedure('public.dblink(text,text)') is null then
-    raise notice 'A-15 SKIP: dblink unavailable, concurrency not exercised here';
+    raise warning 'PROBE-SKIPPED: A-15 — dblink unavailable, concurrency not exercised here';
     return;
   end if;
 
@@ -107,7 +107,7 @@ begin
       || ' user=' || current_user
       || ' password=' || v_pass;
   else
-    raise notice 'A-15 SKIP: % is not a superuser and no usable password/TCP address is available, so dblink cannot open the second session — run via docs/audit/run-probes.sh with PGHOST/PGPASSWORD set', current_user;
+    raise warning 'PROBE-SKIPPED: A-15 — % is not a superuser and no usable password/TCP address is available, so dblink cannot open the second session; run via docs/audit/run-probes.sh with PGHOST/PGPASSWORD set', current_user;
     return;
   end if;
 

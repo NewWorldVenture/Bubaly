@@ -2,17 +2,17 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-19T23:07:52.648Z
-- Total Audit Items: 14047
+- Last Updated: 2026-09-20T11:42:42.347Z
+- Total Audit Items: 14048
 - Not Started: 13842
 - In Progress: 192
 - Passed: 0
-- Fixed + Passed: 10
+- Fixed + Passed: 11
 - Blocked: 1
 - Failed: 2
 - Overall Completion: 0.04%
 
-Database-execution cycle: the local Supabase stack was brought up healthy and every migration applied, so this pass judged the database by running it rather than by reading it. It found three features that have never worked in production and two live boundary breaches. DB-FN-001: `marketplace_create_circle` is `security definer` and pinned `set search_path = public`, but Supabase keeps pgcrypto in the `extensions` schema, so every call since 0176 raised 42883 and no family has ever created a sharing circle. DB-FN-002: `invest_decide_order` writes the ledger `direction` from a CASE over two string literals, which is `text` and does not cast to the enum — so APPROVAL has raised 42804 since 0196 while REJECTION worked, and a parent could decline a child's investment for ever while no order was ever filled. SEC-006: the locator's own comment says "Strictly self-only" and the server action honours it, but that was the only place it held — measured as a child, rewrote the parent's live location, deleted it, and fabricated an arrival event attributed to them. AUTHZ-003, open at FAIL for a full cycle on source analysis alone, was reproduced by execution: a read_only adult deleted their own restriction and became a marketing_manager with publish_posts and connect_accounts. Three further integrity gaps followed from the same question — what does the table enforce, as opposed to what does the code promise: DATA-008, a single-choice poll took every choice (one member cast 3 votes across 3 options) because the single/multi rule lived only in the browser and spans two tables, so it needed a trigger rather than an index; DATA-009, `families.timezone` had no constraint at all, so a typo saved silently and put the family on Greenwich time. Fixed in 0318-0323 with probes that each go red when reverted. The guards that should have caught the first two were asking the wrong question: one verified that a definer function PINS a search_path (this one did), and nothing at all resolved a plpgsql body, which binds its SQL at CALL time and so can be catastrophically wrong while installing, deploying and passing CI cleanly. Both halves are now guarded, the second by resolving all 70 plpgsql bodies against the live catalogue. Running the boundary suite twice in a row also exposed three probes not proving what the green count implied (TEST-004/005/006): one passed on a virgin database and failed forever after, one ERRORED rather than ran on every Supabase database it was ever pointed at so the wallet overspend race had never once been exercised, and one aborted during fixture setup before any assertion ran. `docs/audit/run-probes.sh` passes 45/45, twice in succession. The unit suite passes 16,705/16,705 across 1,305 files on Node 24.21.0, the version the repo declares; the three failures seen under this container's Node 22 are the already-tracked PERF-002 and disappear under 24. OPEN-001 records five member-data tables left deliberately unchanged as an owner decision, with the reasoning and a recommended shape written down for whoever decides. These are local-execution results; they do not by themselves establish deployed behavior, and 0318-0323 are PENDING PRODUCTION MIGRATIONS that a human must apply.
+Database-execution cycle: the local Supabase stack was brought up healthy and every migration applied, so this pass judged the database by running it rather than by reading it. It found three features that have never worked in production and two live boundary breaches. DB-FN-001: `marketplace_create_circle` is `security definer` and pinned `set search_path = public`, but Supabase keeps pgcrypto in the `extensions` schema, so every call since 0176 raised 42883 and no family has ever created a sharing circle. DB-FN-002: `invest_decide_order` writes the ledger `direction` from a CASE over two string literals, which is `text` and does not cast to the enum — so APPROVAL has raised 42804 since 0196 while REJECTION worked, and a parent could decline a child's investment for ever while no order was ever filled. SEC-006: the locator's own comment says "Strictly self-only" and the server action honours it, but that was the only place it held — measured as a child, rewrote the parent's live location, deleted it, and fabricated an arrival event attributed to them. AUTHZ-003, open at FAIL for a full cycle on source analysis alone, was reproduced by execution: a read_only adult deleted their own restriction and became a marketing_manager with publish_posts and connect_accounts. Three further integrity gaps followed from the same question — what does the table enforce, as opposed to what does the code promise: DATA-008, a single-choice poll took every choice (one member cast 3 votes across 3 options) because the single/multi rule lived only in the browser and spans two tables, so it needed a trigger rather than an index; DATA-009, `families.timezone` had no constraint at all, so a typo saved silently and put the family on Greenwich time. Fixed in 0318-0323 with probes that each go red when reverted. The guards that should have caught the first two were asking the wrong question: one verified that a definer function PINS a search_path (this one did), and nothing at all resolved a plpgsql body, which binds its SQL at CALL time and so can be catastrophically wrong while installing, deploying and passing CI cleanly. Both halves are now guarded, the second by resolving all 70 plpgsql bodies against the live catalogue. Running the boundary suite twice in a row also exposed three probes not proving what the green count implied (TEST-004/005/006): one passed on a virgin database and failed forever after, one ERRORED rather than ran on every Supabase database it was ever pointed at so the wallet overspend race had never once been exercised, and one aborted during fixture setup before any assertion ran. TEST-007 is the one that explains the rest: DB-FN-001 had a probe watching it the whole time — `circle-join-code-check.sql` calls the dead function and asserts it works, ran on every pull request, and passed on every pull request. CI's bootstrap installed pgcrypto into `public` while a real Supabase project puts it in `extensions`, so the broken pin resolved there and nowhere else. Restoring the pre-0318 definition on a CI-shaped database: probe exit 0. After the bootstrap was made faithful to production: probe exit 3, `function gen_random_bytes(integer) does not exist`. The runner also reported a SKIP as a PASS, which had hidden that the wallet overspend race ran nowhere; skips are now counted separately and `PROBES_REQUIRE_ALL=1` makes them fatal in CI. `docs/audit/run-probes.sh` passes 45/45 with 0 skipped, on both a fresh container replicating the CI job and the local Supabase stack. The unit suite passes 16,705/16,705 across 1,305 files on Node 24.21.0, the version the repo declares; the three failures seen under this container's Node 22 are the already-tracked PERF-002 and disappear under 24. OPEN-001 records five member-data tables left deliberately unchanged as an owner decision, with the reasoning and a recommended shape written down for whoever decides. These are local-execution results; they do not by themselves establish deployed behavior, and 0318-0323 are PENDING PRODUCTION MIGRATIONS that a human must apply.
 
 Verified application release 2a5e7e7a15b93f544660b41c0f3185b4865e80ed publishes the phone OTP and signout repair on exact Vercel dpl_8oWh1TNVFNbmGissmnvmA11P6ECT (21:28:59 UTC). Public auth/phone readiness passes without authentication actions or SMS dispatch. Frozen source/test/workflow f75e7febdf01bf944fa35a505745001533c80028 passes 459/459 controlled browser cases and both full 16,703/16,703 unit runs across 1,305 files; build252, full strict types, lint (three existing warnings), localization and query checks pass. Exact hosted CI35470363378 Web/Database/Mobile succeed, including both full unit zones/build/types. E2E105970089707 fails only its three new phone HTTP cases:1,293/1,296 pass in8.3minutes; each stalls before code-entry heading after Continue, so real OTP verification is not reached. Repaired durable signout and all six callback cases pass by exact enabled-source matrix minus the three failures, not individual success log entries. A two-file CI provider/hook and diagnostic repair passes local strict types/lint, discovery3, guards66 and config/negative controls; no application runtime or product config/SQL changes. New hosted phone acceptance remains open. Published d954 hosted1,251/1,252 remains historical failed-baseline evidence, not the current release result. AUTH-001/002/003 stay IN PROGRESS. See docs/final-audit/auth-phone-ownership-cycle.md and production-rollout-20260919.md.
 
@@ -14179,6 +14179,7 @@ PRODUCTION READY: NO
 | OPEN-001 | Database | screen_time_limits, grades, behavior_logs, immunizations, health_visits write scope | ⚠️ BLOCKED | Medium | n/a | None — deliberately | n/a | Records kept about a member, writable by any member. No code declares a restriction, so the boundary is an owner decision. Recommended shape: can_manage_family OR is_self_member. |
 | DATA-008 | DATA | Single-choice family poll integrity | 🛠 FIXED + PASS | Medium | 7/7 | 0322 adds a trigger (the rule spans two tables, so no index can express it) taking `for update` on the poll, firing on INSERT and UPDATE | Probe passes twice; 2 assertions fail with the trigger dropped; suite 44/44 | One member cast 3 votes across 3 options of a single-choice poll. The module enforced it client-side and said so in a comment. |
 | DATA-009 | DATA | families.timezone validity | 🛠 FIXED + PASS | Medium | 6/6 | 0323 adds a trigger accepting pg_timezone_names UNION pg_timezone_abbrevs, which matches Intl exactly | Probe passes twice; 4 assertions fail with the trigger dropped; suite 45/45 | No constraint of any kind; a typo saved silently and put the family on Greenwich time. A names-only guard would have wrongly rejected CST and PST. |
+| TEST-007 | Testing | CI database fidelity and skip reporting | 🛠 FIXED + PASS | Critical | 9/9 | Bootstrap puts pgcrypto in `extensions` with Supabase's search_path; runner separates SKIP from PASS; CI installs plpgsql_check and sets PROBES_REQUIRE_ALL | 45/45 with 0 skipped on both a CI replica and the Supabase stack; the circle probe now fails on the broken definition where it used to pass | The probe for DB-FN-001 ran on every PR and passed while the feature was dead, because CI's pgcrypto sat in a different schema than production's. |
 
 ## Inventory and evidence rules
 
@@ -20967,6 +20968,74 @@ Circle creation exercised end to end against the local Supabase stack with all 3
 
 #### Evidence
 Executed against a local Supabase stack, not inferred from source. The probe that catches this (`docs/audit/circle-join-code-check.sql:57`) already existed and already called `public.marketplace_create_circle`; it had simply never been run against a database where pgcrypto sits in `extensions`.
+
+#### Final Status
+🛠 FIXED + PASS
+
+### TEST-007 — CI's database was not shaped like production, so a dead feature stayed green
+
+Status: 🛠 FIXED + PASS
+Severity: Critical
+Route(s), components, actions, tables and providers: docs/audit/pg-bootstrap.sh, docs/audit/run-probes.sh, .github/workflows/ci.yml, docs/audit/circle-join-code-check.sql, docs/audit/plpgsql-bodies-resolve-check.sql, docs/audit/wallet-concurrency-check.sql
+
+#### Expected Behavior
+A probe that passes in CI means the boundary it asserts actually holds on a production-shaped database. A probe that cannot run says so, and CI treats that as a failure.
+
+#### Test Cases
+- [x] All 323 migrations replay onto a CI-shaped database with the faithful shim
+- [x] pgcrypto and vector land in `extensions`, as on a real project
+- [x] The `postgres` role carries Supabase's `search_path`
+- [x] All 45 probes pass on the CI replica
+- [x] All 45 probes pass on the local Supabase stack
+- [x] With the pre-0318 definition restored, the circle probe now FAILS on the CI replica
+- [x] A skipped probe is reported as SKIP, not PASS
+- [x] The skip marker does not match honest output that merely says "skipped"
+- [x] `PROBES_REQUIRE_ALL=1` turns a skip into a non-zero exit; without it, exit 0
+
+#### Issues Found
+**DB-FN-001 had a probe watching it the whole time.** `docs/audit/circle-join-code-check.sql:57` calls `public.marketplace_create_circle` and asserts it works. It ran on every pull request. It passed on every pull request. Creating a sharing circle had been dead since 0176.
+
+The reason is one line in `docs/audit/pg-bootstrap.sh`:
+
+    create extension if not exists pgcrypto;
+
+with no schema, which lands pgcrypto in `public`. A real Supabase project puts it in `extensions`:
+
+    pgcrypto   | extensions
+    uuid-ossp  | extensions
+    vector     | extensions
+
+and gives the `postgres` role `search_path = "$user", public, extensions`. The broken function pinned `set search_path = public` and called `gen_random_bytes`. On CI that resolved fine; on production it raised 42883 every time.
+
+Measured directly, restoring the pre-0318 definition on a CI-shaped database:
+
+    circle probe with the BROKEN definition on a CI-shaped db: exit=0
+
+and after the shim was corrected, the same experiment:
+
+    search_path now: search_path=public
+    circle probe exit=3
+    ERROR:  function gen_random_bytes(integer) does not exist
+
+**A guard that cannot fail in the environment it runs in is not a guard.** This is the repository's signature defect, found in its own test environment, and it is why a dead feature survived months of green builds.
+
+**Second, the runner reported a skipped probe as a pass.** `run-probes.sh` branched on psql's exit code alone, and a probe that skips exits zero. Two probes skip by design — `wallet-concurrency-check` needs a second dblink session, `plpgsql-bodies-resolve-check` needs `plpgsql_check` — and both printed `PASS` while asserting nothing. The wallet overspend race had never run anywhere (TEST-005), and the newly added plpgsql probe would have skipped silently in CI from the day it landed, which would have made it decorative.
+
+#### Fixes Applied
+- `docs/audit/pg-bootstrap.sh` installs pgcrypto **into `extensions`** and sets the `postgres` role's `search_path` to Supabase's. Both halves are needed: without the search_path, DDL that resolves an extension function at CREATE time — a column default such as `invites.token default encode(gen_random_bytes(24),'hex')` — could not find it once pgcrypto moved out of `public`, and every migration declaring one would fail.
+- `docs/audit/run-probes.sh` counts and reports SKIP separately from PASS, and `PROBES_REQUIRE_ALL=1` makes a skip fatal. Skipping stays legitimate for someone reproducing a failure by hand on a server without dblink; it is not legitimate in CI.
+- Skips are raised at **WARNING**, not NOTICE, because every probe sets `client_min_messages = warning` to keep its own progress quiet — which swallowed the one line saying the probe did nothing.
+- `.github/workflows/ci.yml` installs `postgresql-16-plpgsql-check` into the service container and sets `PROBES_REQUIRE_ALL=1`, so if that step ever stops working the suite says so instead of quietly running one probe fewer.
+
+#### Retest Results
+On a fresh `pgvector/pgvector:pg16` container replicating the CI job exactly: all 323 migrations replay (exit 0, with only the two pre-existing best-effort SEED_ALL warnings the baseline also produces), and **45/45 probes pass, 0 skipped**. The same on the local Supabase stack: **45/45, 0 skipped**.
+
+Strict mode verified in both directions with a temporary probe emitting the sentinel: lenient run exit 0, `PROBES_REQUIRE_ALL=1` run exit 1. The temporary probe was removed.
+
+The skip detector was tightened after it produced two false positives on its first run — `family-self-read-check`'s own OK line says "197 empty, skipped", and Postgres narrates `drop policy if exists` as "does not exist, skipping". Matching the word "skip" read both passing probes as having done nothing. The marker is now the exact token `PROBE-SKIPPED:`. A detector that cries wolf is worse than none, because it trains everyone to ignore the SKIP line.
+
+#### Evidence
+Executed against two databases: a fresh container matching the CI job's image and setup, and the local Supabase stack. The before/after on the circle probe is the load-bearing evidence — same probe, same broken function, green before the shim fix and red after.
 
 #### Final Status
 🛠 FIXED + PASS
