@@ -1134,7 +1134,16 @@ was never passed req.signal, found by asymmetry with its sibling route), and
 complete over a stale inventory, the same defect as C1-S9-12 one level up).
 CRON-025..027 added. Verified clean and recorded as such: wallet-allowance,
 family-routines, weekly-digest, provider-sync.
-OPEN: the register's other denominators (Pages, API, Feature modules, Server
-actions) have NOT been re-derived from the tree and are likely stale the same
-way; no coverage figure for them should be quoted until they are.
+RE-DERIVED: every denominator was then rebuilt from the filesystem in the same
+pass. 20 items across four axes had no permanent ID — 3 pages, 5 API routes, 9
+server actions and the 3 cron jobs. All added; the two genuinely new API routes
+(a Twilio status callback and the X OAuth callback) were audited rather than
+merely listed, and both are clean. Register totals now match the tree exactly:
+Pages 398, API 146, Modules 118, Scheduled 27, Server actions 135, total 841.
+The server-action gap was the instructive one: six of the nine live in lib/ and
+four are not named actions.ts, so the original derivation encoded two
+assumptions the codebase does not honour. `C1-S9-15` came out of the same
+re-derivation — /kid-login was the one sign-in form neither disallowed in
+robots.txt nor marked noindex.
+OPEN: nothing outstanding from this pass.
 LAST-UPDATE: 2026-09-20

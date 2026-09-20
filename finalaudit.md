@@ -27,10 +27,11 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 ## Audit Status — Session A (this register)
 - Started: 2026-09-13
 - Last Updated: 2026-09-20
-- Total Audit Items: 821
-- Not Started: 439
-- In Progress: 373
-- Passed: 9
+- Total Audit Items: 841 (re-derived from the tree in Session 9, not carried
+  forward: `C1-S9-14` found 20 items across four axes with no permanent ID)
+- Not Started: 448
+- In Progress: 378
+- Passed: 15
 - Fixed + Passed: see Part 0 — 179 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
@@ -124,10 +125,10 @@ security-critical functionality the release gate stays NO.*
 
 | Area | Items | Named in audit evidence | Coverage |
 |---|---:|---:|---:|
-| Pages | 395 | 170 | 43% |
-| API | 141 | 69 | 49% |
+| Pages | 398 | 173 | 43% |
+| API | 146 | 74 | 51% |
 | Feature modules | 118 | 68 | 58% |
-| Server actions | 126 | 53 | 42% |
+| Server actions | 135 | 62 | 46% |
 | Database | 2 | 2 | 100% |
 | Scheduled | 27 | 27 | 100% |
 | CI/CD | 8 | 4 | 50% |
@@ -539,6 +540,9 @@ complete only when its full workflow is verified, and a static read is not that.
 | PAGE-393 | Pages | `/reviews/new` | 🔄 IN PROGRESS | named in evidence |
 | PAGE-394 | Pages | `/reviews` | 🔄 IN PROGRESS | named in evidence |
 | PAGE-395 | Pages | `/s/[slug]` | 🔄 IN PROGRESS | named in evidence |
+| PAGE-396 | Pages | `/auth/complete` | ✅ PASS | added by the parallel session. Sign-in completion shell; `robots: noindex`, and `/auth` is in robots.txt's `DISALLOWED_PREFIXES`. Its server action is `C1-S9-05`. |
+| PAGE-397 | Pages | `/auth/recovery` | ✅ PASS | added by the parallel session. Suspense shell over `RecoveryForm`; `robots: noindex`, `/auth` disallowed. Its four server actions are `C1-S9-05`. |
+| PAGE-398 | Pages | `/auth/signout/complete` | ✅ PASS | added by the parallel session. Reads a signed bridge cookie; covered by the `/auth` disallow prefix, so the absent `robots` metadata is not a gap (`C1-S9-15`). |
 | API-001 | API | `/api/ab/track` | ⬜ NOT STARTED | — |
 | API-002 | API | `/api/admin/benchmarks/export` | ⬜ NOT STARTED | — |
 | API-003 | API | `/api/admin/marketing/ai` | 🔄 IN PROGRESS | named in evidence |
@@ -680,6 +684,11 @@ complete only when its full workflow is verified, and a static read is not that.
 | API-139 | API | `/api/webhooks/resend` | 🔄 IN PROGRESS | named in evidence |
 | API-140 | API | `/api/webhooks/stripe` | 🔄 IN PROGRESS | named in evidence |
 | API-141 | API | `/api/weekend/discover` | 🔄 IN PROGRESS | named in evidence |
+| API-142 | API | `/api/contact-center/sms/status` | ✅ PASS | added by the parallel session. Audited under `C1-S9-14`: Twilio signature validated over the EXACT reconstructed URL including query, exactly-two-param shape enforced, duplicate form keys rejected, bounded body, account SID pinned, and a status event emits no message. |
+| API-143 | API | `/api/social/x/callback` | ✅ PASS | added by the parallel session. Audited under `C1-S9-14`: single `state`/`code`, encrypted cookie-bound flow, timing-safe state compare, and no open redirect — `flow.redirectUri` is pinned to `xRedirectUri()` AND cross-checked against the request URL. Escaped HTML under a strict CSP on the error path. |
+| API-144 | API | `/api/cron/contact-center-urgent` | 🔄 IN PROGRESS | added by the parallel session; see `CRON-025`. |
+| API-145 | API | `/api/cron/guardian-sms-recovery` | 🔄 IN PROGRESS | added by the parallel session; see `CRON-026`. |
+| API-146 | API | `/api/cron/social-publish` | 🔄 IN PROGRESS | added by the parallel session; see `CRON-027`. `C1-S9-13` fixed its missing `req.signal`. |
 | MOD-001 | Feature modules | `agents-module` | ⬜ NOT STARTED | — |
 | MOD-002 | Feature modules | `announcements-module` | ⬜ NOT STARTED | — |
 | MOD-003 | Feature modules | `assistant-module` | 🔄 IN PROGRESS | named in evidence |
@@ -924,6 +933,15 @@ complete only when its full workflow is verified, and a static read is not that.
 | ACT-124 | Server actions | `onboarding/calendar-actions.ts` | ⬜ NOT STARTED | — |
 | ACT-125 | Server actions | `reviews/new/actions.ts` | 🔄 IN PROGRESS | named in evidence |
 | ACT-126 | Server actions | `s/[slug]/actions.ts` | 🔄 IN PROGRESS | named in evidence |
+| ACT-127 | Server actions | `(auth)/auth/complete/actions.ts` | ✅ PASS | added by the parallel session. Pre-auth by design; pinned to its credential check by `C1-S9-05`'s `CREDENTIAL_GATED` table. |
+| ACT-128 | Server actions | `(auth)/auth/recovery/actions.ts` | ✅ PASS | added by the parallel session. Four pre-auth actions, one of which changes a password; each pinned to its grant verification by `C1-S9-05`. |
+| ACT-129 | Server actions | `(app)/dashboard/concierge/runs/[id]/page.tsx` | 🔄 IN PROGRESS | an INLINE `'use server'` action inside a page file. Missed by a derivation that looked for `actions.ts`; covered by `tests/every-server-action-reaches-auth.test.ts`, which reads the directive rather than the filename. |
+| ACT-130 | Server actions | `lib/family/actions.ts` | 🔄 IN PROGRESS | server action outside `app/`; reaches auth per `tests/every-server-action-reaches-auth.test.ts`. |
+| ACT-131 | Server actions | `lib/groceries/add-summary.ts` | 🔄 IN PROGRESS | server action outside `app/`, and not named `actions.ts`; reaches auth per the same guard. |
+| ACT-132 | Server actions | `lib/i18n/actions.ts` | ✅ PASS | server action outside `app/`. Reaches no auth call BY DESIGN and is one of the named exceptions: it sets the locale cookie and touches no family data. |
+| ACT-133 | Server actions | `lib/library/ingest.ts` | 🔄 IN PROGRESS | server action outside `app/`, not named `actions.ts`; reaches auth per the same guard. |
+| ACT-134 | Server actions | `lib/marketing/recurring-ads.ts` | 🔄 IN PROGRESS | server action outside `app/`, not named `actions.ts`; reaches auth per the same guard. |
+| ACT-135 | Server actions | `lib/paperwork/triage.ts` | 🔄 IN PROGRESS | server action outside `app/`, not named `actions.ts`; reaches auth per the same guard. |
 | DB-001 | Database | `343 migrations replay clean` | ✅ PASS | named in evidence |
 | DB-002 | Database | `491 tables — RLS swept (Pass T + Session 8 census)` | ✅ PASS | named in evidence |
 | CRON-001 | Scheduled | `cron/admin-digest` | 🔄 IN PROGRESS | named in evidence |
@@ -31806,7 +31824,71 @@ Server actions, and the parallel session added files in at least the `app/(auth)
 tree (five server actions, found by `C1-S9-05`) that are equally unlikely to
 carry IDs. Named as outstanding rather than assumed clean — the next pass should
 re-derive every denominator from the tree before any coverage figure is quoted
+
+**Refinement of the derivation itself.** Re-running the count for Server actions
+found nine files with no ID, and their SHAPES are the point. Two are the
+parallel session's new auth actions. But six live in `lib/`, not `app/`, and
+four of those are not named `actions.ts` — `lib/groceries/add-summary.ts`,
+`lib/library/ingest.ts`, `lib/marketing/recurring-ads.ts`,
+`lib/paperwork/triage.ts`. One is an INLINE `'use server'` inside a page file,
+`(app)/dashboard/concierge/runs/[id]/page.tsx`.
+
+So the original register was not merely stale; its derivation encoded two
+assumptions the codebase does not honour — that a server action lives under
+`app/`, and that it lives in a file called `actions.ts`. A denominator built on
+those assumptions cannot be repaired by re-running it, only by re-deriving it
+from the `'use server'` DIRECTIVE, which is the only thing that actually makes a
+file a set of POST endpoints. `tests/every-server-action-reaches-auth.test.ts`
+already reads the directive, which is why all nine were nonetheless inside the
+auth boundary — the guard was right where the register was wrong.
+
+**Final denominators, re-derived from the tree rather than carried forward:**
+Pages 398, API 146, Feature modules 118, Scheduled 27, Server actions 135. Each
+now matches a count taken from the filesystem in the same pass.
+
 again.
+
+---
+
+### `[CLAUDE-1][LOW][SEO/PRIVACY]` C1-S9-15 — the one crawlable sign-in form was the children's one
+
+**File:** `app/(auth)/kid-login/page.tsx`
+
+**Found by** re-deriving the Pages denominator for `C1-S9-14` and then checking
+the indexability of every page in `app/(auth)` rather than only the three new
+ones.
+
+**Problem.** The product keeps sign-in surfaces out of search two different
+ways: `/auth/*` sits in `DISALLOWED_PREFIXES`, which robots.txt and the sitemap
+both read, and `/login` and `/signup` each declare
+`robots: { index: false, follow: false }` in their own metadata. `/kid-login`
+had **neither**. It was the only sign-in form in the tree that was crawlable and
+indexable — and it is the children's one.
+
+**Impact.** Low in mechanism, poor in character: a search result leading
+directly to a form asking a child for a username and a four-digit PIN, while the
+adult login beside it is deliberately excluded. Nothing is exposed — the form
+holds no data — so this is a surface-area and appropriateness issue, not a
+disclosure one.
+
+**Fix.** `robots: { index: false, follow: false }`, matching `/login` exactly.
+
+**Status:** FIXED. Guard: `tests/a-sign-in-form-is-not-indexable.test.ts`
+enumerates every page under `app/(auth)` and requires each to be covered by ONE
+of the two mechanisms, proved red by reverting the change.
+
+**Named, not decided:** `/welcome` is also neither disallowed nor noindexed. It
+is a pre-signup onboarding card — plausibly a page the product WANTS indexed —
+so it is recorded in the guard's `INDEXABLE_ON_PURPOSE` table with a reason
+rather than quietly changed. Whether top-of-funnel pages inside `(auth)` should
+be indexed is a product decision, and the defect this finding is about is a
+choice being ABSENT, not a choice being wrong. Making it silently would repeat
+the mistake in the other direction.
+
+**Also checked and clean:** `/auth/signout/complete` declares no `robots`
+metadata, which looked like a fourth instance until the prefix list was read —
+`/auth` covers it. Recorded because the first pass over these pages counted it
+as a finding, and it was not one.
 
 ## What this pass did NOT establish
 
