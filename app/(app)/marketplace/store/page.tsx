@@ -10,6 +10,7 @@ import { ratingSummary } from '@/lib/marketplace/trust';
 import { KIND_LABELS, priceLabel, type ListingKind, type RentPeriod } from '@/lib/marketplace/listings';
 import { cn } from '@/lib/utils/cn';
 import { getTranslations } from '@/lib/i18n/server';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'My Store · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -21,12 +22,23 @@ export default async function MarketplaceStorePage() {
   const familyId = ctx.active.familyId;
   const selfId = ctx.active.member.id;
 
-  const { data: store } = await sb
+  // A refused read left `store` null, which is the same state as "you have not
+  // opened a store yet" — so a family WITH a store was shown the create-a-store
+  // path, and creating one collides on (family_id, member_id). Audit C1-S9-45.
+  const { data: store, error: storeError } = await sb
     .from('marketplace_stores')
     .select('id, name, tagline, description, emoji')
     .eq('family_id', familyId)
     .eq('member_id', selfId)
     .maybeSingle();
+
+  if (storeError) {
+    return (
+      <div className="space-y-5">
+        <ErrorState message={t('marketplaceStore.couldNotLoadYourStore')} />
+      </div>
+    );
+  }
 
   const [{ count: followers }, { data: reviews }, { data: myListings }] = await Promise.all([
     store

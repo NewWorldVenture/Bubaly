@@ -10,12 +10,25 @@ export default async function PublicSurveyPage({ params }: { params: Promise<{ s
   const t = await getTranslations();
   const { slug } = await params;
   const supabase = createServiceClient();
-  const { data: survey } = await supabase
+  // `closed` is computed from `!survey`, so a refused read told respondents the
+  // survey was closed. A public survey that turns people away loses the
+  // responses it exists to collect, and nobody comes back. Audit C1-S9-45.
+  const { data: survey, error: surveyError } = await supabase
     .from('surveys')
     .select('slug, name, question, scale_min, scale_max, low_label, high_label, follow_up_question, thank_you_message, status')
     .eq('slug', slug)
     .is('deleted_at', null)
     .maybeSingle();
+
+  if (surveyError) {
+    console.error('[survey] survey read failed', { slug, error: surveyError.message });
+    return (
+      <main className="mx-auto flex min-h-[100dvh] max-w-xl flex-col items-center justify-center gap-3 px-5 py-10 text-center">
+        <h1 className="text-xl font-bold">{t('survey.weCouldNotLoadThisSurvey')}</h1>
+        <p className="text-sm text-muted">{t('survey.pleaseRefreshInAMoment')}</p>
+      </main>
+    );
+  }
 
   const closed = !survey || survey.status !== 'active';
 

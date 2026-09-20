@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-185 finding IDs from four workers and two parallel sessions; none of it was
+186 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -12,7 +12,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 > source-and-migration audit run without production credentials. Session B
 > (Register B, 14,038 items, `AUTH-001` / `API-<hash>` / `DB-TBL-nnn`) is a
 > hosted-CI and deployed-release audit. Their finding-ID sets are **disjoint**:
-> 907 IDs from A, 684 from B, 1,588 in union — verified mechanically at each
+> 908 IDs from A, 684 from B, 1,589 in union — verified mechanically at each
 > merge. The three literals both files contain (`LB-009`, `LB-016`, `SHA-256`)
 > are not counter-examples: the first two are pre-existing *runbook* names each
 > register cites, and the third is a hash algorithm the ID regex matches. No
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 195 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 196 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -33421,6 +33421,50 @@ a name field, and the user's own submission is the write).
 
 ---
 
+### `[CLAUDE-1][MEDIUM][PAGES]` C1-S9-45 — the page-side remainder, and a second ratchet
+
+Eight more pages from the corrected page sweep (`C1-S9-44`'s 427-file scan),
+each triaged by `C1-S9-40`'s rule — *does the fallback give a smaller answer, or
+a different one?*
+
+**Different answers, now failing visibly:**
+
+| page | what a refused read said |
+|---|---|
+| `dashboard/vacations/[id]/layout.tsx` | `notFound()` — and it is a LAYOUT, so one refused read 404s every page under the trip at once |
+| `missions/new/page.tsx` | a creation form with nobody to assign to: a parent with three children shown the screen a childless family sees |
+| `app/s/[slug]/page.tsx` | a public survey reported **closed**. Respondents turned away do not come back |
+| `app/reviews/page.tsx` | `ratingStats` is computed from this list, so it published a rating derived from **no reviews** on the page whose entire job is social proof |
+| `marketplace/store/page.tsx` | "you have not opened a store" — and creating a second collides on `(family_id, member_id)` |
+| `marketplace/saved/page.tsx` | "nothing saved yet" to someone whose saved list is not empty |
+
+Each keeps its original branch for a genuine absence, and a guard asserts both
+the check AND that the bail actually returns — without a return it is a log, not
+a fix.
+
+**Smaller answers, logged and deliberately not escalated:** `referrals/page.tsx`
+(a hidden "you were referred" note) and `reviews/new/page.tsx` (hidden external
+review links). Both change nothing the reader can act on wrongly. A guard
+asserts the **absence** of a bail in each, so a later consistency sweep cannot
+harden a cosmetic fallback into a page error.
+
+**Closed with a ratchet**, mirroring `C1-S9-43`'s on the API side: every
+`page.tsx`/`layout.tsx` read still binding only `data` must be one of the
+accepted kinds — the three already owned by `tests/silent-empty-read-ratchet`,
+one `auth.getUser()`, seven display-name maps, `missions/page.tsx` (where
+`C1-S9-29` made the COUNT the signal rather than the error), and
+`onboarding/page.tsx` (verified benign: it pre-fills a name and the write is the
+user's own submission). 21 → 12 would have been a number; this is the claim that
+the twelve are defensible. Keyed by binding name, not line — the API ratchet's
+first version broke on its own commit when an unrelated fix shifted lines.
+
+**Status:** FIXED. Guard: fourteen cases, each proved red by mutation —
+including the over-tightening direction (escalating `referrals` to a page error)
+and a mutation that introduces a new untriaged read to confirm the ratchet
+catches regrowth.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -33490,8 +33534,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,042 passing / 17,045 across 1,351
-files.** (Re-run after `C1-S9-44`; was 16,950 / 16,953 across 1,349 before this
+Status: ✅ PASS — `npx vitest run`: **17,057 passing / 17,060 across 1,351
+files.** (Re-run after `C1-S9-45`; was 16,950 / 16,953 across 1,349 before this
 batch.) The three failures are `C1-S9-09`, BLOCKED: this container runs Node
 22.22.2 against the repository's `.nvmrc` 24.21.0, and nvm cannot fetch the
 Node 24 distribution here. Not counted as passing.
@@ -33502,6 +33546,13 @@ head `f9820169`: **1,293 passed, 3 failed in 11.2m**, down from 13 failures.
 Re-confirmed twice since, on `a7ba8f1f` (1,293 / 3) and on `9c9f3a43`
 (**1,292 passed, 3 failed, 1 flaky**), so Passes AG and the `C1-S9-25` AI-route
 fixes introduced no browser regression.
+
+Re-confirmed a fifth time on `790ac96e` (run 35521432191), the head carrying
+`C1-S9-35` through `C1-S9-44` — including the **App Lock fail-open fix**, which
+changes the layout wrapping every authenticated route and was therefore the
+single most likely change in this session to break the browser suite:
+**1,293 passed, 3 failed, 0 flaky in 9.4m**. The same three phone-auth cases,
+and nothing else. Neither of the two intermittents recorded below recurred.
 
 Re-confirmed a fourth time on `c3cc9ac2` (run 35516752108): **1,292 passed,
 3 failed, 1 flaky in 9.8m**, with Typecheck/Lint/Test/Build, Database and Mobile

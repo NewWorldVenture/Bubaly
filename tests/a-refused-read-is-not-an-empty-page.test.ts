@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { execSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 import { at, between, bodyOf } from './helpers/source-order';
 
@@ -293,5 +294,132 @@ describe('a security control the user chose does not fail open (C1-S9-44)', () =
         expect(catalogue[key], `${locale} is missing ${key}`).toBeTruthy();
       }
     }
+  });
+});
+
+/**
+ * Audit C1-S9-45 — the page-side remainder, triaged by C1-S9-40's rule: does
+ * the fallback give a SMALLER answer, or a DIFFERENT one?
+ */
+const PAGE_BAILS = [
+  {
+    file: 'app/(app)/dashboard/vacations/[id]/layout.tsx',
+    binding: 'tripError',
+    // `notFound()` is a statement that this trip does not exist, and this is a
+    // LAYOUT — a refused read 404s every page under the trip at once.
+    keeps: 'notFound();',
+  },
+  {
+    file: 'app/(app)/missions/new/page.tsx',
+    binding: 'membersError',
+    // The list a mission is ASSIGNED to: an empty one showed a parent with three
+    // children the same screen a family with none sees.
+    keeps: 'const kids = members ?? [];',
+  },
+  {
+    file: 'app/s/[slug]/page.tsx',
+    binding: 'surveyError',
+    // `closed` is computed from `!survey`, so a refused read turned respondents
+    // away from a survey that was open. They do not come back.
+    keeps: "const closed = !survey || survey.status !== 'active';",
+  },
+  {
+    file: 'app/reviews/page.tsx',
+    binding: 'reviewsError',
+    // `ratingStats` is computed from this list, so a refused read published a
+    // rating derived from no reviews on the page whose job is social proof.
+    keeps: 'const rows = reviews ?? [];',
+  },
+  {
+    file: 'app/(app)/marketplace/store/page.tsx',
+    binding: 'storeError',
+    // A null store is also "you have not opened one", and creating a second
+    // collides on (family_id, member_id).
+    keeps: 'const [{ count: followers }',
+  },
+  {
+    file: 'app/(app)/marketplace/saved/page.tsx',
+    binding: 'savesError',
+    keeps: 'const ids = (saves ?? []).map',
+  },
+] as const;
+
+describe('a different answer fails visibly (C1-S9-45)', () => {
+  it.each(PAGE_BAILS)('$file checks $binding before the fallback it would reach', ({ file, binding, keeps }) => {
+    const source = readFileSync(file, 'utf8');
+    expect(source, `${binding} is not bound`).toContain(`error: ${binding}`);
+    expect(source).toContain(`if (${binding})`);
+    // The original branch is KEPT — it is correct for a genuine absence.
+    expect(source, 'the genuine empty/absent branch was removed').toContain(keeps);
+    expect(at(source, `if (${binding})`), 'the check must precede the branch it guards')
+      .toBeLessThan(at(source, keeps));
+  });
+
+  it.each(PAGE_BAILS)('$file returns instead of falling through', ({ file, binding }) => {
+    // Without a return this is a log, not a fix.
+    const bail = bodyOf(readFileSync(file, 'utf8'), `if (${binding})`, '\n  }');
+    expect(bail).toContain('return');
+  });
+});
+
+describe('a smaller answer is logged, not escalated (C1-S9-45)', () => {
+  it.each([
+    ['app/(app)/referrals/page.tsx', 'wasReferredError'],
+    ['app/reviews/new/page.tsx', 'settingsError'],
+  ])('%s degrades without failing the page', (file, binding) => {
+    // A hidden "you were referred" note and hidden external review links change
+    // nothing the reader can act on wrongly. Asserting the ABSENCE of a bail
+    // here stops a later sweep from "consistently" hardening them into errors.
+    const source = readFileSync(file, 'utf8');
+    expect(source).toContain(`error: ${binding}`);
+    expect(source).toContain('console.warn');
+    expect(bodyOf(source, `if (${binding})`, '\n  }')).not.toContain('return');
+  });
+});
+
+describe('the page-side sweep is closed with a ratchet (C1-S9-45)', () => {
+  it('every page read still binding only `data` is one of the accepted kinds', () => {
+    // The API side got this under C1-S9-43; pages get the same treatment, and
+    // for the same reason: 21 → 12 is a number that looks like progress, and a
+    // ratchet is the claim that the remainder is defensible read by read.
+    //
+    // Keyed by file and BINDING NAME rather than line, because the API version
+    // broke on its own commit when an unrelated fix shifted line numbers.
+    const accepted = new Set([
+      // Tracked by tests/silent-empty-read-ratchet.test.ts, which owns its own
+      // baseline and demands pruning as each is fixed.
+      'app/(app)/dashboard/billing/page.tsx::data',
+      'app/(app)/dashboard/family-digital-twin/page.tsx::savedSimRows',
+      'app/(app)/dashboard/money-timeline/page.tsx::data',
+      // auth.getUser() — the signed-out branch hands off to the section layouts
+      // that actually enforce auth, which this file's header states it does not.
+      'app/(app)/layout.tsx::auth',
+      // Display-name maps: the fallback narrows a label and never changes an
+      // answer or an action (C1-S9-40's rule).
+      'app/(app)/marketplace/creators/[id]/page.tsx::members',
+      'app/(app)/marketplace/negotiations/page.tsx::members',
+      'app/(app)/marketplace/reviews/page.tsx::members',
+      'app/gift/[token]/page.tsx::cw', 'app/gift/[token]/page.tsx::m', 'app/gift/[token]/page.tsx::fam',
+      // C1-S9-29: the storage error is deliberately unbound. What matters there
+      // is the COUNT — `expectedProof.length > mediaUrls.length` — which is what
+      // turns a failed signing into a stated gap instead of a silent one, and is
+      // guarded above.
+      'app/(app)/missions/page.tsx::data',
+      // Verified benign: pre-fills a name field, and the write is the user's own
+      // submission, so a failed read costs one retyped name.
+      'app/onboarding/page.tsx::profile',
+    ]);
+    const files = execSync("find app -name 'page.tsx' -o -name 'layout.tsx'", { encoding: 'utf8' }).trim().split('\n');
+    const found = new Set<string>();
+    for (const file of files) {
+      const source = readFileSync(file, 'utf8')
+        .replace(/^\s*\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+      for (const line of source.split('\n')) {
+        const m = line.match(/const \{ data(?:: (\w+))? \} = await/);
+        if (m) found.add(`${file}::${m[1] ?? 'data'}`);
+      }
+    }
+    const unexpected = [...found].filter((f) => !accepted.has(f)).sort();
+    expect(unexpected, 'a page read binding only `data` that has not been triaged').toEqual([]);
   });
 });

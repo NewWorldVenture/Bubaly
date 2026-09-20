@@ -8,6 +8,7 @@ import { REWARD_MODE_LABELS } from '@/lib/chores/logic';
 import { createChoreAction } from '../actions';
 import { PlanGenerator } from './plan-generator';
 import { getTranslations } from '@/lib/i18n/server';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'New mission' };
 export const dynamic = 'force-dynamic';
@@ -20,8 +21,18 @@ export default async function NewMissionPage() {
   const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const { data: members } = await supabase
+  // The list a mission is ASSIGNED to. A refused read emptied it, so a parent
+  // with three children was shown a creation form with nobody to assign to —
+  // the same screen a family with no children sees. Audit C1-S9-45.
+  const { data: members, error: membersError } = await supabase
     .from('family_members').select('id, display_name, birthday').eq('family_id', ctx.active.familyId).eq('is_active', true).order('display_name');
+  if (membersError) {
+    return (
+      <div className="space-y-5">
+        <ErrorState message={t('missionsNew.couldNotLoadYourFamily')} />
+      </div>
+    );
+  }
   const kids = members ?? [];
 
   return (

@@ -27,11 +27,17 @@ export default async function ReferralsPage() {
   const summary = summarizeReferrals(referrals);
 
   // Did this family itself get referred?
-  const { data: wasReferred } = await supabase
+  // Smaller answer, not a different one (C1-S9-40's rule): a null here hides a
+  // "you were referred" note and changes nothing the family can act on wrongly.
+  // Logged so the degradation exists somewhere. Audit C1-S9-45.
+  const { data: wasReferred, error: wasReferredError } = await supabase
     .from('referrals')
     .select('id')
     .eq('referred_family_id', familyId)
     .maybeSingle();
+  if (wasReferredError) {
+    console.warn('[referrals] referred-by lookup failed; hiding the note', { familyId, error: wasReferredError.message });
+  }
 
   const rows = referrals.map((r) => ({
     id: r.id,
