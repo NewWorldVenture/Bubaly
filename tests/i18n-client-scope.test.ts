@@ -270,6 +270,89 @@ describe('a surface ships every string its client components ask for', () => {
   }
 });
 
+/**
+ * PERF-001's actual gate, measured rather than estimated.
+ *
+ * The fix for PERF-001 is to give `translate` a module with no JSON imports, so
+ * the 821.5 KB / 245.8 KB gzip English catalogue stops shipping to every page.
+ * The cost is that `translate` loses its SOURCE_MESSAGES fallback on the client,
+ * and a key outside its surface's scope stops rendering English prose and starts
+ * rendering the raw key at a visitor.
+ *
+ * On an `namespaces="all"` surface that is a no-op. On a SCOPED surface it is
+ * only safe once every key those components can ask for is provably in scope.
+ * The cases above establish that for LITERAL calls. This one bounds what is
+ * left: calls whose first argument is an expression, where no static reading of
+ * the call site alone can say which key it produces.
+ *
+ * The audit had recorded "122 non-literal t() calls across 46 client files" as
+ * the blocker. That is the whole-tree number and most of it sits behind the
+ * login, where it costs nothing. Measured on the FIVE SCOPED SURFACES only:
+ *
+ *     root-chrome    0
+ *     marketing     36
+ *     auth           6
+ *     public-link    0
+ *     survey         0
+ *
+ * Eleven files, and that is the real gate. It is listed here rather than
+ * counted, for the reason this file has had to learn three times: a count is
+ * satisfied by partial coverage, and a name is not. A NEW expression-keyed call
+ * on a public surface now fails HERE, on the day it is written, instead of
+ * becoming a raw key on a marketing page the day the fallback is deleted.
+ *
+ * To remove a file from this list, prove every key its expression can produce is
+ * inside the surface's scope — then delete the entry and watch this case stay
+ * green.
+ */
+const EXPRESSION_KEYED = [
+  'app/(marketing)/pricing/pricing-content.tsx',
+  'components/auth/callback-completion.tsx',
+  'components/auth/legal-consent.tsx',
+  'components/auth/recovery-form.tsx',
+  'components/auth/sign-out-completion.tsx',
+  'components/auth/sign-out-form.tsx',
+  'components/marketing/ai-showcase.tsx',
+  'components/marketing/consent-manager.tsx',
+  'components/marketing/contact-form.tsx',
+  'components/marketing/pricing-value-block.tsx',
+  'components/marketing/site-header.tsx',
+];
+
+/** A translator call whose first argument does not begin with a quote. */
+const CALLS_TRANSLATOR_WITH_EXPRESSION = new RegExp(
+  String.raw`(?<![A-Za-z0-9_$.])(?:${TRANSLATOR_NAMES.join('|')})\(\s*([^)\s])`,
+  'g',
+);
+
+describe('the scoped surfaces still ask for keys no static reading can name', () => {
+  it('names every expression-keyed translator call, and finds no new one', () => {
+    const found = new Set<string>();
+    for (const surface of SURFACES) {
+      for (const file of clientModulesFrom(surface.entries)) {
+        const source = readFileSync(file, 'utf8');
+        if (!/useTranslations/.test(source)) continue;
+        for (const m of source.matchAll(CALLS_TRANSLATOR_WITH_EXPRESSION)) {
+          if (m[1] === "'" || m[1] === '"') continue; // a literal; the cases above cover it
+          found.add(file.replace(`${ROOT}/`, ''));
+        }
+      }
+    }
+    // A scan that sees nothing must not pass. Same floor as the two controls
+    // above, for the same reason.
+    expect(found.size, 'the expression scan matched nothing at all').toBeGreaterThan(0);
+
+    const added = [...found].filter((f) => !EXPRESSION_KEYED.includes(f)).sort();
+    expect(added, 'a NEW expression-keyed translator call on a scoped public surface. '
+      + 'Every key it can produce must be proved in scope before PERF-001 can delete '
+      + "translate()'s English fallback, or this renders a raw key at a visitor").toEqual([]);
+
+    const gone = EXPRESSION_KEYED.filter((f) => !found.has(f)).sort();
+    expect(gone, 'these files no longer have an expression-keyed call — delete them from '
+      + 'EXPRESSION_KEYED so the list keeps meaning what it says').toEqual([]);
+  });
+});
+
 describe('scopeMessages', () => {
   it('keeps a namespace whole and drops everything else', () => {
     const sample = { 'login.title': 'a', 'login.sub': 'b', 'wallet.title': 'c', bare: 'd' };
