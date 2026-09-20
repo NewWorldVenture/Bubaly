@@ -2,11 +2,11 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-20T12:39:12.593Z
-- Total Audit Items: 14055
+- Last Updated: 2026-09-20T12:41:46.548Z
+- Total Audit Items: 14056
 - Not Started: 13842
 - In Progress: 192
-- Passed: 5
+- Passed: 6
 - Fixed + Passed: 13
 - Blocked: 1
 - Failed: 2
@@ -14187,6 +14187,7 @@ PRODUCTION READY: NO
 | AUTHZ-006 | AUTHZ | Cross-family isolation at the real API layer | ✅ PASS | Critical | 6/6 | None required | 396/396 tables read as an outsider with 1 hit (the Idea Board, by design); 0 of 26 sensitive tables writable; fixtures removed, anchor intact | Run through PostgREST with a real password-obtained token against the seeded anchor family's 71,192 rows — the layer the SQL probes do not reach. |
 | TEST-009 | Testing | Probe fixtures left in the seeded anchor family | 🛠 FIXED + PASS | Medium | 6/6 | Both probes now clear their fixtures at the end as well as the start | Each passes twice; suite 47/47 on both databases; anchor family holds only its seeded members | "Race Child" and "Probe Kid" had been living in the 71,192-row anchor family, the latter for a week. Found by the AUTHZ-006 sweep counting a member no fixture of its own had created. |
 | DATA-010 | DATA | Resource lifecycle through the real API | ✅ PASS | High | 8/8 | None required | CREATE/READ/UPDATE/VERIFY/DELETE/VERIFY all pass as a real member; a child's refused write returns HTTP 204 without Prefer, 200 [] with it, dosage unchanged | Shows at the HTTP layer why .select() + wroteNoRows was needed: 204 No Content is a success for a write that changed nothing. |
+| SEC-008 | SEC | Realtime broadcast isolation and publication drift | ✅ PASS | Critical | 5/5 | None required | Publication and code agree exactly (61 = 61, empty diff both ways); a live socket received its own family's row and not another's | The first attempt used an unpublished table and received nothing — a run that would have read as a clean refusal while proving nothing. Controls decided it. |
 
 ## Inventory and evidence rules
 
@@ -21069,6 +21070,53 @@ Executed. The nineteen markers were enumerated and each classified by hand befor
 
 #### Final Status
 🛠 FIXED + PASS
+
+### SEC-008 — Realtime broadcasts, and whether RLS reaches the websocket
+
+Status: ✅ PASS
+Severity: Critical
+Route(s), components, actions, tables and providers: supabase_realtime publication, lib/realtime/published-tables.ts, tests/realtime-publication-drift.test.ts, public.calendar_events, the Realtime service
+
+#### Expected Behavior
+A client holding a websocket receives row changes for its own family and no others. The set of tables the database broadcasts is exactly the set the client code expects.
+
+#### Test Cases
+- [x] The database's publication and the code's declared list agree, in both directions
+- [x] A member's socket subscribes successfully to a published table
+- [x] A row inserted into ANOTHER family does not arrive on that socket
+- [x] A row inserted into the member's OWN family does arrive (control)
+- [x] The control is checked before the refusal is believed
+
+#### Issues Found
+None. Both halves hold.
+
+**The publication matches the code exactly.** The database's `supabase_realtime` publication carries 61 tables and `lib/realtime/published-tables.ts` declares 61; the diff is empty in both directions — nothing published that clients never subscribe to, nothing declared that would open a dead channel. This is a surface that has been wrong before: the file's own header records that ~170 tables were once subscribed while 51 were published, so ~120 channels "connected, reported SUBSCRIBED, and delivered nothing forever".
+
+**RLS reaches the websocket.** This is the part no HTTP-level test can see, because nothing is ever requested — if the broadcast were unfiltered, a family's socket would simply carry other families' rows. Tested with a real signed-in member, a live socket, and a service-role writer inserting into both families:
+
+    signed in as rtprobe@example.com (family A member)
+    socket SUBSCRIBED to public.calendar_events
+    events received: 1  (own family: 1, other family: 0)
+    OK: A's own row arrived and B's did not
+
+The control is what makes that meaningful, and it earned its place. A **first attempt subscribed to `public.notes` and received nothing at all** — not even the member's own row:
+
+    events received: 0  (own family: 0, other family: 0)
+    CONTROL FAILED: the socket delivered nothing at all, so the refusal proves nothing
+
+`notes` is not in the publication. Read as a security result that run says "family B's rows did not arrive" and means nothing whatsoever, because no rows arrived. It is also a live reproduction of the exact dead-channel failure `published-tables.ts` exists to prevent: the socket reported SUBSCRIBED and delivered silence, which from the client's side is indistinguishable from a quiet table.
+
+#### Fixes Applied
+None required.
+
+#### Retest Results
+Re-run against `calendar_events`, which is published and family-scoped, with both controls satisfied. Every fixture removed afterwards and the removal verified: both families deleted, the auth user deleted, zero events and zero families remaining.
+
+#### Evidence
+Executed against the running local stack with `@supabase/supabase-js` 2.108.2 over a real websocket, signed in by password. The writer was a service-role client so that the insert itself could not be what the policy refused — the question was only what the socket delivered.
+
+#### Final Status
+✅ PASS
 
 ### DATA-010 — A resource's full lifecycle through the API the browser uses
 
