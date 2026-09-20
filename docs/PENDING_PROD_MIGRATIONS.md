@@ -501,13 +501,50 @@ passed; production application of the atomic `0240-0254` release remains pending
 ## Migrations added since this document's stated baseline (2026-09-12)
 
 The status line at the top of this file is dated **2026-09-05** against main
-`01881fb2`. **Seventy-seven** migration files have landed since, `0255` through
-`0301`, and none of them appear anywhere above. (This read "thirty-one, `0255`
+`01881fb2`. **Seventy-nine** migration files have landed since, `0255` through
+`0301` plus `0318` and `0319`, and none of them appear anywhere above. (This read "thirty-one, `0255`
 through `0285`" until 2026-09-13, then "seventy-two, `0255` through `0296`" and
 "seventy-four … `0298`" the same day; the range simply keeps growing past the
 sentence.)
 
-`0297_family_credentials_write_boundary.sql` is the newest and is worth naming
+### `0319_allowance_rules_are_not_self_served.sql` — unapplied, and the newest
+
+`allowance_rules` carries `child_wallet_id`, `amount_cents`, `cadence` and
+`next_run_on`, and the wallet allowance cron credits the named wallet from it.
+Its only policy was `for all to authenticated using (is_family_member(family_id))`,
+so the row that pays a child was writable by that child. Reproduced on a replayed
+database as the child: `update public.allowance_rules set amount_cents = 100000,
+next_run_on = current_date;` → `UPDATE 1` — $5.00/week became $1,000.00 due today.
+The wallet actions all gate on `isManager`, but a PATCH to
+`/rest/v1/allowance_rules` never passes through them.
+
+Writes now require `can_manage_family()`; **SELECT is granted explicitly**,
+because the replaced `FOR ALL` was also what allowed reads. Safe to replay, no
+data touched.
+
+### `0318_guardian_safety_config_is_manager_only.sql` — unapplied
+
+Closes **AUTHZ-005**. `guardian_contacts` (per-contact trust levels) and
+`guardian_member_profiles` (each member's per-band routing modes) both carried
+`FOR ALL TO authenticated USING (is_family_member(family_id))` from `01370`.
+`FOR ALL` covers INSERT, UPDATE and DELETE, so the rule deciding who may change a
+**child's call screening** asked only whether the caller was in the household —
+and the child is in the household. A teen wanting an unscreened line to a
+stranger needs one request to `/rest/v1/guardian_contacts`; the server actions in
+`app/(app)/guardian/actions.ts` gate on `isManager` but are not in that path, and
+that file already says as much in its own header.
+
+Writes now require `can_manage_family()` — the same set the server actions
+already enforce, so no capability is added. Reads are unchanged. Replayed on a
+throwaway PG16 (315 migrations, 0 failed) with **24/24** boundary probes green,
+including `docs/audit/guardian-safety-config-is-managers-only-check.sql`, which
+carries its own negative control.
+
+**Applying it is the whole of the remedy; it is safe to replay** (`drop policy if
+exists` then `create policy`), touches no data, and takes no lock beyond the two
+tables' catalogue entries.
+
+`0297_family_credentials_write_boundary.sql` is worth naming
 here rather than leaving inside a count, because what it closes is live in
 production right now: `family_credentials` holds the "Wi-Fi & Passwords" vault,
 its category constraint allows `card` and `pin`, and all four of its policies

@@ -4652,3 +4652,240 @@ imports that come after it, so hoisting that one would silently unmock the turn.
 Standalone: **3/3 pass**. No timeout was added and no assertion was touched — the
 thirty-fold drop in the body is the evidence that the cost was transform rather
 than the test.
+
+---
+
+## Pass BJ — a child could rewrite the screening that protects them
+
+**[CLAUDE-1][HIGH][SECURITY] `guardian_contacts` and `guardian_member_profiles`
+took writes from any household member, child included. — FIXED (repo; unapplied)**
+
+Cross-referenced to the master control document on `main`: **AUTHZ-005** (❌ FAIL,
+High). Their record: *"Pending database policy repair; additional action checks
+alone cannot prevent direct database writes. Existing no-new-SQL constraint
+remains in force."* Writing a migration file is a **repository** change, not a
+production mutation, so that fence is theirs and not mine — the standing rule
+here is only that agents must not *apply* migrations to production, and 0318 is
+left unapplied exactly like 0296–0301.
+
+### The defect, in the application's own words
+
+`01370_ai_call_guardian.sql` gave both tables
+`FOR ALL TO authenticated USING (is_family_member(family_id))`. `FOR ALL` covers
+INSERT, UPDATE and DELETE, so the rule deciding who may change a child's
+protection asked only whether the caller was in the household — and the child is
+in the household.
+
+`app/(app)/guardian/actions.ts` on `main` already says so:
+
+> RLS on the guardian tables is family-scoped (any member), and children have
+> real logins, so these server actions are the authorization boundary: only a
+> family manager (parent/adult) may change safety config.
+
+Both halves are true, and together they are the defect. **A server action is not
+a boundary against a JWT holder.** Children have real logins; a request to
+`/rest/v1/guardian_contacts` never passes through `app/` at all. A teen wanting
+an unscreened line to a stranger needed one HTTP request, not a defeated UI.
+
+What the two tables actually hold: per-contact **trust levels**, and each
+member's per-band **routing modes** — `default_mode_unknown` being the one
+applied to a caller the household has never seen. They are the configuration of
+the AI Call Guardian, whose entire purpose is protecting a child from scam and
+grooming contact. `0215` hardened the routing *rules* table and stopped there,
+which is why this survived that pass.
+
+### Fix — `0318_guardian_safety_config_is_manager_only.sql`
+
+Writes require `can_manage_family()` — the repo's existing predicate
+(`0003`: `role in ('parent','adult') and is_active`), the same set as
+`isManager()` in `lib/constants/roles.ts`, so **nothing is granted that a manager
+did not already have through the server actions**. Reads are unchanged: a child
+may still see their own configuration, which is what the Guardian screens render.
+
+Split into explicit INSERT/UPDATE/DELETE rather than another `FOR ALL`, so the
+next reader cannot mistake a write policy for a read one the way `FOR ALL`
+invited here. UPDATE carries **both** `USING` and `WITH CHECK`: without the
+latter a manager could relocate a row into another family — the S-01 shape.
+
+### Proof — replayed, not reasoned
+
+- **315 migrations applied, 0 failed** on a throwaway PG16 (`verify-pg.sh up`).
+- **24/24 boundary probes pass on a fresh database**, including the new
+  `docs/audit/guardian-safety-config-is-managers-only-check.sql`. The runner
+  globs, so it is picked up without registration.
+- The probe asserts both directions and the `WITH CHECK` half, and **carries its
+  own negative control**: it restores `01370`'s permissive `FOR ALL` inside the
+  transaction, re-runs the child's escalation, and *requires that it now
+  succeeds*. A boundary check that has never been shown to fail is decoration.
+
+### Two mistakes of mine, recorded because they cost runs
+
+1. **`g` is not a hex digit.** I used `…0000g1` as a mnemonic for "guardian" and
+   every UUID literal was invalid. Caught immediately by the probe.
+2. **I invented column names instead of reading them.** `phone_e164` and
+   `display_name` and `routing_mode` do not exist; the real columns are `phone`,
+   `name` and the seven `default_mode_*` bands, and `trust_level` is an enum
+   whose value is `trusted_friend`, not `trusted`. Fixed by querying
+   `information_schema` and `pg_enum` rather than guessing again.
+
+A third thing looked like a regression and was not: `child-login…-check.sql`
+failed on the *second* suite run. Its own fixtures had leaked from my repeated
+manual iteration on the throwaway database; my probe's rows (`d3`/`d4`) were
+absent, so the leak was not mine. Re-bootstrapping and running the suite once —
+which is what CI does — gives **24/24**. Recorded rather than quietly re-run.
+
+---
+
+## Pass BK — a child could set the amount of their own allowance
+
+**[CLAUDE-1][CRITICAL][SECURITY] `allowance_rules` took writes from the child it
+pays. — FIXED (repo `0319`; unapplied)**
+
+**New. Not in any worker's file, and not in the master control document on
+`main`.** Found by sweeping the *class* rather than the instance: with a replayed
+database in hand I asked which tables share AUTHZ-005's shape.
+
+### The sweep, and the honest size of it
+
+```sql
+select tablename from pg_policies
+where cmd='ALL' and permissive='PERMISSIVE'
+  and qual like '%is_family_member%'
+  and qual not like '%can_manage_family%' and qual not like '%is_family_admin%';
+```
+
+**167 tables.** That is emphatically *not* 167 defects — it is a policy
+**default**, and for most of them it is right: `habit_logs`, `game_results`,
+`family_polls`, `dining_out` are a household sharing its own data. The severity
+in AUTHZ-005 came from the *subject*, not the shape.
+
+Narrowing to sensitive subjects with **no restrictive guard layered on top**
+(the money tables already carry three, from earlier passes) leaves **22**:
+allowance_rules, babysitter_payments, babysitter_profiles, behavior_logs,
+compliance_disclosures, family_emergency_contacts, family_emergency_plans,
+family_insurance_policies, gift_links, gift_payments, grades,
+guardian_suggestions, health_goals, health_metrics, health_visits,
+home_security_events, immunizations, medication_doses, tax_documents,
+vacation_documents, vacation_emergency_contacts, vacation_medical_information.
+
+**Only `allowance_rules` is fixed here.** The other 21 are recorded, not
+repaired, because each needs its own read of who legitimately writes it — a
+teen logging their own `health_metrics` is probably correct, and I will not
+mass-apply a predicate to twenty-one tables on the strength of their names.
+
+### The one that is unambiguous
+
+`allowance_rules` carries `child_wallet_id`, `amount_cents`, `cadence` and
+`next_run_on`; `app/api/cron/wallet-allowance/route.ts` reads the due rules and
+credits the named wallet. Its **only** policy was
+`for all to authenticated using (is_family_member(family_id))`.
+
+Every write path in `app/(app)/wallet/actions.ts` gates on
+`isManager(ctx.active.role)`. But a server action is not a boundary against a
+JWT holder, and a PATCH to `/rest/v1/allowance_rules` never passes through
+`app/`.
+
+**Reproduced on the replayed database, as the child:**
+
+```
+update public.allowance_rules set amount_cents = 100000, next_run_on = current_date;
+-> UPDATE 1     ($5.00/week became $1,000.00, scheduled for today)
+```
+
+No exploit, no race — one authenticated request against the row that pays you.
+
+### A correction to my own earlier work
+
+**W-01 and W-02 closed the allowance double-pay race** — `runDueAllowancesAction`
+advancing the schedule by id while the cron carried `.lte('next_run_on', today)`.
+I re-raced it on two connections and got the exact ledger numbers. That pass
+examined how an allowance is **paid** and never once asked **who may set the
+amount**. The execution path was made correct while its input stayed writable by
+the beneficiary. Auditing a mechanism is not the same as auditing its inputs.
+
+### Fix and proof
+
+`0319` mirrors `0318`: writes require `can_manage_family()`, the same set
+`isManager()` already enforces. **SELECT is granted explicitly**, because the
+`FOR ALL` being replaced was also what allowed reads — dropping it without that
+would blank the allowance surfaces for everyone, and "you get $5 on Fridays" is
+the feature.
+
+- **316 migrations applied, 0 failed** on a throwaway PG16.
+- **25/25 boundary probes pass on a fresh database**, including
+  `docs/audit/allowance-rule-is-not-self-served-check.sql`, which carries its own
+  negative control: it restores the permissive policy inside the transaction and
+  requires the child's raise to succeed again.
+
+### One of the 22 checked, and it is correct by design
+
+`medication_doses` looked alarming on the list and is **not** a defect.
+`components/modules/medications-module.tsx` is a **client component** that
+inserts, updates and deletes doses straight from the browser Supabase client —
+there is no server action and no role gate anywhere in that path. The permissive
+member policy is therefore the *intended* boundary, not an oversight: a teen
+marking their own dose taken is the flow the feature was built for.
+
+This is why the other 21 are recorded rather than repaired, and it is worth
+stating explicitly: **the list of 22 is a list of things to read, not a list of
+defects.** The test that separates them is not the table's name but whether the
+application's own write path enforces something RLS does not. For
+`allowance_rules` it did (`isManager` in every wallet action, RLS on bare
+membership) — that gap is the defect. For `medication_doses` there is no gap,
+because there is no gate to disagree with.
+
+### The remaining 21, classified by the same test
+
+Applied mechanically: **does the application's own write path enforce something
+RLS does not?** That, not the table's name, is what separates a defect from a
+design.
+
+**Six carry the same defect as `allowance_rules` — a server action gates on
+`isManager`, RLS gates on bare membership:** `babysitter_payments`,
+`babysitter_profiles`, `compliance_disclosures`, `gift_links`, `gift_payments`
+(via `app/(app)/wallet/actions.ts`) and `vacation_documents` (via
+`lib/services/documents/index.ts`).
+
+**Ten are correct by design** — the write path is a client component going
+straight to the browser Supabase client, so the permissive member policy *is* the
+boundary the feature was built on: `behavior_logs`, `family_insurance_policies`,
+`grades`, `health_goals`, `health_metrics`, `health_visits`,
+`home_security_events`, `immunizations`, `tax_documents`, and `medication_doses`
+as established above.
+
+**Five have no app write path this sweep could find:**
+`family_emergency_contacts`, `family_emergency_plans`, `guardian_suggestions`,
+`vacation_emergency_contacts`, `vacation_medical_information`. Either something
+outside `app/`, `lib/` and `components/` writes them, or nothing does. A table
+nothing writes is its own finding; a table written from somewhere this sweep did
+not look is a gap in the sweep. It is not safe to conclude from silence.
+
+`gift_payments` also has a **second, ungated** server path in `app/gift/actions.ts`
+— which is the public gift-link flow, where the giver is not signed in, so an
+absent role gate there is probably correct rather than a defect. Recorded because
+"ungated" and "wrong" are not the same claim.
+
+**I got this list wrong the first time and am correcting it rather than quietly
+restating it.** My first pass printed *basenames*, so three different
+`actions.ts` files collapsed into one label: it reported four defects, put
+`vacation_documents` under "no write path", and marked `gift_payments` ungated
+when its wallet path gates on `isManager` like the rest. Re-run with full paths,
+it is six, nine becomes ten, and five remain unknown. The failure mode is worth
+naming — an identifier that is not unique is not an identifier, and a census
+keyed on one will under-report in exactly the direction that looks reassuring.
+
+**None of the six are fixed here.** Same shape and same repair, but
+`allowance_rules` earned its fix by being *reproduced* on a live database, not by
+matching a pattern. The next pass should reproduce each of the six the same way
+before writing a line of SQL.
+
+### And the gate caught me, which is the point of it
+
+`tests/migration-version-safety.test.ts` went red: `expected '0320' to be '0302'`.
+That is **my own F-020 gate working as designed** — it pins the next version so a
+new migration cannot land without someone reading the list. Updating the pin is
+the maintenance it exists to compel, not a weakening of it; the comment now names
+both new files and records *why* they skip 0302–0317 (main holds its own
+0296–0317, so this branch's 0296–0301 already collide with six of them, and
+numbering the new pair from 0318 keeps them out of that pile rather than
+deepening it).

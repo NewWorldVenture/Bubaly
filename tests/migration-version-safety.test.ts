@@ -46,7 +46,14 @@ describe('Supabase migration filename safety', () => {
     // the child_logins write boundary, 0300 the audit_logs actor pin, and 0301 the family-erasure indexes. Both branches independently claimed 0295;
     // stating the number rather than deriving it is exactly what caught that, so
     // a file that quietly reuses one, or a rebase that drops one, fails here.
-    expect(audit.nextVersion).toBe('0302');
+    //
+    // 0318 (guardian safety config is manager-only) and 0319 (allowance rules
+    // are not self-served) skip past 0302-0317 DELIBERATELY. main carries its
+    // own 0296-0317, so this branch's 0296-0301 already collide with six of
+    // them; numbering the new pair from 0318 keeps them out of that pile rather
+    // than deepening it. The collision itself is real and still has to be
+    // resolved when the branches meet — see finalaudit.md.
+    expect(audit.nextVersion).toBe('0320');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {
