@@ -7084,3 +7084,121 @@ The same pattern at the *application* layer (`autopilot_suggestions` →
 `trust_policies`) was found in the one place the data pointed, and a systematic
 sweep of manager-gated server actions for read-class-table/write-guarded-table
 flows was **not** done. That is queued, not claimed.
+
+## Pass BR — the deputy pattern at the application layer, and a fix that missed a column
+
+The definer sweep in Pass BQ was systematic — all 55 `SECURITY DEFINER`
+functions granted to `authenticated`, reads intersected against child-writable
+sources and writes against privileged sinks. It found one live chain and three
+already closed. But it found the *application-layer* variant
+(`autopilot_suggestions` → `trust_policies`) by following a hunch in a single
+place, and said so. This pass is that sweep done properly.
+
+**118 manager-gated entry points across 74 files.** The gate vocabulary is
+wider than the brief assumed: `isManager`, `assertSuperAdmin`, `managerCtx`,
+`canManage(scope)`, `notYours()`, `MANAGER_ONLY`/`MANAGER_ONLY_DELETES` set
+membership, and `isAdmin` (parent-only). `requireManager` and `assertManager`
+do not exist in this tree — two names the brief guessed at.
+
+~40 had a read-to-write shape; ~35 were hand-read. **Three are real, one is
+latent, one was the known seed, and the rest are defeated.**
+
+### AUTHZ-012 — the split that covered the verb and missed the column
+
+`family_automation_runs` has **two status columns**. `0255_ai_runtime_lockdown`
+pins member inserts hard — `created_by = auth.uid()`, `state = 'queued'`, six
+columns forced NULL — and the pinned `state` is CHECK-constrained by `0250`. The
+legacy `status` from `0022_family_os.sql:135` is `text NOT NULL DEFAULT
+'pending'` with **no CHECK**, and neither it nor `trigger_type` nor the
+`metadata` jsonb is pinned.
+
+So: child inserts a run that satisfies RLS on `state`, sets `status='pending'`
+and `trigger_type='plan_accepted'`, writes their own `summary`. The autopilot
+panel filters on exactly those two values and renders the child's `summary` as
+the line beside "Do it". On approve, the action reads `meta.approval_id` **from
+that row** and stamps the named `approval_requests` row `approved`,
+`decided_by=<the parent>` — a write `0251` restricts to `can_manage_family`,
+which succeeds only because it is running in the parent's session.
+
+**Sized honestly: decision-record forgery and queue suppression, not remote
+execution.** `approvals.decide()` is what turns an approval into work and is not
+on this path.
+
+**And the provenance of the defect is the lesson.** `0251`'s own header says the
+table was split because *"any member could set `status='executed'` on a run they
+never approved."* The split covered UPDATE. The legacy column stayed reachable
+on INSERT. A fix that addressed the verb and missed the column — which is the
+same shape as `trip_items` having insert and delete guards and no update guard,
+found in Pass BQ.
+
+### AUTHZ-013 — a category a child can neither write nor read
+
+`family_playbook_suggestions` carries `0126`'s role-blind policy on all four
+verbs, through a `format()` loop, never narrowed — `0265` says "No policy
+changes: 0264 owns this table's RLS", and `0264` does not mention it. Its
+`category` CHECK admits `medical` and `account`, the two categories
+`family_facts_insert` specifically bars a non-manager from. `confirmFact` copies
+the suggestion's own `category`, `label`, `value` and `evidence` across in the
+parent's session.
+
+The child is writing into a surface they cannot read, since
+`family_facts_select` hides sensitive categories from them. And **`source` is
+derived from `suggestion.signature`**, which the child controls — so they choose
+whether the fact reads back as *"you said it"* or *"Bubaly worked it out"*, in
+the exact column `0265` exists to make trustworthy. Confirmed facts feed the AI
+context slice.
+
+### AUTHZ-014 — one column, and it ends in money
+
+`chore_assignments.ai_score` was added by `00430` and **has not appeared in a
+migration since**. The decision trigger guards `status` and the award columns
+and nothing else. `approveSubmissionAction` falls back to
+`assignment.ai_score`, which scales an `ai_cash` payout, written in the parent's
+session so the trigger passes, and `payChoreRewardAction` credits the wallet
+from it.
+
+**What narrows it deserves the credit:** `chore_ai_validations` is **SELECT-only
+for members** — no write policy exists at all — so the service-written score
+normally wins and the prose the parent reads is service-written. The fallback is
+only reachable when no validation row exists, which a child arranges by
+inserting the submission directly.
+
+This one matters beyond itself: it is a single unguarded **column** on an
+otherwise trigger-guarded table, which means Pass BQ's "guarded" bucket is
+table-granular and may hide more of these.
+
+### AUTHZ-015 — latent, and the sequencing is the point
+
+`concierge_calls` is child-writable on all four verbs and holds `callee_phone`.
+Two manager-gated actions flip such a row to `queued`. It does not land **only**
+because `app/api/concierge-calls/place/route.ts` has no voice provider and
+parks every due row as `action_needed` — and that file's "HONESTY BOUNDARY"
+comment is what keeps it shut. The row is already sitting in front of the
+dialler. It should be closed *before* a provider is integrated, not after.
+
+### The larger half: defeated, and by guards worth citing
+
+Most of the 35 are closed, several deliberately and narrowly:
+`chore_ai_validations` being read-only is the cleanest — it closes the prose
+half of AUTHZ-014 by policy. `0305` trigger-guards the payout columns and its
+header names this exact path. `0304` and `0306` close the decision statuses.
+`stripe_issuing_cards` and `stripe_connected_accounts` have **no policy at
+all**, so `authenticated` is denied outright and `stripe_card_id` cannot be
+repointed. `parent_approvals` is pinned to `status='pending'` with UPDATE
+forbidden — leaving only the `requested_by` residue recorded as **AUDIT-003**.
+
+### The coverage limit that reframes the rest of this audit
+
+The sweep treated a migration present in the tree as closing its table. **None
+of `0318`–`0328` is applied.** Read against production, the paths it filed as
+defeated by `0322`/`0324`/`0325` are **live** — the Pay ID redirect, the savings
+goal that drains a sibling, the Guardian suggestion. That distinction is now
+stated at the top of `finalaudit.md`, because it changes the present tense of
+every "closed" row in the document.
+
+Also out of reach and stated rather than implied: `approvals.decide()`'s
+execution branches were not traced to the end (the reason AUTHZ-012 is sized as
+forgery and not execution); cron and webhook readers gate on a secret rather
+than a role and were outside the definition, though they read the same tables;
+~20 manager-gated `page.tsx` server components were not traced, and the
+"misled parent" half can live in a page whose action lives elsewhere.
