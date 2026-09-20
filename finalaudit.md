@@ -2,7 +2,7 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-19T21:47:17.477Z
+- Last Updated: 2026-09-20T14:30:00.000Z
 - Total Audit Items: 14038
 - Not Started: 13842
 - In Progress: 192
@@ -42,6 +42,41 @@
 > `main`'s `0306` had already closed it, better. That row records the mistake
 > because the mistake generalises — absence from a failure list is not evidence
 > that nobody looked.
+>
+> **Post-merge passes (2026-09-20), all pushed and CI-running on PR #541:**
+>
+> - **Pass BL** — the two i18n ratchets that went red at the merge. Neither had
+>   been broken: each is one audit's instrument, newly aimed at the other's
+>   code. Measured with one scanner held fixed over three trees (2,823 / 2,811 /
+>   2,823), so the merge added nothing. Of the twelve findings this branch
+>   contributed, **none was new untranslated copy**; six were removed on their
+>   own merits and six are recorded as **I18N-006** rather than half-converted.
+>   A measurement error is recorded with them: archiving without
+>   `lib/i18n/messages/INVARIANT.txt` makes the scanner fall back to an empty
+>   invariant set **in silence**, which pointed the first reading backwards.
+> - **Pass BM** — `tests/no-route-gates-on-a-per-instance-limit.test.ts` caught
+>   a half-fix of this audit's own. Pass BA found a service-role write above an
+>   auth check and removed the durable rate limiter instead of relocating it;
+>   the limiter is now after `resolveAssistantLink`, keyed on the principal.
+>   Where that collided with `main`'s boundary guard, the reconciliation is
+>   written down: the assertion that changed was a **proxy** for the boundary,
+>   every assertion carrying the boundary itself is untouched, and two were
+>   added.
+>
+> Also closed post-merge: the split cron counter, the blog unsubscribe banner,
+> an ungated vacation-import endpoint, a photo lightbox that claimed
+> `aria-modal` inertness with none of the behaviour, an object namer that
+> invented `.jpg` for files of unknown type, and four workflows that
+> contradicted `.nvmrc` — this box was running Node 22 against a repo that
+> declares 24, which accounted for two apparent failures that were the runtime
+> rather than the source.
+>
+> **Full suite on the declared Node 24.21.0: 1,348 files / 17,170 tests, all
+> passing.** `tsc` clean, i18n gate clean, 334 migrations / 0 failed, 46/46
+> boundary probes.
+>
+> **Still NO on production readiness**, and the three reasons are unchanged:
+> SEC-001's bucket half, the unapplied migration ledger, and I18N-001.
 
 Verified application release 2a5e7e7a15b93f544660b41c0f3185b4865e80ed publishes the phone OTP and signout repair on exact Vercel dpl_8oWh1TNVFNbmGissmnvmA11P6ECT (21:28:59 UTC). Public auth/phone readiness passes without authentication actions or SMS dispatch. Frozen source/test/workflow f75e7febdf01bf944fa35a505745001533c80028 passes 459/459 controlled browser cases and both full 16,703/16,703 unit runs across 1,305 files; build252, full strict types, lint (three existing warnings), localization and query checks pass. Exact hosted CI35470363378 Web/Database/Mobile succeed, including both full unit zones/build/types. E2E105970089707 fails only its three new phone HTTP cases:1,293/1,296 pass in8.3minutes; each stalls before code-entry heading after Continue, so real OTP verification is not reached. Repaired durable signout and all six callback cases pass by exact enabled-source matrix minus the three failures, not individual success log entries. A two-file CI provider/hook and diagnostic repair passes local strict types/lint, discovery3, guards66 and config/negative controls; no application runtime or product config/SQL changes. New hosted phone acceptance remains open. Published d954 hosted1,251/1,252 remains historical failed-baseline evidence, not the current release result. AUTH-001/002/003 stay IN PROGRESS. See docs/final-audit/auth-phone-ownership-cycle.md and production-rollout-20260919.md.
 
