@@ -80,7 +80,23 @@ describe('Supabase migration filename safety', () => {
     // app path performs) and the `resolved_by` attribution are closed; 0328 the
     // `wallet_audit_logs` actor pin, which is 0320's repair applied to the
     // money-domain sibling it did not reach.
-    expect(audit.nextVersion).toBe('0329');
+    //
+    // Five more from the same census, one subject each, none renumbering
+    // anything. 0329 `family_automation_runs`: 0251 split 0022's `FOR ALL` and
+    // narrowed UPDATE/DELETE, and 0252/0255 pinned the §10 `state` column, but
+    // the ORIGINAL `status text NOT NULL DEFAULT 'pending'` was never pinned —
+    // so a child's INSERT landed in the parent's "Pending approvals" list
+    // carrying the child's own `summary` and `metadata`, and the "Do it" button
+    // stamped whatever `approval_requests` row that metadata named. The blocker
+    // 0251 recorded for tightening INSERT (plan acceptance ran on the member's
+    // client) is gone: `planAcceptedAction` writes with the service client.
+    // 0330 `playbook_suggestions`; 0331 the AI score column, which is not the
+    // child's to write; 0332 the dialler, where a child does not choose the
+    // number Bubaly calls; 0333 `parent_approvals.requested_by`, the one column
+    // saying whose ask it is — 0320's repair applied a third time, restrictive
+    // rather than restated so 0252's conditions stay where the source-level
+    // ratchets in tests/ai-insert-authority.test.ts can still read them.
+    expect(audit.nextVersion).toBe('0334');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

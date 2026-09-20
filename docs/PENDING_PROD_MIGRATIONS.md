@@ -650,6 +650,79 @@ missing ledger entry does not establish that the schema is absent, and a local
 verification is not production evidence. Production's ledger records only
 `0001-0003`.
 
+### `0329`-`0333`, the census's second tranche — all unapplied
+
+Five more from the same class census, one subject each, none of them renumbering
+anything. All five were **measured on a replayed database before a line of SQL
+was written**, and each carries a probe under `docs/audit/` with a negative
+control that drops only the new guard and requires the escalation to work again.
+
+- **`0329_automation_runs_pin_what_a_member_may_queue.sql`** closes
+  **AUTHZ-012**. `0251` split `0022`'s `FOR ALL` on `family_automation_runs`
+  because, in its own words, "any member could set `status='executed'` on a run
+  they never approved" — and narrowed **UPDATE and DELETE**. `0252` and `0255`
+  then pinned what a member's INSERT may claim, but both pinned the **§10
+  `state` column**; the original `status text NOT NULL DEFAULT 'pending'` from
+  `0022` — which still carries **no CHECK** — was never pinned, and neither were
+  `trigger_type`, `metadata`, `summary`, `approved_by` or `approved_at`. A
+  child's insert therefore landed in the parent's "Pending approvals" list
+  carrying the child's own `summary`, and the "Do it" button stamped whichever
+  `approval_requests` row that row's **own metadata** named. The repair pins
+  **who may INSERT** rather than another column, because `status`'s default is
+  itself a queue value — an insert naming no status at all still lands in the
+  list. Every writer was enumerated first, by bare table name across `app/`,
+  `lib/`, `components/`, `hooks/`, `mobile/` and `scripts/`: **no application
+  path inserts on a member's RLS-bound client**, so plan acceptance by a teen or
+  child is unaffected. The blocker `0251` recorded for exactly this tightening —
+  *"until that app change lands"* — landed in `7a33b9cb`.
+- **`0330_playbook_suggestions_cannot_smuggle_a_sensitive_fact.sql`** closes
+  **AUTHZ-013**, and it is the **confused-deputy pattern for the third time**.
+  `family_playbook_suggestions` carries `0126`'s role-blind `is_family_member`
+  on all four verbs, written through a `format()` loop and never narrowed.
+  `0264` bars a non-manager from writing a `'medical'` or `'account'`
+  `family_facts` row; `confirmFact` is manager-gated and copies the
+  **suggestion's own** category, label, value and evidence into that table, so
+  the parent's session carries the child's fact past the rule. Measured both
+  ways in one rolled-back transaction: the direct insert is **refused (42501)**,
+  the identical fact through the side table **lands**.
+- **`0331_ai_score_is_not_the_childs_to_write.sql`** closes **AUTHZ-014**.
+  `chore_assignments.ai_score` was added by `00430` and has not appeared in a
+  migration since; the table's BEFORE trigger guards the decision `status`
+  (`0223`) and the two award amounts (`0305`) and nothing else, so a child could
+  set the score in the same statement that legitimately moves their own
+  assignment to `done`. `approveSubmissionAction` falls back to
+  `assignment.ai_score`, and for an `ai_cash` chore that scales the payout —
+  written in the **parent's** session, which is how it satisfies `0305`. The
+  repair extends the trigger rather than adding a policy, for the reason `0326`
+  gives: raising the submission is the designed child action, only the number is
+  not theirs.
+- **`0332_a_child_does_not_choose_the_number_bubaly_dials.sql`** closes
+  **AUTHZ-015**, deliberately **before** the exposure becomes real.
+  `concierge_calls` has `0173`'s role-blind policies on all four verbs; all four
+  server actions gate on `isManager`, and `tests/concierge-calls-authz.test.ts`
+  pins that gate as the first executable statement in each. It does not land
+  today only because `app/api/concierge-calls/place/route.ts` has no voice
+  provider and parks every due row as `action_needed`. The day one is
+  integrated, this is a child choosing the number a parent's click dials.
+- **`0333_a_request_says_who_actually_filed_it.sql`** closes **AUTHZ-016**, and
+  is **stated smaller than the brief that found it**. `parent_approvals` is
+  otherwise well pinned — `0251` leaves the decision to managers, `0252` forces
+  the row to be born pending and undecided — but `requested_by` was never
+  pinned, so a child could file a request signed with the parent's uid, a
+  sibling's, or nobody's. **Nothing in the product SELECTs that column**, so no
+  screen shows a parent the wrong name; what is defective is the stored record,
+  which is the AUDIT-002 class. Filing stays open to every member on purpose.
+  The guard is **restrictive rather than a restatement** of
+  `parent_approvals_insert`, because that policy belongs to `0252` and two
+  source-level ratchets read it — recreating it here would leave them describing
+  a policy that is no longer live.
+
+**Verified together, on a database built from nothing:** `docs/audit/pg-bootstrap.sh`
+applied **346 migrations, 0 failed**, and `docs/audit/run-probes.sh` then passed
+**58 of 58** boundary probes against it — the five new ones included. That is
+evidence about this tree. It is **not** evidence about production, which still
+records only `0001-0003`.
+
 ### Three of them gate features that are already merged and live in the app
 
 These shipped today (PRs #513 and #515) and their UI is deployed. Until the

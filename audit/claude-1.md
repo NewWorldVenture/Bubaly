@@ -7190,7 +7190,7 @@ forbidden — leaving only the `requested_by` residue recorded as **AUDIT-003**.
 ### The coverage limit that reframes the rest of this audit
 
 The sweep treated a migration present in the tree as closing its table. **None
-of `0318`–`0328` is applied.** Read against production, the paths it filed as
+of `0318`–`0333` is applied.** Read against production, the paths it filed as
 defeated by `0322`/`0324`/`0325` are **live** — the Pay ID redirect, the savings
 goal that drains a sibling, the Guardian suggestion. That distinction is now
 stated at the top of `finalaudit.md`, because it changes the present tense of
@@ -7202,3 +7202,149 @@ forgery and not execution); cron and webhook readers gate on a secret rather
 than a role and were outside the definition, though they read the same tables;
 ~20 manager-gated `page.tsx` server components were not traced, and the
 "misled parent" half can live in a page whose action lives elsewhere.
+
+## Pass BS — I fixed a guard, declared it sound, and it was blind twice more
+
+This pass is mostly a correction to Pass BP, which was mine. The interesting
+part is not the three defects behind the guard; it is that the same shape
+caught me three times in one file, and I only stopped finding it when I stopped
+fixing instances and closed the shape.
+
+### The shape
+
+`tests/i18n-client-scope.test.ts` decides whether a public page can survive
+PERF-001 deleting `translate`'s English fallback from the client bundle. It has
+three inputs, and I had been treating it as if it had one:
+
+1. **which files it walks** — the entry list;
+2. **which calls it can see inside them** — the extractor;
+3. **which surfaces exist at all** — the `SURFACES` array.
+
+Pass BP found a defect in (1): a git pathspec `app/(marketing)/**/layout.tsx`
+matched **nothing**, because `**/` requires at least one intervening directory.
+I fixed it, wrote a control that *names* the four root layouts instead of
+counting entries, planted a regression, watched it fail alone, and recorded
+I18N-007 as **Fixed**.
+
+It was not. I had checked one of the three inputs.
+
+### (2) The extractor — 105 files, zero keys
+
+```
+"t('a.b')"       MATCHED
+"tr('a.b')"      MISSED
+"i18nT('a.b')"   MISSED
+105              client modules binding the translator as tr / i18nT
+```
+
+`/\bt\(/` puts a word boundary *before* the `t` and then demands the very next
+character be `(`. In `tr('planOutcomes.heading')` the next character is `r`.
+Meanwhile `if (!/useTranslations/.test(source)) continue` let all 105 files
+through happily — so the guard **opened every one of them and took nothing
+out**. Fixing it turned three of four surfaces red immediately:
+
+| surface | out-of-scope keys the fixed extractor found |
+|---|---|
+| root-chrome | **1** — `toast.dismiss`, and `ToastProvider` mounts in `app/layout.tsx` *above* every `ScopedLocaleProvider`, so it is on **every page, public ones included** |
+| marketing | **56**, across 12 namespaces |
+| auth | **5** |
+| public-link | 0 |
+
+Widening the scopes then broke the size assertion, and the cause was worth
+looking at rather than raising the bound past: `AUTH_SCOPE` listed the namespace
+`actions` — **478 keys, 32,141 bytes, 72% of the entire auth scope** — added for
+a comment's stated reason, *"the two kid-login errors the sign-in form surfaces
+from the server action"*. **Two of 478 are used.** `scopeMessages` now accepts
+exact dotted keys as well as namespaces, and auth went **44,440 → 12,471 B**
+(5.32% → 1.49% of the catalogue).
+
+The repair for (2) is not the regex. It is a control that **asserts its own
+completeness**: walk every tracked `.tsx?` under `app/`, `components/`, `lib/`,
+find every `useTranslations` binding, fail naming any alias not in
+`TRANSLATOR_NAMES`. With a `> 500` non-vacuity floor, because the defect this
+file keeps having is *a scan that sees nothing and reports clean*.
+
+Planted `const translateThing = useTranslations()` in
+`components/ui/phone-input.tsx`: failed **alone**, naming the file. Removed:
+11/11.
+
+### (3) The surface list — a public page with no scope at all
+
+Having fixed (1) and (2) I asked what else the file assumes, rather than
+declaring it sound a second time. `SURFACES` is hand-written and nothing
+required it to be **complete**.
+
+`app/s/[slug]` — the feedback survey, **unauthenticated**, linked out to people
+who are not customers — is the only page in the tree with **no `layout.tsx`**.
+No `ScopedLocaleProvider` mounts for it; the root layout's `ROOT_CHROME_SCOPE`
+is all that reaches the browser; and `survey-form.tsx` asks for `surveyForm.*`
+and `sSurveyForm.*`, neither of which is in it. Correct English today, entirely
+on the fallback PERF-001 wants to delete.
+
+`SURVEY_SCOPE` plus `app/s/[slug]/layout.tsx` fixes the instance. The control
+closes the shape: **every `page.tsx` under `app/` is either governed by a
+provider declaring `namespaces="all"` — `app/(app)` and `app/onboarding`, named
+rather than assumed — or belongs to a surface this file walks.** `> 100`
+non-vacuity floor, same reason as before.
+
+Planted by removing the survey surface from `SURFACES`: fails **alone**, naming
+`app/s/[slug]/page.tsx`. Restored: 13/13.
+
+### What this leaves for PERF-001
+
+One file, and scope cannot reach it. `app/global-error.tsx` is the boundary for
+an error thrown in the **root layout**, so Next.js replaces the whole document
+and `app/layout.tsx` — the only thing that mounts a `LocaleProvider` — never
+ran. `useTranslations` there falls to `translate({}, key)`, i.e.
+`SOURCE_MESSAGES[key]`, in **every locale, always**. Its four strings are
+already English-only for every visitor in all eleven locales; the `t()` calls
+are decorative.
+
+Inlining them would be the wrong fix — it raises the
+`hardcoded-locales-only-go-down` ceiling for a page whose behaviour would not
+change. The right one is to keep an explicit English-only source for exactly
+this file **in the same commit as the split**, not after it. Everything else on
+the literal side is now attributed.
+
+### The lesson, stated so it is reusable
+
+A guard has as many blind spots as it has inputs, and fixing one input proves
+nothing about the others. Each time I fixed an instance the file passed, which
+felt like evidence and was not: **it passed before each fix too.** What actually
+moved the needle was replacing a *count* with something that **names** what it
+must see — three times, once per input — and giving each of those a non-vacuity
+floor so an empty scan cannot masquerade as a clean one.
+
+### Pass BS, second half — the census's remaining four, plus one I was wrong about
+
+`0329`–`0333` close AUTHZ-012 through AUTHZ-015 and a new AUTHZ-016. Each was
+measured on a replayed database before any SQL was written, and each carries a
+probe with a negative control that drops **only** the new guard and requires the
+escalation to work again.
+
+Two are worth singling out:
+
+- **`0329`** pins **who may INSERT** into `family_automation_runs` rather than
+  pinning another column, and the reason is that `status`'s own default is a
+  queue value — `NOT NULL DEFAULT 'pending'`, still with no CHECK — so an insert
+  naming no status at all still lands in the parent's "Pending approvals" list.
+  Before writing it I enumerated every writer by **bare table name** across
+  `app/`, `lib/`, `components/`, `hooks/`, `mobile/` and `scripts/`, not only
+  `.from('…')`: **no application path inserts on a member's RLS-bound client.**
+  That is the check CENSUS-002 taught me to run — there I had asked for a
+  manager-only guard on `autopilot_suggestions` and would have 500'd
+  `/dashboard/autopilot` for every child in a Plus family.
+- **`0333`** is **smaller than the brief that sent me**, and saying so is the
+  point. The brief said the forged `requested_by` lands "in the inbox a parent
+  reads while deciding". It does not: **nothing in the product SELECTs that
+  column.** The wallet inbox, both decision cards, the reminder generator, the
+  assistant and the admin count all read `id, kind, amount_cents, created_at`,
+  and the two decide actions never branch on the requester. No screen shows a
+  parent the wrong name. What is defective is the **stored record** — the
+  AUDIT-002 class — and the honest moment to pin a column is before something
+  reads it, not after.
+
+Verified together, on a database built from nothing: **346 migrations applied,
+0 failed**, then **58 of 58** boundary probes passed against it. That is
+evidence about this tree and not about production, which still records only
+`0001-0003`.
