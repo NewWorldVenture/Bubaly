@@ -24,6 +24,18 @@
 #    this audit had already closed as still open. Both sides are expanded into
 #    the three verbs before they are compared.
 #
+# 3. Treating "the table has a raising trigger" as "the table has a ROLE guard".
+#    Nine of the seventeen guard functions are role-aware; eight are not.
+#    `reference_shares_family` checks that a referenced row is in the same
+#    family and says nothing about who may write; `validate_marketplace_
+#    negotiation_round` and `sync_blog_image_provenance` are validation. So
+#    grocery_items, meal_plans, moves and move_tasks were credited with a
+#    boundary they do not have, and the true open count is 251 rather than 247.
+#    Small in magnitude and exactly the AUTHZ-014 shape: a TABLE-granular bucket
+#    standing in for a COLUMN-granular truth. Both numbers are printed below,
+#    and the four tables in the gap are named, because collapsing them into one
+#    figure is how the distinction gets lost again.
+#
 # ── What "open" means here, and what it does NOT mean ────────────────────────
 #
 # Open = the write predicate is NOTHING BUT `is_family_member(family_id)`, there
@@ -45,14 +57,19 @@ psql -v ON_ERROR_STOP=1 -q <<'SQL'
 with verbs(v) as (values ('INSERT'),('UPDATE'),('DELETE')),
 
 -- Only a function that can RAISE can refuse a write. set_updated_at cannot.
-guardfn as (select oid from pg_proc where prosrc ~* 'raise +exception'),
-guarded as (
-  select distinct c.relname as tablename
+-- And only a raising function that consults the ROLE is a role boundary:
+-- reference_shares_family raises, and guards cross-family references, not who.
+anyfn as (select oid from pg_proc where prosrc ~* 'raise +exception'),
+rolefn as (select oid from pg_proc where prosrc ~* 'raise +exception'
+             and prosrc ~* 'can_manage_family|is_manager|role +in +\(|role +='),
+trig_tables as (
+  select distinct c.relname as tablename, t.tgfoid
     from pg_trigger t
     join pg_class c on c.oid = t.tgrelid
     join pg_namespace n on n.oid = c.relnamespace
-   where n.nspname = 'public' and not t.tgisinternal
-     and t.tgfoid in (select oid from guardfn)),
+   where n.nspname = 'public' and not t.tgisinternal),
+anyguard  as (select distinct tablename from trig_tables where tgfoid in (select oid from anyfn)),
+guarded   as (select distinct tablename from trig_tables where tgfoid in (select oid from rolefn)),
 
 w as (
   select tablename, cmd, permissive,
@@ -91,7 +108,14 @@ select 'OPEN tables (bare, unguarded, no raising trigger)', count(distinct table
 union all
 select 'OPEN (table, verb) pairs', count(*)::text from open_pairs
 union all
-select 'tables carrying a raise-exception trigger', count(*)::text from guarded
+select 'tables carrying a ROLE-AWARE raising trigger', count(*)::text from guarded
+union all
+select 'tables carrying a raising trigger that is NOT role-aware',
+       (select count(*)::text from (select tablename from anyguard except select tablename from guarded) x)
+union all
+select '  of those, still open once it is not miscounted',
+       coalesce((select string_agg(distinct o.tablename, ', ' order by o.tablename) from open_pairs o
+                  where o.tablename in (select tablename from anyguard except select tablename from guarded)), 'none')
 union all
 select 'tables carrying set_updated_at (guards NOTHING)', count(distinct c.relname)::text
   from pg_trigger t join pg_class c on c.oid = t.tgrelid
@@ -101,10 +125,11 @@ select 'tables carrying set_updated_at (guards NOTHING)', count(distinct c.relna
 \echo ''
 \echo 'The open tables, with the verbs each still takes from any member:'
 with verbs(v) as (values ('INSERT'),('UPDATE'),('DELETE')),
-guardfn as (select oid from pg_proc where prosrc ~* 'raise +exception'),
+rolefn as (select oid from pg_proc where prosrc ~* 'raise +exception'
+             and prosrc ~* 'can_manage_family|is_manager|role +in +\(|role +='),
 guarded as (select distinct c.relname as tablename from pg_trigger t
    join pg_class c on c.oid = t.tgrelid join pg_namespace n on n.oid = c.relnamespace
-   where n.nspname = 'public' and not t.tgisinternal and t.tgfoid in (select oid from guardfn)),
+   where n.nspname = 'public' and not t.tgisinternal and t.tgfoid in (select oid from rolefn)),
 w as (select tablename, cmd, permissive, coalesce(qual,'') || ' ' || coalesce(with_check,'') as pred
     from pg_policies where schemaname = 'public' and cmd in ('INSERT','UPDATE','DELETE','ALL')),
 xw as (select tablename, v.v as cmd, permissive, pred from w, verbs v where w.cmd = v.v or w.cmd = 'ALL'),
