@@ -29066,6 +29066,49 @@ is missing, and splitting them again is a judgement about meaning the script
 should not make. Deliberately **not** wired into CI: other agents edit these
 files, and a red build over someone's prose is not what the check is for.
 
+## The attribution freeze has a second failure mode, and it is silent
+
+The UPDATE half of AUTHZ-021 wants a **preserving** trigger, for the reason
+AUTHZ-022 gives: no calendar writer sends `created_by` on UPDATE, so a refusing
+policy fails the legitimate edit of somebody else's event while a preserve keeps
+the truth that was recorded. Written the obvious way — `new.created_by :=
+old.created_by`, unconditionally — it also **reverts a referential action**, and
+nothing reports it.
+
+`calendar_events_created_by_fkey` is `ON DELETE SET NULL` (read from the live
+catalog, not from a migration: `confdeltype = 'n'`). Postgres performs that
+action as an ordinary UPDATE against the referencing row, so a BEFORE UPDATE
+trigger sees it and can overwrite it. Measured in an isolated database built for
+this one question:
+
+| # | what was measured | result |
+|---|---|---|
+| 1 | unconditional preserve, then delete the referenced user | `created_by` still names the deleted user — **the FK's SET NULL was subverted**, and no error was raised at the time |
+| 2 | `pg_trigger_depth() = 1` guard, same deletion | trigger fires at **depth 2**, preserve is skipped, `created_by` becomes NULL as the FK intends |
+| 3 | depth guard, application UPDATE rewriting `created_by` to another member | fires at **depth 1**, rewrite refused — the original author stands |
+| 4 | depth guard, application UPDATE erasing `created_by` to NULL | fires at **depth 1**, erasure refused — so this closes anonymisation, not only impersonation |
+| 5 | depth guard, `INSERT … ON CONFLICT DO UPDATE` seizing authorship | fires at **depth 1**, refused — which is the case an INSERT `WITH CHECK` never sees, because the conflict path is checked against the UPDATE policies |
+
+Row 1 is the finding. An account deletion would leave dangling references behind
+it, at the moment the product is meant to be forgetting someone — and the
+symptom appears nowhere near the trigger that caused it.
+
+**Is `= 1` a hole?** Only a *trigger-issued* UPDATE reaches depth 2, so the
+question is whether any exists. Asked of the catalog rather than by grepping:
+no trigger function attached to any table, and no function in any non-system
+schema at all, contains an UPDATE against `calendar_events`. A function invoked
+directly is not a path either — its UPDATE still runs its triggers at depth 1.
+So the guard is exact today. It is also a **maintenance hazard worth stating**:
+the day a trigger is added that updates this table, the freeze stops protecting
+rows updated through it, silently and in the attacker's favour. That is the
+mirror of the hazard in row 1, and both want the same thing — an assertion that
+fails loudly rather than a comment.
+
+These five rows are measurements, not a decision. What they establish is that
+the *shape* AUTHZ-021 needs is a depth-guarded preserve rather than the plain
+one AUTHZ-022 was reaching for, and that the plain one has a cost nobody had
+priced.
+
 ## What this pass did not do
 
 No migration was written. AUTHZ-021 now has a verified precedent, a verified
