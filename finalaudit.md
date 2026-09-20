@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-191 finding IDs from four workers and two parallel sessions; none of it was
+192 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -12,7 +12,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 > source-and-migration audit run without production credentials. Session B
 > (Register B, 14,038 items, `AUTH-001` / `API-<hash>` / `DB-TBL-nnn`) is a
 > hosted-CI and deployed-release audit. Their finding-ID sets are **disjoint**:
-> 913 IDs from A, 684 from B, 1,594 in union — verified mechanically at each
+> 914 IDs from A, 684 from B, 1,595 in union — verified mechanically at each
 > merge. The three literals both files contain (`LB-009`, `LB-016`, `SHA-256`)
 > are not counter-examples: the first two are pre-existing *runbook* names each
 > register cites, and the third is a hash algorithm the ID regex matches. No
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 201 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 202 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -33750,6 +33750,68 @@ register and the test cannot drift apart silently.
 
 ---
 
+### `[CLAUDE-1][HIGH][SERVER ACTIONS]` C1-S9-51 — a revoked super-admin who was not revoked, and an audit log that says otherwise
+
+Eight more from the `C1-S9-50` baseline, and the pass where the class stopped
+being only about what the user sees.
+
+#### The admin console writes a record of what it did
+
+**Every write in `app/(app)/admin/actions.ts` is followed by `adminAuditLog`,
+which records the change as having happened.** So an unconfirmed write there
+does not merely mislead the admin on screen — it writes a **false entry into the
+audit trail**, which is the record anyone later reaches for to establish what
+was done, by whom, and when. Screen, log, and reality disagree, and two of the
+three agree with each other.
+
+**The sharpest instance: `super_admins` revoke.**
+
+```ts
+const { error } = await supabase.from('super_admins').delete().eq('email', email);
+if (error) return actionFailure(error, …);
+// … then: adminAuditLog({ action: 'revoke', resource: 'super_admins', … })
+```
+
+A delete matching no row leaves that person a **super-admin**, tells the acting
+admin they are not, and stamps `action: 'revoke'` into the audit log. Three
+records of a demotion that did not happen — and the one that matters, their
+continued access, is the one nobody is looking at.
+
+Also fixed in the same file: the subscription plan change (billing), the support
+ticket status, and the feature-flag toggle — whose own docstring calls it *"the
+single source of truth for what the wallet exposes."*
+
+**And three provisioning rollbacks.** `createFamilyAction`'s failure paths
+delete the half-created family. They already bound and logged their `error`, but
+a delete that removed **nothing** was silent, leaving an orphan family behind.
+The `C1-S9-35` shape again: the caller is already returning an error, so a
+failed undo is invisible unless it says so itself. They stay **logged rather
+than raised** — they run on a path that is already failing, and throwing would
+replace the real error with a bookkeeping one. A guard pins that.
+
+#### Account lifecycle
+
+`closeAccountAction` promises something about retention and billing that a
+no-op did not keep. `reopenAccountAction` is worse because it **contradicts
+itself on screen**: `resolveEntitlement` in `app/(app)/layout.tsx` reads
+`closed_at` to decide whether to show `AccountClosedGate`, and the action
+revalidates the whole layout — so a no-op told the family they were reopened and
+then put the closed-account gate straight back in front of them.
+
+**Status:** FIXED. Guard: nine cases, each proved red by mutation, including the
+over-tightening direction (turning a rollback into a throw) and an ordering
+case asserting that every confirmed admin write precedes its `adminAuditLog`
+call — because the ordering *is* the finding.
+
+#### The ratchet worked on its first burn-down
+
+`C1-S9-50`'s baseline went in at **82 across 39 files**; this pass took it to
+**74 across 37**. Two files left the list entirely, and the baseline was edited
+down rather than up — which is the motion the instrument exists to make
+visible, and the first evidence that it does.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -33819,8 +33881,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,091 passing / 17,094 across 1,352
-files.** (Re-run after `C1-S9-50`; was 16,950 / 16,953 across 1,349 before this
+Status: ✅ PASS — `npx vitest run`: **17,101 passing / 17,104 across 1,352
+files.** (Re-run after `C1-S9-51`; was 16,950 / 16,953 across 1,349 before this
 batch.) The three failures are `C1-S9-09`, BLOCKED: this container runs Node
 22.22.2 against the repository's `.nvmrc` 24.21.0, and nvm cannot fetch the
 Node 24 distribution here. Not counted as passing.

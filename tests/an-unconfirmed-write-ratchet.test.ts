@@ -65,11 +65,12 @@ function unconfirmedPerFile(): Map<string, number> {
   return counts;
 }
 
-// Known unconfirmed writes as of C1-S9-50. ONLY REMOVE or DECREASE entries as
-// they are fixed — never add, never increase.
+// Known unconfirmed writes as of C1-S9-51 (82 at C1-S9-50, 74 now). ONLY REMOVE
+// or DECREASE entries as they are fixed — never add, never increase.
+//
+// Two files left the list entirely in the first burn-down after the ratchet
+// went in, which is the shape it was built to make visible.
 const BASELINE = new Map<string, number>([
-  ['app/(app)/account/actions.ts', 2],
-  ['app/(app)/admin/actions.ts', 6],
   ['app/(app)/admin/marketing/affiliates/actions.ts', 1],
   ['app/(app)/admin/marketing/content/actions.ts', 2],
   ['app/(app)/admin/marketing/social/recurring/actions.ts', 2],
@@ -137,6 +138,6 @@ describe('the unconfirmed-write class only shrinks (C1-S9-50)', () => {
     // If this number moves without finalaudit.md moving with it, one of the two
     // is wrong — and the register is the thing other workers read.
     const total = [...BASELINE.values()].reduce((a, b) => a + b, 0);
-    expect(total).toBe(82);
+    expect(total).toBe(74);
   });
 });

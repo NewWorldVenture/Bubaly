@@ -15,7 +15,7 @@ import { stripeFromKey } from '@/lib/stripe';
 import type { MemberRole } from '@/lib/constants/roles';
 import type { PlanId } from '@/lib/constants/plans';
 import { isSuperAdminEmail } from '@/lib/constants/super-admins';
-import { describeActionError } from '@/lib/supabase/errors';
+import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { isValidTimezone } from '@/lib/time/zoned';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
@@ -164,16 +164,26 @@ export async function adminCreateFamilyAction(input: {
     is_active: true,
   }, { onConflict: 'family_id,user_id' });
   if (memberError) {
-    const { error: cleanupError } = await supabase.from('families').delete().eq('id', family.id);
-    if (cleanupError) console.error('[admin-action] family cleanup failed', cleanupError);
+    const { data: cleaned, error: cleanupError } = await supabase.from('families').delete().eq('id', family.id).select('id');
+    if (cleanupError || wroteNoRows(cleaned)) {
+      // A rollback that removed nothing leaves an orphan family behind. C1-S9-35
+      // is the same shape: the caller is already returning an error, so a failed
+      // undo is invisible unless it says so itself.
+      console.error('[admin-action] family cleanup failed', cleanupError ?? 'no rows deleted');
+    }
     return actionFailure(memberError, t('actions.couldNotAddTheOwner'));
   }
 
   const { data: existingSubscription, error: subscriptionLookupError } = await supabase
     .from('subscriptions').select('id').eq('family_id', family.id).limit(1);
   if (subscriptionLookupError) {
-    const { error: cleanupError } = await supabase.from('families').delete().eq('id', family.id);
-    if (cleanupError) console.error('[admin-action] family cleanup failed', cleanupError);
+    const { data: cleaned, error: cleanupError } = await supabase.from('families').delete().eq('id', family.id).select('id');
+    if (cleanupError || wroteNoRows(cleaned)) {
+      // A rollback that removed nothing leaves an orphan family behind. C1-S9-35
+      // is the same shape: the caller is already returning an error, so a failed
+      // undo is invisible unless it says so itself.
+      console.error('[admin-action] family cleanup failed', cleanupError ?? 'no rows deleted');
+    }
     return actionFailure(subscriptionLookupError, t('actions.couldNotVerifyTheNew'));
   }
   if (!existingSubscription || existingSubscription.length === 0) {
@@ -184,8 +194,10 @@ export async function adminCreateFamilyAction(input: {
       current_period_end: new Date(Date.now() + 14 * 86400000).toISOString(),
     });
     if (subscriptionError) {
-      const { error: cleanupError } = await supabase.from('families').delete().eq('id', family.id);
-      if (cleanupError) console.error('[admin-action] family cleanup failed', cleanupError);
+      const { data: cleaned, error: cleanupError } = await supabase.from('families').delete().eq('id', family.id).select('id');
+      if (cleanupError || wroteNoRows(cleaned)) {
+        console.error('[admin-action] family cleanup failed', cleanupError ?? 'no rows deleted');
+      }
       return actionFailure(subscriptionError, t('actions.couldNotCreateTheNew'));
     }
   }
@@ -256,9 +268,15 @@ export async function adminSetFamilyPlanAction(input: { familyId: string; plan: 
 
   const previousPlan = existing?.plan ?? null;
   if (existing) {
-    const { error } = await supabase.from('subscriptions')
-      .update({ plan, status: 'active' }).eq('id', existing.id);
+    // Every write in this file is followed by `adminAuditLog`, which records the
+    // change as having happened. So an unconfirmed write does not just mislead
+    // the admin on screen — it writes a FALSE ENTRY into the audit trail, which
+    // is the record anyone later reaches for to establish what was done and by
+    // whom. Audit C1-S9-51.
+    const { data: planned, error } = await supabase.from('subscriptions')
+      .update({ plan, status: 'active' }).eq('id', existing.id).select('id');
     if (error) return actionFailure(error, t('actions.couldNotUpdateTheFamily'));
+    if (wroteNoRows(planned)) return { ok: false, error: t('actions.couldNotUpdateTheFamily') };
   } else {
     const { error } = await supabase.from('subscriptions')
       .insert({ family_id: input.familyId, plan, status: 'active', seats: 1 });
@@ -301,8 +319,13 @@ export async function adminSetSuperAdminAction(input: { email: string; makeAdmin
     const { error } = await supabase.from('super_admins').upsert({ email }, { onConflict: 'email' });
     if (error) return actionFailure(error, t('actions.couldNotUpdateSuperAdmin'));
   } else {
-    const { error } = await supabase.from('super_admins').delete().eq('email', email);
+    // The sharpest one in the file: a REVOKE that matched no row leaves that
+    // person a super-admin, tells the acting admin they are not, and writes
+    // `action: 'revoke'` into the audit log. Three records of a demotion that
+    // did not happen.
+    const { data: revoked, error } = await supabase.from('super_admins').delete().eq('email', email).select('email');
     if (error) return actionFailure(error, t('actions.couldNotUpdateSuperAdmin'));
+    if (wroteNoRows(revoked)) return { ok: false, error: t('actions.couldNotUpdateSuperAdmin') };
   }
 
   await adminAuditLog({
@@ -543,8 +566,9 @@ export async function adminUpdateTicketStatusAction(ticketId: string, status: Ti
   if (!TICKET_STATUSES.includes(status)) return { ok: false, error: t('actions.invalidStatus') };
 
   const supabase = createServiceClient();
-  const { error } = await supabase.from('support_tickets').update({ status }).eq('id', ticketId);
+  const { data: ticket, error } = await supabase.from('support_tickets').update({ status }).eq('id', ticketId).select('id');
   if (error) return actionFailure(error, t('actions.couldNotUpdateThatSupport'));
+  if (wroteNoRows(ticket)) return { ok: false, error: t('actions.couldNotUpdateThatSupport') };
 
   await adminAuditLog({ familyId: null, action: 'update', resource: 'support_tickets', resourceId: ticketId, metadata: { status } });
   revalidatePath('/admin/support');
@@ -560,8 +584,12 @@ export async function adminToggleFeatureFlagAction(key: string, enabled: boolean
   if (!key || key.length > 100) return { ok: false, error: t('actions.invalidFlagKey') };
 
   const supabase = createServiceClient();
-  const { error } = await supabase.from('feature_flags').update({ enabled }).eq('key', key);
+  // The docstring above calls this "the single source of truth for what the
+  // wallet exposes". A toggle that matched no row leaves the flag as it was
+  // while the admin, and the audit log, both record it as changed.
+  const { data: flagged, error } = await supabase.from('feature_flags').update({ enabled }).eq('key', key).select('key');
   if (error) return actionFailure(error, t('actions.couldNotUpdateThatFeature'));
+  if (wroteNoRows(flagged)) return { ok: false, error: t('actions.couldNotUpdateThatFeature') };
 
   await adminAuditLog({ familyId: null, action: 'update', resource: 'feature_flags', resourceId: key, metadata: { enabled } });
   revalidatePath('/admin/wallet');

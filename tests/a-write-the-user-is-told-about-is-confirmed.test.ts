@@ -551,3 +551,77 @@ describe('a feed error annotation is recorded, not raised (C1-S9-49)', () => {
     for (const b of blocks) expect(b.slice(0, 200)).not.toContain('return { ok: false, error: annotateError');
   });
 });
+
+/**
+ * Audit C1-S9-51 — account lifecycle and the admin console, where an
+ * unconfirmed write also corrupts the record of what was done.
+ *
+ * Every write in `admin/actions.ts` is followed by `adminAuditLog`, which
+ * records the change as having happened. So an unconfirmed write here does not
+ * only mislead the admin on screen — it writes a FALSE ENTRY into the audit
+ * trail, which is the record anyone later reaches for to establish what was
+ * done and by whom. That is what lifts this file above the ordinary class.
+ */
+const account = readFileSync('app/(app)/account/actions.ts', 'utf8');
+const adminActions = readFileSync('app/(app)/admin/actions.ts', 'utf8');
+
+describe('closing and reopening an account are confirmed (C1-S9-51)', () => {
+  it('both lifecycle writes ask what they changed', () => {
+    for (const binding of ['closed', 'reopened']) {
+      expect(account, binding).toContain(`wroteNoRows(${binding})`);
+    }
+  });
+
+  it('the reopen would otherwise contradict itself on screen', () => {
+    // `resolveEntitlement` in the app layout reads `closed_at` to decide whether
+    // to show AccountClosedGate, and this revalidates the whole layout — so a
+    // no-op told the family they were reopened and then put the gate straight
+    // back in front of them. The comment carries that reasoning; if it goes, the
+    // justification for the check goes with it.
+    expect(account).toContain('AccountClosedGate');
+    expect(account).toContain("revalidatePath('/', 'layout')");
+  });
+});
+
+describe('an admin action is not audited as done when it was not (C1-S9-51)', () => {
+  it.each([
+    ['the subscription plan change', 'planned'],
+    ['the super-admin revoke', 'revoked'],
+    ['the support ticket status', 'ticket'],
+    ['the feature flag toggle', 'flagged'],
+  ])('%s is confirmed', (_label, binding) => {
+    expect(adminActions, binding).toContain(`wroteNoRows(${binding})`);
+  });
+
+  it('every confirmed admin write precedes its audit-log call', () => {
+    // The ordering IS the finding: the audit entry must not be written for a
+    // change that did not land.
+    for (const binding of ['planned', 'revoked', 'ticket', 'flagged']) {
+      const check = at(adminActions, `wroteNoRows(${binding})`);
+      const rest = adminActions.slice(check);
+      expect(rest, `${binding} has no audit call after it`).toContain('adminAuditLog');
+    }
+  });
+
+  it('the super-admin revoke keeps its reasoning', () => {
+    // Three records of a demotion that did not happen: the screen, the audit
+    // log, and the person's continued access.
+    expect(adminActions).toContain('leaves that\n    // person a super-admin');
+  });
+
+  it('all three provisioning rollbacks report an empty cleanup', () => {
+    // C1-S9-35's shape: the caller is already returning an error, so a failed
+    // undo is invisible unless it says so itself. A rollback that removed
+    // nothing leaves an orphan family behind.
+    expect(adminActions.match(/wroteNoRows\(cleaned\)/g) ?? []).toHaveLength(3);
+    expect(adminActions.match(/'no rows deleted'/g) ?? []).toHaveLength(3);
+  });
+
+  it('the rollbacks stay logged, not raised', () => {
+    // They run on a path that is already failing; turning them into a throw
+    // would replace the real error with a bookkeeping one.
+    const blocks = adminActions.split('family cleanup failed').slice(1);
+    expect(blocks).toHaveLength(3);
+    for (const b of blocks) expect(b.slice(0, 120)).not.toContain('throw');
+  });
+});
