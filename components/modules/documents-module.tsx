@@ -54,7 +54,7 @@ const fmtDateIn = (locale: LocaleCode) => (iso: string): string => {
  * evidence against it.
  */
 const timeAgoIn = (locale: LocaleCode) => (iso: string): string =>
-  createFormat(locale).fmtTimeAgo(iso, { absoluteAfterDays: 7, absolutePattern: 'MMM d, yyyy' });
+  createFormat(locale).fmtTimeAgo(iso, { absoluteAfterDays: 7, absoluteWithYear: true });
 
 // ── File-type detection → icon + color, and coarse storage group ────────────
 type FileMeta = { Icon: typeof FileText; color: string; tint: string };

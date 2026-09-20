@@ -6561,3 +6561,102 @@ version went wrong; it is left as a recorded decision for its own pass.
 
 **Verified:** `tests/middleware-assistant-boundary.test.ts` and
 `tests/alexa-request-verification.test.ts` — **70/70**.
+
+## Pass BL — two ratchets crossed in the merge, and neither had been broken
+
+The merge left two i18n ratchets red, and the tempting reading of both was
+"drift". It was wrong both times, and the reason is structural rather than
+lucky: **each ratchet is one agent's instrument, and the merge pointed it at the
+other agent's code for the first time.**
+
+| instrument | born on | ceiling measured against | what it now measures |
+|---|---|---|---|
+| `tests/i18n-ungated-surface-ratchet.test.ts` | `main` | main's tree alone (2,811) | main **+** this branch's `app/` and `components/` |
+| `tests/hardcoded-locales-only-go-down.test.ts` | this branch | this branch alone (70 / 16) | this branch **+** 198 commits of main's `lib/` |
+
+Neither number moved because someone wrote a careless string. Both moved
+because the instrument is now aimed at code it had never scanned — the same
+*shape* as the "stricter scanner" case the surface ratchet already names as the
+one legitimate reason to raise a ceiling. That file now names this as a second
+reason, explicitly, rather than leaving someone to argue it into existence.
+
+### The method, and the reading that nearly landed
+
+Hold ONE scanner fixed and vary the tree. Today's scanner over three trees:
+
+    617355b2  this branch's pre-merge tip     2,823
+    origin/main                               2,811
+    HEAD      the merge                       2,823
+
+So the merge added **nothing**; this branch was already at 2,823 alone.
+
+**The first run of that measurement said 2,846 / 2,835 / 2,823 and pointed the
+conclusion backwards** — it made the merged tree look like an improvement on
+both parents. The cause is worth writing down: I archived only `app` and
+`components` out of each tree, because those are the two paths `scanPaths` is
+given. But the scanner also reads `lib/i18n/messages/INVARIANT.txt` — the file
+that says "Bubaly" and the other proper nouns are not to be translated — and a
+**missing invariant file falls back to an empty set without a word**. Both
+historical trees were therefore scored with every proper noun counted as a
+finding. That is the same trap this file already records one costume earlier
+(2,343 vs 2,812): two numbers from two differently-configured scanners say
+nothing about the code. I walked into it again from the other side.
+
+### The twelve, classified — none was new untranslated copy
+
+- **5 were date-format PATTERN KEYS** (`'MMM d'`, `'MMM d, yyyy'`) passed as
+  `absolutePattern` from five UI call sites. Both are in `PATTERNS`, so they
+  already routed through `Intl.DateTimeFormat(code, options)` — the scanner was
+  reading a mechanism as copy. **Removed anyway, and not to buy five off a
+  ceiling:** `fmtDate` answers an *unmapped* pattern by falling through to
+  date-fns `format()`, which carries no locale, so a typo (`'MMM D'`) would have
+  failed nowhere and quietly shipped English month names to eleven locales. The
+  option is now `absoluteWithYear?: boolean` — which is what the type's own
+  comment said all seven callers were choosing between.
+- **1 was `label: 'The AI assistant'`**, the only one of eleven `assertAIAccess`
+  callers passing a label. Now derived from `FEATURE_CATALOG_BY_KEY[featureKey]
+  .label`, so an upgrade prompt names the feature the way the plan page it sends
+  the reader to names it. `'ai-requests'` is itself labelled `'Ask Bubaly'`, so
+  the other ten read exactly as before.
+- **6 are `guardian/page.tsx` read-failure diagnostics** — and these were **not
+  converted**, on purpose. The ceiling already accepts the same class from main:
+  command-center's `'open chores'`, `'meal plans'`, `'expiring docs'` and the
+  equivalents on calm and activity are all inside the 2,811. Every one renders
+  as `` `${label}: ${describeReadError(error)}` `` and that second half is a
+  Postgres string nothing can translate, so a translated label reads
+  *"Mitgliederprofile: relation … does not exist"*. Converting one page of six
+  leaves two conventions for one diagnostic — the half-conversion this audit has
+  refused since Pass Z. Recorded as **I18N-006**, a class, to be closed as one.
+
+**2,823 − 6 = 2,817.**
+
+### The locale ratchet: six new sites, all mechanism, none converted
+
+Same method, three trees; it reproduces **70 / 16** on `617355b2` exactly, which
+is what earns the delta any trust, and `origin/main` alone scores **247** — the
+number this file started at, because none of the conversion work exists there.
+The delta is four files and **three did not exist on this branch at all**:
+`lib/display/ambient.ts` (+2), `lib/meals/week.ts` (+2, new on main),
+`lib/social/schedule-time.ts` (+1) and `lib/social/scheduled-publish.ts` (+1).
+
+All six are engines, and the reason is worth recording: **main's authors had
+already reached for the locale wherever a person reads the output.** Each module
+carries both halves, correctly split. `ambient.dayPart()` wraps `.format()` in
+`Number(...)` and does arithmetic on it; `meals/week.ts` builds a `YYYY-MM-DD`
+key that `calendarDate()` re-parses against `/^\d{4}-\d{2}-\d{2}$/` with a
+non-null assertion — a non-Latin numbering system fails the regex and the `!`
+throws; `schedule-time.ts` is the `ics-time.ts` constructor-as-validity-probe
+already in the ratchet's header. `components/` **held at zero through 198
+commits of main**, and `app/` held at its floor of 25.
+
+**One gap found and recorded rather than closed.** `scheduled-publish.ts:25`
+calls `.format(instant)` purely to force a `RangeError` on a bad timezone and
+discards the string. The mechanism pin identifies a bare probe by the *absence*
+of `.format` after the constructor, so the ceiling counts this site and the pin
+cannot see it — which is why the ceiling moved +6 and the pin +5. Widening the
+signal list to catch it would start catching real display formatters, and a pin
+that drifts up on false positives has stopped being a pin.
+
+**Verified:** both ratchets green (8/8), `npm run -s i18n:gate` clean across all
+declared surfaces, `npx tsc --noEmit` clean,
+`tests/one-time-ago-and-it-follows-the-reader.test.ts` 12/12.

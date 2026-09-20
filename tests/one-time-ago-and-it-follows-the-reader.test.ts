@@ -72,7 +72,7 @@ describe('the shared time-ago', () => {
     // No threshold: carries on in weeks however old.
     expect(ago('en-US', 60 * 24 * 40)).toBe('5w ago');
     // The Memories attribution asks for a dated label after a week, with the year.
-    const opts = { absoluteAfterDays: 7, absolutePattern: 'MMM d, yyyy' };
+    const opts = { absoluteAfterDays: 7, absoluteWithYear: true };
     expect(ago('en-US', 60 * 24 * 40, opts)).toBe('Dec 1, 2025');
     // 'MMM' is the SHORT month, so German abbreviates December and does not
     // abbreviate June — which is why a test that happens to pick June proves less

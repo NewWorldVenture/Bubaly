@@ -50,7 +50,7 @@ export function ContactCenterModule({ channel, messages, smsReplyStatuses = {}, 
   // bare toLocaleDateString(), which follows the BROWSER's locale rather than the
   // family's Bubaly choice — a defect the 'en-US' scan could not see.
   const { fmtTimeAgo } = useFormat();
-  const fmtTimeAgo7 = (iso: string) => fmtTimeAgo(iso, { absoluteAfterDays: 7, absolutePattern: 'MMM d, yyyy' });
+  const fmtTimeAgo7 = (iso: string) => fmtTimeAgo(iso, { absoluteAfterDays: 7, absoluteWithYear: true });
   const t = useTranslations();
   const router = useRouter();
   const [pending, start] = useTransition();

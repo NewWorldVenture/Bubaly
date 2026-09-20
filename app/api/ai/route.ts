@@ -149,7 +149,7 @@ export async function POST(req: NextRequest) {
     // switching member or device the way the per-user rate limit above can.
     let access;
     try {
-      access = await assertAIAccess(ctx, { db: supabase, featureKey: AI_ASSISTANT_FEATURE_KEY, label: 'The AI assistant' });
+      access = await assertAIAccess(ctx, { db: supabase, featureKey: AI_ASSISTANT_FEATURE_KEY });
     } catch (error) {
       // assertAIAccess throws only when the family's plan cannot be read. An
       // unreadable plan is not an unentitled family, so answer 503 rather than

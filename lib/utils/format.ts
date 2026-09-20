@@ -122,12 +122,21 @@ const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
  *   absoluteAfterDays  — the Memories share attribution switches to a date after a
  *                        week; the activity feed carries on in weeks until five;
  *                        the Guardian check-in list never switches.
- *   absolutePattern    — and they disagree about whether that date carries a year.
+ *   absoluteWithYear   — and they disagree about whether that date carries a year.
+ *
+ * That second one used to be `absolutePattern?: string`, and a raw pattern string
+ * is the wrong shape for it twice over. It is stringly typed against PATTERNS, and
+ * `fmtDate` answers an UNMAPPED pattern by falling through to date-fns `format()`,
+ * which has no locale — so a typo ('MMM D') would not fail anywhere, it would
+ * quietly ship English month names to all eleven locales. And it put a date-fns
+ * pattern in the hands of seven UI call sites, which is a formatting decision the
+ * formatter owns. Every one of those callers wanted one of exactly two patterns,
+ * which is what the line above already said, so it is a boolean.
  */
 export type TimeAgoOptions = {
   now?: Date;
   absoluteAfterDays?: number;
-  absolutePattern?: string;
+  absoluteWithYear?: boolean;
 };
 
 /**
@@ -251,7 +260,7 @@ export function createFormat(code: LocaleCode = DEFAULT_LOCALE, t?: Translator):
 
     const days = gap / (24 * 3600_000);
     if (opts.absoluteAfterDays != null && days >= opts.absoluteAfterDays) {
-      return fmtDate(d, opts.absolutePattern ?? 'MMM d');
+      return fmtDate(d, opts.absoluteWithYear ? 'MMM d, yyyy' : 'MMM d');
     }
     if (gap < 60_000) {
       return new Intl.RelativeTimeFormat(code, { numeric: 'auto', style: AGO_STYLE }).format(0, 'second');

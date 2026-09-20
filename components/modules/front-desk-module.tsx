@@ -108,7 +108,7 @@ const HOW_IT_WORKS = [
  * evidence against it.
  */
 const fmtTimeIn = (locale: LocaleCode) => (iso: string) =>
-  createFormat(locale).fmtTimeAgo(iso, { absoluteAfterDays: 2, absolutePattern: 'MMM d' });
+  createFormat(locale).fmtTimeAgo(iso, { absoluteAfterDays: 2 });
 
 function fmtDuration(secs: number | null) {
   if (!secs) return null;

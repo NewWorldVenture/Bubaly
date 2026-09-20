@@ -26,7 +26,7 @@ type Comment = { id: string; author_name: string; is_team: boolean; body: string
  * evidence against it.
  */
 const timeAgoIn = (locale: LocaleCode) => (iso: string): string =>
-  createFormat(locale).fmtTimeAgo(iso, { absoluteAfterDays: 30, absolutePattern: 'MMM d' });
+  createFormat(locale).fmtTimeAgo(iso, { absoluteAfterDays: 30 });
 
 const SORTS: { id: FeedbackSort; label: string }[] = [
   { id: 'top', label: 'Top' }, { id: 'trending', label: 'Trending' }, { id: 'new', label: 'Newest' },

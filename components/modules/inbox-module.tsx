@@ -58,7 +58,7 @@ type FilterTab = 'all' | 'unread' | 'call' | 'sms' | 'school' | 'sports' | 'emai
  * evidence against it.
  */
 const fmtTimeIn = (locale: LocaleCode) => (iso: string) =>
-  createFormat(locale).fmtTimeAgo(iso, { absoluteAfterDays: 2, absolutePattern: 'MMM d' });
+  createFormat(locale).fmtTimeAgo(iso, { absoluteAfterDays: 2 });
 
 export function InboxModule() {
   const locale = useLocale();

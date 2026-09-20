@@ -96,7 +96,16 @@ export async function assertAIAccess(
   // and gating both on the concierge's entry is how the assistant came to be
   // refused to families whose plan includes it.
   const featureKey = opts.featureKey ?? AI_REQUESTS_FEATURE_KEY;
-  const label = opts.label ?? 'Ask Bubaly';
+  // What the refusal below calls the thing being refused. It comes from the
+  // catalog entry for `featureKey`, because the catalog is already where a
+  // feature's name lives and it is what the plan and pricing surfaces render —
+  // so an upgrade prompt names the feature the way the reader will find it in
+  // the list they are being sent to. Deriving it also means a caller that gates
+  // on a featureKey cannot label itself as a DIFFERENT product by forgetting to
+  // pass a label, which is the shape of the bug that had the assistant gated on
+  // the concierge's entry. 'ai-requests' is itself labelled 'Ask Bubaly', so the
+  // ten callers that pass neither argument read exactly as they did.
+  const label = opts.label ?? FEATURE_CATALOG_BY_KEY[featureKey]?.label ?? 'Ask Bubaly';
 
   let tiers: Record<string, string>;
   try {

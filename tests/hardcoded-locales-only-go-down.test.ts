@@ -21,11 +21,11 @@
 // names the file; if a change converts one, lower the number in the same commit.
 //
 // components/ IS AT ZERO and app/ IS AT ITS FLOOR OF 25 — every remaining site under app/
-// is one of the exempt categories below. What is left that is real is lib/ (79 sites in 52
+// is one of the exempt categories below. What is left that is real is lib/ (51 sites in 32
 // files), and it has been classified rather than assumed — THE HONEST FLOOR IS 55, NOT 0, and a ratchet that demands zero where zero is
 // wrong is a ratchet someone deletes. The four categories to leave alone:
 //
-//   16  timezone-and-parts ENGINES — pinned and asserted by the case below, because
+//   21  timezone-and-parts ENGINES — pinned and asserted by the case below, because
 //       localising one changes arithmetic rather than wording.
 //   17  app/api/ai/* prompt construction — read by the MODEL, not a person. Verified by
 //       reading chat/route.ts:110, which builds its fmtDate inside the prompt text.
@@ -64,9 +64,11 @@
 // This test does not pretend to know; it only refuses to let the total grow.
 //
 // components/ is now at ZERO — every date, time and money value a component renders
-// follows the reader. What is left is app/ (44) and lib/ (79), and a meaningful share of
-// that is correct: the AI prompt builders, the crons and exports, the Super Admin pages,
-// and lib/i18n's locale codes, which are data rather than a formatter.
+// follows the reader, and it SURVIVED the merge of 198 commits of main: the per-file
+// delta below shows components/ still at 0 files and 0 sites. What is left is app/ (25)
+// and lib/ (51), and a meaningful share of that is correct: the AI prompt builders, the
+// crons and exports, the Super Admin pages, and lib/i18n's locale codes, which are data
+// rather than a formatter.
 import { readFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
@@ -78,7 +80,66 @@ const FORMATTER_WITH_LOCALE =
 /**
  * The ceiling, measured when the shared formatter was made locale-aware.
  *
- * Now 70, and THE FLOOR ROSE AGAIN — for the third time, and again by reading
+ * NOW 76, AND THE SIX THAT ARRIVED WERE NOT WRITTEN HERE. This instrument was born on
+ * this audit's branch and has never existed on origin/main, so its 70 was measured
+ * against ONE tree. The merge then brought 198 commits of main under a ceiling that had
+ * never been held over them. A number that moves at a merge is the case where "it
+ * probably drifted" is most tempting and least defensible, so the six were measured
+ * before they were judged: the CURRENT scan was run, unchanged, over three trees held
+ * still in detached worktrees — 617355b2 (this branch's pre-merge tip), origin/main, and
+ * HEAD. Holding the instrument fixed while the tree varies is the only way to tell a new
+ * defect from a newly-measured one. It reproduces 70 on 617355b2 and 16 mechanism sites
+ * exactly, which is what earns the delta any trust. origin/main alone scores 247 — the
+ * number this file started at, because none of the conversion work below exists there.
+ *
+ * The delta is FOUR FILES, and three of them did not exist on this branch at all:
+ *
+ *   lib/display/ambient.ts          +2   main 4 → HEAD 2
+ *   lib/meals/week.ts               +2   new on main (669c521d)
+ *   lib/social/schedule-time.ts     +1   new on main (f6e17ef6)
+ *   lib/social/scheduled-publish.ts +1   new on main (f6e17ef6)
+ *
+ * ALL SIX ARE MECHANISM. Not one is a user-facing display formatter, and the reason is
+ * worth recording: main's authors had ALREADY reached for the locale parameter wherever
+ * a person reads the output. Each of these modules contains BOTH halves, and the halves
+ * are correctly split.
+ *
+ *   lib/display/ambient.ts — dayPart() wraps its format() in `Number(...)` and feeds
+ *     dayPartForHour(), which does arithmetic on it; formatClock() reads formatToParts
+ *     for hour/minute/second and pads them by hand. Both pin hourCycle 'h23'. A locale
+ *     with Arabic-Indic digits makes `Number()` return NaN and the kitchen screen's clock
+ *     reads "NaN:٠٥". The two sites main's file has that ARE display formatters —
+ *     the forward-facing "now & next" label at its lines 195-196 — were converted by this
+ *     branch and the merge KEPT the converted version: they take `locale` at HEAD:216-217.
+ *     That is why the file reads 4 on main and 2 here. The ratchet did not lose a
+ *     conversion in the merge; it gained two engines.
+ *   lib/meals/week.ts — mealWeek() builds a `YYYY-MM-DD` day KEY from formatToParts,
+ *     and calendarDate() parses it straight back with /^\d{4}-\d{2}-\d{2}$/ and a
+ *     non-null assertion. Localise it and a non-Latin numbering system or a non-gregorian
+ *     calendar fails that regex, calendarDate returns null, and the `!` throws. The
+ *     display half of this very file, formatMealDay(dayKey, locale, options), already
+ *     TAKES a locale, and both of its callers in components/modules/meals-module.tsx pass
+ *     the reader's. The same file gets both answers right; only one half is countable.
+ *   lib/social/schedule-time.ts — scheduleTimezone() is the exact ics-time.ts pattern
+ *     named below: a constructor used as a validity probe whose only output is
+ *     resolvedOptions().timeZone, a canonical IANA zone that is never shown as wording.
+ *     Its display half, formatScheduledTime(value, zone, locale), takes a locale and both
+ *     callers — app/(app)/dashboard/social/{posts/[id],calendar}/page.tsx — pass
+ *     locale.code.
+ *
+ * AND THE SIXTH IS A SITE THE MECHANISM CASE BELOW CANNOT SEE, which is the one honest
+ * wrinkle here. lib/social/scheduled-publish.ts:25 is
+ * `try { new Intl.DateTimeFormat('en-US', { timeZone: input.timezone }).format(instant); }
+ * catch { return scheduleFailure('invalid'); }` — the formatted string is DISCARDED. The
+ * statement exists only so an invalid zone throws RangeError and the receipt is refused.
+ * Nothing renders it. But the case below identifies a bare probe by the ABSENCE of
+ * `.format` after the constructor, and this probe calls `.format` precisely to force the
+ * throw, so it matches no signal and is counted by the ceiling while the pin cannot see
+ * it. Hence +6 on the ceiling and only +5 on the pin. The gap is recorded rather than
+ * closed: widening the signal list to catch it would also start catching real display
+ * formatters, and a pin that drifts upward on false positives stops being a pin.
+ *
+ * Before that, 70, and THE FLOOR ROSE AGAIN — for the third time, and again by reading
  * callers. lib/autopilot/engine.ts and lib/intelligence/hard-signals.ts build money
  * PROSE and are driven by app/api/cron/{autopilot-scan,model-refresh}/route.ts,
  * which PERSIST what they write. A cron has no reader, so their three sites join
@@ -151,7 +212,7 @@ const FORMATTER_WITH_LOCALE =
  * Getting those three numbers to disagree is how a ratchet starts life already
  * broken, which is why the derivation is written down rather than the result.
  */
-const CEILING = 70;
+const CEILING = 76;
 
 /**
  * Comments stripped first, and this is not a detail.
@@ -248,11 +309,22 @@ describe('hardcoded locales only go down', () => {
   // system or calendar, or a clock label where a number was expected. Quiet hours,
   // Guardian routing, trip import and onboarding all read these.
   //
+  // NOW 21, and the five that joined came in with the merge rather than from a new
+  // habit. They are named and derived in full in the CEILING note above; in short,
+  // lib/display/ambient.ts (+2: dayPart's Number(format()) and formatClock's
+  // formatToParts, both pinning hourCycle 'h23' for the Kitchen Display), lib/meals/week.ts
+  // (+2: mealWeek's formatToParts day-key engine, whose output calendarDate re-parses with
+  // /^\d{4}-\d{2}-\d{2}$/) and lib/social/schedule-time.ts (+1: scheduleTimezone's
+  // resolvedOptions() zone canonicaliser, the ics-time.ts pattern again). Each was read
+  // before it was counted, and each is a genuine engine — the display formatter that sits
+  // BESIDE it in the same file already takes a locale in all three cases. Raising this
+  // number on anything less than that reading would defeat the whole point of pinning it.
+  //
   // So the count is PINNED rather than minimised. If it FALLS, someone has localised a
   // parser and this fails with the reason — which is the failure mode a ceiling alone
   // cannot see, because converting a parser makes the ceiling look better.
   it('keeps the timezone-and-parts engines on a pinned locale', () => {
-    const MECHANISM_SITES = 16;
+    const MECHANISM_SITES = 21;
     const SIGNALS: [RegExp, string][] = [
       [/\.resolvedOptions\(\)/, 'resolvedOptions — canonicalising a zone'],
       [/formatToParts/, 'formatToParts — reading parts out'],
@@ -288,7 +360,7 @@ describe('hardcoded locales only go down', () => {
    * looked identical to the scanner breaking. That is the fifth guard in this audit
    * to assert the solution instead of the property.
    *
-   * The property is that the scan sees files it must always see. The sixteen pinned
+   * The property is that the scan sees files it must always see. The twenty-one pinned
    * timezone-and-parts engines are exactly that: they are never going away, because
    * localising one would be a defect. So the control rides on them.
    */

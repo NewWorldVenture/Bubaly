@@ -84,7 +84,7 @@ export function relativeDay(
  * "3d ago", else an absolute date once it's over a week old.
  */
 export function relativeTime(iso: string, now: Date, locale: LocaleCode = DEFAULT_LOCALE): string {
-  return createFormat(locale).fmtTimeAgo(iso, { now, absoluteAfterDays: 7, absolutePattern: 'MMM d, yyyy' });
+  return createFormat(locale).fmtTimeAgo(iso, { now, absoluteAfterDays: 7, absoluteWithYear: true });
 }
 
 export type TimelineRow = { album: AlbumRow; relative: string };

@@ -33,5 +33,5 @@ export function mergeActivity(sources: ActivityItem[][], limit = 50): ActivityIt
  */
 
 export function relativeTime(iso: string, now: Date = new Date(), locale: LocaleCode = DEFAULT_LOCALE): string {
-  return createFormat(locale).fmtTimeAgo(iso, { now, absoluteAfterDays: 35, absolutePattern: 'MMM d' });
+  return createFormat(locale).fmtTimeAgo(iso, { now, absoluteAfterDays: 35 });
 }
