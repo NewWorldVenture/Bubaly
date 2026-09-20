@@ -33122,7 +33122,24 @@ Re-confirmed twice since, on `a7ba8f1f` (1,293 / 3) and on `9c9f3a43`
 (**1,292 passed, 3 failed, 1 flaky**), so Passes AG and the `C1-S9-25` AI-route
 fixes introduced no browser regression.
 
-The flaky one on `9c9f3a43` is `tests/e2e/durable-session.spec.ts:286`
+Re-confirmed a fourth time on `c3cc9ac2` (run 35516752108): **1,292 passed,
+3 failed, 1 flaky in 9.8m**, with Typecheck/Lint/Test/Build, Database and Mobile
+all green. The three failures are the same `phone-auth-http.spec.ts` cases as on
+every previous head. That head carried `C1-S9-29` through `C1-S9-34` — the
+missions proof notice, the paperwork inbox, the Pay-ID resolver and five
+confirmed writes — so none of that work regressed the browser suite.
+
+The flaky case MOVED, which is worth recording rather than smoothing over: on
+`9c9f3a43` it was `durable-session.spec.ts:286`; on `c3cc9ac2` it is
+`auth-initiation-order.spec.ts:175` ("newer decision owns cross-flow password
+first versus oauth"), failing with *"Newer initiation should remain usable"*
+and passing on retry. Both live in the parallel session's auth area and neither
+is in code this branch touches. Two different intermittents in that one area
+across two runs is a pattern, not a coincidence, and it is flagged here for
+whoever owns `AUTH-001`/`AUTH-002` — this register does not claim to have
+diagnosed it.
+
+The earlier flaky one on `9c9f3a43` was `tests/e2e/durable-session.spec.ts:286`
 ("explicit local sign-out clears this browser and preserves another device"),
 which failed with *"Durable-session E2E sign-out request failed"* and then
 PASSED on retry. Recorded rather than dismissed as noise, and not claimed as
