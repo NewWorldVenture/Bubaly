@@ -2,11 +2,11 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-20T16:59:47.224Z
-- Total Audit Items: 14059
+- Last Updated: 2026-09-20T17:12:40.000Z
+- Total Audit Items: 14060
 - Not Started: 13842
 - In Progress: 192
-- Passed: 8
+- Passed: 9
 - Fixed + Passed: 14
 - Blocked: 1
 - Failed: 2
@@ -14185,6 +14185,7 @@ PRODUCTION READY: NO
 | TEST-008 | Testing | Unfinished-work markers in shipping code | 🛠 FIXED + PASS | Medium | 6/6 | Guard now scans comments instead of stripping them, and requires every marker to lead its comment and carry a tracker reference | 3/3; red when a bare marker is appended to a real file | It stripped comments before searching for comment markers, so it reported 0 while 19 existed. All 19 are properly owned. |
 | SEC-007 | SEC | Private document vault over real HTTP | ✅ PASS | Critical | 8/8 | None required | B refused read, sign, upload and delete against A's vault; both controls pass; A's document intact; all fixtures removed | Tested with real user tokens over the Storage service, reaching the signing endpoint that SQL-level probes structurally cannot. The read refusal is NoSuchKey, so the vault is not an existence oracle. |
 | AUTHZ-006 | AUTHZ | Cross-family isolation at the real API layer | ✅ PASS | Critical | 6/6 | None required | 396/396 tables read as an outsider with 1 hit (the Idea Board, by design); 0 of 26 sensitive tables writable; fixtures removed, anchor intact | Run through PostgREST with a real password-obtained token against the seeded anchor family's 71,192 rows — the layer the SQL probes do not reach. |
+| ADMIN-001 | AUTHZ | Every admin server action reaches a super-admin gate | ✅ PASS | Critical | 4/4 | No product change; a permanent check (tests/admin-actions-reach-a-gate.test.ts) walking the call graph to a fixpoint | 138 exported actions across 31 'use server' files, 0 ungated; both mutations (gate stripped from a real action; a 'use server' file the filename walk would miss) go red naming the offender, then revert clean | A layout guards a page, not a server action. Naive per-function grep says 38 ungated; one hop says 3; the fixpoint says 0 (resolveTicketAction -> updateTicket() -> guard() -> isSuperAdmin()). The walk is by directive, not filename, so it can reach a violation written outside an actions-named file. |
 | TEST-009 | Testing | Probe fixtures left in the seeded anchor family | 🛠 FIXED + PASS | Medium | 6/6 | Both probes now clear their fixtures at the end as well as the start | Each passes twice; suite 47/47 on both databases; anchor family holds only its seeded members | "Race Child" and "Probe Kid" had been living in the 71,192-row anchor family, the latter for a week. Found by the AUTHZ-006 sweep counting a member no fixture of its own had created. |
 | DATA-010 | DATA | Resource lifecycle through the real API | ✅ PASS | High | 8/8 | None required | CREATE/READ/UPDATE/VERIFY/DELETE/VERIFY all pass as a real member; a child's refused write returns HTTP 204 without Prefer, 200 [] with it, dosage unchanged | Shows at the HTTP layer why .select() + wroteNoRows was needed: 204 No Content is a success for a write that changed nothing. |
 | SEC-008 | SEC | Realtime broadcast isolation and publication drift | ✅ PASS | Critical | 5/5 | None required | Publication and code agree exactly (61 = 61, empty diff both ways); a live socket received its own family's row and not another's | The first attempt used an unpublished table and received nothing — a run that would have read as a clean refusal while proving nothing. Controls decided it. |
@@ -21457,6 +21458,73 @@ Executed against the running local Supabase stack over HTTP with a token obtaine
 #### Final Status
 ✅ PASS
 
+### ADMIN-001 — Every admin server action reaches a super-admin gate
+
+Status: ✅ PASS
+Severity: Critical
+Route(s), components, actions, tables and providers: `app/(app)/admin/**` (31 `'use server'` files, 138 exported actions), `app/(app)/admin/layout.tsx`, `lib/supabase/auth.ts` (`isSuperAdmin`), `lib/marketing/admin.ts` (`requireMarketingAdmin`), `lib/constants/super-admins.ts` (`isSuperAdminEmail`), `tests/admin-actions-reach-a-gate.test.ts`
+
+#### Expected Behavior
+Every exported server action under the admin tree refuses a caller who is not a super admin, by its own authority — not by the authority of the page it was written for.
+
+#### Test Cases
+- [x] All 129 `.ts`/`.tsx` files under the admin tree enumerated; the 31 that can export an action identified by directive, not by filename
+- [x] All 138 exported actions resolved to a gate through the call graph, to a fixpoint
+- [x] A gate named only in a comment rejected as a gate
+- [x] Mutation: the gate stripped from one real action — check goes red naming that action
+- [x] Mutation: a `'use server'` file added under a name the filename walk would miss — check goes red naming it
+- [x] Both mutations reverted; `git diff` clean; check green
+
+#### Issues Found
+None live. `app/(app)/admin/layout.tsx` does gate, correctly:
+
+    if (!superAdmin) redirect('/dashboard')
+
+and that guards a **page**. It does not guard a server action. A `'use server'` export is its own endpoint with its own id, invocable by anyone holding a session whether or not they ever render the page it was written for — so the layout redirect is necessary and is not the control. Each of the 138 actions has to refuse on its own, and each of them does.
+
+Establishing that took three passes, and the first two were wrong in the way this audit keeps finding checks to be wrong — the rule was right and the search was too small to reach the answer.
+
+**Pass 1 — 38 of 138 "ungated".** Grepping each action's own body for `isSuperAdmin` reports 38 failures and every one of them is a false positive. The admin code gates through helpers.
+
+**Pass 2 — 3 of 138.** Resolving one level of local indirection (`adminCreateUserAction → assertSuperAdmin() → isSuperAdmin()`) clears 35 of them. Three survive: the support-ticket actions.
+
+**Pass 3 — 0 of 138.** Those three are two hops deep:
+
+    resolveTicketAction -> updateTicket() -> guard() -> isSuperAdmin()
+
+`guard()` in `app/(app)/admin/support-tickets/actions.ts` returns a service client only after `isSuperAdmin()`, and `updateTicket` refuses on `if (!('supabase' in guarded)) return guarded`. So the check walks the call graph to a fixpoint instead of grepping each function, and 0 is the true answer. Three of the gate helpers are worth naming because they are each fail-closed by construction rather than by convention: `assertSuperAdmin()` returns `{ ok: false }` before doing anything; `guard()` withholds the privileged client itself, so a caller that forgets to check cannot get a client to misuse; `requireMarketingAdmin()` in `lib/marketing/admin.ts` throws before returning one.
+
+#### Fixes Applied
+No product change — nothing was ungated. One test added, `tests/admin-actions-reach-a-gate.test.ts`, so the 139th action cannot be.
+
+The walk is by **directive, not filename**. All 31 files that export actions today have `actions` in the name, and a filename walk answers correctly on today's tree — and would go on answering "all clear" the first time someone writes `'use server'` into `admin/<thing>/server.ts`. That is this repo's signature defect in its first shape, a guard whose rule is right and whose search cannot reach the violation, and it is the shape that hid DB-FN-001 behind a green probe for a year. So the file set is *any* file under the tree carrying the directive, plus the `actions`-named ones, and a separate assertion fails if those two ever disagree. Today they agree exactly: 31 = 31, `'use server'` files not named `actions`: 0.
+
+Two further things the check does not take on trust:
+
+- **A gate named in prose is not a gate.** Comment bodies are blanked before the search, newlines kept, so `// calls isSuperAdmin() elsewhere` above an ungated action does not gate it. Asserted directly.
+- **A neighbour's gate is not this function's gate.** Bodies are sliced at the next *top-level declaration of any kind*, not the next `function`, so a plain `const` between two actions ends the first one's body and the second cannot inherit its gate. Asserted directly.
+
+Arrow-form actions (`export const x = async () => {}`) are matched too. None exist under the admin tree today; the matcher covers them because nothing stops one being written tomorrow, and a plain `export const LIMIT = 5` is asserted *not* to be reported as an action.
+
+**Mutation-tested, twice — a check that cannot fail is worth nothing.**
+
+Strip the gate from a real action (`adminCreateUserAction`, two lines):
+
+    AssertionError: admin server actions reachable without a super-admin check:
+    app/(app)/admin/actions.ts :: adminCreateUserAction
+
+Add a `'use server'` file the filename walk would never have opened:
+
+    AssertionError: admin server actions reachable without a super-admin check:
+    app/(app)/admin/zz-probe/server.ts :: deleteEveryFamily
+
+Both reverted, `git diff` empty, 4/4 green. The second mutation is the one that matters: against pass-2's filename walk it stays green, which is the whole reason the walk was changed.
+
+The check also refuses to be vacuous — it asserts it found more than 20 action files, more than 100 exported actions, and more than 20 `'use server'` files, so a walk that silently stops finding anything fails instead of passing.
+
+Actual counts: 129 `.ts`/`.tsx` files under the admin tree, 31 carrying `'use server'`, 31 walked, **138 exported actions, 0 ungated.**
+
+
 ### SEC-007 — The private document vault, tested over real HTTP with real user tokens
 
 Status: ✅ PASS
@@ -22105,6 +22173,8 @@ Status: ✅ PASS — `npm run lint` reports the four known baseline warnings and
 
 ## Automated Tests
 Status: ✅ PASS — 15,287 tests across 1,215 files pass, zero failures and zero skips, on Node 24.15.0 at head 92340315 (160s).
+
+Later in this cycle, on Node 24.21.0: **16,714 tests across 1,307 files, zero failures and zero skips** (214s), including the four new cases of `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001) and the four of `tests/feed-token-signing-fails-closed.test.ts` (SEC-009). `npx tsc --noEmit` exits 0.
 
 Run this on the declared engine. On Node 22 the two cases in tests/stream-cancellation-runtime.test.ts fail with `controller[kState].transformAlgorithm is not a function`; that is the runtime gap package.json's `engines: node >=24.15.0 <25` exists to prevent, not a source defect, and both pass on 24.
 
