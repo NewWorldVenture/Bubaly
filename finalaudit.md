@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-192 finding IDs from four workers and two parallel sessions; none of it was
+195 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -12,7 +12,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 > source-and-migration audit run without production credentials. Session B
 > (Register B, 14,038 items, `AUTH-001` / `API-<hash>` / `DB-TBL-nnn`) is a
 > hosted-CI and deployed-release audit. Their finding-ID sets are **disjoint**:
-> 914 IDs from A, 684 from B, 1,595 in union — verified mechanically at each
+> 917 IDs from A, 684 from B, 1,598 in union — verified mechanically at each
 > merge. The three literals both files contain (`LB-009`, `LB-016`, `SHA-256`)
 > are not counter-examples: the first two are pre-existing *runbook* names each
 > register cites, and the third is a hash algorithm the ID regex matches. No
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 202 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 205 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -33812,6 +33812,145 @@ visible, and the first evidence that it does.
 
 ---
 
+### `[CLAUDE-1][MEDIUM][TESTING]` C1-S9-52 — every file:line this register published from a scan was wrong, because `\s` matches a newline
+
+A correction, recorded at the same weight as a finding because other workers
+read these locations to decide where to look.
+
+All three sweep scripts stripped comments before matching, to stop a `.update(`
+inside my own explanatory prose being counted as a write. The stripper was:
+
+```js
+s.replace(/^\s*\/\/.*$/gm, '')
+```
+
+**`\s` matches `\n`.** So on consecutive comment lines, `^\s*` ran past the end
+of one line and consumed the newline before the next — collapsing runs of
+comments into a single line. A file with 965 lines became 947. Every line
+number those scans reported was therefore **shifted upward by the number of
+comment lines above it**, and this codebase is heavily commented.
+
+A second, independent bug in the same reporting path: the block-comment strip
+`replace(/\/\*[\s\S]*?\*\//g, '')` deleted the newlines inside JSDoc too.
+
+**What is and is not affected.** File NAMES are correct throughout; the class
+membership and every count are correct, because those never depended on line
+numbers. The line numbers in the `C1-S9-37`, `C1-S9-38` and `C1-S9-46`
+inventories are not. **The `C1-S9-50` ratchet is unaffected**, because it was
+deliberately keyed on file plus count rather than lines — a decision made to
+survive unrelated edits, which turned out to also survive this.
+
+Fixed with `[^\S\n]*` (horizontal whitespace only) and a block-comment strip
+that replaces each character with a space while preserving newlines; verified by
+asserting the stripped source has the same line count as the original. Two of my
+test files carried the same helper and were corrected. **Eight other test files
+in the tree contain the identical pattern.** They belong to other workers and
+use it only for `toContain`, where the bug is harmless, so they are named here
+rather than edited (charter rules 1 and 9): `marketing-page-has-one-h1`,
+`route-plan-gate`, `mobile-video-playsinline`, `run-history-list`,
+`chore-manager-only-writes`, `reward-redemption-write-path`,
+`handoff-requires-a-party`, `insight-kinds-are-gated-like-their-pages`.
+
+This is the fourth instrument defect this session — after the API sweep's
+missing reads, the page sweep that could not see `C1-S9-44`, and the write
+sweep's twelve-line cap. The pattern is consistent enough to state plainly:
+**in this work, the scan has been wrong more often than the code it was
+scanning.**
+
+---
+
+### `[CLAUDE-1][HIGH][SERVER ACTIONS]` C1-S9-53 — a stranded hold, a skipped allowance, and a distrust that never took
+
+The two highest-consequence files remaining in the `C1-S9-50` baseline: one
+moves money, the other decides who reaches a family member.
+
+#### `app/(app)/wallet/actions.ts`
+
+**The held-debit rollback.** Its own comment states the stakes precisely:
+*"A held debit without its approval row can never be resolved. Cancel the hold
+before returning the insert failure so it stays out of the ledger."* A rollback
+that matched **zero rows** leaves exactly that — a child's money held
+indefinitely, with no approval row that could ever release it — and said
+nothing, because only `error` was checked.
+
+It stays **logged rather than raised**, and for a reason specific to this site:
+the update is predicated on `.eq('status', 'requires_parent_approval')`, so zero
+rows is *also* the benign case where someone else already resolved the hold. The
+log distinguishes a stranded hold from a resolved one for an operator; failing
+the action could not.
+
+**The allowance schedule rollback.** Undoing the claim after a credit failed. If
+it matched nothing, the schedule stays advanced and the child simply **never
+receives that run** — not double-paid, not paid at all, and nothing says so.
+
+Also confirmed: the gift dismissal, both babysitter writes, the Pay-ID save
+(update branch only), and the Pay-ID **release** — a privacy action, where
+`/pay/<handle>` keeps resolving to the child if the delete matched nothing
+(`C1-S9-31` is the page that does the resolving).
+
+**One write here was already correct and is now pinned.** The allowance claim
+uses `.lte('next_run_on', today)` with `.select()` so that a double-click cannot
+credit twice. Left untouched, and guarded — a sweep tidying its neighbours is
+exactly how a correct thing gets "simplified".
+
+#### `app/(app)/guardian/actions.ts`
+
+Six controls, all reporting success they could not see. The sharpest is
+`trust_level` with `trust_override: true` — what the screening pipeline reads to
+decide whether an unknown caller is **put straight through to a family member or
+interrogated first**, flagged as the parent's explicit decision rather than an
+inferred one. A no-op meant a caller the parent deliberately distrusted kept
+being treated as trusted. The same shape as the geofence toggle (`C1-S9-46`) and
+App Lock (`C1-S9-44`): a safety control claiming a state it does not have.
+
+It also writes `logGuardianAudit`, so the `C1-S9-51` problem applies — screen,
+audit log and reality disagreeing, with two of the three agreeing with each
+other. The confirmation is placed before the audit call, and a guard asserts
+that ordering.
+
+Plus: contact delete, member `current_context` (read by the routing pipeline),
+routing-rule toggle and delete, and escalation acknowledgement.
+
+**Status:** FIXED. Guard: fourteen cases, each proved red by mutation —
+including the over-tightening direction on the held-debit rollback and an
+unscoping mutation on the Guardian rule toggle.
+
+**Ratchet: 74 → 61 across 35 files.**
+
+---
+
+### `[CLAUDE-1][LOW][TESTING]` C1-S9-54 — the fifth and sixth guards red on an improvement, and a fourth comment-matching trap
+
+`C1-S9-53` turned two existing tests red, both by the now-familiar mechanism:
+
+- `wallet-allowance-persistence` pinned the rollback's **exact destructure**,
+  `const { error: rollbackError } = await supabase.from('allowance_rules')…`.
+  Binding the rows as well removed the literal while strengthening the
+  behaviour.
+- `wallet-money-action-boundaries` pinned `.eq('status', 'requires_parent_approval');`
+  — **with the trailing semicolon**. Appending `.select('id')` meant the
+  statement no longer ended there. What that test is actually about is that the
+  rollback is *predicated* on the hold still being unresolved, which is what
+  stops it cancelling a debit somebody else already approved.
+
+Both re-pointed at behaviour plus the property the rewrite added. That is now
+six guards this session red on strictly better code, and every one of them was
+written as `toContain("<exact statement>")`.
+
+**And a fourth comment-matching trap, in my own new guard.** The assertion
+protecting the idempotent allowance claim was a file-wide
+`toContain(".lte('next_run_on', today)")`. Mutation testing deleted the
+predicate and the test stayed **green** — the phrase also appears in the comment
+directly above it and in an unrelated read forty lines earlier. Scoped to the
+claim statement, after which the same mutation kills it.
+
+Four occurrences now (`C1-S9-34`, `C1-S9-37`, `C1-S9-41`, here). The rule has
+earned being stated as a rule: **in this repository, an assertion over raw
+source is an assertion over the comments too** — and a comment that explains a
+guard is the most likely thing to satisfy it.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -33881,8 +34020,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,101 passing / 17,104 across 1,352
-files.** (Re-run after `C1-S9-51`; was 16,950 / 16,953 across 1,349 before this
+Status: ✅ PASS — `npx vitest run`: **17,110 passing / 17,113 across 1,352
+files.** (Re-run after `C1-S9-54`; was 16,950 / 16,953 across 1,349 before this
 batch.) The three failures are `C1-S9-09`, BLOCKED: this container runs Node
 22.22.2 against the repository's `.nvmrc` 24.21.0, and nvm cannot fetch the
 Node 24 distribution here. Not counted as passing.

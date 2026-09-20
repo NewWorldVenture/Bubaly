@@ -7,7 +7,12 @@ import { at, bodyOf } from './helpers/source-order';
  * explains the very thing it forbids, without pulling in a parser.
  */
 function stripComments(source: string): string {
-  return source.replace(/^\s*\/\/.*$/gm, '');
+  // `[^\S\n]*`, not `\s*`: `\s` matches newlines, so `^\s*` greedily ate the
+  // line break between consecutive comment lines and collapsed them. Harmless
+  // for `toContain`, but it silently shifted every offset `at()` returns — and
+  // the same bug in the audit scanners misreported every file:line they
+  // published (C1-S9-52).
+  return source.replace(/^[^\S\n]*\/\/.*$/gm, '');
 }
 
 /**

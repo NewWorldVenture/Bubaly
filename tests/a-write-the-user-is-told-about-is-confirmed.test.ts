@@ -4,7 +4,12 @@ import { at, between, bodyOf } from './helpers/source-order';
 
 /** Line comments only — so an assertion cannot match the prose explaining it. */
 function stripComments(source: string): string {
-  return source.replace(/^\s*\/\/.*$/gm, '');
+  // `[^\S\n]*`, not `\s*`: `\s` matches newlines, so `^\s*` greedily ate the
+  // line break between consecutive comment lines and collapsed them. Harmless
+  // for `toContain`, but it silently shifted every offset `at()` returns — and
+  // the same bug in the audit scanners misreported every file:line they
+  // published (C1-S9-52).
+  return source.replace(/^[^\S\n]*\/\/.*$/gm, '');
 }
 
 /**
@@ -623,5 +628,100 @@ describe('an admin action is not audited as done when it was not (C1-S9-51)', ()
     const blocks = adminActions.split('family cleanup failed').slice(1);
     expect(blocks).toHaveLength(3);
     for (const b of blocks) expect(b.slice(0, 120)).not.toContain('throw');
+  });
+});
+
+/**
+ * Audit C1-S9-53 — the walletActions and Guardian, the two highest-consequence files
+ * left in the C1-S9-50 baseline: one moves money, the other decides who reaches
+ * a family member.
+ */
+// `wallet` is already bound at the top of this file to hub-actions.ts.
+const walletActions = readFileSync('app/(app)/wallet/actions.ts', 'utf8');
+const guardian = readFileSync('app/(app)/guardian/actions.ts', 'utf8');
+
+describe('a stranded hold and a skipped allowance are reported (C1-S9-53)', () => {
+  it('the held-debit rollback reports an empty undo', () => {
+    // Its own comment states the stakes: "A held debit without its approval row
+    // can never be resolved." A rollback matching zero rows leaves exactly that
+    // — the child's money held indefinitely — and said nothing.
+    expect(walletActions).toContain('wroteNoRows(rolledBack)');
+    expect(walletActions).toContain('a hold may be stranded');
+    expect(walletActions).toContain('can never be resolved');
+  });
+
+  it('the allowance schedule rollback reports an empty undo', () => {
+    // If it matched nothing the schedule stays advanced, so the child never
+    // receives that run — not double-paid, not paid at all.
+    expect(walletActions).toContain('wroteNoRows(restored)');
+    expect(walletActions).toContain('a run may be skipped');
+  });
+
+  it('both rollbacks stay logged, not raised', () => {
+    // They run on paths already returning a failure, and the held-debit one has
+    // a `status` predicate that makes zero rows ALSO the benign "already
+    // resolved" case. Raising would report the wrong thing twice over.
+    for (const marker of ['a hold may be stranded', 'a run may be skipped']) {
+      const block = bodyOf(walletActions, marker, '});');
+      expect(block, marker).not.toContain('return { ok: false');
+    }
+  });
+
+  it('the gift, babysitter and Pay-ID writes are confirmed', () => {
+    for (const binding of ['dismissed', 'saved', 'archived', 'released']) {
+      expect(walletActions, binding).toContain(`wroteNoRows(${binding})`);
+    }
+    // Releasing a Pay-ID is a privacy action — /pay/<handle> keeps resolving to
+    // the child if the delete matched nothing (see C1-S9-31).
+    expect(walletActions).toContain('privacy action');
+  });
+
+  it('the Pay-ID save confirms only its update branch', () => {
+    expect(walletActions).toContain('if (input.id && wroteNoRows(savedHandle))');
+    const insertLine = stripComments(walletActions).split('\n').find((l) => l.includes("from('pay_handles').insert(row)")) ?? '';
+    expect(insertLine, 'an insert cannot match zero rows').not.toContain('.select(');
+  });
+
+  it('the idempotent allowance claim is untouched', () => {
+    // The one write in this file that was ALREADY correct, and for a sharper
+    // reason than the rest: its `.lte('next_run_on', today)` predicate plus
+    // `.select()` is what stops a double-click crediting an allowance twice.
+    // Pinned so this sweep cannot "simplify" it while tidying its neighbours.
+    // Scoped to the CLAIM statement. A file-wide `toContain` passed with the
+    // predicate deleted, because the phrase also appears in the comment above it
+    // and in an unrelated read forty lines earlier — the C1-S9-34 trap for the
+    // fourth time this session, and the reason every guard here is mutated.
+    const claim = bodyOf(stripComments(walletActions), "const { data: advancedRule, error: advanceError }", '.maybeSingle();');
+    expect(claim, 'the claim predicate is what stops a double credit').toContain(".lte('next_run_on', today)");
+    expect(claim).toContain(".select('id')");
+    expect(walletActions).toContain('double-crediting');
+  });
+});
+
+describe('Guardian trust and escalations are confirmed (C1-S9-53)', () => {
+  it('all six Guardian controls ask what they changed', () => {
+    for (const binding of ['deleted', 'trusted', 'contexted', 'toggled', 'removedRule', 'acked']) {
+      expect(guardian, binding).toContain(`wroteNoRows(${binding})`);
+    }
+  });
+
+  it('the trust check precedes the Guardian audit log', () => {
+    // `trust_level` decides whether an unknown caller is put straight through or
+    // screened, and `trust_override: true` marks it as the parent's explicit
+    // decision. Logging it as changed when it was not is the C1-S9-51 shape.
+    // Sliced forward from the check, not compared against `at()`: this file has
+    // four `logGuardianAudit` calls and `at()` finds the FIRST, which sits in a
+    // different function entirely — the assertion passed or failed on where an
+    // unrelated audit call happened to be.
+    const afterCheck = guardian.slice(at(guardian, 'wroteNoRows(trusted)'));
+    expect(afterCheck, 'the trust check has no audit call after it').toContain('logGuardianAudit({');
+  });
+
+  it('every Guardian write stays scoped to the acting family', () => {
+    // Seven, not six: `saveGuardianContact`'s update branch was ALREADY
+    // confirmed before this pass, with `.select('id').single()`. Counting six
+    // would have meant asserting that a correct write did not exist.
+    const scoped = guardian.match(/\.eq\('family_id', (?:ctx\.active\.familyId|familyId)\)\s*\n\s*\.select\(/g) ?? [];
+    expect(scoped.length, 'a confirmation bought by widening the filter').toBe(7);
   });
 });

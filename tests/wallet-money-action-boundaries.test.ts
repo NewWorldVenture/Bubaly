@@ -44,7 +44,14 @@ describe('wallet and Stripe money action boundaries', () => {
 
   it('rolls back a held spend when its approval row cannot be created', () => {
     expect(walletMoneyActions).toContain('const { error: approvalError } = await supabase.from(\'parent_approvals\').insert');
-    expect(walletMoneyActions).toContain(".eq('status', 'requires_parent_approval');");
+    // The trailing semicolon was the whole assertion, and C1-S9-53 appended
+    // `.select('id')` after this filter so the statement no longer ends here.
+    // What the test is actually about is that the rollback is PREDICATED on the
+    // hold still being unresolved — that predicate is what stops it cancelling
+    // a debit someone else already approved.
+    expect(walletMoneyActions).toContain(".eq('status', 'requires_parent_approval')");
+    expect(walletMoneyActions).toContain('wroteNoRows(rolledBack)');
+    expect(walletMoneyActions).toContain('a hold may be stranded');
     expect(walletMoneyActions).toContain("return actionFailure(approvalError, t('actions.couldNotCreateTheSpend'))");
   });
 

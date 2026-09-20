@@ -65,11 +65,13 @@ function unconfirmedPerFile(): Map<string, number> {
   return counts;
 }
 
-// Known unconfirmed writes as of C1-S9-51 (82 at C1-S9-50, 74 now). ONLY REMOVE
-// or DECREASE entries as they are fixed — never add, never increase.
+// Known unconfirmed writes as of C1-S9-53. ONLY REMOVE or DECREASE entries as
+// they are fixed — never add, never increase.
 //
-// Two files left the list entirely in the first burn-down after the ratchet
-// went in, which is the shape it was built to make visible.
+// Burn-down since the ratchet went in: 82 across 39 files (C1-S9-50) → 74/37
+// (C1-S9-51) → 61/35 (C1-S9-53). Each step edited this baseline DOWN, and the
+// stale-entry case below is what forced the edit rather than leaving fixed
+// files sitting here quietly.
 const BASELINE = new Map<string, number>([
   ['app/(app)/admin/marketing/affiliates/actions.ts', 1],
   ['app/(app)/admin/marketing/content/actions.ts', 2],
@@ -99,13 +101,11 @@ const BASELINE = new Map<string, number>([
   ['app/(app)/dashboard/workload/actions.ts', 1],
   ['app/(app)/family/child-login-actions.ts', 3],
   ['app/(app)/feedback/actions.ts', 1],
-  ['app/(app)/guardian/actions.ts', 6],
   ['app/(app)/marketplace/actions.ts', 4],
   ['app/(app)/marketplace/alerts/actions.ts', 2],
   ['app/(app)/marketplace/community/actions.ts', 1],
   ['app/(app)/marketplace/handoff/actions.ts', 1],
   ['app/(app)/missions/actions.ts', 4],
-  ['app/(app)/wallet/actions.ts', 7],
   ['app/onboarding/actions.ts', 1],
   ['lib/family/actions.ts', 4],
 ]);
@@ -138,6 +138,6 @@ describe('the unconfirmed-write class only shrinks (C1-S9-50)', () => {
     // If this number moves without finalaudit.md moving with it, one of the two
     // is wrong — and the register is the thing other workers read.
     const total = [...BASELINE.values()].reduce((a, b) => a + b, 0);
-    expect(total).toBe(74);
+    expect(total).toBe(61);
   });
 });

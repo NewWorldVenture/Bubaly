@@ -20,7 +20,15 @@ describe('wallet allowance persistence boundaries', () => {
     expect(source).toContain(".update({ next_run_on: next, last_run_on: today })");
     expect(source).toContain(".lte('next_run_on', today)");
     expect(source).toContain(".select('id').maybeSingle()");
-    expect(source).toContain("const { error: rollbackError } = await supabase.from('allowance_rules').update({ next_run_on: rule.next_run_on, last_run_on: rule.last_run_on })");
+    // Was pinned as an exact destructure. C1-S9-53 bound the rollback's ROWS as
+    // well as its error — a rollback matching nothing leaves the schedule
+    // advanced, so the child never receives that run — and the literal vanished
+    // while the behaviour got stronger. Re-pointed at the behaviour, plus the
+    // property the rewrite added so it cannot regress silently.
+    expect(source).toContain("update({ next_run_on: rule.next_run_on, last_run_on: rule.last_run_on })");
+    expect(source).toContain('error: rollbackError');
+    expect(source).toContain('wroteNoRows(restored)');
+    expect(source).toContain('a run may be skipped');
     expect(source).toContain("return { ok: false, error: res.error, ranCount, paidCents };");
   });
 
