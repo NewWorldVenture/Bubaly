@@ -7,13 +7,20 @@
 // family zone to choose WHICH events were today and then printed them in the
 // server's. The right events, at the wrong times.
 //
-// A ratchet and not a clean sweep, for the reason the sibling ratchet in
-// tests/hardcoded-locales-only-go-down.test.ts gives: the honest floor is not
-// zero today, and a guard that demands zero where zero is wrong is a guard
-// somebody deletes. The nine that remain do not have the family's timezone in
-// scope at all — converting them means adding a context read to each, which is a
-// change per page and not a search-and-replace. Three did have it and are bound
-// in this commit: home, command-center and planning.
+// It started as a ratchet at 9 and is now a FLOOR AT ZERO, which took one
+// measurement to justify. The nine were kept back on the belief that they did not
+// have the family's timezone in scope, so each would need a context read added.
+// Checking rather than assuming showed every one of them already opened with
+// `const ctx = await requireUserContext()` or `requireFeature(...)` — the zone was
+// two property accesses away in all nine. The estimate was the only thing keeping
+// the ceiling above zero.
+//
+// So zero is the honest floor here, and demanding it is not the mistake the
+// sibling ratchet in tests/hardcoded-locales-only-go-down.test.ts warns about.
+// That warning is against demanding zero where zero is WRONG — where the floor is
+// really 55 and a guard set to 0 gets deleted the first time someone meets it.
+// Here there is no remaining class of page that legitimately prints the server's
+// clock to a family, because the exclusions below carry the pages that do.
 //
 // IT COUNTS THE CLOCK HELPERS ONLY, and that is the most important line here.
 //
@@ -55,19 +62,23 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 /**
- * The ceiling, derived rather than observed — and the derivation is why it is 9
- * and not 17.
+ * Zero, derived rather than hoped for.
  *
  * 55 server route entries format a timestamp inline, which was the first number
  * and the wrong one. Restricting to the CLOCK helpers, for the reason in the
- * header, leaves 12 family-facing entries, plus one admin. Three of the twelve
- * already resolved `family.timezone` for their reads and are bound here — home,
- * command-center and planning — so 9 remain.
+ * header, leaves 12 family-facing entries plus one admin. All 12 are bound.
  *
- * The 8 pages the coarse count lost are not conversions and must not be claimed
+ * The 8 pages the coarse count lost are not conversions and must not be counted
  * as any: they format DATE columns, which were never wrong.
+ *
+ * ZERO IS ALSO WHAT A BROKEN SCAN RETURNS, so this number carries less evidence
+ * than it did at 9 and the two controls below carry more. `actually walked the
+ * tree` names all 12 bound pages and requires the survey to find every one of
+ * them on the bound side; a scan that has stopped seeing files, stopped matching
+ * the helpers, or stopped recognising route entries fails there rather than
+ * passing here.
  */
-const CEILING = 9;
+const CEILING = 0;
 
 const ENTRY = /app\/.*\/(page|layout|template|default)\.tsx$/;
 /** Clock helpers only — `fmtDate` is deliberately absent. See the header. */
@@ -105,17 +116,16 @@ function survey() {
 }
 
 describe('a server-rendered time only goes unbound down', () => {
-  it(`leaves at most ${CEILING} family-facing server pages printing the server's time`, () => {
+  it(`leaves no family-facing server page printing the server's time`, () => {
     const s = survey();
     expect(s.unbound.length, [
       `${s.unbound.length} family-facing server route entries format a timestamp with no zone bound; ceiling ${CEILING}.`,
       `(${s.bound.length} bound · ${s.admin} admin and ${s.marketing} marketing excluded by design — see the header.)`,
-      s.unbound.length > CEILING
-        ? 'A change ADDED one. Resolve the family zone the page already needs for its reads — '
-          + '`const tz = ctx.active.family.timezone || \'UTC\'` — and bind the formatter to it with '
-          + '`await getFormat(tz)`. If the surface genuinely has no family, it belongs in one of the '
-          + 'documented exclusions, not under the ceiling.'
-        : `Converted ${CEILING - s.unbound.length}. Lower CEILING to ${s.unbound.length} in this commit.`,
+      'A change ADDED one; the floor here is zero. Resolve the family zone the page '
+        + 'already needs for its reads — every page under app/(app) already has `ctx` — with '
+        + '`const tz = ctx.active.family.timezone || \'UTC\'`, and bind the formatter using '
+        + '`await getFormat(tz)`. If the surface genuinely has no family to be wrong about, it '
+        + 'belongs in one of the documented exclusions, not under this ceiling.',
       ...s.unbound.map((f) => `  ${f}`),
     ].join('\n')).toBeLessThanOrEqual(CEILING);
   });
@@ -154,12 +164,27 @@ describe('a server-rendered time only goes unbound down', () => {
     expect(s.entries, 'no server route entries were found at all').toBeGreaterThan(100);
     expect(s.bound, 'the page this ratchet was written for is not on the bound side')
       .toContain('app/(app)/home/page.tsx');
-    // All three bound pages, not just one: each was bound by a different route —
-    // home already called getFormat(), the other two had to be moved off the bare
-    // exports — and a scan that sees only one of them is seeing a coincidence.
-    for (const bound of ['app/(app)/dashboard/command-center/page.tsx',
-                         'app/(app)/dashboard/planning/page.tsx']) {
-      expect(s.bound, `${bound} was bound in this commit and the scan cannot see it`).toContain(bound);
+    // Every bound page, named. This is what stands in for the ceiling now that
+    // the ceiling is zero: a survey that silently stopped working returns an
+    // empty `unbound` and passes the assertion above, and fails here.
+    const BOUND = [
+      'app/(app)/home/page.tsx',
+      'app/(app)/dashboard/command-center/page.tsx',
+      'app/(app)/dashboard/planning/page.tsx',
+      'app/(app)/dashboard/autonomous-family-management/page.tsx',
+      'app/(app)/dashboard/family-automation/page.tsx',
+      'app/(app)/dashboard/family-coo/page.tsx',
+      'app/(app)/dashboard/family-health/page.tsx',
+      'app/(app)/dashboard/family-school/page.tsx',
+      'app/(app)/dashboard/family-sports/page.tsx',
+      'app/(app)/dashboard/migrate/page.tsx',
+      'app/(app)/family/activity/page.tsx',
+      'app/(app)/kids/page.tsx',
+    ];
+    for (const bound of BOUND) {
+      expect(s.bound, `${bound} binds a zone and the scan cannot see it`).toContain(bound);
     }
+    expect(s.bound.length, 'the scan found fewer bound pages than are listed')
+      .toBeGreaterThanOrEqual(BOUND.length);
   });
 });

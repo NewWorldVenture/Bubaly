@@ -5,7 +5,7 @@ import { createServer } from '@/lib/supabase/server';
 import { PageHeader } from '@/components/app/page-header';
 import { MigrateWizard } from '@/components/migrate/migrate-wizard';
 import { competitorByKey } from '@/lib/migrate/competitors';
-import { fmtRelative } from '@/lib/utils/format';
+import { getFormat } from '@/lib/utils/format-server';
 import { ErrorState } from '@/components/ui/states';
 import { getTranslations } from '@/lib/i18n/server';
 
@@ -15,6 +15,12 @@ export const dynamic = 'force-dynamic';
 export default async function MigratePage() {
   const t = await getTranslations();
   const ctx = await requireFeature('/dashboard/migrate');
+  // The family's zone, not the server's. These were the bare exports, which
+  // format in the RUNTIME's zone — UTC on Vercel — so this page printed
+  // Greenwich's clock and Greenwich's Today to a family that is not there.
+  // Binding also puts the month names and AM/PM into the reader's language.
+  const tz = ctx.active.family.timezone || 'UTC';
+  const { fmtRelative } = await getFormat(tz);
   const supabase = await createServer();
   const { data: imports, error: importsError } = await supabase
     .from('audit_logs')

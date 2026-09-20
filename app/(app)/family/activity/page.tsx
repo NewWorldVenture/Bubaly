@@ -7,7 +7,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { SectionCard, MiniEmpty } from '@/components/family/shell';
 import { ErrorState } from '@/components/ui/states';
 import { describeTrail, type TrailRow } from '@/lib/activity/trail';
-import { fmtRelative } from '@/lib/utils/format';
+import { getFormat } from '@/lib/utils/format-server';
 import { getTranslations } from '@/lib/i18n/server';
 
 export const metadata: Metadata = { title: 'Family Activity' };
@@ -16,6 +16,12 @@ export const dynamic = 'force-dynamic';
 export default async function FamilyActivityPage() {
   const t = await getTranslations();
   const ctx = await requireUserContext();
+  // The family's zone, not the server's. These were the bare exports, which
+  // format in the RUNTIME's zone — UTC on Vercel — so this page printed
+  // Greenwich's clock and Greenwich's Today to a family that is not there.
+  // Binding also puts the month names and AM/PM into the reader's language.
+  const tz = ctx.active.family.timezone || 'UTC';
+  const { fmtRelative } = await getFormat(tz);
   const supabase = await createServer();
 
   // `audit_logs.actor_id` is an auth user id, so the names come from the member

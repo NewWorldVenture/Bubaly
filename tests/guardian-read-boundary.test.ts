@@ -58,13 +58,35 @@ function fakeClient() {
   return { from: (table: string) => builder(table) };
 }
 
+// `family` is part of the shape, not an optional extra: `FamilyMembership`
+// declares `family: Tables<'families'>` and `requireUserContext()` always
+// resolves one. This mock omitted it, and the page read
+// `ctx.active.family.timezone` and threw.
+//
+// Fixed HERE rather than by writing `ctx.active.family?.timezone` in the page.
+// The optional chain is the reflex and it is the wrong one: the type says this
+// value is always present, so `?.` would silently fall back to UTC in a state
+// that cannot occur — turning a loud, correct failure into a quiet wrong answer
+// in exactly the subsystem this pass is fixing.
 vi.mock('@/lib/supabase/auth', () => ({
   requireUserContext: async () => ({
-    active: { familyId: 'fam-1', member: { id: 'mem-1' }, role: 'parent' },
+    active: {
+      familyId: 'fam-1',
+      member: { id: 'mem-1' },
+      role: 'parent',
+      family: { id: 'fam-1', name: 'Test Family', timezone: 'America/New_York' },
+    },
   }),
 }));
 vi.mock('@/lib/supabase/server', () => ({ createServer: async () => fakeClient() }));
-vi.mock('@/lib/i18n/server', () => ({ getTranslations: async () => t }));
+// `getLocaleContext` too, now that the page binds its formatter with
+// `getFormat(tz)` — which resolves the reader's locale as well as their zone.
+// Same reasoning as the `family` field above: the export exists, so the mock
+// has to carry it rather than the page working around its absence.
+vi.mock('@/lib/i18n/server', () => ({
+  getTranslations: async () => t,
+  getLocaleContext: async () => ({ locale: { code: 'en-US' }, messages: {} }),
+}));
 vi.mock('@/lib/guardian/twilio', () => ({ isTwilioConfigured: () => true }));
 vi.mock('@/components/i18n/locale-provider', () => ({
   useTranslations: () => t,
