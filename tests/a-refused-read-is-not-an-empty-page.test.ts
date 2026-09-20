@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { at } from './helpers/source-order';
+import { at, between } from './helpers/source-order';
 
 /**
  * Audit C1-S9-19 — a refused read must not render as "you have nothing".
@@ -155,6 +155,86 @@ describe('unloadable evidence is not shown as absent evidence (C1-S9-29)', () =>
     for (const locale of ['en-US', 'de-DE', 'es-ES', 'fr-FR', 'it-IT', 'nl-NL', 'pt-PT']) {
       const catalogue = JSON.parse(readFileSync(`lib/i18n/messages/${locale}.json`, 'utf8')) as Record<string, string>;
       expect(catalogue['reviewCard.proofCouldNotBeLoaded'], `${locale} is missing it`).toBeTruthy();
+    }
+  });
+});
+
+describe('a refused inbox is not inbox zero (C1-S9-30)', () => {
+  const page = () => readFileSync('app/(app)/dashboard/paperwork/page.tsx', 'utf8');
+
+  it('the paperwork page checks the error instead of catching one that never arrives', () => {
+    const source = page();
+    // The `try/catch` described a guard that was not there: supabase-js resolves
+    // with `{ data, error }` for anything the database answers, so the catch
+    // never saw a refusal, and `data ?? []` rendered the module's most confident
+    // sentence — "Inbox zero 🎉 — nothing needs your signature, payment, or
+    // reply." — over permission slips, medical forms and bills with deadlines.
+    expect(source).not.toMatch(/catch\s*\{\s*\/\*\s*table not applied yet/);
+    expect(source).toContain('inbox.error');
+    expect(source).toContain('<ErrorState');
+  });
+
+  it('it still degrades for the unapplied table, and ONLY for that', () => {
+    const source = page();
+    // Migration 0169 is the tolerance the original comment was for. A broader
+    // version would be this same defect wearing a new spelling.
+    expect(source).toContain('isMissingRelationError');
+    expect(source).toMatch(/if \(inbox\.error && !isMissingRelationError\(inbox\.error\)\)/);
+  });
+
+  it('the error bail precedes the fallback that would clobber it', () => {
+    const source = page();
+    expect(at(source, 'if (inbox.error &&')).toBeLessThan(at(source, 'inbox.data ?? []'));
+  });
+
+  it('the copy exists in every base catalogue', () => {
+    for (const locale of ['en-US', 'de-DE', 'es-ES', 'fr-FR', 'it-IT', 'nl-NL', 'pt-PT']) {
+      const catalogue = JSON.parse(readFileSync(`lib/i18n/messages/${locale}.json`, 'utf8')) as Record<string, string>;
+      expect(catalogue['paperwork.couldNotLoadYourInbox'], `${locale} is missing it`).toBeTruthy();
+    }
+  });
+});
+
+describe('a failed Pay-ID lookup is not a dead Pay-ID (C1-S9-31)', () => {
+  const page = () => readFileSync('app/pay/[handle]/page.tsx', 'utf8');
+
+  it('both public reads check their error', () => {
+    const source = page();
+    // This page is reached by someone outside the family trying to send money.
+    // A dropped error told them the child's Pay-ID is dead and sent them to ask
+    // the family for a new one — a support ticket and an abandoned gift over a
+    // fault that may be transient, with nothing on the page to suggest retrying.
+    expect(source).toContain('error: phError');
+    expect(source).toContain('error: linkError');
+    expect(source).toMatch(/if \(phError\) return/);
+    expect(source).toMatch(/if \(linkError\) return/);
+  });
+
+  it('the failure shell is distinct from the no-link dead-end', () => {
+    const source = page();
+    expect(source).toContain("t('pay.couldNotCheckThisPayId')");
+    expect(source).toContain("t('pay.noActiveGiftLink')");
+    // Two different messages, or the fix is cosmetic.
+    expect(source.indexOf("t('pay.couldNotCheckThisPayId')")).not.toBe(source.indexOf("t('pay.noActiveGiftLink')"));
+  });
+
+  it('the failure shell says nothing about the handle', () => {
+    const source = page();
+    // The privacy property the dead-end exists for: the shell must render from
+    // the read's outcome alone, identically for a handle that exists and one
+    // that does not. If `Unavailable` ever took the handle or the row, it could
+    // become an existence oracle for anyone who can guess a Pay-ID.
+    const unavailable = between(source, 'function Unavailable(', 'function Shell(');
+    expect(unavailable).not.toContain('handle');
+    expect(unavailable).not.toContain('ph.');
+  });
+
+  it('the copy exists in every base catalogue', () => {
+    for (const locale of ['en-US', 'de-DE', 'es-ES', 'fr-FR', 'it-IT', 'nl-NL', 'pt-PT']) {
+      const catalogue = JSON.parse(readFileSync(`lib/i18n/messages/${locale}.json`, 'utf8')) as Record<string, string>;
+      for (const key of ['pay.couldNotCheckThisPayId', 'pay.pleaseTryAgainInAMoment']) {
+        expect(catalogue[key], `${locale} is missing ${key}`).toBeTruthy();
+      }
     }
   });
 });

@@ -50,7 +50,10 @@ const BASELINE = new Set<string>([
   // journeys + onboarding-funnel fixed under A-05 (PLA-0790) — now capture `error`
   // and render MiniError instead of a false-empty; removed from baseline.
   'app/(app)/dashboard/money-timeline/page.tsx',
-  'app/(app)/dashboard/paperwork/page.tsx',
+  // paperwork fixed under C1-S9-30 — the try/catch that caught nothing is gone;
+  // a refused read now renders a retryable ErrorState instead of "Inbox zero 🎉".
+  // Removed from baseline. (missions/page.tsx stays: C1-S9-29 fixed its proof
+  // signing, but its four lookup reads still settle to `?? []`.)
   // feedback-board comment thread fixed under A-17 §3e (PLA-0796) — a failed
   // read now shows a retryable message, not a silent empty discussion. Removed.
   'app/(app)/missions/page.tsx',

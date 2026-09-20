@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-170 finding IDs from four workers and two parallel sessions; none of it was
+173 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -12,7 +12,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 > source-and-migration audit run without production credentials. Session B
 > (Register B, 14,038 items, `AUTH-001` / `API-<hash>` / `DB-TBL-nnn`) is a
 > hosted-CI and deployed-release audit. Their finding-ID sets are **disjoint**:
-> 892 IDs from A, 684 from B, 1,573 in union — verified mechanically at each
+> 895 IDs from A, 684 from B, 1,576 in union — verified mechanically at each
 > merge. The three literals both files contain (`LB-009`, `LB-016`, `SHA-256`)
 > are not counter-examples: the first two are pre-existing *runbook* names each
 > register cites, and the third is a hash algorithm the ID regex matches. No
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 180 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 183 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -32641,6 +32641,112 @@ failures only (running 22.22.2 against a declared 24.21.0).
 
 ---
 
+### `[CLAUDE-1][HIGH][PAGES]` C1-S9-30 — "Inbox zero 🎉" over a refused read of the deadline inbox
+
+**File:** `app/(app)/dashboard/paperwork/page.tsx:23-31`
+
+**Problem.** The same shape as `C1-S9-27`: a `try/catch` describing a guard that
+was not there.
+
+```ts
+try {
+  const { data } = await supabase.from('paperwork_items').select('*')...
+  items = (data ?? []) as Tables<'paperwork_items'>[];
+} catch { /* table not applied yet */ }
+```
+
+supabase-js RESOLVES with `{ data, error }` for anything the database answers,
+so the catch never saw an RLS refusal or a query error, and `data ?? []` turned
+one into an empty inbox.
+
+**Impact.** `PaperworkModule` opens on the `needs_action` filter, whose empty
+state is the most confident sentence on the page: *"Inbox zero 🎉 — nothing
+needs your signature, payment, or reply."* A refused read rendered it verbatim.
+The rows behind it are permission slips, medical forms and bills — the feature
+exists precisely because each carries a deadline, and a parent told they are at
+inbox zero does not go looking. It is also mildly destructive by invitation:
+the inbox is a triage surface, so the natural response to an empty one is to
+capture the paper again, re-running AI extraction and re-materializing calendar
+events and reminders that already exist.
+
+**Fix.** Read the `error`, tolerate a genuinely missing relation via
+`isMissingRelationError` (migration 0169 is what the original comment was for,
+and that tolerance is preserved exactly), and otherwise render a `PageHeader` +
+`ErrorState` carrying `paperwork.couldNotLoadYourInbox` — *"Could not load your
+paperwork inbox. Refresh and try again — do not assume it is empty."* Added in
+place to all 7 base catalogues.
+
+**Status:** FIXED. Guard: four cases in
+`tests/a-refused-read-is-not-an-empty-page.test.ts`, proved red by restoring the
+catch-that-catches-nothing and by widening the tolerance to any error. Pruned
+from the `tests/silent-empty-read-ratchet.test.ts` baseline, which demanded it —
+the same ratchet-tightening recorded under `C1-S9-28`. Note that
+`app/(app)/missions/page.tsx` correctly STAYS on that baseline: `C1-S9-29` fixed
+its proof signing, but its four lookup reads still settle to `?? []`.
+
+---
+
+### `[CLAUDE-1][MEDIUM][PAGES]` C1-S9-31 — a failed lookup told a stranger the child's Pay-ID was dead
+
+**File:** `app/pay/[handle]/page.tsx:20,36`
+
+**Problem.** The public Pay-ID resolver made two service-role reads
+(`pay_handles`, then `gift_links`) and dropped the `error` on both. Every
+failure mode fell through to the same dead-end as a handle that genuinely has no
+active link.
+
+**Impact.** This page is reached by someone OUTSIDE the family — a grandparent
+with a phone and a Pay-ID — trying to send money. The dead-end copy reads *"This
+Pay-ID doesn't have an active gift link right now. Please ask the family for a
+current link."* A refused or failed read produced that sentence, so a transient
+fault became a confident statement that the child's Pay-ID is dead, an abandoned
+gift, and a support conversation with the family about a link that was never
+broken. Nothing on the page suggested retrying, because as far as the page knew
+there was nothing to retry.
+
+Not HIGH: no money moves on a wrong answer here, and the failure is recoverable
+by the visitor. It is ranked above a cosmetic false-empty because the person
+misled is not the account holder and has no other way to check.
+
+**Fix.** Capture both errors and render a distinct `Unavailable` shell —
+*"We couldn't check this Pay-ID / Something went wrong on our side, not with
+this Pay-ID. Please try again in a moment."*
+
+This does **not** weaken the privacy property the dead-end exists for. The
+shell is rendered from the read's OUTCOME, never from anything about the handle,
+so it appears identically for a handle that exists and one that does not, and
+leaks nothing that "no active link" did not already leak. A guard asserts that
+directly — `Unavailable` must not reference the handle or the row — because the
+cheapest way to regress this fix would be to make the error message helpful, and
+a helpful one would be an existence oracle for anyone who can guess a Pay-ID.
+
+**Status:** FIXED. Guard: four cases, proved red by dropping each bail
+independently, by making the failure reuse the dead-end copy (a cosmetic fix),
+and by giving `Unavailable` the handle.
+
+---
+
+### `[CLAUDE-1][LOW][TESTING]` C1-S9-32 — a guard I wrote caught a test I wrote
+
+Recorded because it is evidence about the instruments, not just the code.
+`tests/ordering-guards-fail-on-absence.test.ts` — the meta-guard added earlier
+this session, which forbids slicing between two `at()` calls because such a
+slice can silently be empty and pass every assertion made against it — went red
+on `C1-S9-31`'s own new test, which did exactly that:
+
+```ts
+const unavailable = source.slice(at(source, 'function Unavailable('), at(source, 'function Shell('));
+```
+
+Had the two functions ever been reordered, `unavailable` would have been the
+empty string and all three `not.toContain` assertions would have passed while
+checking nothing — the privacy guard would have become decorative without ever
+going red. Replaced with `between()`, which asserts the order before returning
+the slice. The meta-guard earned its place: it caught its author, in the same
+session, on the one test where a false pass would have been least visible.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -32710,8 +32816,9 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **16,965 passing / 16,968 across 1,351
-files.** (Re-run after `C1-S9-29`; was 16,950 / 16,953 across 1,349.) The three failures are `C1-S9-09`, BLOCKED: this container runs Node
+Status: ✅ PASS — `npx vitest run`: **16,973 passing / 16,976 across 1,351
+files.** (Re-run after `C1-S9-32`; was 16,950 / 16,953 across 1,349 before this
+batch.) The three failures are `C1-S9-09`, BLOCKED: this container runs Node
 22.22.2 against the repository's `.nvmrc` 24.21.0, and nvm cannot fetch the
 Node 24 distribution here. Not counted as passing.
 
