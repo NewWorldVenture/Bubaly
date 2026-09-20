@@ -26,6 +26,22 @@
 # output lists the unnamed rather than just counting them: the list is the
 # useful artefact and it cannot be gamed without actually writing something.
 #
+# ── The false negative this had, and now does not ───────────────────────────
+# The first cut reported /api/cron/automations as named by nothing. It is not:
+# tests/cron-auth.test.ts:11 does `readdirSync('app/api/cron', …)` and asserts
+# the auth gate on EVERY route it finds, so it covers that route thoroughly
+# while never containing its path as a string. A test can cover a surface
+# without naming it, and a metric that only looks for names calls that
+# uncovered.
+#
+# So the route pass now also asks whether any ancestor directory is enumerated
+# by a test, and counts that as covered. Over the six routes the name test
+# missed, exactly one — that cron route — turned out to be covered this way;
+# the other five are genuinely untouched. The check is narrow on purpose: it
+# recognises `readdirSync('<dir>')` and `glob('<dir>…')` over a path under
+# `app/api`, which is the shape this repo uses. A cleverer enumerator would
+# slip past it, and that would be another false negative of the same kind.
+#
 # Exits 0 either way.
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -35,15 +51,38 @@ section() { printf '\n== %s ==\n' "$1"; }
 
 # ── API routes, by their URL path ───────────────────────────────────────────
 section "API routes"
-named=0; unnamed=(); 
+
+# Directories a test walks with readdirSync/glob. A route inside one is covered
+# by whatever that test asserts, without its path appearing anywhere.
+mapfile -t ENUMERATED < <(grep -rhoE "(readdirSync|glob|globSync)\(['\"][^'\"]*app/api[^'\"]*['\"]" tests/*.ts 2>/dev/null \
+  | grep -oE "app/api[^'\"]*" | sed 's|/$||' | sort -u)
+
+covered_by_enumerator() {
+  local path="app$1/"
+  local d
+  for d in "${ENUMERATED[@]:-}"; do
+    [ -z "$d" ] && continue
+    case "$path" in "$d"/*) return 0;; esac
+  done
+  return 1
+}
+
+named=0; enumerated=0; unnamed=()
 while read -r r; do
   [ -z "$r" ] && continue
-  if grep -rqF "$r" tests/ 2>/dev/null; then named=$((named+1)); else unnamed+=("$r"); fi
+  if grep -rqF "$r" tests/ 2>/dev/null; then named=$((named+1))
+  elif covered_by_enumerator "$r"; then enumerated=$((enumerated+1))
+  else unnamed+=("$r"); fi
 done < <(find app/api -name route.ts 2>/dev/null | sed 's|^app||; s|/route.ts$||' | sort)
-total=$(( named + ${#unnamed[@]} ))
-printf '  named by a test: %d / %d\n' "$named" "$total"
+total=$(( named + enumerated + ${#unnamed[@]} ))
+printf '  named by a test:                %d / %d\n' "$named" "$total"
+printf '  not named but inside a walked directory: %d\n' "$enumerated"
+printf '  reached by neither:             %d\n' "${#unnamed[@]}"
+if [ ${#ENUMERATED[@]} -gt 0 ]; then
+  printf '  (directories a test walks: %s)\n' "$(printf '%s ' "${ENUMERATED[@]}")"
+fi
 if [ ${#unnamed[@]} -gt 0 ]; then
-  printf '  NOT named by anything under tests/:\n'
+  printf '  REACHED BY NEITHER — these have certainly never been exercised:\n'
   printf '    %s\n' "${unnamed[@]}"
 fi
 
