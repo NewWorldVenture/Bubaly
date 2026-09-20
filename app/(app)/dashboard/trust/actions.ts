@@ -262,24 +262,45 @@ export async function setPermissionGrantAction(input: {
   if (!(CAPABILITIES as readonly string[]).includes(input.capability)) return { ok: false, error: t('actions.unknownCapability') };
 
   const supabase = await createServer();
+  // `.select('id')` on both branches, for the reason `deletePolicyAction` above
+  // already gives: this is the permission surface, and the ledger is the record
+  // of what changed on it. Without asking for the affected rows, PostgREST
+  // returns none either way and neither this action nor the ledger entry below
+  // could tell a real change from a no-op. Audit C1-S9-18.
+  //
+  // The two branches are NOT treated alike, because they do not mean alike.
+  let cleared = 0;
   if (input.effect === 'clear') {
-    const { error: e } = await supabase.from('permission_grants').delete()
-      .eq('family_id', ctx.active.familyId).eq('member_id', input.memberId).eq('domain', input.domain).eq('capability', input.capability);
+    const { data: rows, error: e } = await supabase.from('permission_grants').delete()
+      .eq('family_id', ctx.active.familyId).eq('member_id', input.memberId).eq('domain', input.domain).eq('capability', input.capability)
+      .select('id');
     if (e) return actionFailure(e, t('actions.couldNotClearThatPermission'));
+    // Clearing is IDEMPOTENT: no row means the grant is already absent, which is
+    // the end state the manager asked for. So zero rows is not a failure here —
+    // but the ledger must not claim a clearance that did not happen, which is
+    // what it said before, in the same words, either way.
+    cleared = rows?.length ?? 0;
   } else {
-    const { error: e } = await supabase.from('permission_grants').upsert({
+    const { data: rows, error: e } = await supabase.from('permission_grants').upsert({
       family_id: ctx.active.familyId, member_id: input.memberId,
       domain: input.domain, capability: input.capability as Capability, effect: input.effect, created_by: ctx.user.id,
-    }, { onConflict: 'family_id,member_id,domain,capability' });
+    }, { onConflict: 'family_id,member_id,domain,capability' }).select('id');
     if (e) return actionFailure(e, t('actions.couldNotSaveThatPermission'));
+    // An upsert is NOT idempotent in the same way: it either inserts or updates,
+    // so affecting no row means the grant was not stored. Telling a manager an
+    // allow or deny is in force when it is not is the failure this whole
+    // surface exists to prevent, so it is a hard failure like its five siblings.
+    if (changedNothing(rows)) return { ok: false, error: t('actions.couldNotSaveThatPermission') };
   }
   await recordTrustChange(supabase, {
     familyId: ctx.active.familyId, actorMemberId: ctx.active.member.id,
     decision: 'grant_changed', domain: input.domain, capability: input.capability,
     reason: input.effect === 'clear'
-      ? `Cleared the ${input.capability} grant on ${input.domain}`
+      ? cleared > 0
+        ? `Cleared the ${input.capability} grant on ${input.domain}`
+        : `No ${input.capability} grant on ${input.domain} to clear`
       : `Set ${input.capability} on ${input.domain} to ${input.effect}`,
-    context: { memberId: input.memberId, effect: input.effect },
+    context: { memberId: input.memberId, effect: input.effect, ...(input.effect === 'clear' ? { cleared } : {}) },
   });
   revalidatePath('/dashboard/trust');
   return { ok: true };

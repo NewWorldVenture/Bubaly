@@ -114,7 +114,40 @@ describe('changing the rules leaves a row in the ledger', () => {
     expect(String(granted.reason)).toContain('allow');
 
     await setPermissionGrantAction({ memberId: 'member-2', domain: 'finances', capability: 'approve', effect: 'clear' });
-    expect(String(ledger().at(-1)!.reason)).toContain('Cleared');
+    const removed = ledger().at(-1)!;
+    expect(String(removed.reason)).toContain('Cleared');
+    // The ledger records how many grants the clear actually removed, so a real
+    // clearance is distinguishable from a no-op afterwards (C1-S9-18).
+    expect((removed.context as Record<string, unknown>).cleared).toBe(1);
+  });
+
+  it('does not record a clearance that did not happen (C1-S9-18)', async () => {
+    // Clearing is idempotent — no grant means the end state the manager asked
+    // for already holds — so this still succeeds. What it must NOT do is write
+    // "Cleared the approve grant on finances" into the permission audit trail
+    // when there was nothing to clear, which is what it said before, in exactly
+    // the same words, either way.
+    const before = ledger().length;
+    expect(await setPermissionGrantAction({
+      memberId: 'member-2', domain: 'medical', capability: 'approve', effect: 'clear',
+    })).toEqual({ ok: true });
+    expect(ledger().length, 'the attempt is still recorded').toBe(before + 1);
+    const entry = ledger().at(-1)!;
+    expect(String(entry.reason)).not.toContain('Cleared');
+    expect(String(entry.reason)).toContain('to clear');
+    expect((entry.context as Record<string, unknown>).cleared).toBe(0);
+  });
+
+  it('refuses to report a grant as saved when nothing was stored (C1-S9-18)', async () => {
+    // The other half, and the one that is NOT idempotent: an upsert either
+    // inserts or updates, so affecting no row means the allow/deny is not in
+    // force. Telling a manager otherwise is the failure this surface exists to
+    // prevent, so it is a hard failure like its five siblings in this file.
+    const source = readFileSync('app/(app)/dashboard/trust/actions.ts', 'utf8');
+    const grant = source.slice(source.indexOf('export async function setPermissionGrantAction'));
+    const upsert = grant.slice(grant.indexOf(".from('permission_grants').upsert("));
+    expect(upsert.slice(0, upsert.indexOf('recordTrustChange'))).toContain(".select('id')");
+    expect(upsert.slice(0, upsert.indexOf('recordTrustChange'))).toContain('changedNothing(rows)');
   });
 
   it('records handing authority to someone else, and taking it back', async () => {

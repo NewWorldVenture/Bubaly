@@ -32020,6 +32020,54 @@ change under `lib/guardian/phone.ts` is an ADDED `toE164` export (`C1-S7-05`)
 in the guardian SMS namespace, and that spec does not reference the module at
 all. No fix exists to port; the session that owns them is actively working them.
 
+---
+
+### `[CLAUDE-1][MEDIUM][PERMISSIONS]` C1-S9-18 — the permission surface's own ledger could not tell a change from a no-op
+
+**File:** `app/(app)/dashboard/trust/actions.ts`
+
+**Found by** following `C1-S9-16`'s scan into the trust actions, where the
+inconsistency is internal and therefore hard to argue with:
+`app/(app)/dashboard/trust/actions.ts` defines `changedNothing()` at line 60,
+uses it at **five** sites — policy save, policy toggle, policy delete,
+delegation revoke, emergency end — and `setPermissionGrantAction` uses it at
+neither of its two branches. That is the finest-grained permission control on
+the surface, and the only one in the file that did not ask whether its write
+landed.
+
+**Problem.** Both branches wrote without `.select('id')`, so PostgREST returned
+no rows either way and neither the action nor the ledger entry below it could
+distinguish a real change from a no-op. `recordTrustChange` then wrote
+`Cleared the <capability> grant on <domain>` into the permission audit trail
+**in exactly those words whether or not anything was cleared**.
+
+**Fix, with the two branches treated differently because they mean differently.**
+
+- **Clear** is idempotent: no row means the grant is already absent, which IS
+  the end state the manager asked for. So zero rows stays a success — a hard
+  failure here would be wrong. What changes is the record: the action now counts
+  what it removed and the ledger says either `Cleared the …` or
+  `No … grant on … to clear`, with the count in `context.cleared`. A permission
+  audit trail that cannot tell those apart is worse than one that says less.
+- **Upsert** is not idempotent in the same way: it either inserts or updates, so
+  affecting no row means the allow or deny is **not in force**. Telling a
+  manager their permission is saved when it is not is precisely the failure this
+  surface exists to prevent, so it is now a hard failure, matching its five
+  siblings.
+
+**Status:** FIXED. Guard: two cases added to
+`tests/a-permission-change-is-recorded.test.ts` (which already drove these
+actions through the in-memory Supabase fake), plus an assertion on the count in
+the existing clear case. Both proved red by mutation — reverting the ledger
+wording, and dropping the upsert confirmation.
+
+**Caught in my own test, not the code:** the first draft of the no-op case used
+`domain: 'health'`, which is not in `TRUST_DOMAINS`, so the action refused it
+for a reason unrelated to the finding and the case failed while the code was
+right. Changed to `medical`. A guard that fails for the wrong reason proves
+nothing, and it is the second time in this session that a first draft asserted
+something other than what it was named for.
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
