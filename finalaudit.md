@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-177 finding IDs from four workers and two parallel sessions; none of it was
+178 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -12,7 +12,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 > source-and-migration audit run without production credentials. Session B
 > (Register B, 14,038 items, `AUTH-001` / `API-<hash>` / `DB-TBL-nnn`) is a
 > hosted-CI and deployed-release audit. Their finding-ID sets are **disjoint**:
-> 899 IDs from A, 684 from B, 1,580 in union — verified mechanically at each
+> 900 IDs from A, 684 from B, 1,581 in union — verified mechanically at each
 > merge. The three literals both files contain (`LB-009`, `LB-016`, `SHA-256`)
 > are not counter-examples: the first two are pre-existing *runbook* names each
 > register cites, and the third is a hash algorithm the ID regex matches. No
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 187 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 188 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -32945,6 +32945,101 @@ four found so far were all written that way.
 
 ---
 
+### `[CLAUDE-1][HIGH][API]` C1-S9-37 — four AI routes answering from reads that did not happen, and a filter that only looked like one
+
+**Files:** `app/api/ai/meals/nutrition/route.ts` (5 reads),
+`app/api/ai/relationship/route.ts` (3), `app/api/ai/journal/route.ts` (1),
+`app/api/ai/home/utility-savings/route.ts` (1)
+
+**The worst of them.** `nutrition/route.ts` read the week's `meal_plans`, then
+read `meals` to turn plan rows into dish names, then did this:
+
+```ts
+const nameById = new Map((mealRows ?? []).map((m) => [m.id, m.name]));
+const lines = (plans ?? [])
+  .map((p) => ({ label: nameById.get(p.meal_id ?? '') ?? 'meal', date: p.plan_date, meal_type: p.meal_type }))
+  .filter((l) => l.label !== 'meal' || true);
+```
+
+`x || true` is unconditionally true. **The filter kept every line while reading
+as though it dropped the unresolved ones** — the guard was present in spelling
+and absent in behaviour, which is precisely the shape of "superficial fix" the
+brief forbids, sitting in the codebase already. It is the only `|| true` in the
+repository.
+
+With the `meals` error dropped, a refused read produced an empty `nameById`,
+every label fell to the placeholder `'meal'`, the no-op filter passed all of
+them, and the prompt went out as twenty-one lines of
+`- 2026-09-21 dinner: meal`. The model answered, and the route returned per-day
+calories, protein, carbs and fat **as an estimate of this family's week** —
+numbers with no relationship to anything they had planned. A family managing
+allergies or a medical diet is the intended user of this endpoint.
+
+**The others.**
+
+- **`relationship/route.ts` — a guard inverted with respect to risk.** It
+  caught `isMissingRelationError(datesErr)` — "this feature is not installed
+  yet" — and let every *real* error fall through to `dateRows ?? []`. A helper
+  whose entire job is not forgetting the anniversary then reported ninety clear
+  days. The `relationship_profile` read had no guard at all, and it supplies the
+  partner's name, interests, love languages and gift budget; losing it yields a
+  confidently generic digest in the shape of a personal one. The partner's
+  wishlist — the grounding for every gift suggestion — was the third.
+- **`journal/route.ts`** returned a generic prompt labelled `source: 'ai'` when
+  the five recent entries could not be read. The evergreen fallback already
+  existed for exactly this and is honest about what it is; the failed read now
+  takes it.
+- **`home/utility-savings/route.ts`** fell into the same branch as a family with
+  no bills and told them to "add a few utility bills" — instructions to do work
+  they had already done, phrased as though the app had looked. The mild end of
+  the class: it refuses rather than answering, but the sentence is still a claim
+  about their data the route cannot support.
+
+Plus two in `nutrition` that the first sweep missed entirely: the single-recipe
+and single-meal reads fell straight into `404 Recipe not found` /
+`404 Meal not found`. A 404 is a statement about the caller's data; it must come
+from an answer, not from the absence of one. Both now return 503 on a refused
+read and keep the 404 for a genuine absence. The cache read is the one place
+continuing is correct — the recomputed answer is right, it just costs a model
+call — so it degrades deliberately, with a `console.warn`, rather than silently.
+
+**Fix.** Eleven reads: seven now return 503 with the existing
+`ai.recommendationsAreTemporarilyUnavailable` copy, one takes the evergreen
+path, one warns and continues, and the no-op filter was replaced with the filter
+it described. Where a week cannot be named at all, the pre-existing 422 is the
+truthful answer rather than a fabricated estimate.
+
+**Status:** FIXED. Guard: fifteen cases in
+`tests/an-ai-answer-is-not-built-on-a-read-that-failed.test.ts`, each proved red
+by mutation (restoring the no-op filter, dropping each guard in turn, returning
+a personal-looking journal prompt, failing the request on a cache miss).
+
+#### The instrument under-reported by an order of magnitude, and that is the finding
+
+The first sweep required a `?? []` / `?? 0` fallback within twelve lines of the
+read. It reported **4** candidates across 146 routes. Every read whose dropped
+error falls into a `404`, a `422` or a name lookup has no such fallback, so the
+scan could not see them — including two in the very file it *did* flag.
+
+Re-run without that requirement: **146 routes scanned, 39 reads that bind only
+`data`.** The corrected inventory, classified by consequence and recorded here
+so that none of it is silently counted clean:
+
+| bucket | n | assessment |
+|---|---|---|
+| `supabase.auth.getUser()` | 5 | a different API whose `error` is not the read-refusal channel — **not this class** |
+| insert/upsert returning rows | 4 | the `C1-S9-16` write class, not the read class; `guardian/inbound/*`, `push/subscribe` — **OPEN** |
+| dropped error → `404`/"not found" | 5 | the shape just fixed in `nutrition`; `ai/wallet/child/[childId]`, `email/invite`, `forms/submit`, `recipes/transform`, `vacations/weather` — **OPEN** |
+| everything else | 25 | includes `cron/family-routines:359`, a dropped error on a **reservation** read inside a scheduled job, which is the highest-risk of the remainder — **OPEN** |
+
+Fixed here: 11 of the 39. **28 remain OPEN with permanent locations above**, not
+closed and not counted as passing. The lesson is the same one `C1-S9-34` taught
+about guards: a scan that reports a small number is not evidence of a small
+problem until its heuristic has been attacked. This one was attacked by its own
+results — two misses inside a file it had already flagged.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -33014,8 +33109,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **16,986 passing / 16,989 across 1,351
-files.** (Re-run after `C1-S9-36`; was 16,950 / 16,953 across 1,349 before this
+Status: ✅ PASS — `npx vitest run`: **16,997 passing / 17,000 across 1,351
+files.** (Re-run after `C1-S9-37`; was 16,950 / 16,953 across 1,349 before this
 batch.) The three failures are `C1-S9-09`, BLOCKED: this container runs Node
 22.22.2 against the repository's `.nvmrc` 24.21.0, and nvm cannot fetch the
 Node 24 distribution here. Not counted as passing.
