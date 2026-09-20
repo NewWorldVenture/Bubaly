@@ -45,11 +45,23 @@
 #                layers wrongly leave open lands here too.
 #
 # The grep is deliberately coarse and deliberately over-inclusive on SUSPECT: a
-# false positive costs one file read, a false negative hides a defect. It
-# matches the table name as a PostgREST resource — `from('<table>')` — which is
-# how every client-side write in this codebase names its table, so a table
-# written ONLY through a SECURITY DEFINER RPC reads as NO-WRITER here. That is a
-# known limit of the method, stated rather than papered over, and it is why
+# false positive costs one file read, a false negative hides a defect.
+#
+# An earlier version used `from('<table>')` for BOTH tests and published
+# 46 / 22 / 180 on that basis. The NO-WRITER figure was wrong. Four of those 22
+# — auto_insurance_policies, rental_cars, vehicle_inspections and
+# vehicle_registrations — are written by
+# `saveRow(supabase, 'auto_insurance_policies', …)` and
+# `softDelete(supabase, 'vehicle_registrations', …)` in
+# app/(app)/dashboard/auto/actions.ts, which passes the table as an ARGUMENT and
+# reaches PostgREST as `from(table as 'vehicles')`. No `from('<table>')` regex
+# can see it, and the repo has ~200 such non-literal `.from(` call sites. The
+# corrected split is 46 / 18 / 184; see the two tests above. (Those four are not
+# defects either — that file contains no manager gate at all — but "nothing
+# writes this table" was a false statement about a live feature.)
+#
+# A table written ONLY through a SECURITY DEFINER RPC, naming itself nowhere in
+# TypeScript, still reads as NO-WRITER. That limit remains, and it is why
 # NO-WRITER is a question for a human and not a verdict.
 #
 # ── The proximity pass, and why it is reported but NOT used to narrow ───────
@@ -145,13 +157,34 @@ fi
 SRC=(app lib components hooks)
 GATE='isManager|requireManager|canManage|can_manage_family|assertManager|managerOnly'
 
+# ── Two tests, each used where its error is the SAFE one ────────────────────
+# NARROW is `from('<table>')`. It is precise about writes and it MISSES a
+# writer that passes the table name as an argument —
+# `saveRow(supabase, 'auto_insurance_policies', …)` in
+# app/(app)/dashboard/auto/actions.ts is exactly that shape, and there are ~200
+# `.from(<non-literal>)` call sites in this repo.
+#
+# WIDE is "the name appears as a string literal anywhere under app/, lib/ or
+# components/", excluding the generated database.types.ts (which names every
+# table with an unquoted key, so it would match everything). It catches the
+# parameterised writers and also catches mere mentions — a table listed in
+# lib/ai/context/policy.ts for redaction is not a write.
+#
+# So: NO-WRITER uses WIDE, because "nothing in the application writes this" is
+# the claim that must not over-reach, and a false NO-WRITER is the one that
+# would send someone to revoke DML on a live feature. SUSPECT uses NARROW,
+# because it is a list of call sites for a human to READ and the wide test
+# inflates it from 46 to 99 with files that only mention the name.
+# The two are disjoint — a table with no literal anywhere cannot have a
+# `from('t')` — so CONSISTENT is the remainder and the three still partition.
 suspect=(); nowriter=(); consistent=()
 for t in $tables; do
-  writers=$(grep -rl --include=*.ts --include=*.tsx -E "from\((['\"])${t}\1\)" "${SRC[@]}" 2>/dev/null || true)
-  if [ -z "$writers" ]; then
+  mentions=$(grep -rl --include=*.ts --include=*.tsx "['\"]${t}['\"]" "${SRC[@]}" 2>/dev/null | grep -v 'database.types.ts' || true)
+  if [ -z "$mentions" ]; then
     nowriter+=("$t"); continue
   fi
-  if echo "$writers" | xargs -r grep -lE "$GATE" 2>/dev/null | grep -q .; then
+  writers=$(grep -rl --include=*.ts --include=*.tsx -E "from\((['\"])${t}\1\)" "${SRC[@]}" 2>/dev/null || true)
+  if [ -n "$writers" ] && echo "$writers" | xargs -r grep -lE "$GATE" 2>/dev/null | grep -q .; then
     suspect+=("$t")
   else
     consistent+=("$t")
