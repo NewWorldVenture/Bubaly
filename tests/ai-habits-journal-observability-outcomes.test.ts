@@ -78,6 +78,13 @@ beforeEach(() => {
         select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(),
         gte: vi.fn().mockReturnThis(), order: vi.fn().mockReturnThis(),
         limit: vi.fn().mockResolvedValue(results[table]),
+        // `habit_logs` is read through `readAll`, whose terminal is `.range()`,
+        // not `.limit()`. Without this the page call returned undefined, readAll
+        // reported a failed read — and the route DROPPED that error, so these
+        // tests passed while silently exercising a failed logs read rather than
+        // an empty one. C1-S9-25 stopped dropping it, which is what surfaced the
+        // gap in this fake. Resolving to an empty page is what ends the paging.
+        range: vi.fn().mockResolvedValue({ data: [], error: null }),
       };
     },
   });

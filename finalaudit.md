@@ -32391,6 +32391,99 @@ names. The lesson is the same one this audit keeps finding in the product: a
 key that is not unique will silently collide, and the collision looks like
 success.
 
+---
+
+### `[CLAUDE-1][MEDIUM][AI]` C1-S9-25 — two AI routes answered a family's question from reads that had not happened
+
+**Files:** `app/api/ai/savings/route.ts`, `app/api/ai/habits/route.ts`
+
+Reported by the API worker in Pass AG, **re-verified in source before either was
+touched**, and fixed together because they are one defect in two places.
+
+#### (a) "On track", from four dropped read errors
+
+`settleAll` returned four results and all four `error` fields were destructured
+away. `txns ?? []` then emptied the category map, so no category was over
+budget, no subscription was stale, and the deterministic fallback fired:
+
+> **On track** — No overspending or unused subscriptions detected.
+
+at **HTTP 200**. A parent asking whether they are overspending was told they are
+fine *because* the database was unavailable. The route's own docstring, eighteen
+lines above, says it "never fabricates numbers".
+
+It reached the model as well. The `context` block is built from the same empty
+collections and states `Over-budget categories this month: none` and
+`Unpaid bills: 0` as established fact — under a system prompt instructing the
+model to use ONLY the data given.
+
+The `transactions` read was also **unbounded**, so PostgREST capped it at
+db-max-rows in silence and a busy month's over-budget figures were understated
+and stated as fact.
+
+**Fix.** All four errors are collected and any failure answers **503**; the
+transactions read is paged with `readAllAsQuery` at a real ceiling, so
+exceeding it surfaces as an error rather than as a quiet prefix. There is no
+honest answer to "am I overspending?" built on a read that did not happen.
+
+#### (b) Streaks computed from a prefix
+
+`readAll` sets `error` **both** for a failed page and for a read that exceeds
+`max`, handing back the partial rows either way. `app/api/ai/habits` destructured
+`{ rows: logs }` and dropped it — so streaks, longest-streak and the 30-day
+completion rate were computed from a prefix and returned at 200 as fact:
+"current streak 0" to someone who had not missed a day.
+
+The comment directly above that read explains the truncation hazard and the
+`.limit(5000)` → `max` fix **in detail**, and then the destructure discards the
+signal that reports it. This repository has already fixed this exact shape twice
+with this exact helper — `C4-S4-02` ("refuse rather than invent a number") and
+`C4-S4-06` ("refusing to publish a partial calendar"). Third time, same answer.
+
+**Status:** FIXED. Guard:
+`tests/an-ai-answer-is-not-built-on-a-read-that-failed.test.ts`, four cases,
+each proved red by mutation (removing the savings bail, reverting its bound to
+`.limit()`, and removing the habits error check).
+
+---
+
+### `[CLAUDE-1][MEDIUM][TESTING]` C1-S9-26 — three test fakes were feeding a FAILED read, and the defect hid it
+
+**Files:** `tests/ai-savings-response-integrity.test.ts`,
+`tests/ai-savings-observability-outcomes.test.ts`,
+`tests/ai-habits-journal-observability-outcomes.test.ts`
+
+**Found by breaking them.** Fixing `C1-S9-25` turned 3 suite failures into 42.
+The obvious reading — "the fix is wrong" — was wrong, and the real one is worth
+recording because it inverts the usual relationship between a test and the code
+it covers.
+
+`app/api/ai/habits` has read `habit_logs` through `readAll` for some time, and
+`readAll`'s terminal is `.range(from, to)`. The fake's query builder offered
+`select`, `eq`, `gte`, `order` and `limit` — **no `range`**. So the page call
+returned `undefined`, `readAll` correctly reported a failed read… and the route
+dropped that error, leaving `logs` as `[]`.
+
+The tests passed. But they were not exercising "a family with no habit logs";
+they were exercising "a habit-logs read that failed", and could not tell the
+difference **because the defect under audit was what made the two identical**.
+The same gap existed in both savings fakes once its transactions read began
+paging.
+
+So the defect concealed the flaw in the instrument that was supposed to watch
+it, and removing the defect is what exposed the instrument. A guard cannot
+distinguish two states the production code also cannot distinguish.
+
+**Fix.** All three fakes now provide a `range` terminal resolving to an empty
+page — which is what actually ends `readAll`'s paging — so they supply a real
+empty result instead of a silent failure. 46 tests pass, and they now mean what
+their names say.
+
+**Status:** FIXED. Recorded rather than quietly repaired, because the general
+form is worth having written down: *when a fix to production code breaks tests,
+the first question is not "is the fix wrong" but "what were those tests actually
+asserting" — and sometimes the answer is that the bug was holding them up.*
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
