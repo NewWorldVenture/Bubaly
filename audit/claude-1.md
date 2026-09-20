@@ -6846,3 +6846,121 @@ catalogues also reach the browser bundle is a measurement in flight, not a claim
 `ai-route-rate-limit-contract`, `ai-monthly-allowance`, `ai-chat-ownership`,
 `no-route-gates-on-a-per-instance-limit`, `ai-voice-routes-auth` — 98/98; every
 other test referencing `/api/ai` 59/59. `npx tsc --noEmit` clean.
+
+## Pass BN — eleven tables measured, eight closed, and the three left open are the point
+
+Eleven tables were recorded in earlier passes as gated by a server action and
+not by RLS. **All eleven were writable by a child**, measured on a replayed
+database rather than inferred: each returned `1 row affected`. Eight are
+repaired. Three are not, deliberately, and one recorded claim was simply wrong.
+
+**STEP 0 first, because BK-01 was this mistake in reverse.** `git grep` for each
+table across `supabase/migrations/`, plus the applied policy state read from
+`pg_policies`. **Nothing in `0296`–`0321` touches any of the eleven.** Each
+appears only in its origin migration, always as one permissive `FOR ALL` on
+`is_family_member` — a predicate that asks whether the caller is in the
+household and ignores role entirely. Nothing was already fixed; nothing was done
+twice.
+
+### AUTHZ-006 — the confused deputy, and 0318 held the whole time
+
+This is the finding worth carrying. `0318` closed `guardian_contacts` to
+non-managers and it **works** — as the child, `update guardian_contacts …`
+returns `UPDATE 0`. But `guardian_suggestions` kept `01370`'s permissive policy,
+and `guardian_review_suggestion` (0198) is `SECURITY DEFINER`, checks
+`can_manage_family` correctly, and on approval copies **the suggestion's own
+fields** into `guardian_contacts`.
+
+    child:   update guardian_contacts    set trust_level='immediate_family'  -> UPDATE 0
+    child:   update guardian_suggestions set proposed_trust_level='immediate_family',
+                                             title='Trust this caller'       -> UPDATE 1
+    parent:  select guardian_review_suggestion(<id>,'approved')              -> ok
+    result:  a suspected_spam caller is now immediate_family
+
+The child never wrote the table they were forbidden. They wrote the row that
+told a privileged function what to write there, and the parent did exactly what
+the product asked of them — including reading a `title` the child controlled.
+
+**The definer function is not the defect.** It does what it promises. A
+boundary that stops the direct write and leaves its *input* writable has moved
+the door, not locked it, and nothing in the guard for `guardian_contacts` could
+have seen this — which is the general lesson: closing a table is not closing a
+capability.
+
+### The one that costs a real person money
+
+`/wallet/gift` lists `.eq('status','pending')`. A child flipping a `gift_payments`
+row to `completed` makes a real grandparent's gift **leave the approval queue,
+uncredited and unannounced**. It mints nothing — `wallet_approve_gift` is
+`SECURITY DEFINER` and checks `can_manage_family` — and the migration says so
+rather than overstating it, because the overstatement would be the easy version.
+
+### CENSUS-001 — my own census was wrong, in the reassuring direction
+
+"No app write path found" for `family_emergency_contacts` and
+`family_emergency_plans` was a **search artefact**. Both are in `MANAGER_ONLY`
+in `lib/family/actions.ts`, refused on create, update and delete, and the page
+renders the controls only `if (manager)`. The write path reaches tables
+**generically by name**, so `.from('family_emergency_contacts')` appears nowhere
+for grep to find. `vacation_documents` was mis-filed the other way.
+
+This is the **second** census error in this audit, after basenames collapsed
+three different `actions.ts` files into one label. Both have the same shape and
+the same direction: a grep over call sites cannot see a call site that names its
+table in a variable, so the count comes back comfortable.
+
+### PROD-001 — the three not repaired, which took more judgement than the eight
+
+The vacation tables' write path is `TripCrudSection`, a `'use client'` component
+going **straight to the browser client**, with Add, Edit and Delete rendered
+unconditionally and **no `isManager` gate anywhere**. `requireFeature` is
+plan-level, not role-level. So the app and RLS **agree** — there is no boundary
+being walked around, and the earlier record that called `vacation_documents`
+gated-in-app-only was wrong.
+
+Restricting writes would stop a teen adding their own passport expiry to the
+family trip. Whether a child may edit trip medical information is a product
+decision and the owner's. In a diff it would have looked identical to the eight
+genuine repairs, which is exactly why it needed to be separated out rather than
+swept along.
+
+### Mechanism, and what was checked before restricting anything
+
+Restrictive `insert`/`update`/`delete` guards on `can_manage_family`, UPDATE
+carrying both `USING` and `WITH CHECK`, following `0310` and `0318`. Restrictive
+policies AND with the union of the permissive ones, so no future `FOR ALL`
+written out of habit can grant past them — which is precisely how all eight got
+here in the first place.
+
+**`SELECT` is untouched on every table**, and the read paths were checked first:
+`/wallet/babysitters`, `/wallet/gift`, `/dashboard/family-emergency` and
+`/guardian` are all RLS-bound reads with no role gate, rendering to every member
+on purpose. A crisis surface that hides the meeting point is worse than useless.
+`anon`'s write grants are revoked for the reason `0290` gives: a restrictive
+policy `to authenticated` is simply *absent* for an anonymous request.
+
+Both probes carry a negative control that drops only the new guards inside the
+transaction — leaving the original permissive policies exactly as they were —
+and requires the escalation to succeed again; the safety probe re-arms the
+suggestion and requires the **whole deputy chain** to reproduce. Proved red
+before green on a live database. Inserts catch `unique_violation` separately and
+report it as a breach, because RLS runs before a unique index, so an insert that
+reaches a constraint is one RLS let through.
+
+**Verified:** 336 migrations applied / 0 failed on a fresh database; **48/48**
+boundary probes; `migration-version-safety` plus the two probe meta-guards
+(`boundary-probes-actually-assert`, `audit-probes-do-not-rewrite-grants`) 12/12;
+`tsc` clean. **Neither migration has been applied** — that is a human action.
+
+### A pre-existing probe flake, proved not ours
+
+Running the probe suite a second time against the *same* database fails
+`child-login-mapping-is-managers-only-check.sql` on an FK violation. Rather than
+conclude the change broke it, the suite was re-bootstrapped and run twice with
+the two new probes **excluded**: pass 1 clean, pass 2 fails identically.
+`social-access-symmetry-check.sql` inserts fixtures at the top level, outside
+any transaction, so they autocommit; `child-login-mapping` reuses the same
+UUIDs, its `on conflict do nothing` silently skips, and the member its row
+points at never exists. CI is green because it bootstraps a fresh container per
+run. Pre-existing, out of scope, untouched, queued separately. "It failed after
+I changed something" is still not "my change broke it".
