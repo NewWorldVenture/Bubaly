@@ -52,6 +52,47 @@
 # known limit of the method, stated rather than papered over, and it is why
 # NO-WRITER is a question for a human and not a verdict.
 #
+# ── The proximity pass, and why it is reported but NOT used to narrow ───────
+# SUSPECT is file-level co-occurrence, which over-approximates badly. The
+# obvious refinement is proximity: does a manager gate appear within N lines of
+# an actual write? Run over the 46 SUSPECT tables it reduced them to FIVE —
+# wallet_cards, wallet_passes, wallet_rewards, subscriptions_tracked and
+# dashboard_layout_events — and every one of the five was read and every one is
+# NOT a defect. Three different mechanisms produced those five false positives,
+# and they are written down because each would have produced a wrong verdict on
+# its own:
+#
+#   1. THE NEIGHBOURING FUNCTION. `app/(app)/wallet/hub-actions.ts` gates
+#      `addAccountAction` with isManager and then defines addCardAction,
+#      addPassAction and addRewardAction directly beneath it with NO gate. The
+#      window caught the gate above. Worse, the file makes the intent explicit:
+#      `MANAGER_ONLY_DELETES` is narrowed to financial_accounts and
+#      transactions, with the comment "a teen tidying their own wallet cards,
+#      passes and rewards is not what 0267 is about". The application does not
+#      claim the rule the census inferred. This is CENSUS-002 one level finer.
+#
+#   2. THE IMPORT LINE. `components/modules/subscriptions-module.tsx` writes
+#      subscriptions_tracked at lines 82-83; the only thing matching the gate
+#      pattern inside the window is `import { isManager }` on line 24. The real
+#      gate is `canReview` on line 218, and it governs an AI candidate-review
+#      feature in a DIFFERENT component.
+#
+#   3. THE GATE GOVERNS A DIFFERENT TABLE. `app/(app)/dashboard/customize-
+#      actions.ts` guards saving a layout with canCustomizeDashboard(); the
+#      write the window found is `logEvent`, a telemetry insert into
+#      dashboard_layout_events. The guarded resource is dashboard_layouts,
+#      closed separately by 0325. (The event row's `user_id` is still forgeable
+#      by any member — that is the AUDIT-002 attribution class, not this one,
+#      and it is recorded there rather than counted here.)
+#
+# So proximity is printed as EVIDENCE and never used to shrink the list. A
+# narrowing heuristic whose every hit was a false positive has no business
+# deciding which names a human reads. Equally, zero hits is not absolution:
+# `calendar_events` has 18 write sites and no gate within 60 lines of any of
+# them, and AUTHZ-021 is a real, reproduced finding on it — because AUTHZ-021 is
+# an ATTRIBUTION defect, not a role-gate mismatch. This instrument answers one
+# question and its silence on the others means nothing.
+#
 # Exits 0 whichever way the counts fall. This measures; it does not gate.
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -91,4 +132,26 @@ printf '\n-- NO-WRITER (%d) ----------------------------------------------\n' "$
 printf '%s\n' "${nowriter[@]:-(none)}" | paste -sd' ' -
 printf '\n-- CONSISTENT (%d) ---------------------------------------------\n' "${#consistent[@]}"
 printf '%s\n' "${consistent[@]:-(none)}" | paste -sd' ' -
+
+# ── Proximity: evidence for the reader, never a filter ──────────────────────
+# Read the header before acting on a number here. Every hit this pass has ever
+# produced was a false positive, and a table with zero hits can still be a
+# defect of another class.
+printf '\n-- PROXIMITY over the %d SUSPECT names (evidence only; see header) -----\n' "${#suspect[@]}"
+printf '%-30s %-8s %s\n' 'table' 'writes' 'gate within 60 lines above / 20 below'
+for t in "${suspect[@]:-}"; do
+  [ -z "$t" ] && continue
+  hits=0; near=0
+  while IFS=: read -r f ln _; do
+    [ -z "$f" ] && continue
+    hits=$((hits+1))
+    lo=$((ln>60?ln-60:1)); hi=$((ln+20))
+    if sed -n "${lo},${hi}p" "$f" 2>/dev/null | grep -qE "$GATE"; then near=$((near+1)); fi
+  done < <(grep -rn --include=*.ts --include=*.tsx -E "from\\((['\"])${t}\\1\\)[^;]*\\.(insert|upsert|update|delete)\\(" "${SRC[@]}" 2>/dev/null)
+  printf '%-30s %-8s %s\n' "$t" "$hits" "$near"
+done
+# `writes=0` means the one-line regex above found nothing, NOT that the table is
+# unwritten: a call chained across lines, or built through a variable, is
+# invisible to it. Six of the SUSPECT names read that way and each still has a
+# writer that put it in this bucket.
 echo
