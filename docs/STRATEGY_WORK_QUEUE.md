@@ -155,17 +155,48 @@ webpack and was dying at 4,471 MB against a 4,096 MB cap; standalone it peaks at
 
 ### Available now
 
-> **Check the tree before you build, not just this list.** On 2026-09-20 an agent
-> took `S-05` from here, claimed it, and then found the whole section already
-> implemented and passing on the integration branch (`b17fa42d`) — `disruption.ts`,
-> both test files, the tool registration and the form. Nothing here said so. The
-> claim protocol stops two agents starting the same section at the same time; it
-> does nothing about a section that landed since this list was written. Before
-> writing a line, grep for the files the section says it owns and run its named
-> tests. That check cost two minutes and would have cost a day of duplicated work.
+> ## ⚠️ THIS LIST IS STALE. Measure before you build.
+>
+> **On 2026-09-20 every test named by all twenty sections was run: 78 files,
+> 1,546 tests, all passing.** Every section's owned files exist too (the three
+> gaps are deliberate — `tests/marketing-display-page.test.ts:60` *asserts*
+> `app/(marketing)/display/page.tsx` does not exist).
+>
+> It started with one section. An agent took `S-05` from "Available now",
+> claimed it, then checked the tree before writing and found the whole thing
+> already built and passing at `b17fa42d`. Checking `S-07`, `S-10` and `S-14`
+> found the same. So the sweep was widened to all twenty, and the honest
+> summary is that **this file's Landed / Available / In-progress lists no longer
+> describe the branch**. The Landed table below names 14 items; the tests say
+> the work reaches considerably further.
+>
+> **What that measurement does and does not prove.** It proves every acceptance
+> test this queue names is green. It does **not** prove each section is complete
+> against its own "Done when" list, because a section's tests need not cover its
+> whole scope — only `S-05` was checked that way, item by item, and it passed.
+> So treat a section here as *probably landed* and verify before claiming.
+>
+> **Re-derive it, do not trust this paragraph:**
+>
+> ```bash
+> # every test path this file names, that exists on disk
+> python3 - <<'EOF' > /tmp/q.txt
+> import re, os
+> src = open('docs/STRATEGY_WORK_QUEUE.md', encoding='utf-8').read()
+> print('\n'.join(t for t in sorted(set(
+>     re.findall(r'`(tests/[a-z0-9./-]+\.test\.ts)', src))) if os.path.exists(t)))
+> EOF
+> npx vitest run $(tr '\n' ' ' < /tmp/q.txt)
+> ```
+>
+> **Before you write a line of any section**: grep for the files it says it
+> owns and run its named tests. That check costs two minutes. Skipping it costs
+> a day of duplicated work, which is what the "do not duplicate work" rule in
+> every brief is for.
 
 Every section in §7 is available unless a branch `claude/strategy-<ID>` already
-exists on the remote. Twenty sections, sized so that each is one reviewable PR.
+exists on the remote — **and unless the sweep above says it has already
+landed, which as of 2026-09-20 it says of all twenty.** Twenty sections, sized so that each is one reviewable PR.
 
 ### Being worked on the integration branch right now
 
