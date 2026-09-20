@@ -500,6 +500,12 @@ test('medication edit and confirmed delete read back the saved name and the depe
 
 test('schedule removal retires its actionable dose while retaining its logged history', async ({ page }) => {
   const state = await fixture(page); state.rows.medication_doses = [{ ...recorded }]; await mount(page); await ready(page);
+  // deleteSchedule asks through useConfirm before it writes. Nothing wraps this
+  // fixture in a ConfirmProvider, so the hook falls back to window.confirm —
+  // which Playwright dismisses unless a handler accepts it, exactly as the
+  // medication-delete test above does. Without this the click is a no-op and
+  // the schedule is never removed.
+  page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: 'Remove schedule', exact: true }).click();
   await expect(markTaken(page)).toHaveCount(0); await expect(page.getByText('1 taken', { exact: true })).toBeVisible();
   expect(state.rows.medication_schedules).toEqual([]);

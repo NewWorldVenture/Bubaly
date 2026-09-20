@@ -54,11 +54,26 @@ test.beforeEach(async ({ page }) => {
       'lucide-react': new Proxy({}, { get: () => () => null }),
       '@/lib/utils/cn': { cn: (...values) => values.filter(v => typeof v === 'string').join(' ') },
       '@/components/app/app-context': { useApp: () => ({ familyId: 'family', userId: 'user' }) },
-      '@/components/i18n/locale-provider': { useTranslations: () => key => key === 'states.tryAgain' ? 'Try again' : key },
+      // Every view calls useLocale() as well as useTranslations(), and passes
+      // locale.code to hub.ts's usd/fmtDueDate. It must hand back the whole
+      // Locale record, not a code string: a () => 'en-US' stub type-checks
+      // nowhere and fails at locale.code with an unhelpful undefined.
+      '@/components/i18n/locale-provider': { useTranslations: () => key => key === 'states.tryAgain' ? 'Try again' : key,
+        useLocale: () => load('@/lib/i18n/locales').localeOrDefault('en-US') },
       '@/components/ui/toast': { useToast: () => ({ success() {}, error() {} }) },
       '@/components/ui/modal': { Modal: () => { throw new Error('Unexpected form write workflow'); } },
       '@/lib/supabase/client': { createClient: () => { throw new Error('Unexpected financial write'); } },
-      '@/app/(app)/dashboard/billing/actions': {},
+      // Named rather than left as {}: this spec exercises read states only, and
+      // every one of these throws for the same reason the client and Modal mocks
+      // above do - so a write that appears here says so, instead of failing as
+      // "actions_1.setBudgetAction is not a function" three frames away.
+      '@/app/(app)/dashboard/billing/actions': {
+        setBudgetAction: () => { throw new Error('Unexpected financial write'); },
+        deleteBudgetAction: () => { throw new Error('Unexpected financial write'); },
+        createSavingsGoalAction: () => { throw new Error('Unexpected financial write'); },
+        contributeToGoalAction: () => { throw new Error('Unexpected financial write'); },
+        deleteSavingsGoalAction: () => { throw new Error('Unexpected financial write'); },
+      },
       '@/lib/hooks/use-realtime-query': { useRealtimeQuery: ({ table }) => {
         state[table] ??= { data: [], loading: false, error: null };
         const result = React.useSyncExternalStore(callback => { listeners.add(callback); return () => listeners.delete(callback); }, () => state[table]);

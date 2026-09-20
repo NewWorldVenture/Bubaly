@@ -103,6 +103,11 @@ test.beforeEach(async ({ page }) => {
         if (id === '@/lib/display/calendar') return load('lib/display/calendar.ts');
         if (id === '@/lib/onboarding/ics-time') return load('lib/onboarding/ics-time.ts');
         if (id === '@/lib/display/tiles') return load('lib/display/tiles.ts');
+        // ambient.ts reads DEFAULT_LOCALE from here, and the useLocale mock above
+        // builds its Locale with localeOrDefault. Naming the file in the sources
+        // list is not enough on its own: this switch is what maps an id to it.
+        // (No backticks in here - this whole block is a template literal.)
+        if (id === '@/lib/i18n/locales') return load('lib/i18n/locales.ts');
         if (id === './setup-card') return load('components/display/setup-card.tsx');
         if (id === '@/components/ui/widget-boundary') return load('components/ui/widget-boundary.tsx');
         if (Object.prototype.hasOwnProperty.call(requires, id)) return requires[id];
