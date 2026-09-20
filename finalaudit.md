@@ -15969,7 +15969,36 @@ None
 Pending
 
 #### Evidence
-Pending
+Pending as the RECORD REQUIRES — a second full regression is a workflow-level
+exercise and none has been run. The status above is therefore unchanged, and is
+not to be read as "nothing has been verified". What HAS been verified on the
+current head of `claude/roadmap-implementation-ld8bon` is listed here so that a
+reader can tell the two apart, and so the next person to attempt this record
+knows what is already standing under them:
+
+- **Database (CI, fresh container): green.** Every migration replays from
+  nothing, and the boundary probes pass against the result. Reproduced locally
+  from an empty database: **349 migrations applied, 0 failed**, then **61 of 61
+  probes, three consecutive runs** — the third run being the one that matters,
+  because until Pass BS the suite could only be run once (AUDIT-004).
+- **Typecheck · Lint · Test · Build (CI): green**, which is the full unit suite
+  on the pinned Node 24. Locally on Node 22 it is **17,200 passed / 4 failed**,
+  and all four failures are the pinned-runtime cases saying honestly that the
+  runtime is wrong — `node-version-is-pinned` and the two
+  `stream-cancellation-runtime` cases. They pass in CI.
+- **Mobile (Expo) · Typecheck · Config (CI): green.**
+- **E2E (CI): 1,293 passed, 3 failed.** The three are `phone-auth-http`, which
+  fail identically on `main` at the merge base `ad742c2b` and whose files are
+  byte-identical to it; see the standing-down comment on the PR. Fifty that were
+  failing before this branch are fixed.
+- **i18n gate: clean on every declared surface**, and the five scoped surfaces
+  are now provably complete for literal AND expression-keyed calls.
+
+**What that is not.** None of it is a workflow exercised end to end by a person
+or a browser against a deployed environment, which is what this record asks for,
+and none of it is evidence about PRODUCTION — `0318`–`0338` are unapplied and
+production's ledger still records `0001-0003` (PROD-001). Those are the two gaps
+between the list above and a ✅ here.
 
 #### Final Status
 ⬜ NOT STARTED
