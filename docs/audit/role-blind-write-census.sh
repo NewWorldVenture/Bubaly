@@ -50,10 +50,24 @@
 # not, because a server action is not a boundary against a JWT holder. Deciding
 # which is which needs the call sites read one at a time; CENSUS-002 is what
 # happened when a name on this list was taken for a verdict.
+#
+# ── One derivation, used three times ────────────────────────────────────────
+# The `open_pairs` query below used to be written out TWICE in this file — once
+# for the counts and once for the table list — and a third time, differently, in
+# role-blind-write-triage.sh. That third copy used a looser definition of "bare"
+# and reported 251 open tables where this file reported 248, because it counted
+# `marketplace_listings`, `marketplace_stores` and `notifications`, whose
+# predicates pin a column beyond `is_family_member` (`member_id =
+# marketplace_member_id(family_id)`, `user_id = auth.uid()`). Those three are
+# role-blind but CONSTRAINED, which the definition below deliberately excludes.
+#
+# A number that disagrees with itself is how CENSUS-001, -002 and -003 each
+# happened. So the CTEs now live in $OPEN_PAIRS_CTE, one copy, and both this
+# script and the triage read from it. `--tables` prints just the bare names,
+# which is the interface the triage uses.
 set -uo pipefail
 
-psql -v ON_ERROR_STOP=1 -q <<'SQL'
-\pset border 2
+OPEN_PAIRS_CTE=$(cat <<'CTE'
 with verbs(v) as (values ('INSERT'),('UPDATE'),('DELETE')),
 
 -- Only a function that can RAISE can refuse a write. set_updated_at cannot.
@@ -82,8 +96,10 @@ xw as (select tablename, v.v as cmd, permissive, pred from w, verbs v
         where w.cmd = v.v or w.cmd = 'ALL'),
 
 -- "Bare": strip the call itself and nothing is left. A predicate that also pins
--- a column (parent_approvals' status='pending') is role-blind but constrained,
--- and is deliberately not counted here.
+-- a column (parent_approvals' status='pending', marketplace_listings'
+-- member_id = marketplace_member_id(family_id), notifications' user_id =
+-- auth.uid()) is role-blind but constrained, and is deliberately not counted
+-- here. Loosening this is what made the triage's private copy disagree by three.
 bare as (
   select distinct tablename, cmd from xw
    where permissive = 'PERMISSIVE'
@@ -98,7 +114,22 @@ open_pairs as (
    where not exists (select 1 from restricted r
                       where r.tablename = b.tablename and r.cmd = b.cmd)
      and not exists (select 1 from guarded g where g.tablename = b.tablename))
+CTE
+)
 
+# `--tables` is the triage's interface: bare table names, one per line, nothing
+# else on stdout. Anything that needs the list must come through here.
+if [ "${1:-}" = "--tables" ]; then
+  psql -v ON_ERROR_STOP=1 -tAq <<SQL
+$OPEN_PAIRS_CTE
+select distinct tablename from open_pairs order by 1;
+SQL
+  exit $?
+fi
+
+psql -v ON_ERROR_STOP=1 -q <<SQL
+\pset border 2
+$OPEN_PAIRS_CTE
 select 'tables with any role-blind write policy' as bucket,
        count(distinct tablename)::text as n from w
  where permissive = 'PERMISSIVE' and pred like '%is_family_member%'
@@ -121,25 +152,13 @@ select 'tables carrying set_updated_at (guards NOTHING)', count(distinct c.relna
   from pg_trigger t join pg_class c on c.oid = t.tgrelid
   join pg_namespace n on n.oid = c.relnamespace join pg_proc p on p.oid = t.tgfoid
  where n.nspname = 'public' and not t.tgisinternal and p.proname = 'set_updated_at';
+SQL
 
-\echo ''
-\echo 'The open tables, with the verbs each still takes from any member:'
-with verbs(v) as (values ('INSERT'),('UPDATE'),('DELETE')),
-rolefn as (select oid from pg_proc where prosrc ~* 'raise +exception'
-             and prosrc ~* 'can_manage_family|is_manager|role +in +\(|role +='),
-guarded as (select distinct c.relname as tablename from pg_trigger t
-   join pg_class c on c.oid = t.tgrelid join pg_namespace n on n.oid = c.relnamespace
-   where n.nspname = 'public' and not t.tgisinternal and t.tgfoid in (select oid from rolefn)),
-w as (select tablename, cmd, permissive, coalesce(qual,'') || ' ' || coalesce(with_check,'') as pred
-    from pg_policies where schemaname = 'public' and cmd in ('INSERT','UPDATE','DELETE','ALL')),
-xw as (select tablename, v.v as cmd, permissive, pred from w, verbs v where w.cmd = v.v or w.cmd = 'ALL'),
-bare as (select distinct tablename, cmd from xw
-   where permissive = 'PERMISSIVE' and pred like '%is_family_member%' and pred not like '%can_manage_family%'
-     and regexp_replace(pred, '[()\s]|is_family_member|family_id|::text|public\.', '', 'g') = ''),
-restricted as (select distinct tablename, cmd from xw where permissive = 'RESTRICTIVE')
-select b.tablename, string_agg(b.cmd, ',' order by b.cmd) as still_open_to_any_member
-  from bare b
- where not exists (select 1 from restricted r where r.tablename = b.tablename and r.cmd = b.cmd)
-   and not exists (select 1 from guarded g where g.tablename = b.tablename)
- group by b.tablename order by b.tablename;
+echo ''
+echo 'The open tables, with the verbs each still takes from any member:'
+psql -v ON_ERROR_STOP=1 -q <<SQL
+\pset border 2
+$OPEN_PAIRS_CTE
+select tablename, string_agg(cmd, ',' order by cmd) as still_open_to_any_member
+  from open_pairs group by tablename order by tablename;
 SQL
