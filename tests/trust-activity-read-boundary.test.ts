@@ -262,9 +262,15 @@ describe('the Activity tab renders what was read, and says so when it could not'
     vi.doMock('next/navigation', () => ({ useRouter: () => ({ refresh: () => undefined, push: () => undefined }) }));
     const React = (await import('react')).default;
     const { renderToStaticMarkup } = await import('react-dom/server');
+    // Under a provider, because the component asks for one. `translate` no
+    // longer falls back to the en-US catalogue — that fallback was a static
+    // import and the reason en-US shipped to the browser on 406 of 606 pages
+    // (PERF-001) — so a component rendered with no provider now emits raw
+    // keys. It always did mount under one in the product.
+    const { withLocale } = await import('./helpers/render-translated');
     const { TrustActivityTab } = await import('@/components/modules/trust-activity-tab');
 
-    const html = renderToStaticMarkup(React.createElement(TrustActivityTab, {
+    const html = renderToStaticMarkup(withLocale(React.createElement(TrustActivityTab, {
       error: null,
       policies: [{ domain: 'finances', enabled: true }],
       activity: {
@@ -284,7 +290,7 @@ describe('the Activity tab renders what was read, and says so when it could not'
         }],
         canSeeContext: true,
       },
-    }));
+    })));
 
     expect(html).toContain('calendar.createEvent');
     expect(html).toContain('/dashboard/concierge/runs/run-9');
@@ -302,13 +308,19 @@ describe('the Activity tab renders what was read, and says so when it could not'
     vi.doMock('next/navigation', () => ({ useRouter: () => ({ refresh: () => undefined, push: () => undefined }) }));
     const React = (await import('react')).default;
     const { renderToStaticMarkup } = await import('react-dom/server');
+    // Under a provider, because the component asks for one. `translate` no
+    // longer falls back to the en-US catalogue — that fallback was a static
+    // import and the reason en-US shipped to the browser on 406 of 606 pages
+    // (PERF-001) — so a component rendered with no provider now emits raw
+    // keys. It always did mount under one in the product.
+    const { withLocale } = await import('./helpers/render-translated');
     const { TrustActivityTab } = await import('@/components/modules/trust-activity-tab');
 
-    const html = renderToStaticMarkup(React.createElement(TrustActivityTab, {
+    const html = renderToStaticMarkup(withLocale(React.createElement(TrustActivityTab, {
       error: 'Could not load what Bubaly has done from Supabase. Refresh and try again.',
       policies: [],
       activity: null,
-    }));
+    })));
 
     expect(html).toContain('Could not load what Bubaly has done');
     expect(html).toContain('Try again');

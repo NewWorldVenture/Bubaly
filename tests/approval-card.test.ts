@@ -7,7 +7,18 @@
 // chain ever reaches the markup.
 import { describe, it, expect, vi } from 'vitest';
 import React from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderToStaticMarkup as renderRaw } from 'react-dom/server';
+// Rendered under a LocaleProvider, because the component asks for one.
+//
+// `translate` no longer falls back to the en-US catalogue — that fallback was a
+// static import, and it is why en-US shipped to the browser on 406 of 606 pages
+// (PERF-001). It now lives in getMessages, which is where a catalogue belongs.
+// These cases were rendering a client component with NO provider and asserting
+// its English copy, which passed only on that fallback and mounted the
+// component in a way the product never does. Shadowing the import fixes every
+// call site at once and changes no assertion.
+import { withLocale } from './helpers/render-translated';
+const renderToStaticMarkup = (node: Parameters<typeof withLocale>[0]) => renderRaw(withLocale(node));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: () => undefined, push: () => undefined }) }));
 vi.mock('@/app/(app)/dashboard/approvals-actions', () => ({

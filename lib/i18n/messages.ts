@@ -5,8 +5,19 @@
 // missing from a translation falls back to the English string rather than
 // rendering a raw key at a visitor. A missing translation should look like an
 // untranslated product, not a broken one.
+//
+// That fallback lives in getMessages() below — `{ ...enUS }` with the locale's
+// overlay assigned over it — and NOT in `translate` any more. `translate` moved
+// to lib/i18n/translate.ts, which imports no catalogue, because a client
+// component importing it from here made en-US a live reference in the browser
+// graph: 821.5 KB raw / 245.8 KB gzip on every page, measured on served HTML.
+// It is re-exported here so every existing caller is unchanged, and it is
+// unchanged for them in behaviour too: the map this module hands out is
+// already complete, so `messages[key] ?? SOURCE_MESSAGES[key]` and
+// `messages[key]` cannot differ.
 
 import type { LocaleCode } from '@/lib/i18n/locales';
+import { translate, type Messages } from '@/lib/i18n/translate';
 
 import deDE from '@/lib/i18n/messages/de-DE.json';
 import enGB from '@/lib/i18n/messages/en-GB.json';
@@ -23,7 +34,8 @@ import ptPT from '@/lib/i18n/messages/pt-PT.json';
 /** The English catalogue's keys are the contract; every other catalogue is a
  *  partial of it, so a translation can lag without breaking the build. */
 export type MessageKey = keyof typeof enUS;
-export type Messages = Record<string, string>;
+export { translate };
+export type { Messages };
 
 const CATALOGUES: Record<LocaleCode, Messages> = {
   'en-US': enUS,
@@ -121,14 +133,3 @@ export function getRawMessages(locale: LocaleCode): Messages {
  * cleverer (nested expressions, function calls in strings) turns a translation
  * file into an execution surface.
  */
-export function translate(
-  messages: Messages,
-  key: string,
-  params?: Record<string, string | number>,
-): string {
-  const template = messages[key] ?? SOURCE_MESSAGES[key] ?? key;
-  if (!params) return template;
-  return template.replace(/\{(\w+)\}/g, (match, token: string) =>
-    Object.prototype.hasOwnProperty.call(params, token) ? String(params[token]) : match,
-  );
-}
