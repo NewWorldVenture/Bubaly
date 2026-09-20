@@ -75,9 +75,25 @@ function dateColumns(): Set<string> {
   return cols;
 }
 
-// Two spellings of the same thing. The second was invisible to this guard
-// until a grade date written with it was found in `components/`.
-const UTC_DAY_KEY = /toISOString\(\)\s*(?:\.slice\(0,\s*10\)|\.split\('T'\)\[0\])/;
+// Three spellings of the same thing, and each was found the same way: something
+// slipped past the guard and the guard grew. The second was invisible until a
+// grade date written with it was found in `components/`.
+//
+// The THIRD is `e.starts_at.slice(0, 10)` — a timestamptz column sliced with no
+// `toISOString()` anywhere near it, because PostgREST already handed it over as
+// an ISO string. It is the most natural way to write this bug and the pattern
+// above could not see any of it. Two files were carrying it: the weekly AI
+// briefing, which printed Greenwich dates beside family-zone clocks, and the
+// weekly digest EMAIL, which cannot be re-rendered the way a page can be
+// reloaded. Both are fixed, so this spelling is added with NO new allowlist
+// entries — which is the only honest way to widen a guard.
+//
+// `_at` rather than any identifier, deliberately. `foo.slice(0, 10)` is a string
+// operation that appears all over a codebase; `<something>_at.slice(0, 10)` is
+// the repo's own column-naming convention and is a date being taken off an
+// instant. Widening further would trade this guard's precision for noise, and a
+// noisy guard gets an allowlist entry rather than a fix.
+const UTC_DAY_KEY = /toISOString\(\)\s*(?:\.slice\(0,\s*10\)|\.split\('T'\)\[0\])|\b[A-Za-z_$][\w$]*_at\s*\??\.\s*(?:slice\(0,\s*10\)|split\('T'\)\[0\])/;
 
 /**
  * What this can and cannot claim.
@@ -94,6 +110,23 @@ const UTC_DAY_KEY = /toISOString\(\)\s*(?:\.slice\(0,\s*10\)|\.split\('T'\)\[0\]
  * a proof.
  */
 const ZONE_AWARE = /dayKeyInTz|zonedDayBoundsMs|zonedTimeMs|dayKeysBetween|hourInTz/;
+
+/**
+ * Comments stripped before scanning, and this guard learned it the same way its
+ * sibling did.
+ *
+ * tests/hardcoded-locales-only-go-down.test.ts records the lesson in its own
+ * header: the module that CLOSED a site quotes the defect in order to explain
+ * it, so a scan that reads comments counts the explanation as an occurrence, and
+ * DELETING THE EXPLANATION "fixes" the file. A guard that can be satisfied by
+ * removing a comment measures nothing.
+ *
+ * It happened here the moment the third spelling was added: the weekly-briefing
+ * route was fixed, and then flagged anyway, because the comment recording the
+ * fix contains the words `e.starts_at.slice(0, 10)`.
+ */
+const withoutComments = (source: string) =>
+  source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
 
 function greenwichDayNextToDateFilter(source: string, cols: Set<string>): string[] {
   if (!UTC_DAY_KEY.test(source)) return [];
@@ -114,7 +147,7 @@ describe("a family's day is not Greenwich's day", () => {
     const offenders: string[] = [];
     for (const root of ROOTS) {
       for (const file of sourceFiles(root)) {
-        const hit = greenwichDayNextToDateFilter(readFileSync(file, 'utf8'), cols);
+        const hit = greenwichDayNextToDateFilter(withoutComments(readFileSync(file, 'utf8')), cols);
         if (hit.length === 0) continue;
         if (allowedFile(ALLOWED, file)) continue;
         offenders.push(`${file} — filters ${hit.join(', ')} with a Greenwich day key; use dayKeyInTz(now, tz)`);
@@ -128,7 +161,7 @@ describe("a family's day is not Greenwich's day", () => {
     // fixed, its entry must go, or the next one to regress hides behind it.
     const stale: string[] = [];
     for (const [file] of ALLOWED) {
-      const hit = greenwichDayNextToDateFilter(readFileSync(file, 'utf8'), cols);
+      const hit = greenwichDayNextToDateFilter(withoutComments(readFileSync(file, 'utf8')), cols);
       if (hit.length === 0) stale.push(`${file} no longer needs its exemption — remove it`);
     }
     expect(stale).toEqual([]);
@@ -138,6 +171,20 @@ describe("a family's day is not Greenwich's day", () => {
     const cols2 = new Set(['plan_date']);
     const bad = "const today = now.toISOString().slice(0, 10);\n.eq('plan_date', today)";
     expect(greenwichDayNextToDateFilter(bad, cols2)).toEqual(['plan_date']);
+    // The third spelling, in both the forms it appears in — a plain column read
+    // and an optional one. These are positive controls on the pattern itself:
+    // the offender list is empty today, and an empty list is what a regex that
+    // stopped matching also produces.
+    for (const third of [
+      "const d = e.starts_at.slice(0, 10);\n.eq('plan_date', d)",
+      "const d = r.remind_at?.slice(0, 10);\n.eq('plan_date', d)",
+      "const d = a.created_at.split('T')[0];\n.eq('plan_date', d)",
+    ]) {
+      expect(greenwichDayNextToDateFilter(third, cols2), third).toEqual(['plan_date']);
+    }
+    // And the line it must NOT match, or every string slice in the repo becomes
+    // a timezone defect.
+    expect(greenwichDayNextToDateFilter("const s = title.slice(0, 10);\n.eq('plan_date', s)", cols2)).toEqual([]);
     // A file that reaches for the zone helpers is not flagged, and neither is a
     // UTC key with no DATE filter beside it.
     expect(greenwichDayNextToDateFilter("dayKeyInTz(now, tz);\ntoISOString().slice(0, 10);\n.eq('plan_date', k)", cols2)).toEqual([]);
@@ -177,6 +224,28 @@ const WRITE_ROOTS = ['app', 'lib', 'components'];
  * Same rule as the read allowlist: shrinking it is the point.
  */
 const WRITE_ALLOWED = new Map([
+  // The two the THIRD spelling surfaced, and they belong HERE rather than in
+  // ALLOWED above — that registry gates the FILTER check and these two trip the
+  // WRITE check. Putting them in the wrong one did not merely fail to silence
+  // them: the "keeps the allowlist honest" test immediately reported both as
+  // exemptions nothing needs, which is precisely the rot it exists to catch,
+  // working on an entry that was ten seconds old.
+  //
+  // Both are correct, and both were checked BY HAND rather than taken on a
+  // classifier's word. The reasons name what was read, so this is re-checkable
+  // in a minute:
+  //
+  // `public.documents.expires_at` is declared `date` in 0002_tables.sql:349
+  // ("drives document_expiry notifications"), not timestamptz, so PostgREST
+  // hands over the bare text "2027-03-14" and the slice is a no-op on a value
+  // that is already a day. 0002 also declares a TIMESTAMPTZ `expires_at` on a
+  // different table, which is exactly why the column name was not trusted alone.
+  ['lib/services/documents/index.ts', 'documents.expires_at is a DATE column (0002_tables.sql:349); the slice is a no-op'],
+  // The slice sits inside `if (row.all_day)` at google.ts:399-402; the timed
+  // branch beside it emits `dateTime` with an explicit `timeZone` and never
+  // slices. Google's API uses a bare `date` to MEAN all-day, so the protocol is
+  // asking for a day here, not for a day key taken off an instant.
+  ['lib/sync/providers/google.ts', 'all-day branch only; a bare date is how Google means all-day'],
   // Server actions that take a family but no zone. Converting means threading a
   // zone through the action's `ctx()`, which is worth doing and not yet done.
   ['app/(app)/dashboard/auto/actions.ts', 'server action; needs a zone threaded through ctx()'],
@@ -223,7 +292,7 @@ describe('a DATE column is never written a Greenwich day', () => {
     const offenders: string[] = [];
     for (const root of WRITE_ROOTS) {
       for (const file of sourceFiles(root)) {
-        const hit = greenwichDayWrittenToDateColumn(readFileSync(file, 'utf8'), cols);
+        const hit = greenwichDayWrittenToDateColumn(withoutComments(readFileSync(file, 'utf8')), cols);
         if (hit.length === 0) continue;
         if (allowedFile(WRITE_ALLOWED, file)) continue;
         offenders.push(`${file} — writes ${hit.join(', ')} as a Greenwich day key; use todayInZone(tz)`);
@@ -235,7 +304,7 @@ describe('a DATE column is never written a Greenwich day', () => {
   it('keeps the write allowlist honest — every entry still needs to be there', () => {
     const stale: string[] = [];
     for (const [file] of WRITE_ALLOWED) {
-      const hit = greenwichDayWrittenToDateColumn(readFileSync(file, 'utf8'), cols);
+      const hit = greenwichDayWrittenToDateColumn(withoutComments(readFileSync(file, 'utf8')), cols);
       if (hit.length === 0) stale.push(`${file} no longer needs its exemption — remove it`);
     }
     expect(stale).toEqual([]);

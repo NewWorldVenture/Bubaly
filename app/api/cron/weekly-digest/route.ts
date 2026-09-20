@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { dayKeyInZone } from '@/lib/schedule/zoned';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { listAllAuthUsers } from '@/lib/server/list-all-auth-users';
@@ -53,8 +54,11 @@ export async function GET(req: NextRequest) {
   // Every household, not the first thousand. An unbounded select is capped at
   // PostgREST's db-max-rows and says nothing, so families past that ceiling
   // would silently never receive a digest.
-  const { rows: families, error: familiesError } = await readAll<{ id: string; name: string }>(
-    (from, to) => supabase.from('families').select('id, name').order('id').range(from, to),
+  const { rows: families, error: familiesError } = await readAll<{ id: string; name: string; timezone: string | null }>(
+    // `timezone` is selected because the digest prints DATES. Without it every
+    // date in this email is Greenwich's, and an email cannot be re-rendered the
+    // way a page can be reloaded.
+    (from, to) => supabase.from('families').select('id, name, timezone').order('id').range(from, to),
   );
   if (familiesError) {
     console.error('Weekly digest family read error:', familiesError);
@@ -89,6 +93,12 @@ export async function GET(req: NextRequest) {
   const startedAt = Date.now();
 
   const digestFor = async (family: (typeof families)[number]) => {
+    // The family's own week. `weekStart`/`weekEnd` stay instants — a rolling
+    // seven days is the right bound for `starts_at`, which IS an instant — but
+    // `plan_date` is a DATE column holding the day on their wall, and the dates
+    // rendered into the email are days too.
+    const tz = family.timezone || 'UTC';
+    const dayIn = (iso: string) => dayKeyInZone(Date.parse(iso), tz) ?? iso.slice(0, 10);
     // An open chore is an ASSIGNMENT that is still todo/in_progress. `chores` is
     // the definition table — it carries neither `status` nor `assignee_id`, so
     // reading those from it errors and skipped every family's digest. Counts,
@@ -100,7 +110,7 @@ export async function GET(req: NextRequest) {
         .eq('family_id', family.id).in('status', ['todo', 'in_progress']),
       supabase.from('meal_plans').select('id', { count: 'exact', head: true })
         .eq('family_id', family.id)
-        .gte('plan_date', weekStart.slice(0, 10)).lte('plan_date', weekEnd.slice(0, 10)),
+        .gte('plan_date', dayIn(weekStart)).lte('plan_date', dayIn(weekEnd)),
       supabase.from('family_members').select('user_id, display_name').eq('family_id', family.id).eq('is_active', true),
     ]);
 
@@ -138,7 +148,7 @@ export async function GET(req: NextRequest) {
       react: React.createElement(WeeklyDigestEmail, {
         familyName: family.name,
         adminName: adminMember.display_name,
-        events: (events ?? []).map((e) => ({ title: e.title, date: e.starts_at.slice(0, 10) })),
+        events: (events ?? []).map((e) => ({ title: e.title, date: dayIn(e.starts_at) })),
         openChores: openChores ?? 0,
         mealsPlanned: mealsPlanned ?? 0,
         memberCount: members?.length ?? 0,

@@ -7,6 +7,7 @@ import { scopeFromUserContext } from '@/lib/services/scope';
 import { requireUserContext, effectivePlanLevel } from '@/lib/supabase/auth';
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { weekWindow, weekRangeLabel, choreCompletionRate, bucketByDay, dayLoad } from '@/lib/ai/weekly';
+import { dayKeyInZone } from '@/lib/schedule/zoned';
 import { resolveProvider } from '@/lib/ai/provider';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
@@ -76,6 +77,16 @@ export async function POST(req: NextRequest) {
 
     // Per-day look-ahead buckets so the prompt can present a true week grid.
     const eventsByDay = bucketByDay(aheadEvents ?? [], (e) => e.starts_at, w.days, tz);
+    // The date printed beside each line, in the family's zone.
+    //
+    // These were `e.starts_at.slice(0, 10)`, which is the day at GREENWICH. Binding
+    // the clock below without this would have been WORSE than leaving both alone:
+    // a 21:00 Saturday game in Los Angeles would have rendered its family-zone
+    // clock next to Greenwich's date — "2026-06-21 9:00 PM" — two halves of one
+    // line disagreeing with each other. Found by widening the third spelling into
+    // tests/family-day-not-greenwich-day.test.ts, which flagged this file after the
+    // rest of it had already been fixed.
+    const dayOf = (iso: string) => dayKeyInZone(Date.parse(iso), tz) ?? iso.slice(0, 10);
     // The clock on each line is the family's clock. Without `timeZone` this
     // rendered in the RUNTIME's zone, which on Vercel is UTC — so the same 21:00
     // game read "4:00 AM" in a briefing addressed to the family it belongs to.
@@ -109,7 +120,7 @@ GENERATING FOR: ${ctx.active.member?.display_name ?? 'family'}
 ═══ LAST WEEK RECAP (the 7 days just ended) ═══
 CHORE COMPLETION LAST WEEK: ${recapRate}% (${(recapChores ?? []).length} assignments)
 EVENTS THAT HAPPENED (${(recapEvents ?? []).length}):
-${(recapEvents ?? []).map((e) => `- ${e.starts_at.slice(0, 10)} ${e.title} (${e.category})`).join('\n') || '- none logged'}
+${(recapEvents ?? []).map((e) => `- ${dayOf(e.starts_at)} ${e.title} (${e.category})`).join('\n') || '- none logged'}
 
 ═══ THE WEEK AHEAD (next 7 days) ═══
 CHORES DUE THIS WEEK: ${(choresDueAhead ?? []).length} (currently ${aheadRate}% done)
@@ -117,13 +128,13 @@ DAY-BY-DAY CALENDAR:
 ${dayGrid}
 
 SCHOOL THIS WEEK:
-${(schoolEvents ?? []).map((e) => `- ${e.starts_at.slice(0, 10)} ${e.title} (${e.event_type})${memberName(e.member_id) ? ` [${memberName(e.member_id)}]` : ''}${e.notes ? ': ' + e.notes : ''}`).join('\n') || '- none'}
+${(schoolEvents ?? []).map((e) => `- ${dayOf(e.starts_at)} ${e.title} (${e.event_type})${memberName(e.member_id) ? ` [${memberName(e.member_id)}]` : ''}${e.notes ? ': ' + e.notes : ''}`).join('\n') || '- none'}
 
 SPORTS THIS WEEK:
-${(sportsEvents ?? []).map((e) => `- ${e.starts_at.slice(0, 10)} ${fmtTime(e.starts_at)} ${e.title} (${e.sport})${memberName(e.member_id) ? ` [${memberName(e.member_id)}]` : ''}${e.location ? ` @ ${e.location}` : ''}`).join('\n') || '- none'}
+${(sportsEvents ?? []).map((e) => `- ${dayOf(e.starts_at)} ${fmtTime(e.starts_at)} ${e.title} (${e.sport})${memberName(e.member_id) ? ` [${memberName(e.member_id)}]` : ''}${e.location ? ` @ ${e.location}` : ''}`).join('\n') || '- none'}
 
 MEDICAL APPOINTMENTS THIS WEEK:
-${(appointments ?? []).map((a) => `- ${a.starts_at.slice(0, 10)} ${fmtTime(a.starts_at)} ${a.title}${a.provider ? ` with ${a.provider}` : ''}${memberName(a.member_id) ? ` [${memberName(a.member_id)}]` : ''}`).join('\n') || '- none'}
+${(appointments ?? []).map((a) => `- ${dayOf(a.starts_at)} ${fmtTime(a.starts_at)} ${a.title}${a.provider ? ` with ${a.provider}` : ''}${memberName(a.member_id) ? ` [${memberName(a.member_id)}]` : ''}`).join('\n') || '- none'}
 
 MEAL PLANS THIS WEEK:
 ${(mealPlans ?? []).map((m) => {
@@ -135,7 +146,7 @@ GROCERIES STILL NEEDED (${(groceryItems ?? []).length}):
 ${(groceryItems ?? []).map((g) => `- ${g.name}${g.category ? ` (${g.category})` : ''}`).join('\n') || '- none'}
 
 UPCOMING REMINDERS:
-${(reminders ?? []).map((r) => `- ${r.remind_at?.slice(0, 10) ?? 'soon'}: ${r.title}`).join('\n') || '- none'}
+${(reminders ?? []).map((r) => `- ${r.remind_at ? dayOf(r.remind_at) : 'soon'}: ${r.title}`).join('\n') || '- none'}
     `.trim();
 
     const systemPrompt = `You are the Bubaly AI Chief of Staff producing a WEEKLY family briefing for a Family+ subscriber. Look both backward (recap) and forward (the week ahead).
