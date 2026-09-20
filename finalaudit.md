@@ -108,6 +108,39 @@
 > kept as a measurement has nothing to guard, and a product choice like *"what
 > is a duplicate grocery item"* has nothing to trip on until it is made.
 >
+> **The same question was then put to the TASK list, and it was stale too.**
+> Six tasks read *"in progress"* or *"pending"* while the work behind them was
+> either finished or blocked on the owner. Each was checked against
+> `2026MarketDom.md`'s own per-phase *"Still open"* line rather than against its
+> title:
+>
+> | task | what actually remains |
+> |---|---|
+> | Phase 1 — Unify | the `request_id` link the inbox cannot claim **without the §6 migration** |
+> | Phase 2 — Automate | *"nothing in this phase without a migration"* — done to the agent-doable limit |
+> | Phase 3 — Deepen | the replacement lineage, **§6 item 9** |
+> | Phase 4 — Expand | M27 and M32, and M37's kiosk pairing — **§6 items** |
+> | Public site | W7's second half, **§6 item 18** |
+> | K2 referral flywheel | **nothing — it is done**, and was marked `pending` |
+>
+> So every phase's remainder is a migration §6 forbids an agent from creating.
+> That is a materially different state from *"in progress"*, and it is recorded
+> here because a task list that says "in progress" about work waiting on a
+> human sends the next agent to re-do it.
+>
+> **Two corrections came out of checking rather than assuming.** The referral
+> flywheel was verified before being closed — its three named tests exist and
+> pass (45 assertions), `signup/actions.ts` really does capture and cookie the
+> `?ref=` code, `onboarding/actions.ts:494-500` applies it as `signup_link`, and
+> `rewardReferral` credits through `createBalanceTransaction` and no-ops on an
+> already-`rewarded` row. And the Public site's *"still open"* translation pass
+> **has quietly closed**: all six non-English catalogues now carry all 13,778
+> keys against the 304 missing that line recorded. Checked for the way that
+> number could lie — a catalogue padded with English — and it does not: 0–8% of
+> values match `en-US` in the named groups, `ai.*` is 0%, and
+> `pricingContent.after5Days` is *"Nach 5 Tagen"*, *"Après 5 jours"*,
+> *"Passados 5 dias"*.
+>
 > So the finding rows are at the state an audit reaches on its own. What keeps
 > **PRODUCTION READY: NO** is not those fifteen: it is the 22 Critical Blockers
 > below, nearly all of which read *"deployed / hosted / real provider remains
