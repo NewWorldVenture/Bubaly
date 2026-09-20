@@ -63,11 +63,18 @@ begin
   -- 3. The depth test is exact only while nothing issues a NESTED update against
   --    these tables. Asked of the catalog, because a trigger added later makes
   --    the freeze stop guarding rows written through it, silently.
+  --    p.prosrc, NOT pg_get_functiondef(p.oid): the column read cannot raise,
+  --    while pg_get_functiondef() throws on an aggregate's oid. The join should
+  --    keep aggregates out, but a filter on a joined relation is not ordered and
+  --    the planner may evaluate it while scanning pg_proc. That is not
+  --    hypothetical — the first version of this query passed locally and failed
+  --    in CI with '"array_agg" is an aggregate function'.
   select string_agg(distinct p.proname || ' on ' || tg.tgrelid::regclass::text, ', ')
     into offenders
     from pg_trigger tg join pg_proc p on p.oid = tg.tgfoid
    where not tg.tgisinternal
-     and pg_get_functiondef(p.oid) ~* 'update\s+(public\.)?(care_log|behavior_logs|screen_time_entries|medication_doses)\M';
+     and p.prokind = 'f'
+     and p.prosrc ~* 'update\s+(public\.)?(care_log|behavior_logs|screen_time_entries|medication_doses)\M';
   if offenders is not null then
     failures := array_append(failures,
       'a trigger now issues a nested UPDATE against a guarded ledger (' || offenders || '), so depth = 1 no longer covers every application write');

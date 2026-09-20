@@ -153,12 +153,23 @@ begin
   -- these tables. Re-asked at every replay rather than trusted from the day it
   -- was measured: a trigger added later would make the freeze stop guarding
   -- rows updated through it, silently and in the attacker's favour.
+  -- p.prosrc, NOT pg_get_functiondef(p.oid). This read is a plain COLUMN and
+  -- cannot raise; pg_get_functiondef() throws '"array_agg" is an aggregate
+  -- function' when handed an aggregate's oid. The join to pg_trigger means no
+  -- aggregate SHOULD reach it — but a filter on a joined relation is not
+  -- ordered, and the planner is free to evaluate it while scanning pg_proc,
+  -- before the join has excluded anything. That is exactly what happened: this
+  -- query passed locally on a nested loop driven by pg_trigger and FAILED in CI
+  -- on a plan that scanned pg_proc first. The first version was only
+  -- accidentally safe, and a guard whose correctness depends on a query plan is
+  -- not a guard.
   select string_agg(distinct p.proname || ' on ' || tg.tgrelid::regclass::text, ', ')
     into offenders
     from pg_trigger tg
     join pg_proc p on p.oid = tg.tgfoid
    where not tg.tgisinternal
-     and pg_get_functiondef(p.oid) ~* 'update\s+(public\.)?(care_log|behavior_logs|screen_time_entries|medication_doses)\M';
+     and p.prokind = 'f'
+     and p.prosrc ~* 'update\s+(public\.)?(care_log|behavior_logs|screen_time_entries|medication_doses)\M';
   if offenders is not null then
     raise exception '0340: a trigger now issues a nested UPDATE against a table the attribution freeze guards (%), so pg_trigger_depth() = 1 no longer covers every application write — re-derive the guard rather than widening it', offenders;
   end if;
