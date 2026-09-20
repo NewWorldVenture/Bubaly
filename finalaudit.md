@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-179 finding IDs from four workers and two parallel sessions; none of it was
+180 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -12,7 +12,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 > source-and-migration audit run without production credentials. Session B
 > (Register B, 14,038 items, `AUTH-001` / `API-<hash>` / `DB-TBL-nnn`) is a
 > hosted-CI and deployed-release audit. Their finding-ID sets are **disjoint**:
-> 901 IDs from A, 684 from B, 1,582 in union — verified mechanically at each
+> 902 IDs from A, 684 from B, 1,583 in union — verified mechanically at each
 > merge. The three literals both files contain (`LB-009`, `LB-016`, `SHA-256`)
 > are not counter-examples: the first two are pre-existing *runbook* names each
 > register cites, and the third is a hash algorithm the ID regex matches. No
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 189 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 190 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -33113,6 +33113,83 @@ recorded under `C1-S9-37`; none is counted as passing.
 
 ---
 
+### `[CLAUDE-1][HIGH][API]` C1-S9-39 — Guardian hung up on live calls, logged none of them, and push registered devices into the wrong scope
+
+**Files:** `app/api/guardian/screen/route.ts:70`,
+`app/api/guardian/inbound/voice/route.ts:105,176,~215`,
+`app/api/guardian/inbound/whatsapp/route.ts:94,116`,
+`app/api/push/subscribe/route.ts:42`
+
+The insert/upsert bucket from the `C1-S9-37` inventory, plus one read found
+beside them. Guardian is the call- and message-screening feature: it decides
+whether an unknown caller reaches a family member, and it is aimed at exactly
+the people least able to absorb a scam.
+
+**The trade-off here is inverted relative to every page in this audit.** These
+are Twilio webhooks on a live call, so failing closed *drops a real caller* —
+and the call dropped that way is as likely to be a grandchild as a fraudster.
+The feature already states its own rule for this, in `screen/route.ts`, on the
+callback claim:
+
+> *"Saying goodbye is right for a duplicate and wrong for an outage: it ends a
+> live screening call and reports success. A 503 lets Twilio fall back."*
+
+**And eleven lines later the same file broke it.** The screening-session read
+dropped its error, so a refused or failed read left `session` null and took the
+`!session` branch — *"Thank you for calling, goodbye"* and hang up, on a live
+screening call, indistinguishable to the caller from being screened out. Fixed
+by 503 on error and keeping the goodbye for the case it is right for: a session
+genuinely absent or no longer active.
+
+**Guardian recorded nothing when recording failed.** `inbound/voice` and
+`inbound/whatsapp` both insert a `guardian_communications` row and dropped the
+error. The consequence is not that the call fails — it is that the call
+proceeds normally **with no record of it**: no caller, no trust level, no scam
+verdict, nothing in the family's guardian history. `commId` goes undefined and
+`updateCommStatus` returns early on it without a word. A safety log that
+silently under-reports precisely when something is already wrong. Both now log
+loudly and continue, because hanging up is worse than an incomplete log.
+
+**The screening session could not degrade the same way.** Its id goes straight
+into the TwiML gather action, so a failed insert produced
+`?sessionId=&turn=1` — the AI greets the caller, the caller answers, and their
+reply is posted to an endpoint that rejects an empty id with 400. **The caller
+is left talking to nothing, mid-screening.** 503 instead, per the feature's own
+convention: falling back is a real outcome, a dead gather action is not.
+
+**`updateCommStatus` discarded its result entirely**, with no `.select()`. A
+call shown as `received` forever when it was actually blocked or handled is a
+guardian history that disagrees with what happened — and the status is what the
+family reads to decide whether screening is working at all. Now confirmed with
+`wroteNoRows` and logged; nothing can be surfaced to a caller mid-call, so a log
+is the honest ceiling here.
+
+**Push registration wrote the wrong scope and reported success.**
+`push/subscribe` looked up the user's family to set `family_id`, which is
+*genuinely* nullable — a user with no family has none — and dropped the error,
+so a refused read produced the same null. That is sticky in a way a page render
+is not: `lib/server/push.ts` filters delivery candidates by `family_id`, so the
+row persists and **that device misses every family-scoped notification** until
+some later subscribe happens to succeed. The one thing the route exists to set
+up is silently set up wrong, and the client is told it worked. A failed read now
+returns 503 and lets the client retry; the legitimate no-family user still
+registers, which a guard pins so the fix cannot be "tightened" into locking
+them out.
+
+**Status:** FIXED. Guard: eight cases, each proved red by mutation — removing
+each guard in turn, restoring the hang-up on an outage, turning the
+communication-log failure into a 503 (which would drop the call, the opposite
+error), dropping the `.select()` from the status update, and refusing the
+legitimate no-family user.
+
+**Inventory: 24 of the 39 now fixed, 15 remain OPEN** — the `auth.getUser()`
+bucket (5, classified NOT this class) and 10 in "everything else", chiefly
+`google/calendar/*`, `blog/*`, `ai/gift`, `ai/invest`, `ai/insights`,
+`behavior/insight`, `recipes/suggest`, `weekend/discover`, `webhooks/stripe` and
+`ab/track`. Locations under `C1-S9-37`; none counted as passing.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -33182,8 +33259,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,005 passing / 17,008 across 1,351
-files.** (Re-run after `C1-S9-38`; was 16,950 / 16,953 across 1,349 before this
+Status: ✅ PASS — `npx vitest run`: **17,013 passing / 17,016 across 1,351
+files.** (Re-run after `C1-S9-39`; was 16,950 / 16,953 across 1,349 before this
 batch.) The three failures are `C1-S9-09`, BLOCKED: this container runs Node
 22.22.2 against the repository's `.nvmrc` 24.21.0, and nvm cannot fetch the
 Node 24 distribution here. Not counted as passing.

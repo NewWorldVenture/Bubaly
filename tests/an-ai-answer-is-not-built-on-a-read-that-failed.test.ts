@@ -273,3 +273,101 @@ describe('a cron recovery path says when it could not run (C1-S9-38)', () => {
     expect(bail).not.toContain('.update(');
   });
 });
+
+/**
+ * Audit C1-S9-39 — the guardian call/message screening surface and push
+ * registration: the insert/upsert bucket from the C1-S9-37 inventory.
+ *
+ * The trade-off here is INVERTED relative to every page in this file. These are
+ * Twilio webhooks on a live call, so failing closed drops a real caller — and
+ * the caller Guardian exists to protect is as likely to be a grandchild as a
+ * fraudster. The rule this feature already states for itself, in
+ * `guardian/screen/route.ts`, is the one applied throughout: *"Saying goodbye
+ * is right for a duplicate and wrong for an outage… A 503 lets Twilio fall
+ * back."* So: 503 where the call cannot meaningfully continue, and a loud log
+ * where it can.
+ */
+const guardVoice = readFileSync('app/api/guardian/inbound/voice/route.ts', 'utf8');
+const guardWhats = readFileSync('app/api/guardian/inbound/whatsapp/route.ts', 'utf8');
+const guardScreen = readFileSync('app/api/guardian/screen/route.ts', 'utf8');
+const pushSubscribe = readFileSync('app/api/push/subscribe/route.ts', 'utf8');
+
+describe('guardian does not hang up on a live call because a read failed (C1-S9-39)', () => {
+  it('the screening session read obeys the rule written eleven lines above it', () => {
+    // The file states it on the callback claim and then broke it: a dropped
+    // error hung up on a live screening call with "thank you for calling,
+    // goodbye" — indistinguishable, to the caller, from being screened out.
+    expect(guardScreen).toContain('error: sessionError');
+    expect(bodyOf(guardScreen, 'if (sessionError)', '{ status: 503 }')).toContain('console.error');
+    // The goodbye is KEPT for the case it is right for: a session that is
+    // genuinely absent or no longer active.
+    expect(guardScreen).toContain("if (!session || (session as { status: string }).status !== 'active')");
+    expect(at(guardScreen, 'if (sessionError)'))
+      .toBeLessThan(at(guardScreen, "if (!session || (session as { status: string }).status !== 'active')"));
+  });
+
+  it('a screening session that could not be opened falls back instead of gathering into nothing', () => {
+    // The session id goes straight into the TwiML gather action, so a failed
+    // insert produced `?sessionId=&turn=1`: the AI greets the caller, the caller
+    // answers, and the reply hits an endpoint that rejects an empty id with 400.
+    expect(guardVoice).toContain('error: sessionError');
+    expect(guardVoice).toContain('if (sessionError || !session?.id)');
+    expect(bodyOf(guardVoice, 'if (sessionError || !session?.id)', '{ status: 503 }')).toContain('console.error');
+    expect(at(guardVoice, 'if (sessionError || !session?.id)')).toBeLessThan(at(guardVoice, 'twimlGather({'));
+    // And `.single()` is not used to detect it — that throws on absence rather
+    // than reporting it, which is the trap C1-S9-38 documents.
+    expect(bodyOf(guardVoice, "gFrom('guardian_screening_sessions').insert(", '.maybeSingle();')).not.toContain('.single()');
+  });
+
+  it.each([
+    ['voice', () => guardVoice, 'commError'],
+    ['whatsapp', () => guardWhats, 'commError'],
+  ])('%s records a failed communication log rather than losing it silently', (_n, get, binding) => {
+    const source = get();
+    expect(source).toContain(`error: ${binding}`);
+    expect(source).toContain(`if (${binding})`);
+    // The call/message must still go through: logged, NOT turned into a 503.
+    const bail = bodyOf(source, `if (${binding})`, '\n  }');
+    expect(bail).toContain('console.error');
+    expect(bail).not.toContain('status: 503');
+    expect(bail).not.toContain('return');
+  });
+
+  it('a communication status change is confirmed, not assumed', () => {
+    // A call shown as `received` forever, when it was blocked or handled, is a
+    // guardian history that disagrees with what happened — and the status is
+    // what the family reads to judge whether screening works.
+    const body = bodyOf(guardVoice, 'async function updateCommStatus', '\n}');
+    expect(body).toContain(".select('id')");
+    expect(body).toContain('wroteNoRows(updated)');
+    expect(body).toContain('console.error');
+  });
+});
+
+describe('a push device is not registered into the wrong scope (C1-S9-39)', () => {
+  it('a failed family lookup refuses rather than registering unscoped', () => {
+    // `family_id` is genuinely nullable, so a refused read produced the same
+    // null as a user with no family. `lib/server/push.ts` filters candidates by
+    // `family_id`, so the row persists and the device misses every
+    // family-scoped notification until a later subscribe happens to succeed.
+    expect(pushSubscribe).toContain('error: memberError');
+    expect(pushSubscribe).toContain('if (memberError)');
+    const bail = bodyOf(pushSubscribe, 'if (memberError)', '{ status: 503 });');
+    expect(bail).toContain('console.error');
+    expect(bail).toContain('subscribe.couldNotRegisterThisDevice');
+    // Before the upsert that would write the wrong scope.
+    expect(at(pushSubscribe, 'if (memberError)')).toBeLessThan(at(pushSubscribe, "from('push_devices').upsert("));
+  });
+
+  it('the genuine no-family case still registers', () => {
+    // Refusing every null would lock out users who legitimately have no family.
+    expect(pushSubscribe).toContain('member?.family_id ?? null');
+  });
+
+  it('the copy exists in every base catalogue', () => {
+    for (const locale of ['en-US', 'de-DE', 'es-ES', 'fr-FR', 'it-IT', 'nl-NL', 'pt-PT']) {
+      const catalogue = JSON.parse(readFileSync(`lib/i18n/messages/${locale}.json`, 'utf8')) as Record<string, string>;
+      expect(catalogue['subscribe.couldNotRegisterThisDevice'], `${locale} is missing it`).toBeTruthy();
+    }
+  });
+});

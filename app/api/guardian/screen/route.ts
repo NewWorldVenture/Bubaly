@@ -65,11 +65,26 @@ export async function POST(req: NextRequest) {
   const db = withGuardianTables(supabase);
   const gFrom = (t: Parameters<typeof db.from>[0]) => (db.from(t) as ReturnType<typeof supabase.from>);
 
-  // Load session
-  const { data: session } = await gFrom('guardian_screening_sessions')
+  // Load session.
+  //
+  // The rule for this exact situation is already written eleven lines above,
+  // on the callback claim: *"Saying goodbye is right for a duplicate and wrong
+  // for an outage: it ends a live screening call and reports success. A 503
+  // lets Twilio fall back."* This read then dropped its error and did the
+  // forbidden thing — a refused or failed read left `session` null and hung up
+  // on a live screening call with a cheerful goodbye, which is indistinguishable
+  // to the caller from being screened out. Guardian screens for scams against
+  // the people least able to absorb one; the call it drops this way is as
+  // likely to be a real grandchild as a fraudster. Audit C1-S9-39.
+  const { data: session, error: sessionError } = await gFrom('guardian_screening_sessions')
     .select('*, communication_id')
     .eq('id', sessionId)
     .maybeSingle();
+
+  if (sessionError) {
+    console.error('[guardian/screen] session read failed; letting Twilio fall back', { sessionId, error: sessionError.message });
+    return new NextResponse('', { status: 503 });
+  }
 
   if (!session || (session as { status: string }).status !== 'active') {
     return finish(wrapTwiml(
