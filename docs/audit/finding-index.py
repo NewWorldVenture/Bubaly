@@ -141,13 +141,48 @@ def main() -> int:
     if '--write' not in sys.argv:
         print(body)
         return 0
+    # A 29,000-line audit with no finding rows means the ID_ROW regex stopped
+    # matching, not that the findings were all resolved. Writing an empty index
+    # over a real one would destroy the thing this script exists to produce, and
+    # it would do it while printing a success line.
+    if not rows:
+        print('REFUSING TO WRITE: no finding rows were parsed from '
+              f'{DOC}. That is not a document with no findings — it is a '
+              'document this parser can no longer read. Check ID_ROW against '
+              'the table format before re-running.', file=sys.stderr)
+        return 2
+
     doc = open(DOC, encoding='utf-8').read()
     if BEGIN in doc and END in doc:
         doc = doc[:doc.index(BEGIN)] + body + doc[doc.index(END) + len(END):]
     else:
+        # `str.replace` returns the string UNCHANGED when the anchor is absent.
+        # This branch used to do exactly that and then print "wrote the index",
+        # so renaming the Release Gate heading would have frozen the index at
+        # whatever it last held while every future run reported success —
+        # and the prose-versus-generated cross-check would then compare prose
+        # against a stale block and could agree while both were wrong.
         anchor = '## Release Gate'
+        if anchor not in doc:
+            print(f'REFUSING TO WRITE: {DOC} has neither the '
+                  f'{BEGIN!r} / {END!r} markers nor the {anchor!r} heading to '
+                  'insert them before, so there is nowhere to put the index. '
+                  'Nothing was written. Restore one of them, or change `anchor` '
+                  'to the heading that replaced it.', file=sys.stderr)
+            return 2
         doc = doc.replace(anchor, f'## Finding index\n\n{body}\n\n{anchor}', 1)
+
     open(DOC, 'w', encoding='utf-8').write(doc)
+
+    # Prove the write landed rather than trusting that it did — the whole class
+    # of defect above is a success line printed over a no-op.
+    written = open(DOC, encoding='utf-8').read()
+    if BEGIN not in written or END not in written:
+        print('WROTE, BUT THE BLOCK IS NOT THERE: the index was written to '
+              f'{DOC} and reading it back finds no markers. Do not trust the '
+              'line below.', file=sys.stderr)
+        return 3
+
     print(f'wrote the index: {header}')
     return 0
 
