@@ -241,3 +241,101 @@ describe('a rollback that fails is not reported as a clean failure (C1-S9-35)', 
     }
   });
 });
+
+/**
+ * Audit C1-S9-46 — the server-action write sweep, rebuilt and re-run.
+ *
+ * The earlier estimate of "~105 unconfirmed writes" came from a heuristic that
+ * was wrong in BOTH directions, and correcting it is part of the finding:
+ *
+ *  - It over-reported: it reassembled a statement by reading at most twelve
+ *    lines, so long inserts whose `.select('id')` sat on line thirteen were
+ *    filed as unconfirmed. Two admin marketing inserts were counted that way
+ *    and are in fact correct.
+ *  - It under-reported the distinction that matters: it treated every verb
+ *    alike. **An `insert` cannot match zero rows** — it either inserts or
+ *    errors — so a checked error is sufficient for one. Only `update` and
+ *    `delete` with a filter can silently affect nothing.
+ *
+ * Rebuilt with bracket-balanced statement parsing and per-verb classification:
+ * 130 `'use server'` files, 436 database mutations, **102** filtered
+ * update/delete without `.select()`. That the corrected number lands within
+ * three of the original estimate is a coincidence worth stating rather than
+ * leaning on — the two were counting different things.
+ */
+const locator = readFileSync('app/(app)/dashboard/locator/actions.ts', 'utf8');
+const auto = readFileSync('app/(app)/dashboard/auto/actions.ts', 'utf8');
+
+describe('a place, and a geofence, are confirmed before they are reported (C1-S9-46)', () => {
+  it('all three locator writes ask what they changed', () => {
+    for (const binding of ['saved', 'removed', 'toggled']) {
+      expect(locator, `${binding} is not confirmed`).toContain(`wroteNoRows(${binding})`);
+    }
+    // Three, not four: the insert branch of `savePlace` deliberately does not
+    // select, because an insert cannot match zero rows and asking for the row
+    // back would buy nothing.
+    expect(locator.match(/\.select\('id'\)/g) ?? []).toHaveLength(3);
+  });
+
+  it('the insert branch is deliberately not gated on rows', () => {
+    // `savePlace` is a ternary: update when an id is given, insert otherwise.
+    // An insert cannot match zero rows, so gating it on `wroteNoRows` would
+    // invent a failure mode. The `input.id &&` is the whole point.
+    expect(locator).toContain('if (input.id && wroteNoRows(saved))');
+  });
+
+  it('every confirmed write stays scoped to the acting family', () => {
+    // The cheapest wrong way to make a `.select()` return a row is to widen the
+    // filter, which would confirm a write to another family's place.
+    const body = bodyOf(locator, 'export async function setGeofenceEnabled', 'return { ok: true };');
+    expect(body).toContain("eq('family_id', c.active.familyId)");
+    const del = bodyOf(locator, 'export async function deletePlace', 'return { ok: true };');
+    expect(del).toContain("eq('family_id', c.active.familyId)");
+  });
+
+  it('the geofence failure says the alert setting did not change', () => {
+    // The point of the message: a switch that flips back with no error reads as
+    // a glitch, and the parent's natural response is to try again and assume it
+    // worked the second time.
+    expect(locator).toContain("t('actions.couldNotUpdateThatGeofence')");
+    for (const locale of ['en-US', 'de-DE', 'es-ES', 'fr-FR', 'it-IT', 'nl-NL', 'pt-PT']) {
+      const catalogue = JSON.parse(readFileSync(`lib/i18n/messages/${locale}.json`, 'utf8')) as Record<string, string>;
+      for (const key of ['actions.couldNotSaveThatPlace', 'actions.couldNotDeleteThatPlace', 'actions.couldNotUpdateThatGeofence']) {
+        expect(catalogue[key], `${locale} is missing ${key}`).toBeTruthy();
+      }
+    }
+  });
+});
+
+describe('the shared auto helpers confirm for all fifteen call sites (C1-S9-46)', () => {
+  it('saveRow confirms the update branch only', () => {
+    // Highest-leverage fix in the sweep: two helpers, fifteen callers.
+    const body = bodyOf(auto, 'async function saveRow', '\n}');
+    // Per BRANCH, not per body: both branches carry `.select('id')`, so a
+    // `toContain` over the whole helper stayed green when the update branch
+    // lost its one — the mutation that exposed this was the only survivor in
+    // the batch. The update line is the one that can match zero rows.
+    const updateBranch = body.split('\n').find((l) => l.includes('.update(row as never)')) ?? '';
+    expect(updateBranch, 'the update branch must ask what it changed').toContain(".select('id')");
+    expect(updateBranch).toContain("eq('family_id', familyId)");
+    const insertBranch = body.split('\n').find((l) => l.includes('.insert({ ...row')) ?? '';
+    expect(insertBranch, 'the insert branch is exempt from the ROW check, not from select').toBeTruthy();
+    expect(body).toContain('if (id && wroteNoRows(data))');
+  });
+
+  it('softDelete confirms unconditionally, because it is always an update', () => {
+    const body = bodyOf(auto, 'async function softDelete', '\n}');
+    expect(body).toContain(".select('id')");
+    expect(body).toContain('if (wroteNoRows(data))');
+    // No `id &&` here — a soft delete has no insert branch to exempt.
+    expect(body).not.toContain('if (id && wroteNoRows');
+  });
+
+  it('the pre-existing comment that stopped one step short is still there', () => {
+    // It states the error half of the rule correctly and is worth keeping; the
+    // fix extends it rather than replacing it. If it goes, the reasoning for
+    // why an insert needs no `.select()` goes with it.
+    expect(auto).toContain('A PostgREST write returns { error } without throwing');
+    expect(auto).toContain('cannot match zero rows');
+  });
+});

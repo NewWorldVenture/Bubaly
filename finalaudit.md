@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-186 finding IDs from four workers and two parallel sessions; none of it was
+187 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -12,7 +12,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 > source-and-migration audit run without production credentials. Session B
 > (Register B, 14,038 items, `AUTH-001` / `API-<hash>` / `DB-TBL-nnn`) is a
 > hosted-CI and deployed-release audit. Their finding-ID sets are **disjoint**:
-> 908 IDs from A, 684 from B, 1,589 in union — verified mechanically at each
+> 909 IDs from A, 684 from B, 1,590 in union — verified mechanically at each
 > merge. The three literals both files contain (`LB-009`, `LB-016`, `SHA-256`)
 > are not counter-examples: the first two are pre-existing *runbook* names each
 > register cites, and the third is a hash algorithm the ID regex matches. No
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 196 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 197 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -33465,6 +33465,104 @@ catches regrowth.
 
 ---
 
+### `[CLAUDE-1][MEDIUM][SERVER ACTIONS]` C1-S9-46 — the write sweep, rebuilt; and an insert is not an update
+
+The last large body of the `C1-S9-16`/`23` class: server actions whose writes
+report success they cannot see.
+
+#### The heuristic was wrong in both directions, and correcting it is the finding
+
+The standing estimate was "~105 unconfirmed writes". The scan behind it:
+
+- **Over-reported.** It reassembled a multi-line statement by reading at most
+  twelve lines, so a long `insert` whose `.select('id')` sat on line thirteen was
+  filed as unconfirmed. Two admin marketing inserts were counted that way and
+  are correct.
+- **Missed the distinction that decides everything.** It treated all four verbs
+  alike. **An `insert` cannot match zero rows** — it inserts or it errors — so a
+  checked error is already sufficient for one. Only `update` and `delete` with a
+  filter can silently affect nothing and report success.
+
+Rebuilt with bracket-balanced statement parsing (no line cap), exclusion of
+non-database `.update(` (it was counting `createHash(…).update(bytes)`), and
+per-verb classification: **130 `'use server'` files, 436 database mutations,
+102 filtered update/delete without `.select()`.** That 102 lands within three of
+the old estimate is a coincidence worth naming rather than leaning on — the two
+counts were measuring different things, and only one of them was measuring the
+defect.
+
+#### Fixed in this pass
+
+**`dashboard/locator/actions.ts` — places and geofences.** A geofence is what
+makes "arrived at school" and "left home" fire at all, so a toggle reporting
+success without applying is a safety control claiming a state it does not have.
+
+Stated honestly, this is **MEDIUM and not HIGH**, because the mitigation is
+real: `toggleGeofence` in `locator-module.tsx` calls `refreshPlaces()` — an
+actual re-fetch, unlike the App Store button in `C1-S9-33` whose
+`useState(initial)` ignored fresh props — so the switch snaps back. What the
+parent loses is not a permanent false belief but the *reason*: a switch that
+flips itself back with no error reads as a glitch, and the natural response is
+to try again and assume the second attempt took. `deletePlace` is worse on the
+same surface, because the module toasts *"Place deleted"* and then re-fetches:
+the success message and the still-present place appear together.
+
+**`dashboard/auto/actions.ts` — the highest-leverage fix in the sweep.** Two
+shared helpers, `saveRow` and `softDelete`, serve **fifteen call sites**. The
+file already carries a comment stating the rule:
+
+> *"A PostgREST write returns `{ error }` without throwing, so an unchecked
+> write would let a form report success while the record was silently lost."*
+
+Correct, and checked — and one step short. The same write also reports nothing
+about how many rows it touched unless asked, so the update branch still let a
+form report success for a row it never found. The comment is extended rather
+than replaced, and a guard pins it, because the reasoning for why the insert
+branch needs no `.select()` lives there.
+
+#### Two things the fix itself got wrong first
+
+1. **The insert branch briefly grew a `.select()` too.** Symmetrical, and
+   pointless: it buys nothing an insert can fail at. Removed from both files, so
+   the code now says exactly what it means — confirmation where zero rows is
+   possible, nowhere else.
+2. **A guard that could not see which branch it was testing.** `saveRow`'s two
+   branches both carried `.select('id')`, so a `toContain` over the helper body
+   stayed green when the *update* branch lost its one. It was the only survivor
+   in the mutation batch. Re-scoped to the update line specifically.
+
+#### And the fake was modelling an impossible response
+
+`tests/module-actions-write-boundary.test.ts` went red on the fix. Its
+`writeClient` hardcoded `data: null` for every outcome — but once a write asks
+for `.select()`, PostgREST returns the affected rows, so *"succeeded and
+returned nothing"* is a shape the real client cannot produce for a write that
+matched something. A fake that produces it makes every confirmed write look like
+a no-op. Repaired to return a row on success and to accept `rows: []` for
+modelling the case the confirmation exists for. **Same class as `C1-S9-26`, and
+found the same way: a fix went in, and what broke was the fake rather than the
+code.**
+
+Three new fake-driven cases now exercise the behaviour end-to-end rather than
+asserting it against source text: an update matching no rows throws, a soft
+delete matching no rows throws, and an **insert** returning no rows still
+resolves.
+
+**Status:** FIXED for `locator` (3 writes) and `auto` (2 helpers / 15 call
+sites). Guard: seven source cases plus three fake-driven ones, each proved red by
+mutation — including the over-tightening direction (gating the insert on rows,
+which invents a failure the database cannot produce) and the branch-blind
+assertion above.
+
+**Remaining: 97 of the 102, OPEN.** Ranked for the next pass by what the write
+controls rather than by file order: `dashboard/independence` (the milestone
+regression `C1-S9-27` documented), `dashboard/contact-center`,
+`dashboard/concierge`, `dashboard/home`, `dashboard/paperwork`,
+`dashboard/library`, `dashboard/kitchen`, `admin/actions.ts`. None counted as
+passing.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -33534,8 +33632,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,057 passing / 17,060 across 1,351
-files.** (Re-run after `C1-S9-45`; was 16,950 / 16,953 across 1,349 before this
+Status: ✅ PASS — `npx vitest run`: **17,067 passing / 17,070 across 1,351
+files.** (Re-run after `C1-S9-46`; was 16,950 / 16,953 across 1,349 before this
 batch.) The three failures are `C1-S9-09`, BLOCKED: this container runs Node
 22.22.2 against the repository's `.nvmrc` 24.21.0, and nvm cannot fetch the
 Node 24 distribution here. Not counted as passing.
