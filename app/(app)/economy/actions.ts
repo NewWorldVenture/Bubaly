@@ -9,6 +9,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
+import { wroteNoRows } from '@/lib/supabase/errors';
 import { isManager } from '@/lib/constants/roles';
 import { balanceFrom, canAfford, normalizeTokenAmount, normalizeEmoji } from '@/lib/economy/ledger';
 import { describeActionError } from '@/lib/supabase/errors';
@@ -61,9 +62,15 @@ export async function setCurrencyActiveAction(input: { currencyId: string; isAct
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentGuardianCan2') };
   const supabase = await createServer();
-  const { error } = await supabase.from('family_currencies')
-    .update({ is_active: input.isActive }).eq('id', input.currencyId).eq('family_id', ctx.active.familyId);
+  // Without `.select()` PostgREST reports nothing about what changed, so a row
+  // the family does not own, an already-deleted currency, or an RLS refusal all
+  // return `ok: true` and the parent is told a currency is archived while it
+  // stays spendable. Audit C1-S9-33.
+  const { data: updated, error } = await supabase.from('family_currencies')
+    .update({ is_active: input.isActive }).eq('id', input.currencyId).eq('family_id', ctx.active.familyId)
+    .select('id');
   if (error) return actionFailure('update the currency', t('economy.couldNotUpdateTheCurrency'), error);
+  if (wroteNoRows(updated)) return { ok: false, error: t('economy.couldNotUpdateTheCurrency') };
   revalidatePath('/economy');
   return { ok: true };
 }
@@ -125,9 +132,14 @@ export async function setRewardActiveAction(input: { rewardId: string; isActive:
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentGuardianCan2') };
   const supabase = await createServer();
-  const { error } = await supabase.from('economy_rewards')
-    .update({ is_active: input.isActive }).eq('id', input.rewardId).eq('family_id', ctx.active.familyId);
+  // Same class as the currency archive above, and with a sharper edge:
+  // `requestRedemptionAction` gates on `reward.is_active`, so a reward the
+  // parent believes they archived stays redeemable and keeps charging tokens.
+  const { data: updated, error } = await supabase.from('economy_rewards')
+    .update({ is_active: input.isActive }).eq('id', input.rewardId).eq('family_id', ctx.active.familyId)
+    .select('id');
   if (error) return actionFailure('update the reward', t('economy.couldNotUpdateTheReward'), error);
+  if (wroteNoRows(updated)) return { ok: false, error: t('economy.couldNotUpdateTheReward') };
   revalidatePath('/economy');
   return { ok: true };
 }

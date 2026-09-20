@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { at, between } from './helpers/source-order';
+import { at, between, bodyOf } from './helpers/source-order';
 
 /**
  * Audit C1-S9-16 — two server actions that reported success for work that may
@@ -79,5 +79,91 @@ describe('clearing a child login lockout is not best-effort (C1-S9-16)', () => {
   it('the create path clears the stale lockout before anything is created', () => {
     const create = between(childLogin, "const { data: taken }", 'const email = syntheticChildEmail');
     expect(create).toContain("from('child_login_throttle')");
+  });
+});
+
+/**
+ * Audit C1-S9-33 — the same class in two more files, carried over from the
+ * C1-S9-16/23 shortlist.
+ *
+ * Triaging these produced a rule worth stating, because it is what separates
+ * the ~105 remaining candidates into real and cosmetic: **a silent no-op is
+ * only self-correcting if the surface re-reads and actually re-renders from
+ * that read.** `InstallButton` looks like it re-reads — `revalidatePath` does
+ * re-render the page — but it holds `useState(initial)`, which is read once at
+ * mount and ignores the fresh props. So it rolls back ONLY on `ok: false`, and
+ * an unconfirmed write leaves the button disagreeing with the database until a
+ * full page reload. That is exactly the case these guards pin.
+ */
+const appStore = readFileSync('app/(app)/dashboard/app-store/actions.ts', 'utf8');
+const economy = readFileSync('app/(app)/economy/actions.ts', 'utf8');
+
+describe('an install the button reports is confirmed (C1-S9-33)', () => {
+  it('all three install-lifecycle writes ask what they changed', () => {
+    const writes = appStore.match(/from\('family_app_installs'\)[\s\S]{0,320}?;/g) ?? [];
+    expect(writes.length, 'install, uninstall, toggle').toBe(3);
+    for (const w of writes) expect(w, 'a write that cannot be confirmed').toContain(".select('app_id')");
+  });
+
+  it('each one fails rather than reporting a write it cannot see', () => {
+    for (const binding of ['installed', 'removed', 'toggled']) {
+      expect(appStore, `${binding} is not checked`).toContain(`if (wroteNoRows(${binding}))`);
+    }
+    // Not a bare rethrow of the Postgres message: the button surfaces
+    // `res.error` to the parent verbatim.
+    expect(appStore).toContain("t('actions.couldNotInstallThatApp')");
+    expect(appStore).toContain("t('actions.couldNotRemoveThatApp')");
+    expect(appStore).toContain("t('actions.couldNotUpdateThatApp')");
+  });
+
+  it('every write stays scoped to the acting family', () => {
+    // The confirmation must not be bought by widening the filter: a `.select()`
+    // on an unscoped update would confirm a write to somebody else's row.
+    const writes = appStore.match(/from\('family_app_installs'\)[\s\S]{0,320}?;/g) ?? [];
+    // The upsert carries the family in its payload; the delete and update carry
+    // it as a filter. Both forms scope the row — a `.select()` on an UNSCOPED
+    // write would confirm a change to somebody else's row, which is why this is
+    // asserted alongside the confirmation rather than separately from it.
+    for (const w of writes) {
+      expect(w).toMatch(/family_id: ctx\.active\.familyId|eq\('family_id', ctx\.active\.familyId\)/);
+      expect(w).toContain('app_id');
+    }
+  });
+});
+
+describe('an archive the parent is told about is confirmed (C1-S9-33)', () => {
+  it('the currency archive is confirmed', () => {
+    const body = bodyOf(economy, 'export async function setCurrencyActiveAction', 'return { ok: true };');
+    expect(body).toContain(".select('id')");
+    expect(body).toContain('if (wroteNoRows(updated))');
+    expect(body).toContain("eq('family_id', ctx.active.familyId)");
+  });
+
+  it('the reward archive is confirmed, which gates redemption', () => {
+    // `requestRedemptionAction` reads `reward.is_active`, so an archive that
+    // silently did not happen leaves the reward redeemable and still charging
+    // tokens — the parent's decision is reported as applied and is not.
+    const body = bodyOf(economy, 'export async function setRewardActiveAction', 'return { ok: true };');
+    expect(body).toContain(".select('id')");
+    expect(body).toContain('if (wroteNoRows(updated))');
+    expect(body).toContain("eq('family_id', ctx.active.familyId)");
+    // Scoped to the redemption body, not the whole file: the first version of
+    // this assertion was a file-wide regex, and it stayed green when the gate
+    // was deleted because the COMMENT four lines above still said
+    // `reward.is_active`. A guard that a comment can satisfy is pinning a
+    // spelling, which is the C1-S9-28 lesson in its cheapest form.
+    const redemption = bodyOf(economy, 'export async function requestRedemptionAction', 'return { ok: true };');
+    expect(redemption).toContain('if (!reward || !reward.is_active) return { ok: false');
+  });
+
+  it('the row is asked for before it is judged, in both', () => {
+    // `bodyOf` ends each slice AT `return { ok: true };`, so finding the check
+    // inside the slice is already the ordering assertion. What is left to pin is
+    // that the check reads a binding the write actually produced, rather than
+    // one left over from an earlier statement.
+    for (const name of ['setCurrencyActiveAction', 'setRewardActiveAction']) {
+      const body = bodyOf(economy, `export async function ${name}`, 'return { ok: true };');
+      expect(at(body, "const { data: updated, error }"), name).toBeLessThan(at(body, 'wroteNoRows(updated)'));
+    }
   });
 });

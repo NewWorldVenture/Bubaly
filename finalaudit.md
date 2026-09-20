@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-173 finding IDs from four workers and two parallel sessions; none of it was
+175 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -12,7 +12,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 > source-and-migration audit run without production credentials. Session B
 > (Register B, 14,038 items, `AUTH-001` / `API-<hash>` / `DB-TBL-nnn`) is a
 > hosted-CI and deployed-release audit. Their finding-ID sets are **disjoint**:
-> 895 IDs from A, 684 from B, 1,576 in union — verified mechanically at each
+> 897 IDs from A, 684 from B, 1,578 in union — verified mechanically at each
 > merge. The three literals both files contain (`LB-009`, `LB-016`, `SHA-256`)
 > are not counter-examples: the first two are pre-existing *runbook* names each
 > register cites, and the third is a hash algorithm the ID regex matches. No
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 183 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 185 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -32747,6 +32747,94 @@ session, on the one test where a false pass would have been least visible.
 
 ---
 
+### `[CLAUDE-1][MEDIUM][DATA]` C1-S9-33 — five more writes reported without being seen, and the rule that sorts the rest
+
+**Files:** `app/(app)/dashboard/app-store/actions.ts:19,33,44`,
+`app/(app)/economy/actions.ts:64,128`
+
+**Problem.** The `C1-S9-16` class again: PostgREST returns affected rows only
+when asked — `.select()` is what appends `Prefer: return=representation` — so
+without it `data` is null whether one row changed or none did. Five writes
+returned `ok: true` regardless: install, uninstall and toggle on
+`family_app_installs`; the currency archive and the reward archive on
+`family_currencies` / `economy_rewards`.
+
+**The triage rule this produced.** These came off the ~105-candidate shortlist,
+and working out which of them actually mattered gave a test that applies to the
+rest: *a silent no-op is only self-correcting if the surface re-reads AND
+re-renders from that read.* Where it does, the damage is one misleading toast.
+Where it does not, the user is left holding a false belief.
+
+`InstallButton` looked like the self-correcting case and is not.
+`revalidatePath('/dashboard/app-store')` does re-render the page and does send
+fresh props — but the button holds `useState(initial)`, which is read once at
+mount and ignores them. It rolls back only on `ok: false`. So an unconfirmed
+uninstall left the button reading "Install" over a row that is still installed,
+and no amount of navigation inside the app corrected it — only a full reload.
+This is recorded rather than "fixed" in the component, because confirming the
+write fixes it at the source; the stale-props pattern is noted below as a
+separate latent issue.
+
+**Severity is split, and stated honestly.** `installAppAction` and
+`uninstallAppAction` are live: `components/appstore/install-button.tsx` calls
+both. `toggleAppAction`, `setCurrencyActiveAction` and `setRewardActiveAction`
+have **no caller anywhere in the repository** — they are exported `'use server'`
+endpoints that would lie the moment a UI is wired to them, which is why they are
+fixed now and why this finding is MEDIUM rather than HIGH. Of the three, the
+reward archive has the sharpest latent edge: `requestRedemptionAction` gates on
+`reward.is_active`, so an archive that silently did not happen leaves the reward
+redeemable and still charging the child's tokens.
+
+**Fix.** `.select('app_id')` / `.select('id')` on all five, plus
+`wroteNoRows(...)` with a translated message on each. Three new `actions.*` keys
+in all 7 base catalogues, inserted in place. Family scoping is asserted
+alongside each confirmation, because the cheapest wrong way to make a
+`.select()` return a row is to widen the filter.
+
+**Status:** FIXED. Guard: seven cases appended to
+`tests/a-write-the-user-is-told-about-is-confirmed.test.ts`, each proved red by
+mutation — dropping a `.select()`, dropping a `wroteNoRows` check, unscoping a
+write while keeping its confirmation, checking a stale binding rather than the
+write's own, and deleting the redemption gate.
+
+**Latent, recorded not fixed:** `components/appstore/install-button.tsx` derives
+`useState(installed: initial)` from a prop and never reconciles it. That is
+correct for the optimistic flow it implements, and it is now safe because the
+actions fail loudly, but it means the component cannot be corrected by the
+server. Left to CLAUDE-2, whose area it is (charter rule 9) — not modified here.
+
+---
+
+### `[CLAUDE-1][LOW][TESTING]` C1-S9-34 — the guard matched my own comment
+
+The first version of one `C1-S9-33` assertion was a file-wide regex:
+
+```ts
+expect(economy).toMatch(/requestRedemptionAction[\s\S]*?reward\.is_active/);
+```
+
+Mutation testing deleted the `if (!reward || !reward.is_active)` gate and the
+test stayed **green** — because the explanatory comment four lines above the
+archive still contained the words `reward.is_active`, and the regex reached it.
+The guard was pinning its own prose.
+
+Re-scoped to the redemption body with `bodyOf` and pointed at the statement
+itself, after which the same mutation kills it. Two further bugs in the same new
+test file were caught the same way and are worth naming together, since all
+three are failures of the instrument rather than of the code:
+
+1. `between()` searched from file start, so `'return { ok: true };'` resolved to
+   an occurrence BEFORE the function being sliced — the `bodyOf()` case, for the
+   fourth time this session.
+2. An `ok: true` ordering assertion that was trivially true
+   (`toBeLessThan(body.length)`), replaced with one that pins the confirmation to
+   the binding the write actually produced.
+
+Mutation testing is what found all three. A guard written and never proved red
+is a guard whose author is guessing.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -32816,8 +32904,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **16,973 passing / 16,976 across 1,351
-files.** (Re-run after `C1-S9-32`; was 16,950 / 16,953 across 1,349 before this
+Status: ✅ PASS — `npx vitest run`: **16,979 passing / 16,982 across 1,351
+files.** (Re-run after `C1-S9-34`; was 16,950 / 16,953 across 1,349 before this
 batch.) The three failures are `C1-S9-09`, BLOCKED: this container runs Node
 22.22.2 against the repository's `.nvmrc` 24.21.0, and nvm cannot fetch the
 Node 24 distribution here. Not counted as passing.
