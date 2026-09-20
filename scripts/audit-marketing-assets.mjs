@@ -39,9 +39,12 @@ if (duplicates.length) {
 }
 
 const remoteImages = [];
+let scannedSourceFiles = 0;
 for (const sourceRoot of sourceRoots) {
   const files = await walk(join(root, sourceRoot));
-  for (const path of files.filter((file) => /\.(?:ts|tsx|js|jsx|css)$/.test(file))) {
+  const sources = files.filter((file) => /\.(?:ts|tsx|js|jsx|css)$/.test(file));
+  scannedSourceFiles += sources.length;
+  for (const path of sources) {
     const source = await fs.readFile(path, 'utf8');
     for (const match of source.matchAll(remoteImagePattern)) {
       try {
@@ -56,4 +59,26 @@ if (remoteImages.length) {
   process.exit(1);
 }
 
-console.log(`Marketing asset audit passed: ${images.length} unique shipped raster assets; no remote image URLs.`);
+// Both checks above are NEGATIVE assertions — "no duplicates" and "no remote
+// URLs" — and a negative assertion is satisfied by having looked at nothing.
+// If `public/` held no images, or `sourceRoots` were renamed, or the extension
+// filter stopped matching, this script would print "passed" over a marketing
+// site it had entirely stopped guarding. The counts were already reported,
+// which makes that visible to a careful reader; these floors make it FAIL,
+// which is what a CI gate has to do.
+//
+// Deliberately floors, not exact counts: assets and files churn, and a gate
+// that has to be edited every time someone adds a page is a gate someone
+// deletes. These only catch the collapse.
+if (images.length === 0) {
+  console.error(`Marketing asset audit found NO raster assets under ${join(root, 'public')}.`);
+  console.error('That is not a clean result — the duplicate check above examined nothing.');
+  process.exit(2);
+}
+if (scannedSourceFiles === 0) {
+  console.error(`Marketing asset audit scanned NO source files under ${sourceRoots.join(', ')}.`);
+  console.error('That is not a clean result — the remote-image-URL check above examined nothing.');
+  process.exit(2);
+}
+
+console.log(`Marketing asset audit passed: ${images.length} unique shipped raster assets; no remote image URLs (scanned ${scannedSourceFiles} source files).`);
