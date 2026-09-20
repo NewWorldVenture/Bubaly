@@ -41,10 +41,19 @@ def cell_count(line: str) -> int:
     return len(parts) - 1
 
 
-def check(path: str, shortfall: list[str]) -> list[str]:
-    """Return the rows that LOSE content; append merely-short rows to shortfall."""
+def check(path: str, shortfall: list[str], seen: dict[str, int] | None = None) -> list[str]:
+    """Return the rows that LOSE content; append merely-short rows to shortfall.
+
+    `seen` accumulates how much was actually INSPECTED. Without it this function
+    reports "0 rows lose content" just as confidently over a file with no tables
+    in it as over a file whose tables are all correct, and the caller cannot tell
+    those apart — which is the empty-versus-failed defect this script exists to
+    help find, and which it committed itself until this was added.
+    """
     problems: list[str] = []
     lines = open(path, encoding='utf-8').read().split('\n')
+    if seen is None:
+        seen = {'tables': 0, 'rows': 0}
     i = 0
     while i < len(lines):
         is_header = (
@@ -55,6 +64,7 @@ def check(path: str, shortfall: list[str]) -> list[str]:
         if not is_header:
             i += 1
             continue
+        seen['tables'] += 1
         want = cell_count(lines[i])
         if cell_count(lines[i + 1]) != want:
             problems.append(
@@ -62,6 +72,7 @@ def check(path: str, shortfall: list[str]) -> list[str]:
                 f'header declares {want}')
         j = i + 2
         while j < len(lines) and lines[j].strip().startswith('|'):
+            seen['rows'] += 1
             got = cell_count(lines[j])
             if got > want:
                 # Content loss: GFM discards every cell past the header count.
@@ -90,14 +101,29 @@ def main() -> int:
     paths = sys.argv[1:] or ['finalaudit.md']
     problems: list[str] = []
     shortfall: list[str] = []
+    seen = {'tables': 0, 'rows': 0}
     for path in paths:
-        problems.extend(check(path, shortfall))
+        problems.extend(check(path, shortfall, seen))
     for p in problems:
         print(p)
     for s_ in shortfall:
         print(s_)
+
+    # A clean report over nothing is not a clean report. If SEP stops matching
+    # the separator format, or the wrong file is passed, every table becomes
+    # invisible and this script says "0 row(s) lose content" — a pass it did not
+    # earn. The counts below are printed so a reader can see it looked, and zero
+    # tables is refused outright rather than reported as health.
+    if seen['tables'] == 0:
+        print(f'\nFOUND NO TABLES in {", ".join(paths)}. This is NOT a clean '
+              'result — nothing was inspected. Either the file has no GFM '
+              'tables, or SEP no longer matches the separator row format.',
+              file=sys.stderr)
+        return 2
+
     print(f'\n{len(problems)} row(s) lose content; {len(shortfall)} row(s) are '
-          f'short but lose none, across {len(paths)} file(s).')
+          f'short but lose none, across {len(paths)} file(s) — '
+          f"inspected {seen['tables']} table(s) / {seen['rows']} row(s).")
     # Only content loss fails. A short row renders everything it holds.
     return 1 if problems else 0
 
