@@ -6660,3 +6660,91 @@ that drifts up on false positives has stopped being a pin.
 **Verified:** both ratchets green (8/8), `npm run -s i18n:gate` clean across all
 declared surfaces, `npx tsc --noEmit` clean,
 `tests/one-time-ago-and-it-follows-the-reader.test.ts` 12/12.
+
+## Pass BM — the correction to Pass BA: I removed the limiter instead of moving it
+
+`tests/no-route-gates-on-a-per-instance-limit.test.ts` went red after the merge
+with exactly two findings, and both were mine:
+
+    app/api/assistant/alexa/route.ts:49
+    app/api/assistant/route.ts:52
+
+That guard is **my own**, written on this branch and absent from `main`. Its
+claim is that an in-memory `rateLimit()` with no durable partner in the same
+handler "is per-lambda, so it is not a gate". In Pass BA I found a real defect —
+a durable, service-role-backed limiter sitting **above** the auth check, so an
+unauthenticated request caused a service-role write and 429 could answer a
+request that had proved nothing — and I fixed it by **deleting the durable
+half** and adopting main's in-memory-only design.
+
+That was half a fix. The ordering defect was real and the deletion did close it,
+but the correct move was to relocate the limiter, not remove it — and I had
+already written that down in Pass BA's own record: *"a durable per-caller limit
+belongs after `resolveAssistantLink`, keyed on the caller."* I wrote the remedy
+into the comment and then did not apply it, and my own guard is what caught the
+gap. This is the second time in this audit that the fix for a defect was already
+written in the file that had it.
+
+### What the pair now is
+
+Two limits, and which one sits where is the design:
+
+- **In-memory, first, before any service client exists.** A cheap pre-filter
+  that bounds how many unauthenticated requests reach the one indexed SELECT.
+  It cannot be durable *here* — that is precisely the Pass BA defect.
+- **Durable, after `resolveAssistantLink`.** Keyed on `link.id`, so the key is
+  the **principal** rather than an IP, which a caller can spread across hosts
+  and a link id they cannot. This is what bounds the expensive half —
+  `answerAssistant` reads the family and calls a model — across instances
+  instead of per lambda.
+
+`failOpen: true`, argued rather than defaulted. If the limiter itself cannot be
+read the choice is between refusing every family's assistant and falling back to
+the in-memory bound. Failing open degrades to exactly the behaviour these routes
+had before the durable half existed; failing closed turns a rate-limit outage
+into *"Bubaly is not responding"* in every kitchen. The in-memory limiter is
+still in front, so open here is bounded, not unbounded.
+
+### Two guards contradicted, and the reconciliation is written down not slipped in
+
+`tests/middleware-assistant-boundary.test.ts` is **main's**, and its fake client
+asserted the route's only call is the `assistant_links` read — a count of 1. A
+legitimate post-auth limiter makes it 2. The two guards cannot both hold as
+written, which is the same collision the storage namer hit in this merge.
+
+The count is not a security property; it was a *proxy* for one. Every assertion
+that carries the actual boundary — `mocks.admin` never called, `reads` empty on
+a missing token, `reads` length 1 on an unknown token, and the same on an
+unverified Alexa envelope — is **untouched**. What changed is that the happy
+path now asserts the two calls **and their order**, `['assistant_links',
+'rpc/rate_limit_hit']`, which is stricter than the count it replaces: it pins
+that the limiter is charged *after* the link resolves rather than merely that
+some second call exists.
+
+Two things were *added*, not relaxed. The mock now matches the RPC by **shape**
+— method, key prefix, that the key ends in the resolved link id, the limit and
+the window — rather than tolerating a second pathname. And a new case proves the
+gate actually gates: with the RPC answering `allowed: false`, `/api/assistant`
+returns 429 with `Retry-After: 42` and Alexa speaks its refusal, and neither
+reaches the model.
+
+Answering the RPC in the mock rather than letting it throw is itself load
+bearing, and it is why the first run of this was nearly worthless: `rateLimitDb`
+fails **open** here, so a mock that threw would have been indistinguishable from
+a limiter that allowed the request, and the case would have passed whether or
+not the call was ever made.
+
+**Planted and proven.** With `if (!durable.ok)` neutralised to `if (false &&
+!durable.ok)` in both routes — a regression that keeps the round trip and
+ignores the verdict — both new cases go **red**; restored, 19/19 green.
+
+### Recorded, not fixed here
+
+`app/api/ai/gift/route.ts:31` constructs a service client and calls
+`rateLimitDb` **before** reading its token — the same shape as the Pass BA
+defect, on an unauthenticated gift-link path. It is outside this pass and has no
+boundary guard of its own; it needs the same relocation and a guard that pins it.
+
+**Verified:** `no-route-gates-on-a-per-instance-limit`,
+`middleware-assistant-boundary` and `alexa-request-verification` — **76/76**
+(was 74; the two new cases are the difference). `npx tsc --noEmit` clean.
