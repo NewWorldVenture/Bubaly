@@ -2,11 +2,11 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-20T12:45:05.511Z
-- Total Audit Items: 14057
+- Last Updated: 2026-09-20T16:47:10.303Z
+- Total Audit Items: 14058
 - Not Started: 13842
 - In Progress: 192
-- Passed: 7
+- Passed: 8
 - Fixed + Passed: 13
 - Blocked: 1
 - Failed: 2
@@ -14189,6 +14189,7 @@ PRODUCTION READY: NO
 | DATA-010 | DATA | Resource lifecycle through the real API | ✅ PASS | High | 8/8 | None required | CREATE/READ/UPDATE/VERIFY/DELETE/VERIFY all pass as a real member; a child's refused write returns HTTP 204 without Prefer, 200 [] with it, dosage unchanged | Shows at the HTTP layer why .select() + wroteNoRows was needed: 204 No Content is a success for a write that changed nothing. |
 | SEC-008 | SEC | Realtime broadcast isolation and publication drift | ✅ PASS | Critical | 5/5 | None required | Publication and code agree exactly (61 = 61, empty diff both ways); a live socket received its own family's row and not another's | The first attempt used an unpublished table and received nothing — a run that would have read as a clean refusal while proving nothing. Controls decided it. |
 | PERF-003 | PERF | Unindexed foreign keys on cascade paths | ✅ PASS | Medium | 7/7 | None, deliberately | Member delete 0.50s before 158 indexes, 0.58s after; unchanged at 200,500 rows; a 0-FK delete takes 0.000174s | The half-second is 178 referential-integrity checks, not scans. An index cannot remove a check. Measuring first avoided a 158-index migration for no gain. |
+| API-MKT-001 | API | Marketplace negotiation and circle RPCs | ✅ PASS | High | 10/10 | No product change; a probe so three unexercised RPCs stop being unexercised | Offer/counter/accept produces an order at the countered price and claims the listing; circle create/join/leave all complete; suite 48/48 | Found by asking what else the app calls that nothing tests — the same gap DB-FN-001 hid in. The probe catches the pre-0318 dead function. |
 
 ## Inventory and evidence rules
 
@@ -21071,6 +21072,67 @@ Executed. The nineteen markers were enumerated and each classified by hand befor
 
 #### Final Status
 🛠 FIXED + PASS
+
+### API-MKT-001 — The marketplace RPCs nothing was calling
+
+Status: ✅ PASS
+Severity: High
+Route(s), components, actions, tables and providers: app/(app)/marketplace/negotiations/actions.ts, public.marketplace_negotiation_offer, public.marketplace_negotiation_respond, public.marketplace_leave_circle, public.marketplace_create_circle, public.marketplace_join_circle, docs/audit/marketplace-rpc-liveness-check.sql
+
+#### Expected Behavior
+A buyer offers below the asking price, the seller counters, the buyer accepts, an order is created and the listing is claimed. A family creates a sharing circle, another joins by its code, and either can leave.
+
+#### Test Cases
+- [x] An offer below the ask opens a negotiation at that amount
+- [x] An offer at or above the ask is refused — that is a purchase, not a bid
+- [x] The buyer cannot counter their own offer
+- [x] The seller can counter, and the stored amount follows
+- [x] The buyer accepts, an order id comes back, the negotiation is `agreed` at the COUNTERED price
+- [x] The listing becomes `claimed`
+- [x] A circle is created with a code carrying no 0, 1, O or I
+- [x] Another family joins by that code and lands in the right circle
+- [x] Leaving removes exactly one member family
+- [x] The probe fails when the pre-0318 circle function is restored
+
+#### Issues Found
+None in the product. The finding is the coverage gap.
+
+Fixing DB-FN-001 — `marketplace_create_circle`, dead from 0176 to 0318 — raised the obvious question: what else does the application call that nothing exercises? Cross-referencing the 38 `.rpc(` names in `app/` and `lib/` against every `docs/audit/*.sql` and every file in `tests/` left five, and three were in the same family:
+
+    marketplace_leave_circle
+    marketplace_negotiation_offer
+    marketplace_negotiation_respond
+
+All three work. That is worth having proved rather than assumed — the last dead feature was hiding in exactly this gap, and the reason it stayed hidden was that nothing walked the path end to end on a production-shaped database.
+
+The full negotiation, executed:
+
+    BUYER offers 8000  -> {"ok": true, "amount_cents": 8000, "negotiation_id": "…"}
+    SELLER counters 9000 -> {"ok": true, "status": "open", "amount_cents": 9000}
+    BUYER accepts        -> {"ok": true, "status": "agreed", "order_id": "…", "amount_cents": 9000}
+    listing status: claimed
+
+And the circle lifecycle: created with code `GYQXV76S`, joined by a second family (2 member families), left (1), and the owner leaving removed the last membership and took the circle with it.
+
+#### Fixes Applied
+No product change. A new probe, `docs/audit/marketplace-rpc-liveness-check.sql`, so these three stop being unexercised.
+
+Two things it had to get right, both of which caught the probe rather than the product:
+
+**Argument order.** A first run reported `not_authorized` and looked like a real finding. The signature is `(p_listing, p_buyer_member, p_buyer_family, …)` — **member before family** — and the call passed them swapped. The application is immune because it calls by name. So the probe now asserts `auth.uid()` took AND that `marketplace_member_id(family)` resolves to the member being passed, before any result is believed.
+
+**The `on_family_created` trigger.** A later draft died on `family_members_family_id_user_id_key`: creating a family fires `handle_new_family`, which inserts the creator's membership, and the probe was inserting it as well. It upserts now, stating the role it needs without fighting the trigger for it.
+
+#### Retest Results
+Passes twice in succession; the suite passes **48/48, 0 skipped, no anchor drift** on both the local Supabase stack and the CI replica.
+
+Load-bearing: restoring the pre-0318 definition of `marketplace_create_circle` fails it with `ERROR: function gen_random_bytes(integer) does not exist` — so had this probe existed, and had CI's database been shaped like production, DB-FN-001 would have been caught the day it shipped.
+
+#### Evidence
+Executed against a local Supabase stack with all migrations applied. The probe owns both its families and removes them at the end.
+
+#### Final Status
+✅ PASS
 
 ### PERF-003 — 872 foreign keys have no supporting index, and it does not currently matter
 
