@@ -2,12 +2,12 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-20T12:03:39.967Z
-- Total Audit Items: 14050
+- Last Updated: 2026-09-20T12:07:16.796Z
+- Total Audit Items: 14051
 - Not Started: 13842
 - In Progress: 192
 - Passed: 2
-- Fixed + Passed: 11
+- Fixed + Passed: 12
 - Blocked: 1
 - Failed: 2
 - Overall Completion: 0.04%
@@ -14182,6 +14182,7 @@ PRODUCTION READY: NO
 | TEST-007 | Testing | CI database fidelity and skip reporting | 🛠 FIXED + PASS | Critical | 9/9 | Bootstrap puts pgcrypto in `extensions` with Supabase's search_path; runner separates SKIP from PASS; CI installs plpgsql_check and sets PROBES_REQUIRE_ALL | 45/45 with 0 skipped on both a CI replica and the Supabase stack; the circle probe now fails on the broken definition where it used to pass | The probe for DB-FN-001 ran on every PR and passed while the feature was dead, because CI's pgcrypto sat in a different schema than production's. |
 | DB-002 | Database | Family erasure and cascade completeness | ✅ PASS | High | 6/6 | None — verification, not repair | 71,192 rows across 199 tables deleted with 0 survivors; probe reports both halves when a cascade is removed; suite 46/46 | 387 of 396 family_id columns cascade; the 9 exceptions are user-owned, business-owned or an idempotency ledger, and are now named in the probe. |
 | AI-002 | AI | AI routes outside the context slices | ✅ PASS | High | 7/7 | None required | Rate limiter exercised: 5 allowed / 2 denied, namespace scoping enforced | The policy guard scopes to lib/ai/context/slices; the other 39 routes were checked directly. Three use a service client; each is correctly scoped or token-authorized. |
+| TEST-008 | Testing | Unfinished-work markers in shipping code | 🛠 FIXED + PASS | Medium | 6/6 | Guard now scans comments instead of stripping them, and requires every marker to lead its comment and carry a tracker reference | 3/3; red when a bare marker is appended to a real file | It stripped comments before searching for comment markers, so it reported 0 while 19 existed. All 19 are properly owned. |
 
 ## Inventory and evidence rules
 
@@ -20974,6 +20975,66 @@ Executed against a local Supabase stack, not inferred from source. The probe tha
 #### Final Status
 🛠 FIXED + PASS
 
+### TEST-008 — The dev-marker guard stripped comments before looking for comment markers
+
+Status: 🛠 FIXED + PASS
+Severity: Medium
+Route(s), components, actions, tables and providers: tests/no-dev-markers-in-shipping-code.test.ts, app/, lib/, components/
+
+#### Expected Behavior
+Shipping code carries no unowned developer marker. A `TODO` that names a milestone or ticket is tracked work; a bare `// TODO: fix this` names nobody and is how work gets forgotten.
+
+#### Test Cases
+- [x] A bare `// TODO:`, `// FIXME`, `* XXX` is reported
+- [x] `TODO(M6 undo)` and `TODO-0416` are accepted
+- [x] Prose that merely mentions a marker is not reported
+- [x] A string literal is not treated as a comment
+- [x] The scan covers a non-trivial number of files
+- [x] Appending a bare marker to a real source file turns the guard red
+
+#### Issues Found
+The guard stripped every comment from each file and then searched the remainder for `TODO|FIXME|HACK|XXX`. Its stated reason was sound — a comment saying "no TODO stubs here" should not itself be flagged. But **a developer marker lives in a comment by definition**; the guard's own header called it "the comment-marker convention". Stripping comments removed its entire search space, leaving it able to match only a marker inside a string literal or an identifier, which is nowhere.
+
+So it reported — truthfully, and uselessly — "0 hits across the whole tree", while `app/`, `lib/` and `components/` carried **nineteen** markers:
+
+    TODO(M6 undo): reversing a run's writes from here needs a migration
+    TODO(M35 dead-letter): `ai_tool_calls` rows a dead worker left in
+    TODO(migration, owner approval required): an ESTIMATED total against a
+    TODO(M23 RLS migration): a caregiver preset that also pre-authorises a
+
+This is the same defect the rest of this cycle kept finding — a guard that cannot fail — in a third shape. Not a scope too small (TEST-007), not a premise that missed the bypass (SEC-006), but **preprocessing that deletes the thing being searched for**.
+
+The state underneath is good, and that is worth stating plainly: all nineteen markers are owned, each naming a milestone or a ticket, and several explicitly say "owner approval required" because they need a migration. The repository already follows the discipline the guard claimed to enforce. The guard was not the reason, and would not have noticed if it stopped.
+
+#### Fixes Applied
+The guard now scans comments — the inverse of what it did — and enforces the convention the repository already keeps: a marker must **lead its comment** and **carry a tracker reference**.
+
+"Leads its comment" is what separates a marker from prose about one, and it matters, because three of the nineteen are references inside a sentence:
+
+    // shipped; see the TODO below.                              prose — and the TODO it
+                                                                 points at is real, owned,
+                                                                 and twenty lines down
+    // habit presets, starting with hydration (TODO-0416).       a ticket reference
+    // Trust Engine governs issuing a payment instrument (Trust TODO #1).
+
+A guard that flagged those would be deleted as noise inside a week, which is the other way a guard stops working.
+
+#### Retest Results
+Passes 3/3. The matcher's own behaviour is asserted directly — owned and unowned, marker and prose, comment and string literal — because the failure path was the part that had been broken for this guard's whole life, and a failure path that has never run is a failure path that does not work.
+
+Proved load-bearing against the real tree by appending `// TODO: fix this before launch` to `lib/utils/cn.ts`:
+
+    AssertionError: unowned dev markers:
+    lib/utils/cn.ts:9 — // TODO: fix this before launch
+
+The file was restored and `git diff` confirms it unchanged.
+
+#### Evidence
+Executed. The nineteen markers were enumerated and each classified by hand before the rule was written, rather than the rule being written first and the tree made to fit it.
+
+#### Final Status
+🛠 FIXED + PASS
+
 ### AI-002 — The AI surface outside the context slices
 
 Status: ✅ PASS
@@ -26377,7 +26438,9 @@ red with file, line, table and operation.
 Current request-admission witness verification uses frozen application tree ee0038989221edfaf148150f6e1dc28301f7f6bf. All six changed production files pass final local gates. A later actual HTTP/Mailpit fixture and disposable-only CI redirect configuration are test infrastructure; they have not executed in hosted CI. Final test/infrastructure tree is d0adca170e65ca15ce48d678ce1d6ac1b2273ef6; provenance is in [the admission witness cycle](docs/final-audit/auth-callback-admission-witness-cycle.md). All previous 14,006 IDs/statuses remain intact; twelve structural discovery additions bring the total to 14,018.
 
 ## Build
-Status: ✅ PASS — frozen application source builds 252 pages. Log: Temp/bubaly-admission-build-20260919.log. This is not live provider workflow evidence.
+Status: ✅ PASS — current tree (2026-09-20) builds clean on Node 24.21.0: compiled in 3.4 min, 252/252 static pages generated, exit 0. This cycle added six migrations, eight probes and three guard changes; none of them affect the build, and this run confirms it rather than assuming it. Not live provider workflow evidence.
+
+Previous: frozen application source builds 252 pages. Log: Temp/bubaly-admission-build-20260919.log.
 
 ## Type Check
 Status: ✅ PASS — strict post-build types pass. Log: Temp/bubaly-admission-types-20260919.log. Later HTTP-fixture checks are recorded separately in the cycle document.
@@ -26386,7 +26449,7 @@ Status: ✅ PASS — strict post-build types pass. Log: Temp/bubaly-admission-ty
 Status: ✅ PASS — lint passes with three existing warnings: document-capture generation ref and two messages-module toastError dependencies. Log: Temp/bubaly-admission-lint-20260919.log. Localization and query audit pass (491 tables / 86 functions / 146 routes).
 
 ## Automated Tests
-Status: 🔄 IN PROGRESS — current tree passes **16,705/16,705 across 1,305 files** on Node 24.21.0, the version `package.json` declares, with types clean and lint at its documented baseline of three pre-existing warnings. Note on runtime: this container ships Node 22, under which three tests fail — `node-version-is-pinned` (correctly reporting the mismatch) and two `stream-cancellation-runtime` cases, which are the already-tracked PERF-002 and disappear under 24. A run taken while the Docker daemon and eleven containers were booting alongside it showed five failures, all of them 5s timeouts from CPU contention; they pass in isolation and in a clean full run. Earlier evidence from the published baseline follows.
+Status: 🔄 IN PROGRESS — current tree passes **16,706/16,706 across 1,305 files** on Node 24.21.0, the version `package.json` declares, with types clean and lint at its documented baseline of three pre-existing warnings. Note on runtime: this container ships Node 22, under which three tests fail — `node-version-is-pinned` (correctly reporting the mismatch) and two `stream-cancellation-runtime` cases, which are the already-tracked PERF-002 and disappear under 24. A run taken while the Docker daemon and eleven containers were booting alongside it showed five failures, all of them 5s timeouts from CPU contention; they pass in isolation and in a clean full run. Earlier evidence from the published baseline follows.
 
 Previous: final full UTC and DST runs each pass 16,543/16,543 checks across 1,303 files, zero failed/skipped. Reports: Temp/bubaly-admission-full-{utc,dst}-20260919.json. Browser ownership passes 81 cases, completion/recovery UI 82, server/routing 147 and shared/server/page 77 in overlapping focused runs. The actual HTTP fixture is discovery/type/lint checked, not locally executed; successful Mailpit/PKCE provider completion must still run in hosted CI. Published dc99dc83 passes Web (both 16,495-check full suites, 252-page build and strict types), Database, Mobile and Finance; its E2E run35464679043 passes 1,150/1,150 with authenticated/durable flags enabled. That baseline does not include the new witness source. Current discovery lists 1,183 cases across 49 files. New-source hosted acceptance remains required.
 
