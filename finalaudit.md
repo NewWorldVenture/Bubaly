@@ -3,11 +3,11 @@
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
 - Last Updated: 2026-09-20T17:44:10.000Z
-- Total Audit Items: 14064
+- Total Audit Items: 14065
 - Not Started: 13842
 - In Progress: 192
 - Passed: 9
-- Fixed + Passed: 18
+- Fixed + Passed: 19
 - Blocked: 1
 - Failed: 2
 - Overall Completion: 0.04%
@@ -14011,7 +14011,7 @@ PRODUCTION READY: NO
 | MAIN-F-D01 | UPSTREAM | F-D01: The photo lightbox strands keyboard users (High) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3281). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
 | MAIN-F21 | UPSTREAM | F21: A child could grant themselves a reward (High; half fixed and live, half awaiting the operator) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 1662). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
 | MAIN-F-E04 | UPSTREAM | F-E04: OAuth tokens in social_account_tokens are family-member readable, while the equivalent sync_tokens is service-only | 🛠 FIXED + PASS (pending production) | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3453). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | docs/audit/social-token-is-service-only-check.sql reports 5 breaches before 0324 and exits 0 after; the suite auto-discovers it. | This master-ledger reference preserves the original upstream label. Closed by AUTHZ-007 in this cycle (migration 0324, PENDING PRODUCTION). Two upstream claims are corrected in that record: the policies read can_manage_family rather than is_family_member, and the table is no longer unused. |
-| MAIN-F-E05 | UPSTREAM | F-E05: feedback-attachments is a public bucket holding user-uploaded screenshots | 🔄 IN PROGRESS | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3454). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-E05 | UPSTREAM | F-E05: feedback-attachments is a public bucket holding user-uploaded screenshots | 🛠 FIXED + PASS (pending production) | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3454). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Reproduced and closed over real HTTP: 200 with the bucket public, 400 with it private, 200 through a signed URL. 9 unit cases plus a probe whose two mutations are red. | This master-ledger reference preserves the original upstream label. Closed by SEC-012 in this cycle (migration 0325, PENDING PRODUCTION, which must land with the code that signs these objects). |
 | MAIN-F-E06 | UPSTREAM | F-E06: The Contact Center inbound-email secret is accepted in the query string, where it lands in logs and referrers | ⚠️ ACCEPTED | Medium | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3455). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | The header is now preferred over the query parameter, and the reasoning is written at the call site. | This master-ledger reference preserves the original upstream label. Recorded under SEC-011 as a deliberate product decision rather than an oversight: docs/runbooks/family-contact-center-routing.md documents the ?key= form as the primary integration for inbound-email providers that cannot set custom headers, so removing it would break the documented setup for exactly the providers it exists for. Whoever drops it is choosing which providers can integrate. |
 | MAIN-F-E07 | UPSTREAM | F-E07: Twilio signature verification is off outside production and depends on NEXT_PUBLIC_APP_URL being exactly right | 🛠 FIXED + PASS | High — raised from Medium: eight of the ten call sites were open in any deployment not built with NODE_ENV=production, and the URL inconsistency silently 401s every callback | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3456). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | 14 new cases in tests/twilio-ingress-verifies-everywhere.test.ts plus a strengthened tests/public-webhook-signature-boundary.test.ts; full suite green; tsc --noEmit clean. | This master-ledger reference preserves the original upstream label; the historical appendix row and its Medium rating are retained verbatim as evidence of what was known then. Closed by SEC-010 in this cycle: one shared gate replaces ten hand-written checks, verification is no longer conditional on the build, the signed URL is taken from the request the platform received, and an unverifiable callback is refused rather than admitted. Three mutations each turn the new guard red. |
 | MAIN-F-E08 | UPSTREAM | F-E08: Shared-secret comparisons are not constant time | 🛠 FIXED + PASS | Low | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3457). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | 10 new cases in tests/shared-secrets-compare-in-constant-time.test.ts; both mutations red (an absent secret made to match; one site returned to ===). | This master-ledger reference preserves the original upstream label. Closed by SEC-011 in this cycle: one timingSafeEqual helper at all four call sites, with bearerMatches building the prefix so an unset secret can never be matched as "Bearer undefined". |
@@ -14190,6 +14190,7 @@ PRODUCTION READY: NO
 | SEC-011 | Security | Shared secrets compared with === (closes F-E08, documents F-E06) | 🛠 FIXED + PASS | Low | 10/10 | One helper (lib/server/secret-compare.ts) using timingSafeEqual at all four call sites; bearerMatches builds the prefix so 'Bearer undefined' cannot be minted | Both mutations red (an absent secret made to match; one site returned to ===); the fail-closed property asserted five ways | Cron, internal server-to-server, the emergency SMS/voice blast to every parent, and the inbound-email ingress all decided on string equality, which returns in time proportional to the matching prefix. F-E06 is accepted rather than fixed: the query-string form is the documented integration for providers that cannot set headers. |
 | API-MKT-002 | API | A permissions refusal reported as an OpenAI outage (closes F-E09) | 🛠 FIXED + PASS | Low | 7/7 | MarketingAuthorizationError carries reason: 'unauthenticated' | 'forbidden'; the three catch blocks ask the type instead of searching the message | Reverting the AI route to the string match turns three cases red (expected 500 to be 403); an Error carrying the same words, and a provider fault containing 'sign in', are each asserted NOT to be a refusal | The predicate searched for 'Forbidden', a word requireMarketingAdmin has never said, so a non-admin was told to check the OpenAI API key with a 500 — and the refusal was logged as an application error. |
 | AUTHZ-007 | AUTHZ | Stored OAuth credentials answered client reads (closes F-E04) | 🛠 FIXED + PASS (pending production) | Medium | 11/11 | 0324 drops all four client policies and installs sync_tokens' service-only policy under the same name; no code loses access (every path is already service-role) | 5 breaches reproduced as a parent on the pre-migration schema (read, rewrite the OAuth claim state, repoint the provider account, delete, insert), 0 after; sync_tokens parity and service-role survival both asserted as controls | Two upstream claims corrected: the policies are can_manage_family (a child was already refused), and the table is no longer unused — lib/social/account-tokens.ts runs the whole X OAuth flow against it. |
+| SEC-012 | Security | A feedback screenshot readable by the whole internet (closes F-E05) | 🛠 FIXED + PASS (pending production) | Medium | 9 unit + 5 probe assertions | 0325 makes the bucket private and replaces the blanket SELECT with owner-or-admin; the one surface that renders these objects mints a 10-minute signed URL; the board stops selecting the column; the uploader records the path and the resolver reads either form, so no row is rewritten | Over real HTTP, same object and path, no credentials: public bucket 200/67 bytes, private bucket 400 Bucket not found, signed URL 200/67 bytes. Both mutations red (flag flipped back; blanket policy restored) | Closable where SEC-001 is not because exactly one surface draws these objects — the super-admin console, through the service role — so there was no fleet of getPublicUrl consumers to migrate. bucket-visibility-is-declared-check.sql reported DECLARATION STALE on the flip, as written. |
 | TEST-009 | Testing | Probe fixtures left in the seeded anchor family | 🛠 FIXED + PASS | Medium | 6/6 | Both probes now clear their fixtures at the end as well as the start | Each passes twice; suite 47/47 on both databases; anchor family holds only its seeded members | "Race Child" and "Probe Kid" had been living in the 71,192-row anchor family, the latter for a week. Found by the AUTHZ-006 sweep counting a member no fixture of its own had created. |
 | DATA-010 | DATA | Resource lifecycle through the real API | ✅ PASS | High | 8/8 | None required | CREATE/READ/UPDATE/VERIFY/DELETE/VERIFY all pass as a real member; a child's refused write returns HTTP 204 without Prefer, 200 [] with it, dosage unchanged | Shows at the HTTP layer why .select() + wroteNoRows was needed: 204 No Content is a success for a write that changed nothing. |
 | SEC-008 | SEC | Realtime broadcast isolation and publication drift | ✅ PASS | Critical | 5/5 | None required | Publication and code agree exactly (61 = 61, empty diff both ways); a live socket received its own family's row and not another's | The first attempt used an unpublished table and received nothing — a run that would have read as a clean refusal while proving nothing. Controls decided it. |
@@ -21687,6 +21688,71 @@ The probe's controls are the part that makes it worth having. `sync_tokens` must
 **0324 is a PENDING PRODUCTION MIGRATION.** It is applied locally and recorded in `docs/PENDING_PROD_MIGRATIONS.md`; until a human applies it, anyone holding a manager seat and the anon key can read, rewrite, repoint and delete a family's stored social credentials directly.
 
 
+### SEC-012 — A feedback screenshot readable by the whole internet (closes F-E05)
+
+Status: 🛠 FIXED + PASS (pending production)
+Severity: Medium
+Route(s), components, actions, tables and providers: `feedback-attachments` bucket, `storage.objects`, `app/(app)/admin/feedback/page.tsx`, `app/(app)/feedback/page.tsx`, `app/(app)/feedback/feedback-attachment-upload.tsx`, `lib/storage/feedback-attachments.ts`, `lib/storage/feedback-attachment-signing.ts`, `supabase/migrations/0325_a_feedback_screenshot_is_not_world_readable.sql`, `docs/audit/feedback-attachment-is-not-world-readable-check.sql`
+
+#### Expected Behavior
+A screenshot someone attached to a bug report is visible to the person who uploaded it and to the admin triaging it. Not to every signed-in user, and not to anyone who obtains the URL.
+
+#### Test Cases
+- [x] Unauthenticated GET of an object while the bucket is public — reproduced
+- [x] Unauthenticated GET of the same object once it is private
+- [x] Unauthenticated GET of a signed URL for the same object (the admin path)
+- [x] Another signed-in user cannot read the row through the authenticated path
+- [x] The uploader still can
+- [x] The unscoped SELECT policy is gone and cannot come back unnoticed
+- [x] The INSERT policy still scopes to the uploader's folder
+- [x] A bare path, an old public URL, and neither, all resolve correctly (9 unit cases)
+- [x] A value that cannot be resolved becomes null, not a pass-through
+- [x] A signing failure yields null, not an unsigned URL
+- [x] Mutation: bucket flipped back to public → red on the flag
+- [x] Mutation: blanket policy restored → red twice, on the policy and on a real cross-user read
+- [x] `bucket-visibility-is-declared-check.sql` reported DECLARATION STALE on the flip, as designed
+
+#### Issues Found
+The bucket was `public = true` **and** carried an unscoped read policy:
+
+    objects | Feedback attachments are publicly readable | SELECT | (bucket_id = 'feedback-attachments')
+
+So every object was readable twice over — by the public path, which does not consult `storage.objects` RLS at all, and by the authenticated path, whose policy asked only which bucket the object was in. Writes were already scoped correctly; reads were not scoped at all.
+
+These are screenshots taken at the moment something in the product went wrong, which is to say screenshots of a real family's calendar, children's names, balances or documents. Object names are UUID-based so they are not enumerable, and that was the only thing limiting this. An unguessable name is not an access control.
+
+Measured against the running stack — same object, same path, no credentials of any kind:
+
+    upload as the service role              -> HTTP 200
+    unauthenticated GET, bucket public      -> HTTP 200, 67 bytes
+    unauthenticated GET, bucket private     -> HTTP 400, "Bucket not found"
+    unauthenticated GET of a signed URL     -> HTTP 200, 67 bytes
+
+#### Fixes Applied
+**Why this one could close when SEC-001 still cannot.** Both findings are the same shape — a public bucket whose policy is decorative — and SEC-001 has stayed at ❌ FAIL all cycle because flipping `family-media` would blank every photo, avatar, attachment and album cover until every `getPublicUrl` consumer moved to signed URLs. Here there was no fleet: **exactly one surface renders these objects**, `components/admin/feedback-admin.tsx`, behind the super-admin gate and reading through the service role. The public Idea Board selected `image_url` and never drew it. So the whole rollout is one page learning to sign.
+
+0325 makes the bucket private and replaces the blanket policy with `owner OR is_super_admin()`. That is what the upstream note proposed, and the reasoning needed checking before adopting it: the Idea Board is deliberately cross-user — `feedback_ideas_select` is `auth.uid() IS NOT NULL`, every signed-in user sees every family's ideas (AUTHZ-006) — so a reader-scoped policy **would** have broken the product if the board drew these images. It does not, and the board now does not even fetch the column: sending every idea's attachment location to every signed-in user is this same exposure in miniature.
+
+Three things in the code make the flag flip safe rather than destructive:
+
+- `signFeedbackAttachments` mints one 10-minute signed URL per distinct object per render. Signed rather than served through an authenticated read because an `<img src>` cannot carry an `Authorization` header.
+- The uploader now records the storage **path**. `getPublicUrl` on a private bucket still returns a string; it just resolves to nothing, and recording one would store a value that looks usable and is not.
+- `feedbackAttachmentPath` reads **either** form, so the rows written before 0325 are not rewritten and keep working. That is the whole data migration: none.
+
+A value that cannot be resolved comes back `null`, never passed through. Passing the original through would put a dead public URL into an `<img src>` and make a private bucket look like a broken one — and it is the only way an external URL could reach that tag. Three unit cases hold that: an unresolvable value, a storage-level failure, and a per-object error in the batch response.
+
+**The guard written earlier this cycle did its job.** `docs/audit/bucket-visibility-is-declared-check.sql` exists so "the SEC-001 rollout cannot land quietly", and the moment the flag changed it reported:
+
+    DECLARATION STALE: bucket feedback-attachments is declared internet-readable but is private.
+    If this is the SEC-001 rollout, remove it from the list here and confirm every consumer uses signed URLs.
+
+Which is exactly the prompt to go and check that the consumers really had moved. Its declared list now names three buckets, not four. `tests/public-bucket-objects-are-unguessable.test.ts` **keeps** `feedback-attachments` in its own list on purpose: the rule it enforces — never name an object from the clock — is right whether or not the bucket is open, and dropping a bucket from that list the moment it is secured is how a requirement quietly stops applying to the next upload written into it.
+
+**Mutation-tested.** Flipping the bucket back to public turns the new probe red on the flag. Restoring the blanket policy turns it red twice — on the policy's shape, and on another signed-in user actually reading the row, which is the assertion a flag check cannot make. The probe runs inside a transaction it rolls back, because `storage.protect_delete()` refuses a direct DELETE from `storage.objects`, so a probe that creates an object cannot clean up after itself.
+
+**0325 is a PENDING PRODUCTION MIGRATION**, and it must land together with the code above. Until it is applied, every feedback screenshot ever uploaded is readable by anyone who obtains its URL.
+
+
 ### ADMIN-001 — Every admin server action reaches a super-admin gate
 
 Status: ✅ PASS
@@ -22403,7 +22469,7 @@ Status: ✅ PASS — `npm run lint` reports the four known baseline warnings and
 ## Automated Tests
 Status: ✅ PASS — 15,287 tests across 1,215 files pass, zero failures and zero skips, on Node 24.15.0 at head 92340315 (160s).
 
-Later in this cycle, on Node 24.21.0: **16,747 tests across 1,310 files, zero failures and zero skips**, and **49/49 boundary probes with 0 skipped**. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007). `npx tsc --noEmit` exits 0 and the new files lint clean.
+Later in this cycle, on Node 24.21.0: **16,756 tests across 1,311 files, zero failures and zero skips**, and **50/50 boundary probes with 0 skipped**. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
 
 Five existing guards had to be repaired rather than merely re-run, and that is itself a finding recorded under SEC-010: `guardian-callback-security`, `middleware-public-api-boundary`, `public-pages-reachable`, `health-feature-secrets` and `public-webhook-signature-boundary` each identified a control by the SPELLING of the function that implemented it. Moving identical verification one call away turned all five red while nothing about the behaviour changed — which is the same reason `public-webhook-signature-boundary` stayed green through eight signature checks that only ran in a production build.
 
@@ -22840,7 +22906,7 @@ closed.
 | F-E02 | Step-up MFA is a redirect; no policy knows `aal` | OPEN |
 | F-E03 | `family-media` is a public bucket | OPEN |
 | F-E04 | OAuth tokens family-member readable, while `sync_tokens` is service-only | FIXED — see AUTHZ-007 (0324, pending production) |
-| F-E05 | `feedback-attachments` is a public bucket | OPEN |
+| F-E05 | `feedback-attachments` is a public bucket | FIXED — see SEC-012 (0325, pending production) |
 | F-E06 | The Contact Center secret is accepted in the query string, where it lands in logs | ACCEPTED — see SEC-011; the runbook documents it as the primary integration for providers that cannot set headers, so the header is now preferred and the reasoning is written at the call site |
 | F-E07 | Twilio signature verification is off outside production | FIXED — see SEC-010 |
 | F-E08 | Shared-secret comparisons are not constant time | FIXED — see SEC-011 |

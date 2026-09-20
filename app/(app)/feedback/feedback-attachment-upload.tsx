@@ -10,7 +10,7 @@ import { createClient } from '@/lib/supabase/client';
 import { unguessableObjectName } from '@/lib/storage/object-name';
 import {
   FEEDBACK_ATTACHMENTS_BUCKET, FEEDBACK_ATTACHMENT_MAX_BYTES,
-  feedbackAttachmentPathFromUrl, removeFeedbackAttachmentPath,
+  feedbackAttachmentPath, removeFeedbackAttachmentPath,
 } from '@/lib/storage/feedback-attachments';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
@@ -51,11 +51,15 @@ export function FeedbackAttachmentUpload({
       const path = `${userId}/${unguessableObjectName(file.name.toLowerCase())}`;
       const { data, error } = await sb.storage.from(FEEDBACK_ATTACHMENTS_BUCKET).upload(path, file, { upsert: false, cacheControl: '31536000' });
       if (error) { toastError(`Upload failed: ${error.message}`); return; }
-      const previousPath = ownedPath ?? feedbackAttachmentPathFromUrl(value, process.env.NEXT_PUBLIC_SUPABASE_URL);
+      const previousPath = ownedPath ?? feedbackAttachmentPath(value, process.env.NEXT_PUBLIC_SUPABASE_URL);
       if (previousPath && previousPath !== data.path) await removeFeedbackAttachmentPath(sb, previousPath);
-      const { data: pub } = sb.storage.from(FEEDBACK_ATTACHMENTS_BUCKET).getPublicUrl(data.path);
+      // The PATH, not a public URL. The bucket is private as of 0325, so
+      // getPublicUrl now returns a string that resolves to nothing — recording
+      // one would store a value that looks usable and is not. The admin console
+      // signs whatever is here; rows written before 0325 still hold the old URL
+      // and feedbackAttachmentPath reads both.
       setOwnedPath(data.path);
-      onChange(pub.publicUrl);
+      onChange(data.path);
     } catch {
       toastError(t('feedbackAttachmentUpload.uploadFailedPleaseTryAgain'));
     } finally {
@@ -64,7 +68,7 @@ export function FeedbackAttachmentUpload({
   }
 
   async function remove() {
-    const path = ownedPath ?? feedbackAttachmentPathFromUrl(value, process.env.NEXT_PUBLIC_SUPABASE_URL);
+    const path = ownedPath ?? feedbackAttachmentPath(value, process.env.NEXT_PUBLIC_SUPABASE_URL);
     if (path) await removeFeedbackAttachmentPath(createClient(), path);
     setOwnedPath(null);
     onChange('');

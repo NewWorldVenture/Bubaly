@@ -49,7 +49,7 @@ describe('Supabase migration filename safety', () => {
     // it rather than deriving it is the point: the number is how a new
     // migration announces itself, so a file that quietly reuses one, or a
     // rebase that drops one, fails here.
-    expect(audit.nextVersion).toBe('0325');
+    expect(audit.nextVersion).toBe('0326');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

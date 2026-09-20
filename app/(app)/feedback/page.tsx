@@ -27,13 +27,21 @@ export default async function FeedbackPage() {
       return false;
     }),
     settle(supabase.from('feedback_ideas')
-      .select('id, title, problem, body, category, impact, audience, kind, status, admin_note, image_url, author_name, vote_count, comment_count, pinned, created_at')
+      // `image_url` is deliberately NOT selected. The board never draws the
+      // attachment — components/admin/feedback-admin.tsx is the only place that
+      // does — and sending every idea's attachment location to every signed-in
+      // user is the exposure this bucket was just closed for, in miniature.
+      .select('id, title, problem, body, category, impact, audience, kind, status, admin_note, author_name, vote_count, comment_count, pinned, created_at')
       .order('pinned', { ascending: false }).order('vote_count', { ascending: false }).order('created_at', { ascending: false })
       .limit(400)),
     settle(supabase.from('feedback_votes').select('idea_id').eq('user_id', ctx.user.id).limit(1000)),
   ]);
 
-  const ideas = (ideasRes.data ?? []) as IdeaRow[];
+  // `image_url` is filled in as null rather than left absent: the select above
+  // deliberately omits it, and a cast that claims a field the rows do not
+  // carry is the quiet kind of lie that only shows up later.
+  const ideas = ((ideasRes.data ?? []) as Omit<IdeaRow, 'image_url'>[])
+    .map((idea) => ({ ...idea, image_url: null })) as IdeaRow[];
   const votedIds = ((votesRes.data ?? []) as { idea_id: string }[]).map((v) => v.idea_id);
   const tally = statusTally(ideas);
   const kinds = kindTally(ideas);

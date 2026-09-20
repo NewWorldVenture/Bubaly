@@ -1968,3 +1968,77 @@ control would otherwise blame the guard for the breach.
 
 Until this is applied, anyone holding a manager seat and the anon key can read,
 rewrite, repoint and delete a family's stored social credentials directly.
+
+---
+
+## 0325 — a feedback screenshot was readable by the whole internet
+
+`supabase/migrations/0325_a_feedback_screenshot_is_not_world_readable.sql`
+
+`feedback-attachments` was `public = true` **and** carried an unscoped read
+policy:
+
+```
+objects | Feedback attachments are publicly readable | SELECT | (bucket_id = 'feedback-attachments')
+```
+
+So every object was readable twice over — by the public path, which does not
+consult `storage.objects` RLS at all, and by the authenticated path, whose
+policy asked only which bucket the object was in. Writes were already scoped
+correctly (`auth.uid()::text = (storage.foldername(name))[1]`); reads were not
+scoped at all.
+
+These are screenshots taken at the moment something in the product went wrong,
+which is to say screenshots of a real family's calendar, children's names,
+balances or documents. Object names are UUID-based so they are not enumerable,
+and that was the only thing limiting this. An unguessable name is not an access
+control, and a URL leaks the ordinary ways.
+
+Measured against the running stack — the same object, the same path, no
+credentials of any kind:
+
+```
+upload as the service role              -> HTTP 200
+unauthenticated GET, bucket public      -> HTTP 200, 67 bytes
+unauthenticated GET, bucket private     -> HTTP 400, "Bucket not found"
+unauthenticated GET of a signed URL     -> HTTP 200, 67 bytes
+```
+
+**Why this one could be closed when `family-media` (SEC-001) still cannot.**
+Exactly one surface renders these objects: `components/admin/feedback-admin.tsx`,
+behind the super-admin gate, reading through the service role. The public Idea
+Board selected `image_url` and never drew it. So there was no fleet of
+`getPublicUrl` consumers to migrate — only one page to teach to sign, which it
+now does with a 10-minute signed URL.
+
+**Code that ships with it** (already on the branch, and required for the
+migration to be safe):
+
+- `lib/storage/feedback-attachment-signing.ts` — signs each distinct object once
+  per page render.
+- `app/(app)/admin/feedback/page.tsx` — resolves before rendering.
+- `app/(app)/feedback/page.tsx` — stops selecting `image_url` altogether.
+- `app/(app)/feedback/feedback-attachment-upload.tsx` — records the storage
+  **path**; `getPublicUrl` on a private bucket returns a string that resolves to
+  nothing, and storing one would record a value that looks usable and is not.
+- `lib/storage/feedback-attachments.ts` — `feedbackAttachmentPath` reads either
+  form, so rows written before this migration are **not rewritten** and keep
+  working.
+
+The policy that replaces the blanket one is `owner OR is_super_admin()`. The
+reasoning needed checking first: the Idea Board is deliberately cross-user
+(`feedback_ideas_select` is `auth.uid() IS NOT NULL` — see AUTHZ-006), so a
+reader-scoped policy *would* have broken the product if the board drew these
+images. It does not.
+
+Held by `docs/audit/feedback-attachment-is-not-world-readable-check.sql`, whose
+controls are the point: the uploader must still read their own attachment, or
+the fix has taken it away from them. Flipping the bucket back turns it red on
+the flag; restoring the blanket policy turns it red twice, on the policy and on
+another signed-in user actually reading the row.
+`docs/audit/bucket-visibility-is-declared-check.sql` reported `DECLARATION
+STALE` the moment the flag changed — which is what it was written to do — and
+its declared list now names three buckets, not four.
+
+Until this is applied, every feedback screenshot ever uploaded is readable by
+anyone who obtains its URL.

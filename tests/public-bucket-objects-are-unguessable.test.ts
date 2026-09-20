@@ -29,7 +29,15 @@ function walk(dir: string, out: string[] = []): string[] {
 
 const sources = [...walk('components'), ...walk('app'), ...walk('lib')];
 
-/** Buckets whose SELECT policy is `bucket_id = '<id>'` with no scoping. */
+/**
+ * Buckets whose SELECT policy is `bucket_id = '<id>'` with no scoping — plus
+ * `feedback-attachments`, which 0325 closed (F-E05) and which stays here on
+ * purpose. The rule these names enforce is right whether or not the bucket is
+ * open: an object name is the last thing standing if a policy is ever loosened
+ * again, and it was the ONLY thing standing until 0325. Dropping a bucket from
+ * this list the moment it is secured is how a requirement quietly stops
+ * applying to the next upload written into it.
+ */
 const PUBLIC_READ_BUCKETS = ['family-media', 'avatars', 'feedback-attachments', 'marketplace-photos'];
 
 describe('objects in the public buckets cannot be guessed', () => {

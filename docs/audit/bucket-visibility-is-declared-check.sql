@@ -46,7 +46,18 @@ set client_min_messages = warning;
 do $probe$
 declare
   r        record;
-  declared text[] := array['avatars', 'feedback-attachments', 'marketplace-photos', 'family-media'];
+  -- `feedback-attachments` came off this list with 0325 (F-E05). It is the
+  -- first of the four to make the trip, and the trip is the point: the probe
+  -- reported DECLARATION STALE the moment the flag flipped, which is exactly
+  -- the prompt to go and check that the consumers really had moved. They had
+  -- — one surface renders these objects, the super-admin triage console, and
+  -- it now mints a 10-minute signed URL through the service role. Measured
+  -- against the running stack with the same object at the same path:
+  --
+  --   unauthenticated GET, bucket public   -> HTTP 200, 67 bytes
+  --   unauthenticated GET, bucket private  -> HTTP 400, "Bucket not found"
+  --   unauthenticated GET of a signed URL  -> HTTP 200, 67 bytes
+  declared text[] := array['avatars', 'marketplace-photos', 'family-media'];
   seen     int := 0;
   failures int := 0;
 begin
