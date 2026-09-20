@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { getUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { scopeFromUserContext } from '@/lib/services/scope';
+import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { readBoundedRequestBytes } from '@/lib/server/bounded-request-body';
 import { previewConfirmationImport, applyConfirmationImport } from '@/lib/services/trips/confirmation-import';
 import { confirmationSourceSchema, confirmationFieldsSchema, confirmationPreviewSchema } from '@/lib/vacations/confirmation-import';
@@ -78,6 +79,18 @@ export async function POST(request: Request) {
       || !['parent', 'adult'].includes(active.role)) {
       return errorResponse('The active parent or adult family context has changed.', 403);
     }
+    // The trip page in front of this is `requireFeature('/dashboard/vacations')`
+    // gated, so the endpoint behind it refuses on the same feature, through the
+    // same resolver, before any import work is done. Matches /api/vacations/ai
+    // and /api/vacations/weather.
+    const refused = await refuseUnlessEntitled(db, active.familyId, ['/dashboard/vacations']);
+    // A refusal is as family-specific as a preview, so it carries this route's
+    // private-cache headers rather than travelling as a cacheable 403.
+    if (refused) {
+      for (const [key, value] of Object.entries(headers)) refused.headers.set(key, value);
+      return refused;
+    }
+
     const scope = scopeFromUserContext(ctx, db);
     const input = { vacationId: body.vacationId, source: body.source, fields: body.fields };
     const result = body.action === 'apply'

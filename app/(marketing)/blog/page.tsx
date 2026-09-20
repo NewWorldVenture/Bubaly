@@ -175,7 +175,9 @@ export default async function BlogPage({ searchParams }: Props) {
                 // Distinct from 'invalid' on purpose: the link was fine, we were not.
                 // Telling someone their link is wrong when the database refused sends
                 // them to check the one thing that was never the problem.
-                ? 'We couldn’t complete that just now — your link is fine. Please try again in a moment, and contact support if the emails keep arriving.'
+                // It must also say what did NOT happen: the reader clicked unsubscribe
+                // and it failed, so the honest line is that they are still subscribed.
+                ? 'We couldn’t complete that just now — your link is fine, but the unsubscribe didn’t go through, so you may still receive blog emails. Please try the link again in a few minutes, and contact support if they keep arriving.'
                 : 'That unsubscribe link doesn’t look right. If you keep getting emails, contact support and we’ll sort it out.'}
           </div>
         </Container>
