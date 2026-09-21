@@ -90,9 +90,44 @@ async function requestCode(page: Page, origin: string, phone: string) {
 async function enterCode(page: Page, code: string) {
   // Paste through the actual segmented input handler. Replacing a rejected code
   // in one event avoids accidentally submitting six intermediate edits.
-  const data = await page.evaluateHandle(value => { const transfer = new DataTransfer(); transfer.setData('text/plain', value); return transfer; }, code);
-  try { await page.getByRole('textbox', { name: 'Digit 1', exact: true }).dispatchEvent('paste', { clipboardData: data }); }
-  finally { await data.dispose(); }
+  //
+  // The ClipboardEvent is CONSTRUCTED IN THE PAGE rather than handed to
+  // `locator.dispatchEvent('paste', { clipboardData })`, and that is the whole
+  // reason these three tests could never pass. Playwright's injected
+  // dispatchEvent switches on an event-type map with entries for mouse,
+  // keyboard, touch, pointer, focus, drag, wheel and the motion events — there
+  // is no clipboard entry — so 'paste' falls to the default arm and it builds
+  // `new Event('paste', init)`. Event's init dictionary silently DROPS the
+  // unknown `clipboardData` member. React's ClipboardEventInterface then reads
+  // `'clipboardData' in e ? e.clipboardData : window.clipboardData`, which is
+  // undefined in Chromium, and OtpInput's handler calls `.getData('text')` on
+  // it and throws before publishing a digit. onChange and onComplete never run,
+  // verify() is never called, and no POST reaches /auth/v1/verify — which is
+  // exactly what observeVerify() sat waiting thirty seconds for.
+  //
+  // None of that was ever true of a real user: a real paste carries a real
+  // ClipboardEvent, and typing digit by digit does not go through handlePaste
+  // at all. The defect was in this helper.
+  //
+  // Not switched to six fill() calls: the comment above is right that replacing
+  // an already-full code one digit at a time fires onComplete on every edit,
+  // because each intermediate value is still six digits long. This spec only
+  // runs under the chromium project, so DataTransfer and the ClipboardEvent
+  // constructor are both available.
+  await page.getByRole('textbox', { name: 'Digit 1', exact: true }).evaluate((element, value) => {
+    const input = element as HTMLInputElement;
+    const transfer = new DataTransfer();
+    transfer.setData('text/plain', value);
+    input.focus();
+    input.dispatchEvent(new ClipboardEvent('paste', {
+      clipboardData: transfer, bubbles: true, cancelable: true, composed: true,
+    }));
+  }, code);
+  // The code really landed. Without this the next failure is thirty seconds
+  // later and says only `Expected: true / Received: false`, naming nothing —
+  // which is how the original defect stayed unidentified across six CI runs.
+  await expect(page.getByRole('textbox', { name: 'Digit 1', exact: true })).toHaveValue(code.slice(0, 1));
+  await expect(page.getByRole('textbox', { name: 'Digit 6', exact: true })).toHaveValue(code.slice(5, 6));
 }
 
 function sessionBytes(context: BrowserContext) {
@@ -126,7 +161,21 @@ async function observeVerify(page: Page, userId: string, hold = false) {
   return {
     receipts, release,
     wait: async (count: number) => {
-      await expect.poll(() => failed || receipts.length >= count, { timeout: 30_000 }).toBe(true);
+      // expect.poll THROWS on timeout, so the assertion below — the one
+      // carrying the only human-readable message — is unreachable in exactly
+      // the case that fires. What CI printed for six runs was a bare
+      // `Expected: true / Received: false`, which names nothing and is why the
+      // real cause (a paste event with no clipboardData, see enterCode) went
+      // unidentified. Fold the diagnosis into the failure itself.
+      try {
+        await expect.poll(() => failed || receipts.length >= count, { timeout: 30_000 }).toBe(true);
+      } catch {
+        throw new Error(
+          `No GoTrue /auth/v1/verify receipt after 30s: ${receipts.length} of ${count} observed, ` +
+          `${delivered} delivered, route fetch failed=${failed}. ZERO observed means the POST was ` +
+          'never issued at all, so the flow never reached verification — check that the code ' +
+          'actually landed in the digit boxes before suspecting the app.');
+      }
       expect(failed, 'The real local GoTrue verification response must be readable').toBe(false);
     },
     delivered: async (count: number) => {
