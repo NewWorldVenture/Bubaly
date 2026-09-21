@@ -12,6 +12,7 @@
 // card assembles the whole checklist and each item is a single tap.
 
 import { createFormat } from '@/lib/utils/format';
+import { dayKeyInZone } from '@/lib/schedule/zoned';
 import { DEFAULT_LOCALE, type LocaleCode } from '@/lib/i18n/locales';
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;
@@ -111,7 +112,16 @@ const OUTDOOR = new Set<MomentCategory>(['sports', 'outdoors', 'trip', 'celebrat
  * Only emits steps that make sense for the moment (no packing list for a phone
  * call), so the card stays short and every item is worth a tap.
  */
-export function buildMomentPrep(event: MomentEvent, opts: { now?: Date; departure?: MomentDeparture | null } = {}): MomentPrep {
+export function buildMomentPrep(
+  event: MomentEvent,
+  // `timeZone` belongs on the options object rather than as another positional:
+  // the item LABELS carry clock times, and binding only the caller's own clock
+  // leaves them behind. That is not hypothetical — it shipped for one run of this
+  // fix, and the push read "Leave by 8:25 AM — Leave by 3:25 PM": the same
+  // instant, zoned in the headline and Greenwich in the step beside it, one
+  // notification contradicting itself.
+  opts: { now?: Date; departure?: MomentDeparture | null; timeZone?: string } = {},
+): MomentPrep {
   const category = classifyMoment(event);
   const hasLocation = Boolean(event.location && event.location.trim());
   const start = new Date(event.starts_at);
@@ -138,7 +148,7 @@ export function buildMomentPrep(event: MomentEvent, opts: { now?: Date; departur
   if (leaveByISO) {
     push({
       id: 'leave-by', domain: 'time',
-      label: `Leave by ${fmtClock(leaveByISO)}`,
+      label: `Leave by ${fmtClock(leaveByISO, undefined, opts.timeZone)}`,
       hint: composed ? `${buffer} min drive to ${event.location}` : `${buffer} min to ${event.location}`,
       reminderTitle: `Leave for ${event.title}`,
     });
@@ -196,10 +206,23 @@ function shopHint(category: MomentCategory): { label: string; hint: string; item
   }
 }
 
-function fmtClock(iso: string, locale: LocaleCode = DEFAULT_LOCALE): string {
+function fmtClock(iso: string, locale: LocaleCode = DEFAULT_LOCALE, timeZone?: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  return createFormat(locale).fmtTime(d);
+  return createFormat(locale, undefined, timeZone).fmtTime(d);
+}
+
+/**
+ * A calendar day as a whole number, in `tz`, so two of them subtract to a count
+ * of DAYS.
+ *
+ * Day keys parsed at UTC midnight are exactly 86_400_000 apart whatever the zone
+ * does in between, so this is DST-proof in a way `(a - b) / 86400000` on the
+ * instants is not.
+ */
+function dayIndexInZone(ms: number, tz: string): number {
+  const key = dayKeyInZone(ms, tz);
+  return key ? Math.round(Date.parse(`${key}T00:00:00Z`) / 86_400_000) : Math.round(ms / 86_400_000);
 }
 
 /** Human "when" label for a moment, e.g. "in 2 hours", "Tomorrow", "Sat 9:00 AM". */
@@ -209,11 +232,24 @@ export function momentWhen(
   now: Date = new Date(),
   locale: LocaleCode = DEFAULT_LOCALE,
   t?: Translate,
+  timeZone?: string,
 ): string {
   // FORWARD-facing, so not fmtTimeAgo. The clock and the date take the locale; the
   // five words take a translator, with an English fallback for the caller that has
   // no reader — lib/moments/notify.ts is a cron, and that is I18N-001, not an
   // oversight here.
+  //
+  // `timeZone` is optional for the same reason it is optional on `createFormat`,
+  // and NOT for the reason a default usually is: two of the three callers are
+  // client components, where the runtime IS the reader and omitting it is the
+  // correct answer. The third is that cron, whose output is a PUSH NOTIFICATION
+  // — "Get ready: Soccer · Tomorrow", "Leave by 4:00 PM" — and which therefore
+  // has to pass one. `lib/server/notifications.ts` resolves the family's zone at
+  // its line 77 and simply did not hand it down.
+  //
+  // THREE things here are zone-sensitive and all three had to move, which is why
+  // this is not a one-line change: the clock below, the Today/Tomorrow decision,
+  // and the weekday label at the end.
   const d = new Date(startsAt);
   if (Number.isNaN(d.getTime())) return '';
   const mins = Math.round((d.getTime() - now.getTime()) / 60000);
@@ -225,11 +261,15 @@ export function momentWhen(
     const hours = Math.round(mins / 60);
     return t ? t('moments.inNHours', { hours }) : `in ${hours} hours`;
   }
-  const startDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const dayDiff = Math.round((startDay.getTime() - today.getTime()) / 86400000);
-  const time = allDay ? '' : ` ${fmtClock(startsAt, locale)}`;
+  // Whose day. With a zone bound, both sides are day KEYS in it and the gap is
+  // counted in calendar days; with none, the original local-parts arithmetic is
+  // kept exactly, which is right in a browser.
+  const dayDiff = timeZone
+    ? dayIndexInZone(d.getTime(), timeZone) - dayIndexInZone(now.getTime(), timeZone)
+    : Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+      - new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) / 86400000);
+  const time = allDay ? '' : ` ${fmtClock(startsAt, locale, timeZone)}`;
   if (dayDiff === 0) return `${t ? t('calendar.today') : 'Today'}${time}`;
   if (dayDiff === 1) return `${t ? t('quickCapture.tomorrow') : 'Tomorrow'}${time}`;
-  return `${createFormat(locale).fmtDate(d, 'EEE, MMM d')}${time}`;
+  return `${createFormat(locale, undefined, timeZone).fmtDate(d, 'EEE, MMM d')}${time}`;
 }
