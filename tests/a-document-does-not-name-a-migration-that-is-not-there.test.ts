@@ -32,7 +32,22 @@ import { join } from 'node:path';
 // So this guard is on the two documents that are ACTED ON, not on every .md in
 // the repository. audit/*.md and docs/AGENT_HANDOFF.md are archives: they record
 // what was true at the time and are supposed to keep saying it.
-const GUARDED = ['finalaudit.md', 'docs/PENDING_PROD_MIGRATIONS.md'] as const;
+const GUARDED: readonly string[] = [
+  'finalaudit.md',
+  'docs/PENDING_PROD_MIGRATIONS.md',
+  // Added after three more stale pointers were found HERE, outside the two
+  // documents this guard originally covered: docs/audit/*.sql said
+  // `0301_family_erasure_indexes.sql` three times, and `0301` is
+  // `0301_notification_authorship.sql` — an unrelated migration an operator
+  // following the runbook would have applied instead. These files are operative
+  // in the same sense the two above are: run-probes.sh executes the *-check.sql
+  // ones in CI, and the *-concurrently.sql one is a script a human runs by hand
+  // against production. Widened with NO new exemptions, which is the only
+  // honest way to widen a guard: the instances were fixed first.
+  ...readdirSync('docs/audit')
+    .filter((f) => f.endsWith('.sql') || f.endsWith('.sh'))
+    .map((f) => `docs/audit/${f}`),
+];
 
 /**
  * A document sometimes has to QUOTE a name that is dead — that is what a record
@@ -52,6 +67,15 @@ const STRUCK = /~~`(\d{4,5}_[a-z0-9_]+?)(\.sql)?`~~/g;
 /** `0297_sensitive_tables_respect_role` — with or without the .sql, backticked. */
 const MIGRATION_REF = /`(\d{4,5}_[a-z0-9_]+?)(\.sql)?`/g;
 
+/**
+ * The same thing unbackticked, for the .sql and .sh files, which cite migrations
+ * in ordinary comment prose. A name ending in `_` is a comment WRAPPED across
+ * two lines, not a reference — `0320_audit_` is the head of
+ * `0320_audit_logs_says_who_wrote_it`, and treating it as a missing migration
+ * would be a false positive that teaches a reader to ignore this guard.
+ */
+const BARE_REF = /\b(\d{4,5}_[a-z0-9_]*[a-z0-9])(?:\.sql)?\b/g;
+
 function migrationStems(): Set<string> {
   return new Set(
     readdirSync('supabase/migrations')
@@ -63,7 +87,8 @@ function migrationStems(): Set<string> {
 /** Every migration this document points a reader AT — struck citations excluded. */
 function referencedIn(doc: string): string[] {
   const text = readFileSync(join(process.cwd(), doc), 'utf8').replace(STRUCK, '');
-  return [...text.matchAll(MIGRATION_REF)].map((m) => m[1]);
+  const pattern = doc.endsWith('.md') ? MIGRATION_REF : BARE_REF;
+  return [...text.matchAll(pattern)].map((m) => m[1]);
 }
 
 /** Every migration this document names as dead. */
@@ -130,9 +155,19 @@ describe('a document that is acted on does not name a migration that is not ther
     expect(onDisk.size).toBeGreaterThan(200);
     expect(onDisk.has('0297_sensitive_tables_respect_role')).toBe(true);
 
-    for (const doc of GUARDED) {
+    // The floor is per-KIND, because the two kinds are not alike. The markdown
+    // documents are ledgers and name dozens; a single boundary probe names the
+    // one or two migrations that own the rule it tests, and demanding more of
+    // it would be asserting something untrue — which is how a floor stops being
+    // evidence and starts being noise someone deletes.
+    for (const doc of ['finalaudit.md', 'docs/PENDING_PROD_MIGRATIONS.md']) {
       expect(referencedIn(doc).length, `${doc} suddenly names no migrations at all`).toBeGreaterThan(5);
     }
+    const probes = GUARDED.filter((d) => !d.endsWith('.md'));
+    expect(probes.length, 'docs/audit has stopped yielding probe files').toBeGreaterThan(20);
+    const named = probes.flatMap(referencedIn);
+    expect(named.length, 'not one probe under docs/audit names a migration — the bare-name parser has stopped matching')
+      .toBeGreaterThan(20);
 
     // The corrections this guard was written for are present and resolve.
     const audit = referencedIn('finalaudit.md');

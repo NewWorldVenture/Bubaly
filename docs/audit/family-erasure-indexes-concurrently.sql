@@ -1,6 +1,6 @@
 -- ── S-05 (part) The same 36 indexes, for a live database ─────────────────────
 --
--- `supabase/migrations/0301_family_erasure_indexes.sql` uses plain `create index`
+-- `supabase/migrations/0321_family_erasure_indexes.sql` uses plain `create index`
 -- because a migration file runs inside a transaction and `create index
 -- concurrently` cannot. Plain creation takes ACCESS EXCLUSIVE on each table for
 -- the duration of the build, which on a live `ai_messages` or
@@ -9,7 +9,7 @@
 -- So apply THIS file to production instead: one statement at a time, outside any
 -- transaction, `psql -f` with ON_ERROR_STOP off so a single failure does not
 -- abandon the rest. `if not exists` makes it resumable, and re-running it after
--- 0301 has been applied is a no-op.
+-- 0321 has been applied is a no-op.
 --
 -- A CONCURRENTLY build that is interrupted leaves an INVALID index behind. Find
 -- them with:

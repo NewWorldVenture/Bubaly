@@ -101,7 +101,7 @@ select 'A-14 family-scoped index probe: ALL INVARIANTS PASSED' as result;
 -- `ai_messages` is the example on purpose: the list above names it as one of four
 -- tables "checked and left alone", on the correct grounds that its page query
 -- carries another selective column. That reasoning is about the READ and says
--- nothing about the DELETE, which is how all four ended up in 0301's list.
+-- nothing about the DELETE, which is how all four ended up in 0321's list.
 --
 -- Deliberately scoped to `families`. 191 further constraints reference
 -- `family_members` (158), `vacations` (22) and `child_wallets` (11) — those are
