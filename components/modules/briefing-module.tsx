@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useSyncExternalStore } from 'react';
+import { localDayKey, localDayKeyOf } from '@/lib/time/local-day';
 import Link from 'next/link';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -785,7 +786,11 @@ export function BriefingModule(props: BriefingModuleProps = {}) {
     return () => clearInterval(id);
   }, []);
 
-  const contextKey = briefingContextKey(context, now.toISOString().slice(0, 10), locale.code);
+  // The cache key rolls over when the CONTENT does. `today` above is the
+  // reader's day now, so a Greenwich cache key would hold yesterday's briefing
+  // through the gap between the two midnights — up to twelve hours of showing a
+  // brief the page itself considers stale.
+  const contextKey = briefingContextKey(context, localDayKey(now), locale.code);
 
   useEffect(() => {
     try {
@@ -822,7 +827,13 @@ function ScopedBriefingModule({ recap, relationships, contextKey, now, tab, setT
   const alsoToday = active?.data?.alsoToday ?? [];
   const alsoTodayUnavailable = active?.data?.alsoTodayUnavailable ?? false;
   const generate = session.generate;
-  const today = now.toISOString().slice(0, 10);
+  // The READER's day. `now.toISOString().slice(0, 10)` is the day at Greenwich,
+  // and this is a CLIENT module — the runtime IS the reader — so for anyone west
+  // of Greenwich after 16:00, or east of it before 08:00, "today" was somebody
+  // else's. Both sides move together: the key built here and the keys it is
+  // compared against below, because a local key measured against a Greenwich one
+  // is the same defect in a different place.
+  const today = localDayKey(now);
 
   useEffect(() => () => session.clear(), [session]);
 
@@ -854,11 +865,11 @@ function ScopedBriefingModule({ recap, relationships, contextKey, now, tab, setT
 
   const todayEvents = useMemo(() => {
     const list = (rawEvents ?? []) as CalEvent[];
-    return list.filter(e => e.starts_at.slice(0, 10) === today).sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+    return list.filter(e => localDayKeyOf(e.starts_at) === today).sort((a, b) => a.starts_at.localeCompare(b.starts_at));
   }, [rawEvents, today]);
   const urgentReminders = useMemo(() => {
     const list = (rawReminders ?? []) as ReminderRow[];
-    return list.filter(r => r.remind_at && r.remind_at.slice(0, 10) <= today).slice(0, 6);
+    return list.filter(r => { const d = localDayKeyOf(r.remind_at); return d !== null && d <= today; }).slice(0, 6);
   }, [rawReminders, today]);
   const kitchenError = eventsError || remindersError;
   const refreshKitchen = () => { void refreshEvents(); void refreshReminders(); };

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
+import { localDayKey, localDayKeyOf } from '@/lib/time/local-day';
 import { Activity, ChevronRight, Dumbbell, Heart, Plus, Sparkles, Zap, Thermometer, CheckCircle2, Trash2, Target, Loader2 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
@@ -269,7 +270,11 @@ export function HealthModule() {
     const activeDaySet = new Set<string>();
     metrics.forEach((m) => {
       if (m.type === 'steps' || m.type === 'active_minutes') {
-        activeDaySet.add(m.recorded_at.slice(0, 10));
+        // The reader's day, not Greenwich's: this counts ACTIVE DAYS and sums
+        // steps per day, so a 17:00 walk in Los Angeles was credited to tomorrow
+        // and could make one day look like two.
+        const k = localDayKeyOf(m.recorded_at);
+        if (k) activeDaySet.add(k);
       }
     });
     return [
@@ -288,14 +293,19 @@ export function HealthModule() {
     for (const m of members) {
       const memberStepDays = new Map<string, number>();
       metrics.filter((met) => met.member_id === m.id && met.type === 'steps').forEach((met) => {
-        const day = met.recorded_at.slice(0, 10);
-        memberStepDays.set(day, (memberStepDays.get(day) || 0) + met.value);
+        const day = localDayKeyOf(met.recorded_at);
+        if (day) memberStepDays.set(day, (memberStepDays.get(day) || 0) + met.value);
       });
       let consecutive = 0;
       for (let i = 0; i < 7; i++) {
         const d = new Date();
         d.setDate(d.getDate() - i);
-        const key = d.toISOString().slice(0, 10);
+        // `setDate` walks LOCAL days, and `memberStepDays` above is now keyed by
+        // the local day too — so keying this with `toISOString()` would look up
+        // Greenwich's key in a local-keyed map and miss, breaking the streak for
+        // every reader with an offset. Half-converting is worse than not
+        // converting: before, both sides were Greenwich and at least agreed.
+        const key = localDayKey(d);
         if ((memberStepDays.get(key) || 0) >= stepGoalFor(m.id)) {
           consecutive++;
         } else break;
