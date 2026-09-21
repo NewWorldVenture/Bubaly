@@ -30,9 +30,17 @@ export async function saveCaptureShortcutsAction(input: { keys: string[] }): Pro
   const keys = sanitizeShortcutKeys(input.keys, undefined, MAX_CAPTURE_SHORTCUTS);
   const supabase = await createServer();
 
-  // Read-merge-write so we never clobber other notification_prefs keys.
-  const { data: existing } = await supabase.from('user_preferences')
+  // Read-merge-write so we never clobber other notification_prefs keys. A read
+  // that FAILED is not an empty prefs blob: the upsert below replaces the WHOLE
+  // notification_prefs column, so merging into `{}` would erase App Lock, the
+  // Google Calendar token and every other key this member has set. Fail closed
+  // instead — the same guard the Google Calendar callback and App Lock use.
+  const { data: existing, error: readError } = await supabase.from('user_preferences')
     .select('notification_prefs').eq('user_id', ctx.user.id).maybeSingle();
+  if (readError) {
+    console.error('[capture/shortcuts] preferences read failed', readError);
+    return { ok: false, error: readError.message };
+  }
   const prefs = (existing?.notification_prefs as Record<string, unknown> | null) ?? {};
   const merged = { ...prefs, [CAPTURE_SHORTCUTS_PREF_KEY]: keys };
 
