@@ -15,11 +15,25 @@ const fold = (line: string) => line; // (kept simple; lines are short)
 const esc = (s: string) => s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
 const ymd = (d: string) => d.replace(/-/g, '');
 
-/** DTEND for all-day events is exclusive, so add one day to the inclusive end. */
+const DAY = 86_400_000;
+
+/**
+ * DTEND for all-day events is exclusive, so add one day to the inclusive end.
+ *
+ * `IcsEvent.start`/`.end` are DATE values — the family's calendar days, straight
+ * out of the `vacations.start_date`/`end_date` DATE columns — not instants, so
+ * the step happens entirely in UTC and the day comes back exactly as it went in.
+ * The previous anchor was LOCAL midnight (`new Date(ymdDate + 'T00:00:00')`),
+ * stepped with `setDate`, then read back with `toISOString()`, which re-expresses
+ * that local moment at Greenwich: east of Greenwich the day slid one back (local
+ * midnight 8 Jul in Tokyo is 7 Jul 15:00Z), so a 1-7 Jul trip exported
+ * DTEND 20260707 and every importing calendar — Google, Apple, Outlook — dropped
+ * the last day of the trip. At or west of Greenwich it landed on the right day,
+ * which is why CI (UTC and America/Los_Angeles) never saw it. UTC days are always
+ * exactly 24h, so stepping by DAY here is DST-proof too.
+ */
 function nextDay(ymdDate: string): string {
-  const d = new Date(ymdDate + 'T00:00:00');
-  d.setDate(d.getDate() + 1);
-  return d.toISOString().slice(0, 10);
+  return new Date(Date.parse(ymdDate + 'T00:00:00Z') + DAY).toISOString().slice(0, 10);
 }
 
 export function buildICS(events: IcsEvent[], calName = 'Bubaly Vacations'): string {
