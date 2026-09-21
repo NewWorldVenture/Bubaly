@@ -57,14 +57,25 @@ export async function refreshPlaybookAction(): Promise<Result> {
   // These signals are COUNTS over the whole window, so a capped read does not
   // shorten a list, it reports the wrong number. `.limit(N)` above 1,000 never
   // applied — PostgREST caps a response at db-max-rows regardless.
-  const { rows: plans } = await readAll((from, to) => sb.from('meal_plans')
+  const { rows: plans, error: plansError } = await readAll((from, to) => sb.from('meal_plans')
     .select('meal_id').eq('family_id', familyId).gte('plan_date', since.slice(0, 10))
     .order('id').range(from, to), { max: 2000 });
+  // A read that FAILED is not a family with no meal plans, and `readAll`'s
+  // ceiling error means these rows are a PREFIX. Either way the counts below
+  // would be wrong, so learn nothing rather than learn from a fragment.
+  if (plansError) {
+    console.error('[dashboard/playbook] meal plan read failed', plansError);
+    return { ok: false, error: plansError.message };
+  }
   const mealCounts = new Map<string, number>();
   for (const p of plans ?? []) if (p.meal_id) mealCounts.set(p.meal_id, (mealCounts.get(p.meal_id) ?? 0) + 1);
   if (mealCounts.size) {
-    const { data: meals } = await sb.from('meals')
+    const { data: meals, error: mealsError } = await sb.from('meals')
       .select('id,name').eq('family_id', familyId).in('id', [...mealCounts.keys()]);
+    if (mealsError) {
+      console.error('[dashboard/playbook] meal name read failed', mealsError);
+      return { ok: false, error: mealsError.message };
+    }
     for (const m of meals ?? []) {
       const count = mealCounts.get(m.id) ?? 0;
       if (m.name) signals.push({ type: 'meal', name: m.name, count });
@@ -72,9 +83,13 @@ export async function refreshPlaybookAction(): Promise<Result> {
   }
 
   // 2) Grocery staples — items added to the list again and again.
-  const { rows: groceries } = await readAll((from, to) => sb.from('grocery_items')
+  const { rows: groceries, error: groceriesError } = await readAll((from, to) => sb.from('grocery_items')
     .select('name').eq('family_id', familyId).gte('created_at', since)
     .order('id').range(from, to), { max: 4000 });
+  if (groceriesError) {
+    console.error('[dashboard/playbook] grocery read failed', groceriesError);
+    return { ok: false, error: groceriesError.message };
+  }
   const groceryCounts = new Map<string, { name: string; count: number }>();
   for (const g of groceries ?? []) {
     const key = (g.name ?? '').trim().toLowerCase();
@@ -85,17 +100,28 @@ export async function refreshPlaybookAction(): Promise<Result> {
   for (const { name, count } of groceryCounts.values()) signals.push({ type: 'grocery', name, count });
 
   // 3) Explicit family favorites (already curated by the family).
-  const { data: favs } = await sb.from('family_favorites')
+  const { data: favs, error: favsError } = await sb.from('family_favorites')
     .select('kind,name,member_id,rating').eq('family_id', familyId).limit(500);
+  if (favsError) {
+    console.error('[dashboard/playbook] favorites read failed', favsError);
+    return { ok: false, error: favsError.message };
+  }
   for (const f of favs ?? []) {
     if (f.name) signals.push({ type: 'favorite', kind: f.kind ?? 'thing', name: f.name, memberId: f.member_id, rating: f.rating });
   }
 
   // 4) Annual traditions — same-titled events recurring across multiple years.
   // Three years of events for one household — already 1,906 on seeded data.
-  const { rows: events } = await readAll((from, to) => sb.from('calendar_events')
+  const { rows: events, error: eventsError } = await readAll((from, to) => sb.from('calendar_events')
     .select('title,starts_at,recurrence').eq('family_id', familyId).gte('starts_at', since3y)
     .order('id').range(from, to), { max: 4000 });
+  // A tradition is proved by events spread across YEARS, so a prefix of the
+  // calendar silently demotes a real one to `years < 2` and the family is told
+  // it has none. Fail closed instead of publishing that verdict.
+  if (eventsError) {
+    console.error('[dashboard/playbook] calendar read failed', eventsError);
+    return { ok: false, error: eventsError.message };
+  }
   const byTitle = new Map<string, { title: string; years: Set<number>; earliest: string; yearly: boolean }>();
   for (const e of events ?? []) {
     const key = (e.title ?? '').trim().toLowerCase();
@@ -115,8 +141,12 @@ export async function refreshPlaybookAction(): Promise<Result> {
   }
 
   // 5) Travel style — recurring trip kind + season across the family's vacations.
-  const { data: trips } = await sb.from('vacations')
+  const { data: trips, error: tripsError } = await sb.from('vacations')
     .select('kind,start_date').eq('family_id', familyId).limit(500);
+  if (tripsError) {
+    console.error('[dashboard/playbook] vacation read failed', tripsError);
+    return { ok: false, error: tripsError.message };
+  }
   const styleCounts = new Map<string, number>();
   const bump = (style: string) => styleCounts.set(style, (styleCounts.get(style) ?? 0) + 1);
   for (const v of trips ?? []) {

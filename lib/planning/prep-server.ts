@@ -1,7 +1,8 @@
 // Prep-plan generation — service-callable core (no request context), shared by
 // the on-demand server action and the model-refresh cron. Reads real upcoming
 // signals (trips, member birthdays, expiring documents), runs the pure generator,
-// and upserts plans + steps. Idempotent; preserves is_done on regeneration.
+// and upserts plans + steps. Idempotent; preserves is_done, and preserves what
+// the family decided about a plan (dismissed/done) on regeneration.
 //
 // EVERY DAY IN THIS FILE IS THE FAMILY'S DAY, which is why `tz` is a parameter
 // rather than something this module reads off the server. It used to open with
@@ -95,9 +96,36 @@ export async function runPrepGeneration(
   const plans = generatePrepPlans(signals, todayKey);
   if (plans.length === 0) return { ok: true, plans: 0 };
 
-  const planRows = plans.map((p) => ({
+  // WHAT THE FAMILY DECIDED ABOUT A PLAN IS NOT THE GENERATOR'S TO UNDO.
+  // `generatePrepPlans` is pure over the current signals and never looks at the
+  // rows already on the table, so every plan whose signal is still in the
+  // horizon is re-emitted on every run. Writing a hardcoded `status: 'active'`
+  // back through the upsert therefore RE-ACTIVATED a plan the family had
+  // dismissed with the X on /dashboard/prep-plans — their only way to hide one,
+  // since there is no un-dismiss — on the next "Generate plans" click and,
+  // with nobody watching, on every model-refresh cron sweep.
+  //
+  // Same shape as lib/intelligence/hard-signals-server.ts: read what the family
+  // already decided, leave those rows out of the write entirely, and omit
+  // `status` from the payload so a dismissal landing BETWEEN this read and the
+  // upsert is not reset either. New rows take the schema's 'active' default
+  // (0131_prep_plans.sql), which is the only place that value belongs.
+  //
+  // THE READ FAILS CLOSED. PostgREST answers a refusal with
+  // `{ data: null, error }`, so a dropped error reads as "this family has
+  // dismissed nothing" and the very next write un-dismisses everything. A
+  // generation that cannot see the existing rows does not write.
+  const { data: existing, error: existingErr } = await sb.from('prep_plans')
+    .select('signal_kind, signal_id, status').eq('family_id', familyId);
+  if (existingErr) return { ok: false, error: existingErr.message, plans: 0 };
+  const decided = new Set((existing ?? []).filter((r) => r.status !== 'active').map((r) => `${r.signal_kind}:${r.signal_id}`));
+
+  const fresh = plans.filter((p) => !decided.has(`${p.kind}:${p.signalId}`));
+  if (fresh.length === 0) return { ok: true, plans: 0 };
+
+  const planRows = fresh.map((p) => ({
     family_id: familyId, signal_kind: p.kind, signal_id: p.signalId,
-    title: p.title, target_date: p.targetDate, urgency: p.urgency, status: 'active', created_by: createdBy,
+    title: p.title, target_date: p.targetDate, urgency: p.urgency, created_by: createdBy,
   }));
   const { error: planErr } = await sb.from('prep_plans').upsert(planRows, { onConflict: 'family_id,signal_kind,signal_id' });
   if (planErr) return { ok: false, error: planErr.message, plans: 0 };
@@ -107,7 +135,7 @@ export async function runPrepGeneration(
   const idByKey = new Map<string, string>();
   for (const r of idRows ?? []) idByKey.set(`${r.signal_kind}:${r.signal_id}`, r.id);
 
-  const stepRows = plans.flatMap((p) => {
+  const stepRows = fresh.flatMap((p) => {
     const planId = idByKey.get(`${p.kind}:${p.signalId}`);
     if (!planId) return [];
     return p.steps.map((s, i) => ({
@@ -119,5 +147,5 @@ export async function runPrepGeneration(
     if (stepErr) return { ok: false, error: stepErr.message, plans: 0 };
   }
 
-  return { ok: true, plans: plans.length };
+  return { ok: true, plans: fresh.length };
 }
