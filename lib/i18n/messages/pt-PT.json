@@ -1307,6 +1307,7 @@
   "adminMarketingSocial.newPost": "Nova publicação",
   "adminMarketingSocial.noPostsPlanned": "Nenhuma publicação planeada",
   "adminMarketingSocial.postCopy": "Texto da publicação…",
+  "adminMarketingSocial.thisRunWasAlreadyTaken": "Esta execução já foi assumida pelo agendador ou por outro administrador. Recarregue para ver o estado atual.",
   "adminMarketingSurveys.activateTheSurveyToAcceptResponses": "(ative o inquérito para aceitar respostas)",
   "adminMarketingSurveys.allSurveys": "Todos os inquéritos",
   "adminMarketingSurveys.createSurvey": "Criar inquérito",

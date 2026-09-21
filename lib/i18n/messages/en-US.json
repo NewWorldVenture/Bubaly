@@ -1307,6 +1307,7 @@
   "adminMarketingSocial.newPost": "New post",
   "adminMarketingSocial.noPostsPlanned": "No posts planned",
   "adminMarketingSocial.postCopy": "Post copy…",
+  "adminMarketingSocial.thisRunWasAlreadyTaken": "This run was already taken by the scheduler or another admin. Reload to see the latest.",
   "adminMarketingSurveys.activateTheSurveyToAcceptResponses": "(activate the survey to accept responses)",
   "adminMarketingSurveys.allSurveys": "All surveys",
   "adminMarketingSurveys.createSurvey": "Create survey",

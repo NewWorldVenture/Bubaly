@@ -1307,6 +1307,7 @@
   "adminMarketingSocial.newPost": "Nieuw bericht",
   "adminMarketingSocial.noPostsPlanned": "Geen berichten gepland",
   "adminMarketingSocial.postCopy": "Berichttekst…",
+  "adminMarketingSocial.thisRunWasAlreadyTaken": "Deze run is al opgepakt door de planner of een andere beheerder. Herlaad om de laatste stand te zien.",
   "adminMarketingSurveys.activateTheSurveyToAcceptResponses": "(activeer de enquête om reacties te accepteren)",
   "adminMarketingSurveys.allSurveys": "Alle enquêtes",
   "adminMarketingSurveys.createSurvey": "Enquête maken",

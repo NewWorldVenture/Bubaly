@@ -1307,6 +1307,7 @@
   "adminMarketingSocial.newPost": "Neuer Beitrag",
   "adminMarketingSocial.noPostsPlanned": "Keine Beiträge geplant",
   "adminMarketingSocial.postCopy": "Beitragstext …",
+  "adminMarketingSocial.thisRunWasAlreadyTaken": "Dieser Lauf wurde bereits vom Planer oder einem anderen Administrator übernommen. Neu laden, um den aktuellen Stand zu sehen.",
   "adminMarketingSurveys.activateTheSurveyToAcceptResponses": "(Umfrage aktivieren, um Antworten anzunehmen)",
   "adminMarketingSurveys.allSurveys": "Alle Umfragen",
   "adminMarketingSurveys.createSurvey": "Umfrage erstellen",

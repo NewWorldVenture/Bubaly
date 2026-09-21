@@ -1307,6 +1307,7 @@
   "adminMarketingSocial.newPost": "Nueva publicación",
   "adminMarketingSocial.noPostsPlanned": "No hay publicaciones planificadas",
   "adminMarketingSocial.postCopy": "Texto de la publicación…",
+  "adminMarketingSocial.thisRunWasAlreadyTaken": "Esta ejecución ya la tomó el planificador u otro administrador. Recarga para ver lo último.",
   "adminMarketingSurveys.activateTheSurveyToAcceptResponses": "(activa la encuesta para aceptar respuestas)",
   "adminMarketingSurveys.allSurveys": "Todas las encuestas",
   "adminMarketingSurveys.createSurvey": "Crear encuesta",

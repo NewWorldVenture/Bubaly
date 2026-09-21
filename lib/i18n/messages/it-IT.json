@@ -1307,6 +1307,7 @@
   "adminMarketingSocial.newPost": "Nuovo post",
   "adminMarketingSocial.noPostsPlanned": "Nessun post pianificato",
   "adminMarketingSocial.postCopy": "Testo del post…",
+  "adminMarketingSocial.thisRunWasAlreadyTaken": "Questa esecuzione è già stata presa dallo scheduler o da un altro amministratore. Ricarica per vedere lo stato aggiornato.",
   "adminMarketingSurveys.activateTheSurveyToAcceptResponses": "(attiva il sondaggio per accettare risposte)",
   "adminMarketingSurveys.allSurveys": "Tutti i sondaggi",
   "adminMarketingSurveys.createSurvey": "Crea sondaggio",

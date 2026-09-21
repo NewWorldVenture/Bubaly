@@ -6,6 +6,7 @@
 // server action is its own endpoint: a gate in the page that renders the form
 // does not protect the function the form posts to.
 import { revalidatePath } from 'next/cache';
+import { getTranslations } from '@/lib/i18n/server';
 import { z } from 'zod';
 import { createServiceClient } from '@/lib/supabase/server';
 import { isSuperAdmin, getUser } from '@/lib/supabase/auth';
@@ -176,6 +177,7 @@ export async function deleteRecurringAdAction(id: string): Promise<ActionResult>
  * cron runner uses.
  */
 export async function runRecurringAdNowAction(id: string): Promise<ActionResult> {
+  const t = await getTranslations();
   const gate = await requireAdmin();
   if ('error' in gate) return { ok: false, error: gate.error };
   const supabase = createServiceClient();
@@ -216,7 +218,12 @@ export async function runRecurringAdNowAction(id: string): Promise<ActionResult>
     return { ok: false, error: 'Could not start this run.' };
   }
   if ((claimed?.length ?? 0) === 0) {
-    return { ok: false, error: 'This run was already taken by the scheduler or another admin. Reload to see the latest.' };
+    // Through the catalogue, not as a literal. This is the only NEW sentence
+    // this fix adds, and tests/i18n-ungated-surface-ratchet.test.ts counts it —
+    // as TWO, because the scanner splits on sentences. The ratchet's two
+    // legitimate reasons to rise are a stricter scanner and a tree merge; adding
+    // copy is neither, and its own message says to lift it instead.
+    return { ok: false, error: t('adminMarketingSocial.thisRunWasAlreadyTaken') };
   }
 
   const result = await publishOccurrence(supabase, ad, ad.occurrences, now, body);
