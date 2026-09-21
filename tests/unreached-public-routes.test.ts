@@ -107,7 +107,24 @@ describe('the anonymous subscribe endpoint bounds what it is handed', () => {
     // The point of a honeypot is that the refusal is INDISTINGUISHABLE from
     // success. If this ever becomes a 400, the field stops being a honeypot and
     // becomes a field bots simply stop filling.
-    expect(s).toMatch(/website[\s\S]{0,200}?NextResponse\.json\(\{\s*ok:\s*true\s*\}\)/);
+    //
+    // This used to match the literal `NextResponse.json({ ok: true })` here,
+    // and that was only half the property — the route ALSO answered
+    // `{ ok: true, already: true }` for an address already on the list, so the
+    // honeypot was indistinguishable from a fresh subscribe and DISTINGUISHABLE
+    // from a known one. A bot holding one subscribed address could submit it
+    // twice, once with `website` filled and once without, and the two answers
+    // named the trap field. The literal was the weaker claim precisely because
+    // it could be satisfied while a sibling branch answered something else.
+    //
+    // So what is pinned now is the stronger thing: the honeypot returns the
+    // SHARED answer every accepted submission returns, not a literal of its own
+    // that can drift from it. The byte-identical answers themselves are proved
+    // behaviourally in
+    // tests/a-subscribe-form-does-not-say-who-is-already-subscribed.test.ts.
+    expect(s).toMatch(/body\.website[\s\S]{0,200}?return accepted\(\);/);
+    expect(s).toMatch(/const ACCEPTED = Object\.freeze\(\{ ok: true \}\);/);
+    expect(s).toMatch(/const accepted = \(\) => NextResponse\.json\(ACCEPTED\);/);
   });
 
   it('keeps the anonymous write rate limited and the body bounded', () => {
