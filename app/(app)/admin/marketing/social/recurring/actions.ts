@@ -9,6 +9,7 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { createServiceClient } from '@/lib/supabase/server';
 import { isSuperAdmin, getUser } from '@/lib/supabase/auth';
+import { wroteNoRows } from '@/lib/supabase/errors';
 import { PLATFORMS } from '@/lib/social/capabilities';
 import {
   CADENCES, isValidTimezone, nextRunAt, parseTimesOfDay, parseVariants,
@@ -138,12 +139,17 @@ export async function setRecurringAdStatusAction(id: string, status: 'active' | 
     return { ok: false, error: 'This campaign has no future run left. Edit its schedule or end date.' };
   }
 
-  const { error } = await supabase
+  // `.is('deleted_at', null)` repeats the read's filter on the WRITE, so a
+  // campaign removed between the two is not quietly resumed — and `.select('id')`
+  // is what makes that predicate mean anything. "Campaign resumed." on zero rows
+  // leaves a paused campaign showing as active, with a next_run_at nobody set.
+  // Audit C1-S9-59.
+  const { data: changed, error } = await supabase
     .from('marketing_recurring_ads')
     .update({ status, next_run_at: nextRun?.toISOString() ?? null, updated_by: gate.userId })
-    .eq('id', id);
-  if (error) {
-    console.error('[recurring-ads] status change failed', error);
+    .eq('id', id).is('deleted_at', null).select('id');
+  if (error || wroteNoRows(changed)) {
+    console.error('[recurring-ads] status change failed', error ?? 'no rows updated');
     return { ok: false, error: 'Could not change this campaign.' };
   }
   revalidatePath(PAGE);
@@ -156,12 +162,18 @@ export async function deleteRecurringAdAction(id: string): Promise<ActionResult>
   const supabase = createServiceClient();
   // Soft delete + cleared next run: the run ledger stays readable as history,
   // and the due index stops seeing it.
-  const { error } = await supabase
+  // No prior read here, so `.select('id')` is the only thing standing between a
+  // missing id and "Campaign removed." — and a campaign reported removed while
+  // its next_run_at still stands goes on posting to the family's channels.
+  // Filtered on id alone on purpose: re-removing an already-removed campaign
+  // rewrites the same soft-delete columns and is meant to stay idempotent.
+  // Audit C1-S9-59.
+  const { data: removed, error } = await supabase
     .from('marketing_recurring_ads')
     .update({ deleted_at: new Date().toISOString(), next_run_at: null, status: 'paused', updated_by: gate.userId })
-    .eq('id', id);
-  if (error) {
-    console.error('[recurring-ads] delete failed', error);
+    .eq('id', id).select('id');
+  if (error || wroteNoRows(removed)) {
+    console.error('[recurring-ads] delete failed', error ?? 'no rows updated');
     return { ok: false, error: 'Could not remove this campaign.' };
   }
   revalidatePath(PAGE);

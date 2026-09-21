@@ -157,9 +157,15 @@ export async function cancelHandoffAction(orderId: string): Promise<Result> {
   if (orderError) return actionFailure('load the order', t('marketplace.couldNotLoadTheOrder'), orderError);
   if (!order) return { ok: false, error: t('actions.orderNotFound') };
   if (!role) return { ok: false, error: t(COMPLETE_REASON.forbidden) };
-  const { error } = await sb.from('marketplace_handoffs').update({ status: 'cancelled' })
-    .eq('order_id', orderId).in('status', ['proposed', 'confirmed']);
+  // The Cancel control only renders for `proposed` or `confirmed`, so this filter
+  // matching nothing means the state moved under the viewer — most often the other
+  // party COMPLETED the pickup. Answering `{ ok: true }` then popped "Pickup
+  // cancelled" over a hand-off that just finished, and the two of them would be
+  // reading opposite outcomes of the same meeting. Audit C1-S9-59.
+  const { data: cancelled, error } = await sb.from('marketplace_handoffs').update({ status: 'cancelled' })
+    .eq('order_id', orderId).in('status', ['proposed', 'confirmed']).select('id');
   if (error) return actionFailure('cancel the pickup', t('handoff.couldNotCancelThePickup'), error);
+  if (wroteNoRows(cancelled)) return { ok: false, error: t('handoff.couldNotCancelThePickup') };
   revalidatePath('/marketplace/orders');
   return { ok: true };
 }

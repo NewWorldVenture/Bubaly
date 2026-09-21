@@ -28,7 +28,7 @@ import type { DinnerIdea, DinnerEffort } from '@/lib/onboarding/dinner-ideas';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import type { MemberRole } from '@/lib/constants/roles';
-import { describeActionError } from '@/lib/supabase/errors';
+import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { onboardingItemKey, onboardingRunKey } from '@/lib/onboarding/idempotency';
 import { captureSignupReferral } from '@/lib/referrals/signup';
 import type { OnboardingAnswers } from '@/lib/onboarding/facts';
@@ -418,9 +418,18 @@ export async function finalizeOnboardingAction(input: {
     });
     familyId = existingMembership.family_id;
     if (connectedReceipt && connectedReceipt.familyId !== familyId) return { ok: false, error: t('connectedCalendar.unavailable') };
-    const { error: adoptErr } = await admin.from('families')
-      .update({ name: family.name, timezone: family.timezone }).eq('id', familyId);
+    // Adopting the auto-provisioned family: this is where the name and the
+    // TIMEZONE the person just typed land. Matching no rows finished onboarding
+    // against a family still carrying the provisioning defaults, and the timezone
+    // is not cosmetic — every reminder, digest and cron slot afterwards is
+    // computed in it, so the household would be woken by a morning brief at the
+    // wrong hour with nothing in the wizard to re-run. Audit C1-S9-59.
+    const { data: adopted, error: adoptErr } = await admin.from('families')
+      .update({ name: family.name, timezone: family.timezone }).eq('id', familyId).select('id');
     if (adoptErr) return onboardingFailure('auto-provisioned family update', adoptErr, t('actions.couldNotFinishSettingUp2'));
+    if (wroteNoRows(adopted)) {
+      return onboardingFailure('auto-provisioned family update', new Error('no rows updated'), t('actions.couldNotFinishSettingUp2'));
+    }
   } else {
     // Claim first-family creation under a per-user database lock. This keeps
     // double-submit/retry requests on one family even before the membership

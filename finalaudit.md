@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-199 finding IDs from four workers and two parallel sessions; none of it was
+200 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 209 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 210 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -34161,6 +34161,93 @@ unconfirmed**, each with a guard asserting the absence of a check.
 
 ---
 
+### `[CLAUDE-1][MEDIUM][SERVER ACTIONS]` C1-S9-59 — twelve writes, nine confirmed, and one that was confirmed all along
+
+**Confirmed (9).** The recurring-ad status change and its soft delete (both
+answer *"Campaign paused."* / *"Campaign removed."* over a campaign that would
+go on posting to the family's channels); removing a calendar feed (its imported
+events cascade with the row, so a no-op leaves a stranger's calendar in the
+family's with no row left in the UI to unsubscribe from); resolving an accepted
+Autopilot suggestion; the public feedback roadmap's status change; unsharing a
+marketplace listing; cancelling a marketplace hand-off; and adopting the
+auto-provisioned family at the end of onboarding.
+
+**Two of those deserve naming.**
+
+- **The Autopilot resolve.** The policies are already written by the time it
+  runs. A resolve matching no rows leaves the suggestion looking un-acted-on,
+  and accepting it again writes the **same policies a second time** — a
+  duplicate set at the same priority, which is how a permission nobody granted
+  twice stops being traceable to one decision. The message for the halves coming
+  apart already existed; it simply never ran for the half that fails silently.
+- **The onboarding adoption.** This is where the name and the **timezone** the
+  person just typed land. Matching no rows finished onboarding against a family
+  still carrying the provisioning defaults — and the timezone is not cosmetic:
+  every reminder, digest and cron slot afterwards is computed in it, so the
+  household would be woken by a morning brief at the wrong hour with nothing in
+  the wizard left to re-run.
+
+**Confirmed for the COUNT, not for a bail (1).** `markAffiliatePaidAction`
+settles an affiliate's converted referrals. Zero rows is what a quiet month
+looks like, so failing it would make the button unusable — but the audit entry
+it wrote said `payout` and nothing else, reading identically whether it settled
+forty referrals or none. It now asks `.select('id')` and records
+`referralsPaid`. A finance question is answered from that trail.
+
+**Exempt, with the contrast written beside the code (1).** The archive-time
+`blog_posts` unpublish. `unpublishBlogPostAction` above it **is** confirmed,
+and the difference is the whole point: there an admin named a public post and is
+told it is pulled down, so zero rows is a lie; here an admin archived a *content
+item*, and whether a public row was ever cut from it is unknown — on a draft
+that never shipped there is nothing to match.
+
+**Ordering, not confirmation (1).** The AEO regeneration is a delete-then-insert
+inside a best-effort `try`. Zero rows deleted is ordinary on a first publish; a
+delete that **failed** is not, because inserting after it leaves two generated
+answer sets for one `/blog/<slug>` and the Knowledge Centre then answers the
+same question twice from whichever row it reads first. The clear's error now
+gates the insert, and the `catch {}` — which swallowed the reason entirely —
+says what it swallowed. The publish is still never blocked.
+
+**And one where the code was right and the scan was wrong.**
+`moveAssignmentAction` was on the list for having no `.select()`. It has
+`{ count: 'exact' }` and `if (!count)`: `Prefer: count=exact` is answered by
+PostgREST whether or not a representation was asked for, so it can tell zero
+rows from one by the other of the two available routes. Nothing was wrong with
+it. **The fix was to the instrument** — the ratchet's scan now treats a
+count-bearing write as confirmed — plus a comment in the file, because the next
+consistency sweep to grep for `.select('id')` will read that line exactly as
+this one did.
+
+That makes **four scanner defects and one scanner blind spot** found across
+three sweeps, against a smaller number of genuine code defects per pass. The
+register has said it before and this pass says it again: *the scan has been
+wrong more often than the code it was scanning.*
+
+**Status:** FIXED. Guard: twenty-four cases, **every one proved red by
+mutation, in both directions** — including four over-tightening mutations
+(adding a bail to the affiliate payout, gating the archive-time unpublish,
+adding `.is('deleted_at', null)` to the idempotent campaign delete, and gating
+the deliberately-idempotent listing share).
+
+**One test-helper defect fell out of it.** `between()` searches for its end
+token from the *start of the file*, which is right for a unique marker and wrong
+for `return { ok: true };` — a line most of these files carry a dozen times,
+usually above the function being sliced. It **refused** every such slice rather
+than handing back a reversed one, which is what it is for. A local `actionBody()`
+now takes the slice those cases actually wanted: signature to the first closing
+brace at column 0.
+
+**Ratchet: 35 → 26 across 21 files by the fixes, then → 25 across 20 by the
+scan correction.** The deliberately-unconfirmed set grew by two this pass (the
+affiliate payout's missing bail and the archive-time unpublish). Every member of
+it carries a guard asserting the **absence** of a check — `not.toContain` on
+`.select(` or on `wroteNoRows` — and its reasoning beside the code rather than
+only here, because the next person to run a consistency pass reads the file, not
+the register.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -34230,9 +34317,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,142 passing / 17,145 across 1,352
-files.** (Re-run after `C1-S9-58`; was 16,950 / 16,953 across 1,349 before this
-batch.) The three failures are `C1-S9-09`, BLOCKED: this container runs Node
+Status: ✅ PASS — `npx vitest run`: **17,164 passing / 17,167 across 1,352
+files.** (Re-run after `C1-S9-59`; was 17,142 / 17,145 after `C1-S9-58`.) The three failures are `C1-S9-09`, BLOCKED: this container runs Node
 22.22.2 against the repository's `.nvmrc` 24.21.0, and nvm cannot fetch the
 Node 24 distribution here. Not counted as passing.
 

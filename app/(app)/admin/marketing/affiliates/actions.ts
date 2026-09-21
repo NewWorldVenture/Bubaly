@@ -62,10 +62,19 @@ export async function deleteAffiliateAction(id: string) {
 /** Mark an affiliate's converted referrals as paid (settle payout). */
 export async function markAffiliatePaidAction(affiliateId: string) {
   const { supabase, actorId, actorEmail } = await requireMarketingAdmin();
-  const { error } = await supabase.from('affiliate_referrals')
+  // Zero rows is the ORDINARY case here — an affiliate with nothing converted
+  // since the last settlement — so this is deliberately NOT a failure. What it
+  // must not do is write a payout entry that says nothing about how much moved:
+  // the audit trail is what a finance question is answered from, and "payout"
+  // with no count reads the same whether it settled forty referrals or none.
+  // Confirmed for the COUNT, not for the bail. Audit C1-S9-59.
+  const { data: paid, error } = await supabase.from('affiliate_referrals')
     .update({ status: 'paid', paid_at: new Date().toISOString() })
-    .eq('affiliate_id', affiliateId).eq('status', 'converted');
+    .eq('affiliate_id', affiliateId).eq('status', 'converted').select('id');
   if (error) marketingActionFailure('mark affiliate referrals as paid', error);
-  await logMarketingAudit(supabase, { actorId, actorEmail, action: 'payout', resource: 'affiliate', resourceId: affiliateId });
+  await logMarketingAudit(supabase, {
+    actorId, actorEmail, action: 'payout', resource: 'affiliate', resourceId: affiliateId,
+    metadata: { referralsPaid: paid?.length ?? 0 },
+  });
   revalidatePath('/admin/marketing/affiliates');
 }

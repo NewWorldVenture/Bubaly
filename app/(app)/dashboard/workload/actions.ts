@@ -21,6 +21,12 @@ export async function moveAssignmentAction(assignmentId: string, toMemberId: str
     .select('id').eq('id', toMemberId).eq('family_id', ctx.active.familyId).maybeSingle();
   if (!target) return { ok: false, error: t('actions.thatFamilyMemberWasNot') };
 
+  // Confirmed by COUNT rather than by `.select()`: `count: 'exact'` sends
+  // `Prefer: count=exact`, and PostgREST answers with the number of rows the
+  // filter matched whether or not a representation was asked for. `if (!count)`
+  // below is the same bail as `wroteNoRows` elsewhere, reached by the other of
+  // the two routes — worth saying, because a consistency sweep grepping for
+  // `.select('id')` reads this line as unconfirmed and it is not. Audit C1-S9-59.
   const { error, count } = await supabase.from('chore_assignments')
     .update({ member_id: toMemberId }, { count: 'exact' })
     .eq('id', assignmentId)

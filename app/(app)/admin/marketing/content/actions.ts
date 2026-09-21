@@ -120,7 +120,15 @@ export async function publishContentToBlogAction(formData: FormData): Promise<vo
       category: payload.category,
       excerpt: payload.excerpt,
     });
-    await supabase.from('marketing_aeo_questions').delete().eq('source_path', `/blog/${payload.slug}`).eq('metadata->>seed', 'blog_aeo_v1');
+    // Delete-then-insert, so the delete's outcome decides whether the insert may
+    // run. Zero rows deleted is the ordinary case on a FIRST publish and is not
+    // an error; a delete that FAILED is different — inserting after it leaves two
+    // generated sets for the same `/blog/<slug>`, and the Knowledge Centre then
+    // answers the same question twice with whichever row it read first. Skipping
+    // the insert keeps the older set, which is stale but singular. Audit C1-S9-59.
+    const { error: clearError } = await supabase.from('marketing_aeo_questions')
+      .delete().eq('source_path', `/blog/${payload.slug}`).eq('metadata->>seed', 'blog_aeo_v1');
+    if (clearError) throw clearError;
     await supabase.from('marketing_aeo_questions').insert(
       aeo.map((q) => ({
         question: q.question, answer: q.answer, entity: q.entity, source_path: q.source_path,
@@ -128,8 +136,11 @@ export async function publishContentToBlogAction(formData: FormData): Promise<vo
         last_reviewed: new Date().toISOString(), metadata: q.metadata as unknown as Json,
       })),
     );
-  } catch {
+  } catch (aeoError) {
     /* AEO generation is best-effort — never block a publish on it */
+    console.error('[marketing-content] AEO regeneration skipped', {
+      slug: payload.slug, error: aeoError instanceof Error ? aeoError.message : String(aeoError),
+    });
   }
 
   await logMarketingAudit(supabase, { actorId, actorEmail, action: 'publish', resource: 'blog_post', resourceId: payload.slug, metadata: { fromContentItem: id } });
@@ -199,6 +210,12 @@ export async function archiveContentAction(formData: FormData): Promise<void> {
       ? nestedSlug
       : typeof meta.slug === 'string' ? meta.slug : null;
     if (slug) {
+      // Deliberately NOT confirmed, and the contrast with `unpublishBlogPostAction`
+      // above is the reason. THERE the admin named a public post and is told it is
+      // pulled down, so zero rows is a lie. HERE the admin archived a CONTENT ITEM;
+      // whether a public `blog_posts` row was ever cut from it is unknown, and on a
+      // draft that never shipped there is nothing to match. Zero rows is the
+      // ordinary case, so only the error is raised. Audit C1-S9-59.
       const { error: unpublishError } = await supabase.from('blog_posts').update({ published: false }).eq('slug', slug);
       if (unpublishError) marketingActionFailure('unpublish the archived blog post', unpublishError);
       await archiveLegacyBlogOnPlatform(supabase, slug, actorId);

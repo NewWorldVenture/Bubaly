@@ -30,7 +30,14 @@ import { describe, expect, it } from 'vitest';
  * below and are part of the counts — the ratchet bounds the class, it does not
  * claim every remaining instance is a defect.
  */
-const strip = (s: string) => s.replace(/^\s*\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+// `[^\S\n]*`, not `\s*`, and a block strip that keeps its newlines: `\s` matches
+// the line break, so the original collapsed consecutive comment lines into one.
+// Harmless for a count, but it moved every offset — which is exactly how the
+// audit scanners came to publish wrong file:line numbers (C1-S9-52). Fixed here
+// so the positions this scan reports can be trusted.
+const strip = (s: string) => s
+  .replace(/^[^\S\n]*\/\/.*$/gm, '')
+  .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '));
 
 function statementAt(src: string, start: number): string {
   let depth = 0, i = start;
@@ -56,7 +63,13 @@ function unconfirmedPerFile(): Map<string, number> {
       const stmtStart = Math.max(before.lastIndexOf(';'), before.lastIndexOf('\n\n')) + 1;
       const stmt = statementAt(src, stmtStart);
       if (!/\.from\(/.test(stmt)) continue;      // not a database write
-      if (/\.select\(/.test(stmt)) continue;      // confirmed
+      if (/\.select\(/.test(stmt)) continue;      // confirmed by representation
+      // Confirmed by COUNT instead. `Prefer: count=exact` is answered whether or
+      // not a representation was asked for, so a write carrying it CAN tell zero
+      // rows from one — `moveAssignmentAction` does, via `if (!count)`. Counting
+      // it as unconfirmed was the scan being wrong about the code, which is the
+      // direction this sweep keeps finding first. Audit C1-S9-59.
+      if (/count:\s*'exact'/.test(stmt)) continue;
       if (!/\.eq\(|\.in\(|\.match\(|\.neq\(|\.is\(/.test(stmt)) continue; // unfiltered
       n++;
     }
@@ -69,13 +82,14 @@ function unconfirmedPerFile(): Map<string, number> {
 // they are fixed — never add, never increase.
 //
 // Burn-down since the ratchet went in: 82 across 39 files (C1-S9-50) → 74/37
-// (C1-S9-51) → 61/35 (C1-S9-53) → 54/34 (C1-S9-55) → 43/32 (C1-S9-56) → 42/32 (C1-S9-57) → 35/29 (C1-S9-58). Each step edited this baseline DOWN, and the
-// stale-entry case below is what forced the edit rather than leaving fixed
-// files sitting here quietly.
+// (C1-S9-51) → 61/35 (C1-S9-53) → 54/34 (C1-S9-55) → 43/32 (C1-S9-56) → 42/32
+// (C1-S9-57) → 35/29 (C1-S9-58) → 26/21 (C1-S9-59, nine writes confirmed) →
+// 25/20 (C1-S9-59, `moveAssignmentAction` leaving because the SCAN was wrong
+// about it, not because the code changed). Each step edited this baseline DOWN,
+// and the stale-entry case below is what forced the edit rather than leaving
+// fixed files sitting here quietly.
 const BASELINE = new Map<string, number>([
-  ['app/(app)/admin/marketing/affiliates/actions.ts', 1],
   ['app/(app)/admin/marketing/content/actions.ts', 2],
-  ['app/(app)/admin/marketing/social/recurring/actions.ts', 2],
   ['app/(app)/admin/services/actions.ts', 1],
   ['app/(app)/dashboard/assistants/actions.ts', 1],
   ['app/(app)/dashboard/auto/actions.ts', 1],
@@ -93,15 +107,8 @@ const BASELINE = new Map<string, number>([
   ['app/(app)/dashboard/paperwork/actions.ts', 1],
   ['app/(app)/dashboard/playbook/playbook-actions.ts', 1],
   ['app/(app)/dashboard/social-feed/actions.ts', 1],
-  ['app/(app)/dashboard/sync/feeds/actions.ts', 1],
-  ['app/(app)/dashboard/trust/actions.ts', 1],
-  ['app/(app)/dashboard/workload/actions.ts', 1],
   ['app/(app)/family/child-login-actions.ts', 2],
-  ['app/(app)/feedback/actions.ts', 1],
-  ['app/(app)/marketplace/community/actions.ts', 1],
-  ['app/(app)/marketplace/handoff/actions.ts', 1],
   ['app/(app)/missions/actions.ts', 1],
-  ['app/onboarding/actions.ts', 1],
 ]);
 
 describe('the unconfirmed-write class only shrinks (C1-S9-50)', () => {
@@ -132,6 +139,6 @@ describe('the unconfirmed-write class only shrinks (C1-S9-50)', () => {
     // If this number moves without finalaudit.md moving with it, one of the two
     // is wrong — and the register is the thing other workers read.
     const total = [...BASELINE.values()].reduce((a, b) => a + b, 0);
-    expect(total).toBe(35);
+    expect(total).toBe(25);
   });
 });

@@ -10,7 +10,7 @@ import { delegationFromPreset, findSharingPreset } from '@/lib/trust/sharing-pre
 import { ledgerWriter, recordTrustChange } from '@/lib/trust/ledger';
 import { APPROVAL_MODELS, thresholdFor } from '@/lib/approvals/threshold';
 import type { Json } from '@/lib/database.types';
-import { describeActionError } from '@/lib/supabase/errors';
+import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { decide } from '@/lib/services/approvals';
 import {
@@ -241,10 +241,20 @@ export async function acceptPolicySuggestionAction(input: { suggestionId: string
     if (!saved.ok) return saved;
   }
 
-  const { error: resolveError } = await supabase.from('autopilot_suggestions')
+  // The policies are already saved by here. A resolve matching no rows leaves the
+  // suggestion sitting in the queue looking un-acted-on, and accepting it a second
+  // time writes the SAME policies again — a duplicate set at the same priority,
+  // which is how a permission nobody granted twice becomes hard to trace back to
+  // one decision. The existing message already says the halves came apart; it just
+  // never ran for the half that fails silently. Audit C1-S9-59.
+  const { data: resolved, error: resolveError } = await supabase.from('autopilot_suggestions')
     .update({ status: 'executed', resolved_at: new Date().toISOString(), resolved_by: ctx.user.id })
-    .eq('id', suggestion.id).eq('family_id', familyId);
+    .eq('id', suggestion.id).eq('family_id', familyId).select('id');
   if (resolveError) return actionFailure(resolveError, t('actions.thePolicyWasSavedButTheSuggestion'));
+  if (wroteNoRows(resolved)) {
+    console.error('[trust] suggestion resolve matched no rows', { suggestionId: suggestion.id, familyId });
+    return { ok: false, error: t('actions.thePolicyWasSavedButTheSuggestion') };
+  }
 
   revalidatePath('/dashboard/trust');
   revalidatePath('/dashboard/autopilot');

@@ -1008,3 +1008,201 @@ describe('saved searches and subscriptions are confirmed (C1-S9-58)', () => {
     for (const a of annotations) expect(a).not.toContain('.select(');
   });
 });
+
+/**
+ * Audit C1-S9-59 — twelve more writes, and the pass where the triage rule earned
+ * its keep three separate ways.
+ *
+ * Nine are confirmed. One (`markAffiliatePaidAction`) is confirmed for its COUNT
+ * and deliberately not for a bail, because zero converted referrals is what a
+ * quiet month looks like. One (`archiveContentAction`'s public unpublish) is left
+ * ungated on rows for a reason the file states beside it. And one — the workload
+ * rebalance — turned out to be confirmed already, by `count: 'exact'` rather than
+ * by `.select()`: the scanner reads only the second route, so the annotation is
+ * the fix and the code needed none.
+ */
+/**
+ * The body of ONE exported action: from its signature to the first closing brace
+ * at column 0 after it.
+ *
+ * `between()` searches for its end token from the START of the file, which is
+ * right for a unique marker and wrong for `return { ok: true };` — a line most
+ * of these files carry a dozen times, usually above the function in question. It
+ * refused every such slice rather than handing back a reversed one, which is
+ * what it is for; this is the slice those cases actually wanted.
+ */
+function actionBody(source: string, signature: string): string {
+  const start = at(source, signature);
+  const end = source.indexOf('\n}', start);
+  expect(end, `no closing brace after ${signature}`).toBeGreaterThan(start);
+  return source.slice(start, end);
+}
+
+const affiliates = readFileSync('app/(app)/admin/marketing/affiliates/actions.ts', 'utf8');
+const marketingContent = readFileSync('app/(app)/admin/marketing/content/actions.ts', 'utf8');
+const recurringAds = readFileSync('app/(app)/admin/marketing/social/recurring/actions.ts', 'utf8');
+const calendarFeeds = readFileSync('app/(app)/dashboard/sync/feeds/actions.ts', 'utf8');
+const trustActions = readFileSync('app/(app)/dashboard/trust/actions.ts', 'utf8');
+const workload = readFileSync('app/(app)/dashboard/workload/actions.ts', 'utf8');
+const feedbackActions = readFileSync('app/(app)/feedback/actions.ts', 'utf8');
+const community = readFileSync('app/(app)/marketplace/community/actions.ts', 'utf8');
+const handoff = readFileSync('app/(app)/marketplace/handoff/actions.ts', 'utf8');
+const onboarding = readFileSync('app/onboarding/actions.ts', 'utf8');
+
+describe('a payout entry says how much it moved (C1-S9-59)', () => {
+  it('asks what it settled without turning an empty month into an error', () => {
+    const body = actionBody(affiliates, 'export async function markAffiliatePaidAction');
+    expect(body, 'the settle update').toContain(".select('id')");
+    // Deliberately no bail: an affiliate with nothing converted is the ordinary
+    // case, and failing it would make "Mark paid" unusable on a quiet month.
+    expect(stripComments(body)).not.toContain('wroteNoRows');
+    expect(body).toContain('referralsPaid: paid?.length ?? 0');
+  });
+
+  it('records the reason for the asymmetry beside the code', () => {
+    expect(affiliates).toContain('Confirmed for the COUNT, not for the bail');
+  });
+});
+
+describe('regenerated AEO answers are not doubled up (C1-S9-59)', () => {
+  it('the insert runs only if the clear succeeded', () => {
+    const block = between(marketingContent, 'const aeo = deriveArticleAeoQuestions(', '} catch (aeoError) {');
+    expect(block).toContain('const { error: clearError }');
+    // Ordering is the whole fix: throwing before the insert is what keeps a
+    // failed clear from leaving two generated sets for one `/blog/<slug>`.
+    expect(at(block, 'if (clearError) throw clearError;'))
+      .toBeLessThan(at(block, "from('marketing_aeo_questions').insert("));
+  });
+
+  it('still never blocks the publish, but no longer swallows the reason', () => {
+    // Best-effort by design — the catch stays. What changed is that it says
+    // what it swallowed, which an empty `catch {}` could not.
+    expect(marketingContent).toContain("console.error('[marketing-content] AEO regeneration skipped'");
+  });
+
+  it('leaves the archive-time unpublish ungated on rows, with the contrast stated', () => {
+    const body = actionBody(marketingContent, 'export async function archiveContentAction');
+    const unpublish = body.slice(at(body, "from('blog_posts').update({ published: false })"));
+    expect(unpublish.slice(0, 120), 'a draft that never shipped has no public row').not.toContain('.select(');
+    expect(body).toContain('archived a CONTENT ITEM');
+  });
+
+  it('keeps the named-post unpublish confirmed, which is the other side of it', () => {
+    const body = actionBody(marketingContent, 'export async function unpublishBlogPostAction');
+    expect(body).toContain(".select('slug')");
+    expect(body).toContain('Blog post not found.');
+  });
+});
+
+describe('a campaign reported paused or removed really is (C1-S9-59)', () => {
+  it('the status change confirms, and repeats the read filter on the write', () => {
+    const body = actionBody(recurringAds, 'export async function setRecurringAdStatusAction');
+    expect(body).toContain('wroteNoRows(changed)');
+    // Without the predicate, a campaign soft-deleted between the read and the
+    // write would be resumed by a race the read cannot see.
+    expect(body).toContain(".eq('id', id).is('deleted_at', null).select('id')");
+  });
+
+  it('the soft delete confirms, and stays idempotent on purpose', () => {
+    const body = actionBody(recurringAds, 'export async function deleteRecurringAdAction');
+    expect(body).toContain('wroteNoRows(removed)');
+    // Filtered on id ALONE: adding `.is('deleted_at', null)` here would make a
+    // second removal report failure for a campaign that is already gone.
+    expect(body).toContain(".eq('id', id).select('id')");
+    expect(stripComments(body)).not.toContain("deleted_at', null).select");
+  });
+});
+
+describe('a removed calendar feed stops appearing in the family calendar (C1-S9-59)', () => {
+  it('confirms the delete before answering ok', () => {
+    const body = actionBody(calendarFeeds, 'export async function removeCalendarFeed');
+    expect(body).toContain('wroteNoRows(removed)');
+    expect(at(body, 'wroteNoRows(removed)')).toBeLessThan(at(body, "revalidatePath('/dashboard/settings')"));
+  });
+
+  it('stays family-scoped while it does so', () => {
+    const body = actionBody(calendarFeeds, 'export async function removeCalendarFeed');
+    expect(body).toContain("eq('family_id', ctx.active.familyId)");
+  });
+});
+
+describe('an accepted autopilot suggestion is not offered again (C1-S9-59)', () => {
+  it('confirms the resolve, so the policies cannot be written twice', () => {
+    const body = trustActions.slice(at(trustActions, "from('autopilot_suggestions')\n    .update({ status: 'executed'"));
+    expect(body.slice(0, 700)).toContain('wroteNoRows(resolved)');
+  });
+
+  it('reuses the message that already described the halves coming apart', () => {
+    const body = trustActions.slice(at(trustActions, 'wroteNoRows(resolved)'));
+    expect(body.slice(0, 300)).toContain("t('actions.thePolicyWasSavedButTheSuggestion')");
+  });
+});
+
+describe('the rebalance was already confirmed, by the other route (C1-S9-59)', () => {
+  it('uses count: exact and bails on zero', () => {
+    const body = actionBody(workload, 'export async function moveAssignmentAction');
+    expect(body).toContain("{ count: 'exact' }");
+    expect(body).toContain('if (!count) return { ok: false');
+    // No `.select()` on the UPDATE and none needed: `Prefer: count=exact` is
+    // answered whether or not a representation was requested. Scoped to the
+    // update statement, because the member existence read above it legitimately
+    // selects — an assertion over the whole body would have been about that read.
+    const update = body.slice(at(body, "from('chore_assignments')"));
+    expect(stripComments(update)).not.toContain('.select(');
+  });
+
+  it('says so in the file, because a grep for .select() reads it as unconfirmed', () => {
+    expect(workload).toContain('Confirmed by COUNT rather than by `.select()`');
+  });
+});
+
+describe('a public roadmap does not claim work that never moved (C1-S9-59)', () => {
+  it('confirms the status change', () => {
+    const body = actionBody(feedbackActions, 'export async function setIdeaStatusAction');
+    expect(body).toContain('wroteNoRows(moved)');
+  });
+
+  it('keeps the super-admin gate in front of it', () => {
+    const body = actionBody(feedbackActions, 'export async function setIdeaStatusAction');
+    expect(at(body, 'await isSuperAdmin()')).toBeLessThan(at(body, "from('feedback_ideas')"));
+  });
+});
+
+describe('sharing and unsharing are not mirrors of each other (C1-S9-59)', () => {
+  it('the unshare is confirmed', () => {
+    const body = actionBody(community, 'export async function unshareListingAction');
+    expect(body).toContain('wroteNoRows(unshared)');
+  });
+
+  it('the share stays idempotent on the unique constraint', () => {
+    // Deliberately unconfirmed in the other direction: a double share is
+    // harmless, and `23505` is the success path rather than an error.
+    const body = actionBody(community, 'export async function shareListingAction');
+    expect(body).toContain("error.code !== '23505'");
+    expect(stripComments(body)).not.toContain('wroteNoRows');
+  });
+});
+
+describe('a cancelled pickup is not a completed one (C1-S9-59)', () => {
+  it('confirms the cancel', () => {
+    const body = actionBody(handoff, 'export async function cancelHandoffAction');
+    expect(body).toContain('wroteNoRows(cancelled)');
+    expect(body).toContain(".in('status', ['proposed', 'confirmed']).select('id')");
+  });
+
+  it('leaves the C1-S9-23 confirm guard in place beside it', () => {
+    expect(handoff).toContain('wroteNoRows(confirmed)');
+  });
+});
+
+describe('onboarding does not finish on a default timezone (C1-S9-59)', () => {
+  it('confirms the adoption of an auto-provisioned family', () => {
+    const body = onboarding.slice(at(onboarding, "const { data: adopted, error: adoptErr }"));
+    expect(body.slice(0, 600)).toContain('wroteNoRows(adopted)');
+  });
+
+  it('fails through the same reporter as the error branch', () => {
+    const body = onboarding.slice(at(onboarding, 'wroteNoRows(adopted)'));
+    expect(body.slice(0, 300)).toContain("onboardingFailure('auto-provisioned family update'");
+  });
+});
