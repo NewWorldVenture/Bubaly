@@ -73,6 +73,18 @@
 -- its place in the lock queue. Clock stamps are still collected, but they are
 -- now a consequence rather than the proof.
 --
+-- ONE RESIDUAL RISK, stated rather than left for someone to find. The negative
+-- control must COMMIT its neutered body for the racing connections to see it,
+-- so between that statement and the restore a few lines later there is a window
+-- in which this database's wallet RPC does not lock. Nothing inside the probe
+-- can raise in that window — the race records its verdict instead of throwing,
+-- which is why it is written that way — but a hard kill (a CI timeout, a ^C)
+-- would leave the unlocked body installed. The restore therefore VERIFIES
+-- itself, and if you ever see this probe's restore assertion fire, re-apply the
+-- migration that defines `wallet_reserve_card_auth` before trusting the
+-- database. Run it against a throwaway instance, which is what
+-- docs/audit/verify-pg.sh bootstraps.
+--
 -- Step 3 is also a DIRECT test of the guard. If someone removes the `FOR UPDATE`
 -- from the RPC, the two sessions do not block, no waiters ever appear, and this
 -- probe says so — where the old one would have gone on passing, since removing
@@ -127,13 +139,17 @@ $fn$;
 -- when its assertions fail. The stages therefore record rather than raise, a
 -- top-level statement restores unconditionally, and the last stage does the
 -- raising once the real function is safely back.
-drop table if exists public.a15_verdict;
-create table public.a15_verdict (stage text primary key, approved int, waiters int, held bigint, note text);
+-- TEMP on purpose. These are the parent session's own scratch state — only the
+-- helper function and the neutered body have to be visible to the two racing
+-- connections — and a run that dies partway through must not leave tables
+-- sitting in `public` for the next probe to trip over.
+drop table if exists a15_verdict;
+create temp table a15_verdict (stage text primary key, approved int, waiters int, held bigint, note text);
 
 -- The real definition, saved verbatim before the negative control overwrites it.
-drop table if exists public.a15_saved_fn;
-create table public.a15_saved_fn as
-select pg_get_functiondef(p.oid) as def
+drop table if exists a15_saved_fn;
+create temp table a15_saved_fn as
+select pg_get_functiondef(p.oid) as def, p.prosrc as body
   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
  where n.nspname = 'public' and p.proname = 'wallet_reserve_card_auth';
 
@@ -222,7 +238,7 @@ begin
    where child_wallet_id = v_wallet and direction = 'debit'
      and status in ('pending', 'processing', 'requires_parent_approval');
 
-  insert into public.a15_verdict (stage, approved, waiters, held, note)
+  insert into a15_verdict (stage, approved, waiters, held, note)
   values (p_stage,
           (case when approved_a then 1 else 0 end) + (case when approved_b then 1 else 0 end),
           seen, v_held,
@@ -233,7 +249,7 @@ exception when others then
   begin perform dblink_disconnect('a15_hold'); exception when others then null; end;
   begin perform dblink_disconnect('a15_a');    exception when others then null; end;
   begin perform dblink_disconnect('a15_b');    exception when others then null; end;
-  insert into public.a15_verdict (stage, approved, waiters, held, note)
+  insert into a15_verdict (stage, approved, waiters, held, note)
   values (p_stage, -1, -1, -1, 'raised: ' || sqlerrm)
   on conflict (stage) do update set approved = -1, waiters = -1, held = -1, note = 'raised: ' || sqlerrm;
 end
@@ -291,13 +307,34 @@ call public.a15_race('a15_neutered', false);
 
 -- ── Restore, unconditionally, before anything is allowed to raise ────────────
 do $$
-declare v_def text;
+declare v_def text; v_body text;
 begin
-  select def into v_def from public.a15_saved_fn;
+  select def, body into v_def, v_body from a15_saved_fn;
   if v_def is null then
     raise exception 'A-15 FAIL: the real wallet_reserve_card_auth was not saved and CANNOT be restored';
   end if;
   execute v_def;
+
+  -- PROVE the restore landed rather than trusting that it did. Everything below
+  -- this point is allowed to fail the probe, and failing it while the money RPC
+  -- is still the neutered read-then-insert would leave a database whose wallet
+  -- does not lock — quiet, and exactly the wrong way round.
+  --
+  -- It compares the body to the SAVED one byte for byte, and the first version
+  -- of this assertion did not: it tested `prosrc ilike '%for update%'`, which
+  -- the neutered body SATISFIES, because that body carries the line
+  -- `-- THE GUARD, REMOVED: no \`for update\`` a few lines up. An assertion
+  -- about a guard, defeated by a comment describing the guard's absence. This
+  -- repo has now made the scan-the-comments mistake in a source-shape test, in a
+  -- document guard, and here — so the rule is not "strip comments", it is:
+  -- do not pattern-match a body when you can compare it to the one you saved.
+  if not exists (
+    select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public' and p.proname = 'wallet_reserve_card_auth'
+       and p.prosrc = v_body
+  ) then
+    raise exception 'A-15 FAIL: wallet_reserve_card_auth was NOT restored to the body this probe saved — the database may still hold the unlocked body it installed. Re-apply supabase/migrations/0155_wallet_auth_holds.sql before trusting this database.';
+  end if;
 end $$;
 
 -- ── The verdict ──────────────────────────────────────────────────────────────
@@ -306,8 +343,8 @@ declare
   r_real record;
   r_neut record;
 begin
-  select * into r_real from public.a15_verdict where stage = 'a15_real';
-  select * into r_neut from public.a15_verdict where stage = 'a15_neutered';
+  select * into r_real from a15_verdict where stage = 'a15_real';
+  select * into r_neut from a15_verdict where stage = 'a15_neutered';
 
   if r_real is null then
     raise exception 'A-15 FAIL: the real-RPC stage recorded no verdict at all';
@@ -361,8 +398,8 @@ end $$;
 
 drop procedure if exists public.a15_race(text, boolean);
 drop function if exists public.a15_timed_auth(uuid, uuid, bigint, text, text);
-drop table if exists public.a15_verdict;
-drop table if exists public.a15_saved_fn;
+drop table if exists a15_verdict;
+drop table if exists a15_saved_fn;
 
 -- Leave the ledger as the real stage left it.
 delete from public.wallet_transactions
