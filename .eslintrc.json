@@ -1,4 +1,7 @@
 {
   "extends": "next/core-web-vitals",
-  "ignorePatterns": ["mobile/**", "supabase/**", "node_modules/**", ".next/**"]
+  "ignorePatterns": ["mobile/**", "supabase/**", "node_modules/**", ".next/**"],
+  "rules": {
+    "jsx-a11y/label-has-associated-control": ["error", { "assert": "either", "depth": 4 }]
+  }
 }

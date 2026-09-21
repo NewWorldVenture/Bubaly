@@ -3,11 +3,11 @@
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
 - Last Updated: 2026-09-20T17:44:10.000Z
-- Total Audit Items: 14071
+- Total Audit Items: 14072
 - Not Started: 13842
 - In Progress: 192
 - Passed: 9
-- Fixed + Passed: 24
+- Fixed + Passed: 25
 - Blocked: 2
 - Failed: 2
 - Overall Completion: 0.04%
@@ -14197,6 +14197,7 @@ PRODUCTION READY: NO
 | DATA-012 | Data integrity | "Today" was the server's day, not the family's (F-F02) | 🛠 FIXED + PASS | High | 11/11 | startOfLocalDay / startOfNextLocalDay in lib/time/zoned.ts; the kids, guardian and moments pages, both dashboards' dayBounds, and every notification's today/tomorrow copy moved onto the family's zone | Asserted in three zones from one instant, across both DST changeovers (a 23-hour and a 25-hour day), and in a zone whose clocks jump AT midnight; three mutations red; full suite green under TZ=UTC and TZ=America/Los_Angeles | 8 client files (correct — the browser IS the family) and 19 server files (not). timeLabel was wrong twice in one sentence: the day from the host's midnight and the clock with no timeZone, so 7pm read as "tomorrow at 3:00 AM". |
 | PERF-004 | Performance | The parent approval queue signed one photo per round trip (closes F-F03) | 🛠 FIXED + PASS | High | 4/4 (5 sanity cases inside them) | Paths collected, deduplicated and signed in chunks of 100 through createSignedUrls; the per-entry error is read so an unsignable object is left out rather than rendering an empty src; a signing outage costs the photos, not the queue | Restoring the loop turns the guard red at app/(app)/missions/page.tsx:106; the existing missions read-boundary test still passes | A loop inside a loop around `await createSignedUrl` — up to four photos per submission across the whole queue, in series. The batch form was already in the codebase and already used correctly one directory away. |
 | A11Y-001 | Accessibility | The photo lightbox stranded keyboard users (closes F-D01) | 🛠 FIXED + PASS | High | 7/7 | role=dialog + aria-modal + the shared useDialogBehavior hook on the viewer; tiles made focusable with Enter/Space; Arrow Left/Right between photos | Three mutations red (the hook removed; the tiles returned to mouse-only; a new overlay declaring aria-modal without the hook); 13 declare it and 13 implement it, and the sets are identical | The tiles were div onClick, so a keyboard could not reach the viewer at all — a trap you cannot enter. The existing a11y guard named four overlays by hand, so this one was never looked at: enumerated with no scan, the third shape of this repo's signature defect. |
+| A11Y-002 | Accessibility | The lint config enabled none of the rules that would have caught it (F-D10/F-D02/F-D03) | 🛠 FIXED + PASS (F-D03 ratcheted, not fixed) | Medium | 4/4 (7 sanity cases inside them) | label-has-associated-control enabled at depth 4 — measured first: at the default depth its only three findings are correct markup one level too deep; control-has-associated-label left OFF because 561 findings and the first sample is a correctly labelled input | next lint clean but for the three pre-existing react-hooks warnings; 144 selects scanned, 71 unnamed, pinned by a ratchet whose scan is asserted non-vacuous | next/core-web-vitals carries only a subset of jsx-a11y, which is exactly what F-D10 said. A rule whose findings are mostly wrong is one everyone learns to skip, so the unnamed selects are counted by a check that cannot be satisfied by nesting depth. |
 | TEST-009 | Testing | Probe fixtures left in the seeded anchor family | 🛠 FIXED + PASS | Medium | 6/6 | Both probes now clear their fixtures at the end as well as the start | Each passes twice; suite 47/47 on both databases; anchor family holds only its seeded members | "Race Child" and "Probe Kid" had been living in the 71,192-row anchor family, the latter for a week. Found by the AUTHZ-006 sweep counting a member no fixture of its own had created. |
 | DATA-010 | DATA | Resource lifecycle through the real API | ✅ PASS | High | 8/8 | None required | CREATE/READ/UPDATE/VERIFY/DELETE/VERIFY all pass as a real member; a child's refused write returns HTTP 204 without Prefer, 200 [] with it, dosage unchanged | Shows at the HTTP layer why .select() + wroteNoRows was needed: 204 No Content is a success for a write that changed nothing. |
 | SEC-008 | SEC | Realtime broadcast isolation and publication drift | ✅ PASS | Critical | 5/5 | None required | Publication and code agree exactly (61 = 61, empty diff both ways); a live socket received its own family's row and not another's | The first attempt used an unpublished table and received nothing — a run that would have read as a clean refusal while proving nothing. Controls decided it. |
@@ -22068,6 +22069,49 @@ The tiles became `role="button"` with `tabIndex={0}` and an Enter/Space handler 
 **And an allowlist retired itself.** `tests/consent-preference-centre-focus.test.ts` carried a list of eleven components permitted to hand-roll `aria-modal`, written when only one of them called `.focus()` at all, with the note *"this may only shrink; adding to it is the finding."* The lightbox failed it, and the right answer was not a twelfth entry: every one of those eleven now delegates to the hook, so the list's premise is spent. Its two cases are replaced by the property they were standing in for — *does `aria-modal` mean anything here* — which cannot go stale the way a membership test can, plus a non-vacuity assertion on the walk itself. A new overlay declaring the attribute and delegating nothing turns it red by name.
 
 
+### A11Y-002 — The lint config enabled none of the rules that would have caught it (F-D10, F-D02, F-D03)
+
+Status: 🛠 FIXED + PASS for F-D02/F-D10; ⚠️ F-D03 measured and ratcheted, not fixed
+Severity: Medium
+Route(s), components, actions, tables and providers: `.eslintrc.json`, `tests/a-select-says-what-it-selects.test.ts`, 144 `<select>` elements across `components/` and `app/`
+
+#### Expected Behavior
+The rules that catch a detached label and an unnamed control are switched on, at a setting that matches how this codebase actually writes markup.
+
+#### Test Cases
+- [x] Every jsx-a11y rule `next/core-web-vitals` carries, and does not carry, established by running them
+- [x] `label-has-associated-control` measured at the default depth and at depth 4
+- [x] `control-has-associated-label` measured, and its findings sampled before deciding
+- [x] All 144 `<select>` elements scanned; the 71 with no accessible name counted
+- [x] The scan's four ways of naming a control asserted individually, plus a closed-label and a prose case
+- [x] Non-vacuity: more than 100 selects, more than 200 files
+- [x] The lint rule's presence and depth asserted from the config itself
+- [x] `npx next lint` clean but for the three pre-existing `react-hooks/exhaustive-deps` warnings
+
+#### Issues Found
+`.eslintrc.json` was three lines: `extends: next/core-web-vitals` and an ignore list. That preset carries a *subset* of jsx-a11y — `alt-text`, `aria-props`, `aria-proptypes`, `aria-unsupported-elements`, `role-has-required-aria-props`, `role-supports-aria-props` — and not `label-has-associated-control`. F-D10 named this as the root cause of F-D02 and F-D03, and it was right: nothing in the toolchain could see either class.
+
+#### Fixes Applied
+**`label-has-associated-control`, enabled, at depth 4.** Measured before choosing the setting: at the rule's default depth of 2 it reports exactly three files, and all three are *correct* markup whose text sits one level deeper than the default allows —
+
+    <label><input type="checkbox" name="is_emergency" /><div><p>Emergency contact</p><p>…</p></div></label>
+
+At depth 4 the tree is clean. So raising the depth removed false positives rather than findings, and the 55 detached labels F-D02 counted have genuinely been repaired since it was written. The rule is now what keeps them repaired.
+
+**`control-has-associated-label`, deliberately not enabled.** It reports **561** violations here, and the first one sampled is
+
+    <label className="block"><span>OpenAI API key</span><input type="password" name="openaiKey" /></label>
+
+which is correctly labelled. A rule whose findings are mostly wrong is a rule everyone learns to skip past, and skipping past it is how a real finding hides — the same reason the `readAll` guard in DATA-011 was deliberately made forgiving in its weaker half. Turning it on would have been a change that looked like rigour and produced none.
+
+#### F-D03 — measured, ratcheted, and not fixed
+The genuinely unnamed controls that rule was reaching for are real, and they are counted by `tests/a-select-says-what-it-selects.test.ts` instead, which cannot be satisfied by nesting depth: a `<select>` counts as named by `aria-label`, `aria-labelledby`, an `id` (the house `Field` pattern hands one down), or a wrapping `<label>` opened above it.
+
+**71 of 144 `<select>` elements have no accessible name.** They are filters — "all types", "all lists", a member picker, a status picker — announced as "combo box" and nothing else, while the page's contents change under them. F-D03 counted 65; it is 71 now.
+
+Naming them is **71 pieces of product copy in seven languages**. That is a writing task for whoever owns the product voice, not something to invent inside an audit — the same call recorded for OPEN-001 and SEC-013. What is delivered instead is the measurement, and a ratchet pinned at 71 that stops the number growing and makes every reduction deliberate. Lower the ceiling as they are named; never raise it.
+
+
 ### ADMIN-001 — Every admin server action reaches a super-admin gate
 
 Status: ✅ PASS
@@ -22784,7 +22828,7 @@ Status: ✅ PASS — `npm run lint` reports the four known baseline warnings and
 ## Automated Tests
 Status: ✅ PASS — 15,287 tests across 1,215 files pass, zero failures and zero skips, on Node 24.15.0 at head 92340315 (160s).
 
-Later in this cycle, on Node 24.21.0: **16,783 tests across 1,316 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **51/51 boundary probes with 0 skipped**. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), `tests/a-capped-read-is-not-a-silent-one.test.ts` (DATA-011, 5), `tests/a-family-day-starts-where-the-family-is.test.ts` and `tests/a-server-day-is-the-familys-day.test.ts` (DATA-012, 11), `docs/audit/vaults-require-second-factor-check.sql` (AUTHZ-008), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
+Later in this cycle, on Node 24.21.0: **16,787 tests across 1,317 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **51/51 boundary probes with 0 skipped**. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), `tests/a-capped-read-is-not-a-silent-one.test.ts` (DATA-011, 5), `tests/a-family-day-starts-where-the-family-is.test.ts` and `tests/a-server-day-is-the-familys-day.test.ts` (DATA-012, 11), `docs/audit/vaults-require-second-factor-check.sql` (AUTHZ-008), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
 
 Five existing guards had to be repaired rather than merely re-run, and that is itself a finding recorded under SEC-010: `guardian-callback-security`, `middleware-public-api-boundary`, `public-pages-reachable`, `health-feature-secrets` and `public-webhook-signature-boundary` each identified a control by the SPELLING of the function that implemented it. Moving identical verification one call away turned all five red while nothing about the behaviour changed — which is the same reason `public-webhook-signature-boundary` stayed green through eight signature checks that only ran in a production build.
 
@@ -23133,7 +23177,7 @@ The invite toast and two Home widgets remain.
 | F-F02 | F-017's timezone bug still live on eleven server-rendered surfaces, including the kids page | FIXED on the surfaces that show a day — see DATA-012. 19 server files measured, 5 corrected (kids, guardian, moments, both dashboards) plus every notification's today/tomorrow copy; the remaining 14 are declared with a reason each and the declaration fails in both directions |
 | F-F03 | `/missions` issues up to 240 sequential storage round trips on the parent approval queue | FIXED — see PERF-004: one batched `createSignedUrls` per hundred paths, with a guard that reports any signing call inside a loop |
 | F-D01 | The photo lightbox strands keyboard users: no `role="dialog"`, no Escape, no focus trap | FIXED — see A11Y-001: dialog semantics plus the shared behaviour hook, keyboard-openable tiles and arrow-key navigation, held by a scan asserting aria-modal ⟺ useDialogBehavior in both directions |
-| F-D02 / F-D03 | 55 labels detached from their control; 65 `<select>` with no accessible name | OPEN |
+| F-D02 / F-D03 | 55 labels detached from their control; 65 `<select>` with no accessible name | SPLIT — see A11Y-002. F-D02/F-D10: `label-has-associated-control` is now enabled at depth 4 and the tree is clean, so the detached labels are repaired and stay repaired. F-D03: 71 of 144 selects are unnamed (up from 65), measured and held by a ratchet — naming them is 71 pieces of copy in seven languages and is the product owner's call |
 | F21 | A child could grant themselves a reward | Half fixed and live, half awaiting the operator |
 | F1, F9, F10, F15, F16, F18, F20 | sitemap dead URLs; whole i18n catalogue per page; seeded records shown as real customer stories; Autopilot running for every family; paid features enforced by a padlock; ungated endpoints; a child clearing the chore board | **all fixed** |
 | F-C01, F-C02, F-C03 | sitemap dated by generation time; 445 non-indexable URLs; the catalogue on every public page | **all fixed and verified in production** |
