@@ -46,7 +46,7 @@ export default async function AutonomousManagementPage() {
   const manager = isManager(ctx.active.role);
 
   const [signals, recs, rules, pendingRuns, doneRuns] = await Promise.all([
-    gatherSignalsResult(familyId),
+    gatherSignalsResult(familyId, tz),
     settle(supabase.from('family_ai_recommendations').select('*').eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(8)),
     settle(supabase.from('family_automation_rules').select('id, name, is_enabled').eq('family_id', familyId).eq('is_enabled', true)),
     settle(supabase.from('family_automation_runs').select('*').eq('family_id', familyId).eq('status', 'pending').order('created_at', { ascending: false }).limit(6)),

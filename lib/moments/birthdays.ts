@@ -26,20 +26,49 @@ function parseBirthday(value: string): { year: number | null; month: number; day
   return { year: year > 1900 ? year : null, month, day };
 }
 
+/**
+ * Day index (days since 1970-01-01) of a Date's CALENDAR date, read from its
+ * local parts. `Date.UTC` is used only as a zone-free, DST-free calendar
+ * arithmetic (never as "this is UTC"): subtracting two of these counts calendar
+ * days exactly, where subtracting two local midnights counts 23h or 25h twice a
+ * year. It also survives the zones where local midnight does not exist.
+ */
+function dayIndexOf(d: Date): number {
+  return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86_400_000);
+}
+
+/**
+ * A birthday is a DATE, not an instant, so it is emitted as a ZONE-LESS
+ * 'YYYY-MM-DDT00:00:00' — never `toISOString()`. `toISOString()` re-expresses
+ * local midnight at Greenwich, so east of Greenwich the day walks backwards:
+ * midnight 5 July in Asia/Tokyo is 4 July 15:00Z, and every consumer that
+ * slices the first ten characters (lib/moments/notify.ts's dedup key) reads the
+ * 4th. The parts below come from `d`'s LOCAL fields, which are exactly the
+ * calendar date it was constructed from in every zone, so this string is the
+ * same in all of them. Consumers that re-parse it get local midnight of that
+ * day — the reader's own day, which is what an all-day moment means.
+ */
+function birthdayDayISO(d: Date): string {
+  const y = String(d.getFullYear()).padStart(4, '0');
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}T00:00:00`;
+}
+
 /** The next occurrence (>= today, local midnight) of a month/day, this year or next. */
 export function nextBirthdayDate(birthday: string, now: Date = new Date()): Date | null {
   const p = parseBirthday(birthday);
   if (!p) return null;
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  // `new Date(y, m - 1, d)` also normalizes an impossible date the same way it
+  // always has (29 Feb in a common year -> 1 Mar), so that is kept deliberately.
   let d = new Date(now.getFullYear(), p.month - 1, p.day);
-  if (d.getTime() < today.getTime()) d = new Date(now.getFullYear() + 1, p.month - 1, p.day);
+  if (dayIndexOf(d) < dayIndexOf(now)) d = new Date(now.getFullYear() + 1, p.month - 1, p.day);
   return d;
 }
 
 /** Whole days from `now`'s date to a target date (0 = today). */
 export function daysUntil(target: Date, now: Date = new Date()): number {
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  return Math.round((target.getTime() - today.getTime()) / 86400000);
+  return dayIndexOf(target) - dayIndexOf(now);
 }
 
 /**
@@ -69,7 +98,7 @@ export function upcomingBirthdayEvents(
         title,
         category: 'birthday',
         location: null,
-        starts_at: next.toISOString(),
+        starts_at: birthdayDayISO(next),
         all_day: true,
         description: 'Family birthday',
       },
