@@ -166,18 +166,28 @@ function makeDb() {
 
 const { applyCompletionRewards } = await import('@/lib/chores/server');
 
-// The clock is pinned so the streak arm is decided, not inherited from the day
-// the suite happens to run on: yesterday's activity + today = a streak of 2.
+// The streak arm is decided, not inherited from the day the suite happens to run
+// on: yesterday's activity + today = a streak of 2. The day key that decides it
+// is now an explicit (zone, instant) pair on the options below — see ZONE/NOW —
+// so this holds under TZ=UTC and TZ=Asia/Tokyo alike. The fake clock stays as a
+// floor: any clock read that creeps back into the award path is pinned too.
 beforeAll(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date(`${TODAY}T09:00:00Z`));
 });
 afterAll(() => { vi.useRealTimers(); });
 
+// Named explicitly rather than left to the host: 02:00 on 21 September in Los
+// Angeles is 09:00 the same day at Greenwich, so both answers happen to be
+// TODAY here — which is the point. This test is about the LOCK, and pinning the
+// zone keeps it about the lock in every zone the suite is run under.
+const ZONE = 'America/Los_Angeles';
+const NOW = new Date(`${TODAY}T09:00:00Z`);
+
 describe('two chores approved for one kid at the same time', () => {
   it('both land: 100 + 20 + 20 = 140, and the second award reads what the first wrote', async () => {
     const db = makeDb();
-    const opts = { familyId: FAM, memberId: KID, difficulty: 'medium' as const, qualityScore: 90 };
+    const opts = { familyId: FAM, memberId: KID, difficulty: 'medium' as const, qualityScore: 90, tz: ZONE, now: NOW };
 
     let release!: () => void;
     db.holdUpdates(new Promise<void>((r) => { release = r; }));

@@ -56,7 +56,14 @@ function fakeClient(
   return { client, calls, rpcArgs };
 }
 
-const rewardOptions = { familyId: 'family-1', memberId: 'member-1', difficulty: 'medium' as const, qualityScore: 100 };
+// The zone and the instant are ARGUMENTS as of the family-day conversion, so
+// these boundary cases name both rather than inheriting the host's clock. The
+// pair resolves to 2026-07-02 in Asia/Tokyo (09:30 local), which is the
+// `last_activity` the stubbed award below reports back.
+const rewardOptions = {
+  familyId: 'family-1', memberId: 'member-1', difficulty: 'medium' as const, qualityScore: 100,
+  tz: 'Asia/Tokyo', now: new Date('2026-07-02T00:30:00Z'),
+};
 
 /**
  * The rollback takes back THIS award and nothing else.

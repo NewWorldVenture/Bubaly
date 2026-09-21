@@ -6,14 +6,11 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { createServiceClient } from '@/lib/supabase/server';
+import { dayKeyInTz } from '@/lib/services/scope';
 import { DIFFICULTY_XP, type Difficulty } from '@/lib/chores/logic';
 
 type DB = SupabaseClient<Database>;
 type Progress = Database['public']['Tables']['kid_progress']['Row'];
-
-function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 /**
  * Get-or-create the member's progress row.
@@ -122,9 +119,32 @@ export type CompletionResult = { xp: number; level: number; leveledUp: boolean; 
  */
 export async function applyCompletionRewards(
   supabase: DB,
-  opts: { familyId: string; memberId: string; difficulty: Difficulty; qualityScore: number | null },
+  opts: {
+    familyId: string; memberId: string; difficulty: Difficulty; qualityScore: number | null;
+    /** The family's IANA zone. Required, and deliberately not defaulted. */
+    tz: string;
+    /** The instant the approval happened. Required, so this module reads no clock. */
+    now: Date;
+  },
 ): Promise<CompletionResult> {
-  const today = todayISO();
+  // The day this approval is FILED against, on the family's kitchen wall.
+  //
+  // This used to be the day at Greenwich, and `last_activity` is a DATE column
+  // (00430) — a column that already means the family's day, so a Greenwich key
+  // written into it is simply the wrong day for a large, predictable slice of
+  // every day. A chore approved at 17:00 in Los Angeles was filed against
+  // TOMORROW: `last_activity` disagreed with the day the child actually did the
+  // chore, and 0341's streak arm (`p_today - v_row.last_activity = 1`) then
+  // credited the next day's streak a day early. East of Greenwich the error runs
+  // the other way, and a child who did a chore at 08:00 in Tokyo was filed
+  // against YESTERDAY, so the following day looked like a two-day gap and the
+  // streak reset to 1.
+  //
+  // The SQL side is untouched and must stay untouched: `p_today` is a `date`
+  // parameter and every comparison 0341 makes with it is date-to-date
+  // arithmetic, which is whole-calendar-day arithmetic and therefore DST-proof.
+  // What was wrong was never the comparison; it was which day TypeScript named.
+  const today = dayKeyInTz(opts.now, opts.tz);
   const gainedXp = DIFFICULTY_XP[opts.difficulty] ?? DIFFICULTY_XP.medium;
 
   // 0341. This used to read the row, add the XP in TypeScript, and write the
