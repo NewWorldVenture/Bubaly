@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-198 finding IDs from four workers and two parallel sessions; none of it was
+199 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -12,7 +12,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 > source-and-migration audit run without production credentials. Session B
 > (Register B, 14,038 items, `AUTH-001` / `API-<hash>` / `DB-TBL-nnn`) is a
 > hosted-CI and deployed-release audit. Their finding-ID sets are **disjoint**:
-> 920 IDs from A, 684 from B, 1,601 in union — verified mechanically at each
+> 921 IDs from A, 684 from B, 1,602 in union — verified mechanically at each
 > merge. The three literals both files contain (`LB-009`, `LB-016`, `SHA-256`)
 > are not counter-examples: the first two are pre-existing *runbook* names each
 > register cites, and the third is a hash algorithm the ID regex matches. No
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 208 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 209 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -34123,6 +34123,44 @@ pinning `const { error: linkErr }`. Re-anchored on the filter.
 
 ---
 
+### `[CLAUDE-1][MEDIUM][SERVER ACTIONS]` C1-S9-58 — eight more, two exempt, and a failure mode that is duplication rather than absence
+
+**Confirmed (6).** Closing a meal vote — `winner` is computed there and **stored
+nowhere else**, so a close matching no rows leaves the vote open and discards
+the tally — plus reopening it, both marketplace saved-search writes, and the
+library unsubscribe, which returns *"Subscription removed."* while the feed
+keeps ingesting.
+
+**The relationship calendar pair is the interesting one**, because the two
+halves fail in opposite directions:
+
+- The **unlink** runs after the calendar event is already deleted. A no-op
+  leaves `calendar_event_id` pointing at a deleted event, and the next sync
+  treats the date as already on the calendar — so **it never goes back on**.
+- The **link** runs after the event is created. A no-op leaves the date not
+  knowing about it, so the next run creates a **second event for the same
+  anniversary**. The failure there is duplication, not absence.
+
+Most of this class reads as "the thing the user asked for did not happen." This
+pair is a reminder that it can equally read as "it happened twice."
+
+**Exempt, and documented in the file (2).** Both `dashboard_layouts` resets.
+*"Reset my layout"* on a dashboard nobody customised matches nothing, and that
+**is** the success case — the layout is now the default, which is what was
+asked for. Confirming them would fail the button for every user who had not
+customised anything, which is most users.
+
+**Status:** FIXED. Guard: eleven cases, each proved red by mutation — including
+two over-tightening mutations (gating a layout reset, and gating a
+`last_error` annotation that `C1-S9-49` had deliberately left alone, re-asserted
+here because this pass touched the same file and a tidy-up is exactly how it
+would get "fixed").
+
+**Ratchet: 42 → 35 across 29 files. Twelve writes are now deliberately
+unconfirmed**, each with a guard asserting the absence of a check.
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -34192,8 +34230,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,134 passing / 17,137 across 1,352
-files.** (Re-run after `C1-S9-57`; was 16,950 / 16,953 across 1,349 before this
+Status: ✅ PASS — `npx vitest run`: **17,142 passing / 17,145 across 1,352
+files.** (Re-run after `C1-S9-58`; was 16,950 / 16,953 across 1,349 before this
 batch.) The three failures are `C1-S9-09`, BLOCKED: this container runs Node
 22.22.2 against the repository's `.nvmrc` 24.21.0, and nvm cannot fetch the
 Node 24 distribution here. Not counted as passing.
@@ -34204,6 +34242,12 @@ head `f9820169`: **1,293 passed, 3 failed in 11.2m**, down from 13 failures.
 Re-confirmed twice since, on `a7ba8f1f` (1,293 / 3) and on `9c9f3a43`
 (**1,292 passed, 3 failed, 1 flaky**), so Passes AG and the `C1-S9-25` AI-route
 fixes introduced no browser regression.
+
+**Seventh re-confirmation, on `9cceaa6e` (run 35534235517): 1,293 passed, 3
+failed, 0 flaky in 10.6m** — the same three `phone-auth-http` cases, covering
+`C1-S9-56` and `C1-S9-57`. The durable-session context-close error noted below
+did not recur, which is consistent with it being intermittent rather than
+introduced.
 
 **Sixth re-confirmation, on `65ad3da8` (run 35532988909): 1,293 passed, 3 failed
 in 10.7m**, with Typecheck/Lint/Test/Build, Database and Mobile all green. Same

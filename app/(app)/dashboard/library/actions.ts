@@ -12,6 +12,7 @@ import { safeFeedUrl } from '@/lib/library/feed-parse';
 // so anything the nightly cron also needs cannot live in this file.
 import { ingestFeed } from '@/lib/library/ingest';
 import { rateLimit } from '@/lib/server/rate-limit';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 const PAGE = '/dashboard/library';
 
@@ -117,10 +118,12 @@ export async function refreshFeedAction(feedId: string): Promise<LibraryResult> 
 export async function unsubscribeFeedAction(feedId: string): Promise<LibraryResult> {
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const { error } = await supabase
-    .from('library_feeds').delete().eq('id', feedId).eq('family_id', ctx.active.familyId);
-  if (error) {
-    console.error('[library] unsubscribe failed', error);
+  const { data: unsubscribed, error } = await supabase
+    .from('library_feeds').delete().eq('id', feedId).eq('family_id', ctx.active.familyId).select('id');
+  if (error || wroteNoRows(unsubscribed)) {
+    // "Subscription removed." is returned on success, so a delete that removed
+    // nothing told the family a feed is gone while it keeps ingesting.
+    console.error('[library] unsubscribe failed', error ?? 'no rows deleted');
     return { ok: false, error: 'Could not remove that subscription.' };
   }
   revalidatePath(PAGE);

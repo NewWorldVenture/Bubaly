@@ -928,3 +928,83 @@ describe('a throttle clear and a member link are not the same write (C1-S9-57)',
     expect(childLoginSource).toContain('Zero rows is a real failure here');
   });
 });
+
+/**
+ * Audit C1-S9-58 — eight more, and two that a "reset" makes obviously exempt.
+ */
+const customize = readFileSync('app/(app)/dashboard/customize-actions.ts', 'utf8');
+const mealVote = readFileSync('app/(app)/dashboard/recipes/vote/actions.ts', 'utf8');
+const relationship = readFileSync('app/(app)/dashboard/relationship/actions.ts', 'utf8');
+const alerts = readFileSync('app/(app)/marketplace/alerts/actions.ts', 'utf8');
+const libraryActions = readFileSync('app/(app)/dashboard/library/actions.ts', 'utf8');
+
+describe('a reset that finds nothing has done what it promised (C1-S9-58)', () => {
+  it('neither dashboard-layout reset is gated on rows', () => {
+    // "Reset my layout" on a dashboard nobody customised matches nothing, and
+    // that IS the success case: the layout is now the default, which is what was
+    // asked for. Confirming these would fail the button for every user who had
+    // not customised anything — the largest group.
+    // DELETEs only — the file also upserts layouts when saving one, and an
+    // upsert cannot match zero rows anyway.
+    const deletes = (customize.match(/from\('dashboard_layouts'\)[\s\S]{0,220}?;/g) ?? [])
+      .filter((w) => w.includes('.delete()'));
+    expect(deletes, 'the per-user reset and the family-wide reset').toHaveLength(2);
+    for (const d of deletes) expect(d).not.toContain('.select(');
+    expect(customize).toContain('Deliberately NOT gated on rows');
+  });
+});
+
+describe('a vote result is not computed and thrown away (C1-S9-58)', () => {
+  it('closing a vote is confirmed', () => {
+    // `winner` is computed here and stored nowhere else — a close matching no
+    // rows leaves the vote open and discards the tally.
+    expect(mealVote).toContain('wroteNoRows(closed)');
+    expect(mealVote).toContain('stored nowhere else');
+  });
+
+  it('reopening is confirmed', () => {
+    expect(mealVote).toContain('wroteNoRows(reopenedVote)');
+  });
+});
+
+describe('a calendar link is not left dangling or duplicated (C1-S9-58)', () => {
+  it('the unlink is confirmed, because the event is already gone', () => {
+    // A no-op leaves `calendar_event_id` pointing at a deleted event, and the
+    // next sync treats the date as already on the calendar — so it never goes
+    // back on.
+    expect(relationship).toContain('wroteNoRows(unlinked)');
+    expect(relationship).toContain('it never goes back');
+  });
+
+  it('the link is confirmed, because the failure mode is duplication', () => {
+    // The event exists by then. A link matching no rows leaves the date not
+    // knowing about it, so the next run creates a SECOND event for the same
+    // anniversary.
+    expect(relationship).toContain('wroteNoRows(linked)');
+    expect(relationship).toContain('a SECOND event');
+  });
+});
+
+describe('saved searches and subscriptions are confirmed (C1-S9-58)', () => {
+  it('both saved-search writes ask what they changed', () => {
+    for (const binding of ['deletedSearch', 'seen']) {
+      expect(alerts, binding).toContain(`wroteNoRows(${binding})`);
+    }
+  });
+
+  it('unsubscribing is confirmed before it reports removal', () => {
+    // "Subscription removed." is returned on success, so a delete that removed
+    // nothing told the family a feed is gone while it keeps ingesting.
+    expect(libraryActions).toContain('wroteNoRows(unsubscribed)');
+    expect(at(libraryActions, 'wroteNoRows(unsubscribed)'))
+      .toBeLessThan(at(libraryActions, "return { ok: true, message: 'Subscription removed.' };"));
+  });
+
+  it('the feed-error annotations stay ungated', () => {
+    // C1-S9-49's deliberate case, re-asserted here because this pass touched
+    // the same file and a tidy-up is exactly how it would get "fixed".
+    const annotations = libraryActions.match(/update\(\{ last_error: result\.error \}\)[^;]*;/g) ?? [];
+    expect(annotations).toHaveLength(2);
+    for (const a of annotations) expect(a).not.toContain('.select(');
+  });
+});

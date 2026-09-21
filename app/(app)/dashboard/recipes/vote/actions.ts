@@ -7,6 +7,7 @@ import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { tallyVotes, winningOption } from '@/lib/recipes/voting';
 import type { Database } from '@/lib/database.types';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 type Json = Database['public']['Tables']['grocery_items']['Insert'];
 type Result = { ok: true; id?: string } | { ok: false; error: string };
@@ -80,20 +81,25 @@ export async function closeMealVote(voteId: string): Promise<Result> {
   }
   const ids = (options ?? []).map((o) => o.id);
   const winner = winningOption(tallyVotes(ids, (ballots ?? []) as { option_id: string; choice: string }[]));
-  const { error } = await supabase.from('meal_votes')
+  // The winner is computed here and stored nowhere else. A close that matched
+  // no rows leaves the vote open and discards the tally. Audit C1-S9-58.
+  const { data: closed, error } = await supabase.from('meal_votes')
     .update({ status: 'closed', winner_option_id: winner })
-    .eq('id', voteId).eq('family_id', ctx.active.familyId);
+    .eq('id', voteId).eq('family_id', ctx.active.familyId).select('id');
   if (error) return { ok: false, error: error.message };
+  if (wroteNoRows(closed)) return { ok: false, error: t('actions.couldNotCloseThatVote') };
   revalidatePath('/dashboard/recipes/vote');
   return { ok: true };
 }
 
 /** Reopen a closed vote. */
 export async function reopenMealVote(voteId: string): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const { error } = await supabase.from('meal_votes').update({ status: 'open', winner_option_id: null }).eq('id', voteId).eq('family_id', ctx.active.familyId);
+  const { data: reopenedVote, error } = await supabase.from('meal_votes').update({ status: 'open', winner_option_id: null }).eq('id', voteId).eq('family_id', ctx.active.familyId).select('id');
   if (error) return { ok: false, error: error.message };
+  if (wroteNoRows(reopenedVote)) return { ok: false, error: t('actions.couldNotReopenThatVote') };
   revalidatePath('/dashboard/recipes/vote');
   return { ok: true };
 }

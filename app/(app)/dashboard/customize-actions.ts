@@ -68,6 +68,9 @@ export async function resetDashboardLayoutAction(input: { deviceContext?: string
   const supabase = await createServer();
   const device = asDevice(input.deviceContext);
 
+  // Deliberately NOT gated on rows. "Reset my layout" on a dashboard that was
+  // never customised matches nothing, and that IS the success case — the layout
+  // is now the default, which is what was asked for. Audit C1-S9-58.
   const { error } = await supabase.from('dashboard_layouts')
     .delete().eq('family_id', familyId).eq('user_id', userId).eq('scope', 'user').eq('device_context', device);
   if (error) return { ok: false, error: error.message };
@@ -143,6 +146,8 @@ export async function resetAllLayoutsAction(): Promise<Result> {
   if (!isManager(ctx.active.role)) return { ok: false, error: t('customizeActions.onlyAParentGuardianCan3') };
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
+  // Same: resetting every member's layout in a family where nobody customised
+  // one matches nothing and has done exactly what it promised.
   const { error } = await supabase.from('dashboard_layouts').delete().eq('family_id', familyId).eq('scope', 'user');
   if (error) return { ok: false, error: error.message };
   await logEvent(supabase, familyId, ctx.user.id, 'reset_all');
