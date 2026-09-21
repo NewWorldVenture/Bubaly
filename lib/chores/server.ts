@@ -6,7 +6,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { createServiceClient } from '@/lib/supabase/server';
-import { DIFFICULTY_XP, levelForXp, nextStreak, type Difficulty } from '@/lib/chores/logic';
+import { DIFFICULTY_XP, type Difficulty } from '@/lib/chores/logic';
 
 type DB = SupabaseClient<Database>;
 type Progress = Database['public']['Tables']['kid_progress']['Row'];
@@ -15,7 +15,14 @@ function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-/** Get-or-create the member's progress row. */
+/**
+ * Get-or-create the member's progress row.
+ *
+ * This is a READ path. The award itself no longer goes through it: a total
+ * computed from a row read here would be computed outside the lock that makes
+ * it true (0341), so `applyCompletionRewards` does its own get-or-create inside
+ * `kid_progress_apply_completion`.
+ */
 export async function ensureProgress(supabase: DB, familyId: string, memberId: string): Promise<Progress> {
   const { data: existing, error: lookupError } = await supabase
     .from('kid_progress').select('*').eq('family_id', familyId).eq('member_id', memberId).maybeSingle();
@@ -30,14 +37,74 @@ export async function ensureProgress(supabase: DB, familyId: string, memberId: s
   return data;
 }
 
-async function restoreProgress(supabase: DB, progress: Progress): Promise<void> {
-  const { error } = await supabase.from('kid_progress').update({
-    xp: progress.xp,
-    level: progress.level,
-    current_streak: progress.current_streak,
-    longest_streak: progress.longest_streak,
-    last_activity: progress.last_activity,
-  }).eq('id', progress.id).eq('family_id', progress.family_id);
+/**
+ * What `kid_progress_apply_completion` (0341) hands back: the row as this award
+ * left it, and what it found before touching it. The `previous_*` half is not
+ * decoration — it is what lets ONE award be taken back without taking back an
+ * approval that landed beside it.
+ */
+type AppliedCompletion = {
+  xp: number;
+  level: number;
+  currentStreak: number;
+  longestStreak: number;
+  lastActivity: string | null;
+  previousLevel: number;
+  previousStreak: number;
+  previousLongestStreak: number;
+  previousLastActivity: string | null;
+};
+
+/** Read the RPC's jsonb, or null if it failed or came back a shape we cannot trust. */
+function readAppliedCompletion(data: unknown): AppliedCompletion | null {
+  if (!data || typeof data !== 'object') return null;
+  const row = data as Record<string, unknown>;
+  if (row.ok !== true) return null;
+  const num = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) ? value : null);
+  const day = (value: unknown): string | null => (typeof value === 'string' && value !== '' ? value : null);
+  const xp = num(row.xp);
+  const level = num(row.level);
+  const currentStreak = num(row.current_streak);
+  const longestStreak = num(row.longest_streak);
+  const previousLevel = num(row.previous_level);
+  const previousStreak = num(row.previous_streak);
+  const previousLongestStreak = num(row.previous_longest_streak);
+  if (xp === null || level === null || currentStreak === null || longestStreak === null
+    || previousLevel === null || previousStreak === null || previousLongestStreak === null) return null;
+  return {
+    xp, level, currentStreak, longestStreak,
+    lastActivity: day(row.last_activity),
+    previousLevel, previousStreak, previousLongestStreak,
+    previousLastActivity: day(row.previous_last_activity),
+  };
+}
+
+/**
+ * Take back ONE award when the badge work after it fails.
+ *
+ * This used to write the pre-award row back absolutely, which is the same lost
+ * update pointing the other way: an approval that landed in between would be
+ * erased by the rollback of an unrelated one. `kid_progress_revert_completion`
+ * subtracts under the same row lock the award was applied under, and restores
+ * the streak only while the row still carries what this award wrote.
+ */
+async function revertCompletionRewards(
+  supabase: DB,
+  opts: { familyId: string; memberId: string },
+  gainedXp: number,
+  applied: AppliedCompletion,
+): Promise<void> {
+  const { error } = await supabase.rpc('kid_progress_revert_completion', {
+    p_family_id: opts.familyId,
+    p_member_id: opts.memberId,
+    p_gained_xp: gainedXp,
+    p_applied_streak: applied.currentStreak,
+    p_applied_longest_streak: applied.longestStreak,
+    p_applied_last_activity: applied.lastActivity,
+    p_previous_streak: applied.previousStreak,
+    p_previous_longest_streak: applied.previousLongestStreak,
+    p_previous_last_activity: applied.previousLastActivity,
+  });
   if (error) console.error('[chore rewards] progress rollback failed', error);
 }
 
@@ -47,26 +114,36 @@ export type CompletionResult = { xp: number; level: number; leveledUp: boolean; 
  * Apply XP, streak, level, and badge changes for an approved chore. Idempotency
  * is the caller's responsibility (call once per approval). Returns what changed
  * so the UI can celebrate.
+ *
+ * That idempotency rule is about ONE approval being submitted twice, and it is
+ * unchanged. It never covered two DIFFERENT approvals for the same child
+ * arriving together — no caller can prevent those, and both are supposed to
+ * count. 0341 is what makes them both count.
  */
 export async function applyCompletionRewards(
   supabase: DB,
   opts: { familyId: string; memberId: string; difficulty: Difficulty; qualityScore: number | null },
 ): Promise<CompletionResult> {
-  const progress = await ensureProgress(supabase, opts.familyId, opts.memberId);
   const today = todayISO();
-
   const gainedXp = DIFFICULTY_XP[opts.difficulty] ?? DIFFICULTY_XP.medium;
-  const xp = progress.xp + gainedXp;
-  const prevLevel = progress.level;
-  const level = levelForXp(xp);
-  const streak = nextStreak(progress.current_streak, progress.last_activity, today);
-  const longest = Math.max(progress.longest_streak, streak);
 
-  const { data: updatedProgress, error: progressError } = await supabase
-    .from('kid_progress')
-    .update({ xp, level, current_streak: streak, longest_streak: longest, last_activity: today })
-    .eq('id', progress.id).eq('family_id', opts.familyId).select('id').single();
-  if (progressError || !updatedProgress) throw new Error('Could not save chore progress');
+  // 0341. This used to read the row, add the XP in TypeScript, and write the
+  // total back by id — so two approvals for one child at the same moment both
+  // read xp=100 and both wrote 120, and one award was silently lost. The level
+  // and both streak columns came off that same stale read, so they were lost in
+  // the same statement. `kid_progress_apply_completion` takes the row FOR
+  // UPDATE and does all four sums against what is THERE. Do not put the
+  // arithmetic back on this side of the wire.
+  const { data, error } = await supabase.rpc('kid_progress_apply_completion', {
+    p_family_id: opts.familyId,
+    p_member_id: opts.memberId,
+    p_gained_xp: gainedXp,
+    p_today: today,
+  });
+  const applied = error ? null : readAppliedCompletion(data);
+  if (!applied) throw new Error('Could not save chore progress');
+
+  const { xp, level, currentStreak: streak, previousLevel: prevLevel } = applied;
 
   try {
     // Count this member's approved chores to drive count-based badges.
@@ -91,7 +168,7 @@ export async function applyCompletionRewards(
 
     return { xp, level, leveledUp: level > prevLevel, streak, newBadges };
   } catch {
-    await restoreProgress(supabase, progress);
+    await revertCompletionRewards(supabase, opts, gainedXp, applied);
     throw new Error('Could not apply chore rewards');
   }
 }

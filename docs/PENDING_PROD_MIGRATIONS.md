@@ -1973,3 +1973,107 @@ is what would make `depth = 1` stop covering every application write.
 
 Until this is applied *together with* `0338`, erasing an account leaves that
 person's name on household ledger rows the care timeline still renders.
+
+### `0341` makes two approvals for one kid both land — unapplied
+
+`0341_two_approvals_for_one_kid_both_land.sql` (CONC-001).
+`applyCompletionRewards` in `lib/chores/server.ts` read `kid_progress`, added
+the XP in TypeScript, and wrote the total back by id — a read-modify-write with
+**neither a lock nor a predicate**:
+
+```
+const progress = await ensureProgress(supabase, opts.familyId, opts.memberId);
+const xp = progress.xp + gainedXp;                      // <- READ
+await supabase.from('kid_progress')
+  .update({ xp, level, current_streak: streak, longest_streak: longest, last_activity: today })
+  .eq('id', progress.id).eq('family_id', opts.familyId);  // <- blind WRITE
+```
+
+Two chores approved for one child at the same moment — two parents, one parent
+with two tabs, or the auto-approve path landing while a parent presses Approve —
+both read `xp=100` and both write `120`. One award is silently lost and the
+child is told 120 twice. `level`, `current_streak` and `longest_streak` come off
+the **same stale read** and go out in the same statement, so all four are lost
+together; that is why this moves all four and not just the XP. A fix that made
+only the XP relative would leave the level decided from a total the row no
+longer holds, and a wrong level looks deliberate.
+
+**This is not the idempotency contract.** The engine's docstring says
+idempotency is the caller's ("call once per approval") and that stays true — it
+is about one approval submitted twice. This is two **different** approvals
+arriving together, which no caller-side rule can prevent and which are both
+supposed to count. The contract is unchanged by this migration.
+
+**Measured, with two real concurrent sessions**, two medium chores (20 XP each)
+approved with two seconds of deliberate overlap, against a replay of 352
+migrations:
+
+```
+-- a child on 100 XP --
+  BLIND  shape — read, then UPDATE by id (the defect)
+    xp=120  level=2  current_streak=2  longest_streak=2
+  LOCKED shape — kid_progress_apply_completion (0341)
+    xp=140  level=2  current_streak=2  longest_streak=2
+
+-- a child on 270 XP, where the lost award is also a lost level-up --
+  BLIND  shape — read, then UPDATE by id (the defect)
+    xp=290  level=2  current_streak=2  longest_streak=2
+  LOCKED shape — kid_progress_apply_completion (0341)
+    xp=310  level=3  current_streak=2  longest_streak=2
+```
+
+Same two sessions, same seconds, same row. The second pair is why "it is only
+XP" is not a fair summary: at 270 the lost award is the level the child was
+shown they had reached. Preserved as
+`docs/audit/two-approvals-for-one-kid-both-land-race.sh` — a race, so
+deliberately outside the `*-check.sql` set `run-probes.sh` globs, the same
+posture as `docs/audit/allowance-double-pay-race.sh`.
+
+**What closes it** is the shape `0317_listing_status_decides_from_a_locked_row`
+used for the listing state machine and `0208_atomic_wallet_goal_funding` uses
+for goal funding: `kid_progress_apply_completion` reads the row `for update`, so
+the values the arithmetic is done from are the values that will be written, and
+the award becomes **relative to the locked row** rather than absolute against a
+snapshot taken before it. `kid_progress_level_for_xp` mirrors `levelForXp`
+because the level has to be recomputed inside that lock.
+
+**The rollback is half the fix, and was the same defect pointing the other
+way.** The engine restores the progress row when the badge work after the award
+fails, and it did that by writing the pre-award values back **absolutely** — so
+a concurrent approval that landed in between was erased by the rollback of an
+unrelated one. `kid_progress_revert_completion` subtracts under the same lock
+and restores the streak columns **only while the row still carries what that
+award wrote**, reporting `streak_restored: false` rather than clobbering a
+streak another approval has since decided.
+
+**It is not a new authorization boundary.** `kid_progress` carries `00430_chore_missions`'s
+single role-blind policy (`is_family_member(family_id)` FOR ALL), so any family
+member could already write this row directly; `SECURITY DEFINER` bypasses RLS,
+so the functions **restate** that policy rather than inventing one. Tightening
+it to managers is a separate decision with its own call sites (auto-approve runs
+as the service role, parent approval as the approving manager). What they do add
+is the cross-family guard the table never had — `kid_progress` is not one of
+`0311_family_scoped_references`'s guarded references, so nothing stopped a row
+naming this family beside another family's member.
+
+**Verified on a database built from nothing:** **352 migrations applied, 0
+failed**, and `0341` re-applies onto that schema unchanged (every statement is
+`create or replace`). `docs/audit/two-approvals-for-one-kid-both-land-check.sql`
+holds the boundary in CI — 16 assertions including the blind shape performed on
+the same row as its own negative control, the `for update` read out of
+`pg_get_functiondef` rather than out of a file (so it cannot pass against a
+definition a later migration replaced), and a reader control proving that check
+can still say no. It was **shown to fail before being trusted**: exit **3**
+against a mutated expectation, exit **0** as written.
+
+In the application, `tests/two-approvals-for-one-kid-both-land.test.ts` drives
+the real `applyCompletionRewards` against a stub that HOLDS the first approval
+open and asserts mid-flight that both approvals reached the database and neither
+had written — so the interleaving is a fact the test establishes rather than a
+coincidence it waits for. Reverting the fix turns it red at `expected 120 to be
+140`.
+
+Until this is applied, the two RPCs do not exist, so **`applyCompletionRewards`
+throws `Could not save chore progress` on every approval** — this migration and
+the application change ship together, which is the one ordering constraint on
+this row.

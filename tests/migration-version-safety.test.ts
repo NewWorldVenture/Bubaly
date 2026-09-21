@@ -168,7 +168,27 @@ describe('Supabase migration filename safety', () => {
     // whose negative control restores the unconditional preserve and requires
     // the erasure to break — measured: exit 3 against the unguarded function,
     // exit 0 against the repaired one.
-    expect(audit.nextVersion).toBe('0341');
+    //
+    // 0341 is the first CONCURRENCY finding to take a number here rather than
+    // an authorization one. 0341_two_approvals_for_one_kid_both_land.sql closes
+    // a lost update in applyCompletionRewards: it read kid_progress, added the
+    // XP in TypeScript, and wrote the total back by id, so two chores approved
+    // for one child at the same moment both read xp=100 and both wrote 120 —
+    // one award silently lost, and level/current_streak/longest_streak lost
+    // with it, because all four came off that one stale read. Measured on two
+    // real connections with two seconds of overlap: blind shape xp=120, locked
+    // shape xp=140; and from 270 XP, blind xp=290 level=2 against locked xp=310
+    // level=3, so the lost award is also a lost level-up. The fix is 0317's
+    // shape — `select … for update`, the award relative to the locked row —
+    // and it covers the ROLLBACK too, which wrote the pre-award row back
+    // absolutely and so erased any approval that landed beside it. Held by
+    // docs/audit/two-approvals-for-one-kid-both-land-check.sql (which performs
+    // the blind shape on the same row as its own negative control) and by
+    // tests/two-approvals-for-one-kid-both-land.test.ts (which holds the first
+    // approval open and asserts mid-flight that the second had reached the
+    // database and neither had written, so the interleaving is a fact rather
+    // than a hope).
+    expect(audit.nextVersion).toBe('0342');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {
