@@ -314,7 +314,12 @@ function AddTransactionModal({ open, onClose, familyId, userId, accounts, onDone
     if (!name.trim() || !amount) return;
     setSaving(true);
     const parsedAmount = parseFloat(amount);
-    const finalAmount = type === 'expense' ? -Math.abs(parsedAmount) : Math.abs(parsedAmount);
+    // Amount goes UNSIGNED; the direction lives in `type`. That is what
+    // `createTransaction` enforces (it refuses anything <= 0 outright), what the
+    // wallet action writes, and what this module's own reads already assume —
+    // every rollup below sums `Math.abs(tx.amount)` and prints the sign from
+    // `tx.type`. Negating an expense here refused every expense the form sent.
+    const finalAmount = Math.abs(parsedAmount);
     const supabase = createClient();
     const res = await createTransactionAction({
       name: name.trim(), amount: finalAmount, category, date, type,

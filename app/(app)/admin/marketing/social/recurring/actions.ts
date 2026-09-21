@@ -195,7 +195,12 @@ export async function runRecurringAdNowAction(id: string): Promise<ActionResult>
 
   const now = new Date();
   const schedule = scheduleFromRow(ad);
-  const { error: claimError } = await supabase
+  // The same compare-and-set the cron runner's claimOccurrence makes, read the
+  // same way: `.select('id')` is what makes PostgREST return the rows actually
+  // updated. Without it a lost race answers 204 with `data: null, error: null`,
+  // which is indistinguishable from a won one — and the occurrence goes out to
+  // the brand account a second time.
+  const { data: claimed, error: claimError } = await supabase
     .from('marketing_recurring_ads')
     .update({
       occurrences: ad.occurrences + 1,
@@ -204,8 +209,15 @@ export async function runRecurringAdNowAction(id: string): Promise<ActionResult>
       updated_by: gate.userId,
     })
     .eq('id', id)
-    .eq('occurrences', ad.occurrences);
-  if (claimError) return { ok: false, error: 'Could not start this run.' };
+    .eq('occurrences', ad.occurrences)
+    .select('id');
+  if (claimError) {
+    console.error('[recurring-ads] run now claim failed', id, claimError);
+    return { ok: false, error: 'Could not start this run.' };
+  }
+  if ((claimed?.length ?? 0) === 0) {
+    return { ok: false, error: 'This run was already taken by the scheduler or another admin. Reload to see the latest.' };
+  }
 
   const result = await publishOccurrence(supabase, ad, ad.occurrences, now, body);
   revalidatePath(PAGE);
