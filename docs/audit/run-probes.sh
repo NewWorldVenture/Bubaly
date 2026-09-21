@@ -20,15 +20,35 @@ if [ ${#probes[@]} -eq 0 ]; then
 fi
 
 failed=()
+skipped=()
 for f in "${probes[@]}"; do
   name=$(basename "$f")
   if out=$(psql -v ON_ERROR_STOP=1 -f "$f" 2>&1); then
-    echo "PASS  $name"
-    # SKIP is echoed alongside OK/PASSED, or a probe that declined to run its
-    # own invariant reports "PASS" here with nothing under it — indistinguishable
-    # from one that ran and held. A-15 can skip when its two sessions do not
-    # overlap, and that must be visible.
-    echo "$out" | grep -iE "NOTICE:.*(OK|PASSED|SKIP)" | sed 's/^.*NOTICE:  /        /'
+    # A probe that DECLINED to run its own invariant exits zero, exactly like
+    # one that ran and held. Counting it as a pass is how "64/64 passed" came to
+    # be printed over a run in which the wallet concurrency invariant was never
+    # exercised at all — the probe said so in its own notice, one line below a
+    # PASS, and the total said otherwise. A green line that proves nothing is
+    # worse than a missing one, so a skip is now its own verdict and is named in
+    # the summary rather than folded into the pass count.
+    # CASE-SENSITIVE, and that is the whole trick. Matching /skip/i here caught
+    # three probes that had done no such thing: Postgres says `extension "dblink"
+    # already exists, skipping` and `policy "…" does not exist, skipping` in the
+    # course of a perfectly good run, and family-self-read's own success line
+    # reads "197 empty, skipped". The engine's chatter is lowercase; a probe's
+    # verdict about ITSELF is written `SKIP:` or `SKIPPED`, uppercase, which is
+    # the convention every probe here already follows. Reading the engine's words
+    # as the probe's verdict is the same mistake as a source-shape guard that
+    # scans comments — measure what the probe SAID, not what ran past it.
+    if echo "$out" | grep -qE "NOTICE:.*\bSKIP(PED)?\b"; then
+      skipped+=("$name")
+      echo "SKIP  $name"
+    else
+      echo "PASS  $name"
+    fi
+    # Same case-sensitivity, for the same reason: /skip/i printed three lines of
+    # `… does not exist, skipping` under every probe that creates anything.
+    echo "$out" | grep -E "NOTICE:.*(OK|PASSED|\bSKIP(PED)?\b)" | sed 's/^.*NOTICE:  /        /'
   else
     failed+=("$name")
     echo "FAIL  $name"
@@ -37,8 +57,20 @@ for f in "${probes[@]}"; do
 done
 
 echo
-echo "== probes: $(( ${#probes[@]} - ${#failed[@]} ))/${#probes[@]} passed =="
+echo "== probes: $(( ${#probes[@]} - ${#failed[@]} - ${#skipped[@]} )) passed, ${#skipped[@]} skipped, ${#failed[@]} failed, of ${#probes[@]} =="
+if [ ${#skipped[@]} -ne 0 ]; then
+  echo "SKIPPED PROBES (their invariants were NOT exercised): ${skipped[*]}"
+fi
 if [ ${#failed[@]} -ne 0 ]; then
   echo "FAILED PROBES: ${failed[*]}"
+  exit 1
+fi
+# A skip is a hole in the proof, not a pass, and CI is where that distinction
+# has to bite: every probe here can run on a fully migrated database, so a skip
+# means an absent table, a missing extension or a boundary that stopped being
+# reachable — each worth a red build. PROBES_ALLOW_SKIP=1 is for a developer
+# running these against a partial database on purpose.
+if [ ${#skipped[@]} -ne 0 ] && [ "${PROBES_ALLOW_SKIP:-0}" != "1" ]; then
+  echo "A skipped probe proves nothing. Set PROBES_ALLOW_SKIP=1 only if that is deliberate."
   exit 1
 fi

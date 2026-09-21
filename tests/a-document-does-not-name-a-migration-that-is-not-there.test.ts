@@ -64,8 +64,18 @@ const GUARDED: readonly string[] = [
  */
 const STRUCK = /~~`(\d{4,5}_[a-z0-9_]+?)(\.sql)?`~~/g;
 
-/** `0297_sensitive_tables_respect_role` — with or without the .sql, backticked. */
-const MIGRATION_REF = /`(\d{4,5}_[a-z0-9_]+?)(\.sql)?`/g;
+/**
+ * `0297_sensitive_tables_respect_role` — with or without the .sql, backticked.
+ *
+ * The trailing `[a-z0-9]` is the same rule BARE_REF carries below, and it is
+ * here for the same reason: no migration filename ends in `_`, so a name that
+ * does is a fragment being DISCUSSED rather than a pointer to follow. Leaving it
+ * off matched `` `0320_audit_` `` inside this audit's own prose about wrapped
+ * comments and reported it as a missing migration — a guard failing on the
+ * sentence explaining the thing it guards against. The two patterns disagreeing
+ * was the whole defect: one had learned the rule and the other had not.
+ */
+const MIGRATION_REF = /`(\d{4,5}_[a-z0-9_]*[a-z0-9])(\.sql)?`/g;
 
 /**
  * The same thing unbackticked, for the .sql and .sh files, which cite migrations
