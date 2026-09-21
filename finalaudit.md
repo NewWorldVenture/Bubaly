@@ -3,11 +3,11 @@
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
 - Last Updated: 2026-09-20T17:44:10.000Z
-- Total Audit Items: 14072
+- Total Audit Items: 14073
 - Not Started: 13842
 - In Progress: 192
 - Passed: 9
-- Fixed + Passed: 25
+- Fixed + Passed: 26
 - Blocked: 2
 - Failed: 2
 - Overall Completion: 0.04%
@@ -14198,6 +14198,7 @@ PRODUCTION READY: NO
 | PERF-004 | Performance | The parent approval queue signed one photo per round trip (closes F-F03) | 🛠 FIXED + PASS | High | 4/4 (5 sanity cases inside them) | Paths collected, deduplicated and signed in chunks of 100 through createSignedUrls; the per-entry error is read so an unsignable object is left out rather than rendering an empty src; a signing outage costs the photos, not the queue | Restoring the loop turns the guard red at app/(app)/missions/page.tsx:106; the existing missions read-boundary test still passes | A loop inside a loop around `await createSignedUrl` — up to four photos per submission across the whole queue, in series. The batch form was already in the codebase and already used correctly one directory away. |
 | A11Y-001 | Accessibility | The photo lightbox stranded keyboard users (closes F-D01) | 🛠 FIXED + PASS | High | 7/7 | role=dialog + aria-modal + the shared useDialogBehavior hook on the viewer; tiles made focusable with Enter/Space; Arrow Left/Right between photos | Three mutations red (the hook removed; the tiles returned to mouse-only; a new overlay declaring aria-modal without the hook); 13 declare it and 13 implement it, and the sets are identical | The tiles were div onClick, so a keyboard could not reach the viewer at all — a trap you cannot enter. The existing a11y guard named four overlays by hand, so this one was never looked at: enumerated with no scan, the third shape of this repo's signature defect. |
 | A11Y-002 | Accessibility | The lint config enabled none of the rules that would have caught it (F-D10/F-D02/F-D03) | 🛠 FIXED + PASS (F-D03 ratcheted, not fixed) | Medium | 4/4 (7 sanity cases inside them) | label-has-associated-control enabled at depth 4 — measured first: at the default depth its only three findings are correct markup one level too deep; control-has-associated-label left OFF because 561 findings and the first sample is a correctly labelled input | next lint clean but for the three pre-existing react-hooks warnings; 144 selects scanned, 71 unnamed, pinned by a ratchet whose scan is asserted non-vacuous | next/core-web-vitals carries only a subset of jsx-a11y, which is exactly what F-D10 said. A rule whose findings are mostly wrong is one everyone learns to skip, so the unnamed selects are counted by a check that cannot be satisfied by nesting depth. |
+| TEST-010 | Testing | Three test-infrastructure findings (F-F05, F-F06, F-F12) | 🛠 FIXED + PASS | Medium | 5/5 | seed-failure-safety now asserts every script checks its error and every check ends in a throw; testTimeout/hookTimeout set to 20s from measured cold-import times; the dead esbuild block removed and its backwards comment corrected | Both mutations red — an error check deleted (which made the OLD test greener) and a throw replaced by log-and-return, each named with its line; JSX still compiles after the config change | The rewrite's own first run caught a bug in itself: one /g regex shared between .test() and matchAll carries lastIndex, so it reported every other script as unchecked. Two constants now, and a comment saying why. |
 | TEST-009 | Testing | Probe fixtures left in the seeded anchor family | 🛠 FIXED + PASS | Medium | 6/6 | Both probes now clear their fixtures at the end as well as the start | Each passes twice; suite 47/47 on both databases; anchor family holds only its seeded members | "Race Child" and "Probe Kid" had been living in the 71,192-row anchor family, the latter for a week. Found by the AUTHZ-006 sweep counting a member no fixture of its own had created. |
 | DATA-010 | DATA | Resource lifecycle through the real API | ✅ PASS | High | 8/8 | None required | CREATE/READ/UPDATE/VERIFY/DELETE/VERIFY all pass as a real member; a child's refused write returns HTTP 204 without Prefer, 200 [] with it, dosage unchanged | Shows at the HTTP layer why .select() + wroteNoRows was needed: 204 No Content is a success for a write that changed nothing. |
 | SEC-008 | SEC | Realtime broadcast isolation and publication drift | ✅ PASS | Critical | 5/5 | None required | Publication and code agree exactly (61 = 61, empty diff both ways); a live socket received its own family's row and not another's | The first attempt used an unpublished table and received nothing — a run that would have read as a clean refusal while proving nothing. Controls decided it. |
@@ -22112,6 +22113,52 @@ The genuinely unnamed controls that rule was reaching for are real, and they are
 Naming them is **71 pieces of product copy in seven languages**. That is a writing task for whoever owns the product voice, not something to invent inside an audit — the same call recorded for OPEN-001 and SEC-013. What is delivered instead is the measurement, and a ratchet pinned at 71 that stops the number growing and makes every reduction deliberate. Lower the ceiling as they are named; never raise it.
 
 
+### TEST-010 — Three test-infrastructure findings, each closed by making a claim checkable (F-F05, F-F06, F-F12)
+
+Status: 🛠 FIXED + PASS
+Severity: Medium
+Route(s), components, actions, tables and providers: `vitest.config.ts`, `tests/seed-failure-safety.test.ts`, `scripts/seed*.mjs`
+
+#### Expected Behavior
+A test named "fails closed" fails when the thing stops failing closed; a timeout means something is stuck rather than cold; and a config block that does nothing is not there.
+
+#### Test Cases
+- [x] Every seed script enumerated (7, excluding the shared client)
+- [x] Each asserted to check its write error at all
+- [x] Every error check asserted to end in a throw, by position
+- [x] The single tolerated error asserted to be the narrow, documented one
+- [x] Mutation: an error check deleted → red (the old test went **greener**)
+- [x] Mutation: a throw replaced by log-and-return → red, with the line
+- [x] JSX still compiles to the automatic runtime after the dead block is removed
+- [x] The "Both esbuild and oxc options were set" warning no longer printed
+
+#### Issues Found
+**F-F06 — a test satisfied by the defect it was written to prevent.** `tests/seed-failure-safety.test.ts` was named *"fails closed instead of continuing after an insert or cleanup error"* and asserted only that two bad shapes were absent:
+
+    expect(source).not.toMatch(/if \(error\)[^{\n]*console\.error/);
+    expect(source).not.toMatch(/if \(error\) \{[^}]{0,240}\b(return|break)\b/);
+
+Deleting a script's error check entirely makes it match **neither**, so the test went *greener*. A seed script could stop looking at its write results without a single case going red — which is the exact outcome the file exists to prevent, reached by the shortest path.
+
+**F-F05 — no timeout configured, and ninety-six cases shaped to need one.** Nothing in `vitest.config.ts` set `testTimeout`, so every case ran on vitest's default 5,000ms, and 96 across 12 files share one shape: a cold `await import('@/app/…')` inside a default-timeout test. The first such import in a worker pays for the whole module graph. Observed twice in this cycle: a marketing-route case timed out at **5,007ms** on its first case and passed in **422ms** once the translation catalogue was warm, and a full run under CPU contention timed out five unrelated cases at exactly 5,000ms and passed all of them on a re-run.
+
+**F-F12 — a dead config block, and a comment that had it backwards.** `vitest.config.ts` carried both an `esbuild` and an `oxc` JSX block, with a note explaining that `esbuild` was the live one and `oxc` was "kept for forward-compat with vitest 3". This project is on vitest **4.1.10**, which transforms with oxc — so the opposite was true, and every run printed the correction: *"Both esbuild and oxc options were set. oxc options will be used and esbuild options will be ignored."*
+
+#### Fixes Applied
+The seed test now asserts the shape it claims: every script checks its error, **and** every check it makes ends in a throw, located by position rather than by the absence of a counter-example. The two original `not.toMatch` cases are kept behind those as a cheap second net rather than as the argument. The one tolerated error — `seed-medical.mjs` ignoring a cleanup against a table that does not exist, because production's migration ledger stops short — is asserted to stay exactly that narrow, so it cannot widen into "cleanup errors are fine".
+
+Both mutations are red, and the first is the point: deleting an error check now names the script, where before it removed a finding.
+
+**The rewrite's own first run caught a bug in itself**, which is worth recording because it is the same class. A single `/g` regex was shared between `.test()` and `matchAll`, and `/g` carries `lastIndex` between calls — so `.test()` reported every other script as having no error check at all. Two constants now, and a comment saying why.
+
+`testTimeout` and `hookTimeout` are 20s. A timeout that fires on load rather than on a hang teaches everyone to re-run the suite, and that is how a real hang gets re-run too; 20s is long enough that reaching it means something is stuck, short enough to stay a timeout rather than a wait.
+
+The dead `esbuild` block is gone, with the note corrected to say which transformer is actually live and why. If the project ever moves back to an esbuild-based vitest the failure is loud and immediate — a better signal than a dead block nobody can tell is dead, and than a warning printed on every run that everyone has learned to scroll past.
+
+#### F-F11, closed earlier in this cycle
+*"The proof-photo signing error is discarded, so a parent sees a blank frame rather than a reason"* was fixed as part of PERF-004: batching the missions queue's signing brought the per-entry error with it, so an object that cannot be signed is left out rather than rendered as an empty `src`, and a signing outage is logged. `tests/silent-empty-read-ratchet.test.ts` noticed independently and required the file's removal from its BASELINE.
+
+
 ### ADMIN-001 — Every admin server action reaches a super-admin gate
 
 Status: ✅ PASS
@@ -22828,7 +22875,7 @@ Status: ✅ PASS — `npm run lint` reports the four known baseline warnings and
 ## Automated Tests
 Status: ✅ PASS — 15,287 tests across 1,215 files pass, zero failures and zero skips, on Node 24.15.0 at head 92340315 (160s).
 
-Later in this cycle, on Node 24.21.0: **16,787 tests across 1,317 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **51/51 boundary probes with 0 skipped**. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), `tests/a-capped-read-is-not-a-silent-one.test.ts` (DATA-011, 5), `tests/a-family-day-starts-where-the-family-is.test.ts` and `tests/a-server-day-is-the-familys-day.test.ts` (DATA-012, 11), `docs/audit/vaults-require-second-factor-check.sql` (AUTHZ-008), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
+Later in this cycle, on Node 24.21.0: **16,791 tests across 1,317 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **51/51 boundary probes with 0 skipped**. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), `tests/a-capped-read-is-not-a-silent-one.test.ts` (DATA-011, 5), `tests/a-family-day-starts-where-the-family-is.test.ts` and `tests/a-server-day-is-the-familys-day.test.ts` (DATA-012, 11), `docs/audit/vaults-require-second-factor-check.sql` (AUTHZ-008), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
 
 Five existing guards had to be repaired rather than merely re-run, and that is itself a finding recorded under SEC-010: `guardian-callback-security`, `middleware-public-api-boundary`, `public-pages-reachable`, `health-feature-secrets` and `public-webhook-signature-boundary` each identified a control by the SPELLING of the function that implemented it. Moving identical verification one call away turned all five red while nothing about the behaviour changed — which is the same reason `public-webhook-signature-boundary` stayed green through eight signature checks that only ran in a production build.
 
@@ -26623,15 +26670,15 @@ approval queue — the page a parent opens most.
 
 | | Finding | Severity |
 |---|---|---|
-| F-F04 | A requested local time that does not exist (DST spring-forward) is mishandled — **a genuine production bug**, found by running the suite under `TZ=America/Los_Angeles`, reproduced in two lines of node, and the suite pins no `TZ` at all | Medium |
-| F-F05 | 96 tests across 12 files share the exact shape of the known `api-ai-runs` 5-second timeout — a cold `await import('@/app/…')` inside a default-timeout test — and no `testTimeout` is configured anywhere | Medium |
-| F-F06 | `tests/seed-failure-safety.test.ts`, named "fails closed", asserts only the *absence* of two bad shapes, so deleting the error check makes it greener | Medium |
+| F-F04 | A requested local time that does not exist (DST spring-forward) is mishandled | **FIXED** — Pass I: `parse.ts` gained a UTC `DateOps` twin so the bridge cannot be normalised by the host's DST, and `vitest.config.ts` pins `TZ`. Reproduced red under `TZ=America/Los_Angeles` first (`expected '03:30' to be '03:00'`) | Medium |
+| F-F05 | 96 tests share the cold-`await import` shape and no `testTimeout` was configured | **FIXED** — see TEST-010: `testTimeout`/`hookTimeout` 20s, chosen from two measured instances (5,007ms cold vs 422ms warm; five unrelated cases timing out at exactly 5,000ms under CPU contention) | Medium |
+| F-F06 | `tests/seed-failure-safety.test.ts`, named "fails closed", asserts only the *absence* of two bad shapes, so deleting the error check makes it greener | **FIXED** — see TEST-010: it now asserts every script checks its error AND every check ends in a throw; deleting a check turns it red by name | Medium |
 | F-F07 | 37 of 51 money, kids, economy and missions server actions have no test | Medium |
 | F-F08 | `addFundsAction` is the one money mutator that writes the balance directly | Medium |
 | F-F09 | Unbounded concurrent fan-out to an external drive-time API | Medium |
 | F-F10 | Two buttons in the message header exist only to say the feature is unavailable | Low |
-| F-F11 | The proof-photo signing error is discarded, so a parent sees a blank frame rather than a reason | Low |
-| F-F12 | The vitest config's JSX block is dead under vitest 4 | Low |
+| F-F11 | The proof-photo signing error is discarded, so a parent sees a blank frame rather than a reason | **FIXED** — closed as part of PERF-004: batching the signing brought the per-entry error with it | Low |
+| F-F12 | The vitest config's JSX block is dead under vitest 4 | **FIXED** — see TEST-010: the dead `esbuild` block is gone and the note that had it backwards is corrected; the "esbuild options will be ignored" warning no longer prints on every run | Low |
 | F-F13 | Sixty-nine test blocks assert only the absence of a pattern | Low |
 
 ## On the hunt for tests that cannot fail
