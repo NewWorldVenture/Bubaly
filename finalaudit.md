@@ -3,11 +3,11 @@
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
 - Last Updated: 2026-09-20T17:44:10.000Z
-- Total Audit Items: 14069
+- Total Audit Items: 14070
 - Not Started: 13842
 - In Progress: 192
 - Passed: 9
-- Fixed + Passed: 22
+- Fixed + Passed: 23
 - Blocked: 2
 - Failed: 2
 - Overall Completion: 0.04%
@@ -14195,6 +14195,7 @@ PRODUCTION READY: NO
 | SEC-013 | Security | The family password vault stores its passwords in plaintext | ⚠️ BLOCKED | High | 4/5 (no fix attempted) | None — encrypting needs the write path to move off the browser, which is a feature rework with a key-management decision inside it | Stored and read back verbatim: 'hunter2-the-actual-wifi-password', pg_column_size 33 bytes for a 32-char password — no envelope, no IV, no tag. The only writer is the browser module; the table's one other mention in the tree is an AI denylist entry reading 'passwords and logins' | This is the half of F-E01 that 0296 does not fix — that migration narrowed WHO may read the row and says so in its own header. RLS has nothing to say about a pg_dump, a backup, a replica or the service-role key. Recommended shape recorded for the owner. |
 | DATA-011 | Data integrity | Eleven call sites discarded the truncation signal F-F01 raises | 🛠 FIXED + PASS | High | 5/5 (9 sanity cases inside them) | All eleven now act on it — 503 on the calendar feed and the three AI-coach routes, a refused verdict in the decision simulator, an abandoned playbook refresh, an early return before the GitHub sync's write loop, ErrorState on two marketplace pages | Three mutations red: an error removed from a destructure, from a batch element, and the helper's probe row removed | Every one of the eleven carried a comment explaining why a capped read would be wrong, then dropped the error saying it happened. The detector over-reported 54 -> 17 -> 15 -> 11 across four passes; the guard's two halves are deliberately not equally strict, and the comment says why. |
 | DATA-012 | Data integrity | "Today" was the server's day, not the family's (F-F02) | 🛠 FIXED + PASS | High | 11/11 | startOfLocalDay / startOfNextLocalDay in lib/time/zoned.ts; the kids, guardian and moments pages, both dashboards' dayBounds, and every notification's today/tomorrow copy moved onto the family's zone | Asserted in three zones from one instant, across both DST changeovers (a 23-hour and a 25-hour day), and in a zone whose clocks jump AT midnight; three mutations red; full suite green under TZ=UTC and TZ=America/Los_Angeles | 8 client files (correct — the browser IS the family) and 19 server files (not). timeLabel was wrong twice in one sentence: the day from the host's midnight and the clock with no timeZone, so 7pm read as "tomorrow at 3:00 AM". |
+| PERF-004 | Performance | The parent approval queue signed one photo per round trip (closes F-F03) | 🛠 FIXED + PASS | High | 4/4 (5 sanity cases inside them) | Paths collected, deduplicated and signed in chunks of 100 through createSignedUrls; the per-entry error is read so an unsignable object is left out rather than rendering an empty src; a signing outage costs the photos, not the queue | Restoring the loop turns the guard red at app/(app)/missions/page.tsx:106; the existing missions read-boundary test still passes | A loop inside a loop around `await createSignedUrl` — up to four photos per submission across the whole queue, in series. The batch form was already in the codebase and already used correctly one directory away. |
 | TEST-009 | Testing | Probe fixtures left in the seeded anchor family | 🛠 FIXED + PASS | Medium | 6/6 | Both probes now clear their fixtures at the end as well as the start | Each passes twice; suite 47/47 on both databases; anchor family holds only its seeded members | "Race Child" and "Probe Kid" had been living in the 71,192-row anchor family, the latter for a week. Found by the AUTHZ-006 sweep counting a member no fixture of its own had created. |
 | DATA-010 | DATA | Resource lifecycle through the real API | ✅ PASS | High | 8/8 | None required | CREATE/READ/UPDATE/VERIFY/DELETE/VERIFY all pass as a real member; a child's refused write returns HTTP 204 without Prefer, 200 [] with it, dosage unchanged | Shows at the HTTP layer why .select() + wroteNoRows was needed: 204 No Content is a success for a write that changed nothing. |
 | SEC-008 | SEC | Realtime broadcast isolation and publication drift | ✅ PASS | Critical | 5/5 | None required | Publication and code agree exactly (61 = 61, empty diff both ways); a live socket received its own family's row and not another's | The first attempt used an unpublished table and received nothing — a run that would have read as a clean refusal while proving nothing. Controls decided it. |
@@ -21989,6 +21990,45 @@ Corrected: the kids page, the guardian page's four "today" counts, the moments p
 Verified under both zones the suite runs in, because a timezone fix that only passes on a UTC host has proved nothing.
 
 
+### PERF-004 — The parent approval queue signed one photo per round trip (closes F-F03)
+
+Status: 🛠 FIXED + PASS
+Severity: High (performance)
+Route(s), components, actions, tables and providers: `app/(app)/missions/page.tsx`, `chore-proof` bucket, `tests/signing-media-is-one-round-trip.test.ts`
+
+#### Expected Behavior
+A page that shows N private files mints their signed URLs in a bounded number of requests, not N.
+
+#### Test Cases
+- [x] Every `createSignedUrl` call in `app/`, `lib/` and `components/` located
+- [x] Those inside a loop separated from those signing a single object
+- [x] Five sanity cases: a loop, a `.map`, a single call, the batch form in a loop, and prose
+- [x] Non-vacuity: more than three files do signing at all
+- [x] The approval queue asserted to use the batch form, read the per-entry error, and log a signing outage
+- [x] Mutation: the loop restored → red, naming file and line
+- [x] `tests/missions-review-queue-read-boundary.test.ts` still passes
+
+#### Issues Found
+`app/(app)/missions/page.tsx` built proof-photo URLs in a loop inside a loop:
+
+    for (const s of subs) {
+      for (const path of (s.media_paths ?? []).slice(0, 4)) {
+        const { data } = await supabase.storage.from('chore-proof').createSignedUrl(path, 600);
+
+One request per photo, in series, up to four photos per submission across the whole queue. On a busy Saturday that is a few hundred sequential round trips before the page renders — and this is the parent approval queue, the page a parent opens most.
+
+The batch call was already in the codebase and already used correctly, in `app/(app)/admin/marketing/assets/page.tsx`. Nothing stopped the singular one being reached for in a loop.
+
+#### Fixes Applied
+The paths are collected once, deduplicated, and signed in chunks of a hundred through `createSignedUrls` — chunked because the request carries every path in its body, so a queue with hundreds of photos should be a few requests, never one enormous one and never one per photo. The rendering loop then reads a map.
+
+Two details taken from the existing correct call site rather than invented: the **per-entry** `error` is read, so an object that could not be signed is left out instead of becoming an `<img>` with an empty `src`; and a signing failure logs and breaks rather than failing the page, because a proof photo that will not load is a missing photo and the parent still needs the queue, the note and the AI summary.
+
+A second guard noticed the change without being asked. `tests/silent-empty-read-ratchet.test.ts` keeps a BASELINE of files that drop a read's `error`, and it fails when an entry is **stale** — already fixed but still listed, because a stale entry hides a slot a real regression could slide into. Batching the signing took the discarded per-photo `error` with it, so the missions page came off that list too. That is the ratchet working exactly as designed: it is the second time this cycle a declaration-style guard reported its own obsolescence rather than quietly passing.
+
+`tests/signing-media-is-one-round-trip.test.ts` makes it permanent. It reports a singular `createSignedUrl` whose enclosing code will run it once per item — a loop opening above it at a shallower indent — and never reports the batch form or a single-object call, of which three remain and are correct (one document at a time in `admin/actions.ts`, `lib/services/documents/index.ts` and `lib/storage/documents.ts`). Restoring the loop turns it red at `app/(app)/missions/page.tsx:106`.
+
+
 ### ADMIN-001 — Every admin server action reaches a super-admin gate
 
 Status: ✅ PASS
@@ -22705,7 +22745,7 @@ Status: ✅ PASS — `npm run lint` reports the four known baseline warnings and
 ## Automated Tests
 Status: ✅ PASS — 15,287 tests across 1,215 files pass, zero failures and zero skips, on Node 24.15.0 at head 92340315 (160s).
 
-Later in this cycle, on Node 24.21.0: **16,772 tests across 1,314 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **51/51 boundary probes with 0 skipped**. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), `tests/a-capped-read-is-not-a-silent-one.test.ts` (DATA-011, 5), `tests/a-family-day-starts-where-the-family-is.test.ts` and `tests/a-server-day-is-the-familys-day.test.ts` (DATA-012, 11), `docs/audit/vaults-require-second-factor-check.sql` (AUTHZ-008), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
+Later in this cycle, on Node 24.21.0: **16,776 tests across 1,315 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **51/51 boundary probes with 0 skipped**. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), `tests/a-capped-read-is-not-a-silent-one.test.ts` (DATA-011, 5), `tests/a-family-day-starts-where-the-family-is.test.ts` and `tests/a-server-day-is-the-familys-day.test.ts` (DATA-012, 11), `docs/audit/vaults-require-second-factor-check.sql` (AUTHZ-008), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
 
 Five existing guards had to be repaired rather than merely re-run, and that is itself a finding recorded under SEC-010: `guardian-callback-security`, `middleware-public-api-boundary`, `public-pages-reachable`, `health-feature-secrets` and `public-webhook-signature-boundary` each identified a control by the SPELLING of the function that implemented it. Moving identical verification one call away turned all five red while nothing about the behaviour changed — which is the same reason `public-webhook-signature-boundary` stayed green through eight signature checks that only ran in a production build.
 
@@ -23052,7 +23092,7 @@ The invite toast and two Home widgets remain.
 | F-E03 | The `family-media` bucket is public; photos and attachments are served with no session | OPEN (known, tracked as LB-009) |
 | F-F01 | A caller-supplied `max` truncates a money read and reports success; reconciliation renders "Everything reconciles" from a prefix | FIXED — the helper raises it (the reconciliation page consumes it); DATA-011 then found and fixed the ELEVEN call sites that were discarding the signal, and holds them with a permanent guard |
 | F-F02 | F-017's timezone bug still live on eleven server-rendered surfaces, including the kids page | FIXED on the surfaces that show a day — see DATA-012. 19 server files measured, 5 corrected (kids, guardian, moments, both dashboards) plus every notification's today/tomorrow copy; the remaining 14 are declared with a reason each and the declaration fails in both directions |
-| F-F03 | `/missions` issues up to 240 sequential storage round trips on the parent approval queue | OPEN |
+| F-F03 | `/missions` issues up to 240 sequential storage round trips on the parent approval queue | FIXED — see PERF-004: one batched `createSignedUrls` per hundred paths, with a guard that reports any signing call inside a loop |
 | F-D01 | The photo lightbox strands keyboard users: no `role="dialog"`, no Escape, no focus trap | OPEN |
 | F-D02 / F-D03 | 55 labels detached from their control; 65 `<select>` with no accessible name | OPEN |
 | F21 | A child could grant themselves a reward | Half fixed and live, half awaiting the operator |
