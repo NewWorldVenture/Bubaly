@@ -305,8 +305,10 @@ export async function AiHomeDashboard({ ctx }: { ctx: UserContext }) {
   const lockedButtons = lockedFeatures(dashTier);
   const canCustomize = canCustomizeDashboard(manager, dashSettings);
 
+  // dayBounds.end, not a re-derived one: the family's day was resolved at the
+  // top of this function and this is the same boundary the reads above used.
   const { overdue: overdueReminders, dueToday: dueTodayReminders } = reminderAttention(
-    (dueReminderRows ?? []) as { remind_at: string | null; status: string }[], now,
+    (dueReminderRows ?? []) as { remind_at: string | null; status: string }[], now, dayBounds.end,
   );
 
   // Personal double-bookings: detect per-assignee overlaps; a manager sees the
