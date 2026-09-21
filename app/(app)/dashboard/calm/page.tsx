@@ -56,15 +56,24 @@ export default async function CalmPage() {
       .eq('family_id', familyId).eq('is_done', false).gte('remind_at', now.toISOString()).lte('remind_at', in24).limit(50)),
   ]);
 
+  // The NAME is the family's half of the line and comes from the catalogue; the
+  // Postgres reason is the machine's half and cannot be translated by anything.
+  // They go to the banner as two fields rather than one joined string — see
+  // I18N-006 and components/ui/partial-read-banner.tsx.
+  //
+  // The names also stopped being the SOURCE's names. 'foi' is what the table is
+  // called in this file; it is not a thing a family has ever heard of, and an
+  // acronym nobody can expand is not translatable in any language. Each label is
+  // now what the reader would call the missing thing.
   const readFailures = ([
-    ['agent', agentResult],
-    ['autopilot', autopilotResult],
-    ['foi', foiResult],
-    ['approval', approvalResult],
-    ['reminder', reminderResult],
+    [t('calm.agentActivity'), agentResult],
+    [t('calm.autopilotSuggestions'), autopilotResult],
+    [t('calm.familyOperatingIndex'), foiResult],
+    [t('calm.approvals'), approvalResult],
+    [t('calm.reminders'), reminderResult],
   ] as const)
     .filter(([, res]) => res.error)
-    .map(([label, res]) => `${label}: ${describeReadError(res.error)}`);
+    .map(([label, res]) => ({ label, detail: describeReadError(res.error) }));
   const readError = readFailures.length > 0;
   if (readError) {
     // Degraded, not fatal: every consumer below defaults an absent read to an
@@ -126,7 +135,7 @@ export default async function CalmPage() {
   const inbox = buildCalmInbox(items);
   return (
     <div className="space-y-5">
-      <PartialReadBanner title="Some of your inbox could not be loaded:" failures={readFailures} />
+      <PartialReadBanner title={t('calm.someOfYourInboxCould')} failures={readFailures} />
       <CalmModule inbox={inbox} />
     </div>
   );

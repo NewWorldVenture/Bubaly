@@ -97,8 +97,25 @@ export function localeForCountry(country: string | undefined | null): Locale | u
 /**
  * Countries without a catalogue entry of their own, mapped to the locale their
  * visitors are best served by — a full locale, not a bare language, because the
- * regional choice carries real meaning: Latin America reads es-MX rather than
- * Spain's es-ES, and Belgium reads fr-FR rather than fr-CA.
+ * code selects FORMATTING as well as wording, and a family in Argentina should
+ * read Argentine dates and amounts whatever language the words around them are
+ * in.
+ *
+ * WHAT THE REGIONAL CODES SELECT TODAY, AND WHAT THEY DO NOT. This block used to
+ * justify itself by saying the regional choice was meaningful in VOCABULARY —
+ * that Latin America read Mexican Spanish rather than Spain's. It does not, and
+ * a test now holds this paragraph to that. es-MX is an EMPTY overlay —
+ * three bytes, `{}`, declared in PLACEHOLDER_LOCALES in lib/i18n/messages.ts and
+ * held there by a test — so the seventeen countries mapped to it read Spain's
+ * Spanish word for word, with Mexican dates and numbers around it. The same goes
+ * for the eight mapped to en-GB, for PR (es-US) and for HT (fr-CA): TWENTY-SEVEN
+ * of the forty-six countries below route to a catalogue that is empty.
+ *
+ * The mapping itself is still the right one and is doing real work — it is what
+ * a populated overlay would need, and the formatting half of it is live for
+ * every country here. But for those twenty-seven it selects formatting ONLY, and
+ * this comment now says that rather than claiming a vocabulary that is not
+ * there. See I18N-009.
  *
  * Deliberately conservative: only places with an unambiguous majority language
  * we actually ship. Anywhere absent falls through to Accept-Language, then
@@ -108,7 +125,8 @@ export function localeForCountry(country: string | undefined | null): Locale | u
 const COUNTRY_LOCALE: Record<string, LocaleCode> = {
   // German
   AT: 'de-DE', CH: 'de-DE', LI: 'de-DE', LU: 'de-DE',
-  // Spanish — Latin America to Mexican Spanish, not Peninsular.
+  // Spanish — Latin America to the Mexican locale. Its catalogue is empty, so
+  // today that means Peninsular words with Mexican dates and numbers.
   AR: 'es-MX', BO: 'es-MX', CL: 'es-MX', CO: 'es-MX', CR: 'es-MX', CU: 'es-MX',
   DO: 'es-MX', EC: 'es-MX', GT: 'es-MX', HN: 'es-MX', NI: 'es-MX', PA: 'es-MX',
   PE: 'es-MX', PY: 'es-MX', SV: 'es-MX', UY: 'es-MX', VE: 'es-MX',

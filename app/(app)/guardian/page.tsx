@@ -92,18 +92,25 @@ export default async function GuardianPage() {
 
   // Named individually, because on production the answer is usually one table
   // the migration ledger has not reached — "something failed" would not say which.
+  //
+  // The NAME is the family's half of the line and comes from the catalogue; the
+  // Postgres reason is the machine's half and cannot be translated by anything.
+  // They go to the banner as two fields rather than one joined string, because
+  // joining them is what kept these labels English: `${label}: ${reason}` with a
+  // translated label reads "Mitgliederprofile: relation … does not exist", half
+  // a sentence in the reader's language. See I18N-006 and partial-read-banner.
   const readFailures = ([
-    ['recent calls and messages', commsError],
-    ['suggestions', suggestionsError],
-    ['escalations', escalationsError],
-    ['member profiles', profilesError],
-    ['calls today', totalCallsError],
-    ['blocked today', blockedTodayError],
-    ['scams stopped', scamsBlockedError],
-    ['AI screened', screenedError],
+    [t('guardian.recentCallsAndMessages'), commsError],
+    [t('guardian.suggestions'), suggestionsError],
+    [t('guardian.escalations'), escalationsError],
+    [t('guardian.memberProfiles'), profilesError],
+    [t('guardian.callsToday'), totalCallsError],
+    [t('guardian.blockedToday'), blockedTodayError],
+    [t('guardian.scamsStopped'), scamsBlockedError],
+    [t('guardian.aiScreened'), screenedError],
   ] as const)
     .filter(([, error]) => error)
-    .map(([label, error]) => `${label}: ${describeReadError(error)}`);
+    .map(([label, error]) => ({ label, detail: describeReadError(error) }));
 
   // A count whose read failed is `null`, never 0 — the tile renders an em dash.
   const countOf = (count: number | null, error: unknown) => (error ? null : count ?? 0);

@@ -27,17 +27,22 @@ export default async function ActivityPage() {
     supabase.from('grocery_items').select('id, name, created_at, created_by').eq('family_id', familyId).order('created_at', { ascending: false }).limit(20),
   ]);
 
+  // The NAME is the family's half of the line and comes from the catalogue; the
+  // Postgres reason is the machine's half and cannot be translated by anything.
+  // They go to the banner as two fields rather than one joined string — see
+  // I18N-006 and components/ui/partial-read-banner.tsx. 'grocery' was the table,
+  // not a name: what is missing is the grocery list.
   const readFailures = ([
-    ['members', membersResult],
-    ['announcements', announcementsResult],
-    ['events', eventsResult],
-    ['chores', choresResult],
-    ['photos', photosResult],
-    ['notes', notesResult],
-    ['grocery', groceryResult],
+    [t('activity.members'), membersResult],
+    [t('activity.announcements'), announcementsResult],
+    [t('activity.events'), eventsResult],
+    [t('activity.chores'), choresResult],
+    [t('activity.photos'), photosResult],
+    [t('activity.notes'), notesResult],
+    [t('activity.groceryList'), groceryResult],
   ] as const)
     .filter(([, res]) => res.error)
-    .map(([label, res]) => `${label}: ${describeReadError(res.error)}`);
+    .map(([label, res]) => ({ label, detail: describeReadError(res.error) }));
   const readError = readFailures.length > 0;
   if (readError) {
     // Degraded, not fatal: every consumer below defaults an absent read to an
@@ -87,7 +92,7 @@ export default async function ActivityPage() {
 
   return (
     <div className="space-y-5">
-      <PartialReadBanner title={"Some activity could not be loaded:"} failures={readFailures} />
+      <PartialReadBanner title={t('activity.someActivityCouldNotBe')} failures={readFailures} />
       <ActivityFeed
         feed={feed}
         memberById={new Map(Object.entries(memberById))}

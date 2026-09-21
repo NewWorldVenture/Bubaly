@@ -91,19 +91,48 @@ import { scanPaths } from '../scripts/i18n-scan.mjs';
 //      being sent to names it. 'ai-requests' is itself labelled 'Ask Bubaly',
 //      so the other ten callers read exactly as before.
 //   6  guardian/page.tsx READ-FAILURE DIAGNOSTICS — 'member profiles',
-//      'calls today', 'scams stopped' and three more. NOT converted, and the
-//      reason is that this ceiling already accepts the same class from main:
-//      command-center's 'open chores', 'meal plans' and 'expiring docs', and
-//      the equivalents on calm and activity, are all inside the 2,811. Every
-//      one renders as `${label}: ${describeReadError(error)}`, and that second
-//      half is a Postgres string nothing can translate — so a translated label
-//      reads "Mitgliederprofile: relation … does not exist". Converting one of
-//      the six pages would leave two conventions for one diagnostic, which is
+//      'calls today', 'scams stopped' and three more. NOT converted at the
+//      time, and the reason was that this ceiling already accepted the same
+//      class from main: command-center's 'open chores', 'meal plans' and
+//      'expiring docs', and the equivalents on calm and activity, are all
+//      inside the 2,811. Every one rendered as
+//      `${label}: ${describeReadError(error)}`, and that second half is a
+//      Postgres string nothing can translate — so a translated label read
+//      "Mitgliederprofile: relation … does not exist". Converting one of the
+//      six pages would have left two conventions for one diagnostic, which is
 //      the half-conversion this codebase keeps deciding is worse than either
 //      end. It is a class, and it gets closed as a class or recorded as one.
 //
 // 2,823 − 6 = 2,817.
-const CEILING = 2817;
+//
+// ── AND THE CLASS IS NOW CLOSED AS A CLASS: 2,817 − 10 = 2,807 (I18N-006) ────
+//
+// The paragraph above was right that translating the label alone makes the
+// defect worse, and wrong to conclude from it that the labels had to stay
+// English. The joined SENTENCE was the problem, so the join went: PartialReadBanner
+// takes `{ label, detail }` and renders the Postgres reason as <code>, which
+// marks it as machine output without a word of any language. With the two
+// halves separated the label is ordinary product copy and lifts like any other.
+//
+// All FOUR family-facing pages converted together — nothing is half-done:
+// guardian (6 strings this scanner could see, 8 labels in fact), command-center
+// (3 of 5), calm (its banner title) and activity. The reason the scanner's count
+// and the label count differ is `looksLikeCopy`, which drops single-word
+// strings: it never saw 'foi', 'agent' or 'grocery' at all, which is also why
+// the note above says six pages when there were nine sites.
+//
+// The five SUPER ADMIN pages — admin/, admin/reports/, admin/wallet/,
+// admin/system/, admin/users/ — are deliberately NOT converted and stay English
+// end to end. app/(app)/admin/layout.tsx redirects anyone who is not a super
+// admin, so no family reaches them, and their diagnostics are evidence for
+// whoever is holding the pager. That is the product decision the row said had to
+// be made, and it is checked rather than asserted: the last case of
+// tests/a-failed-read-names-itself-in-the-familys-language.test.ts fails if a
+// joined English diagnostic appears anywhere outside that gate.
+//
+// So the delta is the 6 named above plus command-center's 3 and calm's banner
+// title. 2,817 − 10 = 2,807.
+const CEILING = 2807;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);

@@ -153,8 +153,17 @@ describe('/guardian does not report zero for a count it could not read', () => {
   it('names only the read that failed when the others are fine', async () => {
     reads.byTable.guardian_suggestions = failed;
     const html = await render(GuardianPage());
-    expect(html).toContain('suggestions: permission denied for relation');
-    expect(html).not.toContain('escalations: permission denied');
+    // The name of the read is the family's half of the line and now comes from
+    // the catalogue; the Postgres reason is the machine's half and renders as
+    // <code> BESIDE it rather than joined onto it with a colon, because a
+    // translated label glued to an untranslatable string is one sentence in two
+    // languages (I18N-006). Both halves are still required to be on screen — and
+    // matching the whole <li> is what keeps "escalations" from being satisfied
+    // by the word appearing in prose elsewhere on the page.
+    expect(html).toMatch(
+      new RegExp(`<li>${t('guardian.suggestions')} <code[^>]*>permission denied for relation</code></li>`),
+    );
+    expect(html).not.toMatch(new RegExp(`<li>${t('guardian.escalations')} <code`));
   });
 });
 
