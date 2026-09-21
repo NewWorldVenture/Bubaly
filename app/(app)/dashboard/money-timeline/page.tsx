@@ -21,6 +21,9 @@ export default async function MoneyTimelinePage() {
   await requireAal2(ctx, 'money', '/dashboard/money-timeline');
   const supabase = await createServer();
   const familyId = ctx.active.familyId;
+  // The forecast's "today" and its week buckets are the family's, not the
+  // server's — every day key below is resolved in this zone.
+  const tz = ctx.active.family.timezone || 'UTC';
   const { locale } = await getLocaleContext();
 
   // The loader throws on a real money read failure (see timeline-load.ts):
@@ -30,7 +33,7 @@ export default async function MoneyTimelinePage() {
   try {
     // The insight copy carries amounts and week labels, so the forecast is
     // built for whoever is reading this page.
-    timeline = await loadMoneyTimeline(supabase, familyId, new Date(), { locale: locale.code });
+    timeline = await loadMoneyTimeline(supabase, familyId, tz, new Date(), { locale: locale.code });
   } catch (err) {
     console.error('[dashboard/money-timeline] forecast read failed', err);
     const tr = await getTranslations();

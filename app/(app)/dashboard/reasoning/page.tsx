@@ -32,7 +32,10 @@ export default async function ReasoningPage() {
   const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const report = await loadAndSnapshotReasoning(supabase, ctx.active.familyId, ctx.user.id);
+  // The family's zone — the report composes the operating index, which keys
+  // on the family's day.
+  const tz = ctx.active.family.timezone || 'UTC';
+  const report = await loadAndSnapshotReasoning(supabase, ctx.active.familyId, ctx.user.id, tz);
 
   const attention = report.answers.filter((a) => a.status === 'attention').length;
   const hasReadErrors = report.readErrors.length > 0;

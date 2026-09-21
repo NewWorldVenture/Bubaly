@@ -92,7 +92,7 @@ export default async function AgentsPage() {
   // in. Best-effort: a missing graph yields no insights, never an error.
   let reasoning;
   try {
-    reasoning = await loadFamilyContext(supabase, familyId, now);
+    reasoning = await loadFamilyContext(supabase, familyId, tz, now);
   } catch (error) {
     console.error('[dashboard-agents] reasoning context read failed', error);
     return <ReadFailure />;

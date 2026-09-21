@@ -88,7 +88,7 @@ export default async function CommandCenterPage() {
   // Index, brought into the Command Center (pillar #5). Degrades to null-safe.
   let change;
   try {
-    ({ change } = await loadOperatingIndex(supabase, familyId, now));
+    ({ change } = await loadOperatingIndex(supabase, familyId, tz, now));
   } catch (error) {
     // The recap is ONE section of this page. ChangeRecap requires a real
     // ChangeSummary, so rather than inventing an empty one that would render as

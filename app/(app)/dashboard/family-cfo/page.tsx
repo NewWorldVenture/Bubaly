@@ -83,7 +83,7 @@ export default async function FamilyCfoPage() {
   // comfort as a $0 net position, so it fails closed here too.
   let forecastInput: BuildTimelineInput;
   try {
-    forecastInput = await loadMoneyTimelineInput(supabase, familyId);
+    forecastInput = await loadMoneyTimelineInput(supabase, familyId, tz);
   } catch (err) {
     console.error('[dashboard/family-cfo] forecast read failed', err);
     return <ErrorState message={tr('familyCfo.couldNotLoadYourFamily')} />;

@@ -38,6 +38,9 @@ export default async function CalmPage() {
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
   const now = new Date();
+  // The family's zone: the reasoning context's snapshot bounds DATE columns
+  // with a day key, and a day key only means something in a zone.
+  const tz = ctx.active.family.timezone || 'UTC';
   const in24 = new Date(now.getTime() + 24 * 3_600_000).toISOString();
 
   const [agentResult, autopilotResult, foiResult, approvalResult, reminderResult] = await Promise.all([
@@ -109,7 +112,7 @@ export default async function CalmPage() {
   // loses those rows and keeps everything else.
   let reasoning;
   try {
-    reasoning = await loadFamilyContext(supabase, familyId);
+    reasoning = await loadFamilyContext(supabase, familyId, tz);
   } catch (error) {
     console.warn('[dashboard-calm] reasoning context read failed — inbox without graph insights', error);
     reasoning = null;

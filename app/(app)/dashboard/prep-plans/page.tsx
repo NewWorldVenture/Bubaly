@@ -15,12 +15,15 @@ export default async function PrepPlansPage() {
   const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
+  // The family's zone: the reasoning context's snapshot bounds DATE columns
+  // with a day key, and a day key only means something in a zone.
+  const tz = ctx.active.family.timezone || 'UTC';
   // R2: relationship reasoning next to the prep plans — a high-impact hub is worth
   // planning around. Keep the planner usable, but make a failed shared read visible.
   let reasoning: Awaited<ReturnType<typeof loadFamilyContext>> | null = null;
   let reasoningError = false;
   try {
-    reasoning = await loadFamilyContext(supabase, ctx.active.familyId);
+    reasoning = await loadFamilyContext(supabase, ctx.active.familyId, tz);
   } catch (error) {
     reasoningError = true;
     console.error('[dashboard/prep-plans] reasoning context read failed', error);

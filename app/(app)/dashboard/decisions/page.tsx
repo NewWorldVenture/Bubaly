@@ -15,12 +15,15 @@ export default async function DecisionsPage() {
   const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
+  // The family's zone: the reasoning context's snapshot bounds DATE columns
+  // with a day key, and a day key only means something in a zone.
+  const tz = ctx.active.family.timezone || 'UTC';
   // R2: surface Knowledge Graph relationship context alongside the decision tool —
   // what's centrally connected is worth weighing when you decide. Shared-read failures stay visible.
   let reasoning = null;
   let reasoningError = false;
   try {
-    reasoning = await loadFamilyContext(supabase, ctx.active.familyId);
+    reasoning = await loadFamilyContext(supabase, ctx.active.familyId, tz);
   } catch (error) {
     reasoningError = true;
     console.error('[dashboard/decisions] reasoning context read failed', error);

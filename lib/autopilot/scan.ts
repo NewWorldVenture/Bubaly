@@ -5,6 +5,37 @@
 // engine, then reconciles `autopilot_suggestions`: respects prior resolutions,
 // archives stale OPEN suggestions whose signal vanished, and auto-executes new
 // high-confidence reminders (reversibly — it inserts a real `reminders` row).
+//
+// EVERY DAY IN THIS FILE IS THE FAMILY'S DAY, which is why `tz` is a parameter
+// rather than something the scan reads off the server. It used to open with
+// `new Date().toISOString().slice(0, 10)` — the day at GREENWICH — and then
+// spend that one key three incompatible ways:
+//
+//   - as a DATE-column bound (`renewals.expires_at`, `insurance.renewal_date`,
+//     `family_stress_signals.occurred_on`, `meal_plans.plan_date`). Those
+//     columns hold the day on the family's kitchen wall, so a Greenwich key
+//     compared against them is off by a day for 7h of every day in Los Angeles
+//     and 9h in Tokyo — a renewal 30 days out was read as 29, and the last day
+//     of the meal-plan horizon was simply missing.
+//   - as a timestamptz bound, spelled `${today}T00:00:00Z`. That is GREENWICH
+//     midnight, so "chores overdue before today" swept up every chore due
+//     during the family's own evening, and "appointments from today" started
+//     at 17:00 the previous afternoon in Los Angeles.
+//   - as `snapshot.today`, from which the engine measures every "is it today
+//     or tomorrow?" It is now the family's day key, and the engine resolves
+//     its timestamptz signals on the same wall — see lib/autopilot/engine.ts.
+//     Converting one half without the other would move the bug rather than
+//     fix it.
+//
+// The two kinds of column are handled differently ON PURPOSE. A DATE column is
+// ALREADY the family's day, so it is bounded by a day KEY, untouched. A
+// timestamptz is an instant, so it is bounded by a real family-local midnight.
+// Binding a zone to a date and failing to bind one to a timestamp are the same
+// error, one day apart, in opposite directions.
+//
+// Horizons move the day KEY and then resolve local midnight again, rather than
+// adding N × 86_400_000 ms: a local day is 23 or 25 hours twice a year, so the
+// fixed-millisecond form lands an hour off and formats as the wrong day.
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { settleAll } from '@/lib/supabase/settle';
 import type { Database } from '@/lib/database.types';
@@ -14,7 +45,7 @@ import { isPolicySuggestionKey } from '@/lib/autopilot/policy-candidates';
 import { runPolicyScan } from '@/lib/autopilot/policy-scan';
 import { archiveStaleSuggestions } from '@/lib/autopilot/history';
 import { notify } from '@/lib/services/notifications';
-import { systemScopeForFamily } from '@/lib/services/scope';
+import { addDaysToDayKey, dayKeyInTz, systemScopeForFamily, zonedTimeMs } from '@/lib/services/scope';
 import type { ServiceScope } from '@/lib/services/types';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
 
@@ -30,6 +61,58 @@ export type AutopilotScanResult = {
 };
 
 const RESOLVED = new Set(['dismissed', 'snoozed', 'executed', 'approved', 'auto_executed']);
+
+/**
+ * The family-local window every query in the scan is bounded by.
+ *
+ * Exported because it is the whole of the timezone reasoning and it is pure —
+ * a test can pin an instant and a zone and check the bounds without a database.
+ *
+ * The `*Key` fields are day KEYS for the DATE columns; the `*Iso` fields are
+ * instants for the timestamptz columns. Which one a query wants is decided by
+ * the migration that declared the column, never by the column's name.
+ */
+export type ScanWindow = {
+  /** Today on the family's wall, `YYYY-MM-DD`. Also `snapshot.today`. */
+  todayKey: string;
+  /** Today + 30 days: the DATE bound for `renewals.expires_at` and `family_insurance_policies.renewal_date`. */
+  in30Key: string;
+  /** Today - 8 days: the DATE bound for `family_stress_signals.occurred_on` (the engine keeps 7). */
+  since8Key: string;
+  /** Today - 90 days: the DATE bound for `meal_plans.plan_date`. */
+  since90Key: string;
+  /** Today + 4 days: the last day of the "already has a dinner planned" horizon. */
+  horizonEndKey: string;
+  /** Local midnight today — the inclusive start of every timestamptz window. */
+  startIso: string;
+  /** Local midnight today + 3 days — the EXCLUSIVE end, covering the engine's 0..2 day horizon. */
+  in3Iso: string;
+  /** Local midnight today - 90 days — the start of the chore-history read. */
+  since90Iso: string;
+};
+
+export function scanWindow(tz: string, now: Date): ScanWindow {
+  const todayKey = dayKeyInTz(now, tz);
+  const ahead = (days: number) => addDaysToDayKey(todayKey, days);
+  const midnight = (dayKey: string) => new Date(zonedTimeMs(dayKey, 0, 0, tz)).toISOString();
+  const since90Key = ahead(-90);
+  return {
+    todayKey,
+    in30Key: ahead(30),
+    since8Key: ahead(-8),
+    since90Key,
+    horizonEndKey: ahead(4),
+    startIso: midnight(todayKey),
+    in3Iso: midnight(ahead(3)),
+    since90Iso: midnight(since90Key),
+  };
+}
+
+/** 09:00 on the family's wall — the hour an auto-created reminder falls back to. */
+export function defaultReminderIso(dayKey: string, tz: string): string {
+  const ms = zonedTimeMs(dayKey, 9, 0, tz);
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : `${dayKey}T09:00:00Z`;
+}
 
 /** Get-or-create the family's active shopping list (mirrors lib/capture/save). */
 async function getOrCreateGroceryListId(supabase: DB, familyId: string, userId: string | null): Promise<string | null> {
@@ -48,42 +131,50 @@ async function getOrCreateGroceryListId(supabase: DB, familyId: string, userId: 
   return created?.id ?? null;
 }
 
-export async function runAutopilotScan(supabase: DB, familyId: string, userId: string | null): Promise<AutopilotScanResult> {
+/**
+ * `tz` is the family's IANA zone — `ctx.active.family.timezone` on the
+ * on-demand route, and `families.timezone` on the row the cron is already
+ * iterating. It is required rather than defaulted because BOTH callers have the
+ * family in hand, and a silent 'UTC' default would put this scan straight back
+ * to answering Greenwich's question. `now` is injectable so a test can pin the
+ * instant and the zone independently.
+ */
+export async function runAutopilotScan(
+  supabase: DB,
+  familyId: string,
+  userId: string | null,
+  tz: string,
+  now: Date = new Date(),
+): Promise<AutopilotScanResult> {
   // Built once, lazily: the scope read costs a query, and most scans produce no
   // notification at all. Null means the family could not be read, and the
   // notification is skipped rather than sent against a guessed timezone —
   // quiet hours evaluated in the wrong zone hold a notice at six in the evening
   // and let one through at two in the morning.
   let notifyScope: ServiceScope | null = null;
-  const now = new Date();
-  const today = now.toISOString().slice(0, 10);
-  const in30 = new Date(now.getTime() + 30 * 86400000).toISOString().slice(0, 10);
-  const in2 = new Date(now.getTime() + 2 * 86400000).toISOString();
-
-  const since60 = new Date(now.getTime() - 8 * 86400000).toISOString().slice(0, 10);
-  const since90 = new Date(now.getTime() - 90 * 86400000).toISOString();
+  const { todayKey, in30Key, since8Key, since90Key, horizonEndKey, startIso, in3Iso, since90Iso } = scanWindow(tz, now);
   const [
     renewalsResult, apptsResult, choreRowsResult,
     membersResult, groceriesResult, apptRemindersResult,
     eventsResult, subsResult, stressResult, medsResult,
     choreHistoryResult, twinProfilesResult, mealPlansResult, insuranceResult, wishlistResult, existingResult,
   ] = await settleAll([
-    supabase.from('renewals').select('id, title, expires_at, status').eq('family_id', familyId).eq('status', 'active').lte('expires_at', in30).limit(100),
-    supabase.from('appointments').select('id, title, starts_at, member_id').eq('family_id', familyId).gte('starts_at', `${today}T00:00:00Z`).lte('starts_at', in2).limit(50),
-    supabase.from('chore_assignments').select('id, due_at, member_id, status, chores(title)').eq('family_id', familyId).in('status', ['todo', 'in_progress']).lt('due_at', `${today}T00:00:00Z`).limit(100),
+    supabase.from('renewals').select('id, title, expires_at, status').eq('family_id', familyId).eq('status', 'active').lte('expires_at', in30Key).limit(100),
+    supabase.from('appointments').select('id, title, starts_at, member_id').eq('family_id', familyId).gte('starts_at', startIso).lt('starts_at', in3Iso).limit(50),
+    supabase.from('chore_assignments').select('id, due_at, member_id, status, chores(title)').eq('family_id', familyId).in('status', ['todo', 'in_progress']).lt('due_at', startIso).limit(100),
     supabase.from('family_members').select('id, display_name, birthday').eq('family_id', familyId).eq('is_active', true).not('birthday', 'is', null).limit(50),
     supabase.from('grocery_items').select('id, name, created_at, is_checked').eq('family_id', familyId).eq('is_checked', false).limit(200),
     supabase.from('reminders').select('related_id').eq('family_id', familyId).eq('related_type', 'appointment').eq('is_done', false).limit(200),
-    supabase.from('calendar_events').select('id, title, starts_at, ends_at, assignee_id, all_day, location').eq('family_id', familyId).gte('starts_at', `${today}T00:00:00Z`).lte('starts_at', in2).limit(100),
+    supabase.from('calendar_events').select('id, title, starts_at, ends_at, assignee_id, all_day, location').eq('family_id', familyId).gte('starts_at', startIso).lt('starts_at', in3Iso).limit(100),
     supabase.from('subscriptions_tracked').select('id, name, cost_cents, cadence, next_charge, last_used, status').eq('family_id', familyId).in('status', ['active', 'trial']).limit(200),
-    supabase.from('family_stress_signals').select('member_id, weight, occurred_on').eq('family_id', familyId).eq('status', 'active').gte('occurred_on', since60).limit(500),
+    supabase.from('family_stress_signals').select('member_id, weight, occurred_on').eq('family_id', familyId).eq('status', 'active').gte('occurred_on', since8Key).limit(500),
     supabase.from('medications').select('id, name, member_id, refill_on, refill_reminder_days').eq('family_id', familyId).eq('is_active', true).not('refill_on', 'is', null).limit(200),
     // Digital Twin learning: 90d of chore outcomes per member.
-    readAllAsQuery((from, to) => supabase.from('chore_assignments').select('member_id, status').eq('family_id', familyId).gte('created_at', since90).order('id').range(from, to), { max: 2000 }),
+    readAllAsQuery((from, to) => supabase.from('chore_assignments').select('member_id, status').eq('family_id', familyId).gte('created_at', since90Iso).order('id').range(from, to), { max: 2000 }),
     supabase.from('family_digital_twin_profiles').select('id, member_id, metadata').eq('family_id', familyId).limit(50),
     // Meal Agent / Family Memory: 90d of dinner history + the next few days' plans.
-    supabase.from('meal_plans').select('plan_date, meal_type, meals(name)').eq('family_id', familyId).eq('meal_type', 'dinner').gte('plan_date', since90.slice(0, 10)).limit(500),
-    supabase.from('family_insurance_policies').select('id, policy_type, insurer, renewal_date').eq('family_id', familyId).eq('is_active', true).not('renewal_date', 'is', null).lte('renewal_date', in30).limit(100),
+    supabase.from('meal_plans').select('plan_date, meal_type, meals(name)').eq('family_id', familyId).eq('meal_type', 'dinner').gte('plan_date', since90Key).limit(500),
+    supabase.from('family_insurance_policies').select('id, policy_type, insurer, renewal_date').eq('family_id', familyId).eq('is_active', true).not('renewal_date', 'is', null).lte('renewal_date', in30Key).limit(100),
     // Family Memory: unpurchased wish-list items → gift ideas for upcoming birthdays.
     supabase.from('wishlist_items').select('member_id, title, priority, is_purchased').eq('family_id', familyId).eq('is_purchased', false).limit(500),
     supabase.from('autopilot_suggestions').select('id, dedupe_key, status').eq('family_id', familyId).not('dedupe_key', 'like', 'archived:%').limit(500),
@@ -129,11 +220,13 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
   // the next few days already have a dinner planned.
   const mealCounts = new Map<string, number>();
   const plannedDinnerDays: string[] = [];
-  const horizonEnd = new Date(now.getTime() + 4 * 86400000).toISOString().slice(0, 10);
   for (const mp of mealPlans ?? []) {
     const name = (mp as unknown as { meals: { name: string } | null }).meals?.name;
     if (name) mealCounts.set(name, (mealCounts.get(name) ?? 0) + 1);
-    if (mp.plan_date >= today && mp.plan_date <= horizonEnd) plannedDinnerDays.push(mp.plan_date);
+    // `plan_date` is a DATE column: it arrives as a bare `YYYY-MM-DD` that is
+    // already the family's day, so it is compared to family day keys AS IT
+    // ARRIVES. Resolving it through a zone would move it a day the wrong way.
+    if (mp.plan_date >= todayKey && mp.plan_date <= horizonEndKey) plannedDinnerDays.push(mp.plan_date);
   }
   const favoriteMeals = Array.from(mealCounts.entries())
     .map(([name, count]) => ({ name, count }))
@@ -141,7 +234,8 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
     .slice(0, 5);
 
   const snapshot: FamilySnapshot = {
-    today,
+    today: todayKey,
+    tz,
     renewals: (renewals ?? []).map((r) => ({ id: r.id, label: r.title, expiresOn: r.expires_at })),
     appointments: (appts ?? []).map((a) => ({ id: a.id, title: a.title, startsAt: a.starts_at, memberId: a.member_id, hasReminder: remindedAppt.has(a.id) })),
     overdueChores: (choreRows ?? []).map((c) => ({
@@ -224,7 +318,10 @@ export async function runAutopilotScan(supabase: DB, familyId: string, userId: s
     let createdGroceryIds: string[] = [];
 
     if (isAuto && d.actionType === 'create_reminder') {
-      const at = (d.payload.at as string) ?? `${today}T09:00:00Z`;
+      // Nine in the morning means the FAMILY's nine. `${todayKey}T09:00:00Z`
+      // is 02:00 in Los Angeles — an auto-created reminder that fires in the
+      // middle of the night on the day it was meant to help with.
+      const at = (d.payload.at as string) ?? defaultReminderIso(todayKey, tz);
       const relatedType = d.sourceKind === 'appointments' ? 'appointment'
         : d.sourceKind === 'calendar_events' ? 'event' : 'renewal';
       const { data: reminder, error: remErr } = await supabase.from('reminders').insert({

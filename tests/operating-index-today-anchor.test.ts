@@ -54,16 +54,23 @@ function makeDb() {
 }
 
 const NOW = new Date('2026-09-06T07:10:00Z');
+// The anchor is what this file is about, but the day it anchors ON belongs to
+// a family, so the zone is named rather than left to the host. At this
+// instant Los Angeles reads 00:10 on the 6th — the same calendar day
+// Greenwich reads, which is deliberate: this file must keep proving the
+// anchor, and the zone's effect on the key is proved in
+// tests/the-operating-index-snapshots-the-familys-day.test.ts.
+const TZ = 'America/Los_Angeles';
 
 describe('the operating index anchors its recap to today', () => {
   it('reads the prior snapshot from strictly BEFORE today, not just the newest rows', async () => {
     const { db, calls } = makeDb();
-    await loadOperatingIndex(db, 'fam-1', NOW);
+    await loadOperatingIndex(db, 'fam-1', TZ, NOW);
 
     const snapshotReads = calls.filter((c) => c.table === 'family_operating_index' && c.kind === 'select');
     expect(snapshotReads.length, 'the prior-snapshot read disappeared').toBeGreaterThan(0);
 
-    const anchored = snapshotReads.find((c) => c.filters['lt:as_of_date'] === asOfDate(NOW));
+    const anchored = snapshotReads.find((c) => c.filters['lt:as_of_date'] === asOfDate(NOW, TZ));
     expect(
       anchored,
       'no read anchored with .lt("as_of_date", today) — the recap can now diff two arbitrary days',
@@ -75,12 +82,12 @@ describe('the operating index anchors its recap to today', () => {
     // The upsert is why a morning visit fixes the staleness for every other
     // surface rather than only for the page that triggered it.
     const { db, calls } = makeDb();
-    await loadOperatingIndex(db, 'fam-1', NOW);
+    await loadOperatingIndex(db, 'fam-1', TZ, NOW);
     expect(calls.some((c) => c.table === 'family_operating_index' && c.kind === 'upsert')).toBe(true);
   });
 
   it('asOfDate is a calendar day, which is what the column stores', () => {
-    expect(asOfDate(NOW)).toBe('2026-09-06');
-    expect(asOfDate(new Date('2026-01-01T23:59:59Z'))).toBe('2026-01-01');
+    expect(asOfDate(NOW, TZ)).toBe('2026-09-06');
+    expect(asOfDate(new Date('2026-01-01T23:59:59Z'), TZ)).toBe('2026-01-01');
   });
 });

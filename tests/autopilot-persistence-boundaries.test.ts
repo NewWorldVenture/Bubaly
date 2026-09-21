@@ -117,7 +117,7 @@ describe('autopilot persistence boundaries', () => {
   it('fails closed before any write when a required family read fails', async () => {
     const { client, writes } = failingReadClient('calendar_events');
 
-    await expect(runAutopilotScan(client as never, 'family-1', 'user-1'))
+    await expect(runAutopilotScan(client as never, 'family-1', 'user-1', 'UTC'))
       .rejects.toThrow('Autopilot could not read the required family data');
     expect(writes).toEqual([]);
   });
@@ -125,7 +125,7 @@ describe('autopilot persistence boundaries', () => {
   it('removes an auto-created reminder when its suggestion cannot be saved', async () => {
     const { client, writes } = suggestionInsertFailureClient();
 
-    await expect(runAutopilotScan(client as never, 'family-1', 'user-1'))
+    await expect(runAutopilotScan(client as never, 'family-1', 'user-1', 'UTC'))
       .rejects.toThrow('Autopilot could not save the suggestion');
     expect(writes).toEqual([
       { table: 'reminders', operation: 'insert' },

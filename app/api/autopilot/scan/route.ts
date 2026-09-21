@@ -36,7 +36,12 @@ export async function POST() {
   }
 
   try {
-    const result = await runAutopilotScan(supabase, ctx.active.familyId, ctx.user.id);
+    // The family's zone comes off the context that is already loaded — no
+    // second read, and never the server's zone. `ctx.active.family` is the
+    // `families` row, so `timezone` is the column 0002 defaults to 'UTC'.
+    const result = await runAutopilotScan(
+      supabase, ctx.active.familyId, ctx.user.id, ctx.active.family.timezone || 'UTC',
+    );
     return NextResponse.json(result);
   } catch (err) {
     console.error('Autopilot scan error:', err);

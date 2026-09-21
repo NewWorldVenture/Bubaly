@@ -17,12 +17,15 @@ export default async function ConciergePage() {
   const t = await getTranslations();
   const ctx = await requireFeature('/dashboard/concierge');
   const supabase = await createServer();
+  // The family's zone: the reasoning context's snapshot bounds DATE columns
+  // with a day key, and a day key only means something in a zone.
+  const tz = ctx.active.family.timezone || 'UTC';
   // R2: the concierge reasons over Knowledge Graph relationships. Keep the
   // primary module available, but make a failed shared read visible.
   let reasoning = null;
   let reasoningError = false;
   try {
-    reasoning = await loadFamilyContext(supabase, ctx.active.familyId);
+    reasoning = await loadFamilyContext(supabase, ctx.active.familyId, tz);
   } catch (error) {
     reasoningError = true;
     console.error('[dashboard/concierge] reasoning context read failed', error);

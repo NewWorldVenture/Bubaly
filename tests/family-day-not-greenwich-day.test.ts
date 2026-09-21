@@ -41,13 +41,16 @@ const ALLOWED = new Map([
   // Cron, all families in one pass. Cost of not resolving each family's zone is
   // bounded at one day early for families west of UTC; documented in the file.
   ['app/api/cron/wallet-allowance/route.ts', 'platform-wide cron; bounded to one day early, documented in file'],
-  // Background derivation rather than something a family reads as "today".
-  // Each takes familyId but not a zone, so converting means threading one
-  // through; worth doing, not yet done.
-  ['lib/autopilot/scan.ts', 'background scan; needs a tz threaded through its signature'],
-  ['lib/family/signals.ts', 'background signals; needs a tz threaded through its signature'],
-  ['lib/finance/timeline-load.ts', 'derived timeline; needs a tz threaded through its signature'],
-  ['lib/operating-index/server.ts', 'snapshot key; needs a tz threaded through its signature'],
+  // Background derivation rather than something a family reads as "today". It
+  // takes familyId but not a zone, so converting means threading one through.
+  //
+  // This entry is the LAST of five that said exactly this. lib/family/signals.ts,
+  // lib/autopilot/scan.ts, lib/finance/timeline-load.ts and
+  // lib/operating-index/server.ts all carried the same admission and have all
+  // been converted, each with a test that names its zones explicitly. The
+  // sentence was never a justification — it was a note of work not yet done, and
+  // four fifths of it is now done. This one is left because the agent converting
+  // it did not finish; it is not a different kind of case.
   ['lib/planning/prep-server.ts', 'prep generation; needs a tz threaded through its signature'],
   ['app/(app)/dashboard/family-digital-twin/actions.ts', 'simulation input over a month window; a day either way does not move the result'],
 ]);

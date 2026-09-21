@@ -48,7 +48,7 @@ export async function syncMoneyInsightsAction(): Promise<void> {
   // language of whoever pressed Refresh, which is the right owner for a record
   // and deliberately not a per-member choice: one row serves the whole family.
   const { locale } = await getLocaleContext();
-  const timeline = await loadMoneyTimeline(supabase, ctx.active.familyId, new Date(), { locale: locale.code });
+  const timeline = await loadMoneyTimeline(supabase, ctx.active.familyId, ctx.active.family.timezone || 'UTC', new Date(), { locale: locale.code });
   for (const i of timeline.insights) {
     await supabase.from('money_timeline_insights').upsert(
       {

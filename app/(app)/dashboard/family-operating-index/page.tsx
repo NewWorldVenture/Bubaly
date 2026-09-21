@@ -60,9 +60,12 @@ export default async function FamilyOperatingIndexPage() {
   const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
+  // The family's zone. The index is snapshotted under the family's day and
+  // bounds bills/documents/goals (all DATE columns) with it.
+  const tz = ctx.active.family.timezone || 'UTC';
   let indexResult;
   try {
-    indexResult = await loadOperatingIndex(supabase, ctx.active.familyId);
+    indexResult = await loadOperatingIndex(supabase, ctx.active.familyId, tz);
   } catch (error) {
     console.error('[dashboard/family-operating-index] operating index read failed', error);
     return <ErrorState message={t('familyOperatingIndex.couldNotLoadYourFamily')} />;
