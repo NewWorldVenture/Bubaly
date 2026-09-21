@@ -68,6 +68,15 @@ describe('imminentMomentNotices', () => {
 //
 // Three things in the label are zone-sensitive and all three are asserted below:
 // the clock, the Today/Tomorrow decision, and the weekday name.
+//
+// Every comparison names TWO EXPLICIT ZONES. None of them compares against "no
+// zone", because that renders in the HOST's zone and CI runs the whole suite a
+// second time with `TZ: America/Los_Angeles` (ci.yml, "Unit tests (DST-observing
+// host)") — the same zone used as the family's here. A counterexample written
+// against the unbound call would agree with the bound one on that host and
+// assert nothing. The sibling file
+// tests/a-server-rendered-time-is-the-familys-time.test.ts learned this by
+// turning CI red four times over.
 describe('a "get ready" push is in the family’s zone', () => {
   const LA = 'America/Los_Angeles';
   // 18:30 Sunday 20 September in Los Angeles is already 01:30 Monday at Greenwich.
@@ -78,7 +87,7 @@ describe('a "get ready" push is in the family’s zone', () => {
     starts_at: '2026-09-21T16:00:00Z', all_day: false,
   };
 
-  const titleOf = (tz?: string) =>
+  const titleOf = (tz: string) =>
     imminentMomentNotices([game], [], now, 36, tz).map((n) => n.title).join(' | ');
 
   it('says Tomorrow, with the family’s clock on it', () => {
@@ -91,8 +100,8 @@ describe('a "get ready" push is in the family’s zone', () => {
   // the cron actually sent. The suite pins TZ=UTC, so an unzoned call renders
   // Greenwich — "Today" for a game the family has tomorrow morning, at a clock
   // seven hours out.
-  it('and unzoned it said Today at 4:00 PM, which is what shipped', () => {
-    const title = titleOf(undefined);
+  it('and at Greenwich the same game is Today at 4:00 PM, which is what shipped', () => {
+    const title = titleOf('UTC');
     expect(title).toContain('Today');
     expect(title).toContain('4:00 PM');
     expect(title).not.toBe(titleOf(LA));
@@ -103,7 +112,7 @@ describe('a "get ready" push is in the family’s zone', () => {
     // renderings differ is what proves the parameter reached `fmtClock`, which
     // is a SECOND local fmtClock, distinct from the one in prep.ts.
     const zoned = imminentMomentNotices([game], [], now, 36, LA);
-    const plain = imminentMomentNotices([game], [], now, 36);
+    const plain = imminentMomentNotices([game], [], now, 36, 'UTC');
     expect(zoned).toHaveLength(plain.length);
     expect(zoned.length, 'no notice was produced, so nothing above was asserted').toBeGreaterThan(0);
     const withLeave = zoned.filter((n) => n.body.startsWith('Leave by'));
@@ -143,7 +152,7 @@ describe('a "get ready" push is in the family’s zone', () => {
     const longHorizon = 24 * 7;
     expect(imminentMomentNotices([far], [], now, longHorizon, LA).map((n) => n.title).join(' '))
       .toMatch(/Tue/);
-    expect(imminentMomentNotices([far], [], now, longHorizon).map((n) => n.title).join(' '))
+    expect(imminentMomentNotices([far], [], now, longHorizon, 'UTC').map((n) => n.title).join(' '))
       .toMatch(/Wed/);
   });
 });

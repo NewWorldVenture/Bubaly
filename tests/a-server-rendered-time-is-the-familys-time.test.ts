@@ -26,6 +26,23 @@
 // The clock is pinned throughout. A test about which calendar day an instant
 // falls on cannot also be reading the wall clock — see TIME-001, where exactly
 // that combination was right 23 hours out of 24 and went red in CI at 23:04.
+//
+// AND IT MUST NOT ASSUME THE HOST'S ZONE EITHER, which is the half this file got
+// wrong on its first run. Every counterexample below used to read
+// `createFormat('en-US')` — no zone — and assert it produced the WRONG answer.
+// That is only true where the runtime is UTC. CI runs the whole suite a second
+// time with `TZ: America/Los_Angeles` (ci.yml, "Unit tests (DST-observing
+// host)"), and America/Los_Angeles is the very zone used as the family's here,
+// so on that host the bound and unbound formatters agreed and four cases failed:
+//
+//     expected 'Tomorrow, 9:00 AM' to be 'Today, 4:00 PM'
+//     expected '9:00 AM' not to be '9:00 AM'
+//
+// Pinning the clock and then hard-coding the zone is TIME-001 again, committed
+// in the test written to fix TIME-001's class. So the comparisons below name TWO
+// EXPLICIT ZONES and never compare against "unbound"; the one property that is
+// genuinely about the runtime is asserted against the runtime's own resolved
+// zone, which is true on every host.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFormat } from '@/lib/utils/format';
 
@@ -54,22 +71,22 @@ describe('a server-rendered time is the family’s time', () => {
   // this IS what the page rendered before the fix. If this line ever starts
   // agreeing with the one above, the two are no longer being told apart and the
   // case above has stopped proving anything.
-  it('and would have said Today 4:00 PM with no zone bound, which is the bug', () => {
-    const unbound = createFormat('en-US').fmtRelative(DUE);
-    expect(unbound).toBe('Today, 4:00 PM');
-    expect(unbound).not.toBe(createFormat('en-US', undefined, LA).fmtRelative(DUE));
+  it('and in Greenwich the same instant is Today 4:00 PM, which is what the page showed', () => {
+    const atGreenwich = createFormat('en-US', undefined, 'UTC').fmtRelative(DUE);
+    expect(atGreenwich).toBe('Today, 4:00 PM');
+    expect(atGreenwich).not.toBe(createFormat('en-US', undefined, LA).fmtRelative(DUE));
   });
 
   it('prints the clock in the family’s zone, not the runtime’s', () => {
     expect(createFormat('en-US', undefined, LA).fmtTime(DUE)).toBe('9:00 AM');
-    expect(createFormat('en-US').fmtTime(DUE)).toBe('4:00 PM');
+    expect(createFormat('en-US', undefined, 'UTC').fmtTime(DUE)).toBe('4:00 PM');
   });
 
   it('puts a late-evening instant on the family’s date, not Greenwich’s', () => {
     // 21:00 Sunday in Los Angeles — already Monday at Greenwich.
     const lateSunday = new Date('2026-09-21T04:00:00Z');
     expect(createFormat('en-US', undefined, LA).fmtDate(lateSunday)).toContain('Sun');
-    expect(createFormat('en-US').fmtDate(lateSunday)).toContain('Mon');
+    expect(createFormat('en-US', undefined, 'UTC').fmtDate(lateSunday)).toContain('Mon');
   });
 
   // Tomorrow is the day AFTER today, and twice a year that is not 24 hours away.
@@ -134,10 +151,22 @@ describe('a server-rendered time is the family’s time', () => {
   // runtime's zone, exactly as they did before this parameter existed. That is
   // correct in a browser, where the runtime IS the reader, and it is the reason
   // the zone is opt-in rather than required.
-  it('leaves the unbound formatter byte-identical to what it was', () => {
+  it('leaves the unbound formatter exactly as it was: the runtime’s own zone', () => {
     const f = createFormat('en-US');
+    // Stated against the RUNTIME's resolved zone rather than against a literal,
+    // because "what it was" IS the runtime zone and that differs per host — which
+    // is the whole lesson in the header. This holds under TZ=UTC and under
+    // TZ=America/Los_Angeles alike.
+    const runtime = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const asRuntime = createFormat('en-US', undefined, runtime);
+    for (const value of ['2026-07-14T14:30:00Z', '2026-01-02T23:45:00Z', DUE.toISOString()]) {
+      expect(f.fmtTime(value), value).toBe(asRuntime.fmtTime(value));
+      expect(f.fmtDate(value), value).toBe(asRuntime.fmtDate(value));
+      expect(f.fmtDateTime(value), value).toBe(asRuntime.fmtDateTime(value));
+    }
+    // A local-wall-clock string and money carry no zone at all, so these are
+    // literals on any host.
     expect(f.fmtTime('2026-07-14T09:05:00')).toBe('9:05 AM');
-    expect(f.fmtDate('2026-07-14T14:30:00Z')).toBe('Tue, Jul 14');
     expect(f.fmtMoney(1250)).toBe('$12.50');
   });
 
@@ -157,7 +186,7 @@ describe('a server-rendered time is the family’s time', () => {
   // above are comparisons.
   it('the zone changes the answer at all, or nothing above is a test', () => {
     const zoned = createFormat('en-US', undefined, LA);
-    const plain = createFormat('en-US');
+    const plain = createFormat('en-US', undefined, 'UTC');
     const differ = [
       [zoned.fmtTime(DUE), plain.fmtTime(DUE)],
       [zoned.fmtRelative(DUE), plain.fmtRelative(DUE)],

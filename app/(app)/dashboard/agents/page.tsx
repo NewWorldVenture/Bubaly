@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { dayKeyInZone } from '@/lib/schedule/zoned';
 import { getTranslations } from '@/lib/i18n/server';
 import Link from 'next/link';
 import { requireUserContext } from '@/lib/supabase/auth';
@@ -101,7 +102,12 @@ export default async function AgentsPage() {
     : [];
 
   const events = weekEvents.data ?? [];
-  const eventsToday = events.filter((e) => e.starts_at.slice(0, 10) === todayKey).length;
+  // `todayKey` is the FAMILY's day (line 52, via dayKeyInTz). `.slice(0, 10)` on
+  // an ISO timestamp is GREENWICH's. Comparing them is the defect this file's own
+  // comment four lines above warns about, written on the other side of the same
+  // expression: a 21:00 Saturday event in Los Angeles keys to Sunday and drops out
+  // of "today", while a 17:00 Friday one keys to Saturday and appears in it.
+  const eventsToday = events.filter((e) => dayKeyInZone(Date.parse(e.starts_at), tz) === todayKey).length;
   const unassignedEvents = events.filter((e) => !e.assignee_id).length;
   const upcomingAppointments = events.filter((e) => e.category === 'appointment').length;
 
