@@ -338,6 +338,19 @@ export type DebitResult = { ok: boolean; error?: string; txnId?: string };
  * written as `requires_parent_approval` (held — does not yet reduce the balance)
  * and returned so a parent_approvals row can point at it; otherwise it posts
  * `completed` immediately. The single place spend leaves a wallet.
+ *
+ * The decision and the write are ONE statement, under the spend bucket's row
+ * lock, in `wallet_debit_spend_bucket` (0342). This used to read the balance
+ * here and insert after it — two round trips with nothing held in between, so
+ * two concurrent $8 spends against $10 both passed the check and both posted,
+ * leaving an immutable ledger at -$6.00 (Q-01). A balance read outside the lock
+ * is a memory by the time the insert is sent; `bucketBalanceCents` above stays
+ * for DISPLAY and is not what decides this.
+ *
+ * The RPC totals `completed` + `processing`, so a live card hold is no longer
+ * invisible to an in-app spend, and writes the `wallet_audit_logs` row in the
+ * same transaction as the debit — which is why there is no `logWalletAudit`
+ * call here any more.
  */
 export async function debitSpendBucket(supabase: DB, params: {
   familyId: string; childWalletId: string; amountCents: number; type: WalletTxnType;
@@ -348,26 +361,30 @@ export async function debitSpendBucket(supabase: DB, params: {
   const amount = Math.trunc(params.amountCents);
   if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: 'Amount must be greater than 0' };
 
-  const { bucketId, available, error: balanceError } = await bucketBalanceCents(supabase, { familyId: params.familyId, childWalletId: params.childWalletId, kind: 'spend' });
-  if (balanceError) return { ok: false, error: balanceError };
-  if (!params.requiresApproval && amount > available) {
-    return { ok: false, error: `Only ${(available / 100).toFixed(2)} available in Spend.` };
-  }
-
-  const { data, error } = await supabase.from('wallet_transactions').insert({
-    family_id: params.familyId, child_wallet_id: params.childWalletId, bucket_id: bucketId,
-    type: params.type, status: params.requiresApproval ? 'requires_parent_approval' : 'completed',
-    direction: 'debit', amount_cents: amount, description: params.description,
-    related_type: params.relatedType ?? null, related_id: params.relatedId ?? null,
-    created_by: params.createdBy, approved_by: params.requiresApproval ? null : (params.approvedBy ?? params.createdBy),
-    metadata: (params.metadata ?? {}) as Database['public']['Tables']['wallet_transactions']['Insert']['metadata'],
-  }).select('id').single();
+  const { data, error } = await supabase.rpc('wallet_debit_spend_bucket', {
+    p_family_id: params.familyId,
+    p_child_wallet_id: params.childWalletId,
+    p_amount: amount,
+    p_type: params.type,
+    p_description: params.description,
+    p_actor_id: params.createdBy,
+    p_requires_approval: params.requiresApproval ?? false,
+    p_approved_by: params.approvedBy ?? null,
+    p_related_type: params.relatedType ?? null,
+    p_related_id: params.relatedId ?? null,
+    p_metadata: (params.metadata ?? {}) as Json,
+  });
   if (error) return { ok: false, error: walletFailure(error, 'Could not post that wallet debit.') };
 
-  await logWalletAudit(supabase, {
-    family_id: params.familyId, actor_user_id: params.createdBy, action: `debit_${params.type}`,
-    entity_type: 'child_wallets', entity_id: params.childWalletId,
-    detail: `${params.description} (${amount}c)${params.requiresApproval ? ' — pending approval' : ''}`,
-  }, `wallet debit (${params.type})`);
-  return { ok: true, txnId: data.id };
+  const result = walletRpcResult(data);
+  if (!result.ok) {
+    // Kept word for word rather than handed to walletRpcReason, because this is
+    // the sentence the Spend screen has always shown and the one the wallet
+    // action prints for the same refusal.
+    if (result.reason === 'insufficient_funds') {
+      return { ok: false, error: `Only ${((result.available ?? 0) / 100).toFixed(2)} available in Spend.` };
+    }
+    return { ok: false, error: walletRpcReason(result, 'Could not post that wallet debit.') };
+  }
+  return { ok: true, txnId: result.transaction_id };
 }

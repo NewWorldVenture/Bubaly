@@ -188,7 +188,28 @@ describe('Supabase migration filename safety', () => {
     // approval open and asserts mid-flight that the second had reached the
     // database and neither had written, so the interleaving is a fact rather
     // than a hope).
-    expect(audit.nextVersion).toBe('0342');
+    //
+    // 0342 is a RE-USED number, in the sense 0339 and 0340 are: it is NOT the
+    // rejected notes draft this comment records above, which is still not in
+    // this tree. 0342_a_child_cannot_spend_the_same_dollar_twice.sql is the
+    // second concurrency finding (Q-01) and closes the last money path that
+    // still wrote the ledger from TypeScript. `debitSpendBucket` in
+    // lib/wallet/server.ts read the Spend balance, decided against it, and
+    // inserted a debit in a separate round trip, so two $8 spends arriving
+    // together against $10 both passed the check and both posted — an immutable
+    // ledger at -$6.00, with nothing behind the check to catch it (the only
+    // partial unique index on wallet_transactions is 0316's chore payout, the
+    // only trigger is set_updated_at, and amount_cents >= 0 puts the sign in
+    // `direction`). The fix is 0155's shape rather than 0317's: lock the child's
+    // spend bucket FOR UPDATE, total the ledger inside that lock, refuse, write.
+    // It totals `('completed','processing')` as 0155 does, so a live card hold
+    // stops being invisible to an in-app spend, and its authorization RESTATES
+    // wallet_transactions' manager-only INSERT policy rather than inventing one
+    // — SECURITY DEFINER skips RLS, so the function has to say what RLS said.
+    // Held by docs/audit/a-child-cannot-spend-the-same-dollar-twice-check.sql,
+    // whose negative control replays the read-then-insert shape on the same
+    // bucket and requires the overdraft to land.
+    expect(audit.nextVersion).toBe('0343');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

@@ -85,10 +85,18 @@
 -- database. Run it against a throwaway instance, which is what
 -- docs/audit/verify-pg.sh bootstraps.
 --
--- Step 3 is also a DIRECT test of the guard. If someone removes the `FOR UPDATE`
--- from the RPC, the two sessions do not block, no waiters ever appear, and this
--- probe says so — where the old one would have gone on passing, since removing
--- the lock does not stop a sequential pair from producing one approval.
+-- WHAT STEP 3 DOES NOT PROVE, corrected here because this comment first claimed
+-- the opposite. It is NOT a test of the RPC's own `FOR UPDATE`. An INSERT into
+-- `wallet_transactions` takes FOR KEY SHARE on the `wallet_buckets` row its
+-- `bucket_id` references, which conflicts with the holder's FOR UPDATE — so both
+-- sessions queue on that row whether or not the RPC locks it. Verified directly:
+-- holding the bucket row in one session and issuing a plain INSERT in another
+-- blocks the INSERT.
+--
+-- Removing the guard is caught by the negative control below, which requires the
+-- overdraft to reproduce at $16.00 against $10.00. Step 3's job is narrower and
+-- still the one worth having: it proves the two sessions were in flight
+-- together, which is what wall-clock overlap was supposed to show and could not.
 
 create extension if not exists dblink;
 
@@ -357,7 +365,11 @@ begin
   -- a race; without it the stage below is just a sequential pair.
   if r_real.waiters < 2 then
     if r_real.approved = 2 then
-      raise exception 'A-15 FAIL: both $8 authorizations approved against $10 AND neither ever waited on the bucket row — the FOR UPDATE is gone (%)', r_real.note;
+      -- Both approved AND nothing ever queued. Not a diagnosis of WHICH lock is
+      -- missing — an INSERT's foreign-key check alone would have produced a wait
+      -- — but two approvals against one balance is the defect either way, and a
+      -- run that saw no waiter cannot blame the machine for it.
+      raise exception 'A-15 FAIL: both $8 authorizations approved against $10 AND neither ever queued on the bucket row (%)', r_real.note;
     end if;
     raise notice 'A-15 SKIP: only % of 2 sessions were observed waiting on the spend bucket in 15s; concurrency was NOT exercised (%)',
       r_real.waiters, r_real.note;

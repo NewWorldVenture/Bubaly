@@ -2077,3 +2077,102 @@ Until this is applied, the two RPCs do not exist, so **`applyCompletionRewards`
 throws `Could not save chore progress` on every approval** — this migration and
 the application change ship together, which is the one ordering constraint on
 this row.
+
+### `0342` stops a child spending the same dollar twice — unapplied
+
+`0342_a_child_cannot_spend_the_same_dollar_twice.sql` (Q-01, CONC-002).
+`debitSpendBucket` in `lib/wallet/server.ts` was the **last money path in this
+product that wrote the ledger from TypeScript**, and it did it as a read, a
+decision and then a write — two PostgREST round trips with nothing held in
+between:
+
+```
+const { bucketId, available } = await bucketBalanceCents(supabase, …);  // <- READ
+if (!params.requiresApproval && amount > available) return …;           // <- DECIDE
+await supabase.from('wallet_transactions').insert({ … });               // <- WRITE
+```
+
+Two $8 spends arriving together against $10 — one parent with two tabs, two
+parents in the same minute, a double-submitted form — both read `available =
+1000`, both passed the check, and both posted a `completed` debit. The ledger
+ends at **-$6.00 and stays there**, because the wallet ledger is immutable: a
+correction is a new credit, never an edit.
+
+Nothing stood behind that check, and each half was read off the replayed
+database rather than assumed: the only partial unique index on
+`wallet_transactions` is `0316`'s `uq_wallet_txn_chore_payout`, scoped `where
+related_type = 'chore_assignments'`; the only non-internal trigger is
+`trg_wallet_transactions_updated_at`; and the only relevant CHECK is
+`amount_cents >= 0`, which puts the sign in `direction` — so a negative balance
+is perfectly representable.
+
+The **paging** half of that read was already repaired (`bucketBalanceCents` goes
+through `readAll`), and that is a different property. Paging makes a read
+complete; it does not make it a decision. `readAll` issues N requests in N
+snapshots, and by the time the insert is sent the number is a memory.
+
+**What closes it** is `0155_wallet_auth_holds`'s shape, which has held the card
+path since PAY-1 rather than anything new: `wallet_debit_spend_bucket` takes
+`FOR UPDATE` on the child's `spend` bucket — one row, the natural per-child
+mutex — as the first statement after its guards, totals the ledger **inside**
+that lock, refuses, and writes the debit and its `wallet_audit_logs` row in the
+same transaction. This was the one money mutation in the database that did not
+already do that; `wallet_credit_child_ledger`, `wallet_transfer`,
+`wallet_approve_gift`, `wallet_decide_spend`, `wallet_decide_allowance`,
+`wallet_fund_goal` and `wallet_reserve_card_auth` all take their lock first.
+
+It totals `('completed', 'processing')`, exactly as `0155` does, which closes a
+second defect on the same path: `bucketBalanceCents` counts `completed` only, so
+a **live card hold was invisible to an in-app spend** and a child could tap
+their card at a shop for $8 and have an $8 in-app spend approved against the
+same $10 in the same second. `requires_parent_approval` is deliberately **not**
+counted and a held request is deliberately **not** refused on balance — a held
+debit moves nothing and `wallet_decide_spend` re-sums under this same lock
+before it ever posts, so counting it would let a request a parent has not yet
+seen block one they are about to decline.
+
+**Authorization restates the table's own policy rather than inventing one.**
+`SECURITY DEFINER` skips RLS, so the function has to say what RLS said:
+`wallet_transactions` carries `wallet_transactions_mng_insert` and the
+restrictive `wallet_transactions_manager_insert_guard`, both `with check
+(can_manage_family(family_id))`, and `can_manage_family` is role-aware
+(`role in ('parent','adult') and is_active`) — the same set as `isManager`. So
+the opening guard is `wallet_decide_spend`'s own line, character for character.
+**Named rather than quietly decided:** a CHILD filing a spend request is refused
+here, and is refused by that policy today for the same reason, even though
+`requestSpendAction` is written as though a child can ask. Letting a non-manager
+create a held ledger row is a product decision with its own approval and is not
+this migration's to make; what changes is that the refusal now arrives as
+`forbidden` instead of a raw policy error.
+
+**Verified on the audit database** (352 migrations replayed): applied cleanly —
+`CREATE FUNCTION / COMMENT / REVOKE / GRANT` and the verification block's
+`0342 OK` notice — and **re-applies unchanged**, every statement being `create or
+replace` plus idempotent grants. Live grants afterwards are
+`{postgres=X/postgres,authenticated=X/postgres}`: `authenticated` only, matching
+every `0205`/`0208` money RPC, and deliberately **not** `service_role` (the one
+caller is a cookie-bound server action; the webhook keeps
+`wallet_reserve_card_auth` and `debitCardSpend`).
+
+`docs/audit/a-child-cannot-spend-the-same-dollar-twice-check.sql` holds it, and
+was **shown to fail before being trusted**: exit **0** as written, exit **3**
+against a mutated definition with the `for update` removed and the total
+narrowed to `completed` ("an $8 in-app spend was approved while an $8 card hold
+already reserved the money"). Its negative control replays the pre-`0342`
+read-then-insert shape on its own $10 bucket, through the same RLS the old path
+went through — snapshot taken, another spend lands, write issued from the
+snapshot — and **requires** the overdraft to land and the bucket to end at
+**-600 cents**, failing loudly if it does not. It is a single-connection probe
+and says so in its own header: it demonstrates that the decision and the write
+are one statement over the current ledger, not that the lock serializes. The
+two-connection race for the card path is `docs/audit/wallet-concurrency-check.sql`,
+and a spend-path twin of it belongs beside this one.
+
+**Ships with its application change.** `debitSpendBucket` now calls the RPC
+instead of reading and inserting, and the `wallet_audit_logs` write moved out of
+TypeScript into the function so money cannot move without a trail. Until this is
+applied the RPC does not exist, so every spend returns "Could not post that
+wallet debit." — this migration and `lib/wallet/server.ts` go together, which is
+the one ordering constraint on this row. The external signature and return shape
+of `debitSpendBucket` are unchanged, including the exact "Only $X available in
+Spend." sentence, so `app/(app)/wallet/actions.ts` is untouched.

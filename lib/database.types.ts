@@ -2753,6 +2753,19 @@ export interface Database {
       wallet_decide_spend: { Args: { p_family_id: string; p_approval_id: string; p_decision: string; p_note?: string | null; p_actor_id?: string | null }; Returns: Json };
       wallet_decide_allowance: { Args: { p_family_id: string; p_approval_id: string; p_decision: string; p_note?: string | null; p_actor_id?: string | null }; Returns: Json };
       wallet_fund_goal: { Args: { p_family_id: string; p_goal_id: string; p_amount: number; p_actor_id: string }; Returns: Json };
+      // A spend decided and written under the spend bucket's row lock (0342).
+      // jsonb {ok, reason, transaction_id, status, available, idempotent}: the
+      // committed + held ledger is totalled inside the lock, so two concurrent
+      // spends cannot each be approved against the same dollar.
+      wallet_debit_spend_bucket: {
+        Args: {
+          p_family_id: string; p_child_wallet_id: string; p_amount: number; p_type: WalletTxnType;
+          p_description: string; p_actor_id: string | null; p_requires_approval?: boolean;
+          p_approved_by?: string | null; p_related_type?: string | null; p_related_id?: string | null;
+          p_metadata?: Json;
+        };
+        Returns: Json;
+      };
       // Chore progress under a row lock (0341). Both are jsonb {ok, …}: the
       // award adds to what the locked row holds, the reversal subtracts from it,
       // so two approvals landing together both count and rolling one back does
