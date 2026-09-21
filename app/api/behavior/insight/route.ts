@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { dayKeyInZone } from '@/lib/schedule/zoned';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
@@ -71,9 +72,14 @@ export async function POST(req: NextRequest) {
   }
 
   const summary = summarizeMember(logs as BehaviorLogLike[]);
+  // The DAY each entry belongs to is the family's, not Greenwich's. `occurred_at`
+  // is a timestamptz, so `.slice(0, 10)` labels an 18:00 Sunday note in Los
+  // Angeles as Monday — and these lines are what the model reasons over, so a
+  // day out of place becomes an insight about the wrong day.
+  const tz = ctx.active.family.timezone || 'UTC';
   const recent = (logs as Array<BehaviorLogLike & { note: string | null }>)
     .slice(0, 40)
-    .map((l) => `${l.occurred_at.slice(0, 10)} · ${l.kind} · ${l.category}${l.note ? ` — ${l.note}` : ''}`)
+    .map((l) => `${dayKeyInZone(Date.parse(l.occurred_at), tz) ?? l.occurred_at.slice(0, 10)} · ${l.kind} · ${l.category}${l.note ? ` — ${l.note}` : ''}`)
     .join('\n');
 
   try {
