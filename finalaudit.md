@@ -3,11 +3,11 @@
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
 - Last Updated: 2026-09-20T17:44:10.000Z
-- Total Audit Items: 14073
+- Total Audit Items: 14075
 - Not Started: 13842
 - In Progress: 192
-- Passed: 9
-- Fixed + Passed: 26
+- Passed: 10
+- Fixed + Passed: 27
 - Blocked: 2
 - Failed: 2
 - Overall Completion: 0.04%
@@ -14199,6 +14199,8 @@ PRODUCTION READY: NO
 | A11Y-001 | Accessibility | The photo lightbox stranded keyboard users (closes F-D01) | 🛠 FIXED + PASS | High | 7/7 | role=dialog + aria-modal + the shared useDialogBehavior hook on the viewer; tiles made focusable with Enter/Space; Arrow Left/Right between photos | Three mutations red (the hook removed; the tiles returned to mouse-only; a new overlay declaring aria-modal without the hook); 13 declare it and 13 implement it, and the sets are identical | The tiles were div onClick, so a keyboard could not reach the viewer at all — a trap you cannot enter. The existing a11y guard named four overlays by hand, so this one was never looked at: enumerated with no scan, the third shape of this repo's signature defect. |
 | A11Y-002 | Accessibility | The lint config enabled none of the rules that would have caught it (F-D10/F-D02/F-D03) | 🛠 FIXED + PASS (F-D03 ratcheted, not fixed) | Medium | 4/4 (7 sanity cases inside them) | label-has-associated-control enabled at depth 4 — measured first: at the default depth its only three findings are correct markup one level too deep; control-has-associated-label left OFF because 561 findings and the first sample is a correctly labelled input | next lint clean but for the three pre-existing react-hooks warnings; 144 selects scanned, 71 unnamed, pinned by a ratchet whose scan is asserted non-vacuous | next/core-web-vitals carries only a subset of jsx-a11y, which is exactly what F-D10 said. A rule whose findings are mostly wrong is one everyone learns to skip, so the unnamed selects are counted by a check that cannot be satisfied by nesting depth. |
 | TEST-010 | Testing | Three test-infrastructure findings (F-F05, F-F06, F-F12) | 🛠 FIXED + PASS | Medium | 5/5 | seed-failure-safety now asserts every script checks its error and every check ends in a throw; testTimeout/hookTimeout set to 20s from measured cold-import times; the dead esbuild block removed and its backwards comment corrected | Both mutations red — an error check deleted (which made the OLD test greener) and a throw replaced by log-and-return, each named with its line; JSX still compiles after the config change | The rewrite's own first run caught a bug in itself: one /g regex shared between .test() and matchAll carries lastIndex, so it reported every other script as unchecked. Two constants now, and a comment saying why. |
+| DATA-013 | Data integrity | A money total is derived, never written (F-F08 re-measured) | ✅ PASS | Medium | 5/5 | No product change — the finding's premise no longer holds. A scan now forbids any insert/update/upsert setting a derived money total, with one stated exemption for a named cache of an external figure | Every %balance% column in the schema enumerated and none is a child's spendable money; making addFundsAction write saved_cents turns two cases red with the line | Goal funding goes through the wallet_fund_goal RPC, so the ledger row and the goal total move in one transaction rather than a read-modify-write two parents could interleave. |
+| PERF-005 | Performance | A fan-out whose width nobody chose (closes F-F09) | 🛠 FIXED + PASS | Medium | 10/10 | mapWithConcurrency in lib/utils, and the drive-time lookup bounded to 6 lanes | Restoring Promise.all(located.map(...)) fails on the MEASURED peak — expected 40 to be less than or equal to 6 — not only on a grep for the helper | Order preserved (the test reverses the delays), lanes not chunks (a 40ms item among nine 1ms ones tells them apart), and it rejects like Promise.all rather than putting undefined into a positional array. |
 | TEST-009 | Testing | Probe fixtures left in the seeded anchor family | 🛠 FIXED + PASS | Medium | 6/6 | Both probes now clear their fixtures at the end as well as the start | Each passes twice; suite 47/47 on both databases; anchor family holds only its seeded members | "Race Child" and "Probe Kid" had been living in the 71,192-row anchor family, the latter for a week. Found by the AUTHZ-006 sweep counting a member no fixture of its own had created. |
 | DATA-010 | DATA | Resource lifecycle through the real API | ✅ PASS | High | 8/8 | None required | CREATE/READ/UPDATE/VERIFY/DELETE/VERIFY all pass as a real member; a child's refused write returns HTTP 204 without Prefer, 200 [] with it, dosage unchanged | Shows at the HTTP layer why .select() + wroteNoRows was needed: 204 No Content is a success for a write that changed nothing. |
 | SEC-008 | SEC | Realtime broadcast isolation and publication drift | ✅ PASS | Critical | 5/5 | None required | Publication and code agree exactly (61 = 61, empty diff both ways); a live socket received its own family's row and not another's | The first attempt used an unpublished table and received nothing — a run that would have read as a clean refusal while proving nothing. Controls decided it. |
@@ -22159,6 +22161,75 @@ The dead `esbuild` block is gone, with the note corrected to say which transform
 *"The proof-photo signing error is discarded, so a parent sees a blank frame rather than a reason"* was fixed as part of PERF-004: batching the missions queue's signing brought the per-entry error with it, so an object that cannot be signed is left out rather than rendered as an empty `src`, and a signing outage is logged. `tests/silent-empty-read-ratchet.test.ts` noticed independently and required the file's removal from its BASELINE.
 
 
+### DATA-013 — A money total is derived, never written (F-F08, re-measured)
+
+Status: ✅ PASS — the finding's premise no longer holds; the property it was protecting is now checkable
+Severity: Medium
+Route(s), components, actions, tables and providers: `app/(app)/wallet/actions.ts`, `lib/wallet/server.ts`, `public.wallet_transactions`, `public.wallet_goals`, `tests/money-totals-are-derived-not-written.test.ts`
+
+#### Expected Behavior
+A child's spendable money is summed from the immutable ledger on read. Nothing keeps a running total in a column and updates it from TypeScript.
+
+#### Test Cases
+- [x] `addFundsAction` read end to end; its write located
+- [x] The whole schema queried for `%balance%` columns
+- [x] Every `.insert`/`.update`/`.upsert` in `app/` and `lib/` scanned for a derived-total field
+- [x] The goal balance's actual mechanism traced to a database function
+- [x] Four sanity cases: a write, a select, a reduce, and prose
+- [x] Non-vacuity: >500 files, >5 wallet files
+- [x] Mutation: `addFundsAction` made to write `saved_cents` → red twice, with the line
+
+#### Issues Found
+None. F-F08 recorded `addFundsAction` as *"the one money mutator that writes the balance directly"*, and against the tree today it does not: it inserts rows into `wallet_transactions`, the immutable ledger, and there is no wallet balance column for anything to write. The database agrees — the only `%balance%` columns in the whole schema are
+
+    financial_accounts.balance                        an external institution's figure
+    loyalty_accounts.points_balance                   a third-party loyalty total
+    loyalty_transactions.balance_after                a recorded historical reading
+    stripe_financial_accounts.cached_balance_cents    a cache, and named one
+    wallet_rewards.balance                            a reward catalogue field
+
+and none is a child's spendable money. Goal funding goes through the `wallet_fund_goal` RPC, so the ledger row and the goal total move in one database transaction rather than a read-modify-write two parents could interleave.
+
+#### Fixes Applied
+No product change; the finding was already closed by work this record could not otherwise credit. What is added is the property itself, as a check that cannot be satisfied by the absence of a counter-example: no `.insert`/`.update`/`.upsert` anywhere in `app/` or `lib/` may set `saved_cents`, `spendable_cents`, `balance_cents` or `total_cents`. The one exemption is `lib/stripe/treasury.ts`, and it is exempt for a stated reason rather than by name alone — a cache of an external system's number is not a derived total: nothing here computes it, the provider owns it, and the column says so in its own name.
+
+Making `addFundsAction` update a running total turns two cases red, one naming the line. The point is the next money feature: a running total added quietly and updated from TypeScript is how a ledger and a balance start disagreeing, and the disagreement stays invisible until somebody audits.
+
+---
+
+### PERF-005 — A fan-out whose width nobody chose (closes F-F09)
+
+Status: 🛠 FIXED + PASS
+Severity: Medium
+Route(s), components, actions, tables and providers: `lib/schedule/intelligence.ts`, `lib/utils/map-with-concurrency.ts` (new), the external routing provider
+
+#### Expected Behavior
+A fan-out to an external service runs at a width somebody picked, not at whatever width the family's data happens to be.
+
+#### Test Cases
+- [x] Results stay in input order when they finish out of order
+- [x] The peak concurrency never exceeds the limit, and is greater than one (it does not quietly serialise)
+- [x] A slow item does not idle the other lanes (lanes, not chunks)
+- [x] Empty input, a limit larger than the input, and a nonsense limit (0 and −5)
+- [x] A rejecting worker rejects, rather than putting `undefined` in a positional array
+- [x] 40 located events: all 40 answered, peak concurrency ≤ 6
+- [x] A fetcher that answers null still falls through to the category buffer
+- [x] An event with no location, a blank location, or all-day is never sent to the provider
+- [x] Mutation: `Promise.all(located.map(...))` restored → red on the measured peak (40 > 6), not only on the source shape
+
+#### Issues Found
+    const results = await Promise.all(located.map((e) => fetcher({ … })));
+
+`Promise.all` over a mapped array starts every item immediately. For pure work that is free; here each item is a request to an external routing provider, so the width of the fan-out was whatever the calendar happened to be. A family with two hundred located events opened two hundred simultaneous requests: a rate limit, a bill, and a thundering herd, decided by a number nobody chose.
+
+#### Fixes Applied
+`mapWithConcurrency(items, limit, work)` in `lib/utils/map-with-concurrency.ts`, and the call site bounded to **6** — wide enough to keep the page fast, narrow enough to stay inside an ordinary provider's per-second allowance.
+
+Three decisions inside the helper are worth stating because each has a wrong version that looks the same from outside. It preserves **order**, so a caller zipping results back by index — the usual reason to want a mapped array — stays correct; the test reverses the delays so the last item settles first, which a push-as-they-arrive implementation would return backwards. It uses **lanes rather than chunks**: chunking waits for the slowest item in each batch, so one slow call idles the rest, and the test puts a 40ms item among nine 1ms ones to tell the two apart. And it **rejects like `Promise.all`** rather than swallowing, because swallowing would put `undefined` into an array the caller reads positionally — tolerance belongs inside `work`, where the caller knows what a miss means, which is exactly what `firstDriveTime` already does.
+
+The behavioural assertion is the one that matters: restoring the old line fails with *expected 40 to be less than or equal to 6*, measured from a counter inside the fetcher, rather than only failing a grep for the helper's name.
+
+
 ### ADMIN-001 — Every admin server action reaches a super-admin gate
 
 Status: ✅ PASS
@@ -22875,7 +22946,7 @@ Status: ✅ PASS — `npm run lint` reports the four known baseline warnings and
 ## Automated Tests
 Status: ✅ PASS — 15,287 tests across 1,215 files pass, zero failures and zero skips, on Node 24.15.0 at head 92340315 (160s).
 
-Later in this cycle, on Node 24.21.0: **16,791 tests across 1,317 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **51/51 boundary probes with 0 skipped**. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), `tests/a-capped-read-is-not-a-silent-one.test.ts` (DATA-011, 5), `tests/a-family-day-starts-where-the-family-is.test.ts` and `tests/a-server-day-is-the-familys-day.test.ts` (DATA-012, 11), `docs/audit/vaults-require-second-factor-check.sql` (AUTHZ-008), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
+Later in this cycle, on Node 24.21.0: **16,806 tests across 1,319 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **51/51 boundary probes with 0 skipped**. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), `tests/a-capped-read-is-not-a-silent-one.test.ts` (DATA-011, 5), `tests/a-family-day-starts-where-the-family-is.test.ts` and `tests/a-server-day-is-the-familys-day.test.ts` (DATA-012, 11), `docs/audit/vaults-require-second-factor-check.sql` (AUTHZ-008), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
 
 Five existing guards had to be repaired rather than merely re-run, and that is itself a finding recorded under SEC-010: `guardian-callback-security`, `middleware-public-api-boundary`, `public-pages-reachable`, `health-feature-secrets` and `public-webhook-signature-boundary` each identified a control by the SPELLING of the function that implemented it. Moving identical verification one call away turned all five red while nothing about the behaviour changed — which is the same reason `public-webhook-signature-boundary` stayed green through eight signature checks that only ran in a production build.
 
@@ -26674,8 +26745,8 @@ approval queue — the page a parent opens most.
 | F-F05 | 96 tests share the cold-`await import` shape and no `testTimeout` was configured | **FIXED** — see TEST-010: `testTimeout`/`hookTimeout` 20s, chosen from two measured instances (5,007ms cold vs 422ms warm; five unrelated cases timing out at exactly 5,000ms under CPU contention) | Medium |
 | F-F06 | `tests/seed-failure-safety.test.ts`, named "fails closed", asserts only the *absence* of two bad shapes, so deleting the error check makes it greener | **FIXED** — see TEST-010: it now asserts every script checks its error AND every check ends in a throw; deleting a check turns it red by name | Medium |
 | F-F07 | 37 of 51 money, kids, economy and missions server actions have no test | Medium |
-| F-F08 | `addFundsAction` is the one money mutator that writes the balance directly | Medium |
-| F-F09 | Unbounded concurrent fan-out to an external drive-time API | Medium |
+| F-F08 | `addFundsAction` is the one money mutator that writes the balance directly | **RE-MEASURED — premise no longer holds.** See DATA-013: it inserts ledger rows, and the schema has no wallet balance column at all. The property is now held by a scan no absence-of-counter-example can satisfy | Medium |
+| F-F09 | Unbounded concurrent fan-out to an external drive-time API | **FIXED** — see PERF-005: `mapWithConcurrency` bounds it to 6 lanes; restoring the old line fails with "expected 40 to be less than or equal to 6", measured rather than grepped | Medium |
 | F-F10 | Two buttons in the message header exist only to say the feature is unavailable | Low |
 | F-F11 | The proof-photo signing error is discarded, so a parent sees a blank frame rather than a reason | **FIXED** — closed as part of PERF-004: batching the signing brought the per-entry error with it | Low |
 | F-F12 | The vitest config's JSX block is dead under vitest 4 | **FIXED** — see TEST-010: the dead `esbuild` block is gone and the note that had it backwards is corrected; the "esbuild options will be ignored" warning no longer prints on every run | Low |
