@@ -10,6 +10,15 @@ import type { Database } from '@/lib/database.types';
 type Json = Database['public']['Tables']['family_recipes']['Insert']['ingredients'];
 type SaveResult = { ok: true; id: string; already?: boolean } | { ok: false; error: string };
 
+// `family_recipes.category` is CHECK-constrained to exactly this set
+// (supabase/migrations/0014_core_platform.sql). A provider speaks its own
+// vocabulary — TheMealDB answers "Chicken", "Seafood", "Pasta", "Starter" — so
+// inserting its word raw is rejected by Postgres and "Save to vault" fails for
+// most of the library. Clamp to the allow-list the way createRecipe
+// (lib/services/meals/index.ts) already does; the provider's own word is not
+// lost, it stays verbatim in `raw_payload`.
+const RECIPE_CATEGORIES = ['breakfast', 'lunch', 'dinner', 'snack', 'dessert', 'drink', 'side', 'appetizer', 'other'];
+
 /**
  * Save a discovered recipe into the family vault. Re-fetches the full recipe
  * from the provider server-side (so the search payload can't be tampered with),
@@ -46,7 +55,7 @@ export async function saveDiscoveredRecipe(input: { provider: string; sourceReci
       created_by: ctx.user.id,
       name: recipe.name,
       description: recipe.description,
-      category: recipe.category,
+      category: RECIPE_CATEGORIES.includes(recipe.category) ? recipe.category : 'dinner',
       cuisine: recipe.cuisine,
       photo_url: recipe.photoUrl,
       tags: recipe.tags,
