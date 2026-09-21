@@ -5,7 +5,8 @@ import { runPrepGeneration } from '@/lib/planning/prep-server';
 import { generatePrepPlans } from '@/lib/planning/prep';
 import { nextBirthdayDayKey } from '@/lib/moments/birthdays';
 import { createInMemorySupabase } from './helpers/in-memory-supabase';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 
 // Prep generation opened with `now.toISOString().slice(0, 10)` — the day at
 // GREENWICH — and spent that one key four ways: the lower bound of two DATE
@@ -320,23 +321,89 @@ describe('the pure engine refuses an instant where a day key belongs', () => {
  * could be "fixed" by deleting the explanation. A guard you can satisfy by
  * removing a comment measures nothing.
  */
+/**
+ * EVERY CALL SITE, because a required parameter only helps if the tree actually
+ * compiles — and this exact conversion was landed with one of the two callers
+ * left behind.
+ *
+ * `runPrepGeneration` has two callers and no others: the on-demand server
+ * action and the model-refresh cron. The cases above prove the function answers
+ * the family's day; nothing in them looks at whether the callers pass a zone at
+ * all, because every case calls the function directly. So the call sites are
+ * pinned here by name. There are two of them, they are both one line, and a
+ * conversion that reaches only one is the half-conversion this whole file is
+ * about — a cron that runs for every household is the worse half to miss.
+ *
+ * Comments are stripped first, for the same reason as everywhere else here.
+ */
+describe('both callers hand the zone down, and neither re-reads it', () => {
+  const strip = (source: string) =>
+    source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+
+  it('the on-demand action passes the zone off the context it already loaded', () => {
+    const action = strip(readFileSync('app/(app)/dashboard/prep-plans/prep-actions.ts', 'utf8'));
+    expect(action).toContain("runPrepGeneration(sb, ctx.active.familyId, ctx.user.id, ctx.active.family.timezone || 'UTC')");
+  });
+
+  it('the cron passes each family\'s own zone, and selects it to have one', () => {
+    const cron = strip(readFileSync('app/api/cron/model-refresh/route.ts', 'utf8'));
+    // A cron over every family is NOT a reason to fall back to Greenwich: it is
+    // the one caller that runs without anybody watching, for every household at
+    // once, so a Greenwich "today" here drops a trip departing today for the
+    // whole US west coast on every single run.
+    expect(cron).toContain("select('id, timezone')");
+    expect(cron).toContain("runPrepGeneration(supabase, fam.id, null, fam.timezone || 'UTC', now)");
+    expect(cron).not.toMatch(/runPrepGeneration\(supabase, fam\.id, null, now\)/);
+  });
+
+  it('names the complete caller set, so a third one cannot appear unnoticed', () => {
+    // Both files above are asserted individually; this is the census that says
+    // there are exactly those two. A new caller has to be added here, which is
+    // the moment somebody decides where ITS zone comes from.
+    const roots = ['app', 'lib', 'components'];
+    const callers: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) walk(path);
+        else if (/\.tsx?$/.test(path)) {
+          const source = strip(readFileSync(path, 'utf8'));
+          // A caller IMPORTS it and CALLS it. Keyed on the import so the module
+          // that defines the function is not counted as one of its callers.
+          if (source.includes("from '@/lib/planning/prep-server'") && /\brunPrepGeneration\s*\(/.test(source)) {
+            callers.push(path.replaceAll('\\', '/'));
+          }
+        }
+      }
+    };
+    for (const root of roots) walk(root);
+    expect(callers.sort()).toEqual([
+      'app/(app)/dashboard/prep-plans/prep-actions.ts',
+      'app/api/cron/model-refresh/route.ts',
+    ]);
+  });
+});
+
 describe('the client that renders these day keys counts from the same day', () => {
   const withoutComments = (source: string) =>
     source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
-  const module = withoutComments(readFileSync('components/modules/planning-module.tsx', 'utf8'));
+  // Named `moduleSource`, not `module`: @next/next/no-assign-module-variable
+  // forbids shadowing `module`, and a lint error in a guard is a guard nobody runs.
+  const moduleSource = withoutComments(readFileSync('components/modules/planning-module.tsx', 'utf8'));
   const page = withoutComments(readFileSync('app/(app)/dashboard/prep-plans/page.tsx', 'utf8'));
 
   it('never derives a day from the browser clock at Greenwich', () => {
-    expect(module).not.toMatch(/toISOString\(\)\s*\.(?:slice\(0,\s*10\)|split\('T'\)\[0\])/);
+    expect(moduleSource).not.toMatch(/toISOString\(\)\s*\.(?:slice\(0,\s*10\)|split\('T'\)\[0\])/);
   });
 
   it('takes the zone as a required prop rather than defaulting one', () => {
     // Not `tz?: string` and not `tz = 'UTC'`. A default is what let the weekly
     // briefing ship Greenwich weeks for seven weeks: the caller kept compiling.
-    expect(module).toContain('{ tz }: { tz: string }');
-    expect(module).not.toMatch(/tz\?:\s*string/);
-    expect(module).not.toMatch(/tz\s*=\s*['"]/);
-    expect(module).toContain('todayInZone(tz)');
+    expect(moduleSource).toContain('{ tz }: { tz: string }');
+    expect(moduleSource).not.toMatch(/tz\?:\s*string/);
+    expect(moduleSource).not.toMatch(/tz\s*=\s*['"]/);
+    expect(moduleSource).toContain('todayInZone(tz)');
   });
 
   it('is handed the zone the page already resolved, not a second read', () => {
