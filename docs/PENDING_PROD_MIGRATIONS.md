@@ -2042,3 +2042,84 @@ its declared list now names three buckets, not four.
 
 Until this is applied, every feedback screenshot ever uploaded is readable by
 anyone who obtains its URL.
+
+---
+
+## 0326 — step-up MFA protected a redirect, not the data
+
+`supabase/migrations/0326_the_vaults_ask_for_the_second_factor.sql`
+
+`requireAal2` protects 19 server-rendered pages by calling `redirect()`. The
+data those pages show is **not fetched by those pages** — it is fetched by
+client components straight from PostgREST with the browser's own session:
+
+```
+components/modules/passwords-module.tsx:66
+  sb.from('family_credentials').select('*').eq('family_id', familyId)…
+components/modules/passwords-module.tsx:128
+  sb.from('family_credentials').insert({ …, family_id: familyId })…
+```
+
+An `aal1` session — password only, no second factor — is a fully valid Supabase
+JWT. The redirect is the only thing stopping it, and the redirect only fires if
+the browser asks Next.js for the HTML page, which someone holding a stolen or
+exported session cookie has no reason to do. Measured against the live
+catalogue before this migration:
+
+```
+select count(*) from pg_policies where schemaname='public'
+  and (coalesce(qual,'')||coalesce(with_check,'')) ilike '%aal%';   ->  0
+```
+
+Step-up was presentational. The families most likely to enrol a factor are the
+ones who believe it is protecting exactly this data.
+
+**The rule.** `public.session_meets_assurance()` mirrors `needsStepUp` in
+`lib/auth/mfa.ts` rather than inventing a second policy in SQL: that function
+steps up a session **only when the account has a factor to step up with**, so a
+family that never enrolled is untouched. The SQL says the same — `aal2` passes,
+and so does a session whose account has no verified factor. Getting this wrong
+in the other direction would lock every family without an authenticator out of
+their own passwords, and the probe asserts that case explicitly.
+
+**The three tables, and why only three.** A restrictive assurance guard on a
+table that some *ungated* surface also reads does not protect anything extra —
+it empties that surface, silently, for every enrolled `aal1` session. So the
+set is the tables whose entire read surface is already gated:
+
+| table | read by | rendered by |
+|---|---|---|
+| `family_credentials` | `passwords-module.tsx` (+ a `head: true` count on the family hub) | `/dashboard/passwords` |
+| `tax_documents` | `tax-vault-module.tsx` | `/dashboard/tax-vault` |
+| `household_info` | `binder-module.tsx` | `/dashboard/binder` |
+
+The family-hub reference is a `count: 'exact', head: true` — a tile reading
+"N passwords saved" — so the only effect outside the vault is that the tile
+reads 0 until a code is entered. A count is not a secret and 0 is not a lie
+about one.
+
+**Not closed, and why** — `bills`, `documents` and `paperwork_items` are read by
+`/dashboard/readiness`, `/dashboard/agents`, `/dashboard/planning`,
+`/dashboard/command-center`, `/dashboard/needs-you`, `finances-module`,
+`billing-module`, `files-hub-module`, `lib/inbox/server.ts`,
+`lib/contact-center/server.ts` and three AI routes, none behind `requireAal2`.
+Guarding them would empty all of that, silently. Closing them is real work on
+those surfaces first, and it is recorded under F-E02 in `finalaudit.md` with
+the list.
+
+**What this does not do.** `tax_documents` and `household_info` are governed by
+`is_family_member`, so a **child** can read the family's tax documents and
+household binder. A restrictive assurance guard ANDs with that; it does not
+repair it. That is the 0297 sensitive-table work, a different finding, named
+here so this migration is not mistaken for having scoped these tables by role.
+
+Held by `docs/audit/vaults-require-second-factor-check.sql`, whose controls
+carry the weight: a guard that refused everyone would pass a breach test and
+take every family's passwords away. Five mutations are red — the policy
+dropped, the rule forced true, the rule made enrolment-blind (which is the
+upstream's own suggested fix, and it fails the never-enrolled control), a guard
+added to a table an ungated surface reads, and one of the three removed.
+
+Until this is applied, a stolen session cookie reads and rewrites the family
+credential vault, the tax vault and the household binder without ever being
+asked for a code.

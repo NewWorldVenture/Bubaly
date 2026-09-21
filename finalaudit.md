@@ -3,12 +3,12 @@
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
 - Last Updated: 2026-09-20T17:44:10.000Z
-- Total Audit Items: 14065
+- Total Audit Items: 14067
 - Not Started: 13842
 - In Progress: 192
 - Passed: 9
-- Fixed + Passed: 19
-- Blocked: 1
+- Fixed + Passed: 20
+- Blocked: 2
 - Failed: 2
 - Overall Completion: 0.04%
 
@@ -14003,7 +14003,7 @@ PRODUCTION READY: NO
 | DATA-009 | DATA | An audit write that did not land must be noticeable | 🔄 IN PROGRESS | High | Historical scoped tests and findings retained in the DATA-009 detailed record. | Source repair retained through the merge. | Integrated workflow retest pending; historical tests do not close this full record. | Added to the summary after discovering that the existing detailed record was missing from counts. |
 | MAIN-F-E01 | UPSTREAM | F-E01: Every child can read, edit and delete the family password vault (CRITICAL — fixed by 0296, unapplied) | 🔄 IN PROGRESS | CRITICAL | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3363). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
 | MAIN-F-C08 | UPSTREAM | F-C08: The forward-release mechanism is pinned 38 migrations in the past (High, open) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3138). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
-| MAIN-F-E02 | UPSTREAM | F-E02: Step-up MFA is presentational (High) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3419). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
+| MAIN-F-E02 | UPSTREAM | F-E02: Step-up MFA is presentational (High) | 🔄 IN PROGRESS (partly fixed) | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3419). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | 0326 closes the three vault tables whose entire read surface is gated; 13 probe assertions and 5 red mutations. bills, documents and paperwork_items remain open with the ungated-reader list recorded. | This master-ledger reference preserves the original upstream label. Partly closed by AUTHZ-008 in this cycle (migration 0326, PENDING PRODUCTION). It stays IN PROGRESS deliberately: money and the document vault are still protected only by a redirect, and the remaining work is on the ungated surfaces that read them. |
 | MAIN-F-E03 | UPSTREAM | F-E03: The family-media bucket is public (High) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3436). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
 | MAIN-F-F01 | UPSTREAM | F-F01: A capped read reports success while dropping rows (High, money) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3477). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
 | MAIN-F-F02 | UPSTREAM | F-F02: F-017's timezone bug is still live on eleven server-rendered surfaces (High) | 🔄 IN PROGRESS | High | Historical evidence retained verbatim in the upstream appendix (57f22c0b, source line 3492). | Upstream repair and its stated limitations retained; inspect the cited narrative for the exact scope. | Current integrated workflow verification pending. | This master-ledger reference preserves the original upstream label. IN PROGRESS concerns integration and remaining workflow verification; it does not erase historical passing tests. |
@@ -14191,6 +14191,8 @@ PRODUCTION READY: NO
 | API-MKT-002 | API | A permissions refusal reported as an OpenAI outage (closes F-E09) | 🛠 FIXED + PASS | Low | 7/7 | MarketingAuthorizationError carries reason: 'unauthenticated' | 'forbidden'; the three catch blocks ask the type instead of searching the message | Reverting the AI route to the string match turns three cases red (expected 500 to be 403); an Error carrying the same words, and a provider fault containing 'sign in', are each asserted NOT to be a refusal | The predicate searched for 'Forbidden', a word requireMarketingAdmin has never said, so a non-admin was told to check the OpenAI API key with a 500 — and the refusal was logged as an application error. |
 | AUTHZ-007 | AUTHZ | Stored OAuth credentials answered client reads (closes F-E04) | 🛠 FIXED + PASS (pending production) | Medium | 11/11 | 0324 drops all four client policies and installs sync_tokens' service-only policy under the same name; no code loses access (every path is already service-role) | 5 breaches reproduced as a parent on the pre-migration schema (read, rewrite the OAuth claim state, repoint the provider account, delete, insert), 0 after; sync_tokens parity and service-role survival both asserted as controls | Two upstream claims corrected: the policies are can_manage_family (a child was already refused), and the table is no longer unused — lib/social/account-tokens.ts runs the whole X OAuth flow against it. |
 | SEC-012 | Security | A feedback screenshot readable by the whole internet (closes F-E05) | 🛠 FIXED + PASS (pending production) | Medium | 9 unit + 5 probe assertions | 0325 makes the bucket private and replaces the blanket SELECT with owner-or-admin; the one surface that renders these objects mints a 10-minute signed URL; the board stops selecting the column; the uploader records the path and the resolver reads either form, so no row is rewritten | Over real HTTP, same object and path, no credentials: public bucket 200/67 bytes, private bucket 400 Bucket not found, signed URL 200/67 bytes. Both mutations red (flag flipped back; blanket policy restored) | Closable where SEC-001 is not because exactly one surface draws these objects — the super-admin console, through the service role — so there was no fleet of getPublicUrl consumers to migrate. bucket-visibility-is-declared-check.sql reported DECLARATION STALE on the flip, as written. |
+| AUTHZ-008 | AUTHZ | Step-up MFA protected a redirect, not the data (F-E02, in part) | 🛠 FIXED + PASS (pending production) | High | 13/13 | 0326 adds session_meets_assurance() — mirroring needsStepUp, so a family with no factor is untouched — and a restrictive guard on family_credentials, tax_documents and household_info | 0 policies mentioned aal before; an enrolled aal1 session now reads 0 rows from all three and cannot write; a never-enrolled parent and a stepped-up parent both keep full access; 5 mutations red | The data behind 19 redirect-guarded pages is fetched by client components straight from PostgREST, where an aal1 JWT is perfectly valid. Only three tables are closed: the rest are read by ten ungated surfaces and guarding them would blank those silently — recorded, not left implicit. |
+| SEC-013 | Security | The family password vault stores its passwords in plaintext | ⚠️ BLOCKED | High | 4/5 (no fix attempted) | None — encrypting needs the write path to move off the browser, which is a feature rework with a key-management decision inside it | Stored and read back verbatim: 'hunter2-the-actual-wifi-password', pg_column_size 33 bytes for a 32-char password — no envelope, no IV, no tag. The only writer is the browser module; the table's one other mention in the tree is an AI denylist entry reading 'passwords and logins' | This is the half of F-E01 that 0296 does not fix — that migration narrowed WHO may read the row and says so in its own header. RLS has nothing to say about a pg_dump, a backup, a replica or the service-role key. Recommended shape recorded for the owner. |
 | TEST-009 | Testing | Probe fixtures left in the seeded anchor family | 🛠 FIXED + PASS | Medium | 6/6 | Both probes now clear their fixtures at the end as well as the start | Each passes twice; suite 47/47 on both databases; anchor family holds only its seeded members | "Race Child" and "Probe Kid" had been living in the 71,192-row anchor family, the latter for a week. Found by the AUTHZ-006 sweep counting a member no fixture of its own had created. |
 | DATA-010 | DATA | Resource lifecycle through the real API | ✅ PASS | High | 8/8 | None required | CREATE/READ/UPDATE/VERIFY/DELETE/VERIFY all pass as a real member; a child's refused write returns HTTP 204 without Prefer, 200 [] with it, dosage unchanged | Shows at the HTTP layer why .select() + wroteNoRows was needed: 204 No Content is a success for a write that changed nothing. |
 | SEC-008 | SEC | Realtime broadcast isolation and publication drift | ✅ PASS | Critical | 5/5 | None required | Publication and code agree exactly (61 = 61, empty diff both ways); a live socket received its own family's row and not another's | The first attempt used an unpublished table and received nothing — a run that would have read as a clean refusal while proving nothing. Controls decided it. |
@@ -21753,6 +21755,127 @@ Which is exactly the prompt to go and check that the consumers really had moved.
 **0325 is a PENDING PRODUCTION MIGRATION**, and it must land together with the code above. Until it is applied, every feedback screenshot ever uploaded is readable by anyone who obtains its URL.
 
 
+### AUTHZ-008 — Step-up MFA protected a redirect, not the data (F-E02, in part)
+
+Status: 🛠 FIXED + PASS (pending production) — three tables closed; three named tables remain open with measured reasons
+Severity: High
+Route(s), components, actions, tables and providers: `lib/auth/require-aal2.ts`, `lib/auth/mfa.ts`, `public.family_credentials`, `public.tax_documents`, `public.household_info`, `components/modules/{passwords,tax-vault,binder,family}-module.tsx`, `supabase/migrations/0326_the_vaults_ask_for_the_second_factor.sql`, `docs/audit/vaults-require-second-factor-check.sql`
+
+#### Expected Behavior
+A member who enrolled a second factor cannot read or write the data step-up claims to protect until they have used it — through the API the browser actually talks to, not only through the page they are redirected away from.
+
+#### Test Cases
+- [x] A parent who never enrolled a factor reads and writes their own vault, tax documents and binder (the majority case; must not break)
+- [x] An enrolled parent on an `aal1` session reads 0 credential rows, 0 tax documents, 0 binder rows
+- [x] …and cannot update, insert, or delete a credential
+- [x] The same parent at `aal2` reads and writes all three
+- [x] A session with **no** `aal` claim is treated as `aal1`, not as a free pass
+- [x] Control: the enrolled parent is a real manager, so their refusal means something
+- [x] Control: impersonation took (`auth.uid()` is who the probe thinks)
+- [x] The guarded set is exactly the contained set — three tables, no more, no fewer
+- [x] Mutation: the restrictive policy dropped → 4 breaches
+- [x] Mutation: the rule forced `true` → 5 breaches
+- [x] Mutation: the rule made enrolment-blind → 3 control failures (families locked out)
+- [x] Mutation: a guard added to `bills`, which an ungated surface reads → UNREVIEWED
+- [x] Mutation: one of the three removed → breach plus a 2/3 count
+
+#### Issues Found
+`requireAal2` protects 19 server-rendered pages with `redirect(stepUpPath)`. The data those pages show is not fetched by those pages. It is fetched by client components straight from PostgREST with the browser's own session:
+
+    components/modules/passwords-module.tsx:66
+      sb.from('family_credentials').select('*').eq('family_id', familyId)…
+    components/modules/passwords-module.tsx:128
+      sb.from('family_credentials').insert({ …, family_id: familyId })…
+
+An `aal1` session is a fully valid Supabase JWT. The redirect is the only thing stopping it, and it only fires if the browser asks Next.js for the HTML page — which someone holding a stolen or exported session cookie has no reason to do. Measured against the live catalogue:
+
+    select count(*) from pg_policies where schemaname='public'
+      and (coalesce(qual,'')||coalesce(with_check,'')) ilike '%aal%';   ->  0
+
+Step-up was presentational. `aal2Verdict` exists for the API half and is wired into exactly three routes — paperwork/capture, paperwork/link, privacy/export — and nothing in the money or vault areas uses it. The families most likely to enrol a factor are the ones who believe it is protecting exactly this data.
+
+#### Fixes Applied
+`public.session_meets_assurance()` mirrors `needsStepUp` in `lib/auth/mfa.ts` rather than inventing a second policy in SQL. That function steps up a session **only when the account has a factor to step up with**; a family that never enrolled has `nextLevel: aal1` and is not touched. The SQL says the same thing: `aal2` passes, and so does a session whose account holds no verified factor. `security definer` because `auth.mfa_factors` is not readable by `authenticated`, with a pinned `search_path` that includes `extensions` — a definer function without one is DB-FN-001, which was dead in production for a year.
+
+A **restrictive** policy carries it, so it is ANDed with whatever already governs each table rather than replacing or widening it.
+
+**The three tables, and why only three.** A restrictive assurance guard on a table that some *ungated* surface also reads protects nothing extra — it empties that surface, silently, for every enrolled `aal1` session, which is the silent-empty-read defect this audit spends its time removing. So the set is the tables whose entire read surface is already gated, measured across `app/`, `components/` and `lib/`:
+
+| table | read by | rendered by |
+|---|---|---|
+| `family_credentials` | `passwords-module.tsx`, plus a `head: true` count on the family hub | `/dashboard/passwords` |
+| `tax_documents` | `tax-vault-module.tsx` | `/dashboard/tax-vault` |
+| `household_info` | `binder-module.tsx` | `/dashboard/binder` |
+
+The family-hub reference is a `count: 'exact', head: true` — a tile reading "N passwords saved". The only effect outside the vault is that the tile reads 0 until a code is entered. A count is not a secret and 0 is not a lie about one.
+
+**Why the API half adds nothing here, contrary to the upstream note.** It proposed wiring `aal2Verdict` into every route handler behind a gated page. Measured: the vault has no route handler and no server action. It reads and writes entirely through `createClient()` direct to PostgREST. For these three tables the database policy is not one of two layers — it is the only layer there can be. (The module does already handle the refused-write asymmetry: it selects `id` back and calls `wroteNoRows`, so a blocked write says "That change was not saved" rather than reporting success.)
+
+#### Still open, with the measurement rather than an intention
+`bills`, `documents` and `paperwork_items` are **not** guarded, and this is a deliberate stop, not an oversight. They are read by `/dashboard/readiness`, `/dashboard/agents`, `/dashboard/planning`, `/dashboard/command-center`, `/dashboard/needs-you`, `finances-module`, `billing-module`, `files-hub-module`, `lib/inbox/server.ts`, `lib/contact-center/server.ts` and three AI routes — none behind `requireAal2`. Guarding them today would blank all of those for an enrolled `aal1` session with no explanation. Closing them is work on those surfaces first: each must step up, or stop reading the data. Until then, **F-E02 stays partly open and should not be described as fixed** — money and the document vault are still protected only by a redirect.
+
+The probe asserts the guarded set *is* the contained set, in both directions, so a fourth table added without that work is reported by name rather than discovered when a dashboard goes quietly empty.
+
+Also not repaired here: `tax_documents` and `household_info` are governed by `is_family_member`, so a **child** can read the family's tax documents and household binder. A restrictive assurance guard ANDs with that; it does not fix it. That is the 0297 sensitive-table work, and it is named so this migration is not mistaken for having scoped these tables by role.
+
+**Mutation-tested five ways.** The third is the one worth reading: making the rule enrolment-blind — `aal = 'aal2'` and nothing else, which is precisely the helper the upstream note suggested writing — turns the controls red with *"a parent who never enrolled a factor reads 0/1 of their own credentials — the fix locks families out of their passwords."* The upstream fix, applied literally, would have locked out every family without an authenticator.
+
+**0326 is a PENDING PRODUCTION MIGRATION.** Until it is applied, a stolen session cookie reads and rewrites the family credential vault, the tax vault and the household binder without ever being asked for a code.
+
+
+### SEC-013 — The family password vault stores its passwords in plaintext
+
+Status: ⚠️ BLOCKED — an owner decision, with the analysis and a recommended shape below
+Severity: High
+Route(s), components, actions, tables and providers: `public.family_credentials.secret`, `components/modules/passwords-module.tsx`, `lib/sync/crypto.ts`, `supabase/migrations/0296_family_credentials_manager_only.sql`
+
+#### Expected Behavior
+A stored Wi-Fi password, bank login or card PIN is not readable from a database dump, a backup, a replica, or by anything holding the service-role key.
+
+#### Test Cases
+- [x] The column's type read from the live catalogue
+- [x] A value written and read back to confirm nothing transforms it
+- [x] Every writer of the table enumerated across `app/`, `lib/` and `components/`
+- [x] The repo's existing encryption facility located and its key requirement read
+- [ ] A fix — deliberately not attempted; see below
+
+#### Issues Found
+`family_credentials.secret` is `text`, and it holds exactly what was typed:
+
+    insert into public.family_credentials (family_id, label, secret, …)
+      values (…, 'Home Wi-Fi', 'hunter2-the-actual-wifi-password', …);
+
+    STORED AS: hunter2-the-actual-wifi-password
+    PG_COLUMN_SIZE: 33 bytes for a 32-char password (no envelope, no iv, no tag)
+
+Nothing in the path encrypts. The only writer is `components/modules/passwords-module.tsx`, and it sends `secret: form.secret` straight to PostgREST from the browser. Outside that module the table appears once in the whole tree, in `lib/ai/context/policy.ts` — a denylist entry reading `{ table: 'family_credentials', reason: 'passwords and logins' }`, which is the codebase recognising exactly what this column holds while storing it in the clear.
+
+**This is the half of F-E01 that 0296 does not fix.** That migration's own header says so — *"`secret` is plaintext `text`"* — and then goes on to fix a different thing: it narrowed all four policies from `is_family_member` to `can_manage_family`, because children are real auth users in this product and every child could read the vault. That was right and it is a separate control. RLS decides who may ask Postgres for the row. It has nothing to say about a `pg_dump`, a PITR backup, a read replica, a support engineer with the service-role key, or any of this audit's own probes, all of which see the string. The F-E01 summary row reads "open to children, secrets in plaintext — Fixed by 0296", and only the first clause is true.
+
+AUTHZ-008 (0326) adds a second-factor requirement to the same table in this cycle. That is also not this: it changes who may ask, not what is stored.
+
+#### Why this is recorded rather than fixed
+The repo already has the facility — `encryptSecret` / `decryptSecret` in `lib/sync/crypto.ts`, keyed by `SYNC_TOKEN_KEY`, which is how `sync_tokens.access_token_enc` and `social_account_tokens.access_token_enc` are protected. Reaching for it here is a two-line change and would be wrong, because **the key cannot go where the writer is**. The vault is browser → PostgREST directly: `createClient().from('family_credentials').insert(...)`, and reads arrive over a realtime subscription (`useRealtimeQuery`) that streams rows to the browser. Encrypting server-side means:
+
+1. every write moves to a server action that encrypts;
+2. every read moves to a server path that decrypts, because the browser has no key;
+3. the realtime subscription stops being usable as-is — it would deliver ciphertext to a client that cannot open it;
+4. existing rows need a one-time encryption pass, which cannot run before the key exists in the environment;
+5. `SYNC_TOKEN_KEY` becomes load-bearing for a second subsystem, so losing it now loses the vault as well as the OAuth tokens.
+
+That is a feature rework with a key-management decision inside it, not a defect repair, and choosing it is the owner's call. The same reasoning OPEN-001 is recorded under.
+
+**Recommended shape**, for whoever decides:
+
+- Add `secret_enc text` beside `secret` rather than changing the column in place, so the migration is reversible and a half-finished rollout cannot destroy a family's passwords.
+- Move create/update/delete into a server action in `app/(app)/dashboard/passwords/actions.ts` that encrypts with `encryptSecret`. The module already handles the refused-write asymmetry correctly (`.select('id')` plus `wroteNoRows`), so the error paths survive the move.
+- Serve reads from a server component or action that decrypts, and drop the realtime subscription for this one module — a password vault is not a surface that needs live updates between devices.
+- Backfill `secret_enc` from `secret`, verify the count matches, then drop `secret` in a later migration, not the same one.
+- Keep 0296's `can_manage_family` policies and 0326's assurance guard: encryption at rest and authorization are different controls, and this replaces neither.
+
+Until that is done, the vault's security property is "the database and its backups are trusted", which is the thing a password manager exists not to assume.
+
+
 ### ADMIN-001 — Every admin server action reaches a super-admin gate
 
 Status: ✅ PASS
@@ -22469,7 +22592,7 @@ Status: ✅ PASS — `npm run lint` reports the four known baseline warnings and
 ## Automated Tests
 Status: ✅ PASS — 15,287 tests across 1,215 files pass, zero failures and zero skips, on Node 24.15.0 at head 92340315 (160s).
 
-Later in this cycle, on Node 24.21.0: **16,756 tests across 1,311 files, zero failures and zero skips**, and **50/50 boundary probes with 0 skipped**. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
+Later in this cycle, on Node 24.21.0: **16,756 tests across 1,311 files, zero failures and zero skips**, and **51/51 boundary probes with 0 skipped**. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
 
 Five existing guards had to be repaired rather than merely re-run, and that is itself a finding recorded under SEC-010: `guardian-callback-security`, `middleware-public-api-boundary`, `public-pages-reachable`, `health-feature-secrets` and `public-webhook-signature-boundary` each identified a control by the SPELLING of the function that implemented it. Moving identical verification one call away turned all five red while nothing about the behaviour changed — which is the same reason `public-webhook-signature-boundary` stayed green through eight signature checks that only ran in a production build.
 
@@ -22902,8 +23025,8 @@ closed.
 
 | | Finding | Status |
 |---|---|---|
-| F-E01 | The family password vault, open to children, secrets in plaintext | Fixed by `0296`, unapplied |
-| F-E02 | Step-up MFA is a redirect; no policy knows `aal` | OPEN |
+| F-E01 | The family password vault, open to children, secrets in plaintext | HALF FIXED — `0296` (unapplied in production) closes the child-read half; the PLAINTEXT half is untouched and is now tracked separately as SEC-013 |
+| F-E02 | Step-up MFA is a redirect; no policy knows `aal` | PARTLY FIXED — see AUTHZ-008 (0326, pending production): the three vault tables whose whole read surface is gated now require the factor; `bills`, `documents` and `paperwork_items` stay open because ten ungated surfaces read them |
 | F-E03 | `family-media` is a public bucket | OPEN |
 | F-E04 | OAuth tokens family-member readable, while `sync_tokens` is service-only | FIXED — see AUTHZ-007 (0324, pending production) |
 | F-E05 | `feedback-attachments` is a public bucket | FIXED — see SEC-012 (0325, pending production) |
