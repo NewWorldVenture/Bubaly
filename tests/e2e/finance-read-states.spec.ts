@@ -14,6 +14,13 @@ const sources = Object.fromEntries([
   'components/ui/input.tsx', 'components/app/page-header.tsx', 'lib/finance/hub.ts',
   // hub.ts reads the locale catalogue for its default currency locale.
   'lib/i18n/locales.ts',
+  // And periodStart reads the READER's local day key from here. hub.ts used to
+  // take it off `toISOString()`, which is Greenwich's day, so a monthly budget
+  // period started on 31 May for anyone east of Greenwich. The fixture mounts
+  // these modules for real, so a new value import has to be listed here or it
+  // cannot mount — which tests/medications-fixture-module-graph.test.ts catches
+  // by walking the import graph rather than waiting for the fixture to fail.
+  'lib/time/local-day.ts',
   'lib/supabase/errors.ts', 'lib/schedule/zoned.ts',
 ].map(file => [`@/${file.replace(/\.tsx?$/, '')}`, ts.transpileModule(fs.readFileSync(file, 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.React },
