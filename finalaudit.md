@@ -3,11 +3,11 @@
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
 - Last Updated: 2026-09-20T17:44:10.000Z
-- Total Audit Items: 14068
+- Total Audit Items: 14069
 - Not Started: 13842
 - In Progress: 192
 - Passed: 9
-- Fixed + Passed: 21
+- Fixed + Passed: 22
 - Blocked: 2
 - Failed: 2
 - Overall Completion: 0.04%
@@ -14194,6 +14194,7 @@ PRODUCTION READY: NO
 | AUTHZ-008 | AUTHZ | Step-up MFA protected a redirect, not the data (F-E02, in part) | 🛠 FIXED + PASS (pending production) | High | 13/13 | 0326 adds session_meets_assurance() — mirroring needsStepUp, so a family with no factor is untouched — and a restrictive guard on family_credentials, tax_documents and household_info | 0 policies mentioned aal before; an enrolled aal1 session now reads 0 rows from all three and cannot write; a never-enrolled parent and a stepped-up parent both keep full access; 5 mutations red | The data behind 19 redirect-guarded pages is fetched by client components straight from PostgREST, where an aal1 JWT is perfectly valid. Only three tables are closed: the rest are read by ten ungated surfaces and guarding them would blank those silently — recorded, not left implicit. |
 | SEC-013 | Security | The family password vault stores its passwords in plaintext | ⚠️ BLOCKED | High | 4/5 (no fix attempted) | None — encrypting needs the write path to move off the browser, which is a feature rework with a key-management decision inside it | Stored and read back verbatim: 'hunter2-the-actual-wifi-password', pg_column_size 33 bytes for a 32-char password — no envelope, no IV, no tag. The only writer is the browser module; the table's one other mention in the tree is an AI denylist entry reading 'passwords and logins' | This is the half of F-E01 that 0296 does not fix — that migration narrowed WHO may read the row and says so in its own header. RLS has nothing to say about a pg_dump, a backup, a replica or the service-role key. Recommended shape recorded for the owner. |
 | DATA-011 | Data integrity | Eleven call sites discarded the truncation signal F-F01 raises | 🛠 FIXED + PASS | High | 5/5 (9 sanity cases inside them) | All eleven now act on it — 503 on the calendar feed and the three AI-coach routes, a refused verdict in the decision simulator, an abandoned playbook refresh, an early return before the GitHub sync's write loop, ErrorState on two marketplace pages | Three mutations red: an error removed from a destructure, from a batch element, and the helper's probe row removed | Every one of the eleven carried a comment explaining why a capped read would be wrong, then dropped the error saying it happened. The detector over-reported 54 -> 17 -> 15 -> 11 across four passes; the guard's two halves are deliberately not equally strict, and the comment says why. |
+| DATA-012 | Data integrity | "Today" was the server's day, not the family's (F-F02) | 🛠 FIXED + PASS | High | 11/11 | startOfLocalDay / startOfNextLocalDay in lib/time/zoned.ts; the kids, guardian and moments pages, both dashboards' dayBounds, and every notification's today/tomorrow copy moved onto the family's zone | Asserted in three zones from one instant, across both DST changeovers (a 23-hour and a 25-hour day), and in a zone whose clocks jump AT midnight; three mutations red; full suite green under TZ=UTC and TZ=America/Los_Angeles | 8 client files (correct — the browser IS the family) and 19 server files (not). timeLabel was wrong twice in one sentence: the day from the host's midnight and the clock with no timeZone, so 7pm read as "tomorrow at 3:00 AM". |
 | TEST-009 | Testing | Probe fixtures left in the seeded anchor family | 🛠 FIXED + PASS | Medium | 6/6 | Both probes now clear their fixtures at the end as well as the start | Each passes twice; suite 47/47 on both databases; anchor family holds only its seeded members | "Race Child" and "Probe Kid" had been living in the 71,192-row anchor family, the latter for a week. Found by the AUTHZ-006 sweep counting a member no fixture of its own had created. |
 | DATA-010 | DATA | Resource lifecycle through the real API | ✅ PASS | High | 8/8 | None required | CREATE/READ/UPDATE/VERIFY/DELETE/VERIFY all pass as a real member; a child's refused write returns HTTP 204 without Prefer, 200 [] with it, dosage unchanged | Shows at the HTTP layer why .select() + wroteNoRows was needed: 204 No Content is a success for a write that changed nothing. |
 | SEC-008 | SEC | Realtime broadcast isolation and publication drift | ✅ PASS | Critical | 5/5 | None required | Publication and code agree exactly (61 = 61, empty diff both ways); a live socket received its own family's row and not another's | The first attempt used an unpublished table and received nothing — a run that would have read as a clean refusal while proving nothing. Controls decided it. |
@@ -21935,6 +21936,59 @@ Five i18n keys were added — two for the marketplace pages and three for the co
 Getting there took four passes and every one of the first three over-reported: 54 findings on a name-only scan (`lib/metric/strategy-server.ts` defines its **own** local `readAll`, a keyset pager, and contributed nine false positives — the detector is now scoped to files that import the shared helper); 17 when the batch head was searched for the word `error`; 15 when `safe('Saved listings', readAllAsQuery(…))` was not recognised as a wrapper that owns its error; 11 when a multi-line check counted as absent. The true answer is 11, and it is the same lesson this cycle keeps producing: a detector's first number is a hypothesis, not a finding.
 
 
+### DATA-012 — "Today" was the server's day, not the family's (closes F-F02 on the surfaces that show a day)
+
+Status: 🛠 FIXED + PASS — five surfaces corrected, thirteen declared with reasons
+Severity: High
+Route(s), components, actions, tables and providers: `lib/time/zoned.ts`, `app/(app)/kids/page.tsx`, `app/(app)/guardian/page.tsx`, `app/(app)/dashboard/moments/page.tsx`, `components/dashboard/family-dashboard.tsx`, `components/dashboard/personal-dashboard.tsx`, `lib/server/notifications.ts`, `tests/a-family-day-starts-where-the-family-is.test.ts`, `tests/a-server-day-is-the-familys-day.test.ts`
+
+#### Expected Behavior
+A day boundary computed on the server is the family's day. A browser may use its own midnight, because the browser is the family; a server may not, because it is in whatever zone the host happens to be.
+
+#### Test Cases
+- [x] Midnight resolved in three zones from one instant, each answering its own date
+- [x] A 23:00 local moment placed on its own day, not the next one
+- [x] The day brackets every moment in it and nothing else
+- [x] Spring forward: the day is 23 hours and both boundaries still land on midnight
+- [x] Fall back: the day is 25 hours, same
+- [x] A zone whose clocks jump **at** midnight still has a first moment
+- [x] An unusable zone falls back to the old behaviour rather than throwing
+- [x] Every `setHours(0,0,0,0)` in the tree classified client vs server
+- [x] The remaining server-side ones declared with a reason each, and the declaration asserted in both directions
+- [x] The five corrected surfaces asserted not to regress, by name
+- [x] Mutation: one surface put back on the host's midnight → red
+- [x] Mutation: a new undeclared server-side one → red
+- [x] Mutation: a declaration for a file that no longer has one → red
+- [x] Full suite green under `TZ=UTC` and `TZ=America/Los_Angeles`
+
+#### Issues Found
+`new Date(); d.setHours(0, 0, 0, 0)` is midnight **where the process runs**. F-017 found this, fixed some of it, and F-F02 recorded that it was still live on eleven server-rendered surfaces. Measured now, with the client and server halves separated: **8 client files, where it is correct**, and **19 server files, where it is not**.
+
+The sharpest is the one F-F02 names. `app/(app)/kids/page.tsx` computed a child's "today" from the host's midnight and filtered `calendar_events` by it, so on a UTC deployment a Californian child's day ran 17:00 to 17:00: last night's events on this morning's list and tonight's missing from it.
+
+`app/(app)/dashboard/moments/page.tsx` is the clearest illustration that this was drift rather than a decision. One line reads the day in the family's zone — `dayKeyInTz(now, ctx.active.family.timezone)` — and the next computes "tomorrow" from `setHours(0,0,0,0)`. Two notions of a day, adjacent, in the same function.
+
+And `lib/server/notifications.ts` shows how far a wrong zone travels. `timeLabel` decided today/tomorrow from the host's midnight **and** formatted the clock with no `timeZone` at all, so a UTC-hosted deployment told a Californian family that a 7 p.m. appointment was *"tomorrow at 3:00 AM"* — wrong twice in one sentence, in the copy of every event, chore, sports, school, reminder and conflict notification.
+
+#### Fixes Applied
+`startOfLocalDay` and `startOfNextLocalDay` in `lib/time/zoned.ts`, built on the `instantForLocalTime` machinery already there.
+
+Two details are the reason they are functions rather than an inline expression. **The end of a day is the next local midnight, not `+86_400_000`**: a day is 23 or 25 hours on the two changeovers, and a fixed 24 hours puts the boundary an hour inside the next day (spring) or an hour short of this one (autumn). Asserted both ways, against real Los Angeles dates:
+
+    spring 2026-03-08:  end - start = 23h;  start + 24h reads 2026-03-09 01:00
+    autumn 2026-11-01:  end - start = 25h;  start + 24h reads 2026-11-01 23:00
+
+Twice a year that is a missing evening appointment or a duplicated morning one. **And a day can begin at 01:00**: in a handful of zones the clocks jump at midnight, so 00:00 does not exist on that date. `instantForLocalTime` walks forward to the first minute that does, rather than returning null and handing the caller a day with no beginning.
+
+An unusable zone falls back to the host's midnight — exactly the old behaviour — because this is a correction and must never be the reason a page stops rendering. `0323` and `isValidTimezone` keep unusable zones out of the column in the first place.
+
+Corrected: the kids page, the guardian page's four "today" counts, the moments page's tomorrow window, and `dayBounds()` in **both** dashboards — where the week boundary also had to move, since `getDay()` on a host-zone Date can name a different weekday than the family is living. `timeLabel` now takes the zone and uses it for the day **and** the clock.
+
+19 server files → 14, and the remaining ones are **declared, with a reason each**, in a guard shaped like the bucket-visibility declaration: nine are pure relative-day helpers parameterised on `now` and shared with client components, where subtracting two midnights in one zone is stable and the correction belongs at the server call sites that feed them a host-zone `now`; four are a daily AI quota bucket, where moving the reset to the family's zone is a quota decision rather than a display fix; one is the new helper's own fallback. The declaration fails in **both** directions — a new undeclared occurrence, and a declaration for a file that no longer has one — so the list stays exactly the set rather than becoming a number nobody can interpret.
+
+Verified under both zones the suite runs in, because a timezone fix that only passes on a UTC host has proved nothing.
+
+
 ### ADMIN-001 — Every admin server action reaches a super-admin gate
 
 Status: ✅ PASS
@@ -22651,7 +22705,7 @@ Status: ✅ PASS — `npm run lint` reports the four known baseline warnings and
 ## Automated Tests
 Status: ✅ PASS — 15,287 tests across 1,215 files pass, zero failures and zero skips, on Node 24.15.0 at head 92340315 (160s).
 
-Later in this cycle, on Node 24.21.0: **16,761 tests across 1,312 files, zero failures and zero skips**, and **51/51 boundary probes with 0 skipped**. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), `tests/a-capped-read-is-not-a-silent-one.test.ts` (DATA-011, 5), `docs/audit/vaults-require-second-factor-check.sql` (AUTHZ-008), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
+Later in this cycle, on Node 24.21.0: **16,772 tests across 1,314 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **51/51 boundary probes with 0 skipped**. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), `tests/a-capped-read-is-not-a-silent-one.test.ts` (DATA-011, 5), `tests/a-family-day-starts-where-the-family-is.test.ts` and `tests/a-server-day-is-the-familys-day.test.ts` (DATA-012, 11), `docs/audit/vaults-require-second-factor-check.sql` (AUTHZ-008), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
 
 Five existing guards had to be repaired rather than merely re-run, and that is itself a finding recorded under SEC-010: `guardian-callback-security`, `middleware-public-api-boundary`, `public-pages-reachable`, `health-feature-secrets` and `public-webhook-signature-boundary` each identified a control by the SPELLING of the function that implemented it. Moving identical verification one call away turned all five red while nothing about the behaviour changed — which is the same reason `public-webhook-signature-boundary` stayed green through eight signature checks that only ran in a production build.
 
@@ -22997,7 +23051,7 @@ The invite toast and two Home widgets remain.
 | F-E02 | Step-up MFA is presentational; no policy references `aal`, and guarded pages fetch straight from PostgREST | PARTLY FIXED — AUTHZ-008 / `0326` (pending production): `session_meets_assurance()` plus a restrictive guard on the three vault tables whose entire read surface is already gated. `bills`, `documents` and `paperwork_items` stay open — ten ungated surfaces read them, and guarding those would blank them silently |
 | F-E03 | The `family-media` bucket is public; photos and attachments are served with no session | OPEN (known, tracked as LB-009) |
 | F-F01 | A caller-supplied `max` truncates a money read and reports success; reconciliation renders "Everything reconciles" from a prefix | FIXED — the helper raises it (the reconciliation page consumes it); DATA-011 then found and fixed the ELEVEN call sites that were discarding the signal, and holds them with a permanent guard |
-| F-F02 | F-017's timezone bug still live on eleven server-rendered surfaces, including the kids page | OPEN |
+| F-F02 | F-017's timezone bug still live on eleven server-rendered surfaces, including the kids page | FIXED on the surfaces that show a day — see DATA-012. 19 server files measured, 5 corrected (kids, guardian, moments, both dashboards) plus every notification's today/tomorrow copy; the remaining 14 are declared with a reason each and the declaration fails in both directions |
 | F-F03 | `/missions` issues up to 240 sequential storage round trips on the parent approval queue | OPEN |
 | F-D01 | The photo lightbox strands keyboard users: no `role="dialog"`, no Escape, no focus trap | OPEN |
 | F-D02 / F-D03 | 55 labels detached from their control; 65 `<select>` with no accessible name | OPEN |

@@ -6,6 +6,7 @@ import { isTwilioConfigured } from '@/lib/guardian/twilio';
 import { GuardianDashboard } from '@/components/guardian/guardian-dashboard';
 import { Shield } from 'lucide-react';
 import { getTranslations } from '@/lib/i18n/server';
+import { startOfLocalDay } from '@/lib/time/zoned';
 
 export const metadata: Metadata = { title: 'AI Call Guardian · Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -17,8 +18,10 @@ export default async function GuardianPage() {
   const supabase = await createServer();
   const db = withGuardianTables(supabase);
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // "Today" for these four counts is the family's day, not the host's — the
+  // same correction as the kids page (F-017, F-F02). On a UTC host a
+  // Californian family saw calls from 17:00 yesterday counted as today's.
+  const today = startOfLocalDay(new Date(), ctx.active.family.timezone || 'UTC');
 
   const gFrom = (table: Parameters<typeof db.from>[0]) => (db.from(table) as ReturnType<typeof supabase.from>);
 

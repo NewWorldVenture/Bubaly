@@ -13,20 +13,45 @@ import { DashboardWeather } from '@/components/dashboard/dashboard-weather';
 import { fmtTime, firstName } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { getTranslations } from '@/lib/i18n/server';
+import { localPartsAt, startOfLocalDay, startOfNextLocalDay } from '@/lib/time/zoned';
 
 const ACCENT = ['bg-violet-500', 'bg-emerald-500', 'bg-orange-500', 'bg-rose-500', 'bg-blue-500', 'bg-teal-500'];
 const MEAL_EMOJIS: Record<string, string> = { breakfast: '🍳', lunch: '🥗', dinner: '🍽️', snack: '🍎' };
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-function dayBounds() {
+// Every window this returns is a FAMILY day, not a host day. `setHours(0,0,0,0)`
+// is midnight where the process runs, so on a UTC host a Californian family's
+// dashboard counted "today" from 17:00 yesterday: last night's events on this
+// morning's list, tonight's missing from it (F-017, F-F02).
+//
+// The later boundaries walk day by day through `startOfNextLocalDay` rather
+// than adding multiples of 24 hours, because a DST changeover inside the window
+// shifts every boundary after it by an hour.
+function advanceLocalDays(from: Date, timezone: string, days: number): Date {
+  let at = from;
+  for (let i = 0; i < days; i++) at = startOfNextLocalDay(at, timezone);
+  return at;
+}
+
+function dayBounds(timezone: string) {
   const now = new Date();
-  const start = new Date(now); start.setHours(0, 0, 0, 0);
-  const end = new Date(start); end.setDate(end.getDate() + 1);
-  const in7 = new Date(start); in7.setDate(in7.getDate() + 7);
-  const in14 = new Date(start); in14.setDate(in14.getDate() + 14);
-  const weekStart = new Date(start);
-  weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
-  const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate() + 7);
+  const start = startOfLocalDay(now, timezone);
+  const end = startOfNextLocalDay(now, timezone);
+  const in7 = advanceLocalDays(start, timezone, 7);
+  const in14 = advanceLocalDays(start, timezone, 14);
+  // Monday-first, read in the family's zone: `getDay()` on a host-zone Date can
+  // name a different weekday than the family is living.
+  const localDow = new Date(Date.UTC(
+    localPartsAt(start, timezone).year,
+    localPartsAt(start, timezone).month - 1,
+    localPartsAt(start, timezone).day,
+  )).getUTCDay();
+  let weekStart = start;
+  for (let i = 0; i < (localDow + 6) % 7; i++) {
+    const p = localPartsAt(weekStart, timezone);
+    weekStart = startOfLocalDay(new Date(Date.UTC(p.year, p.month - 1, p.day - 1, 12)), timezone);
+  }
+  const weekEnd = advanceLocalDays(weekStart, timezone, 7);
   return { start, end, in7, in14, weekStart, weekEnd };
 }
 
@@ -54,7 +79,7 @@ export async function FamilyDashboard({ ctx }: { ctx: UserContext }) {
   const tr = await getTranslations();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
-  const { start, end, in7, in14, weekStart, weekEnd } = dayBounds();
+  const { start, end, in7, in14, weekStart, weekEnd } = dayBounds(ctx.active.family.timezone || 'UTC');
 
   const [
     { data: todayEvents },

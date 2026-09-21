@@ -9,6 +9,7 @@ import { nextBirthdayDate, daysUntil } from '@/lib/moments/birthdays';
 import type { MomentDeparture } from '@/lib/moments/prep';
 import { loadScheduleIntelligence } from '@/lib/schedule/intelligence-server';
 import { addDaysToDayKey, dayKeyInTz } from '@/lib/services/scope';
+import { startOfNextLocalDay } from '@/lib/time/zoned';
 
 export const metadata: Metadata = { title: 'Moments' };
 export const dynamic = 'force-dynamic';
@@ -44,8 +45,12 @@ export default async function Page() {
     const now = new Date();
     const todayIso = dayKeyInTz(now, ctx.active.family.timezone || 'UTC');
     const in21 = new Date(now.getTime() + 21 * DAY).toISOString();
-    const tomorrowStart = new Date(now); tomorrowStart.setHours(0, 0, 0, 0); tomorrowStart.setDate(tomorrowStart.getDate() + 1);
-    const tomorrowEnd = new Date(tomorrowStart.getTime() + DAY);
+    // `todayIso` above already reads the day in the FAMILY's zone. These two
+    // used the host's, so "homework due tomorrow" was a different window from
+    // the "today" one line up — two notions of a day on adjacent lines
+    // (F-017, F-F02).
+    const tomorrowStart = startOfNextLocalDay(now, ctx.active.family.timezone || 'UTC');
+    const tomorrowEnd = startOfNextLocalDay(tomorrowStart, ctx.active.family.timezone || 'UTC');
 
     const [members, trips, holidays, homework, dismissedRows] = await settleAll([
       supabase.from('family_members').select('display_name, birthday').eq('family_id', familyId).eq('is_active', true).not('birthday', 'is', null),

@@ -15,14 +15,17 @@ import { DashboardWeather } from '@/components/dashboard/dashboard-weather';
 import { fmtTime } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 import { getTranslations } from '@/lib/i18n/server';
+import { startOfLocalDay, startOfNextLocalDay } from '@/lib/time/zoned';
 
 const ACCENT = ['bg-violet-500', 'bg-emerald-500', 'bg-orange-500', 'bg-rose-500', 'bg-blue-500', 'bg-teal-500'];
 
-function dayBounds() {
+// The family's day, not the host's — see family-dashboard.tsx (F-017, F-F02).
+function dayBounds(timezone: string) {
   const now = new Date();
-  const start = new Date(now); start.setHours(0, 0, 0, 0);
-  const end = new Date(start); end.setDate(end.getDate() + 1);
-  const in14 = new Date(start); in14.setDate(in14.getDate() + 14);
+  const start = startOfLocalDay(now, timezone);
+  const end = startOfNextLocalDay(now, timezone);
+  let in14 = start;
+  for (let i = 0; i < 14; i++) in14 = startOfNextLocalDay(in14, timezone);
   return { start, end, in14 };
 }
 
@@ -52,7 +55,7 @@ export async function PersonalDashboard({ ctx }: { ctx: UserContext }) {
   const manager = isManager(role);
   const isKid = role === 'child' || role === 'teen';
   const supabase = await createServer();
-  const { start, end, in14 } = dayBounds();
+  const { start, end, in14 } = dayBounds(ctx.active.family.timezone || 'UTC');
 
   const [
     { data: myChores },

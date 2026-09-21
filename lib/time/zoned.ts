@@ -143,3 +143,60 @@ export function asWallClockIn(instant: Date, timezone: string): Date {
   const p = localPartsAt(instant, timezone);
   return new Date(p.year, p.month - 1, p.day, p.hour, p.minute, 0, 0);
 }
+
+/**
+ * The instant a family's day begins, read in their own timezone.
+ *
+ * `new Date(); d.setHours(0, 0, 0, 0)` is the shape this replaces. It means
+ * midnight *where the process is running*, which on a UTC host makes a
+ * Californian family's "today" run 17:00 to 17:00 — yesterday evening's events
+ * on today's list, and this evening's missing from it (F-017, F-F02). On a
+ * browser that call is correct, because the browser IS the family; on a server
+ * it is a different day.
+ *
+ * DST is the reason this goes through `instantForLocalTime` rather than
+ * arithmetic: in a handful of zones — America/Santiago, Asia/Beirut and others
+ * at various times — the clocks jump at midnight, so 00:00 does not exist on
+ * that date. `instantForLocalTime` walks forward to the first minute that does,
+ * which is the first moment of that day, rather than returning null and making
+ * the caller handle a day that has no beginning.
+ *
+ * An unusable zone falls back to the host's midnight, which is exactly the old
+ * behaviour: this is a correction, so it must never be the reason a page stops
+ * rendering. `0323` and `isValidTimezone` keep unusable zones out of the
+ * column in the first place.
+ */
+export function startOfLocalDay(instant: Date, timezone: string): Date {
+  try {
+    const p = localPartsAt(instant, timezone);
+    const start = instantForLocalTime(p.year, p.month, p.day, 0, timezone);
+    if (start) return start;
+  } catch {
+    // fall through
+  }
+  const fallback = new Date(instant);
+  fallback.setHours(0, 0, 0, 0);
+  return fallback;
+}
+
+/**
+ * The instant the family's NEXT day begins — the exclusive end of "today".
+ *
+ * Not `startOfLocalDay(...) + 86_400_000`: a day is 23 or 25 hours on the two
+ * DST changeovers, and adding a fixed 24 hours puts the boundary an hour inside
+ * the next day or an hour short of the end of this one. Twice a year that is a
+ * missing evening appointment or a duplicated morning one.
+ */
+export function startOfNextLocalDay(instant: Date, timezone: string): Date {
+  try {
+    const p = localPartsAt(instant, timezone);
+    const nextDay = new Date(Date.UTC(p.year, p.month - 1, p.day + 1));
+    const next = instantForLocalTime(
+      nextDay.getUTCFullYear(), nextDay.getUTCMonth() + 1, nextDay.getUTCDate(), 0, timezone,
+    );
+    if (next) return next;
+  } catch {
+    // fall through
+  }
+  return new Date(startOfLocalDay(instant, timezone).getTime() + 24 * 60 * 60 * 1000);
+}

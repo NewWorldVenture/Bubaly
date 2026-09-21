@@ -32,16 +32,30 @@ type Candidate = {
 
 const HOUR = 3600_000;
 
-function timeLabel(iso: string, allDay = false): string {
+/**
+ * "today at 3:00 PM", read in the FAMILY's zone.
+ *
+ * This is the copy F-F02 names. Every part of it used to be the host's: the
+ * `today`/`tomorrow` decision came from `setHours(0, 0, 0, 0)`, and both
+ * formatters ran with no `timeZone`, so a UTC-hosted deployment told a
+ * Californian family that a 7 p.m. appointment was "tomorrow at 3:00 AM". The
+ * day and the clock have to come from the same zone as each other and as the
+ * family, or the sentence is wrong twice over.
+ *
+ * The day comparison goes through `dayKeyInTz` — already used by this file for
+ * `todayStartIso` — rather than `toDateString()`, which reads the host again.
+ */
+function timeLabel(iso: string, tz: string, allDay = false): string {
   const d = new Date(iso);
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const day = d.toDateString() === today.toDateString()
+  const todayKey = dayKeyInTz(new Date(), tz);
+  const key = dayKeyInTz(d, tz);
+  const day = key === todayKey
     ? 'today'
-    : d.toDateString() === new Date(today.getTime() + 24 * HOUR).toDateString()
+    : key === addDaysToDayKey(todayKey, 1)
       ? 'tomorrow'
-      : d.toLocaleDateString('en-US', { weekday: 'long' });
+      : d.toLocaleDateString('en-US', { weekday: 'long', timeZone: tz });
   if (allDay) return day;
-  return `${day} at ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+  return `${day} at ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz })}`;
 }
 
 export async function generateFamilyNotifications(supabase: DB, familyId: string): Promise<number> {
@@ -162,7 +176,7 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     candidates.push({
       type: 'calendar_event', related_type: 'calendar_events', related_id: e.id, user_id: target,
       title: e.title,
-      body: `${timeLabel(e.starts_at, e.all_day)}${e.location ? ` · ${e.location}` : ''}`,
+      body: `${timeLabel(e.starts_at, tz, e.all_day)}${e.location ? ` · ${e.location}` : ''}`,
     });
   }
 
@@ -171,7 +185,7 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
       type: 'chore_due', related_type: 'chore_assignments', related_id: c.id,
       user_id: userByMember.get(c.member_id) ?? null,
       title: `Chore due: ${choreTitle.get(c.chore_id) ?? 'Task'}`,
-      body: c.due_at ? `Due ${timeLabel(c.due_at)}` : 'Due soon',
+      body: c.due_at ? `Due ${timeLabel(c.due_at, tz)}` : 'Due soon',
     });
   }
 
@@ -180,7 +194,7 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     candidates.push({
       type: 'school_event', related_type: 'school_events', related_id: s.id, user_id: target,
       title: `School: ${s.title}`,
-      body: `${timeLabel(s.starts_at)}${s.event_type ? ` · ${s.event_type}` : ''}`,
+      body: `${timeLabel(s.starts_at, tz)}${s.event_type ? ` · ${s.event_type}` : ''}`,
     });
   }
 
@@ -189,7 +203,7 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
     candidates.push({
       type: 'sports_event', related_type: 'sports_events', related_id: s.id, user_id: target,
       title: `${s.sport ?? 'Sports'}: ${s.title}`,
-      body: `${timeLabel(s.starts_at)}${s.location ? ` · ${s.location}` : ''}`,
+      body: `${timeLabel(s.starts_at, tz)}${s.location ? ` · ${s.location}` : ''}`,
     });
   }
 
@@ -198,7 +212,7 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
       type: 'system', related_type: 'reminders', related_id: r.id,
       user_id: r.member_id ? userByMember.get(r.member_id) ?? null : null,
       title: `Reminder: ${r.title}`,
-      body: `Due ${timeLabel(r.remind_at)}`,
+      body: `Due ${timeLabel(r.remind_at, tz)}`,
     });
   }
 
@@ -259,7 +273,7 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
       type: 'system', related_type: 'family_reminders', related_id: `fr:${n.id}`,
       user_id: r.member_id ? userByMember.get(r.member_id) ?? null : null,
       title: `Reminder: ${n.title}`,
-      body: `Due ${timeLabel(n.remindAtIso)}`,
+      body: `Due ${timeLabel(n.remindAtIso, tz)}`,
     });
   }
 
@@ -305,7 +319,7 @@ export async function generateFamilyNotifications(supabase: DB, familyId: string
   for (const c of detectConflicts((conflictEvents ?? []) as ConflictEvent[])) {
     const key = `conflict:${[...c.eventIds].sort().join('-')}`;
     const who = nameByMember.get(c.assigneeId);
-    const body = `${who ? `${who}: ` : ''}${c.eventIds.length} events overlap ${timeLabel(c.startsAt)}`;
+    const body = `${who ? `${who}: ` : ''}${c.eventIds.length} events overlap ${timeLabel(c.startsAt, tz)}`;
     const target = userByMember.get(c.assigneeId) ?? null;
     if (target) {
       candidates.push({ type: 'system', related_type: 'calendar_events', related_id: key, user_id: target, title: 'Schedule conflict', body });

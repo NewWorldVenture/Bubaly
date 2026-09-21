@@ -9,6 +9,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { ErrorState } from '@/components/ui/states';
 import { fmtTime, firstName } from '@/lib/utils/format';
 import { getTranslations } from '@/lib/i18n/server';
+import { startOfLocalDay, startOfNextLocalDay } from '@/lib/time/zoned';
 
 export const metadata: Metadata = { title: 'My Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -19,8 +20,15 @@ export default async function KidsPage() {
   const me = ctx.active.member;
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
-  const start = new Date(); start.setHours(0, 0, 0, 0);
-  const end = new Date(start.getTime() + 86400000);
+  // The child's day, not the server's. `setHours(0, 0, 0, 0)` here is midnight
+  // where the process runs: on a UTC host a Californian child's "today" ran
+  // 17:00 to 17:00, so last night's events sat on this morning's list and
+  // tonight's were missing from it (F-017, F-F02). The end is the next local
+  // midnight rather than +24h, because two days a year a day is not 24 hours.
+  const timezone = ctx.active.family.timezone || 'UTC';
+  const now = new Date();
+  const start = startOfLocalDay(now, timezone);
+  const end = startOfNextLocalDay(now, timezone);
 
   // Only the child's own tasks + shared family events. No finance/health.
   const [myTasksRes, doneRes, eventsRes] = await settleAll([
