@@ -42,7 +42,9 @@ export default async function PrepPlansPage() {
           <RelationshipInsights insights={insights} />
         </div>
       )}
-      <PlanningModule />
+      {/* The family's zone, resolved above, rather than letting the module
+          re-derive a day from the browser's clock at Greenwich. */}
+      <PlanningModule tz={tz} />
     </>
   );
 }

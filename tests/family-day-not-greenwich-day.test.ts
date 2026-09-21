@@ -41,17 +41,12 @@ const ALLOWED = new Map([
   // Cron, all families in one pass. Cost of not resolving each family's zone is
   // bounded at one day early for families west of UTC; documented in the file.
   ['app/api/cron/wallet-allowance/route.ts', 'platform-wide cron; bounded to one day early, documented in file'],
-  // Background derivation rather than something a family reads as "today". It
-  // takes familyId but not a zone, so converting means threading one through.
-  //
-  // This entry is the LAST of five that said exactly this. lib/family/signals.ts,
+  // lib/planning/prep-server.ts was the LAST of five entries that read "needs a
+  // tz threaded through its signature" — lib/family/signals.ts,
   // lib/autopilot/scan.ts, lib/finance/timeline-load.ts and
-  // lib/operating-index/server.ts all carried the same admission and have all
-  // been converted, each with a test that names its zones explicitly. The
-  // sentence was never a justification — it was a note of work not yet done, and
-  // four fifths of it is now done. This one is left because the agent converting
-  // it did not finish; it is not a different kind of case.
-  ['lib/planning/prep-server.ts', 'prep generation; needs a tz threaded through its signature'],
+  // lib/operating-index/server.ts carried the same admission and were converted
+  // one by one. That sentence was never a justification; it was a note of work
+  // not yet done, and the work is now done. All five are gone from this list.
   ['app/(app)/dashboard/family-digital-twin/actions.ts', 'simulation input over a month window; a day either way does not move the result'],
 ]);
 
@@ -254,7 +249,6 @@ const WRITE_ALLOWED = new Map([
   ['app/(app)/dashboard/auto/actions.ts', 'server action; needs a zone threaded through ctx()'],
   ['app/(app)/dashboard/home/actions.ts', 'server action; needs a zone threaded through ctx()'],
   ['app/(app)/wallet/hub-actions.ts', 'server action; needs a zone threaded through ctx()'],
-  ['lib/planning/prep-server.ts', 'prep generation; needs a tz threaded through its signature'],
   // `reasoning_snapshots` is keyed (family_id, as_of_date) and upserted once a
   // day. Changing the key changes what "already snapshotted today" means, so it
   // wants its own change with the idempotency thought through, not a drive-by.

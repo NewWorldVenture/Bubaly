@@ -12,7 +12,11 @@ describe('Prep Plans reasoning read boundary', () => {
     expectSays(page, 'prepPlans.relationshipInsightsAreTemporarilyUnavailable', 'Relationship insights are temporarily unavailable from Supabase. Refresh and try again.');
     expect(page).toContain("<ErrorState message={");
     expectSays(page, 'prepPlans.relationshipInsightsAreTemporarilyUnavailable', "Relationship insights are temporarily unavailable from Supabase. Refresh and try again.");
-    expect(page).toContain('<PlanningModule />');
+    // The module is handed the family's zone the page already resolved, so its
+    // "in N days" is counted from the family's day and not the browser's
+    // Greenwich one. A bare `<PlanningModule />` is the regression to catch.
+    expect(page).toContain('<PlanningModule tz={tz} />');
+    expect(page).not.toContain('<PlanningModule />');
     expect(page).not.toContain('loadFamilyContext(supabase, ctx.active.familyId, tz).catch(() => null)');
   });
 });

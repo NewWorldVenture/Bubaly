@@ -66,6 +66,52 @@ export function nextBirthdayDate(birthday: string, now: Date = new Date()): Date
   return d;
 }
 
+/**
+ * `YYYY-MM-DD` for calendar parts, normalising an impossible date the way
+ * `new Date(y, m - 1, d)` always has (29 Feb in a common year -> 1 Mar).
+ *
+ * `Date.UTC` is used here purely as ZONE-FREE CALENDAR ARITHMETIC, never as
+ * "this is UTC" — the parts go in and the same parts come back out, so the
+ * answer is identical on every host. The fields are read back with `getUTC*`
+ * rather than `toISOString().slice(0, 10)` for the same reason: this file must
+ * not grow a spelling of the Greenwich-day bug it exists to avoid.
+ */
+function dayKeyOfParts(year: number, month: number, day: number): string {
+  const at = new Date(Date.UTC(year, month - 1, day));
+  if (Number.isNaN(at.getTime())) return '';
+  const y = String(at.getUTCFullYear()).padStart(4, '0');
+  const m = String(at.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(at.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * The next occurrence of a birthday on or after `todayKey`, as a day key.
+ *
+ * DAY KEY IN, DAY KEY OUT — no instant is involved anywhere, which is what
+ * makes this usable from a server surface that must answer for the FAMILY's
+ * day rather than the runtime's. `nextBirthdayDate` above answers the same
+ * question against the reader's own local day, which is right for a page
+ * rendered in front of that reader and wrong for a background job: on a UTC
+ * host it asks Greenwich, and its `Date` result then has to be re-expressed as
+ * a day, which walks backwards east of Greenwich (midnight 5 July in
+ * Asia/Tokyo is 4 July 15:00Z).
+ *
+ * Comparison is lexicographic, which is exact for zero-padded ISO day keys,
+ * and there is no millisecond arithmetic to be knocked off by a 23- or
+ * 25-hour local day.
+ */
+export function nextBirthdayDayKey(birthday: string, todayKey: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(todayKey)) return null;
+  const p = parseBirthday(birthday);
+  if (!p) return null;
+  const year = Number.parseInt(todayKey.slice(0, 4), 10);
+  if (!Number.isFinite(year)) return null;
+  const thisYear = dayKeyOfParts(year, p.month, p.day);
+  if (!thisYear) return null;
+  return thisYear >= todayKey ? thisYear : (dayKeyOfParts(year + 1, p.month, p.day) || null);
+}
+
 /** Whole days from `now`'s date to a target date (0 = today). */
 export function daysUntil(target: Date, now: Date = new Date()): number {
   return dayIndexOf(target) - dayIndexOf(now);

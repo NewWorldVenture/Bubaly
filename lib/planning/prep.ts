@@ -76,6 +76,19 @@ const TITLE_PREFIX: Record<SignalKind, string> = {
 
 const DAY = 86_400_000;
 
+/**
+ * A day key anchored as a zone-free CALENDAR date, never as "this is UTC".
+ *
+ * Every date in this engine — `todayKey`, a signal's `date`, a step's due date
+ * — is a `YYYY-MM-DD` that already means a day on somebody's wall. Anchoring
+ * them all at the same fixed offset makes the arithmetic between them exact:
+ * UTC has no DST, so `- leadDays * DAY` moves whole calendar days and cannot
+ * land at 23:00 the evening before the way the same subtraction does on a
+ * local midnight twice a year. Nothing here re-expresses an INSTANT as a day,
+ * which is the operation that answers Greenwich instead of the family.
+ */
+function calendarAnchor(dayKey: string): Date { return new Date(`${dayKey}T00:00:00Z`); }
+
 function isoDate(d: Date): string { return d.toISOString().slice(0, 10); }
 function daysBetween(from: Date, to: Date): number {
   // whole days, using UTC midnight of each date to avoid DST/tz drift
@@ -88,13 +101,35 @@ function daysBetween(from: Date, to: Date): number {
  * Turn horizon signals into coordinated prep plans. Past-dated signals are
  * dropped. Each plan's steps are ordered soonest-due first; a step is `overdue`
  * when its lead-time window has already opened. Plans are sorted by target date.
+ *
+ * `todayKey` IS THE FAMILY'S DAY, `YYYY-MM-DD`, and it is REQUIRED rather than
+ * defaulted from a clock. This used to take a `now: Date = new Date()` and open
+ * with `now.toISOString().slice(0, 10)` — the day at GREENWICH — against which
+ * every `daysUntil`, every `overdue` flag and the whole past-signal filter was
+ * measured. For the last seven hours of every day in Los Angeles that is
+ * tomorrow, so a trip departing TODAY was dropped as already gone; for the
+ * first nine hours of every day in Tokyo it is yesterday, so the same trip was
+ * one day further away than it is and its "pack the night before" step had not
+ * opened yet.
+ *
+ * A DEFAULT IS WHAT LET THE WEEKLY BRIEFING SHIP GREENWICH WEEKS FOR SEVEN
+ * WEEKS: the caller keeps compiling and keeps being wrong. Required, the
+ * typechecker names every call site.
+ *
+ * Throws on anything that is not a day key — an instant, an ISO timestamp, a
+ * `Date` stringified by a half-converted caller. Producing plans against a
+ * silently-wrong "today" is the failure this parameter exists to remove, so it
+ * refuses rather than guesses.
  */
-export function generatePrepPlans(signals: HorizonSignal[], now: Date = new Date()): PrepPlan[] {
-  const today = new Date(isoDate(now) + 'T00:00:00Z');
+export function generatePrepPlans(signals: HorizonSignal[], todayKey: string): PrepPlan[] {
+  const today = calendarAnchor(todayKey);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(todayKey) || Number.isNaN(today.getTime())) {
+    throw new TypeError(`[planning/prep] todayKey must be a family day key (YYYY-MM-DD), got ${JSON.stringify(todayKey)}`);
+  }
   const plans: PrepPlan[] = [];
 
   for (const s of signals) {
-    const target = new Date(s.date + 'T00:00:00Z');
+    const target = calendarAnchor(s.date);
     if (Number.isNaN(target.getTime())) continue;
     const daysUntil = daysBetween(today, target);
     if (daysUntil < 0) continue; // already happened
