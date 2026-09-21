@@ -13634,5 +13634,10 @@
   "contactSmsReply.failedDetail": "Der Anbieter meldet einen Sendefehler. Die Antwort wird nicht automatisch erneut gesendet.",
   "actions.unknownTimeZone": "Unbekannte Zeitzone. Verwende einen Namen wie America/Chicago.",
   "errors.thatChangeWasNotSaved": "Diese Änderung wurde nicht gespeichert – möglicherweise fehlt dir die Berechtigung. Aktualisiere die Seite und versuche es erneut.",
-  "familyModule.unknownTimeZone": "Unbekannte Zeitzone. Verwende einen Namen wie America/Chicago."
+  "familyModule.unknownTimeZone": "Unbekannte Zeitzone. Verwende einen Namen wie America/Chicago.",
+  "marketplaceInsights.couldNotLoadMarketplacePulse": "Fehler beim Laden: Marketplace Pulse. Bitte aktualisieren und erneut versuchen.",
+  "marketplaceQuestions.couldNotLoadTheseQuestions": "Fehler beim Laden: diese Fragen. Bitte aktualisieren und erneut versuchen.",
+  "digitalTwin.couldNotReadThisCategorysSpending": "Die Ausgaben dieser Kategorie konnten nicht gelesen werden, die Budgetprüfung wäre also geraten.",
+  "digitalTwin.spendingUnavailable": "Ausgaben nicht verfügbar",
+  "playbook.couldNotReadEnoughOfYourHistory": "Es konnte nicht genug Ihres Verlaufs gelesen werden, um ein Playbook zu erstellen. Bitte erneut versuchen."
 }

@@ -53,7 +53,7 @@ export async function POST() {
       }
     }
 
-    const [{ data: childWallets }, { data: buckets }, { data: txns }, { data: members }, { data: goals }] = await settleAll([
+    const [{ data: childWallets }, { data: buckets }, { data: txns, error: txnsError }, { data: members }, { data: goals }] = await settleAll([
       supabase.from('child_wallets').select('id, member_id').eq('family_id', familyId).eq('is_active', true),
       supabase.from('wallet_buckets').select('id, kind').eq('family_id', familyId),
       // Money, so a quietly truncated read is a wrong balance, not a short
@@ -62,6 +62,17 @@ export async function POST() {
       supabase.from('family_members').select('id, display_name').eq('family_id', familyId),
       supabase.from('wallet_goals').select('child_wallet_id, title, saved_cents, target_cents').eq('family_id', familyId).eq('status', 'active').limit(50),
     ]);
+
+    // The comment above is the reason this branch exists. readAllAsQuery
+    // reports a ledger read that stopped at the ceiling with more rows behind
+    // it, and coaching computed from a prefix is not vaguer advice — it is
+    // advice about a balance the child does not have, delivered by a model
+    // that will state it with complete confidence. Refuse rather than coach
+    // from part of the ledger.
+    if (txnsError) {
+      console.error('[ai/wallet] ledger read failed', txnsError);
+      return NextResponse.json({ error: tr('wallet.couldNotGenerateCoachingRight') }, { status: 503 });
+    }
 
     const bucketKindById = new Map((buckets ?? []).map((b) => [b.id, b.kind as BucketKind]));
     const nameByMember = new Map((members ?? []).map((m) => [m.id, m.display_name]));

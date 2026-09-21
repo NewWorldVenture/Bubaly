@@ -13634,5 +13634,10 @@
   "contactSmsReply.failedDetail": "Le prestataire signale un échec de l’envoi. La réponse ne sera pas renvoyée automatiquement.",
   "actions.unknownTimeZone": "Fuseau horaire inconnu. Utilisez un nom comme America/Chicago.",
   "errors.thatChangeWasNotSaved": "Cette modification n'a pas été enregistrée : vous n'avez peut-être pas l'autorisation. Actualisez et réessayez.",
-  "familyModule.unknownTimeZone": "Fuseau horaire inconnu. Utilisez un nom comme America/Chicago."
+  "familyModule.unknownTimeZone": "Fuseau horaire inconnu. Utilisez un nom comme America/Chicago.",
+  "marketplaceInsights.couldNotLoadMarketplacePulse": "Impossible de charger Marketplace Pulse. Actualisez et réessayez.",
+  "marketplaceQuestions.couldNotLoadTheseQuestions": "Impossible de charger ces questions. Actualisez et réessayez.",
+  "digitalTwin.couldNotReadThisCategorysSpending": "Impossible de lire les dépenses de cette catégorie ; la vérification du budget ne serait qu’une supposition.",
+  "digitalTwin.spendingUnavailable": "Dépenses indisponibles",
+  "playbook.couldNotReadEnoughOfYourHistory": "Impossible de lire suffisamment d’historique pour créer un playbook. Veuillez réessayer."
 }

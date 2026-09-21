@@ -3,11 +3,11 @@
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
 - Last Updated: 2026-09-20T17:44:10.000Z
-- Total Audit Items: 14067
+- Total Audit Items: 14068
 - Not Started: 13842
 - In Progress: 192
 - Passed: 9
-- Fixed + Passed: 20
+- Fixed + Passed: 21
 - Blocked: 2
 - Failed: 2
 - Overall Completion: 0.04%
@@ -14193,6 +14193,7 @@ PRODUCTION READY: NO
 | SEC-012 | Security | A feedback screenshot readable by the whole internet (closes F-E05) | 🛠 FIXED + PASS (pending production) | Medium | 9 unit + 5 probe assertions | 0325 makes the bucket private and replaces the blanket SELECT with owner-or-admin; the one surface that renders these objects mints a 10-minute signed URL; the board stops selecting the column; the uploader records the path and the resolver reads either form, so no row is rewritten | Over real HTTP, same object and path, no credentials: public bucket 200/67 bytes, private bucket 400 Bucket not found, signed URL 200/67 bytes. Both mutations red (flag flipped back; blanket policy restored) | Closable where SEC-001 is not because exactly one surface draws these objects — the super-admin console, through the service role — so there was no fleet of getPublicUrl consumers to migrate. bucket-visibility-is-declared-check.sql reported DECLARATION STALE on the flip, as written. |
 | AUTHZ-008 | AUTHZ | Step-up MFA protected a redirect, not the data (F-E02, in part) | 🛠 FIXED + PASS (pending production) | High | 13/13 | 0326 adds session_meets_assurance() — mirroring needsStepUp, so a family with no factor is untouched — and a restrictive guard on family_credentials, tax_documents and household_info | 0 policies mentioned aal before; an enrolled aal1 session now reads 0 rows from all three and cannot write; a never-enrolled parent and a stepped-up parent both keep full access; 5 mutations red | The data behind 19 redirect-guarded pages is fetched by client components straight from PostgREST, where an aal1 JWT is perfectly valid. Only three tables are closed: the rest are read by ten ungated surfaces and guarding them would blank those silently — recorded, not left implicit. |
 | SEC-013 | Security | The family password vault stores its passwords in plaintext | ⚠️ BLOCKED | High | 4/5 (no fix attempted) | None — encrypting needs the write path to move off the browser, which is a feature rework with a key-management decision inside it | Stored and read back verbatim: 'hunter2-the-actual-wifi-password', pg_column_size 33 bytes for a 32-char password — no envelope, no IV, no tag. The only writer is the browser module; the table's one other mention in the tree is an AI denylist entry reading 'passwords and logins' | This is the half of F-E01 that 0296 does not fix — that migration narrowed WHO may read the row and says so in its own header. RLS has nothing to say about a pg_dump, a backup, a replica or the service-role key. Recommended shape recorded for the owner. |
+| DATA-011 | Data integrity | Eleven call sites discarded the truncation signal F-F01 raises | 🛠 FIXED + PASS | High | 5/5 (9 sanity cases inside them) | All eleven now act on it — 503 on the calendar feed and the three AI-coach routes, a refused verdict in the decision simulator, an abandoned playbook refresh, an early return before the GitHub sync's write loop, ErrorState on two marketplace pages | Three mutations red: an error removed from a destructure, from a batch element, and the helper's probe row removed | Every one of the eleven carried a comment explaining why a capped read would be wrong, then dropped the error saying it happened. The detector over-reported 54 -> 17 -> 15 -> 11 across four passes; the guard's two halves are deliberately not equally strict, and the comment says why. |
 | TEST-009 | Testing | Probe fixtures left in the seeded anchor family | 🛠 FIXED + PASS | Medium | 6/6 | Both probes now clear their fixtures at the end as well as the start | Each passes twice; suite 47/47 on both databases; anchor family holds only its seeded members | "Race Child" and "Probe Kid" had been living in the 71,192-row anchor family, the latter for a week. Found by the AUTHZ-006 sweep counting a member no fixture of its own had created. |
 | DATA-010 | DATA | Resource lifecycle through the real API | ✅ PASS | High | 8/8 | None required | CREATE/READ/UPDATE/VERIFY/DELETE/VERIFY all pass as a real member; a child's refused write returns HTTP 204 without Prefer, 200 [] with it, dosage unchanged | Shows at the HTTP layer why .select() + wroteNoRows was needed: 204 No Content is a success for a write that changed nothing. |
 | SEC-008 | SEC | Realtime broadcast isolation and publication drift | ✅ PASS | Critical | 5/5 | None required | Publication and code agree exactly (61 = 61, empty diff both ways); a live socket received its own family's row and not another's | The first attempt used an unpublished table and received nothing — a run that would have read as a clean refusal while proving nothing. Controls decided it. |
@@ -21876,6 +21877,64 @@ That is a feature rework with a key-management decision inside it, not a defect 
 Until that is done, the vault's security property is "the database and its backups are trusted", which is the thing a password manager exists not to assume.
 
 
+### DATA-011 — Eleven call sites threw away the truncation signal F-F01 exists to raise
+
+Status: 🛠 FIXED + PASS
+Severity: High
+Route(s), components, actions, tables and providers: `lib/supabase/read-all.ts`, `app/(app)/dashboard/family-digital-twin/actions.ts`, `app/(app)/dashboard/playbook/playbook-actions.ts`, `app/api/sync/feeds/[token]/route.ts`, `lib/feedback/github-sync.ts`, `lib/marketplace/matches-server.ts`, `app/(app)/marketplace/insights/page.tsx`, `app/(app)/marketplace/questions/page.tsx`, `app/api/ai/wallet/route.ts`, `app/api/ai/wallet/child/[childId]/route.ts`, `app/api/ai/habits/route.ts`, `tests/a-capped-read-is-not-a-silent-one.test.ts`
+
+#### Expected Behavior
+When `readAll` reports that a read stopped at the caller's ceiling with rows still behind it, the caller acts on that. Never renders it, counts it, sums it, publishes it, or writes from it as though the set were whole.
+
+#### Test Cases
+- [x] All 93 call sites enumerated, scoped to the files that import the shared helper
+- [x] The destructure form (`const { rows } = await readAll(...)`) checked exactly
+- [x] The batch form (`const [a, { data: b }] = await settleAll([...])`) checked positionally
+- [x] A call handed to `safe`/`settle`/`readInChunks` treated as that wrapper's result
+- [x] Prose mentioning `error` rejected as a check
+- [x] Nine sanity cases covering both forms, both directions
+- [x] Non-vacuity: >30 files, >50 call sites
+- [x] The helper still emits the signal the call sites depend on
+- [x] Mutation: one destructure's error removed → red, naming file and binding
+- [x] Mutation: one batch element's error removed → red, naming the element
+- [x] Mutation: `probe = ceiling + 1` reverted in the helper → red
+
+#### Issues Found
+F-F01 fixed the helper: `readAll` now reads one row past `options.max` and returns
+
+    readAll reached the caller's max of 2000 rows and more remain.
+    These rows are a PREFIX, not the whole set — treat this as a failed read, or raise the max.
+
+That is worth exactly as much as the call sites that read it, and **eleven did not**. Every one of them carries a comment explaining why a capped read would be wrong, and then discards the error that says it just happened:
+
+| where | its own comment | what a prefix produces |
+|---|---|---|
+| `family-digital-twin/actions.ts` ×2 | *"a capped read understates spending"* | the simulator says a purchase fits inside a budget it does not |
+| `playbook-actions.ts` ×3 | *"a capped read does not shorten a list, it reports the wrong number"* | suggestions presented as what the family's own history supports |
+| `sync/feeds/[token]/route.ts` | *"a busy calendar published 1,000 events and called that the feed"* | a subscriber's client sees missing events as **cancellations** |
+| `github-sync.ts` | *"would have started re-opening issues it believed unlinked"* | writes, against ideas that already had an issue |
+| `matches-server.ts` | *"`.limit(2000)` never was 2,000"* | matches computed from part of the catalogue, then **persisted** |
+| `marketplace/insights/page.tsx` | *"a capped read is a wrong number rather than a short list"* | "0 saves", "0 open offers", rendered as facts |
+| `marketplace/questions/page.tsx` | *"questions rendering without the listing they are about"* | and the owner told they have none to answer |
+| `ai/wallet/route.ts`, `ai/wallet/child/[childId]/route.ts` | *"Money, so a quietly truncated read is a wrong balance"* | coaching about a balance the child does not have |
+| `ai/habits/route.ts` | — | a streak counted over a prefix, stated to someone who kept the habit |
+
+The two AI-coach routes are the sharpest: the wrong number is not rendered in a table where someone might notice its shape, it is handed to a model that restates it in confident prose.
+
+This is the same defect as F-008, F-011, F-013 and F-F01, one level further out each time. The ceiling was silent; then the caller's ceiling was silent; now the caller was silent about the ceiling.
+
+#### Fixes Applied
+All eleven consume the error, each in the shape its own contract already had: the two simulator actions return `{ ok: false }` and a conflict verdict rather than a budget check built on an understated total; the three playbook reads abandon the refresh; the calendar feed answers **503** so a subscriber keeps what it has and re-polls instead of treating absent events as cancellations; the GitHub sync returns with `errors + 1` **before** the reconcile loop that writes; the marketplace matcher returns `[]` rather than persisting a snapshot computed from part of the catalogue; the two marketplace pages render an `ErrorState`; the three AI routes answer 503 rather than coach.
+
+Five i18n keys were added — two for the marketplace pages and three for the copy the simulator and the playbook now show — appended to all seven populated catalogues in the house's "Could not load X. Refresh and try again." shape, with translations matching the wording those catalogues already use for the same sentence. The ungated-i18n count is back to its ceiling of 2,811, unchanged.
+
+**One test was exercising the failure path while asserting the success one.** `tests/ai-habits-journal-observability-outcomes.test.ts` stubs the Supabase builder with `select/eq/gte/order/limit` and **no `range`**, which is what `readAll` pages with. That call threw, `readAll` turned the throw into `{ rows: [], error }` — its documented behaviour for a transport failure — and all seventeen cases ran the route's failed-read branch while asserting the successful one. They passed only because the route discarded the error. Adding `range` to the stub is the fix, and the file is now testing what it says it tests.
+
+`tests/a-capped-read-is-not-a-silent-one.test.ts` makes it permanent, and its **two detectors are deliberately not equally strict**. The destructure form — the shape that went wrong eight times — is checked exactly. The batch form is positional, so it names the element that belongs to the `readAll` and not its neighbours. But a *named* binding (`familiesResult`, `choreHistoryResult`) is checked forgivingly: the strict rule was written, run, and reported five handled reads on the admin reports page and one in the Autopilot scan, which collect their results and ask once, across statements and across lines. A guard that reports correct code is a guard somebody deletes, so the weaker rule stands and the comment says why.
+
+Getting there took four passes and every one of the first three over-reported: 54 findings on a name-only scan (`lib/metric/strategy-server.ts` defines its **own** local `readAll`, a keyset pager, and contributed nine false positives — the detector is now scoped to files that import the shared helper); 17 when the batch head was searched for the word `error`; 15 when `safe('Saved listings', readAllAsQuery(…))` was not recognised as a wrapper that owns its error; 11 when a multi-line check counted as absent. The true answer is 11, and it is the same lesson this cycle keeps producing: a detector's first number is a hypothesis, not a finding.
+
+
 ### ADMIN-001 — Every admin server action reaches a super-admin gate
 
 Status: ✅ PASS
@@ -22592,7 +22651,7 @@ Status: ✅ PASS — `npm run lint` reports the four known baseline warnings and
 ## Automated Tests
 Status: ✅ PASS — 15,287 tests across 1,215 files pass, zero failures and zero skips, on Node 24.15.0 at head 92340315 (160s).
 
-Later in this cycle, on Node 24.21.0: **16,756 tests across 1,311 files, zero failures and zero skips**, and **51/51 boundary probes with 0 skipped**. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
+Later in this cycle, on Node 24.21.0: **16,761 tests across 1,312 files, zero failures and zero skips**, and **51/51 boundary probes with 0 skipped**. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), `tests/a-capped-read-is-not-a-silent-one.test.ts` (DATA-011, 5), `docs/audit/vaults-require-second-factor-check.sql` (AUTHZ-008), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
 
 Five existing guards had to be repaired rather than merely re-run, and that is itself a finding recorded under SEC-010: `guardian-callback-security`, `middleware-public-api-boundary`, `public-pages-reachable`, `health-feature-secrets` and `public-webhook-signature-boundary` each identified a control by the SPELLING of the function that implemented it. Moving identical verification one call away turned all five red while nothing about the behaviour changed — which is the same reason `public-webhook-signature-boundary` stayed green through eight signature checks that only ran in a production build.
 
@@ -22935,9 +22994,9 @@ The invite toast and two Home widgets remain.
 |---|---|---|
 | F5 / F-001 | Production migrations cannot be applied — the ledger records only `0001–0003` | **BLOCKED — operator** |
 | F-C08 | The forward-release mechanism is pinned to `0240–0254`; the repo is 38 migrations past it | **Code half fixed — re-pinning is now a manifest change; the release itself is still owner/operator** |
-| F-E02 | Step-up MFA is presentational; no policy references `aal`, and guarded pages fetch straight from PostgREST | OPEN |
+| F-E02 | Step-up MFA is presentational; no policy references `aal`, and guarded pages fetch straight from PostgREST | PARTLY FIXED — AUTHZ-008 / `0326` (pending production): `session_meets_assurance()` plus a restrictive guard on the three vault tables whose entire read surface is already gated. `bills`, `documents` and `paperwork_items` stay open — ten ungated surfaces read them, and guarding those would blank them silently |
 | F-E03 | The `family-media` bucket is public; photos and attachments are served with no session | OPEN (known, tracked as LB-009) |
-| F-F01 | A caller-supplied `max` truncates a money read and reports success; reconciliation renders "Everything reconciles" from a prefix | OPEN |
+| F-F01 | A caller-supplied `max` truncates a money read and reports success; reconciliation renders "Everything reconciles" from a prefix | FIXED — the helper raises it (the reconciliation page consumes it); DATA-011 then found and fixed the ELEVEN call sites that were discarding the signal, and holds them with a permanent guard |
 | F-F02 | F-017's timezone bug still live on eleven server-rendered surfaces, including the kids page | OPEN |
 | F-F03 | `/missions` issues up to 240 sequential storage round trips on the parent approval queue | OPEN |
 | F-D01 | The photo lightbox strands keyboard users: no `role="dialog"`, no Escape, no focus trap | OPEN |

@@ -57,7 +57,7 @@ export async function GET(
   // `.limit(2000)` is not a bound — PostgREST caps a response at db-max-rows
   // whatever the client asked for, so a busy calendar published 1,000 events and
   // called that the feed. `id` breaks ties so two pages cannot overlap or skip.
-  const { rows } = await readAll((from, to) => supabase
+  const { rows, error: eventsError } = await readAll((from, to) => supabase
     .from('sync_calendar_events')
     .select('id, uid, title, description, location, starts_at, ends_at, all_day, recurrence_rule, status, updated_at')
     .eq('calendar_id', calendar.id)
@@ -66,6 +66,16 @@ export async function GET(
     .order('starts_at', { ascending: true })
     .order('id')
     .range(from, to), { max: 2000 });
+  // readAll reports a read that stopped at the ceiling with more events behind
+  // it. Serving those rows anyway publishes a calendar that is missing
+  // appointments, to a subscriber whose client will happily DELETE the events
+  // it no longer sees — a truncated feed does not look incomplete to Google
+  // Calendar or Apple Calendar, it looks like cancellations. 503 so the
+  // subscriber keeps what it has and re-polls.
+  if (eventsError) {
+    console.error('[sync feeds] calendar read failed', eventsError);
+    return new NextResponse('Calendar temporarily unavailable', { status: 503 });
+  }
 
   const events: IcsEvent[] = (rows ?? []).map((e) => ({
     uid: e.uid ?? `${e.id}@bubaly.com`,

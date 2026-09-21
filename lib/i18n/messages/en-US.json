@@ -13634,5 +13634,10 @@
   "contactSmsReply.failedDetail": "The provider reports that sending failed. The reply will not be repeated automatically.",
   "actions.unknownTimeZone": "Unknown time zone. Use a name like America/Chicago.",
   "errors.thatChangeWasNotSaved": "That change wasn't saved — you may not have permission. Refresh and try again.",
-  "familyModule.unknownTimeZone": "Unknown time zone. Use a name like America/Chicago."
+  "familyModule.unknownTimeZone": "Unknown time zone. Use a name like America/Chicago.",
+  "marketplaceInsights.couldNotLoadMarketplacePulse": "Could not load Marketplace Pulse. Refresh and try again.",
+  "marketplaceQuestions.couldNotLoadTheseQuestions": "Could not load these questions. Refresh and try again.",
+  "digitalTwin.couldNotReadThisCategorysSpending": "Could not read this category’s spending, so the budget check would be a guess.",
+  "digitalTwin.spendingUnavailable": "Spending unavailable",
+  "playbook.couldNotReadEnoughOfYourHistory": "Could not read enough of your history to build a playbook. Please try again."
 }

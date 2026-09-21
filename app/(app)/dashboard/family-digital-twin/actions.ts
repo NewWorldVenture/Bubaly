@@ -36,6 +36,7 @@ function periodStart(period: string, now: Date): string {
 }
 
 export async function simulateDecisionAction(input: SimFormInput): Promise<SimResult> {
+  const tr = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
@@ -77,10 +78,22 @@ export async function simulateDecisionAction(input: SimFormInput): Promise<SimRe
     // This total drives the budget the simulation is checked against, so a
     // capped read understates spending. `.limit(2000)` was never 2,000 —
     // PostgREST caps a response at db-max-rows whatever the client asks for.
-    const { rows: tx } = await readAll((from, to) => supabase
+    const { rows: tx, error: txError } = await readAll((from, to) => supabase
       .from('transactions').select('amount').eq('family_id', familyId)
       .eq('type', 'expense').ilike('category', escapeLike(b.category)).gte('date', start)
       .order('id').range(from, to), { max: 2000 });
+    // readAll reports a read that stopped at the ceiling with more rows behind
+    // it. Discarding that here understates `spentCents`, and an understated
+    // total is a simulator that says a purchase fits inside a budget it does
+    // not — the single worst answer this feature can give.
+    if (txError) {
+      console.error('[digital-twin] spend total read failed', txError);
+      return {
+        verdict: 'conflict',
+        headline: tr('digitalTwin.couldNotReadThisCategorysSpending'),
+        impacts: [{ severity: 'blocker', title: tr('digitalTwin.spendingUnavailable') }],
+      };
+    }
     const spentCents = Math.round((tx ?? []).reduce((s, t) => s + Number(t.amount ?? 0), 0) * 100);
     budgets = [{ category: b.category, limitCents: Math.round(Number(b.amount) * 100), spentCents }];
   }
@@ -134,9 +147,14 @@ export async function projectActivityAction(input: ActivityProjectionInput): Pro
     if (b) {
       const start = periodStart(b.period, now);
       // Same total, same reason as above.
-      const { rows: tx } = await readAll((from, to) => supabase.from('transactions').select('amount')
+      const { rows: tx, error: txError } = await readAll((from, to) => supabase.from('transactions').select('amount')
         .eq('family_id', familyId).eq('type', 'expense').ilike('category', escapeLike(b.category)).gte('date', start)
         .order('id').range(from, to), { max: 2000 });
+      // Same total, same reason, same refusal to guess at it.
+      if (txError) {
+        console.error('[digital-twin] projection spend total read failed', txError);
+        return { ok: false, error: tr('digitalTwin.couldNotReadThisCategorysSpending') };
+      }
       const spentCents = Math.round((tx ?? []).reduce((s, t) => s + Number(t.amount ?? 0), 0) * 100);
       budgets = [{ category: b.category, limitCents: Math.round(Number(b.amount) * 100), spentCents }];
     }

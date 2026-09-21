@@ -45,13 +45,20 @@ function reasonFor(wantedTitle: string, supplyTitle: string, supplyKind: string,
 export async function loadAndSnapshotMatches(sb: DB, familyId: string, userId: string | null): Promise<EnrichedMatch[]> {
   try {
     // `.limit(2000)` never was 2,000 — PostgREST caps at db-max-rows.
-    const { rows } = await readAll((from, to) => sb
+    const { rows, error: listingsError } = await readAll((from, to) => sb
       .from('marketplace_listings')
       .select('id, kind, category, status, title, member_id, price_cents')
       .eq('family_id', familyId)
       .in('status', ['available', 'pending'])
       .order('id')
       .range(from, to), { max: 2000 });
+    // A prefix of the family's listings produces matches computed against part
+    // of the catalogue, and those matches are then PERSISTED — so the snapshot
+    // records an incomplete answer as the family's current one.
+    if (listingsError) {
+      console.error('[marketplace] listing read for matches failed', listingsError);
+      return [];
+    }
 
     const listings = (rows ?? []) as MatchListing[];
     const matches = computeMatches(listings);

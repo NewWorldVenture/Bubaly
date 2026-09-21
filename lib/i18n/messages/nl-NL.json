@@ -13634,5 +13634,10 @@
   "contactSmsReply.failedDetail": "De provider meldt dat het verzenden is mislukt. Het antwoord wordt niet automatisch opnieuw verzonden.",
   "actions.unknownTimeZone": "Onbekende tijdzone. Gebruik een naam zoals America/Chicago.",
   "errors.thatChangeWasNotSaved": "Die wijziging is niet opgeslagen — je hebt mogelijk geen toestemming. Ververs de pagina en probeer het opnieuw.",
-  "familyModule.unknownTimeZone": "Onbekende tijdzone. Gebruik een naam zoals America/Chicago."
+  "familyModule.unknownTimeZone": "Onbekende tijdzone. Gebruik een naam zoals America/Chicago.",
+  "marketplaceInsights.couldNotLoadMarketplacePulse": "Kon Marketplace Pulse niet laden. Ververs en probeer het opnieuw.",
+  "marketplaceQuestions.couldNotLoadTheseQuestions": "Kon deze vragen niet laden. Ververs en probeer het opnieuw.",
+  "digitalTwin.couldNotReadThisCategorysSpending": "Kon de uitgaven van deze categorie niet lezen, dus de budgetcontrole zou een gok zijn.",
+  "digitalTwin.spendingUnavailable": "Uitgaven niet beschikbaar",
+  "playbook.couldNotReadEnoughOfYourHistory": "Kon niet genoeg van je geschiedenis lezen om een playbook te maken. Probeer het opnieuw."
 }

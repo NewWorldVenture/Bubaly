@@ -43,6 +43,7 @@ function travelSeason(date: string): string {
  * signatures insert as 'suggested', existing ones are left untouched.
  */
 export async function refreshPlaybookAction(): Promise<Result> {
+  const tr = await getTranslations();
   const ctx = await requireUserContext();
   const familyId = ctx.active.familyId;
   const sb = await createServer();
@@ -55,9 +56,17 @@ export async function refreshPlaybookAction(): Promise<Result> {
   // These signals are COUNTS over the whole window, so a capped read does not
   // shorten a list, it reports the wrong number. `.limit(N)` above 1,000 never
   // applied — PostgREST caps a response at db-max-rows regardless.
-  const { rows: plans } = await readAll((from, to) => sb.from('meal_plans')
+  const { rows: plans, error: plansError } = await readAll((from, to) => sb.from('meal_plans')
     .select('meal_id').eq('family_id', familyId).gte('plan_date', since.slice(0, 10))
     .order('id').range(from, to), { max: 2000 });
+  // The comment above is the reason this branch exists: readAll reports a read
+  // that stopped at the ceiling, and a count taken over a prefix is not a
+  // smaller list, it is a wrong number — which then becomes a suggestion the
+  // family is shown as something their own history supports.
+  if (plansError) {
+    console.error('[playbook] meal-plan signal read failed', plansError);
+    return { ok: false, error: tr('playbook.couldNotReadEnoughOfYourHistory') };
+  }
   const mealCounts = new Map<string, number>();
   for (const p of plans ?? []) if (p.meal_id) mealCounts.set(p.meal_id, (mealCounts.get(p.meal_id) ?? 0) + 1);
   if (mealCounts.size) {
@@ -70,9 +79,13 @@ export async function refreshPlaybookAction(): Promise<Result> {
   }
 
   // 2) Grocery staples — items added to the list again and again.
-  const { rows: groceries } = await readAll((from, to) => sb.from('grocery_items')
+  const { rows: groceries, error: groceriesError } = await readAll((from, to) => sb.from('grocery_items')
     .select('name').eq('family_id', familyId).gte('created_at', since)
     .order('id').range(from, to), { max: 4000 });
+  if (groceriesError) {
+    console.error('[playbook] grocery signal read failed', groceriesError);
+    return { ok: false, error: tr('playbook.couldNotReadEnoughOfYourHistory') };
+  }
   const groceryCounts = new Map<string, { name: string; count: number }>();
   for (const g of groceries ?? []) {
     const key = (g.name ?? '').trim().toLowerCase();
@@ -91,9 +104,13 @@ export async function refreshPlaybookAction(): Promise<Result> {
 
   // 4) Annual traditions — same-titled events recurring across multiple years.
   // Three years of events for one household — already 1,906 on seeded data.
-  const { rows: events } = await readAll((from, to) => sb.from('calendar_events')
+  const { rows: events, error: eventsError } = await readAll((from, to) => sb.from('calendar_events')
     .select('title,starts_at,recurrence').eq('family_id', familyId).gte('starts_at', since3y)
     .order('id').range(from, to), { max: 4000 });
+  if (eventsError) {
+    console.error('[playbook] tradition signal read failed', eventsError);
+    return { ok: false, error: tr('playbook.couldNotReadEnoughOfYourHistory') };
+  }
   const byTitle = new Map<string, { title: string; years: Set<number>; earliest: string; yearly: boolean }>();
   for (const e of events ?? []) {
     const key = (e.title ?? '').trim().toLowerCase();

@@ -13634,5 +13634,10 @@
   "contactSmsReply.failedDetail": "Il fornitore segnala che l’invio non è riuscito. La risposta non verrà inviata di nuovo automaticamente.",
   "actions.unknownTimeZone": "Fuso orario sconosciuto. Usa un nome come America/Chicago.",
   "errors.thatChangeWasNotSaved": "Quella modifica non è stata salvata: potresti non avere l'autorizzazione. Aggiorna e riprova.",
-  "familyModule.unknownTimeZone": "Fuso orario sconosciuto. Usa un nome come America/Chicago."
+  "familyModule.unknownTimeZone": "Fuso orario sconosciuto. Usa un nome come America/Chicago.",
+  "marketplaceInsights.couldNotLoadMarketplacePulse": "Impossibile caricare Marketplace Pulse. Aggiorna e riprova.",
+  "marketplaceQuestions.couldNotLoadTheseQuestions": "Impossibile caricare queste domande. Aggiorna e riprova.",
+  "digitalTwin.couldNotReadThisCategorysSpending": "Impossibile leggere le spese di questa categoria, quindi il controllo del budget sarebbe solo un’ipotesi.",
+  "digitalTwin.spendingUnavailable": "Spese non disponibili",
+  "playbook.couldNotReadEnoughOfYourHistory": "Impossibile leggere abbastanza cronologia per creare un playbook. Riprova."
 }

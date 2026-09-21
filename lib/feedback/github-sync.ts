@@ -61,12 +61,21 @@ export async function runGithubFeedbackSync(admin: Admin, opts?: { backfillLimit
   // `.limit(3000)` never was 3,000 — PostgREST caps at db-max-rows — so past
   // 1,000 linked ideas the sync stopped seeing the rest and would have started
   // re-opening issues it believed unlinked.
-  const { rows: linked } = await readAll((from, to) => admin
+  const { rows: linked, error: linkedError } = await readAll((from, to) => admin
     .from('feedback_ideas')
     .select('id, title, status, github_issue_number')
     .not('github_issue_number', 'is', null)
     .order('id')
     .range(from, to), { max: 3000 });
+  // The comment above names the consequence, and dropping this error is what
+  // let it happen: every row missing from `linked` is an idea the reconcile
+  // loop below believes has no issue, so a truncated read does not produce a
+  // smaller sync — it produces issues re-opened against ideas that already had
+  // one. A read this loop writes from has to be whole or not used.
+  if (linkedError) {
+    console.error('[github-sync] linked-idea read failed', linkedError);
+    return { configured: true, created, reconciled: 0, changes, errors: errors + 1 };
+  }
   const byNumber = new Map<number, { id: string; title: string; status: string; github_issue_number: number | null }>();
   const byId = new Map<string, { id: string; title: string; status: string; github_issue_number: number | null }>();
   for (const row of linked ?? []) {

@@ -13634,5 +13634,10 @@
   "contactSmsReply.failedDetail": "El proveedor indica que el envío ha fallado. La respuesta no se volverá a enviar automáticamente.",
   "actions.unknownTimeZone": "Zona horaria desconocida. Usa un nombre como America/Chicago.",
   "errors.thatChangeWasNotSaved": "Ese cambio no se guardó: puede que no tengas permiso. Actualiza e inténtalo de nuevo.",
-  "familyModule.unknownTimeZone": "Zona horaria desconocida. Usa un nombre como America/Chicago."
+  "familyModule.unknownTimeZone": "Zona horaria desconocida. Usa un nombre como America/Chicago.",
+  "marketplaceInsights.couldNotLoadMarketplacePulse": "Error al cargar Marketplace Pulse. Actualiza y vuelve a intentarlo.",
+  "marketplaceQuestions.couldNotLoadTheseQuestions": "Error al cargar estas preguntas. Actualiza y vuelve a intentarlo.",
+  "digitalTwin.couldNotReadThisCategorysSpending": "No se han podido leer los gastos de esta categoría, así que la comprobación del presupuesto sería una suposición.",
+  "digitalTwin.spendingUnavailable": "Gastos no disponibles",
+  "playbook.couldNotReadEnoughOfYourHistory": "No se ha podido leer suficiente historial para crear un playbook. Vuelve a intentarlo."
 }

@@ -9,6 +9,7 @@ import { marketplaceInsights, type InsightListing } from '@/lib/marketplace/insi
 import { KIND_LABELS, CATEGORY_LABELS, formatCents, type ListingKind, type ListingCategory } from '@/lib/marketplace/listings';
 import { getTranslations } from '@/lib/i18n/server';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Pulse · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -43,7 +44,11 @@ export default async function MarketplaceInsightsPage() {
   const sb = await createServer();
   const familyId = ctx.active.familyId;
 
-  const [{ data: listings }, { data: saves }, { data: offers }] = await settleAll([
+  const [
+    { data: listings, error: listingsError },
+    { data: saves, error: savesError },
+    { data: offers, error: offersError },
+  ] = await settleAll([
     // Every figure on this page is a count over these rows, so a capped read is
     // a wrong number rather than a short list — and `.limit(N)` above 1,000 never
     // applied, because PostgREST caps a response at db-max-rows regardless.
@@ -52,6 +57,22 @@ export default async function MarketplaceInsightsPage() {
     readAllAsQuery((from, to) => sb.from('marketplace_saves').select('listing_id').eq('family_id', familyId).order('id').range(from, to), { max: 5000 }),
     readAllAsQuery((from, to) => sb.from('marketplace_offers').select('listing_id, status').eq('family_id', familyId).order('id').range(from, to), { max: 5000 }),
   ]);
+
+  // Every figure below is a COUNT, and readAllAsQuery answers a truncated or
+  // failed read with `data: null`. Falling through to `?? []` turns that into a
+  // zero the page renders as a fact — "0 saves", "0 open offers" — which is not
+  // a smaller number than the truth, it is a different claim about the family's
+  // marketplace. The read either completed or the page says it could not.
+  const readError = listingsError ?? savesError ?? offersError;
+  if (readError) {
+    console.error('[marketplace-insights] read failed', readError);
+    return (
+      <div className="space-y-6">
+        <PageHeader title={t('marketplaceInsights.marketplacePulse')} description={t('insights.theStateOfYourFamily')} />
+        <ErrorState message={t('marketplaceInsights.couldNotLoadMarketplacePulse')} />
+      </div>
+    );
+  }
 
   const rows = (listings ?? []) as (InsightListing & { title: string })[];
   const titleOf = new Map(rows.map((l) => [l.id, l.title]));

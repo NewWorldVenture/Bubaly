@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { categorizeQuestions, type QuestionLike } from '@/lib/marketplace/questions';
 import { getTranslations } from '@/lib/i18n/server';
 import { readAllAsQuery } from '@/lib/supabase/read-all';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Questions · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -21,7 +22,7 @@ export default async function MarketplaceQuestionsPage() {
   const familyId = ctx.active.familyId;
   const meId = ctx.active.member.id;
 
-  const [{ data: questions }, { data: listings }, { data: members }] = await settleAll([
+  const [{ data: questions }, { data: listings, error: listingsError }, { data: members }] = await settleAll([
     sb.from('marketplace_questions').select('id, listing_id, asker_member, question, answer, answered_by, created_at')
       .eq('family_id', familyId).order('created_at', { ascending: false }).limit(500),
     // The title lookup every question is joined against: a capped read leaves
@@ -29,6 +30,21 @@ export default async function MarketplaceQuestionsPage() {
     readAllAsQuery((from, to) => sb.from('marketplace_listings').select('id, title, member_id').eq('family_id', familyId).order('id').range(from, to), { max: 2000 }),
     sb.from('family_members').select('id, display_name').eq('family_id', familyId),
   ]);
+
+  // The listing read decides two things, not one: which listing each question
+  // is about, and which questions are MINE (`myListingIds`). A failed read falls
+  // through to an empty map, so every question loses its title AND the page
+  // tells the owner they have none to answer — a quieter wrong answer than an
+  // error, and a worse one.
+  if (listingsError) {
+    console.error('[marketplace-questions] listing read failed', listingsError);
+    return (
+      <div className="space-y-6">
+        <PageHeader title={t('marketplaceQuestions.questions')} description={t('questions.questionsOnYourListingsAnd')} />
+        <ErrorState message={t('marketplaceQuestions.couldNotLoadTheseQuestions')} />
+      </div>
+    );
+  }
 
   const titleOf = new Map((listings ?? []).map((l) => [l.id, l.title]));
   const nameOf = (id: string | null) => (id ? (members ?? []).find((m) => m.id === id)?.display_name ?? 'Someone' : 'Someone');
