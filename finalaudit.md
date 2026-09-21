@@ -3,11 +3,11 @@
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
 - Last Updated: 2026-09-20T17:44:10.000Z
-- Total Audit Items: 14070
+- Total Audit Items: 14071
 - Not Started: 13842
 - In Progress: 192
 - Passed: 9
-- Fixed + Passed: 23
+- Fixed + Passed: 24
 - Blocked: 2
 - Failed: 2
 - Overall Completion: 0.04%
@@ -14196,6 +14196,7 @@ PRODUCTION READY: NO
 | DATA-011 | Data integrity | Eleven call sites discarded the truncation signal F-F01 raises | 🛠 FIXED + PASS | High | 5/5 (9 sanity cases inside them) | All eleven now act on it — 503 on the calendar feed and the three AI-coach routes, a refused verdict in the decision simulator, an abandoned playbook refresh, an early return before the GitHub sync's write loop, ErrorState on two marketplace pages | Three mutations red: an error removed from a destructure, from a batch element, and the helper's probe row removed | Every one of the eleven carried a comment explaining why a capped read would be wrong, then dropped the error saying it happened. The detector over-reported 54 -> 17 -> 15 -> 11 across four passes; the guard's two halves are deliberately not equally strict, and the comment says why. |
 | DATA-012 | Data integrity | "Today" was the server's day, not the family's (F-F02) | 🛠 FIXED + PASS | High | 11/11 | startOfLocalDay / startOfNextLocalDay in lib/time/zoned.ts; the kids, guardian and moments pages, both dashboards' dayBounds, and every notification's today/tomorrow copy moved onto the family's zone | Asserted in three zones from one instant, across both DST changeovers (a 23-hour and a 25-hour day), and in a zone whose clocks jump AT midnight; three mutations red; full suite green under TZ=UTC and TZ=America/Los_Angeles | 8 client files (correct — the browser IS the family) and 19 server files (not). timeLabel was wrong twice in one sentence: the day from the host's midnight and the clock with no timeZone, so 7pm read as "tomorrow at 3:00 AM". |
 | PERF-004 | Performance | The parent approval queue signed one photo per round trip (closes F-F03) | 🛠 FIXED + PASS | High | 4/4 (5 sanity cases inside them) | Paths collected, deduplicated and signed in chunks of 100 through createSignedUrls; the per-entry error is read so an unsignable object is left out rather than rendering an empty src; a signing outage costs the photos, not the queue | Restoring the loop turns the guard red at app/(app)/missions/page.tsx:106; the existing missions read-boundary test still passes | A loop inside a loop around `await createSignedUrl` — up to four photos per submission across the whole queue, in series. The batch form was already in the codebase and already used correctly one directory away. |
+| A11Y-001 | Accessibility | The photo lightbox stranded keyboard users (closes F-D01) | 🛠 FIXED + PASS | High | 7/7 | role=dialog + aria-modal + the shared useDialogBehavior hook on the viewer; tiles made focusable with Enter/Space; Arrow Left/Right between photos | Three mutations red (the hook removed; the tiles returned to mouse-only; a new overlay declaring aria-modal without the hook); 13 declare it and 13 implement it, and the sets are identical | The tiles were div onClick, so a keyboard could not reach the viewer at all — a trap you cannot enter. The existing a11y guard named four overlays by hand, so this one was never looked at: enumerated with no scan, the third shape of this repo's signature defect. |
 | TEST-009 | Testing | Probe fixtures left in the seeded anchor family | 🛠 FIXED + PASS | Medium | 6/6 | Both probes now clear their fixtures at the end as well as the start | Each passes twice; suite 47/47 on both databases; anchor family holds only its seeded members | "Race Child" and "Probe Kid" had been living in the 71,192-row anchor family, the latter for a week. Found by the AUTHZ-006 sweep counting a member no fixture of its own had created. |
 | DATA-010 | DATA | Resource lifecycle through the real API | ✅ PASS | High | 8/8 | None required | CREATE/READ/UPDATE/VERIFY/DELETE/VERIFY all pass as a real member; a child's refused write returns HTTP 204 without Prefer, 200 [] with it, dosage unchanged | Shows at the HTTP layer why .select() + wroteNoRows was needed: 204 No Content is a success for a write that changed nothing. |
 | SEC-008 | SEC | Realtime broadcast isolation and publication drift | ✅ PASS | Critical | 5/5 | None required | Publication and code agree exactly (61 = 61, empty diff both ways); a live socket received its own family's row and not another's | The first attempt used an unpublished table and received nothing — a run that would have read as a clean refusal while proving nothing. Controls decided it. |
@@ -22029,6 +22030,44 @@ A second guard noticed the change without being asked. `tests/silent-empty-read-
 `tests/signing-media-is-one-round-trip.test.ts` makes it permanent. It reports a singular `createSignedUrl` whose enclosing code will run it once per item — a loop opening above it at a shallower indent — and never reports the batch form or a single-object call, of which three remain and are correct (one document at a time in `admin/actions.ts`, `lib/services/documents/index.ts` and `lib/storage/documents.ts`). Restoring the loop turns it red at `app/(app)/missions/page.tsx:106`.
 
 
+### A11Y-001 — The photo lightbox stranded keyboard users (closes F-D01)
+
+Status: 🛠 FIXED + PASS
+Severity: High
+Route(s), components, actions, tables and providers: `components/modules/photos-module.tsx`, `lib/a11y/use-dialog-behavior.ts`, `tests/aria-modal-means-what-it-says.test.ts`
+
+#### Expected Behavior
+The photo viewer can be opened from a keyboard, announces itself as a modal dialog, keeps focus inside itself, closes on Escape, restores focus to the tile that opened it, and offers a keyboard way between photos.
+
+#### Test Cases
+- [x] The lightbox is a labelled `role="dialog"` with `aria-modal="true"`
+- [x] It uses the shared behaviour hook, with the **real** open condition rather than a literal
+- [x] Grid and list tiles are focusable and answer Enter and Space
+- [x] Arrow Left / Arrow Right move between photos
+- [x] Every component declaring `aria-modal="true"` uses the hook — scanned, both directions
+- [x] Comment bodies, including JSX comments, blanked so prose is not code
+- [x] Non-vacuity: more than eight overlays found on each side
+- [x] Mutation: the hook removed → red on the equivalence and on the lightbox case
+- [x] Mutation: the tiles returned to mouse-only → red
+- [x] Mutation: a new overlay declaring `aria-modal` without the hook → red, naming it
+
+#### Issues Found
+The lightbox was a `<div className="fixed inset-0 …" onClick={close}>` with no `role`, no `aria-modal`, no Escape handler, no focus trap and no focus restore — and the tiles that opened it were `<div onClick>`, so **a keyboard could not reach the viewer at all**. That is the first half of the finding and the more complete failure: a trap you cannot enter is not an improvement over one you cannot leave.
+
+The behaviour it needed already existed. `lib/a11y/use-dialog-behavior.ts` was extracted precisely because `components/ui/modal.tsx` coupled the dialog behaviour to its own chrome, and its docstring records that **eleven overlays declared `aria-modal` while implementing none of it**. The lightbox is the case that extraction was for — a full-bleed viewer with its own controls, which could never take Modal's title bar and bottom-sheet layout.
+
+**And the guard that should have covered it was an enumeration.** `tests/mobile-overlay-dialog-a11y.test.ts` names four overlays by hand — exit intent, app lock, rules editor, contact editor — and checks those. Anything not on the list was never looked at. That is the third shape of this repo's signature defect, *enumerated with no scan*, and it is why a full-screen viewer with no dialog semantics sat in the tree while an a11y guard passed on every run.
+
+#### Fixes Applied
+`useDialogBehavior(lightboxRef, lightboxIdx !== null, { onClose })`, plus `role="dialog"`, `aria-modal="true"`, an `aria-label` from the caption, and `tabIndex={-1}` on the panel. The open condition is the real one, not `true`: the panel is only rendered while open, and the hook's own docstring warns that an effect keyed on a literal runs once on mount, finds no dialog and never re-runs.
+
+The tiles became `role="button"` with `tabIndex={0}` and an Enter/Space handler rather than `<button>` elements, because each tile carries hover controls of its own and nesting buttons is invalid HTML. Arrow Left and Arrow Right move between photos, clamped at both ends — a viewer that traps focus and then offers no keyboard path to the next photo has swapped one dead end for another.
+
+**The guard is now a scan, and an equivalence in both directions.** `tests/aria-modal-means-what-it-says.test.ts` asserts that everything declaring `aria-modal="true"` uses the hook, *and* that everything using the hook declares it — because a trapped, Escape-closable overlay that never says `aria-modal` leaves a screen reader announcing a background it can no longer reach. Measured: **13 declare it, 13 implement it, and the two sets are identical.** A file-wide scan was tried first and reported 32 "missing" overlays, almost all of them dropdown dismiss-catchers (`fixed inset-0 z-10` with an onClick) and layout containers — so the narrower, exactly checkable property is the one asserted, rather than a number that would need a page of exceptions.
+
+**And an allowlist retired itself.** `tests/consent-preference-centre-focus.test.ts` carried a list of eleven components permitted to hand-roll `aria-modal`, written when only one of them called `.focus()` at all, with the note *"this may only shrink; adding to it is the finding."* The lightbox failed it, and the right answer was not a twelfth entry: every one of those eleven now delegates to the hook, so the list's premise is spent. Its two cases are replaced by the property they were standing in for — *does `aria-modal` mean anything here* — which cannot go stale the way a membership test can, plus a non-vacuity assertion on the walk itself. A new overlay declaring the attribute and delegating nothing turns it red by name.
+
+
 ### ADMIN-001 — Every admin server action reaches a super-admin gate
 
 Status: ✅ PASS
@@ -22745,7 +22784,7 @@ Status: ✅ PASS — `npm run lint` reports the four known baseline warnings and
 ## Automated Tests
 Status: ✅ PASS — 15,287 tests across 1,215 files pass, zero failures and zero skips, on Node 24.15.0 at head 92340315 (160s).
 
-Later in this cycle, on Node 24.21.0: **16,776 tests across 1,315 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **51/51 boundary probes with 0 skipped**. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), `tests/a-capped-read-is-not-a-silent-one.test.ts` (DATA-011, 5), `tests/a-family-day-starts-where-the-family-is.test.ts` and `tests/a-server-day-is-the-familys-day.test.ts` (DATA-012, 11), `docs/audit/vaults-require-second-factor-check.sql` (AUTHZ-008), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
+Later in this cycle, on Node 24.21.0: **16,783 tests across 1,316 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **51/51 boundary probes with 0 skipped**. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), `tests/a-capped-read-is-not-a-silent-one.test.ts` (DATA-011, 5), `tests/a-family-day-starts-where-the-family-is.test.ts` and `tests/a-server-day-is-the-familys-day.test.ts` (DATA-012, 11), `docs/audit/vaults-require-second-factor-check.sql` (AUTHZ-008), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
 
 Five existing guards had to be repaired rather than merely re-run, and that is itself a finding recorded under SEC-010: `guardian-callback-security`, `middleware-public-api-boundary`, `public-pages-reachable`, `health-feature-secrets` and `public-webhook-signature-boundary` each identified a control by the SPELLING of the function that implemented it. Moving identical verification one call away turned all five red while nothing about the behaviour changed — which is the same reason `public-webhook-signature-boundary` stayed green through eight signature checks that only ran in a production build.
 
@@ -23093,7 +23132,7 @@ The invite toast and two Home widgets remain.
 | F-F01 | A caller-supplied `max` truncates a money read and reports success; reconciliation renders "Everything reconciles" from a prefix | FIXED — the helper raises it (the reconciliation page consumes it); DATA-011 then found and fixed the ELEVEN call sites that were discarding the signal, and holds them with a permanent guard |
 | F-F02 | F-017's timezone bug still live on eleven server-rendered surfaces, including the kids page | FIXED on the surfaces that show a day — see DATA-012. 19 server files measured, 5 corrected (kids, guardian, moments, both dashboards) plus every notification's today/tomorrow copy; the remaining 14 are declared with a reason each and the declaration fails in both directions |
 | F-F03 | `/missions` issues up to 240 sequential storage round trips on the parent approval queue | FIXED — see PERF-004: one batched `createSignedUrls` per hundred paths, with a guard that reports any signing call inside a loop |
-| F-D01 | The photo lightbox strands keyboard users: no `role="dialog"`, no Escape, no focus trap | OPEN |
+| F-D01 | The photo lightbox strands keyboard users: no `role="dialog"`, no Escape, no focus trap | FIXED — see A11Y-001: dialog semantics plus the shared behaviour hook, keyboard-openable tiles and arrow-key navigation, held by a scan asserting aria-modal ⟺ useDialogBehavior in both directions |
 | F-D02 / F-D03 | 55 labels detached from their control; 65 `<select>` with no accessible name | OPEN |
 | F21 | A child could grant themselves a reward | Half fixed and live, half awaiting the operator |
 | F1, F9, F10, F15, F16, F18, F20 | sitemap dead URLs; whole i18n catalogue per page; seeded records shown as real customer stories; Autopilot running for every family; paid features enforced by a padlock; ungated endpoints; a child clearing the chore board | **all fixed** |

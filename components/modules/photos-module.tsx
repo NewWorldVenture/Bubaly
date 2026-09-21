@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
+import { useDialogBehavior } from '@/lib/a11y/use-dialog-behavior';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
 import { FAMILY_MEDIA_MAX_LABEL, partitionBySize, familyMediaPath } from '@/lib/storage/family-media';
@@ -64,6 +65,10 @@ export function PhotosModule() {
 
   const [activeAlbum, setActiveAlbum] = useState<Album | null>(null);
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
+  const lightboxRef = useRef<HTMLDivElement>(null);
+  // The real condition, not `true`: the panel is only rendered while open,
+  // so the effect has to re-run when it appears (see the hook's own note).
+  useDialogBehavior(lightboxRef, lightboxIdx !== null, { onClose: () => setLightboxIdx(null) });
   const [newAlbumOpen, setNewAlbumOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
@@ -323,8 +328,18 @@ export function PhotosModule() {
               {photos.map((photo, idx) => {
                 const isVideo = photo.media_type === 'video';
                 return (
-                <div key={photo.id} className="group relative mb-3 break-inside-avoid overflow-hidden rounded-xl border border-border/40"
-                  onClick={() => setLightboxIdx(idx)}>
+                // A tile that only answers a mouse cannot open the viewer at
+                // all, which is the first half of "strands keyboard users"
+                // (F-D01). `role="button"` + tabIndex + Enter/Space rather than
+                // a <button>, because the tile carries hover controls of its
+                // own and nesting buttons is invalid.
+                <div key={photo.id} className="group relative mb-3 break-inside-avoid overflow-hidden rounded-xl border border-border/40 focus-ring"
+                  role="button" tabIndex={0}
+                  aria-label={photo.caption?.trim() || tr('photosModule.photo')}
+                  onClick={() => setLightboxIdx(idx)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setLightboxIdx(idx); }
+                  }}>
                   {isVideo ? (
                     <div className="flex aspect-video w-full cursor-pointer items-center justify-center bg-black/80">
                       <Play className="h-10 w-10 text-white/70" />
@@ -372,8 +387,14 @@ export function PhotosModule() {
             /* List */
             <div className="overflow-hidden rounded-2xl border border-border">
               {photos.map((photo, idx) => (
-                <div key={photo.id} onClick={() => setLightboxIdx(idx)}
-                  className="group flex cursor-pointer items-center gap-4 border-b border-border/50 px-4 py-3 hover:bg-elevated/30 transition last:border-0">
+                <div key={photo.id}
+                  role="button" tabIndex={0}
+                  aria-label={photo.caption?.trim() || tr('photosModule.photo')}
+                  onClick={() => setLightboxIdx(idx)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setLightboxIdx(idx); }
+                  }}
+                  className="group flex cursor-pointer items-center gap-4 border-b border-border/50 px-4 py-3 hover:bg-elevated/30 transition last:border-0 focus-ring">
                   {photo.media_type === 'video' ? (
                     <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-black/80">
                       <Play className="h-5 w-5 text-white/70" />
@@ -400,7 +421,25 @@ export function PhotosModule() {
 
       {/* ── Lightbox ──────────────────────────────────────────── */}
       {lightboxIdx !== null && photos[lightboxIdx] && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 pt-[var(--safe-top)] pb-[var(--safe-bottom)]"
+        // A real dialog, not a div that looks like one (F-D01). The behaviour —
+        // focus into the panel, Tab trapped inside it, Escape to close, the
+        // background scroll-locked, focus returned to the tile that opened it —
+        // comes from the shared hook that components/ui/modal.tsx uses. The
+        // lightbox could never take Modal's chrome (it is a full-bleed viewer
+        // with its own controls), which is exactly the case lib/a11y/use-dialog
+        // -behavior.ts was extracted for.
+        //
+        // Arrow keys move between photos, because a viewer that traps focus and
+        // then offers no keyboard way to reach the next photo has swapped one
+        // dead end for another.
+        <div ref={lightboxRef}
+          role="dialog" aria-modal="true" tabIndex={-1}
+          aria-label={photos[lightboxIdx].caption?.trim() || tr('photosModule.photo')}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 pt-[var(--safe-top)] pb-[var(--safe-bottom)] outline-none"
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowLeft') { e.preventDefault(); setLightboxIdx((i) => Math.max(0, (i ?? 0) - 1)); }
+            if (e.key === 'ArrowRight') { e.preventDefault(); setLightboxIdx((i) => Math.min(photos.length - 1, (i ?? 0) + 1)); }
+          }}
           onClick={() => setLightboxIdx(null)}>
           {/* Nav */}
           {lightboxIdx > 0 && (
