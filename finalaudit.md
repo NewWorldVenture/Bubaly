@@ -2,12 +2,12 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-22T02:52:00.000Z
-- Total Audit Items: 14081
+- Last Updated: 2026-09-22T03:15:00.000Z
+- Total Audit Items: 14082
 - Not Started: 13842
 - In Progress: 192
 - Passed: 11
-- Fixed + Passed: 32
+- Fixed + Passed: 33
 - Blocked: 2
 - Failed: 2
 - Overall Completion: 0.04%
@@ -14198,6 +14198,7 @@ PRODUCTION READY: NO
 | DATA-014 | Data integrity | Two billing upserts named a conflict target that could never fire | 🛠 FIXED + PASS | High | 14/14 + 1 runtime | lib/billing/customer-ref.ts is now the only writer of `billing_customers`; both routes and the Stripe webhook go through it and it names `family_id`, the constraint that exists | Measured against live PostgREST: 1st bare upsert ok, 2nd 23505 on billing_customers_family_id_key, same write with onConflict ok and updating; after the fix all four sequences pass including a concurrent double-click; 8 mutations red | The scan covers all 136 upsert call sites and derives 491 primary keys from the migrations, agreeing with the live catalogue on every one. Two of my own rules were wrong first: a helper assertion satisfied by a comment, and a named-target rule that flagged correct code in lib/server/profiles.ts. |
 | DATA-015 | Data integrity | Seven paged reads sorted by a key that does not decide the order | 🛠 FIXED + PASS | Medium | 6/6 | Every paged read now ends on its table's primary key: the guardian history page, the AI activity page, the benchmarks sweep, the abandoned-checkout cron, the blog index, and the subscriptions and family_members sweeps behind the CRM customer list | Reproduced on live Postgres: ten rows sharing one created_at, one UPDATE to an unrelated column, and row-03 moved from page 1 to page 2 while row-06 moved the other way — a reader sees one twice and the other never; with `, id desc` appended, zero rows moved; 4 mutations red | 106 `.range(` sites, 103 with a statically resolvable table; 100 of those already had a total order and 3 had none, and 4 more were total only through a unique column rather than the primary key. The tiebreaker is the primary key on purpose: three sites were total only through `uq_subscriptions_family`, which migration 0285 creates and which is PENDING PRODUCTION. |
 | PRIV-001 | Privacy | The AI context deny-list was checked one file deep | ✅ PASS | Medium | 6/6 | No product change — every one of the nine transitive reaches is safe today. A ratchet now pins the (slice, sensitive table) pairs, so a new one fails with the file that reads it, and holds the three projections the safety actually rests on | Six of fourteen slices reach nine deny-listed tables through their imports; each is either projected narrowly before the model sees it or never called. 4 mutations red, including a slice starting to call the emergency-contacts reader that is already in its closure | The existing guard reads the slice FILE, so a slice calling a service that reads a denied table stays green. No leak found; `select('*')` appears in three services but every consumer projects. My own measure overstates reach — an import closure is not a call graph. |
+| SEC-014 | Security | An open redirect in the sanitizer written to prevent one | 🛠 FIXED + PASS | High | 10/10 | `safeInternalRedirect` now judges the value it RETURNS by the same rule as the value it was given; `isSafeReturnPath` shares that rule instead of keeping a second copy, and requires the normalized form to be same-origin too | `/login?redirect=/..//evil.com` -> `resolveAuthSelection().next === '//evil.com'` -> `router.push` -> `https://evil.com/`, after a successful sign-in; 27 attack strings now produce 0 escapes and 6 legitimate paths are unchanged; 4 mutations red, the vulnerability itself caught by 5 assertions | The raw value was harmless — a browser resolving `/..//evil.com` against the origin keeps the origin. The sanitizer's own normalization created the dangerous string. Three other sinks were saved only by taking the value through the sanitizer twice. |
 | PERF-004 | Performance | The parent approval queue signed one photo per round trip (closes F-F03) | 🛠 FIXED + PASS | High | 4/4 (5 sanity cases inside them) | Paths collected, deduplicated and signed in chunks of 100 through createSignedUrls; the per-entry error is read so an unsignable object is left out rather than rendering an empty src; a signing outage costs the photos, not the queue | Restoring the loop turns the guard red at app/(app)/missions/page.tsx:106; the existing missions read-boundary test still passes | A loop inside a loop around `await createSignedUrl` — up to four photos per submission across the whole queue, in series. The batch form was already in the codebase and already used correctly one directory away. |
 | A11Y-001 | Accessibility | The photo lightbox stranded keyboard users (closes F-D01) | 🛠 FIXED + PASS | High | 7/7 | role=dialog + aria-modal + the shared useDialogBehavior hook on the viewer; tiles made focusable with Enter/Space; Arrow Left/Right between photos | Three mutations red (the hook removed; the tiles returned to mouse-only; a new overlay declaring aria-modal without the hook); 13 declare it and 13 implement it, and the sets are identical | The tiles were div onClick, so a keyboard could not reach the viewer at all — a trap you cannot enter. The existing a11y guard named four overlays by hand, so this one was never looked at: enumerated with no scan, the third shape of this repo's signature defect. |
 | A11Y-002 | Accessibility | The lint config enabled none of the rules that would have caught it (F-D10/F-D02/F-D03) | 🛠 FIXED + PASS (F-D03 ratcheted, not fixed) | Medium | 4/4 (7 sanity cases inside them) | label-has-associated-control enabled at depth 4 — measured first: at the default depth its only three findings are correct markup one level too deep; control-has-associated-label left OFF because 561 findings and the first sample is a correctly labelled input | next lint clean but for the three pre-existing react-hooks warnings; 144 selects scanned, 71 unnamed, pinned by a ratchet whose scan is asserted non-vacuous | next/core-web-vitals carries only a subset of jsx-a11y, which is exactly what F-D10 said. A rule whose findings are mostly wrong is one everyone learns to skip, so the unnamed selects are counted by a check that cannot be satisfied by nesting depth. |
@@ -23073,7 +23074,7 @@ Status: ✅ PASS — `npm run lint` reports the four known baseline warnings and
 ## Automated Tests
 Status: ✅ PASS — 15,287 tests across 1,215 files pass, zero failures and zero skips, on Node 24.15.0 at head 92340315 (160s).
 
-Later in this cycle, on Node 24.21.0: **16,847 tests across 1,324 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **52/52 boundary probes with 0 skipped**.
+Later in this cycle, on Node 24.21.0: **16,857 tests across 1,325 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **52/52 boundary probes with 0 skipped**.
 
 One type error was committed and is worth recording rather than quietly fixed: `tests/a-fan-out-has-a-width-somebody-chose.test.ts` used `source: 'test'` where `DriveTimeEstimate.source` is a three-value union. `vitest` does not typecheck, so it passed there; `tsc --noEmit` was run before the test file was written and not after, and the commit went out red. The next `tsc` caught it. The lesson is the ordering: the typecheck belongs after the last file is written, not after the last file one happened to be thinking about. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), `tests/a-capped-read-is-not-a-silent-one.test.ts` (DATA-011, 5), `tests/a-family-day-starts-where-the-family-is.test.ts` and `tests/a-server-day-is-the-familys-day.test.ts` (DATA-012, 11), `docs/audit/vaults-require-second-factor-check.sql` (AUTHZ-008), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
 
@@ -28240,6 +28241,125 @@ in the file but not on any single line.
   24.21.0. `tsc --noEmit` exits 0; the new file lints clean.
 
 No product change and no migration. Recorded as ✅ PASS, not as a fix.
+
+# Pass R — an open redirect inside the function written to prevent one (SEC-014)
+
+## The finding
+
+`lib/auth/redirect.ts` exists to answer one question: is this a safe
+same-origin path? It validated the string it was **given** and returned a
+different string it never validated.
+
+```
+safeInternalRedirect('/..//evil.com', '/home')   ->  '//evil.com'
+new URL('//evil.com', 'https://app.bubaly.com/login').href
+                                                 ->  'https://evil.com/'
+```
+
+`/..//evil.com` passes every input test: one leading slash, no backslash, no
+encoded separator. `new URL()` then resolves it to the pathname `//evil.com`,
+because `..` cannot climb above the root and simply vanishes. The parsed URL's
+origin is still the sentinel base, so the origin check passes too. Returning
+`pathname + search + hash` hands the caller a protocol-relative URL.
+
+The cruel part: **the raw value was harmless.** A browser resolving
+`/..//evil.com` against `https://app.bubaly.com` keeps the origin — the leading
+slash anchors it, and `..` cannot reach the authority. It was the sanitizer's
+own normalization that manufactured the dangerous string. The stricter of the
+two functions in this codebase was the unsafe one, precisely because it
+normalized; the looser one was safe because it returned what it was handed.
+
+## Reached, not theorised
+
+```
+/login?redirect=/..//evil.com
+  -> resolveAuthSelection(params).next === '//evil.com'         (one sanitizer pass)
+  -> components/auth/login-form.tsx:116
+       const destination = redirectDest || (await resolveLandingPathAction());
+  -> router.push('//evil.com')
+  -> https://evil.com/
+```
+
+After a **successful sign-in on the genuine domain**, which is the whole value
+of the primitive: the victim has just proven the site is real, and is then handed
+to a page that can ask them to sign in again.
+
+The other three sinks — `callback-completion`, `phone-auth`,
+`native-bootstrap` — took their value through the sanitizer **twice**, and the
+second pass rejected `//evil.com` on input. They were saved by a round trip, not
+by a rule. `login-form` was the one that used the value after a single pass.
+
+## Measurement
+
+27 attack strings, each judged by where a browser actually goes rather than by
+inspection:
+
+| | before | after |
+|---|---|---|
+| strings `safeInternalRedirect` returned that leave the origin | **3** (`/..//evil.com`, `/a/..//evil.com`, `/..///evil.com`, and every `/x/../..//` variant) | 0 |
+| legitimate application paths still returned unchanged | 6/6 | 6/6 |
+| the two sanitizers' verdicts disagreeing | 8 of 18 | 0 of 27 |
+
+## The fix
+
+One predicate, `isSameOriginPath`, applied to the value coming in **and** the
+value going out. The bug existed because those two were judged by different
+code — one an explicit list of tests, the other an implicit assumption that
+normalization preserves safety.
+
+`isSafeReturnPath` in `lib/auth/mfa.ts` was the second copy of the rule. It now
+imports the shared predicate and additionally requires the value's normalized
+form to be same-origin. It accepted `/..//evil.com` before this change, and that
+was genuinely safe — it returns the raw value, and the raw value keeps the
+origin. It stops being safe the moment anything between it and the `Location`
+header normalizes, which is exactly how SEC-014 happened one module over. The
+shape is closed, not the instance.
+
+## What the scan found on the way
+
+The guard that would have caught this asks: which navigations take a **binding**
+rather than a literal? Nineteen, across `app/`, `components/` and `lib/`. Each
+was traced, and the provenance of each is now recorded in the test, so a new
+navigation to an unaudited value fails rather than shipping:
+
+- static navigation catalogues (`NAV_CATALOG`, `NAV_ITEMS`, `HREF[...]`),
+- server actions (`resolveLandingPathAction`),
+- sanitizer output (four sites),
+- the provider authorization URL in the calendar OAuth flow, deliberately
+  external,
+- and `data.redirect`, which **three** components push straight into
+  `router.push`.
+
+That last one was the lead worth chasing: an AI-produced navigation target would
+be a prompt-injection sink, and the context slices already fence their inputs as
+untrusted. Every producer turned out to be a server-built template —
+`runPagePath(id)` and `purchaseApprovalPath(id)`, both `encodeURIComponent` — so
+`data.redirect` always begins `/dashboard/`. Verified healthy, and now asserted:
+a mutation that sets `redirect: outcome.summary` fails.
+
+## A guard elsewhere earned its keep
+
+Adding the shared import to `lib/auth/mfa.ts` grew a module graph that
+`tests/e2e/signout-form-boundaries.spec.ts` pins, and
+`tests/medications-fixture-module-graph.test.ts` failed with
+`lib/auth/redirect.ts (imported by lib/auth/mfa.ts)`. That is a guard reporting
+a true consequence of a real change, with the fix in its own message. The module
+was added to the fixture's source list.
+
+## Verification
+
+- **4 mutations, all red.** Removing the output check — the vulnerability
+  itself — fails **five** assertions independently, including the login-form
+  chain and the step-up link. Restoring a second copy of the rule in `mfa.ts`
+  fails three, among them the agreement test. A new navigation to an unrecorded
+  value is named with file and line. `redirect: outcome.summary` in the AI
+  intake is rejected.
+- `tests/a-sanitizer-returns-what-it-checked.test.ts` — 10 cases.
+- **16,857 tests across 1,325 files, zero failures and zero skips**, on Node
+  24.21.0, under `TZ=UTC` and again under `TZ=America/Los_Angeles`.
+  `tsc --noEmit` exits 0; the changed files lint clean.
+
+No migration.
 
 # Final Regression
 

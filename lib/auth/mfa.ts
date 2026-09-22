@@ -9,6 +9,11 @@
 // all agree on what "enrolled" and "needs a code" mean — and so the decisions
 // can be tested without a browser or a database.
 
+// The one exception to "no client or server import" above: lib/auth/redirect
+// is pure too, and sharing its same-origin rule is the point — see
+// isSafeReturnPath.
+import { isSameOriginPath, safeInternalRedirect } from '@/lib/auth/redirect';
+
 export type FactorStatus = 'verified' | 'unverified';
 
 /** The subset of Supabase's `Factor` the product reads. */
@@ -108,11 +113,24 @@ export function needsStepUp(input: { role: string | null | undefined; assurance:
  * A return path the step-up page may send a person back to: same-origin,
  * absolute, and not a protocol-relative `//evil.example` that `redirect()`
  * would happily follow off-site.
+ *
+ * The same-origin half is `isSameOriginPath` rather than a second copy of the
+ * rule. It used to be a copy, and the two disagreed on eight of eighteen
+ * attack strings — this one accepted `/a\\b`, `/%2f%2fevil.com` and
+ * `/.\\/evil.com`, which the other rejected. None of those actually left the
+ * origin here, because this function returns the value it was given rather
+ * than a normalized one, so the divergence was latent rather than exploited.
+ * It is still the shape that produced SEC-014 one module over.
  */
 export function isSafeReturnPath(next: string | null | undefined): next is string {
   if (!next || typeof next !== 'string') return false;
-  if (!next.startsWith('/')) return false;
-  if (next.startsWith('//') || next.startsWith('/\\')) return false;
+  // Same-origin as given AND as normalized. `/..//evil.com` satisfies the first
+  // and normalizes to `//evil.com`; this function hands back the raw value, so
+  // that is safe here TODAY — a browser resolving `/..//evil.com` against the
+  // origin keeps the origin. It stops being safe the moment anything between
+  // here and the Location header normalizes, which is exactly how SEC-014
+  // happened. Requiring both closes the shape rather than the instance.
+  if (!isSameOriginPath(next) || !safeInternalRedirect(next, '')) return false;
   if (/[\r\n]/.test(next)) return false;
   // The step-up page itself is never a destination; that would loop.
   if (next === STEP_UP_ROUTE || next.startsWith(`${STEP_UP_ROUTE}?`)) return false;

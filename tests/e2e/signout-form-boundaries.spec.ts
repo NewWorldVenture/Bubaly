@@ -11,7 +11,7 @@ const sources = Object.fromEntries([
   'components/auth/sign-out-form.tsx', 'components/auth/sign-out-button.tsx', 'components/auth/step-up-form.tsx',
   'components/settings/privacy-center.tsx', 'components/app/account-closed-gate.tsx', 'components/app/app-lock-gate.tsx',
   'components/app/trial-paywall-gate.tsx', 'components/ui/modal.tsx', 'components/ui/button.tsx', 'components/ui/card.tsx',
-  'lib/hooks/use-lock-body-scroll.ts', 'lib/auth/mfa.ts', 'lib/constants/roles.ts', 'lib/security/app-lock.ts',
+  'lib/hooks/use-lock-body-scroll.ts', 'lib/auth/mfa.ts', 'lib/auth/redirect.ts', 'lib/constants/roles.ts', 'lib/security/app-lock.ts',
   'lib/a11y/use-dialog-behavior.ts', 'lib/supabase/settle.ts',
 ].map(file => [`@/${file.replace(/\.tsx?$/, '')}`, ts.transpileModule(fs.readFileSync(file, 'utf8'), {
   compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React },
