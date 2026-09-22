@@ -2,11 +2,11 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-22T02:45:00.000Z
-- Total Audit Items: 14080
+- Last Updated: 2026-09-22T02:52:00.000Z
+- Total Audit Items: 14081
 - Not Started: 13842
 - In Progress: 192
-- Passed: 10
+- Passed: 11
 - Fixed + Passed: 32
 - Blocked: 2
 - Failed: 2
@@ -14197,6 +14197,7 @@ PRODUCTION READY: NO
 | DATA-012 | Data integrity | "Today" was the server's day, not the family's (F-F02) | 🛠 FIXED + PASS | High | 11/11 | startOfLocalDay / startOfNextLocalDay in lib/time/zoned.ts; the kids, guardian and moments pages, both dashboards' dayBounds, and every notification's today/tomorrow copy moved onto the family's zone | Asserted in three zones from one instant, across both DST changeovers (a 23-hour and a 25-hour day), and in a zone whose clocks jump AT midnight; three mutations red; full suite green under TZ=UTC and TZ=America/Los_Angeles | 8 client files (correct — the browser IS the family) and 19 server files (not). timeLabel was wrong twice in one sentence: the day from the host's midnight and the clock with no timeZone, so 7pm read as "tomorrow at 3:00 AM". |
 | DATA-014 | Data integrity | Two billing upserts named a conflict target that could never fire | 🛠 FIXED + PASS | High | 14/14 + 1 runtime | lib/billing/customer-ref.ts is now the only writer of `billing_customers`; both routes and the Stripe webhook go through it and it names `family_id`, the constraint that exists | Measured against live PostgREST: 1st bare upsert ok, 2nd 23505 on billing_customers_family_id_key, same write with onConflict ok and updating; after the fix all four sequences pass including a concurrent double-click; 8 mutations red | The scan covers all 136 upsert call sites and derives 491 primary keys from the migrations, agreeing with the live catalogue on every one. Two of my own rules were wrong first: a helper assertion satisfied by a comment, and a named-target rule that flagged correct code in lib/server/profiles.ts. |
 | DATA-015 | Data integrity | Seven paged reads sorted by a key that does not decide the order | 🛠 FIXED + PASS | Medium | 6/6 | Every paged read now ends on its table's primary key: the guardian history page, the AI activity page, the benchmarks sweep, the abandoned-checkout cron, the blog index, and the subscriptions and family_members sweeps behind the CRM customer list | Reproduced on live Postgres: ten rows sharing one created_at, one UPDATE to an unrelated column, and row-03 moved from page 1 to page 2 while row-06 moved the other way — a reader sees one twice and the other never; with `, id desc` appended, zero rows moved; 4 mutations red | 106 `.range(` sites, 103 with a statically resolvable table; 100 of those already had a total order and 3 had none, and 4 more were total only through a unique column rather than the primary key. The tiebreaker is the primary key on purpose: three sites were total only through `uq_subscriptions_family`, which migration 0285 creates and which is PENDING PRODUCTION. |
+| PRIV-001 | Privacy | The AI context deny-list was checked one file deep | ✅ PASS | Medium | 6/6 | No product change — every one of the nine transitive reaches is safe today. A ratchet now pins the (slice, sensitive table) pairs, so a new one fails with the file that reads it, and holds the three projections the safety actually rests on | Six of fourteen slices reach nine deny-listed tables through their imports; each is either projected narrowly before the model sees it or never called. 4 mutations red, including a slice starting to call the emergency-contacts reader that is already in its closure | The existing guard reads the slice FILE, so a slice calling a service that reads a denied table stays green. No leak found; `select('*')` appears in three services but every consumer projects. My own measure overstates reach — an import closure is not a call graph. |
 | PERF-004 | Performance | The parent approval queue signed one photo per round trip (closes F-F03) | 🛠 FIXED + PASS | High | 4/4 (5 sanity cases inside them) | Paths collected, deduplicated and signed in chunks of 100 through createSignedUrls; the per-entry error is read so an unsignable object is left out rather than rendering an empty src; a signing outage costs the photos, not the queue | Restoring the loop turns the guard red at app/(app)/missions/page.tsx:106; the existing missions read-boundary test still passes | A loop inside a loop around `await createSignedUrl` — up to four photos per submission across the whole queue, in series. The batch form was already in the codebase and already used correctly one directory away. |
 | A11Y-001 | Accessibility | The photo lightbox stranded keyboard users (closes F-D01) | 🛠 FIXED + PASS | High | 7/7 | role=dialog + aria-modal + the shared useDialogBehavior hook on the viewer; tiles made focusable with Enter/Space; Arrow Left/Right between photos | Three mutations red (the hook removed; the tiles returned to mouse-only; a new overlay declaring aria-modal without the hook); 13 declare it and 13 implement it, and the sets are identical | The tiles were div onClick, so a keyboard could not reach the viewer at all — a trap you cannot enter. The existing a11y guard named four overlays by hand, so this one was never looked at: enumerated with no scan, the third shape of this repo's signature defect. |
 | A11Y-002 | Accessibility | The lint config enabled none of the rules that would have caught it (F-D10/F-D02/F-D03) | 🛠 FIXED + PASS (F-D03 ratcheted, not fixed) | Medium | 4/4 (7 sanity cases inside them) | label-has-associated-control enabled at depth 4 — measured first: at the default depth its only three findings are correct markup one level too deep; control-has-associated-label left OFF because 561 findings and the first sample is a correctly labelled input | next lint clean but for the three pre-existing react-hooks warnings; 144 selects scanned, 71 unnamed, pinned by a ratchet whose scan is asserted non-vacuous | next/core-web-vitals carries only a subset of jsx-a11y, which is exactly what F-D10 said. A rule whose findings are mostly wrong is one everyone learns to skip, so the unnamed selects are counted by a check that cannot be satisfied by nesting depth. |
@@ -23072,7 +23073,7 @@ Status: ✅ PASS — `npm run lint` reports the four known baseline warnings and
 ## Automated Tests
 Status: ✅ PASS — 15,287 tests across 1,215 files pass, zero failures and zero skips, on Node 24.15.0 at head 92340315 (160s).
 
-Later in this cycle, on Node 24.21.0: **16,841 tests across 1,323 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **52/52 boundary probes with 0 skipped**.
+Later in this cycle, on Node 24.21.0: **16,847 tests across 1,324 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **52/52 boundary probes with 0 skipped**.
 
 One type error was committed and is worth recording rather than quietly fixed: `tests/a-fan-out-has-a-width-somebody-chose.test.ts` used `source: 'test'` where `DriveTimeEstimate.source` is a three-value union. `vitest` does not typecheck, so it passed there; `tsc --noEmit` was run before the test file was written and not after, and the commit went out red. The next `tsc` caught it. The lesson is the ordering: the typecheck belongs after the last file is written, not after the last file one happened to be thinking about. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), `tests/a-capped-read-is-not-a-silent-one.test.ts` (DATA-011, 5), `tests/a-family-day-starts-where-the-family-is.test.ts` and `tests/a-server-day-is-the-familys-day.test.ts` (DATA-012, 11), `docs/audit/vaults-require-second-factor-check.sql` (AUTHZ-008), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
 
@@ -28148,6 +28149,97 @@ right reason.
   `tsc --noEmit` exits 0; the seven changed files lint clean.
 
 No migration.
+
+# Pass Q — the deny-list that was checked one file deep (PRIV-001, verified healthy)
+
+Applying Pass O's lesson — *a scan whose search space is defined by the presence
+of the thing being checked* — to the guard that decides what family data reaches
+a language model.
+
+`tests/context-policy.test.ts` asserts that no file under
+`lib/ai/context/slices` selects from a deny-listed table. Sixty-six tables are
+on that list. The assertion reads the slice **file**, and the policy's own
+comment says slices reach sensitive areas on purpose: *"Slices go through domain
+services, which project the one narrow column (allergies, a document title) a
+plan legitimately needs."* That projection is the control, and nothing checked
+it.
+
+## What the transitive measure found
+
+Following each slice's imports, six of the fourteen reach nine deny-listed
+tables:
+
+| slice | table | how it is safe |
+|---|---|---|
+| documents | `documents` | mapped to id/title/category/expiry/member; lines carry title, category, member, expiry |
+| documents | `vacation_documents` | **not called** — same service module |
+| food | `medical_profiles` | `select('member_id, allergies')` |
+| shopping | `medical_profiles` | `select('allergies')` |
+| proactive | `documents` | `select('id')`, for a count of documents expiring within 30 days |
+| proactive | `financial_accounts` | `select('id, balance')` on overdrawn non-credit accounts, reduced to `accountsRes.data?.length` — a **count** reaches the model, never a figure |
+| proactive | `family_messages` | `select('conversation_id, read_by')` — no body |
+| travel | `vacation_documents` | **not called** |
+| travel | `vacation_emergency_contacts` | **not called** |
+
+**No leak.** Every reach is either projected before anything reaches the model,
+or is not called at all. Three services do use `select('*')` — on `documents`,
+`vacation_documents` and `vacation_emergency_contacts` — but each consumer
+projects, and the documents slice maps field by field rather than spreading.
+
+## Two things worth recording rather than re-deriving
+
+**The blind spot the schema closes, not the guard.** A view over a sensitive
+table would defeat a `.from('table')` scan entirely. `information_schema.views`
+returns **nothing** for `public` — there are no views at all — and all thirteen
+tables the slices read directly are ordinary tables. So that hole does not
+exist, for a reason that has nothing to do with the guard's rigour and could
+change with one migration.
+
+**My own measure overstates reach.** An import closure is not a call graph.
+`lib/services/trips/index.ts` is imported for trip listing and happens to also
+export the reader for `vacation_emergency_contacts`; the travel slice mentions
+no contact field anywhere. Three of the nine pairs are of this kind, and calling
+them "reach" would have been the more alarming and less true reading.
+
+That is also precisely why the ratchet is worth having. The function that
+returns a family's emergency contacts — names and phone numbers — is **already
+one call away** from a slice that renders lines into a prompt, and nothing fails
+if someone calls it. The depth-1 rule stays green, because the slice file still
+names no denied table.
+
+## What was added
+
+`tests/a-sensitive-table-is-one-call-away.test.ts` pins the nine pairs, each
+with a recorded reason of `projected` or `not-called` and a note a reviewer can
+check. A **new** pair fails with the slice, the table and the file that reads
+it, so a new sensitive reach has to be justified by editing the baseline instead
+of passing in silence. Three assertions hold the projections the safety actually
+rests on: the overdrawn-accounts count is still a count, the documents slice
+still maps rather than spreads, and the deny-list has not shrunk.
+
+A field-name scan over the slices was considered and rejected: every current
+match is benign (`body` on Bubaly's own recommendations, `content` inside a
+sensitivity check, the word "contents" in a comment saying it never sends them),
+so the rule would have needed an allowlist longer than its findings.
+
+## Two of my own assertions were wrong first
+
+Both caught by running the guard, not by reading it: a baseline note one
+character under the minimum length the same test imposes, and a `toContain` on a
+comment that is line-wrapped in the source, so the string it looked for exists
+in the file but not on any single line.
+
+## Verification
+
+- **4 mutations, all red**: a slice made to call the emergency-contacts reader
+  (reported as `NEW: tasks.ts can now reach vacation_emergency_contacts`); the
+  overdrawn count changed to an actual balance; the documents slice changed to
+  spread the service row; and the closure walker made to resolve nothing, which
+  fails two cases rather than silently reporting an empty world.
+- **16,847 tests across 1,324 files, zero failures and zero skips**, on Node
+  24.21.0. `tsc --noEmit` exits 0; the new file lints clean.
+
+No product change and no migration. Recorded as ✅ PASS, not as a fix.
 
 # Final Regression
 
