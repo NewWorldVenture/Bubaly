@@ -2,12 +2,12 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-22T02:25:00.000Z
-- Total Audit Items: 14079
+- Last Updated: 2026-09-22T02:45:00.000Z
+- Total Audit Items: 14080
 - Not Started: 13842
 - In Progress: 192
 - Passed: 10
-- Fixed + Passed: 31
+- Fixed + Passed: 32
 - Blocked: 2
 - Failed: 2
 - Overall Completion: 0.04%
@@ -14196,6 +14196,7 @@ PRODUCTION READY: NO
 | DATA-011 | Data integrity | Eleven call sites discarded the truncation signal F-F01 raises | 🛠 FIXED + PASS | High | 5/5 (9 sanity cases inside them) | All eleven now act on it — 503 on the calendar feed and the three AI-coach routes, a refused verdict in the decision simulator, an abandoned playbook refresh, an early return before the GitHub sync's write loop, ErrorState on two marketplace pages | Three mutations red: an error removed from a destructure, from a batch element, and the helper's probe row removed | Every one of the eleven carried a comment explaining why a capped read would be wrong, then dropped the error saying it happened. The detector over-reported 54 -> 17 -> 15 -> 11 across four passes; the guard's two halves are deliberately not equally strict, and the comment says why. |
 | DATA-012 | Data integrity | "Today" was the server's day, not the family's (F-F02) | 🛠 FIXED + PASS | High | 11/11 | startOfLocalDay / startOfNextLocalDay in lib/time/zoned.ts; the kids, guardian and moments pages, both dashboards' dayBounds, and every notification's today/tomorrow copy moved onto the family's zone | Asserted in three zones from one instant, across both DST changeovers (a 23-hour and a 25-hour day), and in a zone whose clocks jump AT midnight; three mutations red; full suite green under TZ=UTC and TZ=America/Los_Angeles | 8 client files (correct — the browser IS the family) and 19 server files (not). timeLabel was wrong twice in one sentence: the day from the host's midnight and the clock with no timeZone, so 7pm read as "tomorrow at 3:00 AM". |
 | DATA-014 | Data integrity | Two billing upserts named a conflict target that could never fire | 🛠 FIXED + PASS | High | 14/14 + 1 runtime | lib/billing/customer-ref.ts is now the only writer of `billing_customers`; both routes and the Stripe webhook go through it and it names `family_id`, the constraint that exists | Measured against live PostgREST: 1st bare upsert ok, 2nd 23505 on billing_customers_family_id_key, same write with onConflict ok and updating; after the fix all four sequences pass including a concurrent double-click; 8 mutations red | The scan covers all 136 upsert call sites and derives 491 primary keys from the migrations, agreeing with the live catalogue on every one. Two of my own rules were wrong first: a helper assertion satisfied by a comment, and a named-target rule that flagged correct code in lib/server/profiles.ts. |
+| DATA-015 | Data integrity | Seven paged reads sorted by a key that does not decide the order | 🛠 FIXED + PASS | Medium | 6/6 | Every paged read now ends on its table's primary key: the guardian history page, the AI activity page, the benchmarks sweep, the abandoned-checkout cron, the blog index, and the subscriptions and family_members sweeps behind the CRM customer list | Reproduced on live Postgres: ten rows sharing one created_at, one UPDATE to an unrelated column, and row-03 moved from page 1 to page 2 while row-06 moved the other way — a reader sees one twice and the other never; with `, id desc` appended, zero rows moved; 4 mutations red | 106 `.range(` sites, 103 with a statically resolvable table; 100 of those already had a total order and 3 had none, and 4 more were total only through a unique column rather than the primary key. The tiebreaker is the primary key on purpose: three sites were total only through `uq_subscriptions_family`, which migration 0285 creates and which is PENDING PRODUCTION. |
 | PERF-004 | Performance | The parent approval queue signed one photo per round trip (closes F-F03) | 🛠 FIXED + PASS | High | 4/4 (5 sanity cases inside them) | Paths collected, deduplicated and signed in chunks of 100 through createSignedUrls; the per-entry error is read so an unsignable object is left out rather than rendering an empty src; a signing outage costs the photos, not the queue | Restoring the loop turns the guard red at app/(app)/missions/page.tsx:106; the existing missions read-boundary test still passes | A loop inside a loop around `await createSignedUrl` — up to four photos per submission across the whole queue, in series. The batch form was already in the codebase and already used correctly one directory away. |
 | A11Y-001 | Accessibility | The photo lightbox stranded keyboard users (closes F-D01) | 🛠 FIXED + PASS | High | 7/7 | role=dialog + aria-modal + the shared useDialogBehavior hook on the viewer; tiles made focusable with Enter/Space; Arrow Left/Right between photos | Three mutations red (the hook removed; the tiles returned to mouse-only; a new overlay declaring aria-modal without the hook); 13 declare it and 13 implement it, and the sets are identical | The tiles were div onClick, so a keyboard could not reach the viewer at all — a trap you cannot enter. The existing a11y guard named four overlays by hand, so this one was never looked at: enumerated with no scan, the third shape of this repo's signature defect. |
 | A11Y-002 | Accessibility | The lint config enabled none of the rules that would have caught it (F-D10/F-D02/F-D03) | 🛠 FIXED + PASS (F-D03 ratcheted, not fixed) | Medium | 4/4 (7 sanity cases inside them) | label-has-associated-control enabled at depth 4 — measured first: at the default depth its only three findings are correct markup one level too deep; control-has-associated-label left OFF because 561 findings and the first sample is a correctly labelled input | next lint clean but for the three pre-existing react-hooks warnings; 144 selects scanned, 71 unnamed, pinned by a ratchet whose scan is asserted non-vacuous | next/core-web-vitals carries only a subset of jsx-a11y, which is exactly what F-D10 said. A rule whose findings are mostly wrong is one everyone learns to skip, so the unnamed selects are counted by a check that cannot be satisfied by nesting depth. |
@@ -23071,7 +23072,7 @@ Status: ✅ PASS — `npm run lint` reports the four known baseline warnings and
 ## Automated Tests
 Status: ✅ PASS — 15,287 tests across 1,215 files pass, zero failures and zero skips, on Node 24.15.0 at head 92340315 (160s).
 
-Later in this cycle, on Node 24.21.0: **16,835 tests across 1,322 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **52/52 boundary probes with 0 skipped**.
+Later in this cycle, on Node 24.21.0: **16,841 tests across 1,323 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **52/52 boundary probes with 0 skipped**.
 
 One type error was committed and is worth recording rather than quietly fixed: `tests/a-fan-out-has-a-width-somebody-chose.test.ts` used `source: 'test'` where `DriveTimeEstimate.source` is a three-value union. `vitest` does not typecheck, so it passed there; `tsc --noEmit` was run before the test file was written and not after, and the commit went out red. The next `tsc` caught it. The lesson is the ordering: the typecheck belongs after the last file is written, not after the last file one happened to be thinking about. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), `tests/a-capped-read-is-not-a-silent-one.test.ts` (DATA-011, 5), `tests/a-family-day-starts-where-the-family-is.test.ts` and `tests/a-server-day-is-the-familys-day.test.ts` (DATA-012, 11), `docs/audit/vaults-require-second-factor-check.sql` (AUTHZ-008), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
 
@@ -27945,6 +27946,37 @@ customer the row names rather than the one being paid through. That one closes
 itself: `checkout.session.completed` comes back through the same function with
 the session's own customer.
 
+## The pass that should have caught it, and could not
+
+`supabase/migrations/0285_conflict_targets_inferable.sql` is a previous audit
+pass on this exact class. Its header is worth quoting: *"Five upserts in this
+codebase could never have run."* It found five `onConflict` targets with no
+inferable index behind them — partial or expression indexes that PostgREST
+cannot emit a predicate for — and each failed with `42P10` at **planning** time,
+on the first row, with an empty table, every time.
+
+It does not mention `billing_customers`, and it could not have. Its question was
+*given a named target, is there an index to infer it from?* A bare upsert names
+nothing, so it is not in the search space at all. The check was over declared
+targets, and the defect was the absence of a declaration. That is the sixth
+shape of this repo's signature failure to add to the five already catalogued:
+**a scan whose search space is defined by the presence of the thing being
+checked.**
+
+The two failure modes are worth holding side by side, because the quieter one
+survived four years:
+
+| | 0285's five | DATA-014's two |
+|---|---|---|
+| target | named, uninferable | never named |
+| fails at | planning | execution |
+| when | first row, empty table, always | second write **per family** |
+| looks like | a broken deployment | a data problem |
+
+`0285` is itself pending production. This fix depends on nothing pending:
+`billing_customers_family_id_key` is declared inline in `0002_tables.sql`, on
+the line that created the table.
+
 ## The generalisation
 
 The rule is a scan over all **136** `.upsert(` call sites, not a list of the two
@@ -28023,6 +28055,99 @@ precedes ignoring a real one.
 
 No migration. The constraint the fix relies on has been in `0002_tables.sql`
 since the beginning; only the code that ignored it changed.
+
+# Pass P — a page boundary decided by the query plan (DATA-015)
+
+## The finding
+
+`order by` on a column that does not decide the order leaves the rest to the
+planner and the physical order of the heap. Seven paged reads relied on one.
+
+Reproduced on the local Postgres, in one transaction, with nothing concurrent:
+
+```
+10 rows, 1 distinct created_at   (now() is transaction-start time, so every row
+                                  inserted together shares it exactly)
+page 1 = rows 1-5,  page 2 = rows 6-10
+UPDATE one row's unrelated text column — no insert, no delete, created_at untouched
+re-read both pages:
+   row-03   page 1  ->  page 2
+   row-06   page 2  ->  page 1
+```
+
+A reader who held page 1 and then asked for page 2 sees **row-03 twice** and
+**row-06 never**. The same run with `, id desc` appended: **0 rows moved**.
+
+The tie is not hypothetical. `ai_requests.created_at` and
+`guardian_communications.started_at` both default to `now()`, which is
+transaction-start time — so any batch written in one transaction ties exactly,
+to the microsecond. And `network_aggregates` is unique on
+`(scope, cohort_key, metric, value)` while the sweep sorted on
+`(cohort_size, cohort_key, metric)`, so two aggregates differing only in `value`
+tie too.
+
+Four of the seven are `readAll` sweeps rather than screens, which is worse: the
+duplicate and the omission both land inside one array the caller treats as the
+whole table. `lib/marketing/customers.ts` already carries a comment explaining
+that a short read *"silently mislabels customers whose rows fell off the end"* —
+its own sort could drop a row for a different reason, four lines below.
+
+## Why the primary key and not just any unique column
+
+Three of the seven were *already* total, by a unique column: `session_id` on
+`checkout_sessions`, `slug` on `blog_posts`, `family_id` on `subscriptions`. They
+would have passed a "the sort must be total" rule.
+
+`subscriptions.family_id` is unique only because of `uq_subscriptions_family`,
+created by migration **0285 — which `docs/PENDING_PROD_MIGRATIONS.md` records as
+not applied**. In production that sweep has no total order today. A tiebreaker
+whose correctness depends on which migration is live is not a tiebreaker.
+
+So the rule is the primary key, which every one of these tables has carried
+since `0002`. Appending it to an already-total sort changes nothing — further
+terms cannot reorder a total order — so the three that were fine stay fine, and
+the rule no longer has to know what is deployed. This also caught the analysis
+error I would otherwise have shipped: my first scan judged totality against the
+**live** catalogue, which contains pending DDL.
+
+## Measurement
+
+| | |
+|---|---|
+| `.range(` call sites | 106 |
+| table statically resolvable | 103 |
+| generic pagers (query supplied by the caller) | 3 |
+| sort did not end on the primary key | **7** |
+| of those, ordered by nothing unique at all | 3 |
+| of those, total only via a unique column | 4 (one of them pending) |
+
+All seven queries were run against live PostgREST after the change, including
+three that now order by an `id` they do not select — which PostgREST allows.
+
+## What is not asserted
+
+No SQL probe was added. The demonstration above proves a property of Postgres,
+not an invariant of this schema, and it needed a heap reorder that an `UPDATE`
+happened to cause; as a CI probe it would pass or fail on physical layout. The
+unit guard is the right instrument: it reads every paged read and requires the
+primary key in the sort, which is checkable, deterministic, and fails for the
+right reason.
+
+## Verification
+
+- **4 mutations, all red**: the `ai_requests` tiebreaker removed; the
+  `subscriptions` tiebreaker removed; a new paged read with no order at all
+  (reported by file, line and table); and the primary-key parser emptied, which
+  fails three cases rather than silently passing everything.
+- `tests/a-page-boundary-is-not-a-coin-flip.test.ts` — 6 cases, including a
+  control that a composite primary key is accepted in either column order, and
+  one that pins the pending-migration reasoning so it cannot quietly relax to
+  "any unique column".
+- **16,841 tests across 1,323 files, zero failures and zero skips**, on Node
+  24.21.0, under `TZ=UTC` and again under `TZ=America/Los_Angeles`.
+  `tsc --noEmit` exits 0; the seven changed files lint clean.
+
+No migration.
 
 # Final Regression
 

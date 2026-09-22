@@ -170,6 +170,7 @@ async function fetchAllPublishedRows<K extends keyof Row>(columns: string): Prom
       .eq('published', true)
       .order('published_at', { ascending: false })
       .order('slug')
+      .order('id')
       .range(from, to);
     return { data: (page.data ?? []) as unknown as Pick<Row, K>[], error: page.error };
   });

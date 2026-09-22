@@ -163,7 +163,11 @@ export async function listAiActivity(
   let query = db
     .from('ai_requests')
     .select(COLUMNS, { count: 'exact' })
+    // `created_at` defaults to now() — transaction-start time — so requests
+    // inserted in one transaction tie exactly. `id` makes the page split a
+    // property of the data rather than of the plan.
     .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
     .range(from, from + AI_ACTIVITY_PAGE_SIZE - 1);
 
   if (status) query = query.eq('status', status);

@@ -29,7 +29,12 @@ export async function GET(req: NextRequest) {
     .from('checkout_sessions')
     .select('session_id, email, name, status, created_at')
     .eq('status', 'pending')
+    // `session_id` is unique, so this sort is already total — `id` is appended
+    // because the primary key is the one tiebreaker that does not depend on
+    // which migration is live. `uq_subscriptions_family`, the index that makes
+    // a sibling sweep total, is itself pending production.
     .order('session_id')
+    .order('id')
     .range(from, to));
   if (error) {
     console.error('Abandoned-checkout cron read failed:', error);
