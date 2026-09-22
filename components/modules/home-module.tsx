@@ -440,11 +440,15 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
   async function removeFile(doc: WarrantyDoc) {
     setRemovingId(doc.id);
     const supabase = createClient();
-    await removeFamilyDocument(supabase, doc.storage_path);
-    // NOTE the order: the storage object is removed FIRST, so a row delete the
-    // database refuses leaves a row pointing at a file that no longer exists.
-    // Verifying the delete at least makes that visible instead of reporting it
-    // as done; the ordering itself is recorded in audit/claude-1.md.
+    // SEC-015: the storage object goes FIRST, and the row stays if it did not
+    // go. `document_object_is_restricted` hides a secure file by finding its
+    // row, so a deleted row over a surviving object makes the file readable by
+    // every family member.
+    // A row delete the database refuses still leaves a row pointing at a file
+    // that is gone; verifying it makes that visible rather than reporting it as
+    // done. The ordering is recorded in audit/claude-1.md.
+    const removed = await removeFamilyDocument(supabase, doc.storage_path);
+    if (removed.error) { setRemovingId(null); return toastError(tr('errors.thatChangeWasNotSaved')); }
     const { data: rows, error } = await supabase.from('documents').delete().eq('id', doc.id).select('id');
     setRemovingId(null);
     if (error) return toastError(describeDbError(error));

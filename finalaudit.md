@@ -2,12 +2,12 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-22T03:15:00.000Z
-- Total Audit Items: 14082
+- Last Updated: 2026-09-22T03:30:00.000Z
+- Total Audit Items: 14083
 - Not Started: 13842
 - In Progress: 192
 - Passed: 11
-- Fixed + Passed: 33
+- Fixed + Passed: 34
 - Blocked: 2
 - Failed: 2
 - Overall Completion: 0.04%
@@ -14199,6 +14199,7 @@ PRODUCTION READY: NO
 | DATA-015 | Data integrity | Seven paged reads sorted by a key that does not decide the order | 🛠 FIXED + PASS | Medium | 6/6 | Every paged read now ends on its table's primary key: the guardian history page, the AI activity page, the benchmarks sweep, the abandoned-checkout cron, the blog index, and the subscriptions and family_members sweeps behind the CRM customer list | Reproduced on live Postgres: ten rows sharing one created_at, one UPDATE to an unrelated column, and row-03 moved from page 1 to page 2 while row-06 moved the other way — a reader sees one twice and the other never; with `, id desc` appended, zero rows moved; 4 mutations red | 106 `.range(` sites, 103 with a statically resolvable table; 100 of those already had a total order and 3 had none, and 4 more were total only through a unique column rather than the primary key. The tiebreaker is the primary key on purpose: three sites were total only through `uq_subscriptions_family`, which migration 0285 creates and which is PENDING PRODUCTION. |
 | PRIV-001 | Privacy | The AI context deny-list was checked one file deep | ✅ PASS | Medium | 6/6 | No product change — every one of the nine transitive reaches is safe today. A ratchet now pins the (slice, sensitive table) pairs, so a new one fails with the file that reads it, and holds the three projections the safety actually rests on | Six of fourteen slices reach nine deny-listed tables through their imports; each is either projected narrowly before the model sees it or never called. 4 mutations red, including a slice starting to call the emergency-contacts reader that is already in its closure | The existing guard reads the slice FILE, so a slice calling a service that reads a denied table stays green. No leak found; `select('*')` appears in three services but every consumer projects. My own measure overstates reach — an import closure is not a call graph. |
 | SEC-014 | Security | An open redirect in the sanitizer written to prevent one | 🛠 FIXED + PASS | High | 10/10 | `safeInternalRedirect` now judges the value it RETURNS by the same rule as the value it was given; `isSafeReturnPath` shares that rule instead of keeping a second copy, and requires the normalized form to be same-origin too | `/login?redirect=/..//evil.com` -> `resolveAuthSelection().next === '//evil.com'` -> `router.push` -> `https://evil.com/`, after a successful sign-in; 27 attack strings now produce 0 escapes and 6 legitimate paths are unchanged; 4 mutations red, the vulnerability itself caught by 5 assertions | The raw value was harmless — a browser resolving `/..//evil.com` against the origin keeps the origin. The sanitizer's own normalization created the dangerous string. Three other sinks were saved only by taking the value through the sanitizer twice. |
+| SEC-015 | Security | Deleting a secure document made it readable by the whole family | 🛠 FIXED + PASS | High | 9/9 | `removeFamilyDocument` now confirms the object is gone by name and reports a failure otherwise; all four delete paths keep the `documents` row when the removal is not confirmed | Over live storage with a real parent and child: row present -> child download DENIED, not listed; row deleted with the object alive -> child download ALLOWED, `"THE FAMILY WILL — private"`, and listed. A refused remove and an absent object are both `error: null, data: []`; 5 mutations red | The storage guard `document_object_is_restricted(name)` hides the file by FINDING its row, so a deleted row over a surviving object unlocks it. A child cannot delete the row, so only a manager can reach the state — and a manager can list the object, which is why confirming by listing works for exactly the actor who matters. |
 | PERF-004 | Performance | The parent approval queue signed one photo per round trip (closes F-F03) | 🛠 FIXED + PASS | High | 4/4 (5 sanity cases inside them) | Paths collected, deduplicated and signed in chunks of 100 through createSignedUrls; the per-entry error is read so an unsignable object is left out rather than rendering an empty src; a signing outage costs the photos, not the queue | Restoring the loop turns the guard red at app/(app)/missions/page.tsx:106; the existing missions read-boundary test still passes | A loop inside a loop around `await createSignedUrl` — up to four photos per submission across the whole queue, in series. The batch form was already in the codebase and already used correctly one directory away. |
 | A11Y-001 | Accessibility | The photo lightbox stranded keyboard users (closes F-D01) | 🛠 FIXED + PASS | High | 7/7 | role=dialog + aria-modal + the shared useDialogBehavior hook on the viewer; tiles made focusable with Enter/Space; Arrow Left/Right between photos | Three mutations red (the hook removed; the tiles returned to mouse-only; a new overlay declaring aria-modal without the hook); 13 declare it and 13 implement it, and the sets are identical | The tiles were div onClick, so a keyboard could not reach the viewer at all — a trap you cannot enter. The existing a11y guard named four overlays by hand, so this one was never looked at: enumerated with no scan, the third shape of this repo's signature defect. |
 | A11Y-002 | Accessibility | The lint config enabled none of the rules that would have caught it (F-D10/F-D02/F-D03) | 🛠 FIXED + PASS (F-D03 ratcheted, not fixed) | Medium | 4/4 (7 sanity cases inside them) | label-has-associated-control enabled at depth 4 — measured first: at the default depth its only three findings are correct markup one level too deep; control-has-associated-label left OFF because 561 findings and the first sample is a correctly labelled input | next lint clean but for the three pre-existing react-hooks warnings; 144 selects scanned, 71 unnamed, pinned by a ratchet whose scan is asserted non-vacuous | next/core-web-vitals carries only a subset of jsx-a11y, which is exactly what F-D10 said. A rule whose findings are mostly wrong is one everyone learns to skip, so the unnamed selects are counted by a check that cannot be satisfied by nesting depth. |
@@ -23074,7 +23075,7 @@ Status: ✅ PASS — `npm run lint` reports the four known baseline warnings and
 ## Automated Tests
 Status: ✅ PASS — 15,287 tests across 1,215 files pass, zero failures and zero skips, on Node 24.15.0 at head 92340315 (160s).
 
-Later in this cycle, on Node 24.21.0: **16,857 tests across 1,325 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **52/52 boundary probes with 0 skipped**.
+Later in this cycle, on Node 24.21.0: **16,866 tests across 1,326 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **52/52 boundary probes with 0 skipped**.
 
 One type error was committed and is worth recording rather than quietly fixed: `tests/a-fan-out-has-a-width-somebody-chose.test.ts` used `source: 'test'` where `DriveTimeEstimate.source` is a three-value union. `vitest` does not typecheck, so it passed there; `tsc --noEmit` was run before the test file was written and not after, and the commit went out red. The next `tsc` caught it. The lesson is the ordering: the typecheck belongs after the last file is written, not after the last file one happened to be thinking about. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), `tests/a-capped-read-is-not-a-silent-one.test.ts` (DATA-011, 5), `tests/a-family-day-starts-where-the-family-is.test.ts` and `tests/a-server-day-is-the-familys-day.test.ts` (DATA-012, 11), `docs/audit/vaults-require-second-factor-check.sql` (AUTHZ-008), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
 
@@ -28360,6 +28361,125 @@ was added to the fixture's source list.
   `tsc --noEmit` exits 0; the changed files lint clean.
 
 No migration.
+
+# Pass S — deleting a secure document made it readable by everyone (SEC-015)
+
+## The finding
+
+The Secure Vault is a database boundary (0266, 0303): the storage policy on the
+`documents` bucket is
+
+```
+bucket_id = 'documents'
+  AND is_family_member((storage.foldername(name))[1]::uuid)
+  AND NOT document_object_is_restricted(name)
+```
+
+and `document_object_is_restricted` hides a file by **finding its row**:
+
+```sql
+select exists (select 1 from public.documents d
+                where d.storage_path = p_object_name
+                  and public.is_sensitive_document(d.is_secure, d.category)
+                  and not public.can_manage_family(d.family_id))
+```
+
+The guard's premise is that the row still names the object. All four delete
+paths removed the object first and then deleted the row — the ordering is
+correct, and three of them carry a comment explaining why. Three then discarded
+the removal's result entirely; the fourth checked only `error`.
+
+Storage reports a delete the policy refused exactly as it reports a delete of
+something that was never there. Measured on the local stack:
+
+| | error | data |
+|---|---|---|
+| removed | `null` | `['<key>']` |
+| refused | `null` | `[]` |
+| never existed | `null` | `[]` |
+
+So `error === null` was not evidence, and the row went anyway.
+
+## Proven end to end
+
+A real family, a real parent, a real child, over live storage:
+
+```
+row present, object present
+   child   download: DENIED (Object not found);  listed: no
+   parent  download: ALLOWED — "THE FAMILY WILL — private";  listed: YES
+
+row deleted, object still present
+   child   download: ALLOWED — "THE FAMILY WILL — private";  listed: YES
+```
+
+The child can both **list** and **read** it, because with no row the guard finds
+nothing, returns false, and only `is_family_member` remains.
+
+## Who can actually reach it
+
+Also measured, because the severity depends on it:
+
+```
+child deletes the secure row  -> rows=[]   (refused; a child cannot create the orphan)
+parent deletes the secure row -> rows=[{id}]
+parent can list the object    -> YES
+child can list the object     -> no
+```
+
+So the trigger is **a manager deleting a secure document while the storage
+removal fails** — a timeout, a 5xx, an offline tab. Not attacker-controlled, and
+all the worse for it: nothing about the failure is visible, and the file quietly
+changes audience.
+
+This also resolves the one weakness in the fix. Confirming by listing uses the
+same client whose permissions may have hidden the object — "I cannot see it" is
+not "it is gone". But the actor who cannot see it is exactly the actor who
+cannot delete the row either, so that case cannot produce the leak. The actor
+who can reach the dangerous state is the one who can see the object.
+
+## The fix
+
+`removeFamilyDocument` confirms the removal by name. An empty result is checked
+rather than trusted: if the object is still listed it reports a failure and the
+caller keeps the row; if it is genuinely absent — a retry after a half-finished
+delete — the caller may proceed, so a partial failure does not strand a row for
+ever. The name is compared exactly, because `search` is a prefix match and a
+neighbouring `…-Will.pdf.bak` must not be mistaken for the file.
+
+All four paths now keep the row when the removal is unconfirmed, including the
+admin action, whose own comment already said *"Keep the database row when
+storage removal fails so the operator can retry rather than silently orphaning
+the object"* — the right reasoning, defeated by a return shape.
+
+## What this one is really about
+
+The previous pass got the hard part right. It worked out that the object must go
+first, wrote the reasoning into three call sites, recorded it in
+`audit/claude-1.md`, and put the row-keeping rule in the admin action. Then it
+discarded the result of the very call whose failure the ordering existed to
+handle.
+
+The ordering was correct. The check was missing. It is the same lesson as
+DATA-011's eleven capped reads — a signal is worth exactly what its call sites
+do with it — arriving at a security boundary rather than a money one.
+
+## Verification
+
+- **5 mutations, all red**: the helper trusting `error === null` again (fails
+  three cases); the helper treating an unreadable listing as absence; the
+  files-hub path discarding the result; the admin path back to checking only
+  the error; and the exact-name comparison loosened to a prefix match.
+- `tests/a-deleted-row-does-not-unlock-a-file.test.ts` — 9 cases. The first six
+  drive the real helper through a storage double that answers the three shapes
+  real storage answers with, so they are behavioural rather than textual; the
+  last three hold the call sites and the policy the premise depends on.
+- **16,866 tests across 1,326 files, zero failures and zero skips**, on Node
+  24.21.0, under `TZ=UTC` and again under `TZ=America/Los_Angeles`.
+  `tsc --noEmit` exits 0; the six changed files lint clean.
+
+No migration: the policy is right, and was right. Only the code that could
+remove the row it depends on changed.
 
 # Final Regression
 
