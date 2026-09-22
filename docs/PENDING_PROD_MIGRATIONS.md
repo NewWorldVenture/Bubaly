@@ -2123,3 +2123,66 @@ added to a table an ungated surface reads, and one of the three removed.
 Until this is applied, a stolen session cookie reads and rewrites the family
 credential vault, the tax vault and the household binder without ever being
 asked for a code.
+
+---
+
+## 0327 — a chore proof named whose chore it was, and anyone could name it
+
+`supabase/migrations/0327_a_chore_proof_belongs_to_whose_chore_it_is.sql`
+
+`chore_submissions` and `chore_disputes` were each governed by one policy:
+
+```
+chore_submissions | chore_submissions_all | ALL | is_family_member(family_id)
+chore_disputes    | chore_disputes_all    | ALL | is_family_member(family_id)
+```
+
+`is_family_member` answers "is this user in the family" and says nothing about
+**which member the row names**. So any member could insert a submission against
+another child's chore assignment, or open a dispute the row attributed to that
+child.
+
+The app layer had the same gap, and it is fixed alongside this migration:
+`submitProofAction` and `disputeSubmissionAction` loaded their row filtered on
+`family_id` only and then wrote `member_id: assignment.member_id` — the
+assignee, not whoever sent the form. A sibling could complete a child's chore
+for them, file a failing photo against it and have the parent's queue reject it
+in their name, or raise a dispute the event log said that child had raised.
+
+**The rule is the row's own member OR a manager**, not managers-only.
+Submitting proof of your own chore *is* the child's half of the product — the
+kids page exists for it — and a parent submitting on a child's behalf is a real
+case that is kept. Same shape `0319` put on `member_locations` after SEC-006.
+
+Restrictive, so it ANDs with the family policy already there; INSERT and UPDATE
+both carry it, because without the UPDATE half a member could insert a correctly
+attributed row and then re-point it.
+
+`0222` already stops a member moving a submission INTO a manager-decision
+status, and deliberately lets members submit (pending) and dispute (disputed).
+This narrows **whose** submissions and disputes they may create; it does not
+touch that.
+
+Held by `docs/audit/chore-proof-ownership-check.sql`. Measured against the
+pre-migration schema:
+
+```
+BREACH: a sibling submitted proof against another child's chore (rows: 1)
+BREACH: a sibling re-attributed an existing submission (rows: 1)
+```
+
+and the control that matters more — making the rule managers-only instead
+reports **"CONTROL FAILED: the assignee was refused their own submission — the
+fix took the kids page away"**.
+
+**Code that ships with it** (already on the branch): the assignee-or-manager
+check in both actions, the dispute event log corrected to name the actual actor
+rather than the assignee, and the same rule added to two more actions the new
+`tests/a-family-action-says-whose-row-it-is.test.ts` found —
+`requestAllowanceAction` (any member could raise an allowance request against
+any child's wallet) and `requestRedemptionAction` (any member could spend
+another child's tokens, since `memberId` was caller-supplied and only checked to
+be in the family).
+
+Until this is applied, a direct PostgREST call with a child's session can still
+submit and dispute in a sibling's name, even though the product path cannot.

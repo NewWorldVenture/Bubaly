@@ -887,9 +887,18 @@ export async function requestAllowanceAction(input: {
   const supabase = await createServer();
 
   const { data: cw, error: walletError } = await supabase
-    .from('child_wallets').select('id').eq('id', input.childWalletId).eq('family_id', familyId).maybeSingle();
+    .from('child_wallets').select('id, member_id').eq('id', input.childWalletId).eq('family_id', familyId).maybeSingle();
   if (walletError) return actionFailure(walletError, t('actions.couldNotLoadThatWallet'));
   if (!cw) return { ok: false, error: t('actions.walletNotFound') };
+
+  // Asking for YOUR allowance is the child's half of this feature; asking for
+  // a sibling's is not. This read filters on `family_id` only, so without the
+  // check any member could raise a request against any child's wallet — and
+  // the parent's queue would show it as that child asking. `requested_by`
+  // recorded the truth all along, which is what made the gap invisible.
+  if (cw.member_id !== ctx.active.member.id && !isManager(ctx.active.role)) {
+    return { ok: false, error: t('actions.notAuthorized') };
+  }
 
   const { error } = await supabase.from('parent_approvals').insert({
     family_id: familyId, kind: 'allowance_request',

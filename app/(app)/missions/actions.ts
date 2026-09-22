@@ -109,6 +109,21 @@ export async function submitProofAction(formData: FormData): Promise<{ ok: boole
   const { data: assignment } = await supabase
     .from('chore_assignments').select('*').eq('id', assignmentId).eq('family_id', familyId).maybeSingle();
   if (!assignment) return { ok: false, error: t('actions.choreNotFound') };
+
+  // Same family is not the same person. This read filters on `family_id` only,
+  // so without the check below ANY member could submit proof for ANY other
+  // member's chore — and the row below attributes it to `assignment.member_id`,
+  // the assignee, not to whoever sent the form. A sibling could complete a
+  // child's chore for them, or file a failing photo against it and have the
+  // parent's queue reject it in their name.
+  //
+  // A manager submitting on a child's behalf is a real case and is kept: the
+  // rule is the assignee OR a manager, which is the same shape SEC-006 put on
+  // the locator.
+  const isAssignee = assignment.member_id === ctx.active.member.id;
+  if (!isAssignee && !isManager(ctx.active.role)) {
+    return { ok: false, error: t('actions.notAuthorized') };
+  }
   const { data: chore } = await supabase.from('chores').select('*').eq('id', assignment.chore_id).maybeSingle();
   if (!chore) return { ok: false, error: t('actions.choreNotFound') };
 
@@ -361,6 +376,12 @@ export async function disputeSubmissionAction(formData: FormData): Promise<void>
   const { data: submission } = await supabase.from('chore_submissions').select('*').eq('id', submissionId).eq('family_id', familyId).maybeSingle();
   if (!submission) return;
 
+  // Same family, same filter, same gap as submitProofAction — and worse here,
+  // because both the dispute row and the event log were attributed to
+  // `submission.member_id`. A sibling could open a dispute the record said the
+  // assignee had raised.
+  if (submission.member_id !== ctx.active.member.id && !isManager(ctx.active.role)) return;
+
   const { data: dispute, error: disputeError } = await supabase.from('chore_disputes').insert({ family_id: familyId, submission_id: submissionId, member_id: submission.member_id, reason: str(formData, 'reason'), status: 'open' }).select('id').single();
   if (disputeError || !dispute) return;
   if (!await setSubmissionStatus(supabase, familyId, submissionId, 'disputed')) {
@@ -376,7 +397,9 @@ export async function disputeSubmissionAction(formData: FormData): Promise<void>
     if (disputeCleanupError) console.error('[chore state] dispute cleanup failed', disputeCleanupError);
     return;
   }
-  await logChoreEvent({ familyId, assignmentId: submission.assignment_id, submissionId, actorId: submission.member_id, action: 'dispute', note: str(formData, 'reason') });
+  // The ACTOR is whoever disputed, not whose chore it is. Logging the assignee
+  // made the ledger agree with the bug rather than record it.
+  await logChoreEvent({ familyId, assignmentId: submission.assignment_id, submissionId, actorId: ctx.active.member.id, action: 'dispute', note: str(formData, 'reason') });
   revalidatePath('/missions');
   revalidatePath('/kids');
 }

@@ -151,6 +151,15 @@ export async function requestRedemptionAction(input: { rewardId: string; memberI
   if (memError) return actionFailure('verify the family member', t('economy.couldNotVerifyTheFamilyMember'), memError);
   if (!mem) return { ok: false, error: t('actions.familyMemberNotFound') };
 
+  // `memberId` is caller-supplied and was only checked to be IN the family.
+  // Redemption debits that member's tokens on approval, so any member could
+  // spend another child's balance — and the request reaching a parent named the
+  // other child, not the person who sent it. Spending your own is the product;
+  // spending a sibling's is not.
+  if (mem.id !== ctx.active.member.id && !isManager(ctx.active.role)) {
+    return { ok: false, error: t('actions.notAuthorized') };
+  }
+
   // Soft pre-check affordability (final check is on approval, to avoid races).
   const { data: txns, error: txnError } = await supabase
     .from('currency_transactions').select('direction, amount')

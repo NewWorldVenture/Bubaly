@@ -3,11 +3,11 @@
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
 - Last Updated: 2026-09-20T17:44:10.000Z
-- Total Audit Items: 14076
+- Total Audit Items: 14077
 - Not Started: 13842
 - In Progress: 192
 - Passed: 10
-- Fixed + Passed: 28
+- Fixed + Passed: 29
 - Blocked: 2
 - Failed: 2
 - Overall Completion: 0.04%
@@ -14202,6 +14202,7 @@ PRODUCTION READY: NO
 | DATA-013 | Data integrity | A money total is derived, never written (F-F08 re-measured) | ✅ PASS | Medium | 5/5 | No product change — the finding's premise no longer holds. A scan now forbids any insert/update/upsert setting a derived money total, with one stated exemption for a named cache of an external figure | Every %balance% column in the schema enumerated and none is a child's spendable money; making addFundsAction write saved_cents turns two cases red with the line | Goal funding goes through the wallet_fund_goal RPC, so the ledger row and the goal total move in one transaction rather than a read-modify-write two parents could interleave. |
 | PERF-005 | Performance | A fan-out whose width nobody chose (closes F-F09) | 🛠 FIXED + PASS | Medium | 10/10 | mapWithConcurrency in lib/utils, and the drive-time lookup bounded to 6 lanes | Restoring Promise.all(located.map(...)) fails on the MEASURED peak — expected 40 to be less than or equal to 6 — not only on a grep for the helper | Order preserved (the test reverses the delays), lanes not chunks (a 40ms item among nine 1ms ones tells them apart), and it rejects like Promise.all rather than putting undefined into a positional array. |
 | TEST-011 | Testing | The last test whose whole argument was an absence (closes F-F13) | 🛠 FIXED + PASS | Low | 4/4 | The 27-path hand-written list (two duplicated) replaced by a scan of all 146 app/api routes, plus the positive half it never had: every catching route's answer is something the route wrote itself | Zero leaks across 124 JSON-answering routes; a real route made to answer err.message goes red naming the file and pattern; making the walk match nothing fails TWO cases rather than passing silently | The first mutation passed and should not have — the target file's catches have no binding, so the injection never landed. Checking that a mutation applied is the difference between testing a guard and reassuring yourself about one. |
+| AUTHZ-009 | AUTHZ | Same family is not the same person, in four money-area actions (F-F07) | 🛠 FIXED + PASS (0327 pending production) | High | 13/13 | The row's own member OR a manager, in all four actions; 0327 adds restrictive INSERT and UPDATE guards on chore_submissions and chore_disputes; the dispute event log now names the actual actor | Two breaches reproduced in the database and both mutations red — including the over-correction, where managers-only reports "the assignee was refused their own submission — the fix took the kids page away" | The last two of the four were found by the guard written for the first two, on its first run. Coverage was the symptom; the property was the finding. |
 | TEST-009 | Testing | Probe fixtures left in the seeded anchor family | 🛠 FIXED + PASS | Medium | 6/6 | Both probes now clear their fixtures at the end as well as the start | Each passes twice; suite 47/47 on both databases; anchor family holds only its seeded members | "Race Child" and "Probe Kid" had been living in the 71,192-row anchor family, the latter for a week. Found by the AUTHZ-006 sweep counting a member no fixture of its own had created. |
 | DATA-010 | DATA | Resource lifecycle through the real API | ✅ PASS | High | 8/8 | None required | CREATE/READ/UPDATE/VERIFY/DELETE/VERIFY all pass as a real member; a child's refused write returns HTTP 204 without Prefer, 200 [] with it, dosage unchanged | Shows at the HTTP layer why .select() + wroteNoRows was needed: 204 No Content is a success for a write that changed nothing. |
 | SEC-008 | SEC | Realtime broadcast isolation and publication drift | ✅ PASS | Critical | 5/5 | None required | Publication and code agree exactly (61 = 61, empty diff both ways); a live socket received its own family's row and not another's | The first attempt used an unpublished table and received nothing — a run that would have read as a clean refusal while proving nothing. Controls decided it. |
@@ -22268,6 +22269,55 @@ Zero leaks across all 124. Both mutations are red, and the second is the one wor
 **A note on the first mutation, which passed and should not have.** The first attempt injected `error: err.message` into `app/api/ai/chat/route.ts`, the guard stayed green, and the honest reading of that is "the guard does not work". It was not: that file's catches are all `catch {` with no binding, so the injection never landed — `grep -c` returned 0. Re-run against `app/api/ai/insights/route.ts`, which does bind, it fails immediately and names the file and the pattern. Checking whether the mutation actually applied, rather than trusting that it did, is the difference between testing a guard and reassuring yourself about one.
 
 
+### AUTHZ-009 — Same family is not the same person, in four money-area actions (F-F07, the half that matters)
+
+Status: 🛠 FIXED + PASS (app layer live; migration 0327 pending production)
+Severity: High
+Route(s), components, actions, tables and providers: `app/(app)/missions/actions.ts` (`submitProofAction`, `disputeSubmissionAction`), `app/(app)/wallet/actions.ts` (`requestAllowanceAction`), `app/(app)/economy/actions.ts` (`requestRedemptionAction`), `public.chore_submissions`, `public.chore_disputes`, `supabase/migrations/0327_a_chore_proof_belongs_to_whose_chore_it_is.sql`, `docs/audit/chore-proof-ownership-check.sql`, `tests/a-family-action-says-whose-row-it-is.test.ts`
+
+#### Expected Behavior
+An action that writes a row *about a family member* agrees with who is calling: the member themselves, or a manager acting for them. Never merely "someone in the same family".
+
+#### Test Cases
+- [x] All 53 exported money-area actions enumerated across 7 files
+- [x] Each classified: manager-gated, member-scoped, or family-wide
+- [x] Every declared member-scoped action asserted to actually read `ctx.active.member.id`
+- [x] Both declarations asserted not to name an action that no longer exists
+- [x] The two chore actions asserted to check the assignee, and to log the real actor
+- [x] Database: the assignee may submit their own proof (the product)
+- [x] Database: a sibling may not submit against another child's chore
+- [x] Database: a sibling may not dispute in another child's name
+- [x] Database: a sibling may not re-attribute an existing submission
+- [x] Database: a manager may still submit and dispute for a child
+- [x] Mutation: the DB guards dropped → 2 breaches
+- [x] Mutation: the rule made managers-only → the assignee's own submission refused
+- [x] Mutation: one app-layer check removed → red, naming the action
+
+#### Issues Found
+F-F07 counted *"37 of 51 money, kids, economy and missions server actions with no test"*. Re-measured: **38 of 53**. Coverage is the symptom; asking what property was going unchecked found four live authorization defects, all the same confusion.
+
+**`submitProofAction`** loaded the assignment filtered on `family_id` only, then inserted the submission with `member_id: assignment.member_id` — the assignee, not the sender. Any member could submit proof against any other member's chore. A sibling could complete a child's chore for them, or file a failing photo and have the parent's queue reject it in that child's name.
+
+**`disputeSubmissionAction`** was the same read, and worse in what it recorded: the dispute row *and* the event log were both attributed to `submission.member_id`, so a sibling could open a dispute the ledger said the assignee had raised.
+
+**`requestAllowanceAction`** verified the wallet was in the family and nothing more, so any member could raise an allowance request against any child's wallet. `requested_by` recorded the truth all along, which is exactly what made the gap invisible: the audit trail was right while the request the parent saw was wrong.
+
+**`requestRedemptionAction`** takes a caller-supplied `memberId`, checked only to be *in the family*. Redemption debits that member's tokens on approval, so any member could spend another child's balance — and the request reaching the parent named the other child.
+
+The last two were found by the guard written for the first two, on its first run. That is the argument for writing the property down rather than fixing the two known cases.
+
+#### Fixes Applied
+The rule everywhere is **the row's own member OR a manager** — not managers-only. Submitting proof of your own chore, asking for your own allowance and spending your own tokens are the child's half of this product; a parent acting for a child is a real case and is kept. Same shape `0319` put on `member_locations` after SEC-006.
+
+`0327` adds restrictive INSERT and UPDATE guards on `chore_submissions` and `chore_disputes`, so the direct-PostgREST path is closed too — the path a session cookie reaches without rendering a page, which is the distinction ADMIN-001 and AUTHZ-008 turn on. UPDATE as well as INSERT, because without it a member could insert a correctly attributed row and then re-point it, which the probe checks. `0222`'s existing rule (members may submit and dispute, but not move a submission into a manager-decision status) is untouched; this narrows *whose*.
+
+The dispute's event log now names the actual actor. Logging the assignee made the ledger agree with the bug rather than record it.
+
+`tests/a-family-action-says-whose-row-it-is.test.ts` holds the app half as a **declaration**: each of the 53 actions is manager-gated, or named in `MEMBER_SCOPED` with its reason, or named in `FAMILY_SCOPED` with its reason — and a declared member-scoped action must actually read `ctx.active.member.id`. A name on the list with a body that only filters `family_id` is the original gap wearing a licence, so that is a separate case. Both lists are asserted not to name an action that no longer exists.
+
+**The mutation worth reading** is the second database one. Making the rule managers-only — the obvious over-correction — reports *"CONTROL FAILED: the assignee was refused their own submission — the fix took the kids page away."* A guard that only tested the breach would have called that a pass.
+
+
 ### ADMIN-001 — Every admin server action reaches a super-admin gate
 
 Status: ✅ PASS
@@ -22984,7 +23034,9 @@ Status: ✅ PASS — `npm run lint` reports the four known baseline warnings and
 ## Automated Tests
 Status: ✅ PASS — 15,287 tests across 1,215 files pass, zero failures and zero skips, on Node 24.15.0 at head 92340315 (160s).
 
-Later in this cycle, on Node 24.21.0: **16,809 tests across 1,319 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **51/51 boundary probes with 0 skipped**. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), `tests/a-capped-read-is-not-a-silent-one.test.ts` (DATA-011, 5), `tests/a-family-day-starts-where-the-family-is.test.ts` and `tests/a-server-day-is-the-familys-day.test.ts` (DATA-012, 11), `docs/audit/vaults-require-second-factor-check.sql` (AUTHZ-008), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
+Later in this cycle, on Node 24.21.0: **16,814 tests across 1,320 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **52/52 boundary probes with 0 skipped**.
+
+One type error was committed and is worth recording rather than quietly fixed: `tests/a-fan-out-has-a-width-somebody-chose.test.ts` used `source: 'test'` where `DriveTimeEstimate.source` is a three-value union. `vitest` does not typecheck, so it passed there; `tsc --noEmit` was run before the test file was written and not after, and the commit went out red. The next `tsc` caught it. The lesson is the ordering: the typecheck belongs after the last file is written, not after the last file one happened to be thinking about. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), `tests/a-capped-read-is-not-a-silent-one.test.ts` (DATA-011, 5), `tests/a-family-day-starts-where-the-family-is.test.ts` and `tests/a-server-day-is-the-familys-day.test.ts` (DATA-012, 11), `docs/audit/vaults-require-second-factor-check.sql` (AUTHZ-008), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
 
 Five existing guards had to be repaired rather than merely re-run, and that is itself a finding recorded under SEC-010: `guardian-callback-security`, `middleware-public-api-boundary`, `public-pages-reachable`, `health-feature-secrets` and `public-webhook-signature-boundary` each identified a control by the SPELLING of the function that implemented it. Moving identical verification one call away turned all five red while nothing about the behaviour changed — which is the same reason `public-webhook-signature-boundary` stayed green through eight signature checks that only ran in a production build.
 
@@ -26782,7 +26834,7 @@ approval queue — the page a parent opens most.
 | F-F04 | A requested local time that does not exist (DST spring-forward) is mishandled | **FIXED** — Pass I: `parse.ts` gained a UTC `DateOps` twin so the bridge cannot be normalised by the host's DST, and `vitest.config.ts` pins `TZ`. Reproduced red under `TZ=America/Los_Angeles` first (`expected '03:30' to be '03:00'`) | Medium |
 | F-F05 | 96 tests share the cold-`await import` shape and no `testTimeout` was configured | **FIXED** — see TEST-010: `testTimeout`/`hookTimeout` 20s, chosen from two measured instances (5,007ms cold vs 422ms warm; five unrelated cases timing out at exactly 5,000ms under CPU contention) | Medium |
 | F-F06 | `tests/seed-failure-safety.test.ts`, named "fails closed", asserts only the *absence* of two bad shapes, so deleting the error check makes it greener | **FIXED** — see TEST-010: it now asserts every script checks its error AND every check ends in a throw; deleting a check turns it red by name | Medium |
-| F-F07 | 37 of 51 money, kids, economy and missions server actions have no test | Medium |
+| F-F07 | 37 of 51 money, kids, economy and missions server actions have no test | **RE-FRAMED AND PART-FIXED** — see AUTHZ-009. Re-measured at 38 of 53. Asking what property was going unchecked found FOUR live authorization defects (submitProof, disputeSubmission, requestAllowance, requestRedemption — all "same family" mistaken for "same person"), now fixed in the actions and in `0327`, with all 53 held by a declaration guard. Per-action unit coverage is still thin and is the remaining work | Medium |
 | F-F08 | `addFundsAction` is the one money mutator that writes the balance directly | **RE-MEASURED — premise no longer holds.** See DATA-013: it inserts ledger rows, and the schema has no wallet balance column at all. The property is now held by a scan no absence-of-counter-example can satisfy | Medium |
 | F-F09 | Unbounded concurrent fan-out to an external drive-time API | **FIXED** — see PERF-005: `mapWithConcurrency` bounds it to 6 lanes; restoring the old line fails with "expected 40 to be less than or equal to 6", measured rather than grepped | Medium |
 | F-F10 | Two buttons in the message header exist only to say the feature is unavailable | Low |
