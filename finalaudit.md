@@ -3,11 +3,11 @@
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
 - Last Updated: 2026-09-20T17:44:10.000Z
-- Total Audit Items: 14075
+- Total Audit Items: 14076
 - Not Started: 13842
 - In Progress: 192
 - Passed: 10
-- Fixed + Passed: 27
+- Fixed + Passed: 28
 - Blocked: 2
 - Failed: 2
 - Overall Completion: 0.04%
@@ -14201,6 +14201,7 @@ PRODUCTION READY: NO
 | TEST-010 | Testing | Three test-infrastructure findings (F-F05, F-F06, F-F12) | 🛠 FIXED + PASS | Medium | 5/5 | seed-failure-safety now asserts every script checks its error and every check ends in a throw; testTimeout/hookTimeout set to 20s from measured cold-import times; the dead esbuild block removed and its backwards comment corrected | Both mutations red — an error check deleted (which made the OLD test greener) and a throw replaced by log-and-return, each named with its line; JSX still compiles after the config change | The rewrite's own first run caught a bug in itself: one /g regex shared between .test() and matchAll carries lastIndex, so it reported every other script as unchecked. Two constants now, and a comment saying why. |
 | DATA-013 | Data integrity | A money total is derived, never written (F-F08 re-measured) | ✅ PASS | Medium | 5/5 | No product change — the finding's premise no longer holds. A scan now forbids any insert/update/upsert setting a derived money total, with one stated exemption for a named cache of an external figure | Every %balance% column in the schema enumerated and none is a child's spendable money; making addFundsAction write saved_cents turns two cases red with the line | Goal funding goes through the wallet_fund_goal RPC, so the ledger row and the goal total move in one transaction rather than a read-modify-write two parents could interleave. |
 | PERF-005 | Performance | A fan-out whose width nobody chose (closes F-F09) | 🛠 FIXED + PASS | Medium | 10/10 | mapWithConcurrency in lib/utils, and the drive-time lookup bounded to 6 lanes | Restoring Promise.all(located.map(...)) fails on the MEASURED peak — expected 40 to be less than or equal to 6 — not only on a grep for the helper | Order preserved (the test reverses the delays), lanes not chunks (a 40ms item among nine 1ms ones tells them apart), and it rejects like Promise.all rather than putting undefined into a positional array. |
+| TEST-011 | Testing | The last test whose whole argument was an absence (closes F-F13) | 🛠 FIXED + PASS | Low | 4/4 | The 27-path hand-written list (two duplicated) replaced by a scan of all 146 app/api routes, plus the positive half it never had: every catching route's answer is something the route wrote itself | Zero leaks across 124 JSON-answering routes; a real route made to answer err.message goes red naming the file and pattern; making the walk match nothing fails TWO cases rather than passing silently | The first mutation passed and should not have — the target file's catches have no binding, so the injection never landed. Checking that a mutation applied is the difference between testing a guard and reassuring yourself about one. |
 | TEST-009 | Testing | Probe fixtures left in the seeded anchor family | 🛠 FIXED + PASS | Medium | 6/6 | Both probes now clear their fixtures at the end as well as the start | Each passes twice; suite 47/47 on both databases; anchor family holds only its seeded members | "Race Child" and "Probe Kid" had been living in the 71,192-row anchor family, the latter for a week. Found by the AUTHZ-006 sweep counting a member no fixture of its own had created. |
 | DATA-010 | DATA | Resource lifecycle through the real API | ✅ PASS | High | 8/8 | None required | CREATE/READ/UPDATE/VERIFY/DELETE/VERIFY all pass as a real member; a child's refused write returns HTTP 204 without Prefer, 200 [] with it, dosage unchanged | Shows at the HTTP layer why .select() + wroteNoRows was needed: 204 No Content is a success for a write that changed nothing. |
 | SEC-008 | SEC | Realtime broadcast isolation and publication drift | ✅ PASS | Critical | 5/5 | None required | Publication and code agree exactly (61 = 61, empty diff both ways); a live socket received its own family's row and not another's | The first attempt used an unpublished table and received nothing — a run that would have read as a clean refusal while proving nothing. Controls decided it. |
@@ -22230,6 +22231,43 @@ Three decisions inside the helper are worth stating because each has a wrong ver
 The behavioural assertion is the one that matters: restoring the old line fails with *expected 40 to be less than or equal to 6*, measured from a counter inside the fetcher, rather than only failing a grep for the helper's name.
 
 
+### TEST-011 — The last test whose whole argument was an absence (closes F-F13)
+
+Status: 🛠 FIXED + PASS
+Severity: Low
+Route(s), components, actions, tables and providers: `tests/database-error-boundaries.test.ts`, all 146 `app/api/**/route.ts`
+
+#### Expected Behavior
+A test file that guards a property asserts the property. A file whose every assertion is "this bad string is absent" is satisfied by deleting the subject, which is the opposite of a guard.
+
+#### Test Cases
+- [x] Every `it()` block in all 1,300+ test files classified
+- [x] Re-classified at file granularity, which is where the defect actually lives
+- [x] All 146 route files scanned; the 124 answering with JSON identified
+- [x] The 102 that catch identified, and each one's answer shape accounted for
+- [x] Four sanity cases: prose, two leak shapes, and a translated message
+- [x] Mutation: a real route made to answer `err.message` → red, naming file and pattern
+- [x] Mutation: the walk made to match nothing → red on two cases, not zero
+
+#### Issues Found
+F-F13 recorded *"sixty-nine test blocks assert only the absence of a pattern"*. Measured three ways, because the first two definitions were wrong:
+
+- **Any block whose assertions are all "negative-looking"** — 1,165 of 11,341. Useless: `toEqual([])` on an offenders list is the *correct* positive assertion for a no-offenders guard, and it is what every guard written in this cycle uses.
+- **Blocks reasoning about source text whose assertions are all `.not.*`** — 31. Better, still wrong: *"leaves the marketing header alone"*, *"leaves the presence channel alone"* are genuinely negative claims, and correct, when a sibling case asserts the positive.
+- **FILES where every assertion is negative** — **1**. That is the granularity the defect lives at, because it is the only one where nothing in the file asserts the thing exists.
+
+The one file was `tests/database-error-boundaries.test.ts`: a single `it` over a hand-written list of 27 route paths (two of them the same path twice), containing three `.not.toMatch` assertions and nothing else. Two ways to make it greener without fixing anything — delete a route from the list, or stop the route returning JSON errors at all.
+
+#### Fixes Applied
+The list is gone. Every route under `app/api` is read — 146 files, 124 answering with JSON, 102 of those catching — so a route added tomorrow is covered tomorrow and the duplicates are moot.
+
+The positive half is what the file never had: **every catching route's answer is something the route wrote itself** — a literal or translated message, a structured status carrying no message (`{ ok: false, failed: 1 }`, which is the most leak-proof answer a cron endpoint can give), an empty body, or a fixed module constant. Four shapes, each identified by reading the routes that use them rather than by widening a pattern until the count reached zero. That assertion gets *harder* as routes are added, where the old one got easier as routes were removed.
+
+Zero leaks across all 124. Both mutations are red, and the second is the one worth keeping: making the walk match nothing fails **two** cases rather than passing silently, because the non-vacuity counts are asserted.
+
+**A note on the first mutation, which passed and should not have.** The first attempt injected `error: err.message` into `app/api/ai/chat/route.ts`, the guard stayed green, and the honest reading of that is "the guard does not work". It was not: that file's catches are all `catch {` with no binding, so the injection never landed — `grep -c` returned 0. Re-run against `app/api/ai/insights/route.ts`, which does bind, it fails immediately and names the file and the pattern. Checking whether the mutation actually applied, rather than trusting that it did, is the difference between testing a guard and reassuring yourself about one.
+
+
 ### ADMIN-001 — Every admin server action reaches a super-admin gate
 
 Status: ✅ PASS
@@ -22946,7 +22984,7 @@ Status: ✅ PASS — `npm run lint` reports the four known baseline warnings and
 ## Automated Tests
 Status: ✅ PASS — 15,287 tests across 1,215 files pass, zero failures and zero skips, on Node 24.15.0 at head 92340315 (160s).
 
-Later in this cycle, on Node 24.21.0: **16,806 tests across 1,319 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **51/51 boundary probes with 0 skipped**. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), `tests/a-capped-read-is-not-a-silent-one.test.ts` (DATA-011, 5), `tests/a-family-day-starts-where-the-family-is.test.ts` and `tests/a-server-day-is-the-familys-day.test.ts` (DATA-012, 11), `docs/audit/vaults-require-second-factor-check.sql` (AUTHZ-008), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
+Later in this cycle, on Node 24.21.0: **16,809 tests across 1,319 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **51/51 boundary probes with 0 skipped**. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), `tests/a-capped-read-is-not-a-silent-one.test.ts` (DATA-011, 5), `tests/a-family-day-starts-where-the-family-is.test.ts` and `tests/a-server-day-is-the-familys-day.test.ts` (DATA-012, 11), `docs/audit/vaults-require-second-factor-check.sql` (AUTHZ-008), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
 
 Five existing guards had to be repaired rather than merely re-run, and that is itself a finding recorded under SEC-010: `guardian-callback-security`, `middleware-public-api-boundary`, `public-pages-reachable`, `health-feature-secrets` and `public-webhook-signature-boundary` each identified a control by the SPELLING of the function that implemented it. Moving identical verification one call away turned all five red while nothing about the behaviour changed — which is the same reason `public-webhook-signature-boundary` stayed green through eight signature checks that only ran in a production build.
 
@@ -26750,7 +26788,7 @@ approval queue — the page a parent opens most.
 | F-F10 | Two buttons in the message header exist only to say the feature is unavailable | Low |
 | F-F11 | The proof-photo signing error is discarded, so a parent sees a blank frame rather than a reason | **FIXED** — closed as part of PERF-004: batching the signing brought the per-entry error with it | Low |
 | F-F12 | The vitest config's JSX block is dead under vitest 4 | **FIXED** — see TEST-010: the dead `esbuild` block is gone and the note that had it backwards is corrected; the "esbuild options will be ignored" warning no longer prints on every run | Low |
-| F-F13 | Sixty-nine test blocks assert only the absence of a pattern | Low |
+| F-F13 | Sixty-nine test blocks assert only the absence of a pattern | **FIXED** — see TEST-011. Measured three ways: 1,165 blocks under a naive definition (mostly correct guards), 31 under a narrower one (mostly correct negative claims with positive siblings), and **1 FILE** where every assertion is negative — which is the granularity the defect lives at. That file is rewritten as a scan of all 146 routes with a positive half | Low |
 
 ## On the hunt for tests that cannot fail
 
