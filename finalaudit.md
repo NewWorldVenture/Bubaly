@@ -2,12 +2,12 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-20T17:44:10.000Z
-- Total Audit Items: 14078
+- Last Updated: 2026-09-22T02:25:00.000Z
+- Total Audit Items: 14079
 - Not Started: 13842
 - In Progress: 192
 - Passed: 10
-- Fixed + Passed: 30
+- Fixed + Passed: 31
 - Blocked: 2
 - Failed: 2
 - Overall Completion: 0.04%
@@ -14195,6 +14195,7 @@ PRODUCTION READY: NO
 | SEC-013 | Security | The family password vault stores its passwords in plaintext | ⚠️ BLOCKED | High | 4/5 (no fix attempted) | None — encrypting needs the write path to move off the browser, which is a feature rework with a key-management decision inside it | Stored and read back verbatim: 'hunter2-the-actual-wifi-password', pg_column_size 33 bytes for a 32-char password — no envelope, no IV, no tag. The only writer is the browser module; the table's one other mention in the tree is an AI denylist entry reading 'passwords and logins' | This is the half of F-E01 that 0296 does not fix — that migration narrowed WHO may read the row and says so in its own header. RLS has nothing to say about a pg_dump, a backup, a replica or the service-role key. Recommended shape recorded for the owner. |
 | DATA-011 | Data integrity | Eleven call sites discarded the truncation signal F-F01 raises | 🛠 FIXED + PASS | High | 5/5 (9 sanity cases inside them) | All eleven now act on it — 503 on the calendar feed and the three AI-coach routes, a refused verdict in the decision simulator, an abandoned playbook refresh, an early return before the GitHub sync's write loop, ErrorState on two marketplace pages | Three mutations red: an error removed from a destructure, from a batch element, and the helper's probe row removed | Every one of the eleven carried a comment explaining why a capped read would be wrong, then dropped the error saying it happened. The detector over-reported 54 -> 17 -> 15 -> 11 across four passes; the guard's two halves are deliberately not equally strict, and the comment says why. |
 | DATA-012 | Data integrity | "Today" was the server's day, not the family's (F-F02) | 🛠 FIXED + PASS | High | 11/11 | startOfLocalDay / startOfNextLocalDay in lib/time/zoned.ts; the kids, guardian and moments pages, both dashboards' dayBounds, and every notification's today/tomorrow copy moved onto the family's zone | Asserted in three zones from one instant, across both DST changeovers (a 23-hour and a 25-hour day), and in a zone whose clocks jump AT midnight; three mutations red; full suite green under TZ=UTC and TZ=America/Los_Angeles | 8 client files (correct — the browser IS the family) and 19 server files (not). timeLabel was wrong twice in one sentence: the day from the host's midnight and the clock with no timeZone, so 7pm read as "tomorrow at 3:00 AM". |
+| DATA-014 | Data integrity | Two billing upserts named a conflict target that could never fire | 🛠 FIXED + PASS | High | 14/14 + 1 runtime | lib/billing/customer-ref.ts is now the only writer of `billing_customers`; both routes and the Stripe webhook go through it and it names `family_id`, the constraint that exists | Measured against live PostgREST: 1st bare upsert ok, 2nd 23505 on billing_customers_family_id_key, same write with onConflict ok and updating; after the fix all four sequences pass including a concurrent double-click; 8 mutations red | The scan covers all 136 upsert call sites and derives 491 primary keys from the migrations, agreeing with the live catalogue on every one. Two of my own rules were wrong first: a helper assertion satisfied by a comment, and a named-target rule that flagged correct code in lib/server/profiles.ts. |
 | PERF-004 | Performance | The parent approval queue signed one photo per round trip (closes F-F03) | 🛠 FIXED + PASS | High | 4/4 (5 sanity cases inside them) | Paths collected, deduplicated and signed in chunks of 100 through createSignedUrls; the per-entry error is read so an unsignable object is left out rather than rendering an empty src; a signing outage costs the photos, not the queue | Restoring the loop turns the guard red at app/(app)/missions/page.tsx:106; the existing missions read-boundary test still passes | A loop inside a loop around `await createSignedUrl` — up to four photos per submission across the whole queue, in series. The batch form was already in the codebase and already used correctly one directory away. |
 | A11Y-001 | Accessibility | The photo lightbox stranded keyboard users (closes F-D01) | 🛠 FIXED + PASS | High | 7/7 | role=dialog + aria-modal + the shared useDialogBehavior hook on the viewer; tiles made focusable with Enter/Space; Arrow Left/Right between photos | Three mutations red (the hook removed; the tiles returned to mouse-only; a new overlay declaring aria-modal without the hook); 13 declare it and 13 implement it, and the sets are identical | The tiles were div onClick, so a keyboard could not reach the viewer at all — a trap you cannot enter. The existing a11y guard named four overlays by hand, so this one was never looked at: enumerated with no scan, the third shape of this repo's signature defect. |
 | A11Y-002 | Accessibility | The lint config enabled none of the rules that would have caught it (F-D10/F-D02/F-D03) | 🛠 FIXED + PASS (F-D03 ratcheted, not fixed) | Medium | 4/4 (7 sanity cases inside them) | label-has-associated-control enabled at depth 4 — measured first: at the default depth its only three findings are correct markup one level too deep; control-has-associated-label left OFF because 561 findings and the first sample is a correctly labelled input | next lint clean but for the three pre-existing react-hooks warnings; 144 selects scanned, 71 unnamed, pinned by a ratchet whose scan is asserted non-vacuous | next/core-web-vitals carries only a subset of jsx-a11y, which is exactly what F-D10 said. A rule whose findings are mostly wrong is one everyone learns to skip, so the unnamed selects are counted by a check that cannot be satisfied by nesting depth. |
@@ -23070,7 +23071,7 @@ Status: ✅ PASS — `npm run lint` reports the four known baseline warnings and
 ## Automated Tests
 Status: ✅ PASS — 15,287 tests across 1,215 files pass, zero failures and zero skips, on Node 24.15.0 at head 92340315 (160s).
 
-Later in this cycle, on Node 24.21.0: **16,818 tests across 1,321 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **52/52 boundary probes with 0 skipped**.
+Later in this cycle, on Node 24.21.0: **16,835 tests across 1,322 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **52/52 boundary probes with 0 skipped**.
 
 One type error was committed and is worth recording rather than quietly fixed: `tests/a-fan-out-has-a-width-somebody-chose.test.ts` used `source: 'test'` where `DriveTimeEstimate.source` is a three-value union. `vitest` does not typecheck, so it passed there; `tsc --noEmit` was run before the test file was written and not after, and the commit went out red. The next `tsc` caught it. The lesson is the ordering: the typecheck belongs after the last file is written, not after the last file one happened to be thinking about. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), `tests/a-capped-read-is-not-a-silent-one.test.ts` (DATA-011, 5), `tests/a-family-day-starts-where-the-family-is.test.ts` and `tests/a-server-day-is-the-familys-day.test.ts` (DATA-012, 11), `docs/audit/vaults-require-second-factor-check.sql` (AUTHZ-008), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
 
@@ -27875,6 +27876,153 @@ compiles; lint unchanged at its three pre-existing warnings; i18n gate clean
 with one new string added to all seven populated catalogues. The new guard is
 verified load-bearing in both directions — removing one `.select('id')` turns it
 red with file, line, table and operation.
+
+# Pass O — a write that worked once per family (DATA-014)
+
+## The finding
+
+`billing_customers` was written in three places with the same three columns.
+Two of them — `app/api/billing/checkout` and `app/api/billing/change-plan` —
+passed no conflict target; the Stripe webhook passed `onConflict: 'family_id'`.
+Only one of the three authors knew what the table's keys are.
+
+A PostgREST `.upsert()` without `onConflict` gets `on conflict (<primary key>)`.
+`billing_customers` keys on `id uuid primary key default gen_random_uuid()` and
+carries a **separate** `unique (family_id)`. The payload never supplies an `id`,
+so a fresh uuid is generated on every attempt, the `on conflict (id)` clause can
+never fire, the insert is attempted in full — and collides with the *other*
+constraint:
+
+```
+23505 duplicate key value violates unique constraint "billing_customers_family_id_key"
+```
+
+Measured against the local PostgREST through the same client the routes use,
+not inferred from the docs:
+
+| sequence | result |
+|---|---|
+| 1st bare upsert for a family | ok, row written |
+| 2nd bare upsert for the same family | **23505** on `billing_customers_family_id_key` |
+| same write with `onConflict: 'family_id'` | ok, and it **updates** |
+| a row left with `customer_ref` NULL, then the route runs | **23505**, and the row stays NULL |
+
+Both call sites sit *after* `stripe.customers.create` has already returned. So
+the failure is not a dead letter — it is a real Stripe customer, carrying the
+family's name and email, that the database never recorded. The route answers
+503, the person retries, and the retry mints another one. The row that would
+let them past stays as it is.
+
+Two ways in. A row with `customer_ref` NULL takes the branch on every attempt
+and can never leave it. And two concurrent requests for one family — a
+double-clicked upgrade, or checkout and change-plan at once — both read no
+customer, both create one, and the second write fails.
+
+## The fix
+
+`lib/billing/customer-ref.ts` is now the only thing that writes that row, and
+it names `family_id`. Both routes and the webhook go through it. Three copies of
+one write, one of which knew the rule, is how the rule got lost; there is no
+longer a second place for it to differ.
+
+After the fix, all four sequences above pass, and a genuine concurrent pair both
+succeed leaving one row.
+
+## What the fix does not do, stated rather than implied
+
+The first version of the helper's doc comment claimed the callers converge on
+one customer because it reads the row back. The race probe falsified that:
+PostgREST's `.select()` returns **this statement's own RETURNING row**, so two
+racing callers both succeed and each answers with the id it wrote, while the row
+holds whichever committed last. Both callers report `ok`; they report different
+ids. The comment now says that, because the measurement said it and the first
+draft did not.
+
+The loser's Stripe customer is therefore still left unreferenced — avoiding that
+needs the id reserved before Stripe is called, which is a larger change than a
+write. And until checkout completes, `/api/billing/portal` can open against the
+customer the row names rather than the one being paid through. That one closes
+itself: `checkout.session.completed` comes back through the same function with
+the session's own customer.
+
+## The generalisation
+
+The rule is a scan over all **136** `.upsert(` call sites, not a list of the two
+that were wrong. Primary keys are parsed out of the migrations — **491 tables**,
+agreeing with the live `pg_constraint` catalogue on **every one**, which is what
+makes a parser regression a failure here rather than an empty search space.
+
+Every upsert must either name a target or supply its table's primary key. The
+other five bare upserts in the tree are correct and the scan says so:
+`marketing_settings`, `marketing_suppressions` and `marketing_provider_syncs`
+all have the natural key **as** the primary key. `graph_entities` names exactly
+the unique index it has.
+
+## Two of my own rules were wrong first
+
+Both were found by mutating the fix, not by reading the test.
+
+- **A helper assertion satisfied by a comment.** `expect(helper).toContain("onConflict: 'family_id'")`
+  read the whole file. Deleting the actual argument left the doc comment above
+  the query, and the assertion passed on that. Only the repo-wide scan caught
+  the mutation. The assertion now matches comment-stripped source. This is the
+  fifth guard shape this audit has catalogued — matching the spelling of the
+  implementation — appearing in a guard written to catch it.
+- **A named target rule that flagged correct code.** Strengthening the analyser
+  to reject `onConflict: 'id'` on a payload with no `id` — because that clause
+  is just as dead as none — immediately reported `lib/server/profiles.ts:36`.
+  That code is right: it passes `id` in a `const row` object three lines up, and
+  the scanner only read the call's own text. The scanner now resolves a payload
+  passed by name, with controls in both directions.
+
+Two neighbouring tests also had to be repaired, and each was wrong in a way
+worth recording:
+
+- `tests/billing-read-boundary.test.ts` asserted `toContain('customerWriteError')`
+  — a **variable name**. The refactor renamed the binding and the assertion
+  failed while the guard it cared about was still there and stricter. It now
+  reads the binding out of the source and requires that binding to be tested in
+  something that returns 503 before Stripe is mutated, with four controls
+  including an `if` that logs instead of returning.
+- `tests/billing-price-verification.test.ts` stubbed `upsert` as `async`, so
+  awaitable but not chainable. The same file's `update` stub carries a comment
+  explaining that a real PostgREST builder is both — the lesson was written down
+  for one method and not the other. Modelled that way, **no unit test in the
+  suite could observe whether an upsert's result was read at all**, which is how
+  a missing conflict target survived. The stub now records the options object,
+  and both routes assert at runtime that `{ onConflict: 'family_id' }` is what
+  actually reaches the client.
+
+## The runtime was not the declared one
+
+Two failures in the full run were neither mine nor flakes: this container came
+up on **Node 22.22.2** while `.nvmrc` and `package.json` declare **24.21.0**.
+`node-version-is-pinned` said exactly that, and `stream-cancellation-runtime`
+failed on `controller[kState].transformAlgorithm is not a function`, a Node 22
+`TransformStream` bug fixed in 24. Two honest guards reporting the same fact.
+Installing 24.21.0 and re-running turned both green with no code change. Worth
+noting because "two failures, probably environmental" is the sentence that
+precedes ignoring a real one.
+
+## Verification
+
+- **8 mutations, all red**: the original bare upsert restored (caught by three
+  assertions independently); `onConflict` dropped from the helper; `onConflict`
+  changed to `'id'`; a new bare upsert on `subscriptions`; the primary-key
+  parser's composite branch disabled; the payload resolver disabled; the
+  helper's missing-ref check removed; and the runtime assertion checked against
+  a helper with no target.
+- `tests/an-upsert-names-a-target-that-can-fire.test.ts` — 14 cases.
+- One runtime case across both routes in `billing-price-verification`.
+- **16,835 tests across 1,322 files, zero failures and zero skips**, on Node
+  24.21.0. `npx tsc --noEmit` exits 0; the changed files lint clean.
+- One type error was caught **before** committing this time, by running `tsc`
+  after the last file was written: the widened stub recorded an `options` field
+  the `writes` array's type did not have. That is the ordering lesson from the
+  F-F07 pass applied rather than restated.
+
+No migration. The constraint the fix relies on has been in `0002_tables.sql`
+since the beginning; only the code that ignored it changed.
 
 # Final Regression
 
