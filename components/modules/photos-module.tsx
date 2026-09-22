@@ -14,7 +14,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { useDialogBehavior } from '@/lib/a11y/use-dialog-behavior';
 import { createClient } from '@/lib/supabase/client';
 import { describeDbError } from '@/lib/supabase/errors';
-import { FAMILY_MEDIA_MAX_LABEL, partitionBySize, familyMediaPath } from '@/lib/storage/family-media';
+import { FAMILY_MEDIA_MAX_LABEL, partitionBySize, familyMediaPath, removeFamilyMedia } from '@/lib/storage/family-media';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -181,7 +181,20 @@ export function PhotosModule() {
     // never orphan a library row that points at an already-removed image.
     const { error } = await supabase.from('family_photos').delete().eq('id', photo.id);
     if (error) { toastError(describeDbError(error)); return; }
-    await supabase.storage.from('family-media').remove([photo.storage_path]);
+    // SEC-015, same shape: storage answers a refused delete and a delete of
+    // something absent identically — `error: null`, `data: []` — so the returned
+    // list is what says the file is gone. `family-media` is a PUBLIC bucket, so
+    // a removal that quietly failed leaves the photo retrievable by its URL for
+    // ever, with no row left to find it by. The comment above records that
+    // dropping the ROW delete's error once showed a false "Photo deleted"; this
+    // is the same falsehood, three lines down.
+    const removal = await removeFamilyMedia(supabase, photo.storage_path);
+    if (removal.error) {
+      toastError(tr('photosModule.removedFromYourLibraryBut'));
+      void refreshPhotos();
+      if (lightboxIdx !== null) setLightboxIdx(null);
+      return;
+    }
     success(tr('photosModule.photoDeleted'));
     void refreshPhotos();
     if (lightboxIdx !== null) setLightboxIdx(null);

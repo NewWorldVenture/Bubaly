@@ -1,3 +1,4 @@
+import { removeConfirmed } from './confirm-removal';
 import { unguessableObjectName } from './object-name';
 // Client-side size guard for the `family-media` Storage bucket (Photos,
 // Create Memory, Messages attachments). Matches the bucket's 25 MB
@@ -49,4 +50,21 @@ export function oversizeMessage(count: number): string | null {
  */
 export function familyMediaPath(familyId: string, folder: string, fileName: string): string {
   return `${familyId}/${folder}/${unguessableObjectName(fileName)}`;
+}
+
+export const FAMILY_MEDIA_BUCKET = 'family-media';
+
+/**
+ * Remove one family-media object and confirm it is gone.
+ *
+ * SEC-015: `family-media` is a PUBLIC bucket, so a removal that quietly failed
+ * leaves the object retrievable by its URL for ever — and for a photo the row
+ * is deleted first, so nothing is left to find it by. The shared rule is used
+ * rather than an inline check so this cannot drift from the other four buckets.
+ */
+export async function removeFamilyMedia(
+  supabase: { storage: { from: (bucket: string) => Parameters<typeof removeConfirmed>[0] } },
+  path: string,
+): Promise<{ error: string | null }> {
+  return removeConfirmed(supabase.storage.from(FAMILY_MEDIA_BUCKET), path);
 }

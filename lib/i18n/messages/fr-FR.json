@@ -13639,5 +13639,6 @@
   "marketplaceQuestions.couldNotLoadTheseQuestions": "Impossible de charger ces questions. Actualisez et réessayez.",
   "digitalTwin.couldNotReadThisCategorysSpending": "Impossible de lire les dépenses de cette catégorie ; la vérification du budget ne serait qu’une supposition.",
   "digitalTwin.spendingUnavailable": "Dépenses indisponibles",
-  "playbook.couldNotReadEnoughOfYourHistory": "Impossible de lire suffisamment d’historique pour créer un playbook. Veuillez réessayer."
+  "playbook.couldNotReadEnoughOfYourHistory": "Impossible de lire suffisamment d’historique pour créer un playbook. Veuillez réessayer.",
+  "photosModule.removedFromYourLibraryBut": "Retiré de votre bibliothèque, mais le fichier lui-même n’a pas pu être supprimé. Veuillez réessayer."
 }

@@ -13639,5 +13639,6 @@
   "marketplaceQuestions.couldNotLoadTheseQuestions": "Could not load these questions. Refresh and try again.",
   "digitalTwin.couldNotReadThisCategorysSpending": "Could not read this category’s spending, so the budget check would be a guess.",
   "digitalTwin.spendingUnavailable": "Spending unavailable",
-  "playbook.couldNotReadEnoughOfYourHistory": "Could not read enough of your history to build a playbook. Please try again."
+  "playbook.couldNotReadEnoughOfYourHistory": "Could not read enough of your history to build a playbook. Please try again.",
+  "photosModule.removedFromYourLibraryBut": "Removed from your library, but the file itself could not be deleted. Please try again."
 }

@@ -19,7 +19,7 @@ const h = vi.hoisted(() => ({
   photos: [] as Photo[], albums: [] as Album[], mutationError: null as unknown,
   photoInsertError: null as unknown, albumInsertError: null as unknown,
   success: vi.fn(), error: vi.fn(), refresh: vi.fn(), insert: vi.fn(), update: vi.fn(), eq: vi.fn(),
-  upload: vi.fn(), remove: vi.fn(), bucket: vi.fn(), publicUrl: vi.fn(),
+  upload: vi.fn(), remove: vi.fn(), list: vi.fn(), bucket: vi.fn(), publicUrl: vi.fn(),
 }));
 
 // The real module, local forms, fields, provider and HTML renderer run here.
@@ -70,7 +70,7 @@ vi.mock('@/lib/supabase/client', () => ({ createClient: () => ({
     } }),
   }),
   storage: { from: (bucket: string) => {
-    h.bucket(bucket); return { upload: h.upload, remove: h.remove, getPublicUrl: h.publicUrl };
+    h.bucket(bucket); return { upload: h.upload, remove: h.remove, list: h.list, getPublicUrl: h.publicUrl };
   } },
 }) }));
 vi.mock('@/lib/i18n/server', async () => {
@@ -149,9 +149,14 @@ function openUpload() { render(); clickText(t('photos.upload')); return render()
 beforeEach(() => {
   h.locale = 'en-US'; h.slots = []; h.cursor = 0; h.tree = null; h.photos = []; h.albums = [];
   h.mutationError = null; h.photoInsertError = null; h.albumInsertError = null;
-  for (const mock of [h.success, h.error, h.refresh, h.insert, h.update, h.eq, h.upload, h.remove, h.bucket, h.publicUrl]) mock.mockReset();
+  for (const mock of [h.success, h.error, h.refresh, h.insert, h.update, h.eq, h.upload, h.remove, h.list, h.bucket, h.publicUrl]) mock.mockReset();
   h.upload.mockImplementation(async (path: string) => ({ data: { path }, error: null }));
-  h.remove.mockResolvedValue({ error: null });
+  // Real storage answers a successful remove with the objects it removed, and a
+  // REFUSED one with `error: null, data: []` — indistinguishable from an absent
+  // object (SEC-015). A double that returned only `{ error: null }` could not
+  // tell those apart, so it could not observe whether the component checks.
+  h.remove.mockImplementation(async (paths: string[]) => ({ data: paths.map((name) => ({ name })), error: null }));
+  h.list.mockResolvedValue({ data: [], error: null });
   h.publicUrl.mockImplementation((path: string) => ({ data: { publicUrl: `https://example.com/${path}` } }));
   vi.useFakeTimers(); vi.setSystemTime(NOW);
   vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:local-preview');
@@ -332,5 +337,28 @@ it('preserves row-first deletion and refuses storage removal or success after a 
   expect(h.remove).not.toHaveBeenCalled(); expect(h.success).not.toHaveBeenCalled();
   h.mutationError = null; clickLabel(t('photos.deletePhoto')); await flush();
   expect(h.remove).toHaveBeenLastCalledWith(['family-1/photos/photo-1.jpg']);
+  expect(h.success).toHaveBeenLastCalledWith(t('photosModule.photoDeleted'));
+});
+
+it('does not claim a photo was deleted when the file survived (SEC-015)', async () => {
+  // `family-media` is a public bucket, so a removal that quietly failed leaves
+  // the photo retrievable by its URL with no row left to find it by. A refused
+  // remove looks exactly like an absent one: `error: null, data: []`.
+  h.photos = [photo()]; openAll();
+  clickNode(find((n) => n.type === 'div' && typeof n.props.onClick === 'function' && String(n.props.className).includes('break-inside-avoid'))); render();
+  h.remove.mockResolvedValue({ data: [], error: null });
+  h.list.mockResolvedValue({ data: [{ name: 'photo-1.jpg' }], error: null });
+  clickLabel(t('photos.deletePhoto')); await flush();
+  expect(h.success).not.toHaveBeenCalled();
+  expect(h.error).toHaveBeenLastCalledWith(t('photosModule.removedFromYourLibraryBut'));
+});
+
+it('still reports success when the file is confirmed already gone (SEC-015)', async () => {
+  // A retry after a half-finished delete must not be reported as a failure.
+  h.photos = [photo()]; openAll();
+  clickNode(find((n) => n.type === 'div' && typeof n.props.onClick === 'function' && String(n.props.className).includes('break-inside-avoid'))); render();
+  h.remove.mockResolvedValue({ data: [], error: null });
+  h.list.mockResolvedValue({ data: [], error: null });
+  clickLabel(t('photos.deletePhoto')); await flush();
   expect(h.success).toHaveBeenLastCalledWith(t('photosModule.photoDeleted'));
 });

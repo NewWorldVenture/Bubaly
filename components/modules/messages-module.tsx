@@ -407,7 +407,15 @@ export function MessagesModule() {
       });
       if (insErr) {
         // Roll back the orphaned upload if the message row failed to insert.
-        await supabase.storage.from('family-media').remove([stored.path]);
+        // Best-effort: the person is told about the insert failure, which is the
+        // part that concerns them. But `family-media` is a public bucket, so a
+        // rollback that quietly failed leaves an unreferenced object behind —
+        // and a discarded result cannot be distinguished from a refusal
+        // (SEC-015), so it is logged rather than dropped.
+        const rollback = await supabase.storage.from('family-media').remove([stored.path]);
+        if (rollback.error || !rollback.data?.some((object) => object.name === stored.path)) {
+          console.error('[messages] attachment rollback not confirmed', { path: stored.path, error: rollback.error });
+        }
         toastError(describeDbError(insErr));
       }
     } catch (err) {

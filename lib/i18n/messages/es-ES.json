@@ -13639,5 +13639,6 @@
   "marketplaceQuestions.couldNotLoadTheseQuestions": "Error al cargar estas preguntas. Actualiza y vuelve a intentarlo.",
   "digitalTwin.couldNotReadThisCategorysSpending": "No se han podido leer los gastos de esta categoría, así que la comprobación del presupuesto sería una suposición.",
   "digitalTwin.spendingUnavailable": "Gastos no disponibles",
-  "playbook.couldNotReadEnoughOfYourHistory": "No se ha podido leer suficiente historial para crear un playbook. Vuelve a intentarlo."
+  "playbook.couldNotReadEnoughOfYourHistory": "No se ha podido leer suficiente historial para crear un playbook. Vuelve a intentarlo.",
+  "photosModule.removedFromYourLibraryBut": "Se ha quitado de tu biblioteca, pero no se ha podido eliminar el archivo. Vuelve a intentarlo."
 }

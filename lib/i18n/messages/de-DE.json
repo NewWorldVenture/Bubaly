@@ -13639,5 +13639,6 @@
   "marketplaceQuestions.couldNotLoadTheseQuestions": "Fehler beim Laden: diese Fragen. Bitte aktualisieren und erneut versuchen.",
   "digitalTwin.couldNotReadThisCategorysSpending": "Die Ausgaben dieser Kategorie konnten nicht gelesen werden, die Budgetprüfung wäre also geraten.",
   "digitalTwin.spendingUnavailable": "Ausgaben nicht verfügbar",
-  "playbook.couldNotReadEnoughOfYourHistory": "Es konnte nicht genug Ihres Verlaufs gelesen werden, um ein Playbook zu erstellen. Bitte erneut versuchen."
+  "playbook.couldNotReadEnoughOfYourHistory": "Es konnte nicht genug Ihres Verlaufs gelesen werden, um ein Playbook zu erstellen. Bitte erneut versuchen.",
+  "photosModule.removedFromYourLibraryBut": "Aus deiner Bibliothek entfernt, aber die Datei selbst konnte nicht gelöscht werden. Bitte versuche es erneut."
 }
