@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   MessageCircle, Plus, Send, Smile, Paperclip, Reply, Pin, Trash2,
   MoreHorizontal, CheckCheck, ArrowLeft, Search, X, Camera, Loader2,
-  Check, Phone, Video, Info, Settings, UserPlus, SlidersHorizontal, Mic,
+  Check, Info, Settings, UserPlus, SlidersHorizontal, Mic,
   Image as ImageIcon, BellOff, Archive, ChevronRight, FileText, Download,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
@@ -697,10 +697,23 @@ export function MessagesModule() {
                 </p>
               </div>
               <AiInsight kind="messages" params={{ conversationId: activeConv.id }} variant="ghost" iconOnly />
-              <button onClick={() => toastError(tr('messagesModule.videoCallingIsnTAvailable'))} aria-label={tr('messages.startVideoCall')}
-                className="rounded-lg p-1.5 text-muted hover:text-fg"><Video className="h-4 w-4" /></button>
-              <button onClick={() => toastError(tr('messagesModule.voiceCallingIsnTAvailable'))} aria-label={tr('messages.startVoiceCall')}
-                className="rounded-lg p-1.5 text-muted hover:text-fg"><Phone className="h-4 w-4" /></button>
+              {/* A "Start video call" and a "Start voice call" button used to sit
+                  here. They rendered unconditionally, were styled exactly like
+                  the working "About this chat" button beside them, carried
+                  affirmative labels, and their only effect was an ERROR toast
+                  saying the feature does not exist (F-F10).
+                  
+                  That is the one place in the signed-in app that advertised a
+                  capability it does not have, and it contradicted a rule this
+                  repo states about itself twice — lib/constants/navigation.ts:
+                  "No 'coming soon' stubs: if a console section isn't built yet,
+                  it isn't listed." The capability-gated surfaces that do it
+                  right read the capability and simply do not offer the control:
+                  /wallet/cards passes caps.issuing and caps.physicalCards down
+                  rather than rendering a button that apologises.
+                  
+                  Removed rather than disabled. A greyed-out control still makes
+                  the promise; the absence of one makes none. */}
               <button onClick={() => setShowAbout(true)} aria-label={tr('messages.aboutThisChat')}
                 className="rounded-lg p-1.5 text-muted hover:text-fg"><Info className="h-4 w-4" /></button>
             </div>
