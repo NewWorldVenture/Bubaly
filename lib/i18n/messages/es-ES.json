@@ -514,6 +514,7 @@
   "actions.tooManyReviewAttemptsPlease": "Demasiados intentos de reseña. Inténtalo de nuevo en breve.",
   "actions.tooManySignInAttempts": "Demasiados intentos de inicio de sesión. Inténtalo de nuevo en breve.",
   "actions.tooManySurveyResponsesPlease": "Demasiadas respuestas a la encuesta. Inténtalo de nuevo en breve.",
+  "actions.tooManyTriesTryAgainIn": "Demasiados intentos. Inténtalo de nuevo en {minutes} min.",
   "actions.transactionNotFound": "No se ha encontrado la transacción.",
   "actions.unknownCapability": "Capacidad desconocida.",
   "actions.unknownDomain": "Ámbito desconocido.",

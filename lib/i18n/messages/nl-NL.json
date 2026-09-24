@@ -514,6 +514,7 @@
   "actions.tooManyReviewAttemptsPlease": "Te veel beoordelingspogingen. Probeer het zo dadelijk opnieuw.",
   "actions.tooManySignInAttempts": "Te veel inlogpogingen. Probeer het zo dadelijk opnieuw.",
   "actions.tooManySurveyResponsesPlease": "Te veel enquêteantwoorden. Probeer het zo dadelijk opnieuw.",
+  "actions.tooManyTriesTryAgainIn": "Te veel pogingen. Probeer het over {minutes} min. opnieuw.",
   "actions.transactionNotFound": "Transactie niet gevonden.",
   "actions.unknownCapability": "Onbekende mogelijkheid.",
   "actions.unknownDomain": "Onbekend domein.",

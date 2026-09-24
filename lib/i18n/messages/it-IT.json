@@ -514,6 +514,7 @@
   "actions.tooManyReviewAttemptsPlease": "Troppi tentativi di recensione. Riprova tra poco.",
   "actions.tooManySignInAttempts": "Troppi tentativi di accesso. Riprova tra poco.",
   "actions.tooManySurveyResponsesPlease": "Troppe risposte al sondaggio. Riprova tra poco.",
+  "actions.tooManyTriesTryAgainIn": "Troppi tentativi. Riprova tra {minutes} min.",
   "actions.transactionNotFound": "Transazione non trovata.",
   "actions.unknownCapability": "Capacità sconosciuta.",
   "actions.unknownDomain": "Ambito sconosciuto.",

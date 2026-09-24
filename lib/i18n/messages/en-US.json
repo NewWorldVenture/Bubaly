@@ -514,6 +514,7 @@
   "actions.tooManyReviewAttemptsPlease": "Too many review attempts. Please try again shortly.",
   "actions.tooManySignInAttempts": "Too many sign-in attempts. Try again shortly.",
   "actions.tooManySurveyResponsesPlease": "Too many survey responses. Please try again shortly.",
+  "actions.tooManyTriesTryAgainIn": "Too many tries. Try again in {minutes} min.",
   "actions.transactionNotFound": "Transaction not found.",
   "actions.unknownCapability": "Unknown capability.",
   "actions.unknownDomain": "Unknown domain.",

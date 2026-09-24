@@ -514,6 +514,7 @@
   "actions.tooManyReviewAttemptsPlease": "Trop de tentatives d’avis. Veuillez réessayer dans un instant.",
   "actions.tooManySignInAttempts": "Trop de tentatives de connexion. Réessayez dans un instant.",
   "actions.tooManySurveyResponsesPlease": "Trop de réponses à l’enquête. Veuillez réessayer dans un instant.",
+  "actions.tooManyTriesTryAgainIn": "Trop de tentatives. Réessayez dans {minutes} min.",
   "actions.transactionNotFound": "Transaction introuvable.",
   "actions.unknownCapability": "Capacité inconnue.",
   "actions.unknownDomain": "Domaine inconnu.",

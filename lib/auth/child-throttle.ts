@@ -100,7 +100,15 @@ export function clearedState(now: Date = new Date()): ThrottleRow {
   return { fails: 0, window_start: now.toISOString(), locked_until: null };
 }
 
-/** Friendly "try again in …" text for the retry-after seconds. */
+/**
+ * Whole minutes until the lock lifts, never 0 — the `{minutes}` in the
+ * catalogue's `actions.tooManyTriesTryAgainIn`, which is what sign-in shows.
+ */
+export function retryAfterMinutes(sec: number): number {
+  return Math.max(1, Math.ceil(sec / 60));
+}
+
+/** Friendly "try again in …" text for the retry-after seconds. English only. */
 export function retryAfterLabel(sec: number): string {
   if (sec <= 0) return 'a moment';
   if (sec < 60) return `${sec} second${sec === 1 ? '' : 's'}`;

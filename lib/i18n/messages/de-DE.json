@@ -514,6 +514,7 @@
   "actions.tooManyReviewAttemptsPlease": "Zu viele Bewertungsversuche. Bitte versuchen Sie es in Kürze erneut.",
   "actions.tooManySignInAttempts": "Zu viele Anmeldeversuche. Versuchen Sie es in Kürze erneut.",
   "actions.tooManySurveyResponsesPlease": "Zu viele Umfrageantworten. Bitte versuchen Sie es in Kürze erneut.",
+  "actions.tooManyTriesTryAgainIn": "Zu viele Versuche. Versuchen Sie es in {minutes} Min. erneut.",
   "actions.transactionNotFound": "Transaktion nicht gefunden.",
   "actions.unknownCapability": "Unbekannte Fähigkeit.",
   "actions.unknownDomain": "Unbekannter Bereich.",
