@@ -2,12 +2,12 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-25T04:10:00.000Z
-- Total Audit Items: 14086
+- Last Updated: 2026-09-25T05:40:00.000Z
+- Total Audit Items: 14087
 - Not Started: 13842
 - In Progress: 192
 - Passed: 12
-- Fixed + Passed: 37
+- Fixed + Passed: 38
 - Blocked: 2
 - Failed: 1
 - Overall Completion: 0.04%
@@ -85,7 +85,8 @@ PRODUCTION READY: NO
 - PUSH-002: Legacy FCM and APNs-token misrouting replaced with provider-specific senders. Native provider/device configuration and receipt still unverified.
 - EMAIL-001: Suppression retry, receipt claims and documented tags shape repaired locally. Real database/provider workflow still unverified; metric atomicity tracked EMAIL-002.
 - MOBILE-001: Late service-worker registration and teardown defects repaired and component-tested. Actual authenticated install/update/offline and physical device flows remain unverified.
-- DEPLOY-002: Migrations 0318–0330 are PENDING PRODUCTION and must be applied by a human (docs/PENDING_PROD_MIGRATIONS.md). 0328 (SEC-016) is deploy-coupled in both directions: this branch's marketplace code reads `has_reserve`/`reserve_met`, which exist only after 0328, and older code reads `reserve_cents`, which 0328 refuses. Apply it with the deploy that carries this code; either order alone breaks the auction board and item page.
+- SEC-018 (CRITICAL until deployed): a stranger who knew a family's id could onboard into it as a PARENT and read its password vault — reproduced with real sessions. Fixed on this branch in the onboarding action (effective on deploy) and in migration 0331 (pending). Production is exposed until this code ships; 0331 additionally closes the removed-creator variant the code check alone does not.
+- DEPLOY-002: Migrations 0318–0331 are PENDING PRODUCTION and must be applied by a human (docs/PENDING_PROD_MIGRATIONS.md). 0328 (SEC-016) is deploy-coupled in both directions: this branch's marketplace code reads `has_reserve`/`reserve_met`, which exist only after 0328, and older code reads `reserve_cents`, which 0328 refuses. Apply it with the deploy that carries this code; either order alone breaks the auction board and item page.
 - SEC-001: Family media bucket explicitly public while family photo/message/reminder consumers publish public URLs; authorization privacy cannot pass.
 - SOCIAL-001: Live authorized X configuration/provider acceptance and deployed role enforcement remain unverified. AUTHZ-003 remains a database release failure. New one-off scheduling implementation and local proof are recorded underSOCIAL-003. Automatic refresh, interrupted-state recovery, other platforms/media and feed/analytics remain open.
 - JOB-001: Missing-config false-success defect repaired and CLI-tested. Deployed scheduler configuration, execution and durable missed-tick catch-up remain unverified.
@@ -14204,6 +14205,7 @@ PRODUCTION READY: NO
 | AUTHZ-010 | AUTHZ | The refused-write guard scanned `components/` only, and said so nowhere | ✅ PASS | Medium | 13/13 | No product change — every write outside that root is safe today. A rule now covers `'use server'` actions under `app/`: a guarded-table update/delete through the user client must refuse a non-manager itself, read its rows back, or use the service role | 67 update/delete calls on the 44 guarded tables live outside `components/`; 17 go through the cookie-bound client and are filtered by RLS exactly as silently. All are gated, check rows, or bypass RLS. 5 mutations red, including dropping the `isManager` line from a real action | Five false positives of my own first, each from matching a name instead of a behaviour (`canManage`, `admin = createServiceClient()`, `ledgerClient()`, a binding assumed to be called `data`, a too-short window) — and one mutation that never landed until I checked that it had. |
 | SEC-016 | Security | A proxy bid's ceiling was readable by the people bidding against it | 🛠 FIXED + PASS (0328 pending production, deploy-coupled) | High | 9/9 + probe | Column privileges: client SELECT withheld on `reserve_cents`, `highest_max_cents` and `marketplace_bids.max_cents`, with the grant list computed in the migration and a self-check; the UI reads generated `has_reserve`/`reserve_met` instead of the figure; the one `select('*')` names its columns | Three real accounts over PostgREST: a rival read the leader's ceiling (50000) and reserve (20000), the seller read every bidder's max, and a rival bid of exactly the ceiling moved a $10.00 auction to $500.00 without leading. After: all three refused with 42501, the engine, bid history and reserve badge unchanged. 8 mutations red across probe and unit guard | 0183's own column comments call both values "hidden". The auction board was also serialising `reserve_cents` into every viewer's page props. A column grant does not extend to columns added later, so the probe asserts the selectable set is exactly "all minus the secrets". |
 | SEC-017 | Security | A child could decide where a gift went, and what a goal said | 🛠 FIXED + PASS (0329 pending production) | High | 4/4 + probe | Restrictive manager-only write guards on gift_payments, gift_links, pay_handles and wallet_goals — the four 0088 tables 0217 missed that a parent's money decision is made from | Real sessions, a parent and two children: Grandma's $50 for Sister rewritten to $500 for Brother, a $20,000 gift invented, the parent approves the queue, Sister $0.00 and Brother $20,500.00; a $300 goal forged as reached with zero ledger rows. After: all refused; every parent and public path unchanged. 7 mutations red | The probe carries the general rule — nothing a definer money function reads may be rewritten by a non-manager — which catches the next RPC as well as these four. Found by asking what a brute-forced circle join code would grant, then what else the approval queue trusts. |
+| SEC-018 | Security | A stranger could onboard into your family as its parent | 🛠 FIXED + PASS (app live on deploy; 0331 pending production) | Critical | 4/4 + probe | Three layers: the onboarding action refuses a resumed claim the caller did not create before writing the membership; `onboarding_claim_family` resumes only a family the caller created with no other login member; clients lose INSERT and `family_id` UPDATE on `onboarding_progress` | Real sessions: a fresh account set its own onboarding row's family_id to a victim family, ran onboarding, was upserted in as `parent` by the service role, and read the victim's password vault. After: five probe findings pre-0331, two with only the function fixed, clean after; the action mutation fails its test | The family id is readable by every family sharing a marketplace circle (marketplace_circle_members) and known to every past member. prepareCalendarFamily always had the check; the main action did not. Found by asking which definer functions write privileged tables from member-writable rows. |
 | PERF-004 | Performance | The parent approval queue signed one photo per round trip (closes F-F03) | 🛠 FIXED + PASS | High | 4/4 (5 sanity cases inside them) | Paths collected, deduplicated and signed in chunks of 100 through createSignedUrls; the per-entry error is read so an unsignable object is left out rather than rendering an empty src; a signing outage costs the photos, not the queue | Restoring the loop turns the guard red at app/(app)/missions/page.tsx:106; the existing missions read-boundary test still passes | A loop inside a loop around `await createSignedUrl` — up to four photos per submission across the whole queue, in series. The batch form was already in the codebase and already used correctly one directory away. |
 | A11Y-001 | Accessibility | The photo lightbox stranded keyboard users (closes F-D01) | 🛠 FIXED + PASS | High | 7/7 | role=dialog + aria-modal + the shared useDialogBehavior hook on the viewer; tiles made focusable with Enter/Space; Arrow Left/Right between photos | Three mutations red (the hook removed; the tiles returned to mouse-only; a new overlay declaring aria-modal without the hook); 13 declare it and 13 implement it, and the sets are identical | The tiles were div onClick, so a keyboard could not reach the viewer at all — a trap you cannot enter. The existing a11y guard named four overlays by hand, so this one was never looked at: enumerated with no scan, the third shape of this repo's signature defect. |
 | A11Y-002 | Accessibility | The lint config enabled none of the rules that would have caught it (F-D10/F-D02/F-D03) | 🛠 FIXED + PASS (F-D03 ratcheted, not fixed) | Medium | 4/4 (7 sanity cases inside them) | label-has-associated-control enabled at depth 4 — measured first: at the default depth its only three findings are correct markup one level too deep; control-has-associated-label left OFF because 561 findings and the first sample is a correctly labelled input | next lint clean but for the three pre-existing react-hooks warnings; 144 selects scanned, 71 unnamed, pinned by a ratchet whose scan is asserted non-vacuous | next/core-web-vitals carries only a subset of jsx-a11y, which is exactly what F-D10 said. A rule whose findings are mostly wrong is one everyone learns to skip, so the unnamed selects are counted by a check that cannot be satisfied by nesting depth. |
@@ -23079,7 +23081,7 @@ Status: ✅ PASS — `npm run lint` reports the four known baseline warnings and
 ## Automated Tests
 Status: ✅ PASS — 15,287 tests across 1,215 files pass, zero failures and zero skips, on Node 24.15.0 at head 92340315 (160s).
 
-Later in this cycle, on Node 24.21.0: **16,908 tests across 1,330 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **55/55 boundary probes with 0 skipped**.
+Later in this cycle, on Node 24.21.0: **16,912 tests across 1,331 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **56/56 boundary probes with 0 skipped**.
 
 One type error was committed and is worth recording rather than quietly fixed: `tests/a-fan-out-has-a-width-somebody-chose.test.ts` used `source: 'test'` where `DriveTimeEstimate.source` is a three-value union. `vitest` does not typecheck, so it passed there; `tsc --noEmit` was run before the test file was written and not after, and the commit went out red. The next `tsc` caught it. The lesson is the ordering: the typecheck belongs after the last file is written, not after the last file one happened to be thinking about. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), `tests/a-capped-read-is-not-a-silent-one.test.ts` (DATA-011, 5), `tests/a-family-day-starts-where-the-family-is.test.ts` and `tests/a-server-day-is-the-familys-day.test.ts` (DATA-012, 11), `docs/audit/vaults-require-second-factor-check.sql` (AUTHZ-008), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
 
@@ -28933,6 +28935,102 @@ browser-side sibling guard is not currently blind.
 Still open under AUTHZ-005, and said so in Critical Blockers: deployed policy
 state after 0330 is applied, and the independent member/family foreign keys the
 original record flagged, which this pass did not examine.
+
+# Pass X — a stranger could onboard into your family as its parent (SEC-018, critical)
+
+## Found by the same question
+
+Of the twelve SECURITY DEFINER functions that write a privileged table from a
+row members can update, `onboarding_claim_family` was the last one unexamined
+after Pass W. It writes `families`, reading `onboarding_progress`. That looked
+harmless — the row is the user's own. It is the user's own to *write*, too,
+including which family it names.
+
+## The chain
+
+`onboarding_claim_family` exists so a double-submitted or interrupted wizard
+lands on the family it already started: with no active membership, it resumes
+from `onboarding_progress.family_id`. The onboarding action then does exactly
+what it should for a resumed wizard — it upserts the caller into that family as
+the owner, `role: 'parent'`, with the service role, "FATAL on failure — a family
+without its owner as a member would bounce the user straight back into
+onboarding".
+
+Nothing checked that the resumed family was the caller's. Reproduced with real
+sessions — the attacker's step through their own session, the action's
+server-side steps exactly as written:
+
+```
+attacker's active memberships before: 0
+
+── 1. the attacker writes their OWN onboarding row, naming the victim family
+    allowed: [{"family_id":"2fc495fa-…"}]
+
+── 2. the onboarding action runs
+    onboarding_claim_family -> [{"family_id":"2fc495fa-…","created":false}]   <<< THE VICTIM FAMILY
+    parent membership upsert -> ok
+
+── 3. the attacker, in their own session
+    role in the victim family: parent
+    the victim family's password vault: [{"label":"Home wifi","secret":"the-real-wifi-password"}]
+```
+
+The only prerequisite is the family's UUID. It is not guessable, and it is not
+secret either: `marketplace_circle_members.family_id` is readable by every
+family in a sharing circle, and every past member — a removed co-parent, a
+former nanny — already has it.
+
+## The check that already existed, one file over
+
+`lib/services/onboarding-calendar/setup.ts`, the calendar onboarding path, calls
+the same function and then:
+
+```ts
+if (family.error || family.data?.created_by !== scope.userId) throw new Error('Family owner changed');
+```
+
+Its author saw exactly this. The main onboarding action never got the same
+line.
+
+## Three layers
+
+1. **The action** (`app/onboarding/actions.ts`) now reads
+   `families.created_by` for a resumed claim and refuses it unless it is the
+   caller, **before** the membership write. This is the layer that matters for
+   production timing: it holds from the moment the code deploys, without waiting
+   on a migration.
+2. **The function** (0331) resumes only a family the caller created *and that
+   has no other login member*. The second clause closes a variant the code check
+   cannot: a creator removed from their own family by the other parent did
+   create it, so `created_by` matches — and would be re-admitted as a parent. A
+   legitimate resume never has another login member, because the owner's
+   membership is the first thing the wizard writes. A progress row that fails the
+   check is now replaced by the new family instead of `coalesce`d behind it.
+3. **The row** (0331): clients lose INSERT on `onboarding_progress` and UPDATE on
+   `family_id`, `id`, `user_id` and `created_at`. Every writer of `family_id` was
+   already the service role; the calendar path's own update of `source` and
+   `status` keeps those columns, and the probe asserts it as a control.
+
+## Verification
+
+- `docs/audit/onboarding-claim-ownership-check.sql`: **five findings** against
+  the pre-0331 function and grants — the stranger resumed into the victim, the
+  removed creator resumed into their old family, both row writes, and a progress
+  row left naming the victim after a fresh claim; **two** with only the function
+  fixed; the calendar path's columns revoked as well reports `CONTROL FAILED`;
+  clean after. The legitimate first claim and the interrupted-wizard resume are
+  both controls.
+- `tests/onboarding-resumes-only-your-own-family.test.ts` — removing the
+  action's owner check fails it; it also pins the calendar path's check and the
+  migration's three parts.
+- The 27 existing onboarding test files pass unchanged.
+- **56/56 boundary probes, 0 skipped.**
+- **16,912 tests across 1,331 files, zero failures and zero skips**, on Node
+  24.21.0, under `TZ=UTC` and again under `TZ=America/Los_Angeles`.
+  `tsc --noEmit` exits 0.
+
+Listed under Critical Blockers until the code is deployed: production is exposed
+to this until then.
 
 # Final Regression
 

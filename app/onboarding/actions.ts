@@ -436,6 +436,20 @@ export async function finalizeOnboardingAction(input: {
       : { ok: false, error: t('actions.couldNotFinishSettingUp2') };
     familyId = familyClaim.family_id;
     newFamily = familyClaim.created;
+    // SEC-018: a resumed claim is only this user's own abandoned wizard family.
+    // `onboarding_claim_family` resumes from onboarding_progress.family_id, a
+    // row the user can write, and the next step upserts them into the family
+    // as a PARENT with the service role — so a fresh account that named
+    // someone else's family there became a parent of it and could read its
+    // password vault. prepareCalendarFamily has always refused this ("Family
+    // owner changed"); this is the same check, in the path that lacked it, so
+    // it holds the moment this code deploys rather than when 0331 is applied.
+    if (!newFamily) {
+      const { data: claimed, error: claimedError } = await admin
+        .from('families').select('created_by').eq('id', familyId).maybeSingle();
+      if (claimedError) return onboardingFailure('claimed family owner check', claimedError, t('actions.couldNotFinishSettingUp2'));
+      if (claimed?.created_by !== auth.user.id) return { ok: false, error: t('onboardingWizard.contextChanged') };
+    }
   }
 
   // 2b. Explicitly create (or reconcile) the owner's parent membership — do NOT

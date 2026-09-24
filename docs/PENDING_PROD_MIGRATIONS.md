@@ -2370,3 +2370,58 @@ well reports `CONTROL FAILED: the child cannot see the family's contacts`.
 
 Until this is applied, a child can undo any screening decision a parent made
 about their own calls.
+
+## 0331 — a stranger could onboard into your family as its parent
+
+`supabase/migrations/0331_onboarding_resumes_only_your_own_family.sql`
+
+**Severity: critical.** **Safe in either order** relative to a deploy: the
+code on this branch refuses the takeover by itself, and this migration refuses
+it by itself. Apply it anyway — it also closes the removed-creator variant the
+code check does not.
+
+`onboarding_claim_family` lets an interrupted wizard land on the family it
+already started, by resuming from `onboarding_progress.family_id`. That row is
+the user's own to write (`user_id = auth.uid()`), and nothing constrained its
+`family_id`. The onboarding action then upserts the caller into whatever family
+the claim returns **as a parent, with the service role**. Reproduced with real
+sessions:
+
+```
+fresh account, no family
+upserts its own onboarding_progress: family_id = <victim family>   -> allowed
+onboarding_claim_family -> {"family_id": <victim>, "created": false}
+parent membership upsert                                             -> ok
+in its own session: role in the victim family                        -> parent
+the victim family's password vault                                   -> [{"label":"Home wifi","secret":"the-real-wifi-password"}]
+```
+
+The prerequisite is the family's id. Every family sharing a marketplace circle
+with it can read that from `marketplace_circle_members`; every past member
+already knows it.
+
+`prepareCalendarFamily` has always refused this (`'Family owner changed'`).
+The main onboarding action did not. Three layers now:
+
+1. **The action** (already on the branch) reads `families.created_by` for a
+   resumed claim and refuses it unless it is the caller, *before* writing the
+   membership. This protects production from the moment the code deploys.
+2. **The function** resumes only a family the caller created and that has no
+   other login member. The second condition also stops a creator removed from
+   their own family re-onboarding back in as a parent — which the code check
+   alone would allow, since they did create it. A progress row that fails the
+   check is replaced by the new family rather than coalesced behind it.
+3. **The row**: clients lose INSERT on `onboarding_progress` and UPDATE on its
+   `family_id` (and `id`, `user_id`, `created_at`); every writer of `family_id`
+   is the service role. `prepareCalendarFamily`'s own update of `source` and
+   `status` keeps its columns.
+
+Held by `docs/audit/onboarding-claim-ownership-check.sql`: five findings
+against the pre-0331 function and grants (the takeover, the removed creator,
+both row writes, a progress row left naming the victim); two when only the
+function is fixed; and revoking the calendar path's columns as well reports
+`CONTROL FAILED: the calendar setup path lost the columns it updates`.
+
+As with 0328, a column grant does not extend to columns added later: a future
+migration adding a column to `onboarding_progress` that clients must update
+needs its own `grant update (<col>)`.
