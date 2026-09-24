@@ -6,7 +6,7 @@ const state = vi.hoisted(() => ({
   lookupError: null as null | { message: string }, throttleError: null as null | { message: string },
   writeError: null as null | { message: string }, unknown: false,
   throttle: null as null | { fails: number; window_start: string; locked_until: string | null },
-  upserts: [] as Array<Record<string, unknown>>, tables: [] as string[],
+  upserts: [] as Array<Record<string, unknown>>, reservations: [] as Array<Record<string, unknown>>, tables: [] as string[],
   options: [] as Array<Record<string, unknown>>, disposals: [] as Array<ReturnType<typeof vi.fn>>,
 }));
 vi.mock('next/headers', () => ({ cookies: state.cookieFactory, headers: async () => new Headers({ 'x-forwarded-for': '192.0.2.1' }) }));
@@ -18,10 +18,19 @@ vi.mock('@/lib/supabase/server', () => ({
   createServer: state.serverFactory,
   createServiceClient: () => ({ from: (table: string) => {
     state.tables.push(table);
+    // A throttle attempt is reserved before the PIN is checked: an insert for a
+    // first attempt, a conditional update after that. The clear is an upsert.
+    let patch: Record<string, unknown> | null = null;
     const chain = {
-      select: () => chain, eq: () => chain, ilike: () => chain,
-      maybeSingle: async () => ({ data: state.throttle, error: state.throttleError }),
+      select: () => chain, eq: () => chain, is: () => chain, ilike: () => chain,
+      update: (value: Record<string, unknown>) => { patch = value; return chain; },
+      maybeSingle: async () => {
+        if (!patch) return { data: state.throttle, error: state.throttleError };
+        state.reservations.push(patch);
+        return state.writeError ? { data: null, error: state.writeError } : { data: { username: 'emma' }, error: null };
+      },
       limit: async () => ({ data: state.unknown ? [] : [{ username: 'emma', user_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }], error: state.lookupError }),
+      insert: async (value: Record<string, unknown>) => { state.reservations.push(value); return { error: state.writeError }; },
       upsert: async (value: Record<string, unknown>) => { state.upserts.push(value); return { error: state.writeError }; },
     };
     return chain;
@@ -54,7 +63,7 @@ beforeEach(() => {
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'synthetic-public-anon');
   state.lookupError = state.throttleError = state.writeError = null;
   state.unknown = false; state.throttle = null;
-  state.upserts = []; state.tables = []; state.options = []; state.disposals = [];
+  state.upserts = []; state.reservations = []; state.tables = []; state.options = []; state.disposals = [];
   state.rateLimit.mockResolvedValue({ ok: true });
   state.cookieFactory.mockResolvedValue({ set: state.cookieWrite });
   state.serverFactory.mockImplementation(() => { throw new Error('Cookie-bound auth must not run'); });
@@ -120,7 +129,7 @@ describe('child password action returns a candidate without adopting browser sto
     expect(state.request).not.toHaveBeenCalled();
   });
 
-  it('keeps unknown usernames and rejected PINs indistinguishable and records both failures', async () => {
+  it('keeps unknown usernames and rejected PINs indistinguishable and counts both attempts', async () => {
     state.unknown = true;
     const unknown = await childSignInAction({ username: 'emma', pin: '1234' });
     expect(state.request).not.toHaveBeenCalled();
@@ -128,14 +137,15 @@ describe('child password action returns a candidate without adopting browser sto
     const rejected = await childSignInAction({ username: 'emma', pin: '1234' });
     expect(unknown).toEqual({ ok: false, error: 'actions.thatUsernameOrPinIsn' });
     expect(rejected).toEqual(unknown);
-    expect(state.upserts).toHaveLength(2);
-    expect(state.upserts.every(value => value.fails === 1)).toBe(true);
+    expect(state.reservations).toHaveLength(2);
+    expect(state.reservations.every(value => value.fails === 1)).toBe(true);
+    expect(state.upserts).toEqual([]);
   });
 
-  it.each([true, false])('does not return an authentication candidate when failed-attempt persistence fails (unknown=%s)', async unknown => {
+  it.each([true, false])('does not check the PIN, or return a candidate, when the attempt cannot be counted (unknown=%s)', async unknown => {
     state.unknown = unknown; state.writeError = { message: 'synthetic write failure' };
-    respond({ error_code: 'invalid_credentials', msg: 'Invalid login credentials' }, 400);
     expect(await childSignInAction({ username: 'emma', pin: '1234' })).toEqual({ ok: false, error: 'actions.kidSignInIsTemporarily' });
+    expect(state.request).not.toHaveBeenCalled();
   });
 
   it.each(['access_token', 'refresh_token'] as const)('rejects a blank %s rather than returning a usable-looking candidate', async field => {

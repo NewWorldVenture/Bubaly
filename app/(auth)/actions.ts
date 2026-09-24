@@ -9,9 +9,8 @@ import { stitchVisitorIdentity } from '@/lib/marketing/identity';
 import { isValidPin } from '@/lib/onboarding/pin';
 import { normalizeUsername, isValidUsername, syntheticChildEmail } from '@/lib/onboarding/child-login';
 import { deriveChildPassword } from '@/lib/onboarding/child-password';
-import {
-  evaluateThrottle, registerFailure, clearedState, retryAfterLabel, type ThrottleRow,
-} from '@/lib/auth/child-throttle';
+import { clearedState, retryAfterLabel } from '@/lib/auth/child-throttle';
+import { reserveChildLoginAttempt } from '@/lib/auth/child-throttle-store';
 import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { createClient as createPasswordClient } from '@supabase/supabase-js';
@@ -97,25 +96,17 @@ export async function childSignInAction(input: { username: string; pin: string }
   // 4-digit PIN on a guessable username can't be enumerated. Keyed by username
   // (durable + cross-instance via the child_login_throttle table). Note we check
   // the lock even for unknown usernames so the throttle isn't a lookup oracle.
+  // The attempt is counted as it is admitted, not after the PIN is checked — see
+  // lib/auth/child-throttle-store for the burst that the later write let through.
   const now = new Date();
-  const { data: tRow, error: throttleReadError } = await admin.from('child_login_throttle')
-    .select('fails, window_start, locked_until').eq('username', username).maybeSingle();
-  if (throttleReadError) {
-    console.error('[child-login] throttle lookup failed', throttleReadError);
+  const reservation = await reserveChildLoginAttempt(admin, username, now);
+  if (!reservation.ok) {
+    if (reservation.reason === 'locked') {
+      return { ok: false, error: `Too many tries. Try again in ${retryAfterLabel(reservation.retryAfterSec)}.` };
+    }
+    console.error('[child-login] failed-attempt counter write failed', reservation.error);
     return { ok: false, error: t('actions.kidSignInIsTemporarily') };
   }
-  const gate = evaluateThrottle(tRow as ThrottleRow | null, now);
-  if (gate.locked) {
-    return { ok: false, error: `Too many tries. Try again in ${retryAfterLabel(gate.retryAfterSec)}.` };
-  }
-
-  const recordFailure = async () => {
-    const next = registerFailure(tRow as ThrottleRow | null, now);
-    const { error } = await admin.from('child_login_throttle').upsert(
-      { username, ...next }, { onConflict: 'username' });
-    if (error) console.error('[child-login] failed-attempt counter write failed', error);
-    return !error;
-  };
 
   // `eq`, not `ilike`. Both sides are already lowercased by `normalizeUsername`,
   // so the case-insensitive match bought nothing — and it cost the throttle
@@ -132,10 +123,7 @@ export async function childSignInAction(input: { username: string; pin: string }
     return { ok: false, error: t('actions.kidSignInIsTemporarily') };
   }
   const row = rows?.[0];
-  if (!row) {
-    if (!(await recordFailure())) return { ok: false, error: t('actions.kidSignInIsTemporarily') };
-    return { ok: false, error: t('actions.thatUsernameOrPinIsn') };
-  }
+  if (!row) return { ok: false, error: t('actions.thatUsernameOrPinIsn') };
 
   let passwordClient: ReturnType<typeof createPasswordClient> | null = null;
   try {
@@ -150,10 +138,7 @@ export async function childSignInAction(input: { username: string; pin: string }
       email: syntheticChildEmail(row.username),
       password: deriveChildPassword(sec, row.username, pin),
     });
-    if (error) {
-      if (!(await recordFailure())) return { ok: false, error: t('actions.kidSignInIsTemporarily') };
-      return { ok: false, error: t('actions.thatUsernameOrPinIsn') };
-    }
+    if (error) return { ok: false, error: t('actions.thatUsernameOrPinIsn') };
     const session = data.session;
     if (!session || !data.user || data.user.id !== row.user_id || session.user?.id !== data.user.id
       || typeof session.access_token !== 'string' || !session.access_token.trim()
@@ -169,8 +154,10 @@ export async function childSignInAction(input: { username: string; pin: string }
     }
 
     // Success: wipe the throttle so a genuine kid never carries a stale lock.
-    await admin.from('child_login_throttle').upsert(
+    // The sign-in already happened; a failed wipe leaves a count, not a hole.
+    const { error: clearError } = await admin.from('child_login_throttle').upsert(
       { username, ...clearedState(now) }, { onConflict: 'username' });
+    if (clearError) console.error('[child-login] throttle reset after sign-in failed', clearError);
     return { ok: true, tokens: { access_token: session.access_token, refresh_token: session.refresh_token } };
   } catch {
     // Provider/configuration failures never expose the derived password or any

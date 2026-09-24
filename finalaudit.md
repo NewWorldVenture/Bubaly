@@ -2,12 +2,12 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-25T06:20:00.000Z
-- Total Audit Items: 14087
+- Last Updated: 2026-09-25T08:10:00.000Z
+- Total Audit Items: 14088
 - Not Started: 13842
 - In Progress: 192
 - Passed: 12
-- Fixed + Passed: 38
+- Fixed + Passed: 39
 - Blocked: 2
 - Failed: 1
 - Overall Completion: 0.04%
@@ -14206,6 +14206,7 @@ PRODUCTION READY: NO
 | SEC-016 | Security | A proxy bid's ceiling was readable by the people bidding against it | 🛠 FIXED + PASS (0328 pending production, deploy-coupled) | High | 9/9 + probe | Column privileges: client SELECT withheld on `reserve_cents`, `highest_max_cents` and `marketplace_bids.max_cents`, with the grant list computed in the migration and a self-check; the UI reads generated `has_reserve`/`reserve_met` instead of the figure; the one `select('*')` names its columns | Three real accounts over PostgREST: a rival read the leader's ceiling (50000) and reserve (20000), the seller read every bidder's max, and a rival bid of exactly the ceiling moved a $10.00 auction to $500.00 without leading. After: all three refused with 42501, the engine, bid history and reserve badge unchanged. 8 mutations red across probe and unit guard | 0183's own column comments call both values "hidden". The auction board was also serialising `reserve_cents` into every viewer's page props. A column grant does not extend to columns added later, so the probe asserts the selectable set is exactly "all minus the secrets". |
 | SEC-017 | Security | A child could decide where a gift went, and what a goal said | 🛠 FIXED + PASS (0329 pending production) | High | 4/4 + probe | Restrictive manager-only write guards on gift_payments, gift_links, pay_handles and wallet_goals — the four 0088 tables 0217 missed that a parent's money decision is made from | Real sessions, a parent and two children: Grandma's $50 for Sister rewritten to $500 for Brother, a $20,000 gift invented, the parent approves the queue, Sister $0.00 and Brother $20,500.00; a $300 goal forged as reached with zero ledger rows. After: all refused; every parent and public path unchanged. 7 mutations red | The probe carries the general rule — nothing a definer money function reads may be rewritten by a non-manager — which catches the next RPC as well as these four. Found by asking what a brute-forced circle join code would grant, then what else the approval queue trusts. |
 | SEC-018 | Security | A stranger could onboard into your family as its parent | 🛠 FIXED + PASS (app live on deploy; 0331 pending production) | Critical | 4/4 + probe | Three layers: the onboarding action refuses a resumed claim the caller did not create before writing the membership; `onboarding_claim_family` resumes only a family the caller created with no other login member; clients lose INSERT and `family_id` UPDATE on `onboarding_progress` | Real sessions: a fresh account set its own onboarding row's family_id to a victim family, ran onboarding, was upserted in as `parent` by the service role, and read the victim's password vault. After: five probe findings pre-0331, two with only the function fixed, clean after; the action mutation fails its test | The family id is readable by every family sharing a marketplace circle (marketplace_circle_members) and known to every past member. prepareCalendarFamily always had the check; the main action did not. Found by asking which definer functions write privileged tables from member-writable rows. |
+| SEC-019 | Security | A burst of PIN guesses got past a child's sign-in lock | 🛠 FIXED + PASS (app; no migration) | High | 4/4 + live | Sign-in now takes the attempt BEFORE the PIN is checked, with a compare-and-set on the whole `child_login_throttle` row it read; a loser re-reads and takes the next slot, so the sixth guess of a burst meets the lock the fifth set. A guess that cannot be counted is refused, not checked | Real action, local stack: 25 concurrent wrong PINs all reached the password check and left `fails = 1`; the right PIN placed 21st in such a burst signed in. After: 5 checked, 20 locked; 100 concurrent → 5 checked, 95 locked, identical for an unknown username; the right PIN at position 21 is refused unchecked; a lone right PIN still signs in and clears the row. The old action fails 5 of the new test's 8 cases (its 2 controls stay green); 5 helper mutations each fail it | The per-IP limit (30/min) bounds one address, not one child, and an IPv6 client controls its low 64 bits. Found by asking which decisions read a row and write it back across an `await`. |
 | PERF-004 | Performance | The parent approval queue signed one photo per round trip (closes F-F03) | 🛠 FIXED + PASS | High | 4/4 (5 sanity cases inside them) | Paths collected, deduplicated and signed in chunks of 100 through createSignedUrls; the per-entry error is read so an unsignable object is left out rather than rendering an empty src; a signing outage costs the photos, not the queue | Restoring the loop turns the guard red at app/(app)/missions/page.tsx:106; the existing missions read-boundary test still passes | A loop inside a loop around `await createSignedUrl` — up to four photos per submission across the whole queue, in series. The batch form was already in the codebase and already used correctly one directory away. |
 | A11Y-001 | Accessibility | The photo lightbox stranded keyboard users (closes F-D01) | 🛠 FIXED + PASS | High | 7/7 | role=dialog + aria-modal + the shared useDialogBehavior hook on the viewer; tiles made focusable with Enter/Space; Arrow Left/Right between photos | Three mutations red (the hook removed; the tiles returned to mouse-only; a new overlay declaring aria-modal without the hook); 13 declare it and 13 implement it, and the sets are identical | The tiles were div onClick, so a keyboard could not reach the viewer at all — a trap you cannot enter. The existing a11y guard named four overlays by hand, so this one was never looked at: enumerated with no scan, the third shape of this repo's signature defect. |
 | A11Y-002 | Accessibility | The lint config enabled none of the rules that would have caught it (F-D10/F-D02/F-D03) | 🛠 FIXED + PASS (F-D03 ratcheted, not fixed) | Medium | 4/4 (7 sanity cases inside them) | label-has-associated-control enabled at depth 4 — measured first: at the default depth its only three findings are correct markup one level too deep; control-has-associated-label left OFF because 561 findings and the first sample is a correctly labelled input | next lint clean but for the three pre-existing react-hooks warnings; 144 selects scanned, 71 unnamed, pinned by a ratchet whose scan is asserted non-vacuous | next/core-web-vitals carries only a subset of jsx-a11y, which is exactly what F-D10 said. A rule whose findings are mostly wrong is one everyone learns to skip, so the unnamed selects are counted by a check that cannot be satisfied by nesting depth. |
@@ -23081,7 +23082,7 @@ Status: ✅ PASS — `npm run lint` reports the four known baseline warnings and
 ## Automated Tests
 Status: ✅ PASS — 15,287 tests across 1,215 files pass, zero failures and zero skips, on Node 24.15.0 at head 92340315 (160s).
 
-Later in this cycle, on Node 24.21.0: **16,913 tests across 1,331 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **56/56 boundary probes with 0 skipped**.
+Later in this cycle, on Node 24.21.0: **16,921 tests across 1,332 files, zero failures and zero skips under `TZ=America/Los_Angeles`**; the default-zone run of the same tree failed one source-pinned assertion (SEC-019, repointed, passing) and passed the other 16,920 — and **56/56 boundary probes with 0 skipped**.
 
 One type error was committed and is worth recording rather than quietly fixed: `tests/a-fan-out-has-a-width-somebody-chose.test.ts` used `source: 'test'` where `DriveTimeEstimate.source` is a three-value union. `vitest` does not typecheck, so it passed there; `tsc --noEmit` was run before the test file was written and not after, and the commit went out red. The next `tsc` caught it. The lesson is the ordering: the typecheck belongs after the last file is written, not after the last file one happened to be thinking about. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), `tests/a-capped-read-is-not-a-silent-one.test.ts` (DATA-011, 5), `tests/a-family-day-starts-where-the-family-is.test.ts` and `tests/a-server-day-is-the-familys-day.test.ts` (DATA-012, 11), `docs/audit/vaults-require-second-factor-check.sql` (AUTHZ-008), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
 
@@ -29046,6 +29047,91 @@ than a second hole — but the service role should not be carrying a value it ha
 not verified. The action now records only a family the user is an active member
 of; reverting it fails the extended unit guard. **16,913 tests across 1,331
 files**, both zones.
+
+# Pass Y — a burst of PIN guesses got past a child's sign-in lock (SEC-019)
+
+## The question
+
+Every privileged decision so far this cycle was found by asking what it reads
+and who can write that. This pass asked a narrower one: which decisions read a
+row, `await` something slow, and then write the row back? A read-modify-write
+across an `await` is a lost update under concurrency, and where the row is a
+security counter, a lost update is a bypass.
+
+`childSignInAction` was the sharpest match. `lib/auth/child-throttle.ts` states
+the stakes itself: "A 4-digit PIN is only 10,000 combinations and kid usernames
+are guessable … so unthrottled sign-in is a real account-takeover risk." The
+action read `child_login_throttle`, checked the lock, sent the PIN to the auth
+provider, and only after that wrote `registerFailure(theRowItRead)`.
+
+## Reproduced
+
+The real action, the real local stack, a real child account (PIN 4321). Only
+`next/headers` and the translator were stubbed:
+
+```
+control — 7 sequential wrong PINs:  5 checked, then LOCKED       fails=5, locked 15 min
+burst   — 25 concurrent wrong PINs: 25 checked, 0 locked          fails=1, locked_until=null
+burst   — right PIN 21st of 25:     SIGNED IN
+```
+
+Every guess in the burst read `fails = 0`, passed the gate, and wrote back
+`fails = 1`. The policy's five-guess budget became "as many as you can send at
+once". The per-IP limiter (30 a minute) is the only other bound and it counts
+one address, not one child.
+
+## The fix
+
+The attempt is taken **before** the PIN is checked
+(`lib/auth/child-throttle-store.ts`), and counted as a failure until a sign-in
+succeeds and clears the row:
+
+- The write is conditional on the whole row that was read: `fails`,
+  `window_start` and `locked_until`, the same compare-and-set the Resend counter
+  uses. A writer that loses re-reads and takes the next slot, so the sixth guess
+  of a burst meets the lock the fifth one set.
+- A first attempt inserts; a `23505` means another attempt created the row
+  first, so it re-reads rather than assuming success.
+- A guess that cannot be counted is refused and never checked: a write error, or
+  losing the compare-and-set eight times.
+- No migration, so nothing to deploy in lockstep: the table and its privileges
+  are unchanged.
+
+Moving the count ahead of the check also removed the two post-check
+`recordFailure` calls, so the unknown-username and wrong-PIN paths now spend the
+budget at the same point and cannot drift apart. The one remaining post-check
+write is the clear on success, whose error is now logged rather than dropped.
+
+## Verification
+
+- Live, same probe after the fix: 25 concurrent → **5 checked, 20 locked**;
+  100 concurrent → **5 checked, 95 locked**, identical for a username that does
+  not exist; the right PIN at position 21 → refused without being checked;
+  control: two wrong PINs then the right one → signed in, row cleared to
+  `fails = 0`.
+- `tests/a-burst-of-guesses-meets-the-lock.test.ts` drives the real action
+  concurrently against a table double where every call resolves on a later
+  macrotask and a conditional update is judged against the row as it is when it
+  runs. The pre-fix action fails 5 of its 8 cases; its 2 controls (a real child
+  signs in; a sequential guesser locks after five) pass on both. Five helper
+  mutations (drop the `fails`/`window_start` condition, drop the `locked_until`
+  condition, admit on a duplicate insert, admit on contention, drop the gate)
+  each fail it. The `locked_until` condition survived at first: every current
+  writer moves `window_start` with the lock, so no test could see it. It is kept,
+  and now tested, because it is what stops a reader's stale "unlocked" from
+  overwriting a lock that only changed the lock.
+- `tests/child-login-session-adoption.test.ts` and
+  `tests/child-login-persistence.test.ts` pinned the old wiring (two
+  `recordFailure` calls, an upsert per failure). They now assert the new
+  contract: the count is taken before the lookup and the PIN check, and the only
+  post-check write is the clear. A count that cannot be written now also proves
+  the provider was never called, which the old test did not check.
+- `tests/child-login-action-security.test.ts` pinned the variable name
+  `throttleReadError`; it now asserts the helper's read-error branch and the
+  action's refusal of anything but a taken attempt.
+- Full suite: **16,921 tests across 1,332 files** under
+  `TZ=America/Los_Angeles`, zero failures; the default-zone run found only that
+  pinned assertion. `tsc --noEmit` exits 0; eslint clean on every changed file.
 
 # Final Regression
 
