@@ -2,12 +2,12 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-25T09:05:00.000Z
-- Total Audit Items: 14089
+- Last Updated: 2026-09-25T10:00:00.000Z
+- Total Audit Items: 14090
 - Not Started: 13842
 - In Progress: 192
 - Passed: 12
-- Fixed + Passed: 40
+- Fixed + Passed: 41
 - Blocked: 2
 - Failed: 1
 - Overall Completion: 0.04%
@@ -14208,6 +14208,7 @@ PRODUCTION READY: NO
 | SEC-018 | Security | A stranger could onboard into your family as its parent | 🛠 FIXED + PASS (app live on deploy; 0331 pending production) | Critical | 4/4 + probe | Three layers: the onboarding action refuses a resumed claim the caller did not create before writing the membership; `onboarding_claim_family` resumes only a family the caller created with no other login member; clients lose INSERT and `family_id` UPDATE on `onboarding_progress` | Real sessions: a fresh account set its own onboarding row's family_id to a victim family, ran onboarding, was upserted in as `parent` by the service role, and read the victim's password vault. After: five probe findings pre-0331, two with only the function fixed, clean after; the action mutation fails its test | The family id is readable by every family sharing a marketplace circle (marketplace_circle_members) and known to every past member. prepareCalendarFamily always had the check; the main action did not. Found by asking which definer functions write privileged tables from member-writable rows. |
 | SEC-019 | Security | A burst of PIN guesses got past a child's sign-in lock | 🛠 FIXED + PASS (app; no migration) | High | 4/4 + live | Sign-in now takes the attempt BEFORE the PIN is checked, with a compare-and-set on the whole `child_login_throttle` row it read; a loser re-reads and takes the next slot, so the sixth guess of a burst meets the lock the fifth set. A guess that cannot be counted is refused, not checked | Real action, local stack: 25 concurrent wrong PINs all reached the password check and left `fails = 1`; the right PIN placed 21st in such a burst signed in. After: 5 checked, 20 locked; 100 concurrent → 5 checked, 95 locked, identical for an unknown username; the right PIN at position 21 is refused unchecked; a lone right PIN still signs in and clears the row. The old action fails 5 of the new test's 8 cases (its 2 controls stay green); 5 helper mutations each fail it | The per-IP limit (30/min) bounds one address, not one child, and an IPv6 client controls its low 64 bits. Found by asking which decisions read a row and write it back across an `await`. |
 | SEC-020 | Security | Every per-client limit was unbounded for an IPv6 client | 🛠 FIXED + PASS (app; no migration) | Medium | 4/4 | `clientIp` now returns a limit SUBJECT: an IPv4 address, or the /64 an IPv6 address belongs to, parsed from the groups rather than the spelling, with IPv4-mapped IPv6 folded to its IPv4 address and a zone index dropped | Through the real `rateLimit` at a limit of 5: fifty hosts in one /64 were fifty subjects, 50/50 allowed; one address in four spellings, 20/48; an IPv4 client and its mapped form, 10/50. After: 5 allowed and one subject in every case; single-address controls unchanged and neighbouring /64s stay apart. 5 mutations each fail the new test | All 23 per-client keys use `clientIp` and nothing else does, so the change is confined to rate limiting: child PIN sign-in, contact form, AI gift finder, forms, surveys, reviews, gift actions, tracking. Assumes the platform sets `x-forwarded-for` (Vercel does); behind a proxy that forwards a client-supplied value, no per-IP limit holds and this does not change that. |
+| SEC-021 | Data integrity | Two retries of an abandoned AI action both ran it | 🛠 FIXED + PASS (app; no migration) | Medium | 4/4 + live | The `ai_tool_calls` takeover is now also conditional on `attempt`, which moves on every takeover; `state` alone matched twice because taking over an abandoned `reserved` row writes `reserved` again | Live database, the shipped statement: two workers that read the same abandoned call BOTH took it over ("TOOK IT" ×2); with the token, the second lost. Through the real `executeTool` with a ledger double that applies every filter and releases both reads together: the tool's `execute` ran twice and two calendar inserts were issued; after, once, and the other retry is told to try again. Removing the token fails the new case and the finance filter pin | Where it bites depends on the tool: six tables (calendar events, reminders, todos, chore assignments, meal plans, grocery items) carry their own unique idempotency index; the rest do not — `messages.sendFamilyMessage` ("A sent message cannot be unsent"), `finances.createTransaction`, `notifications.notify`, notes, goals, trips, moving. The ledger double previously honoured only the `state` filter, which is how a guard that matched twice looked safe. Every other state-guarded compare-and-set in the codebase pairs state with a changing token (`updated_at`, `received_at` or a revision). |
 | PERF-004 | Performance | The parent approval queue signed one photo per round trip (closes F-F03) | 🛠 FIXED + PASS | High | 4/4 (5 sanity cases inside them) | Paths collected, deduplicated and signed in chunks of 100 through createSignedUrls; the per-entry error is read so an unsignable object is left out rather than rendering an empty src; a signing outage costs the photos, not the queue | Restoring the loop turns the guard red at app/(app)/missions/page.tsx:106; the existing missions read-boundary test still passes | A loop inside a loop around `await createSignedUrl` — up to four photos per submission across the whole queue, in series. The batch form was already in the codebase and already used correctly one directory away. |
 | A11Y-001 | Accessibility | The photo lightbox stranded keyboard users (closes F-D01) | 🛠 FIXED + PASS | High | 7/7 | role=dialog + aria-modal + the shared useDialogBehavior hook on the viewer; tiles made focusable with Enter/Space; Arrow Left/Right between photos | Three mutations red (the hook removed; the tiles returned to mouse-only; a new overlay declaring aria-modal without the hook); 13 declare it and 13 implement it, and the sets are identical | The tiles were div onClick, so a keyboard could not reach the viewer at all — a trap you cannot enter. The existing a11y guard named four overlays by hand, so this one was never looked at: enumerated with no scan, the third shape of this repo's signature defect. |
 | A11Y-002 | Accessibility | The lint config enabled none of the rules that would have caught it (F-D10/F-D02/F-D03) | 🛠 FIXED + PASS (F-D03 ratcheted, not fixed) | Medium | 4/4 (7 sanity cases inside them) | label-has-associated-control enabled at depth 4 — measured first: at the default depth its only three findings are correct markup one level too deep; control-has-associated-label left OFF because 561 findings and the first sample is a correctly labelled input | next lint clean but for the three pre-existing react-hooks warnings; 144 selects scanned, 71 unnamed, pinned by a ratchet whose scan is asserted non-vacuous | next/core-web-vitals carries only a subset of jsx-a11y, which is exactly what F-D10 said. A rule whose findings are mostly wrong is one everyone learns to skip, so the unnamed selects are counted by a check that cannot be satisfied by nesting depth. |
@@ -23083,7 +23084,7 @@ Status: ✅ PASS — `npm run lint` reports the four known baseline warnings and
 ## Automated Tests
 Status: ✅ PASS — 15,287 tests across 1,215 files pass, zero failures and zero skips, on Node 24.15.0 at head 92340315 (160s).
 
-Later in this cycle, on Node 24.21.0: **16,928 tests across 1,333 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **56/56 boundary probes with 0 skipped**.
+Later in this cycle, on Node 24.21.0: **16,929 tests across 1,333 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **56/56 boundary probes with 0 skipped**.
 
 One type error was committed and is worth recording rather than quietly fixed: `tests/a-fan-out-has-a-width-somebody-chose.test.ts` used `source: 'test'` where `DriveTimeEstimate.source` is a three-value union. `vitest` does not typecheck, so it passed there; `tsc --noEmit` was run before the test file was written and not after, and the commit went out red. The next `tsc` caught it. The lesson is the ordering: the typecheck belongs after the last file is written, not after the last file one happened to be thinking about. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), `tests/a-capped-read-is-not-a-silent-one.test.ts` (DATA-011, 5), `tests/a-family-day-starts-where-the-family-is.test.ts` and `tests/a-server-day-is-the-familys-day.test.ts` (DATA-012, 11), `docs/audit/vaults-require-second-factor-check.sql` (AUTHZ-008), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
 
@@ -29198,6 +29199,78 @@ changing the function rather than adding a second one. Nothing stores it.
 - Full suite: **16,928 tests across 1,333 files**, zero failures, under
   `TZ=UTC` and again under `TZ=America/Los_Angeles`. `tsc --noEmit` exits 0;
   eslint clean on the changed files.
+
+# Pass AA — two retries of an abandoned AI action both ran it (SEC-021)
+
+## Found by the same question as SEC-019
+
+After the child-login throttle, the sweep looked for other rows that are read,
+decided on, and written back with a compare-and-set, and asked of each: does
+the condition change when the write succeeds? A compare-and-set whose guarded
+value the winner writes back unchanged is not a compare-and-set.
+
+`reserveCall` in `lib/ai/tools/execute.ts` is the idempotency gate every AI
+write passes through. When a call's key is already taken by a row that is
+`failed`, or `reserved` but older than two minutes (a worker that died), it
+takes the row over:
+
+```ts
+.update({ state: 'reserved', attempt: existing.attempt + 1, … })
+.eq('id', existing.id)
+.eq('state', existing.state)   // "exactly one update matches"
+```
+
+For a `failed` row that holds: the winner writes `reserved`, and the loser's
+`state = 'failed'` no longer matches. For an abandoned `reserved` row the
+winner writes `reserved` **again**, so the loser's condition still matches
+and both run the tool.
+
+## Measured
+
+- **Live database**, the shipped statement through PostgREST: two workers read
+  the same abandoned call, then each took it over. `worker A -> TOOK IT`,
+  `worker B -> TOOK IT`. With `.eq('attempt', existing.attempt)`: A took it and
+  B lost.
+- **The real `executeTool`**, twice at once on one key: the tool's `execute`
+  ran twice. The harness had to be made to show it. Its ledger double honoured
+  only the `state` filter ("the optimistic guard the takeover relies on"),
+  which is exactly the filter that could not tell the two workers apart. It now
+  applies every filter against the row as it is at write time, like PostgREST,
+  and can hold reads until both workers have read. Without that barrier the
+  first call finished before the second reached the ledger, and the second
+  replayed it as a duplicate. That was a test not racing, not the code being
+  safe.
+
+## Where it bites
+
+Two retries of one abandoned call happen when a run executor and a manual
+rerun, or two scheduler ticks, reach the same stale reservation. Six domain
+tables carry their own unique index on `idempotency_key` and would refuse the
+second insert: calendar events, reminders, todos, chore assignments, meal plans
+and grocery items. The tools writing anywhere else have no second line:
+`messages.sendFamilyMessage`, whose own consequence text says "A sent message
+cannot be unsent", `finances.createTransaction`, `notifications.notify`, and the
+notes, goals, trips and moving tools.
+
+## The fix and its checks
+
+`attempt` moves on every takeover, so the takeover is now also conditional on
+the `attempt` that was read. The run-lease code in `lib/ai/runs/store.ts`
+already did exactly this. Every other state-guarded compare-and-set in the
+codebase was checked and pairs the state with a token that changes on every
+write (`updated_at`, `received_at` or a revision UUID).
+
+- `tests/tool-execute.test.ts`: "takes over an abandoned reservation once, when
+  two retries race for it" asserts the tool's `execute` runs once, one retry
+  gets a retryable error, and the row ends `succeeded` at `attempt: 2`.
+  Removing the token fails it ("expected execute to be called 1 times, but got
+  2 times").
+- `tests/finance-tool-operation-context.test.ts` pinned the takeover's exact
+  filter object; it now includes `attempt` and also fails without it.
+- All 48 test files touching `executeTool` or `ai_tool_calls` pass. Full suite
+  **16,929 tests across 1,333 files**, zero failures, under `TZ=UTC` and again
+  under `TZ=America/Los_Angeles` (measured before the test's execution spy was
+  added; the file passes with it). `tsc --noEmit` exits 0.
 
 # Final Regression
 

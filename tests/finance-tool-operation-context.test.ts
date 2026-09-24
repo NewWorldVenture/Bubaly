@@ -120,7 +120,8 @@ describe('finance executor operation-context handoff', () => {
     expect(execute).toHaveBeenCalledTimes(1);
     expect(execute.mock.calls[0][0].toolOperation).toEqual({ id: 'reserved-operation', db: ledger.db });
     expect(ledger.calls).toContainEqual(expect.objectContaining({
-      kind: 'update', filters: { id: 'reserved-operation', state: 'failed' },
+      // `attempt` is the takeover's token (SEC-021): `state` alone matched twice.
+      kind: 'update', filters: { id: 'reserved-operation', state: 'failed', attempt: 1 },
     }));
   });
 
