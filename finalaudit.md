@@ -2,12 +2,12 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-25T08:10:00.000Z
-- Total Audit Items: 14088
+- Last Updated: 2026-09-25T09:05:00.000Z
+- Total Audit Items: 14089
 - Not Started: 13842
 - In Progress: 192
 - Passed: 12
-- Fixed + Passed: 39
+- Fixed + Passed: 40
 - Blocked: 2
 - Failed: 1
 - Overall Completion: 0.04%
@@ -14207,6 +14207,7 @@ PRODUCTION READY: NO
 | SEC-017 | Security | A child could decide where a gift went, and what a goal said | 🛠 FIXED + PASS (0329 pending production) | High | 4/4 + probe | Restrictive manager-only write guards on gift_payments, gift_links, pay_handles and wallet_goals — the four 0088 tables 0217 missed that a parent's money decision is made from | Real sessions, a parent and two children: Grandma's $50 for Sister rewritten to $500 for Brother, a $20,000 gift invented, the parent approves the queue, Sister $0.00 and Brother $20,500.00; a $300 goal forged as reached with zero ledger rows. After: all refused; every parent and public path unchanged. 7 mutations red | The probe carries the general rule — nothing a definer money function reads may be rewritten by a non-manager — which catches the next RPC as well as these four. Found by asking what a brute-forced circle join code would grant, then what else the approval queue trusts. |
 | SEC-018 | Security | A stranger could onboard into your family as its parent | 🛠 FIXED + PASS (app live on deploy; 0331 pending production) | Critical | 4/4 + probe | Three layers: the onboarding action refuses a resumed claim the caller did not create before writing the membership; `onboarding_claim_family` resumes only a family the caller created with no other login member; clients lose INSERT and `family_id` UPDATE on `onboarding_progress` | Real sessions: a fresh account set its own onboarding row's family_id to a victim family, ran onboarding, was upserted in as `parent` by the service role, and read the victim's password vault. After: five probe findings pre-0331, two with only the function fixed, clean after; the action mutation fails its test | The family id is readable by every family sharing a marketplace circle (marketplace_circle_members) and known to every past member. prepareCalendarFamily always had the check; the main action did not. Found by asking which definer functions write privileged tables from member-writable rows. |
 | SEC-019 | Security | A burst of PIN guesses got past a child's sign-in lock | 🛠 FIXED + PASS (app; no migration) | High | 4/4 + live | Sign-in now takes the attempt BEFORE the PIN is checked, with a compare-and-set on the whole `child_login_throttle` row it read; a loser re-reads and takes the next slot, so the sixth guess of a burst meets the lock the fifth set. A guess that cannot be counted is refused, not checked | Real action, local stack: 25 concurrent wrong PINs all reached the password check and left `fails = 1`; the right PIN placed 21st in such a burst signed in. After: 5 checked, 20 locked; 100 concurrent → 5 checked, 95 locked, identical for an unknown username; the right PIN at position 21 is refused unchecked; a lone right PIN still signs in and clears the row. The old action fails 5 of the new test's 8 cases (its 2 controls stay green); 5 helper mutations each fail it | The per-IP limit (30/min) bounds one address, not one child, and an IPv6 client controls its low 64 bits. Found by asking which decisions read a row and write it back across an `await`. |
+| SEC-020 | Security | Every per-client limit was unbounded for an IPv6 client | 🛠 FIXED + PASS (app; no migration) | Medium | 4/4 | `clientIp` now returns a limit SUBJECT: an IPv4 address, or the /64 an IPv6 address belongs to, parsed from the groups rather than the spelling, with IPv4-mapped IPv6 folded to its IPv4 address and a zone index dropped | Through the real `rateLimit` at a limit of 5: fifty hosts in one /64 were fifty subjects, 50/50 allowed; one address in four spellings, 20/48; an IPv4 client and its mapped form, 10/50. After: 5 allowed and one subject in every case; single-address controls unchanged and neighbouring /64s stay apart. 5 mutations each fail the new test | All 23 per-client keys use `clientIp` and nothing else does, so the change is confined to rate limiting: child PIN sign-in, contact form, AI gift finder, forms, surveys, reviews, gift actions, tracking. Assumes the platform sets `x-forwarded-for` (Vercel does); behind a proxy that forwards a client-supplied value, no per-IP limit holds and this does not change that. |
 | PERF-004 | Performance | The parent approval queue signed one photo per round trip (closes F-F03) | 🛠 FIXED + PASS | High | 4/4 (5 sanity cases inside them) | Paths collected, deduplicated and signed in chunks of 100 through createSignedUrls; the per-entry error is read so an unsignable object is left out rather than rendering an empty src; a signing outage costs the photos, not the queue | Restoring the loop turns the guard red at app/(app)/missions/page.tsx:106; the existing missions read-boundary test still passes | A loop inside a loop around `await createSignedUrl` — up to four photos per submission across the whole queue, in series. The batch form was already in the codebase and already used correctly one directory away. |
 | A11Y-001 | Accessibility | The photo lightbox stranded keyboard users (closes F-D01) | 🛠 FIXED + PASS | High | 7/7 | role=dialog + aria-modal + the shared useDialogBehavior hook on the viewer; tiles made focusable with Enter/Space; Arrow Left/Right between photos | Three mutations red (the hook removed; the tiles returned to mouse-only; a new overlay declaring aria-modal without the hook); 13 declare it and 13 implement it, and the sets are identical | The tiles were div onClick, so a keyboard could not reach the viewer at all — a trap you cannot enter. The existing a11y guard named four overlays by hand, so this one was never looked at: enumerated with no scan, the third shape of this repo's signature defect. |
 | A11Y-002 | Accessibility | The lint config enabled none of the rules that would have caught it (F-D10/F-D02/F-D03) | 🛠 FIXED + PASS (F-D03 ratcheted, not fixed) | Medium | 4/4 (7 sanity cases inside them) | label-has-associated-control enabled at depth 4 — measured first: at the default depth its only three findings are correct markup one level too deep; control-has-associated-label left OFF because 561 findings and the first sample is a correctly labelled input | next lint clean but for the three pre-existing react-hooks warnings; 144 selects scanned, 71 unnamed, pinned by a ratchet whose scan is asserted non-vacuous | next/core-web-vitals carries only a subset of jsx-a11y, which is exactly what F-D10 said. A rule whose findings are mostly wrong is one everyone learns to skip, so the unnamed selects are counted by a check that cannot be satisfied by nesting depth. |
@@ -23082,7 +23083,7 @@ Status: ✅ PASS — `npm run lint` reports the four known baseline warnings and
 ## Automated Tests
 Status: ✅ PASS — 15,287 tests across 1,215 files pass, zero failures and zero skips, on Node 24.15.0 at head 92340315 (160s).
 
-Later in this cycle, on Node 24.21.0: **16,921 tests across 1,332 files, zero failures and zero skips under `TZ=America/Los_Angeles`**; the default-zone run of the same tree failed one source-pinned assertion (SEC-019, repointed, passing) and passed the other 16,920 — and **56/56 boundary probes with 0 skipped**.
+Later in this cycle, on Node 24.21.0: **16,928 tests across 1,333 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **56/56 boundary probes with 0 skipped**.
 
 One type error was committed and is worth recording rather than quietly fixed: `tests/a-fan-out-has-a-width-somebody-chose.test.ts` used `source: 'test'` where `DriveTimeEstimate.source` is a three-value union. `vitest` does not typecheck, so it passed there; `tsc --noEmit` was run before the test file was written and not after, and the commit went out red. The next `tsc` caught it. The lesson is the ordering: the typecheck belongs after the last file is written, not after the last file one happened to be thinking about. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), `tests/a-capped-read-is-not-a-silent-one.test.ts` (DATA-011, 5), `tests/a-family-day-starts-where-the-family-is.test.ts` and `tests/a-server-day-is-the-familys-day.test.ts` (DATA-012, 11), `docs/audit/vaults-require-second-factor-check.sql` (AUTHZ-008), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
 
@@ -29132,6 +29133,71 @@ write is the clear on success, whose error is now logged rather than dropped.
 - Full suite: **16,921 tests across 1,332 files** under
   `TZ=America/Los_Angeles`, zero failures; the default-zone run found only that
   pinned assertion. `tsc --noEmit` exits 0; eslint clean on every changed file.
+
+# Pass Z — every per-client limit was unbounded for an IPv6 client (SEC-020)
+
+## Found from SEC-019
+
+SEC-019's record says the per-IP limit "bounds one address, not one child".
+That sentence was an assumption about what one client can be, so it was tested.
+`clientIp` returns the first `x-forwarded-for` entry that `isIP` accepts,
+**as written**, and all 23 per-client rate-limit keys in the app are built from
+it: child PIN sign-in, the contact form, the AI gift finder, form and survey
+submission, reviews, gift actions, blog subscribe/like/save, and the tracking
+endpoints.
+
+An IPv6 subscriber is routinely assigned a whole /64 and can source traffic
+from any address in it. So for an IPv6 client each of those limits counted
+addresses the client chose.
+
+## Measured
+
+Through the real `rateLimit` and `clientIp`, at a limit of 5:
+
+```
+control: one IPv4 address          5/50 allowed, 1 subject
+control: one IPv6 address          5/50 allowed, 1 subject
+one /64, 50 host addresses        50/50 allowed, 50 subjects
+one address, 4 spellings x 12     20/48 allowed, 4 subjects
+IPv4 vs its IPv4-mapped form      10/50 allowed, 2 subjects
+```
+
+The first unbounded row is the real one. The spelling and mapped-form rows
+matter only where the forwarded value is not normalised by the platform, but
+they come from the same defect: the key was a string, not an address.
+
+## The fix
+
+`clientIp` now returns the subject a limit should count: an IPv4 address, or
+`xxxx:xxxx:xxxx:xxxx::/64` computed from the parsed 16-bit groups. That makes
+the spelling irrelevant. An IPv4-mapped address folds to its IPv4 form, and a
+zone index is dropped before parsing (it would otherwise hide a trailing
+dotted quad). A /64 is the smallest block a network assigns to one site, so it
+is the unit one client can be held to. A household on one /64 shares a budget,
+just as a household behind one NAT'd IPv4 address already did.
+
+Every caller uses the value only as a rate-limit key, which was checked before
+changing the function rather than adding a second one. Nothing stores it.
+
+## Verification
+
+- The same measurement after the fix: **5 allowed and one subject in every
+  row**. The single-address controls are unchanged, and `2001:db8:1:2::/64` and
+  `2001:db8:1:3::/64` stay apart.
+- `tests/a-client-is-its-network-not-its-address.test.ts` drives that
+  measurement. Mutations: returning the address as written (the pre-fix code)
+  fails 4 of its 7 cases; keying /128 fails 2; dropping the mapped-address fold
+  fails 1; not stripping the zone fails 1. Lowercasing the text survived because
+  `parseInt(…, 16)` is already case-insensitive, so it was removed rather than
+  kept as decoration.
+- `tests/rate-limit.test.ts` expected `2001:db8::10` back verbatim, which was
+  the defect stated as a test. It now expects `2001:db8:0:0::/64`.
+- Not changed: the limit assumes the platform sets `x-forwarded-for` (Vercel
+  does, overwriting any client value). Behind a proxy that forwards a
+  client-supplied value, no per-IP limit holds, and this does not change that.
+- Full suite: **16,928 tests across 1,333 files**, zero failures, under
+  `TZ=UTC` and again under `TZ=America/Los_Angeles`. `tsc --noEmit` exits 0;
+  eslint clean on the changed files.
 
 # Final Regression
 

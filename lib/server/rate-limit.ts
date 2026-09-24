@@ -39,7 +39,46 @@ export function rateLimit(
   return { ok: true, remaining: safeLimit - existing.count, retryAfter: 0 };
 }
 
-/** Best-effort client IP from proxy headers, normalized before key construction. */
+/** The eight 16-bit groups of an address `isIP` has already accepted as IPv6. */
+function ipv6Groups(address: string): number[] {
+  // A zone index would hide a trailing dotted quad from the match below.
+  let text = address.split('%')[0];
+  const dotted = /(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(text);
+  if (dotted) {
+    const [a, b, c, d] = dotted.slice(1).map(Number);
+    text = `${text.slice(0, dotted.index)}${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`;
+  }
+  const [head, tail] = text.split('::');
+  const before = head ? head.split(':') : [];
+  const after = tail ? tail.split(':') : [];
+  const groups = tail === undefined ? before : [...before, ...Array(8 - before.length - after.length).fill('0'), ...after];
+  return groups.map(group => parseInt(group, 16));
+}
+
+/**
+ * The subject a per-client limit counts: an IPv4 address, or an IPv6 /64.
+ *
+ * Keyed on the address as written, an IPv6 client was a new subject with every
+ * address it chose, and a single subscriber is routinely handed a whole /64 —
+ * 2^64 of them. Measured through `rateLimit` at a limit of 5: fifty hosts in one
+ * /64 were fifty subjects and all fifty were allowed; one address in four
+ * spellings was four subjects; an IPv4 client and its IPv4-mapped form were two.
+ * A /64 is the smallest block a network assigns to one site, so it is the unit
+ * that one client can be held to.
+ */
+function limitSubject(address: string): string {
+  if (isIP(address) === 4) return address;
+  const groups = ipv6Groups(address);
+  if (groups.slice(0, 5).every(group => group === 0) && groups[5] === 0xffff) {
+    return [groups[6] >> 8, groups[6] & 0xff, groups[7] >> 8, groups[7] & 0xff].join('.');
+  }
+  return `${groups.slice(0, 4).map(group => group.toString(16)).join(':')}::/64`;
+}
+
+/**
+ * Best-effort client identity from proxy headers, for rate-limit keys only: an
+ * IPv4 address, or the /64 an IPv6 address belongs to (see `limitSubject`).
+ */
 export function clientIp(headers: Headers): string {
   const candidates = [
     headers.get('x-forwarded-for')?.split(',')[0],
@@ -47,7 +86,7 @@ export function clientIp(headers: Headers): string {
   ];
   for (const candidate of candidates) {
     const value = candidate?.trim();
-    if (value && value.length <= 64 && isIP(value)) return value;
+    if (value && value.length <= 64 && isIP(value)) return limitSubject(value);
   }
   return 'unknown';
 }

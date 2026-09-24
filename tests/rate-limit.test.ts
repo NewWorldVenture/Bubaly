@@ -4,7 +4,8 @@ import { clientIp, rateLimit } from '@/lib/server/rate-limit';
 describe('local rate-limit boundary', () => {
   it('accepts normalized IPv4 and IPv6 proxy values', () => {
     expect(clientIp(new Headers({ 'x-forwarded-for': ' 203.0.113.10, 10.0.0.1' }))).toBe('203.0.113.10');
-    expect(clientIp(new Headers({ 'x-forwarded-for': '2001:db8::10' }))).toBe('2001:db8::10');
+    // An IPv6 client is counted by its /64, not the address it chose (SEC-020).
+    expect(clientIp(new Headers({ 'x-forwarded-for': '2001:db8::10' }))).toBe('2001:db8:0:0::/64');
   });
 
   it('rejects malformed or oversized proxy values instead of using them as keys', () => {
