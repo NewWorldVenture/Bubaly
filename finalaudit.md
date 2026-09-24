@@ -2,12 +2,12 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-25T15:30:00.000Z
-- Total Audit Items: 14097
+- Last Updated: 2026-09-25T17:20:00.000Z
+- Total Audit Items: 14100
 - Not Started: 13842
 - In Progress: 193
 - Passed: 12
-- Fixed + Passed: 47
+- Fixed + Passed: 50
 - Blocked: 2
 - Failed: 1
 - Overall Completion: 0.04%
@@ -85,8 +85,10 @@ PRODUCTION READY: NO
 - PUSH-002: Legacy FCM and APNs-token misrouting replaced with provider-specific senders. Native provider/device configuration and receipt still unverified.
 - EMAIL-001: Suppression retry, receipt claims and documented tags shape repaired locally. Real database/provider workflow still unverified; metric atomicity tracked EMAIL-002.
 - MOBILE-001: Late service-worker registration and teardown defects repaired and component-tested. Actual authenticated install/update/offline and physical device flows remain unverified.
+- SEC-024 (HIGH until 0333 is applied): with only the public anon key, anyone who knows the ids can place card holds that freeze a child's spendable balance, and bid in another family's name. Reproduced locally; fixed in migration 0333 (pending production). Forged rows may already exist in production and cannot be told apart from genuine ones by the database.
+- TEST-012: the CI database gate was red on this branch (0326 could not replay; 13/57 probes failed on the CI image) and could not see function-grant traps. The harness is repaired and 57/57 on the exact CI image, but CI itself has never run on this branch: no PR exists.
 - SEC-018 (CRITICAL until deployed): a stranger who knew a family's id could onboard into it as a PARENT and read its password vault — reproduced with real sessions. Fixed on this branch in the onboarding action (effective on deploy) and in migration 0331 (pending). Production is exposed until this code ships; 0331 additionally closes the removed-creator variant the code check alone does not.
-- DEPLOY-002: Migrations 0318–0332 are PENDING PRODUCTION and must be applied by a human (docs/PENDING_PROD_MIGRATIONS.md). 0328 (SEC-016) is deploy-coupled in both directions: this branch's marketplace code reads `has_reserve`/`reserve_met`, which exist only after 0328, and older code reads `reserve_cents`, which 0328 refuses. Apply it with the deploy that carries this code; either order alone breaks the auction board and item page. 0332 (DATA-018) is data only; apply it with or after the deploy so runs the old code decides in between are also moved.
+- DEPLOY-002: Migrations 0318–0334 are PENDING PRODUCTION and must be applied by a human (docs/PENDING_PROD_MIGRATIONS.md). 0328 (SEC-016) is deploy-coupled in both directions: this branch's marketplace code reads `has_reserve`/`reserve_met`, which exist only after 0328, and older code reads `reserve_cents`, which 0328 refuses. Apply it with the deploy that carries this code; either order alone breaks the auction board and item page. 0332 (DATA-018) is data only; apply it with or after the deploy so runs the old code decides in between are also moved. 0333 (SEC-024) closes two functions callable with the anon key; 0334 (DB-FN-003) makes auctions closable, and its first settlement run closes the whole backlog at once.
 - SEC-001: Family media bucket explicitly public while family photo/message/reminder consumers publish public URLs; authorization privacy cannot pass.
 - SOCIAL-001: Live authorized X configuration/provider acceptance and deployed role enforcement remain unverified. AUTHZ-003 remains a database release failure. New one-off scheduling implementation and local proof are recorded underSOCIAL-003. Automatic refresh, interrupted-state recovery, other platforms/media and feed/analytics remain open.
 - JOB-001: Missing-config false-success defect repaired and CLI-tested. Deployed scheduler configuration, execution and durable missed-tick catch-up remain unverified.
@@ -14216,6 +14218,9 @@ PRODUCTION READY: NO
 | DATA-017 | Data integrity | Declining a gift could mark a credited gift "cancelled" | 🛠 FIXED + PASS (app; no migration) | Low | 4/4 + live | `dismissGiftAction` declines only a `pending` gift; if nothing matched it re-reads and answers "already applied" for a decided gift, "not found" for none, and success only when it is already declined | Local database, a parent session, the exact statements: `wallet_approve_gift` credited 5,000 cents, then the decline updated 1 row and the gift read `cancelled` with the credit still in the ledger. With the condition: 0 rows, gift stays `completed`. New test: the shipped action fails 2 of 4 — the approved gift, and reporting success for another family's gift it never touched | The gift screen offers Approve and Decline side by side, so a second parent or a stale page reaches this without any race. The approval RPC was already sound: it locks the row and refuses anything not pending. |
 | DATA-018 | Data integrity | Every concierge run a parent decided stayed on "Needs your decision" | 🛠 FIXED + PASS (app; 0332 pending production) | Medium | 4/4 + live | Approve and dismiss now write `state` with `status` (completed / cancelled, the repo's own `LEGACY_RUN_STATUS_TO_STATE` mapping); approval claims the run (`pending → approved/executing`) before applying the plan and hands it back to the queue if applying throws or cannot be recorded; dismissal matches only a pending run. 0332 moves the runs already decided the old way | Local database, a parent session, the exact statements: after one dismissal and one approval both runs were still listed by the Needs-you query (`status=dismissed/executed, state=awaiting_approval`). New test (7 cases, a filter-honouring interleaving double): the shipped actions fail 4; each of the four guards' removal fails at least one. 0332 locally: both stuck rows moved, a pending control untouched, re-application exits 0. 56/56 probes | Also closed: an approval and a dismissal racing could both succeed — the plan applied while the record said dismissed. `displayRunState` prefers `state`, so the run views and the kiosk's completed count read these rows wrong too, not only Needs-you. Found by sweeping status-downgrade writes with no status condition after DATA-017. |
 | SEC-023 | Security | 61 server actions handed the database's own error text to the user | 🛠 FIXED + PASS (app; no migration) | Low | 4/4 + live | Every `error: <err>.message` return under app/ (61 sites, 22 files) now goes through `describeActionError`, keeping each site's own fallback, and so do the prep and twin actions that forwarded a runner's raw message; a scan holds app/ at zero with one named admin-diagnostics exception | The real `savePlace` as a real parent session: a radius of 150.5 answered `invalid input syntax for type integer: "150.5"` and a malformed id `… for type uuid: "not-a-uuid"`. After: "Something went wrong. Please try again.", and a valid place still saves. The scan fails on the pre-sweep tree; the 20 test files touching these actions pass unchanged | `describeActionError` states its purpose — answer "without exposing unclassified database or provider details to the browser" — and these sites skipped it. Classified cases still come through (permission, already exists, not found). The helper's own messages are English; that is I18N-002's territory. Browser-side storage helpers in lib/ return provider text the browser already received, so they are not a disclosure. |
+| SEC-024 | Security | Two server-only money and bidding functions were callable with the public anon key | 🛠 FIXED + PASS (0333 pending production) | High | 4/4 + live | 0333 revokes EXECUTE on `wallet_reserve_card_auth` and `marketplace_place_bid_unchecked` from public, anon and authenticated; a new probe scans EVERY definer function anon can call for a caller check, instead of listing five | With only the anon key and no session: a forged card hold took a child's spendable balance 2000 → 0, and a leading $50,000-ceiling bid was placed in the name of a family that never bid. After: 42501 for anon and for a signed-in member; the Issuing webhook's service-role hold (2000 → 1500) and a member bidding as themselves through the checked wrapper still work. On the CI image the probe fails without 0333 and passes with it; five restored defects (incl. a brand-new unchecked function) each fail it | Supabase grants EXECUTE on new functions DIRECTLY to anon and authenticated; `revoke ... from public` leaves both. 0221 found this for authenticated and missed anon. Production may hold forged rows the database cannot tell apart — see docs/PENDING_PROD_MIGRATIONS.md. |
+| DB-FN-003 | Database | No auction could ever close | 🛠 FIXED + PASS (0334 pending production) | High | 4/4 + live | `marketplace_close_auction` tested `current_user <> 'service_role'`; inside a SECURITY DEFINER function current_user is the OWNER, so it refused every caller. 0334 re-creates it from its live definition with only that test changed, to `auth.role()` | Called exactly as the settlement cron calls it, through the service client: `P0001 forbidden`. After: the cron's call claims the listing for the winner and creates a confirmed order; anon gets 42501. The probe's third rule (no definer function tests current_user for its caller) fails on the restored 0185 body | The third feature in this audit that never worked in production (after DB-FN-001/002). The cron logged "settlement failed; leaving it retryable" daily. The first run after 0334 will settle the whole backlog at once. |
+| TEST-012 | Test infrastructure | The CI database was red on this branch, and could not see the grant trap anyway | 🛠 FIXED + PASS | High | 4/4 | The CI bootstrap now matches Supabase: function default privileges, `auth.uid()/role()/email()/jwt()` as Supabase defines them (reading `request.jwt.claims` too; role NULL, not 'authenticated'), and `auth.mfa_factors`. The SEC-018 probe now calls the claim function as service_role, as the action does | On the exact CI image (`pgvector/pgvector:pg16`) with the old bootstrap: 0326 failed to replay (no `auth.mfa_factors`), so the bootstrap stopped before the anchor account, and 13 of 57 probes failed. After: 345/345 migrations, 56/57 without 0333/0334 (the one failure is the real SEC-024 breach), 57/57 with them, 0 skipped. Three new unit assertions fail on the old bootstrap | This corrects my own records: every "56/56 boundary probes" written this cycle was measured on the local Supabase stack only. No PR exists for this branch, so CI never ran on it. The SEC-018 probe only passed locally because an old probe's blanket grant had poisoned that database. |
 | PERF-004 | Performance | The parent approval queue signed one photo per round trip (closes F-F03) | 🛠 FIXED + PASS | High | 4/4 (5 sanity cases inside them) | Paths collected, deduplicated and signed in chunks of 100 through createSignedUrls; the per-entry error is read so an unsignable object is left out rather than rendering an empty src; a signing outage costs the photos, not the queue | Restoring the loop turns the guard red at app/(app)/missions/page.tsx:106; the existing missions read-boundary test still passes | A loop inside a loop around `await createSignedUrl` — up to four photos per submission across the whole queue, in series. The batch form was already in the codebase and already used correctly one directory away. |
 | A11Y-001 | Accessibility | The photo lightbox stranded keyboard users (closes F-D01) | 🛠 FIXED + PASS | High | 7/7 | role=dialog + aria-modal + the shared useDialogBehavior hook on the viewer; tiles made focusable with Enter/Space; Arrow Left/Right between photos | Three mutations red (the hook removed; the tiles returned to mouse-only; a new overlay declaring aria-modal without the hook); 13 declare it and 13 implement it, and the sets are identical | The tiles were div onClick, so a keyboard could not reach the viewer at all — a trap you cannot enter. The existing a11y guard named four overlays by hand, so this one was never looked at: enumerated with no scan, the third shape of this repo's signature defect. |
 | A11Y-002 | Accessibility | The lint config enabled none of the rules that would have caught it (F-D10/F-D02/F-D03) | 🛠 FIXED + PASS (F-D03 ratcheted, not fixed) | Medium | 4/4 (7 sanity cases inside them) | label-has-associated-control enabled at depth 4 — measured first: at the default depth its only three findings are correct markup one level too deep; control-has-associated-label left OFF because 561 findings and the first sample is a correctly labelled input | next lint clean but for the three pre-existing react-hooks warnings; 144 selects scanned, 71 unnamed, pinned by a ratchet whose scan is asserted non-vacuous | next/core-web-vitals carries only a subset of jsx-a11y, which is exactly what F-D10 said. A rule whose findings are mostly wrong is one everyone learns to skip, so the unnamed selects are counted by a check that cannot be satisfied by nesting depth. |
@@ -23091,7 +23096,7 @@ Status: ✅ PASS — `npm run lint` reports the four known baseline warnings and
 ## Automated Tests
 Status: ✅ PASS — 15,287 tests across 1,215 files pass, zero failures and zero skips, on Node 24.15.0 at head 92340315 (160s).
 
-Later in this cycle, on Node 24.21.0: **16,962 tests across 1,338 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **56/56 boundary probes with 0 skipped**.
+Later in this cycle, on Node 24.21.0: **16,965 tests across 1,338 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **57/57 boundary probes with 0 skipped on BOTH the local Supabase stack and a fresh replica on the exact CI image** (`pgvector/pgvector:pg16`, `plpgsql_check` installed). Earlier "56/56" figures in this cycle were the local stack only; the CI-shaped database was red from 0326 until TEST-012.
 
 One type error was committed and is worth recording rather than quietly fixed: `tests/a-fan-out-has-a-width-somebody-chose.test.ts` used `source: 'test'` where `DriveTimeEstimate.source` is a three-value union. `vitest` does not typecheck, so it passed there; `tsc --noEmit` was run before the test file was written and not after, and the commit went out red. The next `tsc` caught it. The lesson is the ordering: the typecheck belongs after the last file is written, not after the last file one happened to be thinking about. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), `tests/a-capped-read-is-not-a-silent-one.test.ts` (DATA-011, 5), `tests/a-family-day-starts-where-the-family-is.test.ts` and `tests/a-server-day-is-the-familys-day.test.ts` (DATA-012, 11), `docs/audit/vaults-require-second-factor-check.sql` (AUTHZ-008), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
 
@@ -29596,6 +29601,111 @@ six base catalogues, and the count is back to 2,810.
 Full suite **16,962 tests across 1,338 files**, zero failures, under `TZ=UTC`
 and again under `TZ=America/Los_Angeles`. `tsc --noEmit` exits 0; eslint clean
 on every changed file.
+
+# Pass AG — server-only functions callable with the anon key, an auction that could never close, and a CI database that could not see either (SEC-024, DB-FN-003, TEST-012)
+
+## The question
+
+Every SECURITY DEFINER function runs as its owner and bypasses RLS, so its
+own check is the only thing between a caller and its writes. This pass listed
+every definer function in `public` that `anon` can execute (54) and classified
+each: trigger function (can't be called directly), body names a caller check,
+or neither. Three were neither and not meant to be public.
+
+## Two with no caller check, callable with the public anon key
+
+`wallet_reserve_card_auth` (0155) and `marketplace_place_bid_unchecked` (0184)
+are server-only by design: the first is the Stripe Issuing webhook's funds
+check, the second the raw engine behind the checked bid wrapper. Both
+migrations did `revoke all ... from public; grant execute ... to service_role`.
+On vanilla Postgres that locks them. On Supabase, `pg_default_acl` grants
+EXECUTE on every new function directly to `anon` and `authenticated`
+(`anon=X/postgres` in the ACL, not a PUBLIC entry), and a revoke from `public`
+does not touch a direct grant. 0221 discovered exactly this for
+`authenticated` on the bid function, revoked that role, and missed `anon`.
+
+With only the anon key, no session, no account:
+
+```
+wallet_reserve_card_auth(<family>, <child wallet>, 2000, …)    -> true
+  child's spendable balance: 2000 -> 0
+marketplace_place_bid_unchecked(<listing>, <another family's member>, <that family>, 5000000)
+  -> {"ok":true,"leading":true}   highest_bidder_family = the family that never bid
+```
+
+After 0333, both return `42501` for anon and for a signed-in member. The controls
+still work: the Issuing webhook's service-role hold (2000 → 1500), and a member
+bidding as themselves through the checked wrapper.
+
+## One whose check refused everyone
+
+`marketplace_close_auction` (0185) opened with
+`if current_user <> 'service_role' then raise exception 'forbidden'`. In a
+SECURITY DEFINER function `current_user` is the owner, `postgres`. Called
+exactly as the settlement cron calls it, with the service key, it answered
+`P0001 forbidden`. No auction has ever closed: no winner claimed, no order, no
+notification. The cron logs "settlement failed; leaving it retryable" every day.
+0334 re-creates it from its live definition with that single test changed to
+`auth.role()`, which the chore and reward guards already use. Locally, the
+cron's call now claims the listing and creates the confirmed order. That closing
+run also awarded the probe auction to the family whose name the forged anon bid
+had used, which shows what the two holes combine into.
+
+## Why no probe saw any of it (TEST-012)
+
+`privileged-rpc-grants-check.sql` names five functions, so none of these was
+checked. And the CI database could not have seen the grant trap even with the
+right probe: its bootstrap reproduces Supabase's default privileges for tables
+("setting the defaults up front means a migration's REVOKE survives, and a
+missing one is caught") but not for functions. On the exact CI image, `anon`
+held EXECUTE on none of the three functions.
+
+Building that replica turned up more. With the old bootstrap:
+
+```
+MIGRATION FAIL: 0326 … relation "auth.mfa_factors" does not exist
+== probes: 43/57 passed, 1 skipped, 13 failed ==
+```
+
+0326 stopped the replay before the anchor account was inserted, so five probes
+failed on a missing family. Three probes written this cycle set
+`request.jwt.claims`, which Supabase's `auth.uid()` reads but the shim's did
+not, so their controls correctly refused to pass. And my SEC-018 probe called
+`onboarding_claim_family` as `authenticated`. On a clean database that function
+is service-only (0210). The probe had passed locally only because an old probe's
+blanket `grant execute on all functions ... to authenticated` had poisoned that
+database, the same poisoning that made this pass's local `authenticated`
+grants untrustworthy.
+
+**This corrects my own record.** Every "56/56 boundary probes, 0 skipped"
+written this cycle was measured on the local Supabase stack. No pull request
+exists for this branch, so CI has never run on it. The CI-shaped database has
+been red since 0326.
+
+The bootstrap now matches Supabase: default privileges on functions, the four
+`auth.*` helpers exactly as a live project defines them, and `auth.mfa_factors`.
+The SEC-018 probe calls the claim function as `service_role` with service claims,
+the way the action does, and still reports all five findings against the
+pre-0331 function on both databases. `tests/db-boundary-ci.test.ts` gains three
+assertions that fail on the old bootstrap.
+
+## Verification
+
+- **Exact CI image (`pgvector/pgvector:pg16`, `plpgsql_check` installed),
+  fresh:** 345/345 migrations. Without 0333/0334, 56/57 probes: the one failure
+  is `definer-functions-check-their-caller-check.sql` naming the three
+  functions. With them, 347/347 migrations and **57/57 probes, 0 skipped**.
+- **Local Supabase stack:** **57/57, 0 skipped.**
+- `docs/audit/definer-functions-check-their-caller-check.sql`: a scan (anon can
+  execute, definer, not a trigger, names no caller check, not one of the two
+  declared-public stat functions), the three service-only functions closed to
+  both client roles, no definer caller check against `current_user`, anon
+  refused at the door, and a control that the service role can close an
+  auction. Restored defects that each fail it: anon's grant on either function,
+  authenticated's on the bid function, the 0185 close body, and a brand-new
+  unchecked definer function nobody listed.
+- Full suite **16,965 tests across 1,338 files**, zero failures, under
+  `TZ=UTC` and again under `TZ=America/Los_Angeles`.
 
 # Final Regression
 

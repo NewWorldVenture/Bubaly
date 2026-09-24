@@ -2458,3 +2458,70 @@ self-check that raises if any such row remains.
 Verified locally: two stuck rows moved (`dismissed → cancelled`,
 `executed → completed`), a genuinely pending control untouched, and a
 second application exits 0.
+
+## 0333 — two server-only functions were callable with the anon key
+
+`supabase/migrations/0333_service_only_functions_are_service_only.sql`
+
+**Severity: high. Safe in either order** relative to a deploy: both app callers
+already use the service client.
+
+`wallet_reserve_card_auth` (0155) places a `processing` debit hold on a child's
+spend bucket. `marketplace_place_bid_unchecked` (0184) is the raw bid engine
+behind the checked `marketplace_place_bid` wrapper. Neither checks its caller,
+because both were meant for the server only. Their migrations revoked EXECUTE
+from `public`, which is how vanilla Postgres is locked down. On Supabase, the
+default privileges grant EXECUTE on every new function **directly** to `anon` and
+`authenticated`, and a revoke from `public` leaves those grants in place. 0221
+found this for `authenticated` on the bid function and revoked that one role;
+`anon` kept it.
+
+Measured on the local Supabase stack with **only the public anon key**:
+
+```
+wallet_reserve_card_auth(<family>, <child wallet>, 2000, …)  -> true   spendable 2000 -> 0
+marketplace_place_bid_unchecked(<listing>, <another family's member>, <that family>, 5000000)
+                                                            -> {"ok":true,"leading":true}
+```
+
+After 0333: both refused with `42501` for anon and for a signed-in member. The
+Issuing webhook's service-role hold still works (2000 → 1500), and a member
+bidding as themselves through the checked wrapper still works.
+
+**After applying, consider auditing production for forged holds and bids:**
+`wallet_transactions` rows with `type = 'card_spend', status = 'processing'`
+whose `stripe_ref` matches no Stripe Issuing authorization, and
+`marketplace_bids` whose bidder family never had a member place them. The
+function records no caller, so neither can be told apart from genuine rows
+from the database alone.
+
+## 0334 — no auction could ever close
+
+`supabase/migrations/0334_an_auction_can_close.sql`
+
+**Severity: high (a feature that has never worked). Safe in either order.**
+
+`marketplace_close_auction` (0185) began with
+`if current_user <> 'service_role' then raise exception 'forbidden'`. Inside a
+SECURITY DEFINER function `current_user` is the owner, so this refused every
+call, including the settlement cron's. Called exactly as
+`app/api/cron/close-auctions` calls it, through the service client, it answered
+`{"code":"P0001","message":"forbidden"}`. The cron logs "settlement failed;
+leaving it retryable" and moves on, so every ended auction has stayed
+`available`: no winner claimed, no order, no notification, and new bids are
+refused as `ended`.
+
+0334 re-creates the function from its live definition with only that line
+changed. It now tests `auth.role()`, which reads the request's JWT, the same
+test the chore and reward guards use. It also revokes the client roles.
+Verified locally: the cron's call now claims the listing for the highest bidder
+and creates a confirmed order, and `anon` gets `42501`.
+
+**Operational note:** the first settlement run after 0334 closes *every*
+auction that ended while the function was dead, up to the cron's batch size per
+run, and notifies each winner and seller, possibly about auctions that ended
+long ago. Review the backlog before applying if that would surprise families:
+`select count(*) from marketplace_listings where sale_format = 'auction' and
+status = 'available' and auction_ends_at < now();`. Also check whether any of
+those auctions' leading bids came through the SEC-024 hole (0333) before
+letting the backlog settle.

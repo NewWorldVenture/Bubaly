@@ -96,12 +96,45 @@ grant usage on schema auth, storage, extensions, public to anon, authenticated, 
 -- database, until 0286 closed it. Setting the defaults up front means a
 -- migration's REVOKE survives, and a missing one is caught.
 alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
+-- And FUNCTIONS, for the same reason (TEST-012). Supabase grants EXECUTE on
+-- every new function directly to anon and authenticated (pg_default_acl,
+-- objtype f), so a migration's `revoke ... from public` leaves both callers in
+-- place on a real project while it closes the function here. Without this line
+-- the harness was safer than production again: wallet_reserve_card_auth and
+-- marketplace_place_bid_unchecked were callable with the anon key on every real
+-- database (SEC-024) and not callable here, so no probe could see it.
+alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
 create table if not exists auth.users (id uuid primary key default gen_random_uuid(), email text, phone text,
   raw_user_meta_data jsonb default '{}', raw_app_meta_data jsonb default '{}', created_at timestamptz default now());
-create or replace function auth.uid() returns uuid language sql stable as $f$ select nullif(current_setting('request.jwt.claim.sub', true),'')::uuid $f$;
-create or replace function auth.role() returns text language sql stable as $f$ select coalesce(nullif(current_setting('request.jwt.claim.role', true),''),'authenticated') $f$;
-create or replace function auth.email() returns text language sql stable as $f$ select nullif(current_setting('request.jwt.claim.email', true),'') $f$;
-create or replace function auth.jwt() returns jsonb language sql stable as $f$ select coalesce(nullif(current_setting('request.jwt.claims', true),'')::jsonb,'{}'::jsonb) $f$;
+-- Supabase's own definitions, copied from a live project (TEST-012). Each reads
+-- the single claim setting OR the JSON claims PostgREST sets. These used to read
+-- only `request.jwt.claim.<x>`, so a probe that set `request.jwt.claims` — the
+-- way PostgREST and the local stack do it — was nobody here, and its CONTROL
+-- refused to pass. And auth.role() defaulted to 'authenticated', where
+-- Supabase returns NULL for a session with no role claim.
+create or replace function auth.uid() returns uuid language sql stable as $f$
+  select coalesce(nullif(current_setting('request.jwt.claim.sub', true), ''),
+                  (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub'))::uuid $f$;
+create or replace function auth.role() returns text language sql stable as $f$
+  select coalesce(nullif(current_setting('request.jwt.claim.role', true), ''),
+                  (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role'))::text $f$;
+create or replace function auth.email() returns text language sql stable as $f$
+  select coalesce(nullif(current_setting('request.jwt.claim.email', true), ''),
+                  (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'email'))::text $f$;
+create or replace function auth.jwt() returns jsonb language sql stable as $f$
+  select coalesce(nullif(current_setting('request.jwt.claim', true), ''),
+                  nullif(current_setting('request.jwt.claims', true), ''))::jsonb $f$;
+-- auth.mfa_factors, as GoTrue creates it (0326 reads it to decide who must step
+-- up). Without it 0326 failed to replay and the bootstrap stopped before the
+-- anchor account, so five further probes failed on a missing anchor family.
+do $$ begin create type auth.factor_type as enum ('totp', 'webauthn', 'phone'); exception when duplicate_object then null; end $$;
+do $$ begin create type auth.factor_status as enum ('unverified', 'verified'); exception when duplicate_object then null; end $$;
+create table if not exists auth.mfa_factors (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  friendly_name text, factor_type auth.factor_type not null, status auth.factor_status not null,
+  created_at timestamptz not null default now(), updated_at timestamptz not null default now(),
+  secret text, phone text, last_challenged_at timestamptz);
 do $$ begin create publication supabase_realtime; exception when duplicate_object then null; end $$;
 create table if not exists storage.buckets (id text primary key, name text not null, public boolean default false,
   file_size_limit bigint, allowed_mime_types text[], created_at timestamptz default now());

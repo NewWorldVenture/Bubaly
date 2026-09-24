@@ -70,6 +70,13 @@ begin
     if n > 0 then raise warning 'BREACH: a user rewrote their onboarding row to name another family (rows: %)', n; failures := failures + 1; end if;
   exception when insufficient_privilege then null;
   end;
+  reset role;
+  -- The claim itself is the server's call, as app/onboarding/actions.ts makes
+  -- it: 0210 grants EXECUTE to service_role only. (This probe used to call it
+  -- as `authenticated`, which only worked on a database a since-removed blanket
+  -- grant had poisoned; on a clean replay it was refused. TEST-012.)
+  perform set_config('request.jwt.claims', '{"role":"service_role"}', true);
+  set local role service_role;
   select c.family_id, c.created into got, was_new from public.onboarding_claim_family(attacker, 'Attacker', 'UTC') c;
   if got = fam_v then
     raise warning 'BREACH: onboarding_claim_family resumed another family for a stranger — the action would make them its parent';
@@ -88,8 +95,8 @@ begin
   -- ── 2. a creator removed from their own family ──────────────────────────
   insert into public.onboarding_progress (user_id, family_id, source, status) values (creator, fam_c, 'wizard', 'in_progress')
   on conflict (user_id) do update set family_id = fam_c, status = 'in_progress';
-  perform set_config('request.jwt.claims', json_build_object('sub', creator::text, 'role', 'authenticated')::text, true);
-  set local role authenticated;
+  perform set_config('request.jwt.claims', '{"role":"service_role"}', true);
+  set local role service_role;
   select c.family_id into got from public.onboarding_claim_family(creator, 'Again', 'UTC') c;
   if got = fam_c then
     raise warning 'BREACH: a creator removed from their family was resumed into it — the action would re-admit them as a parent';
@@ -98,8 +105,8 @@ begin
   reset role;
 
   -- ── 3. controls: the legitimate paths ───────────────────────────────────
-  perform set_config('request.jwt.claims', json_build_object('sub', newbie::text, 'role', 'authenticated')::text, true);
-  set local role authenticated;
+  perform set_config('request.jwt.claims', '{"role":"service_role"}', true);
+  set local role service_role;
   select c.family_id, c.created into first_id, was_new from public.onboarding_claim_family(newbie, 'Newbie', 'UTC') c;
   if first_id is null or not was_new then
     raise warning 'CONTROL FAILED: a first-time user did not get a new family';
@@ -111,7 +118,10 @@ begin
     raise warning 'CONTROL FAILED: an interrupted wizard was not resumed onto its own family (got %, new %)', got, was_new;
     failures := failures + 1;
   end if;
-  -- prepareCalendarFamily resets source and status on the user's own row
+  reset role;
+  -- a user may still update source and status on their own row (0331 kept them)
+  perform set_config('request.jwt.claims', json_build_object('sub', newbie::text, 'role', 'authenticated')::text, true);
+  set local role authenticated;
   begin
     update public.onboarding_progress set source = 'wizard', status = 'in_progress' where user_id = newbie;
     get diagnostics n = row_count;
