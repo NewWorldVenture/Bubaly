@@ -98,7 +98,9 @@ describe('chore reward persistence boundaries', () => {
   it('rolls an approved assignment back when reward application fails', () => {
     const source = readFileSync(resolve(process.cwd(), 'app/(app)/missions/actions.ts'), 'utf8');
 
-    expect(source).toContain(".eq('family_id', args.familyId).select('id').single()");
+    // The approval write is conditional on `approved_at` being null (rewards are
+    // paid once per assignment — tests/a-chore-pays-once) and still checked.
+    expect(source).toContain(".eq('family_id', args.familyId).is('approved_at', null).select('id').maybeSingle()");
     expect(source).toContain("throw new Error('Could not save chore approval')");
     expect(source).toContain("const { error: rollbackError } = await supabase.from('chore_assignments').update");
     expect(source).toContain('args.assignment.points_awarded');

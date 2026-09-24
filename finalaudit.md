@@ -2,12 +2,12 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-25T11:30:00.000Z
-- Total Audit Items: 14093
+- Last Updated: 2026-09-25T12:40:00.000Z
+- Total Audit Items: 14094
 - Not Started: 13842
 - In Progress: 193
 - Passed: 12
-- Fixed + Passed: 43
+- Fixed + Passed: 44
 - Blocked: 2
 - Failed: 1
 - Overall Completion: 0.04%
@@ -14212,6 +14212,7 @@ PRODUCTION READY: NO
 | SEC-022 | Security | A child's PIN lockout never escalated — every lock was the first | 🛠 FIXED + PASS (app; no migration) | Medium | 4/4 + live | `registerFailure` now counts a failure as within the window until `lockMemoryMs` (a day) after the last lock lifts, so the escalation the policy already implemented can happen; a success or a parent's PIN reset still clears everything | Through the policy's own gate, a patient guesser: 480 guesses/day, 96 lockouts, every one 15 min, the count never above 5 — a 4-digit PIN in ~10 days on average. After: 27 the first day, locks 15/30/60/120 min, ~12.5/day sustained, ~185–400 days on average. Live, real action: the first guess after a lock lifted reset the count to 1 and the next guess went through; after, it is the 6th failure, re-locks, and the next guess is refused. Five new cases fail on the old policy, four with the memory at 0 | The unit test "resets the counter when the window has elapsed" asserted the defect (16 minutes after a lockout, the counter is 1) while the next test asserted the escalation that behaviour made unreachable. Typo tolerance is unchanged: failures that never reached a lock still expire with the 15-minute window. |
 | I18N-001 | Localization | The lockout a child sees was English in every language | 🛠 FIXED + PASS | Low | 4/4 | `actions.tooManyTriesTryAgainIn` ("Too many tries. Try again in {minutes} min.") added to en-US and all six base catalogues, in the register each already uses for sign-in; the action passes whole minutes via `retryAfterMinutes` | The message was a template literal, `Too many tries. Try again in ${retryAfterLabel(…)}.`, so a German, French or Dutch child read English at exactly the moment they were locked out, and `retryAfterLabel` ("15 minutes") is English-only. The new case asserts the catalogue key and `{ minutes: 15 }` for a lock with 14.2 minutes left; restoring the template fails it. Catalogue parity and every i18n suite pass | Found while fixing SEC-022, which makes these locks longer and more frequent. The scanner that guards this could not see it — see I18N-002. |
 | I18N-002 | Localization | The hardcoded-string ratchet cannot see template literals | 🔄 IN PROGRESS | Medium | 1/4 | Not fixed: recorded with its measurement. The fix is to teach `scripts/i18n-scan.mjs` to read a template literal with each `${…}` as a placeholder, then raise the ratchet's CEILING by exactly what that reveals — the one legitimate reason its own comment gives | `NOT_COPY` in the scanner excludes every string containing a backtick: "a template literal is code, not a sentence". The I18N-001 message is proof it is sometimes a sentence: removing it left the scanner's count at 2,810 before and after. A rough grep finds ~228 template literals in app/ + components/ that open on an English sentence and interpolate a value, including 15 returned as action errors — 13 of them the wallet's "Blocked by household policy: …", which children see | The 2,812 ceiling therefore understates the English on the ungated surface. The ~228 is an upper bound from a regex (it also matches AI prompts and log text), not a scanner result. |
+| DATA-016 | Data integrity | A chore paid its XP every time it was approved, and concurrent approvals lost XP | 🛠 FIXED + PASS (app; no migration) | Low | 4/4 + live | `finalizeApproval` pays only when the assignment's `approved_at` is still null (set only by approval, cleared only by its rollback); a later approval puts the chore back to `approved` without paying or re-pricing it. `applyCompletionRewards` writes XP conditional on the XP it read and retries; a concurrent first award re-reads the progress row instead of failing on its unique key; a rollback restores only the row it wrote | Live, the real action as a real parent session: one submission approved three times gave XP 20 → 40 → 60; four different chores approved together raised XP by 20, not 80. After: 20 / 20 / 20, and +80. New test: the shipped code fails 4 of its 7 cases; removing each of the four guards fails at least one | Cash is not affected: the wallet payout is separate and `uq_wallet_txn_chore_payout` (0316) already makes a second credit a `duplicate`. XP drives level, streak and badges. `submitProofAction` still accepts new proof for an approved chore; that is now harmless (it cannot pay twice) but a product question. `disputeSubmissionAction` has no caller in the UI. |
 | PERF-004 | Performance | The parent approval queue signed one photo per round trip (closes F-F03) | 🛠 FIXED + PASS | High | 4/4 (5 sanity cases inside them) | Paths collected, deduplicated and signed in chunks of 100 through createSignedUrls; the per-entry error is read so an unsignable object is left out rather than rendering an empty src; a signing outage costs the photos, not the queue | Restoring the loop turns the guard red at app/(app)/missions/page.tsx:106; the existing missions read-boundary test still passes | A loop inside a loop around `await createSignedUrl` — up to four photos per submission across the whole queue, in series. The batch form was already in the codebase and already used correctly one directory away. |
 | A11Y-001 | Accessibility | The photo lightbox stranded keyboard users (closes F-D01) | 🛠 FIXED + PASS | High | 7/7 | role=dialog + aria-modal + the shared useDialogBehavior hook on the viewer; tiles made focusable with Enter/Space; Arrow Left/Right between photos | Three mutations red (the hook removed; the tiles returned to mouse-only; a new overlay declaring aria-modal without the hook); 13 declare it and 13 implement it, and the sets are identical | The tiles were div onClick, so a keyboard could not reach the viewer at all — a trap you cannot enter. The existing a11y guard named four overlays by hand, so this one was never looked at: enumerated with no scan, the third shape of this repo's signature defect. |
 | A11Y-002 | Accessibility | The lint config enabled none of the rules that would have caught it (F-D10/F-D02/F-D03) | 🛠 FIXED + PASS (F-D03 ratcheted, not fixed) | Medium | 4/4 (7 sanity cases inside them) | label-has-associated-control enabled at depth 4 — measured first: at the default depth its only three findings are correct markup one level too deep; control-has-associated-label left OFF because 561 findings and the first sample is a correctly labelled input | next lint clean but for the three pre-existing react-hooks warnings; 144 selects scanned, 71 unnamed, pinned by a ratchet whose scan is asserted non-vacuous | next/core-web-vitals carries only a subset of jsx-a11y, which is exactly what F-D10 said. A rule whose findings are mostly wrong is one everyone learns to skip, so the unnamed selects are counted by a check that cannot be satisfied by nesting depth. |
@@ -29338,6 +29339,86 @@ day is not itself a bypass.
 - SEC-019's burst tests are unaffected. They exercise one window.
 - Full suite **16,934 tests across 1,333 files**, zero failures, under
   `TZ=UTC` and again under `TZ=America/Los_Angeles`; `tsc --noEmit` exits 0.
+
+# Pass AC — a chore paid its XP every time it was approved (DATA-016)
+
+## The same question, on the rewards side
+
+After SEC-019 and SEC-021, the sweep asked which approvals write a reward and
+whether the write can happen twice. The cash payout was already sound:
+`payChoreRewardAction` reads for an existing credit, and 0316's
+`uq_wallet_txn_chore_payout` turns the race it cannot see into a `duplicate`.
+The XP payout was not.
+
+## Two defects
+
+1. **Approval was not one-way.** `approveSubmissionAction` sets the submission
+   `approved` without checking what it was, and `finalizeApproval` writes the
+   assignment `approved` and runs `applyCompletionRewards` every time. The same
+   submission approved again (a double-click, two parents, a replayed form post)
+   pays again. So does approving a fresh proof for a chore that was already
+   approved: `submitProofAction` accepts one for any assignment.
+2. **XP was last-writer-wins.** `applyCompletionRewards` read `kid_progress`,
+   added in JavaScript, and wrote the total back, so approvals for one child that
+   overlap overwrite each other.
+
+Measured live, with the real `approveSubmissionAction` running as a real parent
+session on the local stack (only the cookie plumbing and the context lookup
+stubbed):
+
+```
+one submission approved 3×              XP 20 -> 40 -> 60
+4 different chores approved together    XP 20 -> 40      (expected 100)
+```
+
+and after the fix:
+
+```
+one submission approved 3×              XP 20 -> 20 -> 20, assignment "approved"
+4 different chores approved together    XP 20 -> 100
+```
+
+## The fix
+
+- **Paid once per assignment.** The approval write is conditional on
+  `approved_at is null`. `approved_at` is set only by that write and cleared only
+  by its own rollback, so "still null" means exactly "never paid", and when two
+  approvals arrive together only the first matches. A later approval re-sets
+  `status = 'approved'`, because a new proof moves the chore back to `submitted`,
+  and it does so without paying or changing the recorded award. If neither write
+  matches, the approval fails and is rolled back. Before, it would have reported
+  success having saved nothing.
+- **XP is a compare-and-set.** The progress write is conditional on the `xp`
+  that was read. Every award adds XP, so `xp` moves on every write, and a loser
+  re-reads and adds to the new total (up to 8 attempts, then the approval fails
+  and rolls back). Two first-ever awards used to race to create the progress row
+  and the loser failed on `kid_progress_member_id_key`; it now re-reads the
+  winner's row. The rollback path restored the old values unconditionally, which
+  would erase XP another approval had added in between. It now restores only if
+  the row is still the one it wrote.
+
+## Verification
+
+- `tests/a-chore-pays-once.test.ts` uses a double that honours every filter
+  against the row as it is at write time and resolves each call on a later
+  macrotask. The existing reward tests used a double that ignored filters, and
+  passed straight through both defects. The shipped code fails 4 of 7 cases.
+  Removing the `approved_at` guard fails 3, the XP compare-and-set 1, the
+  `23505` re-read 1, and the re-approve write's check 1. That last case, an
+  approval whose writes can match nothing, was added because the check survived
+  the first round of mutations.
+- `tests/chore-reward-persistence.test.ts` pinned the approval write's exact
+  spelling; it now pins the conditional form.
+- Not changed, and said so: `submitProofAction` still accepts new proof for an
+  approved chore. That can no longer pay twice, but whether it should be offered
+  at all is a product question. `disputeSubmissionAction` has no caller in the UI.
+- Full suite: **16,942 tests across 1,334 files** under
+  `TZ=America/Los_Angeles`, zero failures. The container restarted mid-cycle and
+  a pre-restart run survived, so two full suites wrote one UTC log at once: one
+  is clean at 16,942, and the other timed out
+  `seed-data-safety-contract` at 20 s while competing with the other suite and
+  the Docker boot. That file passes 4/4 alone. Both zones are re-run clean
+  under DATA-017. `tsc --noEmit` exits 0.
 
 # Final Regression
 

@@ -26,20 +26,38 @@ export async function ensureProgress(supabase: DB, familyId: string, memberId: s
     .insert({ family_id: familyId, member_id: memberId })
     .select('*')
     .single();
+  if (error?.code === '23505') {
+    // A concurrent approval created it first (unique on member_id): use theirs.
+    const { data: created, error: rereadError } = await supabase
+      .from('kid_progress').select('*').eq('family_id', familyId).eq('member_id', memberId).maybeSingle();
+    if (rereadError || !created) throw new Error('Could not read chore progress');
+    return created;
+  }
   if (error || !data) throw new Error('Could not create chore progress');
   return data;
 }
 
-async function restoreProgress(supabase: DB, progress: Progress): Promise<void> {
-  const { error } = await supabase.from('kid_progress').update({
+/**
+ * Undo this call's progress write — only while the row is still the one it
+ * wrote. Restoring unconditionally would also erase XP another approval added
+ * in the meantime, which is the lost update this module now avoids going up.
+ */
+async function restoreProgress(supabase: DB, progress: Progress, wroteXp: number): Promise<void> {
+  const { data, error } = await supabase.from('kid_progress').update({
     xp: progress.xp,
     level: progress.level,
     current_streak: progress.current_streak,
     longest_streak: progress.longest_streak,
     last_activity: progress.last_activity,
-  }).eq('id', progress.id).eq('family_id', progress.family_id);
-  if (error) console.error('[chore rewards] progress rollback failed', error);
+  }).eq('id', progress.id).eq('family_id', progress.family_id).eq('xp', wroteXp).select('id').maybeSingle();
+  if (error || !data) console.error('[chore rewards] progress rollback failed', error ?? new Error('Progress moved on; not overwritten'));
 }
+
+/**
+ * How many times the progress write may lose its compare-and-set before the
+ * approval fails. Contention is approvals for one child landing together.
+ */
+const PROGRESS_ATTEMPTS = 8;
 
 export type CompletionResult = { xp: number; level: number; leveledUp: boolean; streak: number; newBadges: string[] };
 
@@ -52,21 +70,31 @@ export async function applyCompletionRewards(
   supabase: DB,
   opts: { familyId: string; memberId: string; difficulty: Difficulty; qualityScore: number | null },
 ): Promise<CompletionResult> {
-  const progress = await ensureProgress(supabase, opts.familyId, opts.memberId);
   const today = todayISO();
-
   const gainedXp = DIFFICULTY_XP[opts.difficulty] ?? DIFFICULTY_XP.medium;
-  const xp = progress.xp + gainedXp;
-  const prevLevel = progress.level;
-  const level = levelForXp(xp);
-  const streak = nextStreak(progress.current_streak, progress.last_activity, today);
-  const longest = Math.max(progress.longest_streak, streak);
 
-  const { data: updatedProgress, error: progressError } = await supabase
-    .from('kid_progress')
-    .update({ xp, level, current_streak: streak, longest_streak: longest, last_activity: today })
-    .eq('id', progress.id).eq('family_id', opts.familyId).select('id').single();
-  if (progressError || !updatedProgress) throw new Error('Could not save chore progress');
+  // The write is conditional on the XP that was read. Unconditionally, two
+  // approvals for one child both read the same row and each wrote back "that
+  // plus mine": four different chores approved together raised XP by 20, not
+  // 80 (measured live). Every approval adds XP, so `xp` moves on every write
+  // and is the token; a writer that loses re-reads and adds to the new value.
+  let progress: Progress | null = null;
+  let xp = 0, level = 0, prevLevel = 0, streak = 0;
+  for (let attempt = 0; attempt < PROGRESS_ATTEMPTS; attempt += 1) {
+    const read = await ensureProgress(supabase, opts.familyId, opts.memberId);
+    xp = read.xp + gainedXp;
+    prevLevel = read.level;
+    level = levelForXp(xp);
+    streak = nextStreak(read.current_streak, read.last_activity, today);
+    const longest = Math.max(read.longest_streak, streak);
+    const { data: updatedProgress, error: progressError } = await supabase
+      .from('kid_progress')
+      .update({ xp, level, current_streak: streak, longest_streak: longest, last_activity: today })
+      .eq('id', read.id).eq('family_id', opts.familyId).eq('xp', read.xp).select('id').maybeSingle();
+    if (progressError) throw new Error('Could not save chore progress');
+    if (updatedProgress) { progress = read; break; }
+  }
+  if (!progress) throw new Error('Could not save chore progress');
 
   try {
     // Count this member's approved chores to drive count-based badges.
@@ -91,7 +119,7 @@ export async function applyCompletionRewards(
 
     return { xp, level, leveledUp: level > prevLevel, streak, newBadges };
   } catch {
-    await restoreProgress(supabase, progress);
+    await restoreProgress(supabase, progress, xp);
     throw new Error('Could not apply chore rewards');
   }
 }

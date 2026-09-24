@@ -269,11 +269,27 @@ async function finalizeApproval(
   const points = args.pointsOverride ?? reward.points;
   const cashCents = args.cashOverride ?? reward.cashCents;
 
+  // Completion rewards are paid once per ASSIGNMENT, however many times it is
+  // approved. Nothing enforced that: approving the same submission again, or
+  // approving a fresh proof for a chore already approved, re-ran the payout —
+  // measured live, one chore approved three times gave the child 20, 40, 60 XP.
+  // `approved_at` is set only here and cleared only by the rollback below, so
+  // "still null" is exactly "never paid", and the condition makes the first
+  // approval the only one that pays even when two arrive together.
   const { data: approvedAssignment, error: approvalError } = await supabase.from('chore_assignments').update({
     status: 'approved', approved_at: new Date().toISOString(), approved_by: args.actorId,
     points_awarded: points, cash_awarded_cents: cashCents,
-  }).eq('id', args.assignment.id as string).eq('family_id', args.familyId).select('id').single();
-  if (approvalError || !approvedAssignment) throw new Error('Could not save chore approval');
+  }).eq('id', args.assignment.id as string).eq('family_id', args.familyId).is('approved_at', null).select('id').maybeSingle();
+  if (approvalError) throw new Error('Could not save chore approval');
+  if (!approvedAssignment) {
+    // Already approved and paid. Put the chore back to approved (a new proof
+    // moves it to `submitted`) without paying or re-pricing it.
+    const { data: reapproved, error: reapproveError } = await supabase.from('chore_assignments')
+      .update({ status: 'approved' }).eq('id', args.assignment.id as string).eq('family_id', args.familyId)
+      .not('approved_at', 'is', null).select('id').maybeSingle();
+    if (reapproveError || !reapproved) throw new Error('Could not save chore approval');
+    return;
+  }
 
   try {
     await applyCompletionRewards(supabase, {
