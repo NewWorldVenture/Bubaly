@@ -2,12 +2,12 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-25T00:45:00.000Z
-- Total Audit Items: 14085
+- Last Updated: 2026-09-25T02:30:00.000Z
+- Total Audit Items: 14086
 - Not Started: 13842
 - In Progress: 192
 - Passed: 12
-- Fixed + Passed: 35
+- Fixed + Passed: 36
 - Blocked: 2
 - Failed: 2
 - Overall Completion: 0.04%
@@ -85,7 +85,7 @@ PRODUCTION READY: NO
 - PUSH-002: Legacy FCM and APNs-token misrouting replaced with provider-specific senders. Native provider/device configuration and receipt still unverified.
 - EMAIL-001: Suppression retry, receipt claims and documented tags shape repaired locally. Real database/provider workflow still unverified; metric atomicity tracked EMAIL-002.
 - MOBILE-001: Late service-worker registration and teardown defects repaired and component-tested. Actual authenticated install/update/offline and physical device flows remain unverified.
-- DEPLOY-002: Migrations 0318–0328 are PENDING PRODUCTION and must be applied by a human (docs/PENDING_PROD_MIGRATIONS.md). 0328 (SEC-016) is deploy-coupled in both directions: this branch's marketplace code reads `has_reserve`/`reserve_met`, which exist only after 0328, and older code reads `reserve_cents`, which 0328 refuses. Apply it with the deploy that carries this code; either order alone breaks the auction board and item page.
+- DEPLOY-002: Migrations 0318–0329 are PENDING PRODUCTION and must be applied by a human (docs/PENDING_PROD_MIGRATIONS.md). 0328 (SEC-016) is deploy-coupled in both directions: this branch's marketplace code reads `has_reserve`/`reserve_met`, which exist only after 0328, and older code reads `reserve_cents`, which 0328 refuses. Apply it with the deploy that carries this code; either order alone breaks the auction board and item page.
 - SEC-001: Family media bucket explicitly public while family photo/message/reminder consumers publish public URLs; authorization privacy cannot pass.
 - SOCIAL-001: Live authorized X configuration/provider acceptance and deployed role enforcement remain unverified. AUTHZ-003 remains a database release failure. New one-off scheduling implementation and local proof are recorded underSOCIAL-003. Automatic refresh, interrupted-state recovery, other platforms/media and feed/analytics remain open.
 - JOB-001: Missing-config false-success defect repaired and CLI-tested. Deployed scheduler configuration, execution and durable missed-tick catch-up remain unverified.
@@ -14203,6 +14203,7 @@ PRODUCTION READY: NO
 | SEC-015 | Security | Deleting a secure document made it readable by the whole family | 🛠 FIXED + PASS | High | 9/9 | `removeFamilyDocument` now confirms the object is gone by name and reports a failure otherwise; all four delete paths keep the `documents` row when the removal is not confirmed | Over live storage with a real parent and child: row present -> child download DENIED, not listed; row deleted with the object alive -> child download ALLOWED, `"THE FAMILY WILL — private"`, and listed. A refused remove and an absent object are both `error: null, data: []`; 5 mutations red | The storage guard `document_object_is_restricted(name)` hides the file by FINDING its row, so a deleted row over a surviving object unlocks it. A child cannot delete the row, so only a manager can reach the state — and a manager can list the object, which is why confirming by listing works for exactly the actor who matters. Generalised across all 10 storage removes: one shared rule in `lib/storage/confirm-removal.ts`, five buckets delegating to it, and the `family-media` photo delete no longer claiming "Photo deleted" for a file that may still be in a PUBLIC bucket. |
 | AUTHZ-010 | AUTHZ | The refused-write guard scanned `components/` only, and said so nowhere | ✅ PASS | Medium | 13/13 | No product change — every write outside that root is safe today. A rule now covers `'use server'` actions under `app/`: a guarded-table update/delete through the user client must refuse a non-manager itself, read its rows back, or use the service role | 67 update/delete calls on the 44 guarded tables live outside `components/`; 17 go through the cookie-bound client and are filtered by RLS exactly as silently. All are gated, check rows, or bypass RLS. 5 mutations red, including dropping the `isManager` line from a real action | Five false positives of my own first, each from matching a name instead of a behaviour (`canManage`, `admin = createServiceClient()`, `ledgerClient()`, a binding assumed to be called `data`, a too-short window) — and one mutation that never landed until I checked that it had. |
 | SEC-016 | Security | A proxy bid's ceiling was readable by the people bidding against it | 🛠 FIXED + PASS (0328 pending production, deploy-coupled) | High | 9/9 + probe | Column privileges: client SELECT withheld on `reserve_cents`, `highest_max_cents` and `marketplace_bids.max_cents`, with the grant list computed in the migration and a self-check; the UI reads generated `has_reserve`/`reserve_met` instead of the figure; the one `select('*')` names its columns | Three real accounts over PostgREST: a rival read the leader's ceiling (50000) and reserve (20000), the seller read every bidder's max, and a rival bid of exactly the ceiling moved a $10.00 auction to $500.00 without leading. After: all three refused with 42501, the engine, bid history and reserve badge unchanged. 8 mutations red across probe and unit guard | 0183's own column comments call both values "hidden". The auction board was also serialising `reserve_cents` into every viewer's page props. A column grant does not extend to columns added later, so the probe asserts the selectable set is exactly "all minus the secrets". |
+| SEC-017 | Security | A child could decide where a gift went, and what a goal said | 🛠 FIXED + PASS (0329 pending production) | High | 4/4 + probe | Restrictive manager-only write guards on gift_payments, gift_links, pay_handles and wallet_goals — the four 0088 tables 0217 missed that a parent's money decision is made from | Real sessions, a parent and two children: Grandma's $50 for Sister rewritten to $500 for Brother, a $20,000 gift invented, the parent approves the queue, Sister $0.00 and Brother $20,500.00; a $300 goal forged as reached with zero ledger rows. After: all refused; every parent and public path unchanged. 7 mutations red | The probe carries the general rule — nothing a definer money function reads may be rewritten by a non-manager — which catches the next RPC as well as these four. Found by asking what a brute-forced circle join code would grant, then what else the approval queue trusts. |
 | PERF-004 | Performance | The parent approval queue signed one photo per round trip (closes F-F03) | 🛠 FIXED + PASS | High | 4/4 (5 sanity cases inside them) | Paths collected, deduplicated and signed in chunks of 100 through createSignedUrls; the per-entry error is read so an unsignable object is left out rather than rendering an empty src; a signing outage costs the photos, not the queue | Restoring the loop turns the guard red at app/(app)/missions/page.tsx:106; the existing missions read-boundary test still passes | A loop inside a loop around `await createSignedUrl` — up to four photos per submission across the whole queue, in series. The batch form was already in the codebase and already used correctly one directory away. |
 | A11Y-001 | Accessibility | The photo lightbox stranded keyboard users (closes F-D01) | 🛠 FIXED + PASS | High | 7/7 | role=dialog + aria-modal + the shared useDialogBehavior hook on the viewer; tiles made focusable with Enter/Space; Arrow Left/Right between photos | Three mutations red (the hook removed; the tiles returned to mouse-only; a new overlay declaring aria-modal without the hook); 13 declare it and 13 implement it, and the sets are identical | The tiles were div onClick, so a keyboard could not reach the viewer at all — a trap you cannot enter. The existing a11y guard named four overlays by hand, so this one was never looked at: enumerated with no scan, the third shape of this repo's signature defect. |
 | A11Y-002 | Accessibility | The lint config enabled none of the rules that would have caught it (F-D10/F-D02/F-D03) | 🛠 FIXED + PASS (F-D03 ratcheted, not fixed) | Medium | 4/4 (7 sanity cases inside them) | label-has-associated-control enabled at depth 4 — measured first: at the default depth its only three findings are correct markup one level too deep; control-has-associated-label left OFF because 561 findings and the first sample is a correctly labelled input | next lint clean but for the three pre-existing react-hooks warnings; 144 selects scanned, 71 unnamed, pinned by a ratchet whose scan is asserted non-vacuous | next/core-web-vitals carries only a subset of jsx-a11y, which is exactly what F-D10 said. A rule whose findings are mostly wrong is one everyone learns to skip, so the unnamed selects are counted by a check that cannot be satisfied by nesting depth. |
@@ -23078,7 +23079,7 @@ Status: ✅ PASS — `npm run lint` reports the four known baseline warnings and
 ## Automated Tests
 Status: ✅ PASS — 15,287 tests across 1,215 files pass, zero failures and zero skips, on Node 24.15.0 at head 92340315 (160s).
 
-Later in this cycle, on Node 24.21.0: **16,895 tests across 1,328 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **53/53 boundary probes with 0 skipped**.
+Later in this cycle, on Node 24.21.0: **16,904 tests across 1,329 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **54/54 boundary probes with 0 skipped**.
 
 One type error was committed and is worth recording rather than quietly fixed: `tests/a-fan-out-has-a-width-somebody-chose.test.ts` used `source: 'test'` where `DriveTimeEstimate.source` is a three-value union. `vitest` does not typecheck, so it passed there; `tsc --noEmit` was run before the test file was written and not after, and the commit went out red. The next `tsc` caught it. The lesson is the ordering: the typecheck belongs after the last file is written, not after the last file one happened to be thinking about. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), `tests/a-capped-read-is-not-a-silent-one.test.ts` (DATA-011, 5), `tests/a-family-day-starts-where-the-family-is.test.ts` and `tests/a-server-day-is-the-familys-day.test.ts` (DATA-012, 11), `docs/audit/vaults-require-second-factor-check.sql` (AUTHZ-008), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
 
@@ -28733,6 +28734,129 @@ On the join codes themselves: 39.2 bits with no attempt limit is recorded, not
 fixed. It is an online guess against the whole population of circles, and what
 a successful guess grants is now a listing, a price and a family name rather
 than anyone's bidding ceiling. Worth a rate limit when the RPC is next touched.
+
+# Pass V — a child could decide where a gift went, and what a goal said (SEC-017)
+
+## The finding
+
+A pledge from the public `/gift/[token]` page lands as a **pending**
+`gift_payments` row, and `wallet_approve_gift` — the parent's approval —
+credits whatever wallet and amount that row names at the moment of approval.
+The approval is careful: it checks the caller manages the family, locks the
+row, refuses anything not pending. It never asks who wrote the row.
+
+Anyone in the family could. 0217 locked the money tables after a child minted
+wallet credit through PostgREST, and it took five of the tables 0088 created —
+`family_wallets`, `child_wallets`, `wallet_buckets`, `wallet_transactions`,
+`wallet_rules`. It left the rest of 0088's `"Members manage <t>" FOR ALL
+is_family_member` policies where they were, and four of those are rows a
+parent's money decision is made from:
+
+| table | what trusts it |
+|---|---|
+| `gift_payments` | the approval credits its `child_wallet_id` and `amount_cents` |
+| `gift_links` | which child a public pledge is for |
+| `pay_handles` | which child's gift link a public Pay-ID routes to |
+| `wallet_goals` | `saved_cents`/`status` are what a parent reads as "reached"; `child_wallet_id` is whose savings `wallet_fund_goal` debits |
+
+## Proven with real sessions
+
+A parent, Sister and Brother, each signed in as themselves, with real wallets
+and buckets:
+
+```
+Grandma pledges $50.00 to Sister — pending a parent's approval
+
+Brother (child) edits it:   rows=[{"amount_cents":50000}]        (and child_wallet_id -> his)
+Brother invents one:        rows=[{"amount_cents":2000000}]      ("Uncle Joe")
+Brother repoints the link:  rows=[{"id":"…"}]
+
+The parent approves the queue:
+    "Uncle Joe" $20000.00 -> Brother: credited
+    "Grandma"   $500.00   -> Brother: credited
+
+    Sister: $0.00    Brother: $20500.00
+```
+
+The invented gift is twenty times the $1,000 cap the public path enforces —
+`clampGiftAmountCents` sits in the server action, and a direct insert never
+meets it. Nothing in the approval queue distinguishes a pledge a relative made
+from one a child typed in.
+
+And separately, with no gift involved:
+
+```
+the parent sets a $300 bike goal: saved_cents 0, status active
+the child marks it saved in full: [{"saved_cents":30000,"status":"reached"}]
+ledger rows behind that "saved" figure: 0
+```
+
+DATA-013 had already made the *code* derive goal totals rather than write them.
+The database still let a child write one.
+
+## How it was found
+
+Sideways. Pass U had asked what a stranger who brute-forced a circle join code
+would get, which led to the auction columns. Asking the same question about
+the approval queue — *what does the parent's decision trust, and who can write
+it?* — led here. The answer was the same shape as the auction: a careful
+function, and a row it reads that the wrong people can write.
+
+## The fix
+
+Migration `0329_the_rows_a_parents_money_decision_trusts.sql` (pending
+production, **not** deploy-coupled — no application code changed):
+RESTRICTIVE manager-only insert/update/delete guards on the four tables, in
+0217's exact shape, ANDing with the existing family policy, plus `revoke
+insert, update, delete … from anon`. SELECT is untouched.
+
+Managers-only is not an over-correction here, and that was checked rather than
+assumed: every product writer was already parent-only (`createGoalAction`,
+`fundGoalAction`, `claimPayHandleAction`, `releasePayHandleAction`, the
+create-link and dismiss actions), or the service role (the public pledge), or
+SECURITY DEFINER (approval and funding). The two refused-write guards agree —
+with all four tables added to `GUARDED_TABLES`, both pass unchanged, meaning no
+browser write and no ungated server action touches them.
+
+## The general rule
+
+`docs/audit/money-decision-rows-check.sql` carries the form of this finding as
+a structural check: **every table a SECURITY DEFINER money-crediting function
+reads from must not be updatable by a non-manager** — every permissive
+UPDATE/ALL policy manager-only, or a restrictive manager guard over it. Run against
+the pre-0329 policies (the twelve guards dropped), it lists exactly two offenders,
+`gift_payments` (read by `wallet_approve_gift`) and `wallet_goals` (read by
+`wallet_fund_goal`); every other source table — `economy_redemptions`,
+`invest_orders`, `parent_approvals` and the rest — is already manager-only for
+updates. Dropping only the goals' guards is caught twice, by the goals' own case
+and by this rule, as `wallet_goals (read by wallet_fund_goal)`.
+
+Deliberately not in scope: the other 64 tables still on the 0088 pattern. Most
+are collaborative by design and OPEN-001 records that as an owner decision;
+`babysitter_payments` records payments made to a sitter and never credits a
+wallet.
+
+## Verification
+
+- The probe, under three identities and rolled back: **4 mutations red** — the
+  whole pre-0329 world (ten findings, including `BREACH: Brother's wallet was
+  credited 50000 cents from gifts that were not his`), goals alone left open,
+  Pay-IDs alone left open, and the managers-only over-correction applied to
+  SELECT (`CONTROL FAILED: the child cannot see the gift that was credited to
+  her`). The structural rule was mutated separately and names the table and
+  function.
+- `tests/a-money-decision-row-is-parent-written.test.ts` pins the migration's
+  four tables and the probe's cases and controls; dropping `pay_handles` from
+  the migration's list fails it.
+- **54/54 boundary probes, 0 skipped.**
+- **16,904 tests across 1,329 files, zero failures and zero skips**, on Node
+  24.21.0, under `TZ=UTC` and again under `TZ=America/Los_Angeles`.
+  `tsc --noEmit` exits 0.
+
+Three mistakes of my own in the probe, all caught by running it: an unescaped
+apostrophe in a SQL string, a Pay-ID fixture that broke the handle format
+constraint, and a PL/pgSQL variable named `handle` that collided with the
+column of the same name.
 
 # Final Regression
 

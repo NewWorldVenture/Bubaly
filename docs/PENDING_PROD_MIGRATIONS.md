@@ -2261,3 +2261,64 @@ props; `components/modules/marketplace-module.tsx` names its columns instead of
 
 Until this is applied, any member of a sharing circle can read the ceiling of
 every auction shared there, and any seller can read every bidder's maximum.
+
+## 0329 — a child could decide where a gift went, and what a goal said
+
+`supabase/migrations/0329_the_rows_a_parents_money_decision_trusts.sql`
+
+Not deploy-coupled: no application code changed with it, and every product
+path that writes these tables was already parent-only. Safe to apply in either
+order relative to a deploy.
+
+0217 locked the money tables to managers after a child minted wallet credit
+through PostgREST. It took five of the tables 0088 created and left the rest of
+0088's `"Members manage <t>" FOR ALL is_family_member` policies in place. Four
+of those are rows a parent's money decision is made **from**:
+
+| table | what trusts it |
+|---|---|
+| `gift_payments` | `wallet_approve_gift` credits the wallet and amount the pending row names when a parent approves |
+| `gift_links` | which child a pledge from the public page is for |
+| `pay_handles` | which child's gift link a public Pay-ID routes to |
+| `wallet_goals` | `saved_cents`/`status` are what a parent reads to decide a goal is reached; `child_wallet_id` is whose savings `wallet_fund_goal` debits |
+
+Measured with real sessions — a parent and two children:
+
+```
+Grandma pledges $50.00 to Sister                  (public path, service role)
+Brother updates it to $500.00, to his own wallet  -> allowed
+Brother inserts "Uncle Joe", $20,000.00, to him   -> allowed
+Brother repoints Sister's gift link at himself    -> allowed
+the parent approves the queue                     -> both credited
+
+Sister: $0.00    Brother: $20,500.00
+```
+
+The invented gift is twenty times the $1,000 cap the public path enforces —
+a direct insert never meets that clamp. Separately a child set a $300 goal to
+`saved_cents = 30000, status = 'reached'` with zero ledger rows behind it.
+
+**The fix** is 0217's shape: RESTRICTIVE manager-only insert/update/delete
+guards that AND with the existing family policy, plus `revoke insert, update,
+delete … from anon`. SELECT is untouched — a child still sees their gifts and
+goals. Every product writer was already parent-only (`createGoalAction`,
+`fundGoalAction`, `claimPayHandleAction`, `releasePayHandleAction`, the
+create-link and dismiss actions), the service role (the public pledge), or
+SECURITY DEFINER (approval and funding), so nothing a family does is taken away.
+
+Held by `docs/audit/money-decision-rows-check.sql`, which also carries the
+general rule: **every table a SECURITY DEFINER money-crediting function reads
+from must not be updatable by a non-manager.** Against the pre-migration
+policies it reports ten findings, including
+`BREACH: Brother's wallet was credited 50000 cents from gifts that were not his`,
+and dropping only the goals' guards is caught twice — by its own case and by
+the structural rule, as `wallet_goals (read by wallet_fund_goal)`.
+
+Deliberately not here: the other 64 tables still on the 0088 pattern. Most are
+collaborative by design (trips, polls, meal votes, plans) and OPEN-001 records
+that as an owner decision; `babysitter_payments` records payments made to a
+sitter and never credits a wallet.
+
+Until this is applied, any child in a family can redirect or inflate a pending
+gift, invent one, repoint a sibling's gift link or Pay-ID, and forge a goal as
+reached.
