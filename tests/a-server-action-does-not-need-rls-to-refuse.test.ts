@@ -86,7 +86,11 @@ export function guardedServerWrites(file: string, source: string): Finding[] {
   for (let i = 0; i < starts.length; i++) {
     const start = starts[i].index!;
     const body = source.slice(start, i + 1 < starts.length ? starts[i + 1].index! : source.length);
-    const writes = [...body.matchAll(/\.from\(\s*['"`]([a-z_0-9]+)['"`]\s*\)\s*\n?\s*\.(update|delete)\(/g)]
+    // The optional `as …)` admits the cast wrapper the Guardian actions use —
+    // `(db.from('guardian_contacts') as ReturnType<typeof supabase.from>).update(` —
+    // which the first version of this pattern could not see, so an ungated
+    // Guardian write passed here while its own test caught it.
+    const writes = [...body.matchAll(/\.from\(\s*['"`]([a-z_0-9]+)['"`]\s*\)(?:\s*as\s+[^\n]*?\))?\s*\n?\s*\.(update|delete)\(/g)]
       .filter((m) => GUARDED_TABLES.has(m[1]));
     if (!writes.length) continue;
     out.push({
@@ -207,6 +211,21 @@ describe('a server action does not need RLS to refuse (AUTHZ-010)', () => {
       '  return { ok: !error };',
     ].join('\n'));
     expect(unaccounted(guardedServerWrites('s.ts', service)[0])).toBeNull();
+  });
+
+  it('sees a write through a cast wrapper', () => {
+    const cast = [
+      'export async function setTrust(id: string) {',
+      '  const supabase = await createServer();',
+      '  const db = withGuardianTables(supabase);',
+      "  const { error } = await (db.from('allowance_rules') as ReturnType<typeof supabase.from>)",
+      "    .update({ is_active: false }).eq('id', id);",
+      '  return { ok: !error };',
+      '}',
+    ].join('\n');
+    const [finding] = guardedServerWrites('s.ts', cast);
+    expect(finding?.writes).toBe('allowance_rules.update()');
+    expect(unaccounted(finding)).toMatch(/no manager gate/);
   });
 
   it('reads a rows-back check whatever the binding is called', () => {

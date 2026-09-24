@@ -50,6 +50,8 @@ export const GUARDED_TABLES = new Set([
   // (SEC-017): they are the rows a parent's money decision is made FROM.
   'allowance_rules', 'approval_requests', 'assistant_links', 'bills', 'budgets',
   'gift_links', 'gift_payments', 'pay_handles', 'wallet_goals',
+  // and the Guardian screening tables in 0330 (AUTHZ-005).
+  'guardian_contacts', 'guardian_member_profiles', 'guardian_suggestions',
   'child_wallets', 'currency_transactions', 'documents', 'driver_licenses',
   'economy_redemptions', 'economy_rewards', 'event_rsvps', 'families',
   'family_ai_settings', 'family_automation_rules', 'family_automation_runs',

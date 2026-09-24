@@ -2,14 +2,14 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-25T02:30:00.000Z
+- Last Updated: 2026-09-25T04:10:00.000Z
 - Total Audit Items: 14086
 - Not Started: 13842
 - In Progress: 192
 - Passed: 12
-- Fixed + Passed: 36
+- Fixed + Passed: 37
 - Blocked: 2
-- Failed: 2
+- Failed: 1
 - Overall Completion: 0.04%
 
 Database-execution cycle: the local Supabase stack was brought up healthy and every migration applied, so this pass judged the database by running it rather than by reading it. It found three features that have never worked in production and two live boundary breaches. DB-FN-001: `marketplace_create_circle` is `security definer` and pinned `set search_path = public`, but Supabase keeps pgcrypto in the `extensions` schema, so every call since 0176 raised 42883 and no family has ever created a sharing circle. DB-FN-002: `invest_decide_order` writes the ledger `direction` from a CASE over two string literals, which is `text` and does not cast to the enum — so APPROVAL has raised 42804 since 0196 while REJECTION worked, and a parent could decline a child's investment for ever while no order was ever filled. SEC-006: the locator's own comment says "Strictly self-only" and the server action honours it, but that was the only place it held — measured as a child, rewrote the parent's live location, deleted it, and fabricated an arrival event attributed to them. AUTHZ-003, open at FAIL for a full cycle on source analysis alone, was reproduced by execution: a read_only adult deleted their own restriction and became a marketing_manager with publish_posts and connect_accounts. Three further integrity gaps followed from the same question — what does the table enforce, as opposed to what does the code promise: DATA-008, a single-choice poll took every choice (one member cast 3 votes across 3 options) because the single/multi rule lived only in the browser and spans two tables, so it needed a trigger rather than an index; DATA-009, `families.timezone` had no constraint at all, so a typo saved silently and put the family on Greenwich time. Fixed in 0318-0323 with probes that each go red when reverted. The guards that should have caught the first two were asking the wrong question: one verified that a definer function PINS a search_path (this one did), and nothing at all resolved a plpgsql body, which binds its SQL at CALL time and so can be catastrophically wrong while installing, deploying and passing CI cleanly. Both halves are now guarded, the second by resolving all 70 plpgsql bodies against the live catalogue. Running the boundary suite twice in a row also exposed three probes not proving what the green count implied (TEST-004/005/006): one passed on a virgin database and failed forever after, one ERRORED rather than ran on every Supabase database it was ever pointed at so the wallet overspend race had never once been exercised, and one aborted during fixture setup before any assertion ran. TEST-007 is the one that explains the rest: DB-FN-001 had a probe watching it the whole time — `circle-join-code-check.sql` calls the dead function and asserts it works, ran on every pull request, and passed on every pull request. CI's bootstrap installed pgcrypto into `public` while a real Supabase project puts it in `extensions`, so the broken pin resolved there and nowhere else. Restoring the pre-0318 definition on a CI-shaped database: probe exit 0. After the bootstrap was made faithful to production: probe exit 3, `function gen_random_bytes(integer) does not exist`. The runner also reported a SKIP as a PASS, which had hidden that the wallet overspend race ran nowhere; skips are now counted separately and `PROBES_REQUIRE_ALL=1` makes them fatal in CI. `docs/audit/run-probes.sh` passes 45/45 with 0 skipped, on both a fresh container replicating the CI job and the local Supabase stack. The unit suite passes 16,705/16,705 across 1,305 files on Node 24.21.0, the version the repo declares; the three failures seen under this container's Node 22 are the already-tracked PERF-002 and disappear under 24. OPEN-001 records five member-data tables left deliberately unchanged as an owner decision, with the reasoning and a recommended shape written down for whoever decides. These are local-execution results; they do not by themselves establish deployed behavior, and 0318-0323 are PENDING PRODUCTION MIGRATIONS that a human must apply.
@@ -85,7 +85,7 @@ PRODUCTION READY: NO
 - PUSH-002: Legacy FCM and APNs-token misrouting replaced with provider-specific senders. Native provider/device configuration and receipt still unverified.
 - EMAIL-001: Suppression retry, receipt claims and documented tags shape repaired locally. Real database/provider workflow still unverified; metric atomicity tracked EMAIL-002.
 - MOBILE-001: Late service-worker registration and teardown defects repaired and component-tested. Actual authenticated install/update/offline and physical device flows remain unverified.
-- DEPLOY-002: Migrations 0318–0329 are PENDING PRODUCTION and must be applied by a human (docs/PENDING_PROD_MIGRATIONS.md). 0328 (SEC-016) is deploy-coupled in both directions: this branch's marketplace code reads `has_reserve`/`reserve_met`, which exist only after 0328, and older code reads `reserve_cents`, which 0328 refuses. Apply it with the deploy that carries this code; either order alone breaks the auction board and item page.
+- DEPLOY-002: Migrations 0318–0330 are PENDING PRODUCTION and must be applied by a human (docs/PENDING_PROD_MIGRATIONS.md). 0328 (SEC-016) is deploy-coupled in both directions: this branch's marketplace code reads `has_reserve`/`reserve_met`, which exist only after 0328, and older code reads `reserve_cents`, which 0328 refuses. Apply it with the deploy that carries this code; either order alone breaks the auction board and item page.
 - SEC-001: Family media bucket explicitly public while family photo/message/reminder consumers publish public URLs; authorization privacy cannot pass.
 - SOCIAL-001: Live authorized X configuration/provider acceptance and deployed role enforcement remain unverified. AUTHZ-003 remains a database release failure. New one-off scheduling implementation and local proof are recorded underSOCIAL-003. Automatic refresh, interrupted-state recovery, other platforms/media and feed/analytics remain open.
 - JOB-001: Missing-config false-success defect repaired and CLI-tested. Deployed scheduler configuration, execution and durable missed-tick catch-up remain unverified.
@@ -115,7 +115,7 @@ PRODUCTION READY: NO
 - AUTH-003: Live email delivery, provider URL allowlists/templates, deployed password/reauthentication policy and real recipient-to-password workflow remain unverified. Current isolated action receipt and browser adoption/grant checks pass focused local execution; initiation-before-completion ownership and new-source hosted acceptance remain open. Local grant ownership is not distributed exactly-once mutation control, and a failed post-exchange check cannot undo provider code consumption.
 - SMS-001: Current signed ingress retention passes focused tests, including deterministic filing after candidate failure. New integrated ingress hosted acceptance, real provider delivery, controlled old-handler cutover and production configuration remain open; see main-integration-cycle-20260919.md.
 - AUTHZ-004: Guardian contact/profile role authorization remains AUTHZ-005; cross-table operations remain non-atomic.
-- AUTHZ-005: Verify deployed policy state, child contact/profile mutations and the contact-deletion cascade into routing rules. Independent member/family foreign keys require separate integrity verification.
+- AUTHZ-005: Reproduced by execution and repaired in migration 0330 (PENDING PRODUCTION): seven child breaches before, clean after, including the contact-deletion cascade into routing rules. Remaining: deployed policy state once 0330 is applied, and the independent member/family foreign keys, which still need their own integrity verification.
 - SMS-002: Production scheduler configuration/execution and real provider delivery remain unverified; cross-table operations are not transactions.
 
 - SEO-001: Both generated social preview images answer 307 to /login for an unauthenticated crawler, so no shared Bubaly link renders a preview card on any platform.
@@ -13806,7 +13806,7 @@ PRODUCTION READY: NO
 | SUPPORT-370A0FE646C3 | SUPPORT | tests/guardian-policy-execution.test.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-policy-inventory.json. Full workflow verification remains separate. |
 | API-C8B72ACE022A | API | POST /api/assistant | 🔄 IN PROGRESS | High | Exact POST-only middleware exemption verified in source and against production; tests/middleware-public-api-boundary.test.ts pins the class. | Named the two exact paths in the middleware and gated them to POST; the namespace was not opened. | unauthenticated production probes against www.bubaly.com on 2026-09-13 (build f9c4d7a1): POST answers 401 from the handler; GET on the same path answers 307 to /login, and both /api/assistant/link and /api/assistant/other answer 307 on GET and POST — the exemption did not widen to neighbours. | Resolved. Full assistant feature workflow remains separate. Historical scoped evidence retained; current merged-source verification and remaining workflow obligations are pending. |
 | API-A2C5302CAE88 | API | POST /api/assistant/alexa | 🔄 IN PROGRESS | High | Exact POST-only middleware exemption verified in source and against production; tests/middleware-public-api-boundary.test.ts pins the class. | Named the two exact paths in the middleware and gated them to POST; the namespace was not opened. | unauthenticated production probes against www.bubaly.com on 2026-09-13 (build f9c4d7a1): POST answers 403 from Amazon signature verification; GET on the same path answers 307 to /login, and both /api/assistant/link and /api/assistant/other answer 307 on GET and POST — the exemption did not widen to neighbours. | Resolved. Full assistant feature workflow remains separate. Historical scoped evidence retained; current merged-source verification and remaining workflow obligations are pending. |
-| AUTHZ-005 | AUTHZ | Guardian contact trust and member profiles require database manager write authority | ❌ FAIL | High | Independent complete named/dynamic policy-source trace confirms the repository boundary at incoming217c7be4. No live or disposable child-write execution has yet been performed. | Pending database policy repair; additional action checks alone cannot prevent direct database writes. Existing no-new-SQL constraint remains in force. | Pending disposable role-boundary reproduction and authorized schema repair. | Do not claim a deployed exploit, foreign-row read/write, or runtime cascade proof. Guardian SMS receipt authorship repairs AUTHZ-004 but does not authenticate changes to the routing policy itself. |
+| AUTHZ-005 | AUTHZ | Guardian contact trust and member profiles require database manager write authority | 🛠 FIXED + PASS (0330 pending production) | High | 3/3 + probe | Migration 0330: restrictive manager-only insert/update/delete guards on guardian_contacts, guardian_member_profiles, guardian_suggestions and guardian_communications; SELECT untouched | Reproduced as a child on the local stack before repair, seven findings: a blocked caller raised to immediate_family, a trusted contact added, a contact deleted, a parent's manager-only routing rule deleted through `condition_contact_id ON DELETE CASCADE`, a pending suggestion rewritten, a call record fabricated, the child's own screening switched off. Clean after; the managers-only-to-read over-correction reports CONTROL FAILED | The earlier record's no-new-SQL constraint no longer applies — the database-execution cycle ships pending migrations. Every product writer was already parent-gated or service role. The AUTHZ-010 scanner was blind to Guardian's cast-wrapped writes and is now cast-aware. Deployed state still unverified. |
 | MIGRATION-828B29F5735B | MIGRATION | supabase/migrations/0282_marketing_recurring_ads.sql | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/weekly-meal-inventory.json. Full workflow verification remains separate. |
 | SUPPORT-EBD58C8E93F0 | SUPPORT | app/(app)/dashboard/assistants/actions.ts | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-replay-inventory.json. Full workflow verification remains separate. |
 | SERVICE-274EDFA6815C | SERVICE | createAssistantLinkAction | ⬜ NOT STARTED | Unassessed | Pending | None | Pending | Source discovery only; exact committed hashes and baseline in discovery/guardian-replay-inventory.json. Full workflow verification remains separate. |
@@ -23079,7 +23079,7 @@ Status: ✅ PASS — `npm run lint` reports the four known baseline warnings and
 ## Automated Tests
 Status: ✅ PASS — 15,287 tests across 1,215 files pass, zero failures and zero skips, on Node 24.15.0 at head 92340315 (160s).
 
-Later in this cycle, on Node 24.21.0: **16,904 tests across 1,329 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **54/54 boundary probes with 0 skipped**.
+Later in this cycle, on Node 24.21.0: **16,908 tests across 1,330 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **55/55 boundary probes with 0 skipped**.
 
 One type error was committed and is worth recording rather than quietly fixed: `tests/a-fan-out-has-a-width-somebody-chose.test.ts` used `source: 'test'` where `DriveTimeEstimate.source` is a three-value union. `vitest` does not typecheck, so it passed there; `tsc --noEmit` was run before the test file was written and not after, and the commit went out red. The next `tsc` caught it. The lesson is the ordering: the typecheck belongs after the last file is written, not after the last file one happened to be thinking about. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), `tests/a-capped-read-is-not-a-silent-one.test.ts` (DATA-011, 5), `tests/a-family-day-starts-where-the-family-is.test.ts` and `tests/a-server-day-is-the-familys-day.test.ts` (DATA-012, 11), `docs/audit/vaults-require-second-factor-check.sql` (AUTHZ-008), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
 
@@ -28857,6 +28857,82 @@ Three mistakes of my own in the probe, all caught by running it: an unescaped
 apostrophe in a SQL string, a Pay-ID fixture that broke the handle format
 constraint, and a PL/pgSQL variable named `handle` that collided with the
 column of the same name.
+
+# Pass W — Guardian's screening decisions were anyone's (AUTHZ-005, closed)
+
+AUTHZ-005 sat at ❌ FAIL with a precise, honest note: the gap was traced from
+the policy source, *"no live or disposable child-write execution has yet been
+performed"*, and a repair was pending. It was reached this pass the same way as
+SEC-016 and SEC-017, by asking of every SECURITY DEFINER function **which
+manager-only table it writes from a row any member can update**. Twelve
+functions came back; most are a family editing its own collaborative data.
+`guardian_review_suggestion` was not: it writes the trust level of a contact
+from a suggestion row any member could rewrite.
+
+## Reproduced
+
+Guardian screens a family's calls and texts. `guardian_routing_rules` was
+already manager-only; the tables that decide who rings through were not. As a
+child, on the local stack, `docs/audit/guardian-authority-check.sql`:
+
+```
+BREACH: a child rewrote a pending suggestion before a parent approved it (rows: 1)
+BREACH: a child raised a blocked caller to immediate_family (rows: 1)
+BREACH: a child added a trusted contact
+BREACH: a child deleted a blocked caller's record (rows: 1)
+BREACH: a child deleted a parent's manager-only routing rule by deleting the contact it names (cascade)
+BREACH: a child fabricated a call record, which the learning run reads
+BREACH: a child switched off their own call screening (rows: 1)
+```
+
+The fifth is the one the policy source could not show on its own.
+`guardian_routing_rules.condition_contact_id` is `ON DELETE CASCADE`, so the
+rules table's manager-only policies were real and still walkable-around: delete
+the contact and the rule goes with it, without ever touching the rules table.
+
+## The repair
+
+Migration `0330_guardian_screening_is_the_parents_decision.sql` (pending
+production, not deploy-coupled): restrictive manager-only insert/update/delete
+guards on `guardian_contacts`, `guardian_member_profiles`,
+`guardian_suggestions` and `guardian_communications`. SELECT untouched. Every
+product writer was already parent-gated or the service role, and
+`tests/guardian-screening-is-the-parents-decision.test.ts` asserts that of every
+action in `app/(app)/guardian/actions.ts` that writes these tables.
+
+## Three fixture mistakes, and a scanner blind spot
+
+The probe was built to report a broken fixture rather than pass over it, and it
+did, three times: the child's contact deletion cascaded into the suggestion the
+parent's control needed (fixed by rebuilding fixtures after destructive
+breaches, the lesson from the social-token probe); a `current_context` value the
+check constraint rejects; and a call-record fixture with the wrong enum and
+then the wrong status — reported both times as `CONTROL FAILED: the
+fabricated-call fixture is wrong (…), so this case proves nothing`, which is
+exactly what it was.
+
+Mutation-testing the new unit guard also showed that **AUTHZ-010's scanner
+could not see Guardian's writes at all**. They go through
+`(db.from('guardian_contacts') as ReturnType<typeof supabase.from>).update(`,
+and the cast between `.from()` and `.update()` broke the pattern. Removing the
+`isManager` line from `updateContactTrustAction` failed the Guardian test and
+passed AUTHZ-010. The pattern now admits the cast, a control case drives it, and
+the same mutation fails both. No component writes through a cast today, so the
+browser-side sibling guard is not currently blind.
+
+## Verification
+
+- Probe: seven findings against the pre-0330 policies, clean after; the
+  over-correction (contacts manager-only to read) reports `CONTROL FAILED: the
+  child cannot see the family's contacts`.
+- **55/55 boundary probes, 0 skipped.**
+- **16,908 tests across 1,330 files, zero failures and zero skips**, on Node
+  24.21.0, under `TZ=UTC` and again under `TZ=America/Los_Angeles`.
+  `tsc --noEmit` exits 0.
+
+Still open under AUTHZ-005, and said so in Critical Blockers: deployed policy
+state after 0330 is applied, and the independent member/family foreign keys the
+original record flagged, which this pass did not examine.
 
 # Final Regression
 

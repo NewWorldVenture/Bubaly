@@ -2322,3 +2322,51 @@ sitter and never credits a wallet.
 Until this is applied, any child in a family can redirect or inflate a pending
 gift, invent one, repoint a sibling's gift link or Pay-ID, and forge a goal as
 reached.
+
+## 0330 — Guardian's screening decisions were anyone's (closes AUTHZ-005)
+
+`supabase/migrations/0330_guardian_screening_is_the_parents_decision.sql`
+
+Not deploy-coupled: no application code changed with it, and every product
+writer of these tables was already parent-only or the service role.
+
+Guardian screens a family's calls and texts. `guardian_routing_rules` was
+already manager-only, but the tables that actually decide who rings through
+were `FOR ALL is_family_member`: `guardian_contacts` (each caller's trust
+level), `guardian_member_profiles` (each member's handling per trust level, and
+whether screening is on at all) and `guardian_suggestions` (proposals a parent
+approves — `guardian_review_suggestion` applies whatever `proposed_*` the row
+holds at that moment). AUTHZ-005 recorded this from the policy source and asked
+for a reproduction before a repair. Reproduced as a child on the local stack:
+
+```
+BREACH: a child rewrote a pending suggestion before a parent approved it
+BREACH: a child raised a blocked caller to immediate_family
+BREACH: a child added a trusted contact
+BREACH: a child deleted a blocked caller's record
+BREACH: a child deleted a parent's manager-only routing rule by deleting the contact it names (cascade)
+BREACH: a child fabricated a call record, which the learning run reads
+BREACH: a child switched off their own call screening
+```
+
+The cascade is the one the policy source could not show:
+`guardian_routing_rules.condition_contact_id` is `ON DELETE CASCADE`, so a
+member who could delete a contact could delete the manager-only rule attached
+to it without touching the rules table.
+
+**The fix**: RESTRICTIVE manager-only insert/update/delete guards on
+`guardian_contacts`, `guardian_member_profiles`, `guardian_suggestions` and
+`guardian_communications`, in 0217's shape, plus `revoke insert, update, delete
+… from anon`. SELECT untouched — a child still sees the family's contacts.
+Every product writer was already parent-gated (`upsertContactAction`,
+`updateContactTrustAction`, `deleteContactAction`, `upsertMemberProfileAction`,
+`updateContextAction`, `assignGuardianPhoneAction`,
+`generateGuardianSuggestionsAction`) or the service role (the provider webhooks,
+the learning cron).
+
+Held by `docs/audit/guardian-authority-check.sql`: seven findings against the
+pre-migration policies, clean after; making contacts manager-only to READ as
+well reports `CONTROL FAILED: the child cannot see the family's contacts`.
+
+Until this is applied, a child can undo any screening decision a parent made
+about their own calls.
