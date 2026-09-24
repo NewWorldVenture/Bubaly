@@ -19,12 +19,19 @@ export interface ThrottlePolicy {
   windowMs: number;
   /** Base lockout length (ms). Escalates with repeated lockouts. */
   lockMs: number;
+  /**
+   * How long after a lockout lifts its failures are still counted (ms), so the
+   * next failure escalates instead of starting a fresh window. Without it the
+   * escalation below could never fire: a lock always outlasts the window.
+   */
+  lockMemoryMs: number;
 }
 
 export const DEFAULT_POLICY: ThrottlePolicy = {
   maxFails: 5,
   windowMs: 15 * 60_000, // 15 minutes
   lockMs: 15 * 60_000,   // 15 minutes
+  lockMemoryMs: 24 * 60 * 60_000, // a day
 };
 
 export interface ThrottleDecision {
@@ -56,6 +63,13 @@ export function evaluateThrottle(
  * The next persisted state after a FAILED attempt. Failures within the window
  * accumulate; crossing `maxFails` triggers a lockout whose length escalates when
  * the account was already recently locked (repeat offenders wait longer).
+ *
+ * "Recently locked" is `lockMemoryMs` after the lock lifts. The window alone
+ * cannot carry it: the lock is as long as the window and starts after the
+ * window does, so by the time a lock lifted the window had always closed, the
+ * count restarted at 1, and every lockout was the base 15 minutes. Measured
+ * against a patient guesser: 96 lockouts a day, all 15 minutes, 480 guesses a
+ * day — a 4-digit PIN in about ten days on average. A success clears all of it.
  */
 export function registerFailure(
   row: ThrottleRow | null | undefined,
@@ -64,7 +78,9 @@ export function registerFailure(
 ): ThrottleRow {
   const nowMs = now.getTime();
   const windowStart = ms(row?.window_start);
-  const withinWindow = row && windowStart > 0 && nowMs - windowStart < policy.windowMs;
+  const lockedUntil = ms(row?.locked_until);
+  const rememberedUntil = Math.max(windowStart + policy.windowMs, lockedUntil > 0 ? lockedUntil + policy.lockMemoryMs : 0);
+  const withinWindow = row && windowStart > 0 && nowMs < rememberedUntil;
 
   const fails = (withinWindow ? row!.fails : 0) + 1;
   const window_start = withinWindow ? row!.window_start : now.toISOString();
