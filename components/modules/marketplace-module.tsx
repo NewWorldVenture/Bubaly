@@ -30,7 +30,12 @@ import {
 import type { Tables } from '@/lib/database.types';
 import { useTranslations } from '@/components/i18n/locale-provider';
 
-type Listing = Tables<'marketplace_listings'>;
+// SEC-016: `reserve_cents` and `highest_max_cents` are not client-selectable
+// (0328), so this module names its columns — a `*` read now fails with 42501.
+type Listing = Omit<Tables<'marketplace_listings'>, 'reserve_cents' | 'highest_max_cents'>;
+// A literal, not a joined array: supabase-js types the result by parsing this
+// string, and a computed one reads as GenericStringError.
+const LISTING_COLUMNS = 'id, family_id, member_id, title, description, kind, category, condition, price_cents, rent_period, photo_url, location, status, claimed_by, claimed_at, created_by, created_at, updated_at, sale_format, auction_starts_at, auction_ends_at, starting_bid_cents, buy_now_cents, current_bid_cents, bid_count, highest_bidder_member_id, highest_bidder_family_id, anti_snipe_minutes, auction_closed_at, has_reserve, reserve_met' as const;
 type Offer = Tables<'marketplace_offers'>;
 
 const KIND_ICON: Record<ListingKind, typeof Store> = {
@@ -83,7 +88,7 @@ export function MarketplaceModule({
 
   const { data: listings, loading, error } = useRealtimeQuery<Listing>({
     table: 'marketplace_listings', familyId, deps: [familyId],
-    fetcher: (sb) => sb.from('marketplace_listings').select('*').eq('family_id', familyId),
+    fetcher: (sb) => sb.from('marketplace_listings').select(LISTING_COLUMNS).eq('family_id', familyId),
   });
   const { data: offers, error: offersError } = useRealtimeQuery<Offer>({
     table: 'marketplace_offers', familyId, deps: [familyId],

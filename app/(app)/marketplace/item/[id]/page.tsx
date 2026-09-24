@@ -52,7 +52,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
 
   const { data: listing, error: listingError } = await sb
     .from('marketplace_listings')
-    .select('id, member_id, title, description, kind, category, condition, price_cents, rent_period, photo_url, location, status, created_at, sale_format, auction_starts_at, auction_ends_at, starting_bid_cents, reserve_cents, buy_now_cents, current_bid_cents, bid_count, highest_bidder_family_id')
+    .select('id, member_id, title, description, kind, category, condition, price_cents, rent_period, photo_url, location, status, created_at, sale_format, auction_starts_at, auction_ends_at, starting_bid_cents, has_reserve, reserve_met, buy_now_cents, current_bid_cents, bid_count, highest_bidder_family_id')
     .eq('id', id).eq('family_id', familyId).maybeSingle();
   if (listingError) {
     reportRead('Listing', listingError);
@@ -284,7 +284,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
                 initial={{
                   saleFormat: listing.sale_format, status: listing.status,
                   startingBidCents: listing.starting_bid_cents, currentBidCents: listing.current_bid_cents,
-                  bidCount: listing.bid_count, reserveCents: listing.reserve_cents, buyNowCents: listing.buy_now_cents,
+                  bidCount: listing.bid_count, hasReserve: listing.has_reserve, reserveMet: listing.reserve_met, buyNowCents: listing.buy_now_cents,
                   auctionStartsAt: listing.auction_starts_at, auctionEndsAt: listing.auction_ends_at,
                   highestBidderFamilyId: listing.highest_bidder_family_id,
                 }}

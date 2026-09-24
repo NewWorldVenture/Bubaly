@@ -2,12 +2,12 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-24T17:15:00.000Z
-- Total Audit Items: 14084
+- Last Updated: 2026-09-25T00:45:00.000Z
+- Total Audit Items: 14085
 - Not Started: 13842
 - In Progress: 192
 - Passed: 12
-- Fixed + Passed: 34
+- Fixed + Passed: 35
 - Blocked: 2
 - Failed: 2
 - Overall Completion: 0.04%
@@ -85,6 +85,7 @@ PRODUCTION READY: NO
 - PUSH-002: Legacy FCM and APNs-token misrouting replaced with provider-specific senders. Native provider/device configuration and receipt still unverified.
 - EMAIL-001: Suppression retry, receipt claims and documented tags shape repaired locally. Real database/provider workflow still unverified; metric atomicity tracked EMAIL-002.
 - MOBILE-001: Late service-worker registration and teardown defects repaired and component-tested. Actual authenticated install/update/offline and physical device flows remain unverified.
+- DEPLOY-002: Migrations 0318–0328 are PENDING PRODUCTION and must be applied by a human (docs/PENDING_PROD_MIGRATIONS.md). 0328 (SEC-016) is deploy-coupled in both directions: this branch's marketplace code reads `has_reserve`/`reserve_met`, which exist only after 0328, and older code reads `reserve_cents`, which 0328 refuses. Apply it with the deploy that carries this code; either order alone breaks the auction board and item page.
 - SEC-001: Family media bucket explicitly public while family photo/message/reminder consumers publish public URLs; authorization privacy cannot pass.
 - SOCIAL-001: Live authorized X configuration/provider acceptance and deployed role enforcement remain unverified. AUTHZ-003 remains a database release failure. New one-off scheduling implementation and local proof are recorded underSOCIAL-003. Automatic refresh, interrupted-state recovery, other platforms/media and feed/analytics remain open.
 - JOB-001: Missing-config false-success defect repaired and CLI-tested. Deployed scheduler configuration, execution and durable missed-tick catch-up remain unverified.
@@ -14201,6 +14202,7 @@ PRODUCTION READY: NO
 | SEC-014 | Security | An open redirect in the sanitizer written to prevent one | 🛠 FIXED + PASS | High | 10/10 | `safeInternalRedirect` now judges the value it RETURNS by the same rule as the value it was given; `isSafeReturnPath` shares that rule instead of keeping a second copy, and requires the normalized form to be same-origin too | `/login?redirect=/..//evil.com` -> `resolveAuthSelection().next === '//evil.com'` -> `router.push` -> `https://evil.com/`, after a successful sign-in; 27 attack strings now produce 0 escapes and 6 legitimate paths are unchanged; 4 mutations red, the vulnerability itself caught by 5 assertions | The raw value was harmless — a browser resolving `/..//evil.com` against the origin keeps the origin. The sanitizer's own normalization created the dangerous string. Three other sinks were saved only by taking the value through the sanitizer twice. |
 | SEC-015 | Security | Deleting a secure document made it readable by the whole family | 🛠 FIXED + PASS | High | 9/9 | `removeFamilyDocument` now confirms the object is gone by name and reports a failure otherwise; all four delete paths keep the `documents` row when the removal is not confirmed | Over live storage with a real parent and child: row present -> child download DENIED, not listed; row deleted with the object alive -> child download ALLOWED, `"THE FAMILY WILL — private"`, and listed. A refused remove and an absent object are both `error: null, data: []`; 5 mutations red | The storage guard `document_object_is_restricted(name)` hides the file by FINDING its row, so a deleted row over a surviving object unlocks it. A child cannot delete the row, so only a manager can reach the state — and a manager can list the object, which is why confirming by listing works for exactly the actor who matters. Generalised across all 10 storage removes: one shared rule in `lib/storage/confirm-removal.ts`, five buckets delegating to it, and the `family-media` photo delete no longer claiming "Photo deleted" for a file that may still be in a PUBLIC bucket. |
 | AUTHZ-010 | AUTHZ | The refused-write guard scanned `components/` only, and said so nowhere | ✅ PASS | Medium | 13/13 | No product change — every write outside that root is safe today. A rule now covers `'use server'` actions under `app/`: a guarded-table update/delete through the user client must refuse a non-manager itself, read its rows back, or use the service role | 67 update/delete calls on the 44 guarded tables live outside `components/`; 17 go through the cookie-bound client and are filtered by RLS exactly as silently. All are gated, check rows, or bypass RLS. 5 mutations red, including dropping the `isManager` line from a real action | Five false positives of my own first, each from matching a name instead of a behaviour (`canManage`, `admin = createServiceClient()`, `ledgerClient()`, a binding assumed to be called `data`, a too-short window) — and one mutation that never landed until I checked that it had. |
+| SEC-016 | Security | A proxy bid's ceiling was readable by the people bidding against it | 🛠 FIXED + PASS (0328 pending production, deploy-coupled) | High | 9/9 + probe | Column privileges: client SELECT withheld on `reserve_cents`, `highest_max_cents` and `marketplace_bids.max_cents`, with the grant list computed in the migration and a self-check; the UI reads generated `has_reserve`/`reserve_met` instead of the figure; the one `select('*')` names its columns | Three real accounts over PostgREST: a rival read the leader's ceiling (50000) and reserve (20000), the seller read every bidder's max, and a rival bid of exactly the ceiling moved a $10.00 auction to $500.00 without leading. After: all three refused with 42501, the engine, bid history and reserve badge unchanged. 8 mutations red across probe and unit guard | 0183's own column comments call both values "hidden". The auction board was also serialising `reserve_cents` into every viewer's page props. A column grant does not extend to columns added later, so the probe asserts the selectable set is exactly "all minus the secrets". |
 | PERF-004 | Performance | The parent approval queue signed one photo per round trip (closes F-F03) | 🛠 FIXED + PASS | High | 4/4 (5 sanity cases inside them) | Paths collected, deduplicated and signed in chunks of 100 through createSignedUrls; the per-entry error is read so an unsignable object is left out rather than rendering an empty src; a signing outage costs the photos, not the queue | Restoring the loop turns the guard red at app/(app)/missions/page.tsx:106; the existing missions read-boundary test still passes | A loop inside a loop around `await createSignedUrl` — up to four photos per submission across the whole queue, in series. The batch form was already in the codebase and already used correctly one directory away. |
 | A11Y-001 | Accessibility | The photo lightbox stranded keyboard users (closes F-D01) | 🛠 FIXED + PASS | High | 7/7 | role=dialog + aria-modal + the shared useDialogBehavior hook on the viewer; tiles made focusable with Enter/Space; Arrow Left/Right between photos | Three mutations red (the hook removed; the tiles returned to mouse-only; a new overlay declaring aria-modal without the hook); 13 declare it and 13 implement it, and the sets are identical | The tiles were div onClick, so a keyboard could not reach the viewer at all — a trap you cannot enter. The existing a11y guard named four overlays by hand, so this one was never looked at: enumerated with no scan, the third shape of this repo's signature defect. |
 | A11Y-002 | Accessibility | The lint config enabled none of the rules that would have caught it (F-D10/F-D02/F-D03) | 🛠 FIXED + PASS (F-D03 ratcheted, not fixed) | Medium | 4/4 (7 sanity cases inside them) | label-has-associated-control enabled at depth 4 — measured first: at the default depth its only three findings are correct markup one level too deep; control-has-associated-label left OFF because 561 findings and the first sample is a correctly labelled input | next lint clean but for the three pre-existing react-hooks warnings; 144 selects scanned, 71 unnamed, pinned by a ratchet whose scan is asserted non-vacuous | next/core-web-vitals carries only a subset of jsx-a11y, which is exactly what F-D10 said. A rule whose findings are mostly wrong is one everyone learns to skip, so the unnamed selects are counted by a check that cannot be satisfied by nesting depth. |
@@ -23076,7 +23078,7 @@ Status: ✅ PASS — `npm run lint` reports the four known baseline warnings and
 ## Automated Tests
 Status: ✅ PASS — 15,287 tests across 1,215 files pass, zero failures and zero skips, on Node 24.15.0 at head 92340315 (160s).
 
-Later in this cycle, on Node 24.21.0: **16,886 tests across 1,327 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **52/52 boundary probes with 0 skipped**.
+Later in this cycle, on Node 24.21.0: **16,895 tests across 1,328 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **53/53 boundary probes with 0 skipped**.
 
 One type error was committed and is worth recording rather than quietly fixed: `tests/a-fan-out-has-a-width-somebody-chose.test.ts` used `source: 'test'` where `DriveTimeEstimate.source` is a three-value union. `vitest` does not typecheck, so it passed there; `tsc --noEmit` was run before the test file was written and not after, and the commit went out red. The next `tsc` caught it. The lesson is the ordering: the typecheck belongs after the last file is written, not after the last file one happened to be thinking about. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), `tests/a-capped-read-is-not-a-silent-one.test.ts` (DATA-011, 5), `tests/a-family-day-starts-where-the-family-is.test.ts` and `tests/a-server-day-is-the-familys-day.test.ts` (DATA-012, 11), `docs/audit/vaults-require-second-factor-check.sql` (AUTHZ-008), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
 
@@ -28618,6 +28620,119 @@ real corpus could never have caught it.
   `tsc --noEmit` exits 0; the new file lints clean.
 
 No product change and no migration. Recorded as ✅ PASS, not as a fix.
+
+# Pass U — a proxy bid's ceiling was readable by the people bidding against it (SEC-016)
+
+## How it was found
+
+Not by looking for it. The pass started on sharing-circle join codes — eight
+characters, 39.2 bits measured over 200,000 generated codes, redeemed by a
+`security definer` RPC with no attempt limit — and asked what a stranger who
+brute-forced one would actually get. The answer was in the listing columns a
+circle member can read, and two of them were labelled secret by the migration
+that created them:
+
+```
+reserve_cents      bigint,                      -- hidden floor
+highest_max_cents  bigint not null default 0,   -- current leader's hidden proxy max
+```
+
+Nothing hid them. `marketplace_listings` granted table-level SELECT to
+`authenticated`, `marketplace_listings_circle_read` lets every family in a
+circle read every listing shared there, and `marketplace_bids_select` lets the
+seller's family read every bid on its listing — `max_cents` included. The join
+code question turned out to matter less than this: every legitimate member of a
+circle already had the ceiling.
+
+## Proven with three real accounts
+
+A seller, Alice and Bob, one circle, one auction ($10 start, $200 reserve),
+entirely over PostgREST with each person's own session:
+
+```
+Alice bids "up to $500"          -> {"ok":true,"leading":true,"current_cents":1000}
+Bob selects the listing          -> {"current_bid_cents":1000,"highest_max_cents":50000,"reserve_cents":20000}
+the seller selects the bids      -> [{"max_cents":50000,"status":"active"}]
+Bob bids exactly 50000           -> {"ok":true,"leading":false,"current_cents":50000}
+                                    price is now 50000; Alice still leads: true
+```
+
+Alice wins at her **entire maximum**. The engine's "does not beat the standing
+proxy" branch prices a challenger at `least(highest_max_cents, p_max +
+increment)`, so bidding the leader's ceiling exactly sets the price to it. A
+rival who did not peek and bid $300 would have left it at $300.50. This is
+shill bidding with perfect information, and the seller had the information by
+default.
+
+## The fix
+
+Migration `0328_a_proxy_bid_ceiling_is_secret.sql` (pending production):
+
+- revokes table-level SELECT on both tables from `anon` and `authenticated` and
+  re-grants every column **except** `reserve_cents`, `highest_max_cents` and
+  `marketplace_bids.max_cents` — the list computed inside the migration, not
+  typed out;
+- adds `has_reserve` and `reserve_met` as stored generated columns, the second
+  the same rule as `reserveMet()` in `lib/marketplace/auction.ts`, because the
+  UI needs to know whether there is a reserve and whether it has been met, and
+  never needed the figure;
+- ends in a self-check that fails the migration if a secret is still
+  selectable **or** if any ordinary column lost its grant.
+
+What keeps working, and was checked rather than assumed: the bid engine is
+`security definer` and reads and writes all three columns as the owner; INSERT
+and UPDATE grants are untouched, so a seller still sets a reserve through their
+own session (measured); the service role keeps everything, so the
+close-auctions cron is unaffected; and Realtime's `apply_rls` filters each
+column through `has_column_privilege(working_role, …)`, so the live bid feed
+stops carrying `max_cents` without any change to the subscription.
+
+On the app side the item page, the auction panel and the auction board read
+`has_reserve`/`reserve_met`; `AuctionView` is the client's type and has no
+`reserveCents`; `auctionStatus` and `isLive` take only the fields they read.
+The auction board had been selecting `reserve_cents` and handing it to every
+viewer's page as a prop — a leak through the product itself, not just through a
+crafted query. `components/modules/marketplace-module.tsx` read `select('*')`,
+which would now fail, and names its columns in a literal (a joined array loses
+its literal type and supabase-js reads it as `GenericStringError` — found by
+`tsc`, not by reasoning).
+
+## The two things a deployer must know
+
+**It is deploy-coupled in both directions.** New code reads columns that exist
+only after 0328; old code reads a column 0328 refuses. Recorded as DEPLOY-002
+under Critical Blockers and at the top of the 0328 entry in
+`docs/PENDING_PROD_MIGRATIONS.md`.
+
+**A column grant does not extend to columns added later.** A future migration
+that adds a column to either table and forgets `grant select (<col>)` will make
+every client read of it fail with 42501. The probe asserts the selectable set is
+exactly "every column minus the secrets", and adding a column without its grant
+was one of the mutations: it fails as `REGRESSION: ordinary columns are not
+selectable`.
+
+## Verification
+
+- `docs/audit/proxy-bid-ceiling-is-secret-check.sql` — a real circle, a real
+  auction and the real bid RPC under three identities, rolled back. **4
+  mutations, all red**: table-level SELECT restored (four findings, including
+  `BREACH: a rival read the leader's proxy ceiling (50000)`); a new column
+  without its grant; `reserve_met` withheld as well (`CONTROL FAILED: … the fix
+  took the reserve badge away`); `max_cents` alone re-granted.
+- `tests/a-proxy-bid-ceiling-is-secret.test.ts` — 9 cases; scans every
+  `.from('marketplace_listings' | 'marketplace_bids')…select(…)` in `app/`,
+  `components/` and `lib/`, resolving a select list held in a constant. **4
+  mutations, all red**, each reported with file and line.
+- **53/53 boundary probes, 0 skipped**, on the local stack.
+- **16,895 tests across 1,328 files, zero failures and zero skips**, on Node
+  24.21.0, under `TZ=UTC` and again under `TZ=America/Los_Angeles`.
+  `tsc --noEmit` exits 0, the changed files lint clean, and the i18n gate is
+  clean.
+
+On the join codes themselves: 39.2 bits with no attempt limit is recorded, not
+fixed. It is an online guess against the whole population of circles, and what
+a successful guess grants is now a listing, a price and a family name rather
+than anyone's bidding ceiling. Worth a rate limit when the RPC is next touched.
 
 # Final Regression
 

@@ -5,7 +5,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { ListingImage } from '@/components/marketplace/listing-image';
 import { ErrorState } from '@/components/ui/states';
-import { auctionStatus, timeLeft, reserveMet, type AuctionListing } from '@/lib/marketplace/auction';
+import { auctionStatus, timeLeft, type AuctionView } from '@/lib/marketplace/auction';
 import { cn } from '@/lib/utils/cn';
 import { getTranslations } from '@/lib/i18n/server';
 
@@ -28,7 +28,7 @@ async function ReadFailure() {
 type Row = {
   id: string; title: string; photo_url: string | null; category: string;
   sale_format: string; status: string; starting_bid_cents: number; current_bid_cents: number;
-  bid_count: number; reserve_cents: number | null; buy_now_cents: number | null;
+  bid_count: number; has_reserve: boolean; reserve_met: boolean; buy_now_cents: number | null;
   auction_starts_at: string | null; auction_ends_at: string | null;
 };
 
@@ -43,7 +43,7 @@ export default async function AuctionsPage() {
   // Family + reachable (RLS/circles) auctions that are still open, soonest-ending first.
   const { data, error } = await sb
     .from('marketplace_listings')
-    .select('id, title, photo_url, category, sale_format, status, starting_bid_cents, current_bid_cents, bid_count, reserve_cents, buy_now_cents, auction_starts_at, auction_ends_at')
+    .select('id, title, photo_url, category, sale_format, status, starting_bid_cents, current_bid_cents, bid_count, has_reserve, reserve_met, buy_now_cents, auction_starts_at, auction_ends_at')
     .eq('sale_format', 'auction').eq('status', 'available')
     .gt('auction_ends_at', now.toISOString())
     .order('auction_ends_at', { ascending: true })
@@ -54,9 +54,9 @@ export default async function AuctionsPage() {
   }
 
   const rows = (data ?? []) as Row[];
-  const toAuction = (r: Row): AuctionListing => ({
+  const toAuction = (r: Row): AuctionView => ({
     saleFormat: r.sale_format, status: r.status, startingBidCents: r.starting_bid_cents,
-    currentBidCents: r.current_bid_cents, bidCount: r.bid_count, reserveCents: r.reserve_cents,
+    currentBidCents: r.current_bid_cents, bidCount: r.bid_count, hasReserve: r.has_reserve, reserveMet: r.reserve_met,
     buyNowCents: r.buy_now_cents, auctionStartsAt: r.auction_starts_at, auctionEndsAt: r.auction_ends_at,
   });
 
@@ -102,7 +102,7 @@ export default async function AuctionsPage() {
           {rows.map((r) => {
             const a = toAuction(r);
             const soon = auctionStatus(a, now) === 'ending_soon';
-            const resMet = reserveMet(a);
+            const resMet = a.reserveMet;
             return (
               <Link key={r.id} href={`/marketplace/item/${r.id}`}
                 className="group overflow-hidden rounded-2xl border border-border bg-surface/40 transition hover:border-brand/40">
@@ -122,7 +122,7 @@ export default async function AuctionsPage() {
                     <span className="text-[11px] text-muted">{r.bid_count} bid{r.bid_count === 1 ? '' : 's'}</span>
                   </div>
                   <div className="mt-0.5 flex items-center gap-2 text-[10px] text-muted">
-                    {r.reserve_cents != null && <span className={resMet ? 'text-emerald-400' : 'text-amber-400'}>{resMet ? 'Reserve met' : 'Reserve'}</span>}
+                    {r.has_reserve && <span className={resMet ? 'text-emerald-400' : 'text-amber-400'}>{resMet ? 'Reserve met' : 'Reserve'}</span>}
                     {r.buy_now_cents != null && <span className="text-emerald-400">Buy now {money(r.buy_now_cents)}</span>}
                   </div>
                 </div>

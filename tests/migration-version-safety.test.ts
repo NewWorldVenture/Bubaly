@@ -40,7 +40,8 @@ describe('Supabase migration filename safety', () => {
   // generation (00100 and 00101 both live in 0010). nextVersion reads the first
   // four digits, so those do not drag the next free number up to 1422.
   it('points new migrations at the next unused version', () => {
-    // Bumped whenever a migration lands — 0323 requires a family timezone the
+    // Bumped whenever a migration lands — 0328 withholds a proxy bid's ceiling,
+    // the hidden reserve and every bidder's maximum from client reads; 0323 requires a family timezone the
     // server can actually resolve, after 0322 held a single-choice poll to one
     // vote per member, 0321 let an investment order be approved, 0320 stopped a
     // restricted member deleting their way back to a broader social role, 0319
@@ -49,7 +50,7 @@ describe('Supabase migration filename safety', () => {
     // it rather than deriving it is the point: the number is how a new
     // migration announces itself, so a file that quietly reuses one, or a
     // rebase that drops one, fails here.
-    expect(audit.nextVersion).toBe('0328');
+    expect(audit.nextVersion).toBe('0329');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

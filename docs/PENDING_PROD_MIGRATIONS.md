@@ -2186,3 +2186,78 @@ be in the family).
 
 Until this is applied, a direct PostgREST call with a child's session can still
 submit and dispute in a sibling's name, even though the product path cannot.
+
+## 0328 — a proxy bid's ceiling was readable by the people bidding against it
+
+`supabase/migrations/0328_a_proxy_bid_ceiling_is_secret.sql`
+
+> **Deploy-coupled, in both directions.** The code on this branch selects
+> `has_reserve` and `reserve_met`, which exist only after 0328; code from before
+> this branch selects `reserve_cents`, which 0328 refuses. Apply 0328 **with**
+> the deploy that carries this code — not before it, not after it. Deploying
+> the code first breaks the auction board and the item page (`42703 column does
+> not exist`); applying the migration first breaks them the other way (`42501
+> permission denied`). Every other surface is unaffected.
+
+`marketplace_place_bid` runs a proxy auction, and 0183's own column comments
+call two values secret:
+
+```
+reserve_cents      bigint,                      -- hidden floor
+highest_max_cents  bigint not null default 0,   -- current leader's hidden proxy max
+```
+
+Nothing hid them. `marketplace_listings` granted table-level SELECT to
+`authenticated`, and the circle read policy lets every family in a sharing
+circle read every listing shared there — so every rival bidder could read both.
+`marketplace_bids_select` let the seller's family read each bidder's `max_cents`.
+
+Measured over PostgREST with three real accounts in one circle:
+
+```
+Alice bids "up to $500"          -> leading, price $10.00
+Bob selects highest_max_cents    -> 50000   (reserve_cents -> 20000)
+seller selects max_cents         -> [50000]
+Bob bids exactly 50000           -> leading: false, current_cents: 50000
+```
+
+Alice still wins — at her **entire** maximum. The engine's "does not beat the
+standing proxy" branch prices a challenger at `least(highest_max_cents, p_max +
+increment)`, so bidding the leader's ceiling exactly sets the price to it. That
+is shill bidding with perfect information; the seller had it by default. A blind
+$300 bid would have left the price at $300.50.
+
+**The fix is column privileges.** Table-level SELECT is revoked from `anon` and
+`authenticated` and re-granted on every column except the secrets; the column
+list is computed inside the migration. The bid engine is SECURITY DEFINER and
+keeps full access; INSERT and UPDATE grants are untouched (a seller still sets a
+reserve); the service role keeps everything. Realtime's `apply_rls` filters each
+column through `has_column_privilege`, so the live bid feed stops carrying
+`max_cents` as well. The UI's two needs — is there a reserve, has it been met —
+become stored generated columns mirroring `reserveMet()`.
+
+**A trap this sets, stated so it is not discovered in production:** a column
+grant does not extend to columns added later. Any future migration that adds a
+column to `marketplace_listings` or `marketplace_bids` must `grant select
+(<column>) … to anon, authenticated`, or every client read naming that column
+fails with `42501`. The migration's self-check and the probe both assert the
+selectable set is exactly "every column minus the secrets", so the omission
+fails CI rather than a user.
+
+Held by `docs/audit/proxy-bid-ceiling-is-secret-check.sql`. Against the
+pre-migration grants it reports four findings, including
+`BREACH: a rival read the leader's proxy ceiling (50000)` and
+`BREACH: the seller read the bidders' maxima (50000)`; withholding `reserve_met`
+as well reports `CONTROL FAILED: … the fix took the reserve badge away`; and
+adding a column without its grant reports
+`REGRESSION: ordinary columns are not selectable`.
+
+**Code that ships with it** (already on the branch): the item page, the auction
+panel and the auction board read `has_reserve` / `reserve_met` instead of the
+figure — the board had been serialising `reserve_cents` into every viewer's page
+props; `components/modules/marketplace-module.tsx` names its columns instead of
+`select('*')`, which would now fail; `AuctionView` in
+`lib/marketplace/auction.ts` is the client's type, with no `reserveCents`.
+
+Until this is applied, any member of a sharing circle can read the ceiling of
+every auction shared there, and any seller can read every bidder's maximum.

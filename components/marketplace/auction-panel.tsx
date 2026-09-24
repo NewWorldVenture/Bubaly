@@ -12,8 +12,8 @@ import { settleAll } from '@/lib/supabase/settle';
 import { useToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils/cn';
 import {
-  auctionStatus, isLive, timeLeft, minNextBidCents, reserveMet, quickBidLadder,
-  type AuctionListing,
+  auctionStatus, isLive, timeLeft, minNextBidCents, quickBidLadder,
+  type AuctionView,
 } from '@/lib/marketplace/auction';
 import { placeBidAction, buyNowAction } from '@/app/(app)/marketplace/auctions/actions';
 import { useTranslations } from '@/components/i18n/locale-provider';
@@ -28,7 +28,7 @@ export function AuctionPanel({
   listingId: string;
   isOwner: boolean;
   myFamilyId: string;
-  initial: AuctionListing & { highestBidderFamilyId: string | null };
+  initial: AuctionView & { highestBidderFamilyId: string | null };
   initialBids: Bid[];
 }) {
   const tr = useTranslations();
@@ -51,12 +51,12 @@ export function AuctionPanel({
   refetch.current = async () => {
     const sb = createClient();
     const [{ data: l }, { data: b }] = await settleAll([
-      sb.from('marketplace_listings').select('sale_format, status, starting_bid_cents, current_bid_cents, bid_count, reserve_cents, buy_now_cents, auction_starts_at, auction_ends_at, highest_bidder_family_id').eq('id', listingId).maybeSingle(),
+      sb.from('marketplace_listings').select('sale_format, status, starting_bid_cents, current_bid_cents, bid_count, has_reserve, reserve_met, buy_now_cents, auction_starts_at, auction_ends_at, highest_bidder_family_id').eq('id', listingId).maybeSingle(),
       sb.from('marketplace_bids').select('id, bidder_family_id, amount_cents, status, created_at, is_auto').eq('listing_id', listingId).order('created_at', { ascending: false }).limit(20),
     ]);
     if (l) setA({
       saleFormat: l.sale_format, status: l.status, startingBidCents: l.starting_bid_cents,
-      currentBidCents: l.current_bid_cents, bidCount: l.bid_count, reserveCents: l.reserve_cents,
+      currentBidCents: l.current_bid_cents, bidCount: l.bid_count, hasReserve: l.has_reserve, reserveMet: l.reserve_met,
       buyNowCents: l.buy_now_cents, auctionStartsAt: l.auction_starts_at, auctionEndsAt: l.auction_ends_at,
       highestBidderFamilyId: l.highest_bidder_family_id,
     });
@@ -75,7 +75,7 @@ export function AuctionPanel({
   const iLead = a.highestBidderFamilyId === myFamilyId;
   const minNext = minNextBidCents(a);
   const ladder = useMemo(() => quickBidLadder(a), [a]);
-  const resMet = reserveMet(a);
+  const resMet = a.reserveMet;
 
   function bid(maxCents: number) {
     if (isOwner) return;
@@ -122,7 +122,7 @@ export function AuctionPanel({
           <p className="text-3xl font-black tabular-nums">{money(a.bidCount > 0 ? a.currentBidCents : a.startingBidCents)}</p>
           <p className="mt-0.5 text-xs text-muted">
             {a.bidCount} bid{a.bidCount === 1 ? '' : 's'}
-            {a.reserveCents != null && (
+            {a.hasReserve && (
               <span className={cn('ml-2 font-semibold', resMet ? 'text-emerald-400' : 'text-amber-400')}>
                 · {resMet ? 'Reserve met' : 'Reserve not met'}
               </span>

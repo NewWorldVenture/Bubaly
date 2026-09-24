@@ -19,6 +19,22 @@ export interface AuctionListing {
   auctionEndsAt: string | null;
 }
 
+/**
+ * What a browser is allowed to know about an auction. SEC-016: the reserve
+ * FIGURE is a secret between the seller and the database (0328 revokes client
+ * SELECT on `reserve_cents`, `highest_max_cents` and `marketplace_bids.max_cents`),
+ * so the client gets the two facts the UI actually shows — whether there is a
+ * reserve, and whether a bid has reached it — as generated columns computed by
+ * the same rule as `reserveMet()` below.
+ */
+export type AuctionView = Omit<AuctionListing, 'reserveCents'> & {
+  hasReserve: boolean;
+  reserveMet: boolean;
+};
+
+/** The fields `auctionStatus` reads; `isLive` also needs `status`. */
+export type AuctionTiming = Pick<AuctionListing, 'saleFormat' | 'auctionStartsAt' | 'auctionEndsAt'>;
+
 /** Tiered minimum increment by current price — must match the SQL exactly. */
 export function bidIncrementCents(currentCents: number): number {
   if (currentCents < 100) return 5;
@@ -47,7 +63,7 @@ export function isAuction(a: Pick<AuctionListing, 'saleFormat'>): boolean {
   return a.saleFormat === 'auction';
 }
 
-export function auctionStatus(a: AuctionListing, now: Date = new Date()): AuctionStatus {
+export function auctionStatus(a: AuctionTiming, now: Date = new Date()): AuctionStatus {
   if (!isAuction(a) || !a.auctionEndsAt) return 'ended';
   const ends = new Date(a.auctionEndsAt).getTime();
   const t = now.getTime();
@@ -60,7 +76,7 @@ export function auctionStatus(a: AuctionListing, now: Date = new Date()): Auctio
   return 'live';
 }
 
-export function isLive(a: AuctionListing, now: Date = new Date()): boolean {
+export function isLive(a: AuctionTiming & Pick<AuctionListing, 'status'>, now: Date = new Date()): boolean {
   const s = auctionStatus(a, now);
   return (s === 'live' || s === 'ending_soon') && a.status === 'available';
 }
