@@ -3,11 +3,11 @@
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
 - Last Updated: 2026-09-25T12:40:00.000Z
-- Total Audit Items: 14094
+- Total Audit Items: 14095
 - Not Started: 13842
 - In Progress: 193
 - Passed: 12
-- Fixed + Passed: 44
+- Fixed + Passed: 45
 - Blocked: 2
 - Failed: 1
 - Overall Completion: 0.04%
@@ -14213,6 +14213,7 @@ PRODUCTION READY: NO
 | I18N-001 | Localization | The lockout a child sees was English in every language | 🛠 FIXED + PASS | Low | 4/4 | `actions.tooManyTriesTryAgainIn` ("Too many tries. Try again in {minutes} min.") added to en-US and all six base catalogues, in the register each already uses for sign-in; the action passes whole minutes via `retryAfterMinutes` | The message was a template literal, `Too many tries. Try again in ${retryAfterLabel(…)}.`, so a German, French or Dutch child read English at exactly the moment they were locked out, and `retryAfterLabel` ("15 minutes") is English-only. The new case asserts the catalogue key and `{ minutes: 15 }` for a lock with 14.2 minutes left; restoring the template fails it. Catalogue parity and every i18n suite pass | Found while fixing SEC-022, which makes these locks longer and more frequent. The scanner that guards this could not see it — see I18N-002. |
 | I18N-002 | Localization | The hardcoded-string ratchet cannot see template literals | 🔄 IN PROGRESS | Medium | 1/4 | Not fixed: recorded with its measurement. The fix is to teach `scripts/i18n-scan.mjs` to read a template literal with each `${…}` as a placeholder, then raise the ratchet's CEILING by exactly what that reveals — the one legitimate reason its own comment gives | `NOT_COPY` in the scanner excludes every string containing a backtick: "a template literal is code, not a sentence". The I18N-001 message is proof it is sometimes a sentence: removing it left the scanner's count at 2,810 before and after. A rough grep finds ~228 template literals in app/ + components/ that open on an English sentence and interpolate a value, including 15 returned as action errors — 13 of them the wallet's "Blocked by household policy: …", which children see | The 2,812 ceiling therefore understates the English on the ungated surface. The ~228 is an upper bound from a regex (it also matches AI prompts and log text), not a scanner result. |
 | DATA-016 | Data integrity | A chore paid its XP every time it was approved, and concurrent approvals lost XP | 🛠 FIXED + PASS (app; no migration) | Low | 4/4 + live | `finalizeApproval` pays only when the assignment's `approved_at` is still null (set only by approval, cleared only by its rollback); a later approval puts the chore back to `approved` without paying or re-pricing it. `applyCompletionRewards` writes XP conditional on the XP it read and retries; a concurrent first award re-reads the progress row instead of failing on its unique key; a rollback restores only the row it wrote | Live, the real action as a real parent session: one submission approved three times gave XP 20 → 40 → 60; four different chores approved together raised XP by 20, not 80. After: 20 / 20 / 20, and +80. New test: the shipped code fails 4 of its 7 cases; removing each of the four guards fails at least one | Cash is not affected: the wallet payout is separate and `uq_wallet_txn_chore_payout` (0316) already makes a second credit a `duplicate`. XP drives level, streak and badges. `submitProofAction` still accepts new proof for an approved chore; that is now harmless (it cannot pay twice) but a product question. `disputeSubmissionAction` has no caller in the UI. |
+| DATA-017 | Data integrity | Declining a gift could mark a credited gift "cancelled" | 🛠 FIXED + PASS (app; no migration) | Low | 4/4 + live | `dismissGiftAction` declines only a `pending` gift; if nothing matched it re-reads and answers "already applied" for a decided gift, "not found" for none, and success only when it is already declined | Local database, a parent session, the exact statements: `wallet_approve_gift` credited 5,000 cents, then the decline updated 1 row and the gift read `cancelled` with the credit still in the ledger. With the condition: 0 rows, gift stays `completed`. New test: the shipped action fails 2 of 4 — the approved gift, and reporting success for another family's gift it never touched | The gift screen offers Approve and Decline side by side, so a second parent or a stale page reaches this without any race. The approval RPC was already sound: it locks the row and refuses anything not pending. |
 | PERF-004 | Performance | The parent approval queue signed one photo per round trip (closes F-F03) | 🛠 FIXED + PASS | High | 4/4 (5 sanity cases inside them) | Paths collected, deduplicated and signed in chunks of 100 through createSignedUrls; the per-entry error is read so an unsignable object is left out rather than rendering an empty src; a signing outage costs the photos, not the queue | Restoring the loop turns the guard red at app/(app)/missions/page.tsx:106; the existing missions read-boundary test still passes | A loop inside a loop around `await createSignedUrl` — up to four photos per submission across the whole queue, in series. The batch form was already in the codebase and already used correctly one directory away. |
 | A11Y-001 | Accessibility | The photo lightbox stranded keyboard users (closes F-D01) | 🛠 FIXED + PASS | High | 7/7 | role=dialog + aria-modal + the shared useDialogBehavior hook on the viewer; tiles made focusable with Enter/Space; Arrow Left/Right between photos | Three mutations red (the hook removed; the tiles returned to mouse-only; a new overlay declaring aria-modal without the hook); 13 declare it and 13 implement it, and the sets are identical | The tiles were div onClick, so a keyboard could not reach the viewer at all — a trap you cannot enter. The existing a11y guard named four overlays by hand, so this one was never looked at: enumerated with no scan, the third shape of this repo's signature defect. |
 | A11Y-002 | Accessibility | The lint config enabled none of the rules that would have caught it (F-D10/F-D02/F-D03) | 🛠 FIXED + PASS (F-D03 ratcheted, not fixed) | Medium | 4/4 (7 sanity cases inside them) | label-has-associated-control enabled at depth 4 — measured first: at the default depth its only three findings are correct markup one level too deep; control-has-associated-label left OFF because 561 findings and the first sample is a correctly labelled input | next lint clean but for the three pre-existing react-hooks warnings; 144 selects scanned, 71 unnamed, pinned by a ratchet whose scan is asserted non-vacuous | next/core-web-vitals carries only a subset of jsx-a11y, which is exactly what F-D10 said. A rule whose findings are mostly wrong is one everyone learns to skip, so the unnamed selects are counted by a check that cannot be satisfied by nesting depth. |
@@ -23088,7 +23089,7 @@ Status: ✅ PASS — `npm run lint` reports the four known baseline warnings and
 ## Automated Tests
 Status: ✅ PASS — 15,287 tests across 1,215 files pass, zero failures and zero skips, on Node 24.15.0 at head 92340315 (160s).
 
-Later in this cycle, on Node 24.21.0: **16,935 tests across 1,333 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **56/56 boundary probes with 0 skipped**.
+Later in this cycle, on Node 24.21.0: **16,946 tests across 1,335 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **56/56 boundary probes with 0 skipped**.
 
 One type error was committed and is worth recording rather than quietly fixed: `tests/a-fan-out-has-a-width-somebody-chose.test.ts` used `source: 'test'` where `DriveTimeEstimate.source` is a three-value union. `vitest` does not typecheck, so it passed there; `tsc --noEmit` was run before the test file was written and not after, and the commit went out red. The next `tsc` caught it. The lesson is the ordering: the typecheck belongs after the last file is written, not after the last file one happened to be thinking about. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), `tests/a-capped-read-is-not-a-silent-one.test.ts` (DATA-011, 5), `tests/a-family-day-starts-where-the-family-is.test.ts` and `tests/a-server-day-is-the-familys-day.test.ts` (DATA-012, 11), `docs/audit/vaults-require-second-factor-check.sql` (AUTHZ-008), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
 
@@ -29419,6 +29420,41 @@ one submission approved 3×              XP 20 -> 20 -> 20, assignment "approved
   `seed-data-safety-contract` at 20 s while competing with the other suite and
   the Docker boot. That file passes 4/4 alone. Both zones are re-run clean
   under DATA-017. `tsc --noEmit` exits 0.
+
+# Pass AD — declining a gift could mark a credited gift "cancelled" (DATA-017)
+
+Next on the money side after DATA-016. Approving a relative's gift goes through
+`wallet_approve_gift`, which locks the row and refuses anything that is not
+`pending`, so it cannot pay twice. Its sibling on the same screen,
+`dismissGiftAction`, was a plain update with no condition on the status:
+
+```ts
+.update({ status: 'cancelled' }).eq('id', …).eq('family_id', …)
+```
+
+Measured on the local database as a parent session, in a rolled-back
+transaction, with the two statements the screen sends:
+
+```
+parent approves:              {"ok": true, "transaction_id": "32ab…"}
+then "decline" as shipped:    1 row updated -> status cancelled, ledger credited 5000 cents
+with status = 'pending':      0 rows updated -> status completed
+```
+
+Approve and Decline sit side by side on each pending gift. A second parent, or
+one parent on a page loaded before the approval, reaches this without any race.
+The family's record then says the gift was declined while the child has the
+money.
+
+The decline is now conditional on `status = 'pending'`. When nothing matches it
+re-reads to say which case it is: already applied (refused), not found
+(refused), or already declined (success, since declining twice is still
+declining). As shipped it also reported success for a gift id outside the
+family, having changed nothing. `tests/a-decided-gift-stays-decided.test.ts`
+drives the real action; the shipped version fails 2 of its 4 cases. Full suite
+**16,946 tests across 1,335 files**, zero failures, under `TZ=UTC` and again
+under `TZ=America/Los_Angeles` (this also covers DATA-016's code). `tsc
+--noEmit` exits 0.
 
 # Final Regression
 

@@ -497,9 +497,22 @@ export async function dismissGiftAction(input: { giftPaymentId: string }): Promi
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentGuardianCan11') };
   const supabase = await createServer();
-  const { error } = await supabase.from('gift_payments')
-    .update({ status: 'cancelled' }).eq('id', input.giftPaymentId).eq('family_id', ctx.active.familyId);
+  // Only a PENDING gift can be declined. Unconditionally, declining one that a
+  // second parent (or this parent, from a stale page) had already approved
+  // marked it cancelled while its credit stayed in the child's ledger —
+  // measured: 1 row updated, status "cancelled", 5,000 cents credited.
+  const { data: declined, error } = await supabase.from('gift_payments')
+    .update({ status: 'cancelled' }).eq('id', input.giftPaymentId).eq('family_id', ctx.active.familyId)
+    .eq('status', 'pending').select('id').maybeSingle();
   if (error) return actionFailure(error, t('actions.couldNotDismissThatGift'));
+  if (!declined) {
+    const { data: gift, error: readError } = await supabase.from('gift_payments')
+      .select('status').eq('id', input.giftPaymentId).eq('family_id', ctx.active.familyId).maybeSingle();
+    if (readError) return actionFailure(readError, t('actions.couldNotDismissThatGift'));
+    if (!gift) return { ok: false, error: t('actions.giftNotFound') };
+    // Declining twice is still declined; anything else was decided the other way.
+    if (gift.status !== 'cancelled') return { ok: false, error: t('actions.thisGiftWasAlreadyApplied') };
+  }
   revalidatePath('/wallet/gift');
   return { ok: true };
 }
