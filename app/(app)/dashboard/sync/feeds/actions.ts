@@ -7,11 +7,13 @@ import { createServer } from '@/lib/supabase/server';
 import { syncFeed } from '@/lib/server/calendar-feeds';
 import { normalizeFeedUrl, FEED_COLORS, type FeedColor } from '@/lib/calendar/feeds';
 import { recordActivationServer } from '@/lib/analytics/activation-server';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type ActionResult = { ok: true; imported?: number } | { ok: false; error: string };
 
 /** Adds a calendar subscription, then immediately syncs it once. */
 export async function addCalendarFeed(input: { name: string; url: string; color?: string }): Promise<ActionResult> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const { familyId } = ctx.active;
   const supabase = await createServer();
@@ -26,7 +28,7 @@ export async function addCalendarFeed(input: { name: string; url: string; color?
     .insert({ family_id: familyId, name, url, color, created_by: ctx.user.id })
     .select('id, family_id, url')
     .single();
-  if (error || !feed) return { ok: false, error: error?.message ?? 'Could not save the feed' };
+  if (error || !feed) return { ok: false, error: describeActionError(error, t('actions.couldNotSaveTheFeed')) };
 
   const result = await syncFeed(supabase, feed);
   // TTFV: importing a calendar is a first-value milestone (recorded once).
@@ -68,7 +70,7 @@ export async function removeCalendarFeed(feedId: string): Promise<ActionResult> 
     .delete()
     .eq('id', feedId)
     .eq('family_id', ctx.active.familyId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
 
   revalidatePath('/dashboard/settings');
   revalidatePath('/dashboard/calendar');

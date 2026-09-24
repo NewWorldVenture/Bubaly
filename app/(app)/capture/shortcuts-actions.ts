@@ -9,6 +9,7 @@
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { sanitizeShortcutKeys, CAPTURE_SHORTCUTS_PREF_KEY, MAX_CAPTURE_SHORTCUTS } from '@/lib/capture/shortcuts';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type Result = { ok: boolean; error?: string };
 
@@ -38,6 +39,6 @@ export async function saveCaptureShortcutsAction(input: { keys: string[] }): Pro
 
   const { error } = await supabase.from('user_preferences')
     .upsert({ user_id: ctx.user.id, notification_prefs: merged as never }, { onConflict: 'user_id' });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   return { ok: true };
 }

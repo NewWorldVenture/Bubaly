@@ -9,6 +9,7 @@ import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { tierForPlanLevel } from '@/lib/dashboard/registry';
 import { validateLayout } from '@/lib/dashboard/layout';
 import { canCustomizeDashboard, normalizeSettings, type DashSettings } from '@/lib/dashboard/permissions';
+import { describeActionError } from '@/lib/supabase/errors';
 
 async function familyDashSettings(supabase: Awaited<ReturnType<typeof createServer>>, familyId: string): Promise<DashSettings> {
   const { data } = await supabase.from('family_dashboard_settings')
@@ -53,7 +54,7 @@ export async function saveDashboardLayoutAction(input: { featureKeys: string[]; 
     { family_id: familyId, user_id: userId, scope: 'user', device_context: device, feature_keys: v.keys, is_active: true, created_by: userId, updated_by: userId, deleted_at: null },
     { onConflict: 'family_id,user_id,device_context' },
   );
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
 
   await logEvent(supabase, familyId, userId, 'customized', null, { count: v.keys.length });
   revalidatePath('/dashboard');
@@ -70,7 +71,7 @@ export async function resetDashboardLayoutAction(input: { deviceContext?: string
 
   const { error } = await supabase.from('dashboard_layouts')
     .delete().eq('family_id', familyId).eq('user_id', userId).eq('scope', 'user').eq('device_context', device);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
 
   await logEvent(supabase, familyId, userId, 'reset');
   revalidatePath('/dashboard');
@@ -100,7 +101,7 @@ export async function saveFamilyDefaultLayoutAction(input: { featureKeys: string
     { family_id: familyId, user_id: null, scope: 'family', device_context: device, feature_keys: v.keys, is_active: true, created_by: userId, updated_by: userId, deleted_at: null },
     { onConflict: 'family_id,user_id,device_context' },
   );
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
 
   await logEvent(supabase, familyId, userId, 'family_default_set', null, { count: v.keys.length });
   revalidatePath('/dashboard');
@@ -130,7 +131,7 @@ export async function saveDashboardSettingsAction(input: { allowChildCustomizati
     { family_id: familyId, allow_child_customization: !!input.allowChildCustomization, lock_to_family_default: !!input.lockToFamilyDefault, updated_by: ctx.user.id },
     { onConflict: 'family_id' },
   );
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   await logEvent(supabase, familyId, ctx.user.id, 'settings_changed', null, { ...input });
   revalidatePath('/dashboard');
   return { ok: true };
@@ -144,7 +145,7 @@ export async function resetAllLayoutsAction(): Promise<Result> {
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
   const { error } = await supabase.from('dashboard_layouts').delete().eq('family_id', familyId).eq('scope', 'user');
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   await logEvent(supabase, familyId, ctx.user.id, 'reset_all');
   revalidatePath('/dashboard');
   return { ok: true };

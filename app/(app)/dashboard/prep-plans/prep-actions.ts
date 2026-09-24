@@ -8,6 +8,7 @@
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { runPrepGeneration } from '@/lib/planning/prep-server';
+import { describeActionError } from '@/lib/supabase/errors';
 
 export type GenerateResult = { ok: boolean; error?: string; plans?: number };
 
@@ -15,5 +16,7 @@ export async function generatePrepPlansAction(): Promise<GenerateResult> {
   const ctx = await requireUserContext();
   const sb = await createServer();
   const res = await runPrepGeneration(sb, ctx.active.familyId, ctx.user.id);
-  return res.ok ? { ok: true, plans: res.plans } : { ok: false, error: res.error };
+  // The runner returns the database's own text for its cron log; a person gets
+  // the described form (SEC-023).
+  return res.ok ? { ok: true, plans: res.plans } : { ok: false, error: describeActionError(res.error) };
 }

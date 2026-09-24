@@ -8,6 +8,7 @@
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { runTwinProjection } from '@/lib/twin/project-server';
+import { describeActionError } from '@/lib/supabase/errors';
 
 export type ProjectResult = { ok: boolean; error?: string; entities?: number; edges?: number };
 
@@ -15,5 +16,7 @@ export async function projectTwinAction(): Promise<ProjectResult> {
   const ctx = await requireUserContext();
   const sb = await createServer();
   const res = await runTwinProjection(sb, ctx.active.familyId, ctx.user.id);
-  return res.ok ? { ok: true, entities: res.entities, edges: res.edges } : { ok: false, error: res.error };
+  // The runner returns the database's own text for its cron log; a person gets
+  // the described form (SEC-023).
+  return res.ok ? { ok: true, entities: res.entities, edges: res.edges } : { ok: false, error: describeActionError(res.error) };
 }

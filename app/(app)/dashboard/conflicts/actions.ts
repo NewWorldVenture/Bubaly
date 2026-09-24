@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { describeActionError } from '@/lib/supabase/errors';
 
 /**
  * Apply a conflict resolution by rescheduling one event. Family-scoped: RLS plus
@@ -26,7 +27,7 @@ export async function rescheduleEventAction(
     .update({ starts_at: startsAtIso, ends_at: endsAtIso })
     .eq('id', eventId)
     .eq('family_id', ctx.active.familyId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeActionError(error) };
   revalidatePath('/dashboard/conflicts');
   revalidatePath('/dashboard/command-center');
   revalidatePath('/dashboard/calendar');

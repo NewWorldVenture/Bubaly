@@ -6,6 +6,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { getProvider } from '@/lib/recipes/providers';
 import type { Database } from '@/lib/database.types';
+import { describeActionError } from '@/lib/supabase/errors';
 
 type Json = Database['public']['Tables']['family_recipes']['Insert']['ingredients'];
 type SaveResult = { ok: true; id: string; already?: boolean } | { ok: false; error: string };
@@ -63,7 +64,7 @@ export async function saveDiscoveredRecipe(input: { provider: string; sourceReci
     .select('id')
     .single();
 
-  if (error || !data) return { ok: false, error: error?.message ?? 'Could not save recipe.' };
+  if (error || !data) return { ok: false, error: describeActionError(error, t('actions.couldNotSaveTheRecipe')) };
   revalidatePath('/dashboard/recipes');
   return { ok: true, id: data.id };
 }

@@ -2,12 +2,12 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-25T14:05:00.000Z
-- Total Audit Items: 14096
+- Last Updated: 2026-09-25T15:30:00.000Z
+- Total Audit Items: 14097
 - Not Started: 13842
 - In Progress: 193
 - Passed: 12
-- Fixed + Passed: 46
+- Fixed + Passed: 47
 - Blocked: 2
 - Failed: 1
 - Overall Completion: 0.04%
@@ -14215,6 +14215,7 @@ PRODUCTION READY: NO
 | DATA-016 | Data integrity | A chore paid its XP every time it was approved, and concurrent approvals lost XP | 🛠 FIXED + PASS (app; no migration) | Low | 4/4 + live | `finalizeApproval` pays only when the assignment's `approved_at` is still null (set only by approval, cleared only by its rollback); a later approval puts the chore back to `approved` without paying or re-pricing it. `applyCompletionRewards` writes XP conditional on the XP it read and retries; a concurrent first award re-reads the progress row instead of failing on its unique key; a rollback restores only the row it wrote | Live, the real action as a real parent session: one submission approved three times gave XP 20 → 40 → 60; four different chores approved together raised XP by 20, not 80. After: 20 / 20 / 20, and +80. New test: the shipped code fails 4 of its 7 cases; removing each of the four guards fails at least one | Cash is not affected: the wallet payout is separate and `uq_wallet_txn_chore_payout` (0316) already makes a second credit a `duplicate`. XP drives level, streak and badges. `submitProofAction` still accepts new proof for an approved chore; that is now harmless (it cannot pay twice) but a product question. `disputeSubmissionAction` has no caller in the UI. |
 | DATA-017 | Data integrity | Declining a gift could mark a credited gift "cancelled" | 🛠 FIXED + PASS (app; no migration) | Low | 4/4 + live | `dismissGiftAction` declines only a `pending` gift; if nothing matched it re-reads and answers "already applied" for a decided gift, "not found" for none, and success only when it is already declined | Local database, a parent session, the exact statements: `wallet_approve_gift` credited 5,000 cents, then the decline updated 1 row and the gift read `cancelled` with the credit still in the ledger. With the condition: 0 rows, gift stays `completed`. New test: the shipped action fails 2 of 4 — the approved gift, and reporting success for another family's gift it never touched | The gift screen offers Approve and Decline side by side, so a second parent or a stale page reaches this without any race. The approval RPC was already sound: it locks the row and refuses anything not pending. |
 | DATA-018 | Data integrity | Every concierge run a parent decided stayed on "Needs your decision" | 🛠 FIXED + PASS (app; 0332 pending production) | Medium | 4/4 + live | Approve and dismiss now write `state` with `status` (completed / cancelled, the repo's own `LEGACY_RUN_STATUS_TO_STATE` mapping); approval claims the run (`pending → approved/executing`) before applying the plan and hands it back to the queue if applying throws or cannot be recorded; dismissal matches only a pending run. 0332 moves the runs already decided the old way | Local database, a parent session, the exact statements: after one dismissal and one approval both runs were still listed by the Needs-you query (`status=dismissed/executed, state=awaiting_approval`). New test (7 cases, a filter-honouring interleaving double): the shipped actions fail 4; each of the four guards' removal fails at least one. 0332 locally: both stuck rows moved, a pending control untouched, re-application exits 0. 56/56 probes | Also closed: an approval and a dismissal racing could both succeed — the plan applied while the record said dismissed. `displayRunState` prefers `state`, so the run views and the kiosk's completed count read these rows wrong too, not only Needs-you. Found by sweeping status-downgrade writes with no status condition after DATA-017. |
+| SEC-023 | Security | 61 server actions handed the database's own error text to the user | 🛠 FIXED + PASS (app; no migration) | Low | 4/4 + live | Every `error: <err>.message` return under app/ (61 sites, 22 files) now goes through `describeActionError`, keeping each site's own fallback, and so do the prep and twin actions that forwarded a runner's raw message; a scan holds app/ at zero with one named admin-diagnostics exception | The real `savePlace` as a real parent session: a radius of 150.5 answered `invalid input syntax for type integer: "150.5"` and a malformed id `… for type uuid: "not-a-uuid"`. After: "Something went wrong. Please try again.", and a valid place still saves. The scan fails on the pre-sweep tree; the 20 test files touching these actions pass unchanged | `describeActionError` states its purpose — answer "without exposing unclassified database or provider details to the browser" — and these sites skipped it. Classified cases still come through (permission, already exists, not found). The helper's own messages are English; that is I18N-002's territory. Browser-side storage helpers in lib/ return provider text the browser already received, so they are not a disclosure. |
 | PERF-004 | Performance | The parent approval queue signed one photo per round trip (closes F-F03) | 🛠 FIXED + PASS | High | 4/4 (5 sanity cases inside them) | Paths collected, deduplicated and signed in chunks of 100 through createSignedUrls; the per-entry error is read so an unsignable object is left out rather than rendering an empty src; a signing outage costs the photos, not the queue | Restoring the loop turns the guard red at app/(app)/missions/page.tsx:106; the existing missions read-boundary test still passes | A loop inside a loop around `await createSignedUrl` — up to four photos per submission across the whole queue, in series. The batch form was already in the codebase and already used correctly one directory away. |
 | A11Y-001 | Accessibility | The photo lightbox stranded keyboard users (closes F-D01) | 🛠 FIXED + PASS | High | 7/7 | role=dialog + aria-modal + the shared useDialogBehavior hook on the viewer; tiles made focusable with Enter/Space; Arrow Left/Right between photos | Three mutations red (the hook removed; the tiles returned to mouse-only; a new overlay declaring aria-modal without the hook); 13 declare it and 13 implement it, and the sets are identical | The tiles were div onClick, so a keyboard could not reach the viewer at all — a trap you cannot enter. The existing a11y guard named four overlays by hand, so this one was never looked at: enumerated with no scan, the third shape of this repo's signature defect. |
 | A11Y-002 | Accessibility | The lint config enabled none of the rules that would have caught it (F-D10/F-D02/F-D03) | 🛠 FIXED + PASS (F-D03 ratcheted, not fixed) | Medium | 4/4 (7 sanity cases inside them) | label-has-associated-control enabled at depth 4 — measured first: at the default depth its only three findings are correct markup one level too deep; control-has-associated-label left OFF because 561 findings and the first sample is a correctly labelled input | next lint clean but for the three pre-existing react-hooks warnings; 144 selects scanned, 71 unnamed, pinned by a ratchet whose scan is asserted non-vacuous | next/core-web-vitals carries only a subset of jsx-a11y, which is exactly what F-D10 said. A rule whose findings are mostly wrong is one everyone learns to skip, so the unnamed selects are counted by a check that cannot be satisfied by nesting depth. |
@@ -23090,7 +23091,7 @@ Status: ✅ PASS — `npm run lint` reports the four known baseline warnings and
 ## Automated Tests
 Status: ✅ PASS — 15,287 tests across 1,215 files pass, zero failures and zero skips, on Node 24.15.0 at head 92340315 (160s).
 
-Later in this cycle, on Node 24.21.0: **16,953 tests across 1,336 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **56/56 boundary probes with 0 skipped**.
+Later in this cycle, on Node 24.21.0: **16,962 tests across 1,338 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **56/56 boundary probes with 0 skipped**.
 
 One type error was committed and is worth recording rather than quietly fixed: `tests/a-fan-out-has-a-width-somebody-chose.test.ts` used `source: 'test'` where `DriveTimeEstimate.source` is a three-value union. `vitest` does not typecheck, so it passed there; `tsc --noEmit` was run before the test file was written and not after, and the commit went out red. The next `tsc` caught it. The lesson is the ordering: the typecheck belongs after the last file is written, not after the last file one happened to be thinking about. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), `tests/a-capped-read-is-not-a-silent-one.test.ts` (DATA-011, 5), `tests/a-family-day-starts-where-the-family-is.test.ts` and `tests/a-server-day-is-the-familys-day.test.ts` (DATA-012, 11), `docs/audit/vaults-require-second-factor-check.sql` (AUTHZ-008), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
 
@@ -29524,6 +29525,77 @@ plan applied, and the record says it was dismissed.
   a second application exits 0. **56/56 boundary probes, 0 skipped.**
 - Full suite **16,953 tests across 1,336 files**, zero failures, under
   `TZ=UTC` and again under `TZ=America/Los_Angeles`. `tsc --noEmit` exits 0.
+
+# Pass AF — 61 server actions handed the database's own error text to the user (SEC-023)
+
+`lib/supabase/errors.ts` has a helper for exactly one job. `describeActionError`
+describes "an error for a server-action/API response without exposing
+unclassified database or provider details to the browser or model". It is
+used widely. A scan for `error: <something>.message` in return objects under
+app/ found 61 places across 22 files that skipped it and returned the
+Postgres/PostgREST message verbatim.
+
+Measured through the real `savePlace` action, as a real parent session on the
+local stack:
+
+```
+radius 150.5            -> {"ok":false,"error":"invalid input syntax for type integer: \"150.5\""}
+id "not-a-uuid"         -> {"ok":false,"error":"invalid input syntax for type uuid: \"not-a-uuid\""}
+```
+
+That text carries column types, constraint and table names, and the offending
+values, in English whatever the family's language. After the sweep:
+
+```
+radius 150.5            -> {"ok":false,"error":"Something went wrong. Please try again."}
+id "not-a-uuid"         -> {"ok":false,"error":"Something went wrong. Please try again."}
+valid place (control)   -> {"ok":true}
+```
+
+The sweep was mechanical but checked. Every site is
+`if (error) return { ok: false, error: error.message }` directly after a
+Supabase call, so the value is always a PostgREST error. Sites that already
+had a fallback (`error?.message ?? 'Could not create vote'`) keep it as the
+helper's fallback. Classified errors still reach the person: permission,
+already exists, not found, missing information.
+
+`tests/a-database-error-is-not-a-user-message.test.ts` holds app/ at zero. One
+exception is named, with a reason, and the test fails if that exception goes
+stale: an admin-only analytics tile that shows its own query failure to the
+operator. The test fails on the pre-sweep tree. It also pins the helper's
+behaviour on the two measured strings and on the classified cases. The 20
+existing test files that touch these actions pass unchanged.
+
+Two more were one step removed, where the scan's shape cannot reach. The first
+draft of this record said the job runners in lib/ "report to logs and cron
+responses, not to a family". Tracing their callers before committing showed
+that was wrong. `runPrepGeneration` and `runTwinProjection` return the
+database's message, which is right for the model-refresh cron. But
+`generatePrepPlansAction` and `projectTwinAction`, which a family triggers,
+returned it as `error: res.error`. Both now describe it at the action
+boundary. `tests/a-job-error-is-described-at-the-action.test.ts` fails 2 of 4
+on the shipped twin action. That indirection is the limit of the scan, stated
+rather than implied: it sees `error: <err>.message`, not a raw string that has
+passed through a helper first.
+
+Not in scope, and why: the `lib/storage` helpers run in the browser, so the
+provider text they pass along is text the browser already received (every
+caller is a client component). `runNetworkAggregation` is called only by its
+cron.
+
+The sweep also tripped the i18n ratchet, and that was worth having. Six sites
+had an English fallback behind `??` (`error?.message ?? 'Could not create vote'`).
+The scanner excludes anything containing `??`, so those strings were always
+hardcoded but never counted. Moved into `describeActionError(error, '…')` they
+became visible, and the count went from 2,810 to 2,816. The ratchet's
+instruction for that case is to translate them, not to raise the ceiling. Six
+keys (`actions.couldNotCreateTheCallRequest`, `…CreateAList`, `…SaveTheRecipe`,
+`…CreateTheVote`, `…CreateAGroceryList`, `…SaveTheFeed`) went into en-US and all
+six base catalogues, and the count is back to 2,810.
+
+Full suite **16,962 tests across 1,338 files**, zero failures, under `TZ=UTC`
+and again under `TZ=America/Los_Angeles`. `tsc --noEmit` exits 0; eslint clean
+on every changed file.
 
 # Final Regression
 
