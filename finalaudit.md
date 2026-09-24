@@ -29731,6 +29731,26 @@ These were checked by the same question and not changed:
 - **The privacy export** runs on the caller's RLS client with no service-role
   read, and `sectionsForRole` withholds manager-only sections from children.
 
+A second sweep, of write policies whose `WITH CHECK` omits `family_id`, and of
+the remaining anon-executable definer functions, found these sound:
+
+- **`push_devices.family_id` is writable to any value** on a user's own row
+  (`push_devices_insert`/`_update` check only `user_id = auth.uid()`), but it is
+  inert: every delivery path selects devices by `user_id` (`sendPushDevicesToUser`,
+  the campaign audience), no code reads the column, and no policy references it.
+  A user sees only their own device rows. `social_account_tokens` and
+  `sync_tokens` are `WITH CHECK false` (service-only); `support_tickets`' open
+  policy is the `service_role` one.
+- **`marketplace_complete_handoff`** and **`economy_decide_redemption`** lock
+  their rows, gate on family membership (manager for the redemption), and are
+  idempotent on status. **`requestRedemptionAction`**'s affordability check is
+  deliberately soft, with the real check on the locking approval RPC, and it
+  refuses spending a sibling's balance.
+- **The circle join code** is 8 characters over a 32-symbol alphabet (40 bits,
+  ~1.1 trillion), looked up under an `is_family_member` gate. Unthrottled, but
+  40 bits is not brute-forceable at request rates, so the standing "recorded,
+  not fixed" posture holds.
+
 # Final Regression
 
 Current request-admission witness verification uses frozen application tree ee0038989221edfaf148150f6e1dc28301f7f6bf. All six changed production files pass final local gates. A later actual HTTP/Mailpit fixture and disposable-only CI redirect configuration are test infrastructure; they have not executed in hosted CI. Final test/infrastructure tree is d0adca170e65ca15ce48d678ce1d6ac1b2273ef6; provenance is in [the admission witness cycle](docs/final-audit/auth-callback-admission-witness-cycle.md). All previous 14,006 IDs/statuses remain intact; twelve structural discovery additions bring the total to 14,018.
