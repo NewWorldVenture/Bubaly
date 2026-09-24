@@ -2,11 +2,11 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-22T04:00:00.000Z
-- Total Audit Items: 14083
+- Last Updated: 2026-09-24T17:15:00.000Z
+- Total Audit Items: 14084
 - Not Started: 13842
 - In Progress: 192
-- Passed: 11
+- Passed: 12
 - Fixed + Passed: 34
 - Blocked: 2
 - Failed: 2
@@ -14200,6 +14200,7 @@ PRODUCTION READY: NO
 | PRIV-001 | Privacy | The AI context deny-list was checked one file deep | ✅ PASS | Medium | 6/6 | No product change — every one of the nine transitive reaches is safe today. A ratchet now pins the (slice, sensitive table) pairs, so a new one fails with the file that reads it, and holds the three projections the safety actually rests on | Six of fourteen slices reach nine deny-listed tables through their imports; each is either projected narrowly before the model sees it or never called. 4 mutations red, including a slice starting to call the emergency-contacts reader that is already in its closure | The existing guard reads the slice FILE, so a slice calling a service that reads a denied table stays green. No leak found; `select('*')` appears in three services but every consumer projects. My own measure overstates reach — an import closure is not a call graph. |
 | SEC-014 | Security | An open redirect in the sanitizer written to prevent one | 🛠 FIXED + PASS | High | 10/10 | `safeInternalRedirect` now judges the value it RETURNS by the same rule as the value it was given; `isSafeReturnPath` shares that rule instead of keeping a second copy, and requires the normalized form to be same-origin too | `/login?redirect=/..//evil.com` -> `resolveAuthSelection().next === '//evil.com'` -> `router.push` -> `https://evil.com/`, after a successful sign-in; 27 attack strings now produce 0 escapes and 6 legitimate paths are unchanged; 4 mutations red, the vulnerability itself caught by 5 assertions | The raw value was harmless — a browser resolving `/..//evil.com` against the origin keeps the origin. The sanitizer's own normalization created the dangerous string. Three other sinks were saved only by taking the value through the sanitizer twice. |
 | SEC-015 | Security | Deleting a secure document made it readable by the whole family | 🛠 FIXED + PASS | High | 9/9 | `removeFamilyDocument` now confirms the object is gone by name and reports a failure otherwise; all four delete paths keep the `documents` row when the removal is not confirmed | Over live storage with a real parent and child: row present -> child download DENIED, not listed; row deleted with the object alive -> child download ALLOWED, `"THE FAMILY WILL — private"`, and listed. A refused remove and an absent object are both `error: null, data: []`; 5 mutations red | The storage guard `document_object_is_restricted(name)` hides the file by FINDING its row, so a deleted row over a surviving object unlocks it. A child cannot delete the row, so only a manager can reach the state — and a manager can list the object, which is why confirming by listing works for exactly the actor who matters. Generalised across all 10 storage removes: one shared rule in `lib/storage/confirm-removal.ts`, five buckets delegating to it, and the `family-media` photo delete no longer claiming "Photo deleted" for a file that may still be in a PUBLIC bucket. |
+| AUTHZ-010 | AUTHZ | The refused-write guard scanned `components/` only, and said so nowhere | ✅ PASS | Medium | 13/13 | No product change — every write outside that root is safe today. A rule now covers `'use server'` actions under `app/`: a guarded-table update/delete through the user client must refuse a non-manager itself, read its rows back, or use the service role | 67 update/delete calls on the 44 guarded tables live outside `components/`; 17 go through the cookie-bound client and are filtered by RLS exactly as silently. All are gated, check rows, or bypass RLS. 5 mutations red, including dropping the `isManager` line from a real action | Five false positives of my own first, each from matching a name instead of a behaviour (`canManage`, `admin = createServiceClient()`, `ledgerClient()`, a binding assumed to be called `data`, a too-short window) — and one mutation that never landed until I checked that it had. |
 | PERF-004 | Performance | The parent approval queue signed one photo per round trip (closes F-F03) | 🛠 FIXED + PASS | High | 4/4 (5 sanity cases inside them) | Paths collected, deduplicated and signed in chunks of 100 through createSignedUrls; the per-entry error is read so an unsignable object is left out rather than rendering an empty src; a signing outage costs the photos, not the queue | Restoring the loop turns the guard red at app/(app)/missions/page.tsx:106; the existing missions read-boundary test still passes | A loop inside a loop around `await createSignedUrl` — up to four photos per submission across the whole queue, in series. The batch form was already in the codebase and already used correctly one directory away. |
 | A11Y-001 | Accessibility | The photo lightbox stranded keyboard users (closes F-D01) | 🛠 FIXED + PASS | High | 7/7 | role=dialog + aria-modal + the shared useDialogBehavior hook on the viewer; tiles made focusable with Enter/Space; Arrow Left/Right between photos | Three mutations red (the hook removed; the tiles returned to mouse-only; a new overlay declaring aria-modal without the hook); 13 declare it and 13 implement it, and the sets are identical | The tiles were div onClick, so a keyboard could not reach the viewer at all — a trap you cannot enter. The existing a11y guard named four overlays by hand, so this one was never looked at: enumerated with no scan, the third shape of this repo's signature defect. |
 | A11Y-002 | Accessibility | The lint config enabled none of the rules that would have caught it (F-D10/F-D02/F-D03) | 🛠 FIXED + PASS (F-D03 ratcheted, not fixed) | Medium | 4/4 (7 sanity cases inside them) | label-has-associated-control enabled at depth 4 — measured first: at the default depth its only three findings are correct markup one level too deep; control-has-associated-label left OFF because 561 findings and the first sample is a correctly labelled input | next lint clean but for the three pre-existing react-hooks warnings; 144 selects scanned, 71 unnamed, pinned by a ratchet whose scan is asserted non-vacuous | next/core-web-vitals carries only a subset of jsx-a11y, which is exactly what F-D10 said. A rule whose findings are mostly wrong is one everyone learns to skip, so the unnamed selects are counted by a check that cannot be satisfied by nesting depth. |
@@ -23075,7 +23076,7 @@ Status: ✅ PASS — `npm run lint` reports the four known baseline warnings and
 ## Automated Tests
 Status: ✅ PASS — 15,287 tests across 1,215 files pass, zero failures and zero skips, on Node 24.15.0 at head 92340315 (160s).
 
-Later in this cycle, on Node 24.21.0: **16,873 tests across 1,326 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **52/52 boundary probes with 0 skipped**.
+Later in this cycle, on Node 24.21.0: **16,886 tests across 1,327 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **52/52 boundary probes with 0 skipped**.
 
 One type error was committed and is worth recording rather than quietly fixed: `tests/a-fan-out-has-a-width-somebody-chose.test.ts` used `source: 'test'` where `DriveTimeEstimate.source` is a three-value union. `vitest` does not typecheck, so it passed there; `tsc --noEmit` was run before the test file was written and not after, and the commit went out red. The next `tsc` caught it. The lesson is the ordering: the typecheck belongs after the last file is written, not after the last file one happened to be thinking about. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), `tests/a-capped-read-is-not-a-silent-one.test.ts` (DATA-011, 5), `tests/a-family-day-starts-where-the-family-is.test.ts` and `tests/a-server-day-is-the-familys-day.test.ts` (DATA-012, 11), `docs/audit/vaults-require-second-factor-check.sql` (AUTHZ-008), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
 
@@ -28533,6 +28534,90 @@ of diff per file).
 
 No migration: the policy is right, and was right. Only the code that could
 remove the row it depends on changed.
+
+# Pass T — the refused-write guard stopped at `components/` (AUTHZ-010, verified healthy)
+
+`tests/a-refused-write-is-not-a-success.test.ts` is one of the better guards in
+the repo. It proved on Postgres that a restrictive policy's `using` clause
+FILTERS an UPDATE or DELETE rather than raising, so a refused write arrives as a
+success, and it enumerates the 44 tables where that applies. It scans
+`const ROOTS = ['components']`. That scope is not stated anywhere, and it is not
+where all the writes are.
+
+## Measurement
+
+| | count |
+|---|---|
+| update/delete on a guarded table outside `components/` | 67 |
+| through the cookie-bound user client (RLS applies) | 17 |
+| through the service role, `ledgerClient()` or a system scope | 50 |
+
+The 17 are filtered by RLS exactly as silently as the browser writes the guard
+was written for, and most return `{ ok: true }` without asking for their rows.
+
+## Why none of them is a defect
+
+Every `'use server'` action among them refuses a non-manager in the same
+function before the write — `isManager`, `canManage` — so RLS never gets to be
+the only guard. The `lib/` functions take their client from the caller and were
+read by hand: `updateRunWhereState` is a compare-and-set that reads
+`(data ?? []).length > 0`; `cancelRun` reads `(approvals ?? []).length`;
+`updateRun` and `releaseRun` go through `ledgerClient()`, the service role;
+`releaseCardHold` filters on `status = 'processing'` and is idempotent by
+design, as its own comment says; `recordAssistantEvent` is a `last_used_at`
+touch that logs; `retryPrivatePurchaseAnswer` is gated by ownership, not role.
+
+So the finding is not a hole. It is that the property holds by convention and
+nothing checks it: drop the `isManager` line from one of those actions and RLS
+becomes the only guard, the refusal is silent, and the action still reports
+success.
+
+## What was added
+
+`tests/a-server-action-does-not-need-rls-to-refuse.test.ts` makes it a rule for
+the surface where the rule is crisp — exported actions in `'use server'` files
+under `app/`, the entry points a browser can call directly. Each must refuse a
+non-manager itself, read its rows back, or write with the service role. It reads
+the guarded-table list from the sibling guard rather than copying it, and it
+pins the sibling's `components`-only scope so a future widening says so here.
+
+It deliberately does not extend to `lib/`. A rule there would need to model the
+call graph, or grow four escape hatches, and a guard with four escape hatches is
+false confidence. This is the sibling guard's own reasoning about
+`family_members` and `notifications` — *zero rows is a normal outcome and must
+not be reported as a refusal* — applied one layer down.
+
+## My own detector, five times
+
+Every one of these reported safe code as unsafe, and every one came from
+matching a name instead of a behaviour:
+
+1. the gate pattern omitted `canManage`;
+2. the client resolution missed `createServiceClient()` bound to a variable
+   called `admin`;
+3. and then missed `ledgerClient()`;
+4. the rows-back pattern assumed the destructured binding is called `data`, so
+   `(approvals ?? []).length` read as no check;
+5. and its search window was too short to reach past an intervening error block.
+
+The binding is now derived from the destructure. And one mutation — hard-coding
+`data` back in — passed the whole file, twice, before I checked that it had
+applied. It had not: the escaping in the one-liner silently failed. Applied
+verifiably it goes red, and there is now a case driving the derivation directly,
+because nothing under `app/` currently binds its rows to any other name and the
+real corpus could never have caught it.
+
+## Verification
+
+- **5 mutations, all red**: the manager gate removed from
+  `setCurrencyActiveAction`; the sibling guard's scope widened; the guarded-table
+  set shrunk by two; the binding derivation regressed to assume `data`; and
+  the synthetic neither-gated-nor-checked action.
+- **16,886 tests across 1,327 files, zero failures and zero skips**, on Node
+  24.21.0, under `TZ=UTC` and again under `TZ=America/Los_Angeles`.
+  `tsc --noEmit` exits 0; the new file lints clean.
+
+No product change and no migration. Recorded as ✅ PASS, not as a fix.
 
 # Final Regression
 
