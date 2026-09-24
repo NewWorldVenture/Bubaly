@@ -33,7 +33,14 @@ import { scanPaths } from '../scripts/i18n-scan.mjs';
 // raises the count without a single new hardcoded string being written. That is
 // a legitimate reason to raise CEILING, and it is the ONLY one. Say which in
 // the commit.
-const CEILING = 2812;
+//
+// Raised 2,812 -> 2,899 for exactly that reason (I18N-002). The scanner now reads
+// a failure message or a toast written as a template literal —
+// `error: \`Blocked by household policy: ${reason}\``, `toastError(\`Upload
+// failed: ${msg}\`)` — which NOT_COPY's backtick rule had hidden. Measured with
+// the tree held fixed: 2,810 before, 2,835 with action errors, 2,899 with toasts
+// too; every one of the 89 is a message that already shipped in English.
+const CEILING = 2899;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);
@@ -65,5 +72,30 @@ describe('the ungated i18n surface does not get worse', () => {
       CEILING - total,
       `The surface is ${CEILING - total} strings better than the ceiling — lower CEILING to ${total}.`,
     ).toBeLessThan(150);
+  });
+});
+
+describe('the scanner sees a failure message written as a template literal (I18N-002)', () => {
+  it('reports it, with each interpolation shown as a placeholder', async () => {
+    const { writeFileSync, mkdtempSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const { tmpdir } = await import('node:os');
+    const { scanFile } = await import('../scripts/i18n-scan.mjs');
+    const dir = mkdtempSync(join(tmpdir(), 'i18n-scan-'));
+    const file = join(dir, 'action.ts');
+    writeFileSync(file, [
+      "export async function a(reason: string) {",
+      "  if (reason) return { ok: false, error: `Blocked by household policy: ${reason}` };",
+      "  return { ok: false, error: describeActionError(e, `Could not save ${name}.`) };",
+      "}",
+      "export function B() {",
+      "  const { error: toastError } = useToast();",
+      "  toastError(`Upload failed: ${message}`);",
+      "}",
+    ].join('\n'));
+    const texts = scanFile(file).map((f: { text: string }) => f.text);
+    expect(texts).toContain('Blocked by household policy: …');
+    expect(texts).toContain('Could not save ….');
+    expect(texts).toContain('Upload failed: …');
   });
 });

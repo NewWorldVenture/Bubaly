@@ -377,6 +377,21 @@ const ACTION_ERROR_PATTERN =
   /(?:\berror:\s*|describeActionError\([^,()]+,\s*)'([^'\\\n]{4,})'/g;
 
 /**
+ * The same failure message written as a template literal (I18N-002).
+ *
+ * `NOT_COPY` refuses anything containing a backtick — "a template literal is
+ * code, not a sentence" — and for a template sliced out of the middle of an
+ * expression that is right. A template that IS the error message is not code:
+ * `error: \`Too many tries. Try again in ${…}.\`` was the lockout a child saw,
+ * in English in every language, and the scanner's count did not move when it was
+ * removed (I18N-001). Each `${…}` is shown as `…`: a placeholder, not copy, and
+ * never text the lift can find and replace — it matches quoted strings only.
+ */
+const TEMPLATE_BODY = String.raw`\x60((?:[^\x60\\\n$]|\\.|\$(?!\{)|\$\{[^}\n]*\})+)\x60`;
+const TEMPLATE_ACTION_ERROR_PATTERN =
+  new RegExp(String.raw`(?:\berror:\s*|describeActionError\([^,()]+,\s*)` + TEMPLATE_BODY, 'g');
+
+/**
  * A prose argument to a helper that puts it in front of a user.
  *
  * Every name here was read before it was listed — `actionFailure` returns the
@@ -432,6 +447,14 @@ function toastPattern(source) {
   }
   if (!names.size) return null;
   return new RegExp(`\\b(?:${[...names].join('|')})\\(\\s*'([^'\\\\\\n]{3,})'`, 'g');
+}
+
+/** The same toast calls with a template literal message (I18N-002). */
+function toastTemplatePattern(source) {
+  const plain = toastPattern(source);
+  if (!plain) return null;
+  const names = /\(\?:([^)]*)\)/.exec(plain.source)?.[1];
+  return names ? new RegExp(String.raw`\b(?:${names})\(\s*` + TEMPLATE_BODY, 'g') : null;
 }
 // A JSX text node: between > and <, no braces (those are expressions, not copy).
 //
@@ -531,9 +554,12 @@ export function scanFile(file) {
   for (const [text, at] of arrayFindings(source)) push(text, at);
   for (const m of source.matchAll(DIALOG_PATTERN)) push(m[1], m.index ?? 0);
   for (const m of source.matchAll(ACTION_ERROR_PATTERN)) push(m[1], m.index ?? 0);
+  for (const m of source.matchAll(TEMPLATE_ACTION_ERROR_PATTERN)) push(m[1].replace(/\$\{[^}]*\}/g, '…'), m.index ?? 0);
   for (const m of source.matchAll(HELPER_PATTERN)) push(m[2], m.index ?? 0);
   const toasts = toastPattern(source);
   if (toasts) for (const m of source.matchAll(toasts)) push(m[1], m.index ?? 0);
+  const toastTemplates = toastTemplatePattern(source);
+  if (toastTemplates) for (const m of source.matchAll(toastTemplates)) push(m[1].replace(/\$\{[^}]*\}/g, '…'), m.index ?? 0);
 
   return findings;
 }
