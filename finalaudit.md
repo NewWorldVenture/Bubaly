@@ -2,12 +2,12 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-25T12:40:00.000Z
-- Total Audit Items: 14095
+- Last Updated: 2026-09-25T14:05:00.000Z
+- Total Audit Items: 14096
 - Not Started: 13842
 - In Progress: 193
 - Passed: 12
-- Fixed + Passed: 45
+- Fixed + Passed: 46
 - Blocked: 2
 - Failed: 1
 - Overall Completion: 0.04%
@@ -86,7 +86,7 @@ PRODUCTION READY: NO
 - EMAIL-001: Suppression retry, receipt claims and documented tags shape repaired locally. Real database/provider workflow still unverified; metric atomicity tracked EMAIL-002.
 - MOBILE-001: Late service-worker registration and teardown defects repaired and component-tested. Actual authenticated install/update/offline and physical device flows remain unverified.
 - SEC-018 (CRITICAL until deployed): a stranger who knew a family's id could onboard into it as a PARENT and read its password vault — reproduced with real sessions. Fixed on this branch in the onboarding action (effective on deploy) and in migration 0331 (pending). Production is exposed until this code ships; 0331 additionally closes the removed-creator variant the code check alone does not.
-- DEPLOY-002: Migrations 0318–0331 are PENDING PRODUCTION and must be applied by a human (docs/PENDING_PROD_MIGRATIONS.md). 0328 (SEC-016) is deploy-coupled in both directions: this branch's marketplace code reads `has_reserve`/`reserve_met`, which exist only after 0328, and older code reads `reserve_cents`, which 0328 refuses. Apply it with the deploy that carries this code; either order alone breaks the auction board and item page.
+- DEPLOY-002: Migrations 0318–0332 are PENDING PRODUCTION and must be applied by a human (docs/PENDING_PROD_MIGRATIONS.md). 0328 (SEC-016) is deploy-coupled in both directions: this branch's marketplace code reads `has_reserve`/`reserve_met`, which exist only after 0328, and older code reads `reserve_cents`, which 0328 refuses. Apply it with the deploy that carries this code; either order alone breaks the auction board and item page. 0332 (DATA-018) is data only; apply it with or after the deploy so runs the old code decides in between are also moved.
 - SEC-001: Family media bucket explicitly public while family photo/message/reminder consumers publish public URLs; authorization privacy cannot pass.
 - SOCIAL-001: Live authorized X configuration/provider acceptance and deployed role enforcement remain unverified. AUTHZ-003 remains a database release failure. New one-off scheduling implementation and local proof are recorded underSOCIAL-003. Automatic refresh, interrupted-state recovery, other platforms/media and feed/analytics remain open.
 - JOB-001: Missing-config false-success defect repaired and CLI-tested. Deployed scheduler configuration, execution and durable missed-tick catch-up remain unverified.
@@ -14214,6 +14214,7 @@ PRODUCTION READY: NO
 | I18N-002 | Localization | The hardcoded-string ratchet cannot see template literals | 🔄 IN PROGRESS | Medium | 1/4 | Not fixed: recorded with its measurement. The fix is to teach `scripts/i18n-scan.mjs` to read a template literal with each `${…}` as a placeholder, then raise the ratchet's CEILING by exactly what that reveals — the one legitimate reason its own comment gives | `NOT_COPY` in the scanner excludes every string containing a backtick: "a template literal is code, not a sentence". The I18N-001 message is proof it is sometimes a sentence: removing it left the scanner's count at 2,810 before and after. A rough grep finds ~228 template literals in app/ + components/ that open on an English sentence and interpolate a value, including 15 returned as action errors — 13 of them the wallet's "Blocked by household policy: …", which children see | The 2,812 ceiling therefore understates the English on the ungated surface. The ~228 is an upper bound from a regex (it also matches AI prompts and log text), not a scanner result. |
 | DATA-016 | Data integrity | A chore paid its XP every time it was approved, and concurrent approvals lost XP | 🛠 FIXED + PASS (app; no migration) | Low | 4/4 + live | `finalizeApproval` pays only when the assignment's `approved_at` is still null (set only by approval, cleared only by its rollback); a later approval puts the chore back to `approved` without paying or re-pricing it. `applyCompletionRewards` writes XP conditional on the XP it read and retries; a concurrent first award re-reads the progress row instead of failing on its unique key; a rollback restores only the row it wrote | Live, the real action as a real parent session: one submission approved three times gave XP 20 → 40 → 60; four different chores approved together raised XP by 20, not 80. After: 20 / 20 / 20, and +80. New test: the shipped code fails 4 of its 7 cases; removing each of the four guards fails at least one | Cash is not affected: the wallet payout is separate and `uq_wallet_txn_chore_payout` (0316) already makes a second credit a `duplicate`. XP drives level, streak and badges. `submitProofAction` still accepts new proof for an approved chore; that is now harmless (it cannot pay twice) but a product question. `disputeSubmissionAction` has no caller in the UI. |
 | DATA-017 | Data integrity | Declining a gift could mark a credited gift "cancelled" | 🛠 FIXED + PASS (app; no migration) | Low | 4/4 + live | `dismissGiftAction` declines only a `pending` gift; if nothing matched it re-reads and answers "already applied" for a decided gift, "not found" for none, and success only when it is already declined | Local database, a parent session, the exact statements: `wallet_approve_gift` credited 5,000 cents, then the decline updated 1 row and the gift read `cancelled` with the credit still in the ledger. With the condition: 0 rows, gift stays `completed`. New test: the shipped action fails 2 of 4 — the approved gift, and reporting success for another family's gift it never touched | The gift screen offers Approve and Decline side by side, so a second parent or a stale page reaches this without any race. The approval RPC was already sound: it locks the row and refuses anything not pending. |
+| DATA-018 | Data integrity | Every concierge run a parent decided stayed on "Needs your decision" | 🛠 FIXED + PASS (app; 0332 pending production) | Medium | 4/4 + live | Approve and dismiss now write `state` with `status` (completed / cancelled, the repo's own `LEGACY_RUN_STATUS_TO_STATE` mapping); approval claims the run (`pending → approved/executing`) before applying the plan and hands it back to the queue if applying throws or cannot be recorded; dismissal matches only a pending run. 0332 moves the runs already decided the old way | Local database, a parent session, the exact statements: after one dismissal and one approval both runs were still listed by the Needs-you query (`status=dismissed/executed, state=awaiting_approval`). New test (7 cases, a filter-honouring interleaving double): the shipped actions fail 4; each of the four guards' removal fails at least one. 0332 locally: both stuck rows moved, a pending control untouched, re-application exits 0. 56/56 probes | Also closed: an approval and a dismissal racing could both succeed — the plan applied while the record said dismissed. `displayRunState` prefers `state`, so the run views and the kiosk's completed count read these rows wrong too, not only Needs-you. Found by sweeping status-downgrade writes with no status condition after DATA-017. |
 | PERF-004 | Performance | The parent approval queue signed one photo per round trip (closes F-F03) | 🛠 FIXED + PASS | High | 4/4 (5 sanity cases inside them) | Paths collected, deduplicated and signed in chunks of 100 through createSignedUrls; the per-entry error is read so an unsignable object is left out rather than rendering an empty src; a signing outage costs the photos, not the queue | Restoring the loop turns the guard red at app/(app)/missions/page.tsx:106; the existing missions read-boundary test still passes | A loop inside a loop around `await createSignedUrl` — up to four photos per submission across the whole queue, in series. The batch form was already in the codebase and already used correctly one directory away. |
 | A11Y-001 | Accessibility | The photo lightbox stranded keyboard users (closes F-D01) | 🛠 FIXED + PASS | High | 7/7 | role=dialog + aria-modal + the shared useDialogBehavior hook on the viewer; tiles made focusable with Enter/Space; Arrow Left/Right between photos | Three mutations red (the hook removed; the tiles returned to mouse-only; a new overlay declaring aria-modal without the hook); 13 declare it and 13 implement it, and the sets are identical | The tiles were div onClick, so a keyboard could not reach the viewer at all — a trap you cannot enter. The existing a11y guard named four overlays by hand, so this one was never looked at: enumerated with no scan, the third shape of this repo's signature defect. |
 | A11Y-002 | Accessibility | The lint config enabled none of the rules that would have caught it (F-D10/F-D02/F-D03) | 🛠 FIXED + PASS (F-D03 ratcheted, not fixed) | Medium | 4/4 (7 sanity cases inside them) | label-has-associated-control enabled at depth 4 — measured first: at the default depth its only three findings are correct markup one level too deep; control-has-associated-label left OFF because 561 findings and the first sample is a correctly labelled input | next lint clean but for the three pre-existing react-hooks warnings; 144 selects scanned, 71 unnamed, pinned by a ratchet whose scan is asserted non-vacuous | next/core-web-vitals carries only a subset of jsx-a11y, which is exactly what F-D10 said. A rule whose findings are mostly wrong is one everyone learns to skip, so the unnamed selects are counted by a check that cannot be satisfied by nesting depth. |
@@ -23089,7 +23090,7 @@ Status: ✅ PASS — `npm run lint` reports the four known baseline warnings and
 ## Automated Tests
 Status: ✅ PASS — 15,287 tests across 1,215 files pass, zero failures and zero skips, on Node 24.15.0 at head 92340315 (160s).
 
-Later in this cycle, on Node 24.21.0: **16,946 tests across 1,335 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **56/56 boundary probes with 0 skipped**.
+Later in this cycle, on Node 24.21.0: **16,953 tests across 1,336 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **56/56 boundary probes with 0 skipped**.
 
 One type error was committed and is worth recording rather than quietly fixed: `tests/a-fan-out-has-a-width-somebody-chose.test.ts` used `source: 'test'` where `DriveTimeEstimate.source` is a three-value union. `vitest` does not typecheck, so it passed there; `tsc --noEmit` was run before the test file was written and not after, and the commit went out red. The next `tsc` caught it. The lesson is the ordering: the typecheck belongs after the last file is written, not after the last file one happened to be thinking about. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), `tests/a-capped-read-is-not-a-silent-one.test.ts` (DATA-011, 5), `tests/a-family-day-starts-where-the-family-is.test.ts` and `tests/a-server-day-is-the-familys-day.test.ts` (DATA-012, 11), `docs/audit/vaults-require-second-factor-check.sql` (AUTHZ-008), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
 
@@ -29455,6 +29456,74 @@ drives the real action; the shipped version fails 2 of its 4 cases. Full suite
 **16,946 tests across 1,335 files**, zero failures, under `TZ=UTC` and again
 under `TZ=America/Los_Angeles` (this also covers DATA-016's code). `tsc
 --noEmit` exits 0.
+
+# Pass AE — every concierge run a parent decided stayed on "Needs your decision" (DATA-018)
+
+## Found by sweeping DATA-017's shape
+
+After the gift decline, the sweep looked for every write that sets a
+`cancelled`/`dismissed`/`revoked`-style status with no condition on the
+current one. Four turned up. Three are admin or suggestion housekeeping. The
+fourth, the concierge's `dismissQueuedRunAction`, led somewhere else.
+
+`family_automation_runs` has two status columns. 0022's free-text `status` is
+still written by the concierge; 0250 added the constrained `state` beside it,
+which the run engine, Needs-you and the kiosk read. `displayRunState` prefers
+`state` whenever it isn't the default. The concierge queues a run with
+`status = 'pending', state = 'awaiting_approval'`, then approves or dismisses it
+by writing `status` alone.
+
+## Measured
+
+On the local database, as a parent, with the exact statements the two actions
+send and then the Needs-you page's query:
+
+```
+Needs-you lists after one dismissal and one approval:
+  Waiting for approval: Dinner [status=dismissed, state=awaiting_approval]
+  Dinner planned              [status=executed,  state=awaiting_approval]
+```
+
+Each decided run keeps asking for a decision on the page whose job is to list
+what is waiting on a person. Both actions also read `pending` and wrote without
+a condition, so an approval and a dismissal that overlap can both succeed: the
+plan applied, and the record says it was dismissed.
+
+## The fix
+
+- **Both columns move together**, by the mapping the repo already defines for
+  these legacy values: approved runs end `executed/completed`, dismissed runs
+  `dismissed/cancelled`.
+- **Approval claims the run first** (`pending → approved/executing`, the pair
+  the run engine's own `legacyStatusFor` uses mid-flight), so a dismissal
+  racing it finds nothing to dismiss. If applying the plan throws, or the run
+  cannot then be recorded as executed, the claim is handed back to the queue.
+  That keeps the retry the code's own comment promises: `materializePlan`
+  skips kinds already applied.
+- **Dismissal matches only a pending run.**
+- **0332** moves the rows decided the old way. It is data only, touches only
+  the contradictory pair (a decided `status` with `awaiting_approval`), and
+  self-checks. Apply it with or after the deploy (see
+  docs/PENDING_PROD_MIGRATIONS.md).
+
+## Verification
+
+- `tests/a-decided-run-leaves-the-queue.test.ts`, 7 cases, uses a double that
+  applies every filter to the row as it is when the write runs and interleaves
+  calls. The shipped actions fail 4. An unconditional claim fails the race
+  case; dropping `state` from the executed write fails 2; no release on a
+  throw fails 1. An unconditional dismissal at first survived, because in the
+  race the dismissal writes before the approval claims, and the stale-page case
+  is caught by the dismissal's own read. A case where the approval lands
+  between the dismissal's read and its write now fails it.
+- `tests/concierge-run-write-boundary.test.ts`: its double ended an update at
+  `.eq()`. It now answers the read-back the dismissal performs.
+- One new catalogue key, `actions.couldNotApproveThatRun`, in all six base
+  catalogues, for a claim that fails.
+- 0332 applied locally: both stuck rows moved, the pending control untouched,
+  a second application exits 0. **56/56 boundary probes, 0 skipped.**
+- Full suite **16,953 tests across 1,336 files**, zero failures, under
+  `TZ=UTC` and again under `TZ=America/Los_Angeles`. `tsc --noEmit` exits 0.
 
 # Final Regression
 

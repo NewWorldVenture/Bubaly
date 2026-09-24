@@ -115,6 +115,7 @@
   "actions.couldNotAddThoseEvents": "Kan die gebeurtenissen niet toevoegen.",
   "actions.couldNotAddThoseFunds": "Kan dat geld niet toevoegen.",
   "actions.couldNotAddThoseItems": "Kan die items niet toevoegen.",
+  "actions.couldNotApproveThatRun": "Kan die uitvoering niet goedkeuren. Vernieuw en probeer het opnieuw.",
   "actions.couldNotArchiveThatBabysitter": "Kan die oppas niet archiveren.",
   "actions.couldNotAssignThatAddress": "Kan dat adres niet toewijzen.",
   "actions.couldNotCheckPayId": "Kan de beschikbaarheid van de Pay-ID niet controleren.",

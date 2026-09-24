@@ -15,9 +15,14 @@ function client(runData: unknown, updateError: unknown) {
     eq: () => selectChain,
     maybeSingle: () => Promise.resolve({ data: runData, error: null }),
   };
+  // The dismiss reads back the row it changed (DATA-018), so a successful
+  // update answers with that row.
+  const updated = () => ({ data: updateError ? null : { id: 'r1' }, error: updateError });
   const updateChain: Record<string, unknown> = {
     eq: () => updateChain,
-    then: (onF: (v: { data: null; error: unknown }) => unknown) => Promise.resolve({ data: null, error: updateError }).then(onF),
+    select: () => updateChain,
+    maybeSingle: () => Promise.resolve(updated()),
+    then: (onF: (v: { data: unknown; error: unknown }) => unknown) => Promise.resolve(updated()).then(onF),
   };
   return { from: () => ({ select: () => selectChain, update: () => updateChain }) };
 }

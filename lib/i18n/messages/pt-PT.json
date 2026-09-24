@@ -115,6 +115,7 @@
   "actions.couldNotAddThoseEvents": "Não foi possível adicionar esses eventos.",
   "actions.couldNotAddThoseFunds": "Não foi possível adicionar esses fundos.",
   "actions.couldNotAddThoseItems": "Não foi possível adicionar esses artigos.",
+  "actions.couldNotApproveThatRun": "Não foi possível aprovar essa execução. Atualize e tente novamente.",
   "actions.couldNotArchiveThatBabysitter": "Não foi possível arquivar essa ama.",
   "actions.couldNotAssignThatAddress": "Não foi possível atribuir esse endereço.",
   "actions.couldNotCheckPayId": "Não foi possível verificar a disponibilidade do Pay-ID.",

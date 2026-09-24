@@ -115,6 +115,7 @@
   "actions.couldNotAddThoseEvents": "Could not add those events.",
   "actions.couldNotAddThoseFunds": "Could not add those funds.",
   "actions.couldNotAddThoseItems": "Could not add those items.",
+  "actions.couldNotApproveThatRun": "Could not approve that run. Refresh and try again.",
   "actions.couldNotArchiveThatBabysitter": "Could not archive that babysitter.",
   "actions.couldNotAssignThatAddress": "Could not assign that address.",
   "actions.couldNotCheckPayId": "Could not check Pay-ID availability.",

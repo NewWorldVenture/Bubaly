@@ -115,6 +115,7 @@
   "actions.couldNotAddThoseEvents": "Diese Termine konnten nicht hinzugefügt werden.",
   "actions.couldNotAddThoseFunds": "Diese Mittel konnten nicht eingezahlt werden.",
   "actions.couldNotAddThoseItems": "Diese Artikel konnten nicht hinzugefügt werden.",
+  "actions.couldNotApproveThatRun": "Dieser Lauf konnte nicht genehmigt werden. Aktualisieren Sie und versuchen Sie es erneut.",
   "actions.couldNotArchiveThatBabysitter": "Dieser Babysitter konnte nicht archiviert werden.",
   "actions.couldNotAssignThatAddress": "Diese Adresse konnte nicht zugewiesen werden.",
   "actions.couldNotCheckPayId": "Die Verfügbarkeit der Pay-ID konnte nicht geprüft werden.",

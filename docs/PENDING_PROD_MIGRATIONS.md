@@ -2425,3 +2425,36 @@ function is fixed; and revoking the calendar path's columns as well reports
 As with 0328, a column grant does not extend to columns added later: a future
 migration adding a column to `onboarding_progress` that clients must update
 needs its own `grant update (<col>)`.
+
+## 0332 — decided concierge runs stayed on "Needs your decision"
+
+`supabase/migrations/0332_decided_concierge_runs_leave_needs_you.sql`
+
+**Data only. Apply with, or after, the deploy that carries DATA-018's code.**
+No schema change and no deploy coupling in either direction. Runs the old code
+decides after 0332 runs would still be stuck, and re-running its `UPDATE` by
+hand is safe and idempotent.
+
+A concierge run queued for approval is written with `status = 'pending'` and
+`state = 'awaiting_approval'`. Approving or dismissing it wrote `status` only,
+so `state` never moved. The Needs-you page lists runs by `state`, and
+`displayRunState` prefers `state` whenever it isn't the default. So every run
+a parent ever decided this way is still listed as waiting on them. On the local
+database, as a parent, after one dismissal and one approval:
+
+```
+Waiting for approval: Dinner [status=dismissed, state=awaiting_approval]
+Dinner planned              [status=executed,  state=awaiting_approval]
+```
+
+The concierge actions now write both columns, claim the run before applying
+it, and hand it back to the queue if applying fails. 0332 moves the rows
+decided before that, using the mapping the code already defines
+(`LEGACY_RUN_STATUS_TO_STATE`: executed → completed, dismissed → cancelled). It
+touches only the contradictory pair: a status that says decided and a state that
+says awaiting approval. No writer produces that pair on purpose. It ends with a
+self-check that raises if any such row remains.
+
+Verified locally: two stuck rows moved (`dismissed → cancelled`,
+`executed → completed`), a genuinely pending control untouched, and a
+second application exits 0.

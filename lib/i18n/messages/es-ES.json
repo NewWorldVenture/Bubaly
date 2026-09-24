@@ -115,6 +115,7 @@
   "actions.couldNotAddThoseEvents": "No se han podido añadir esos eventos.",
   "actions.couldNotAddThoseFunds": "No se han podido añadir esos fondos.",
   "actions.couldNotAddThoseItems": "No se han podido añadir esos artículos.",
+  "actions.couldNotApproveThatRun": "No se ha podido aprobar esa ejecución. Actualiza e inténtalo de nuevo.",
   "actions.couldNotArchiveThatBabysitter": "No se ha podido archivar a ese canguro.",
   "actions.couldNotAssignThatAddress": "No se ha podido asignar esa dirección.",
   "actions.couldNotCheckPayId": "No se ha podido comprobar la disponibilidad de la Pay-ID.",

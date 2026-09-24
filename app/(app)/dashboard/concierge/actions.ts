@@ -205,19 +205,45 @@ export async function executeQueuedRunAction(runId: string): Promise<LoopResult>
   if (!plan) return { ok: false, error: t('actions.planNoLongerExists') };
 
   const kinds = (meta.kinds?.length ? meta.kinds : VALID).filter((k) => VALID.includes(k));
-  const applied = await materializePlan(sb, familyId, ctx.user.id, plan, kinds);
+
+  // Claim the run before applying anything, so an approval and a dismissal (two
+  // parents, or two tabs) cannot both win. Both columns move: `state` is what
+  // Needs-you, the run views and the kiosk read, and writing `status` alone left
+  // every decided run listed as awaiting approval for good (DATA-018).
+  const approvedAt = new Date().toISOString();
+  const { data: claimed, error: claimErr } = await sb.from('family_automation_runs').update({
+    status: 'approved', state: 'executing', approved_by: ctx.user.id, approved_at: approvedAt,
+  }).eq('id', runId).eq('family_id', familyId).eq('status', 'pending').select('id').maybeSingle();
+  if (claimErr) {
+    console.error('[concierge] run claim failed', { runId, familyId, error: claimErr });
+    return { ok: false, error: describeActionError(claimErr, t('actions.couldNotApproveThatRun')) };
+  }
+  if (!claimed) return { ok: false, error: t('actions.runNotFoundOrAlready') };
+  // Hand the run back to the approval queue if it does not finish, so the
+  // manager can retry: materializePlan is idempotent (it skips kinds already in
+  // concierge_plan_actions), which is what makes a retry safe.
+  const release = async () => {
+    const { error: releaseErr } = await sb.from('family_automation_runs').update({
+      status: 'pending', state: 'awaiting_approval', approved_by: null, approved_at: null,
+    }).eq('id', runId).eq('family_id', familyId).eq('status', 'approved').eq('approved_at', approvedAt);
+    if (releaseErr) console.error('[concierge] run release failed', { runId, familyId, error: releaseErr });
+  };
+
+  let applied: WriteBackKind[];
+  try {
+    applied = await materializePlan(sb, familyId, ctx.user.id, plan, kinds);
+  } catch (error) {
+    await release();
+    throw error;
+  }
   const summary = runSummary(plan.title, applied);
 
-  // Record the run as executed. materializePlan is idempotent (it skips kinds
-  // already in concierge_plan_actions), so surfacing this failure lets the
-  // manager safely retry rather than leaving the run stuck "pending" with the
-  // plan already applied — which would look like the approval did nothing.
-  const { error: runErr } = await sb.from('family_automation_runs').update({
-    status: 'executed', summary, result: { steps: applied } as never,
-    approved_by: ctx.user.id, approved_at: new Date().toISOString(),
-  }).eq('id', runId).eq('family_id', familyId);
-  if (runErr) {
-    console.error('[concierge] executed-run status update failed', { runId, familyId, error: runErr });
+  const { data: executed, error: runErr } = await sb.from('family_automation_runs').update({
+    status: 'executed', state: 'completed', summary, result: { steps: applied } as never,
+  }).eq('id', runId).eq('family_id', familyId).eq('status', 'approved').select('id').maybeSingle();
+  if (runErr || !executed) {
+    console.error('[concierge] executed-run status update failed', { runId, familyId, error: runErr ?? new Error('Run claim lost') });
+    await release();
     return { ok: false, error: describeActionError(runErr, t('actions.appliedThePlanButCould')) };
   }
 
@@ -247,12 +273,16 @@ export async function dismissQueuedRunAction(runId: string): Promise<Result> {
     .eq('id', runId).eq('family_id', ctx.active.familyId).maybeSingle();
   if (!run || run.status !== 'pending') return { ok: false, error: t('actions.runNotFoundOrAlready') };
 
-  const { error: dismissErr } = await sb.from('family_automation_runs').update({ status: 'dismissed' })
-    .eq('id', runId).eq('family_id', ctx.active.familyId);
+  // Only a run still awaiting approval can be dismissed; `state` moves with
+  // `status` (see executeQueuedRunAction).
+  const { data: dismissed, error: dismissErr } = await sb.from('family_automation_runs')
+    .update({ status: 'dismissed', state: 'cancelled' })
+    .eq('id', runId).eq('family_id', ctx.active.familyId).eq('status', 'pending').select('id').maybeSingle();
   if (dismissErr) {
     console.error('[concierge] dismiss-run status update failed', { runId, familyId: ctx.active.familyId, error: dismissErr });
     return { ok: false, error: describeActionError(dismissErr, t('actions.couldNotDismissThatRun')) };
   }
+  if (!dismissed) return { ok: false, error: t('actions.runNotFoundOrAlready') };
 
   const meta = (run.metadata ?? {}) as { approval_id?: string | null };
   if (meta.approval_id) {
