@@ -279,14 +279,25 @@ export async function resetOnboardingAction(): Promise<Result> {
   if (prefErr) return onboardingFailure('reset preference update', prefErr, 'Could not reset onboarding.');
 
   // 2. Mark the lifecycle row reset (best-effort, degrades pre-migration).
+  //    `active_family_id` is the user's own preference row, so it names
+  //    whatever family they set it to. Written straight into
+  //    onboarding_progress.family_id by the service role, it walked around the
+  //    column 0331 takes away from clients — the pointer SEC-018 turned on. Only
+  //    a family the user is an active member of is recorded.
+  const preferred = (prefRow?.active_family_id as string | null) ?? null;
+  const { data: membership } = preferred
+    ? await admin.from('family_members').select('family_id')
+      .eq('user_id', auth.user.id).eq('family_id', preferred).eq('is_active', true).maybeSingle()
+    : { data: null };
+  const ownFamilyId = membership?.family_id ?? null;
   await recordOnboardingProgress(admin, {
     userId: auth.user.id,
-    familyId: (prefRow?.active_family_id as string | null) ?? null,
+    familyId: ownFamilyId,
     status: 'reset',
   });
 
   await logAudit(supabase, {
-    familyId: (prefRow?.active_family_id as string | null) ?? null, actorId: auth.user.id,
+    familyId: ownFamilyId, actorId: auth.user.id,
     action: 'update', resource: 'onboarding_progress', resourceId: auth.user.id,
     metadata: { onboarding: 'reset' },
   });

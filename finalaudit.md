@@ -2,7 +2,7 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-25T05:40:00.000Z
+- Last Updated: 2026-09-25T06:20:00.000Z
 - Total Audit Items: 14087
 - Not Started: 13842
 - In Progress: 192
@@ -23081,7 +23081,7 @@ Status: ✅ PASS — `npm run lint` reports the four known baseline warnings and
 ## Automated Tests
 Status: ✅ PASS — 15,287 tests across 1,215 files pass, zero failures and zero skips, on Node 24.15.0 at head 92340315 (160s).
 
-Later in this cycle, on Node 24.21.0: **16,912 tests across 1,331 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **56/56 boundary probes with 0 skipped**.
+Later in this cycle, on Node 24.21.0: **16,913 tests across 1,331 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **56/56 boundary probes with 0 skipped**.
 
 One type error was committed and is worth recording rather than quietly fixed: `tests/a-fan-out-has-a-width-somebody-chose.test.ts` used `source: 'test'` where `DriveTimeEstimate.source` is a three-value union. `vitest` does not typecheck, so it passed there; `tsc --noEmit` was run before the test file was written and not after, and the commit went out red. The next `tsc` caught it. The lesson is the ordering: the typecheck belongs after the last file is written, not after the last file one happened to be thinking about. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), `tests/a-capped-read-is-not-a-silent-one.test.ts` (DATA-011, 5), `tests/a-family-day-starts-where-the-family-is.test.ts` and `tests/a-server-day-is-the-familys-day.test.ts` (DATA-012, 11), `docs/audit/vaults-require-second-factor-check.sql` (AUTHZ-008), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
 
@@ -29031,6 +29031,21 @@ line.
 
 Listed under Critical Blockers until the code is deployed: production is exposed
 to this until then.
+
+## The same pointer, laundered once more
+
+Sweeping every read of `user_preferences.active_family_id` — the other pointer a
+user writes to their own row and can aim at any family — found every consumer
+cross-checking it against real memberships (`getUserContext`, entitlement, the
+billing review, paperwork links, trip imports, the calendar path) except one.
+`resetOnboardingAction` read it with the service role and wrote it straight into
+the caller's `onboarding_progress.family_id`: exactly the column 0331 takes away
+from clients, set on the client's behalf. The function and action checks above
+still refuse the takeover downstream, so this was a bypass of one layer rather
+than a second hole — but the service role should not be carrying a value it has
+not verified. The action now records only a family the user is an active member
+of; reverting it fails the extended unit guard. **16,913 tests across 1,331
+files**, both zones.
 
 # Final Regression
 
