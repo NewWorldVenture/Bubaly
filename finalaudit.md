@@ -29707,6 +29707,29 @@ assertions that fail on the old bootstrap.
 - Full suite **16,965 tests across 1,338 files**, zero failures, under
   `TZ=UTC` and again under `TZ=America/Los_Angeles`.
 
+## Swept alongside, and found sound
+
+These were checked by the same question and not changed:
+
+- **Definer functions a signed-in user can call with a family id.** On the
+  clean CI replay (the local database's `authenticated` grants are poisoned, so
+  it was not used for this), 19 take a `p_family…` argument. The 12 wallet,
+  marketplace-circle and grocery RPCs pass it to a membership helper. The two
+  that do not, `move_recalculate_date` and `vacation_import_confirmation`, bind
+  the member row to `auth.uid()`, the family, `is_active` and a parent/adult
+  role under `FOR SHARE`. The rest are the membership helpers themselves.
+- **API routes with no visible auth call.** 25 of them. All are either public
+  by design (tracking beacons, blog, contact, build info, the OAuth callback)
+  or guarded by a helper the pattern missed (`authenticateAI`,
+  `requireMarketingAdmin`, `getUser`). `GET /api/ai/runs/[id]` loads through the
+  caller's RLS client and filters on their family.
+- **CSRF.** Auth cookies are `SameSite=Lax`, so a cross-site POST carries no
+  session. Every `GET` handler that writes is either cron-bearer-gated (including
+  `concierge-calls/place`), a token link (blog unsubscribe), the OAuth callback,
+  or `privacy/export`, which only downloads the caller's own data.
+- **The privacy export** runs on the caller's RLS client with no service-role
+  read, and `sectionsForRole` withholds manager-only sections from children.
+
 # Final Regression
 
 Current request-admission witness verification uses frozen application tree ee0038989221edfaf148150f6e1dc28301f7f6bf. All six changed production files pass final local gates. A later actual HTTP/Mailpit fixture and disposable-only CI redirect configuration are test infrastructure; they have not executed in hosted CI. Final test/infrastructure tree is d0adca170e65ca15ce48d678ce1d6ac1b2273ef6; provenance is in [the admission witness cycle](docs/final-audit/auth-callback-admission-witness-cycle.md). All previous 14,006 IDs/statuses remain intact; twelve structural discovery additions bring the total to 14,018.
