@@ -10,6 +10,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../database.types';
 import type { FamilyMembership, UserContext } from './auth';
 import type { MemberRole } from '@/lib/constants/roles';
+import { chooseActiveMembership } from '@/lib/auth/active-membership';
 
 type DB = SupabaseClient<Database>;
 
@@ -81,6 +82,7 @@ export async function getBearerUserContext(token: string): Promise<BearerContext
     console.error('[bearer] user preference query failed', prefsError);
     return { ok: false, reason: 'unavailable', supabase, user };
   }
-  const active = memberships.find((m) => m.familyId === prefs?.active_family_id) ?? memberships[0];
+  const activeRow = chooseActiveMembership(memberships.map((m) => m.member), prefs?.active_family_id);
+  const active = memberships.find((m) => m.member === activeRow) ?? memberships[0];
   return { ok: true, supabase, user, ctx: { user, memberships, active } };
 }

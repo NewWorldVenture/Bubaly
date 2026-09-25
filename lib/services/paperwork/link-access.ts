@@ -8,6 +8,7 @@ import { planLevel } from '@/lib/constants/plans';
 import { FEATURE_CATALOG } from '@/lib/constants/feature-catalog';
 import { featureAccessByTier, isFeatureTier, resolveFeatureTiers, tiersByHref, type FeatureOverrides } from '@/lib/features/tiers';
 import { computeEntitlement } from '@/lib/server/entitlement';
+import { chooseActiveMembership } from '@/lib/auth/active-membership';
 
 type Access = { ok: true } | {
   ok: false;
@@ -26,6 +27,7 @@ const membersSchema = z.array(z.object({
   id: uuid, family_id: uuid, user_id: uuid,
   role: z.enum(['parent', 'adult', 'teen', 'child', 'caregiver', 'guest']),
   is_active: z.literal(true),
+  created_at: z.string().nullish(),
 }));
 const prefsSchema = z.object({ active_family_id: uuid.nullable() }).nullable();
 const timestamp = z.string().datetime({ offset: true });
@@ -59,7 +61,7 @@ export async function authorizeDocumentLink(
     if (!auth.data.user || auth.data.user.id !== userId) return changed();
 
     const [membership, preferences] = await settleAll([
-      db.from('family_members').select('id, family_id, user_id, role, is_active', { count: 'exact' })
+      db.from('family_members').select('id, family_id, user_id, role, is_active, created_at', { count: 'exact' })
         .eq('user_id', userId).eq('is_active', true),
       db.from('user_preferences').select('active_family_id').eq('user_id', userId).maybeSingle(),
     ]);
@@ -70,7 +72,7 @@ export async function authorizeDocumentLink(
       || members.data.some((member) => member.user_id !== userId)) return unavailable('context proof');
     // Match getUserContext's successful missing/stale preference fallback. All
     // current memberships are needed: a newly joined family may now be active.
-    const active = members.data.find((member) => member.family_id === prefs.data?.active_family_id) ?? members.data[0];
+    const active = chooseActiveMembership(members.data, prefs.data?.active_family_id);
     if (!active || active.id !== memberId || active.family_id !== familyId || active.role !== ctx.active.role) return changed();
     if (!needsInbox) return { ok: true };
 

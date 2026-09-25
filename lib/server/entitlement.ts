@@ -14,6 +14,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { settleAll } from '@/lib/supabase/settle';
 import type { Database } from '@/lib/database.types';
 import { planLevel } from '@/lib/constants/plans';
+import { chooseActiveMembership } from '@/lib/auth/active-membership';
 
 type DB = SupabaseClient<Database>;
 
@@ -69,14 +70,14 @@ export async function resolveEntitlement(
 ): Promise<Entitlement & { familyId: string | null }> {
   try {
     const { data: members } = await supabase
-      .from('family_members').select('family_id').eq('user_id', userId).eq('is_active', true);
-    const familyIds = (members ?? []).map((m) => m.family_id);
-    if (familyIds.length === 0) return { ...UNLOCKED_FALLBACK, familyId: null };
+      .from('family_members').select('family_id, created_at').eq('user_id', userId).eq('is_active', true);
+    if (!members?.length) return { ...UNLOCKED_FALLBACK, familyId: null };
 
     const { data: prefs } = await supabase
       .from('user_preferences').select('active_family_id').eq('user_id', userId).maybeSingle();
-    const activeId = familyIds.includes(prefs?.active_family_id ?? '')
-      ? (prefs!.active_family_id as string) : familyIds[0];
+    // The same choice getUserContext makes, so the gate judges the family the
+    // page is about to show.
+    const activeId = chooseActiveMembership(members, prefs?.active_family_id)!.family_id;
 
     const [{ data: fam }, { data: subs }] = await settleAll([
       supabase.from('families').select('trial_ends_at, closed_at').eq('id', activeId).maybeSingle(),

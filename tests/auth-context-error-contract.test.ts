@@ -44,11 +44,13 @@ describe('authenticated context error boundary', () => {
   it('keeps a failed preference read non-fatal', () => {
     // `user_preferences` only picks WHICH of the already-resolved memberships is
     // active. It is not tenant context, so a failure there falls back to the
-    // first membership instead of taking every authenticated page down.
+    // earliest membership instead of taking every authenticated page down.
+    // (Earliest, not "row 0": an unordered read's row 0 moves when a member
+    // row is edited — DATA-019.)
     expect(source).toContain(
-      "if (prefsError) console.error('[auth] user preference query failed; using the first membership', prefsError);",
+      "if (prefsError) console.error('[auth] user preference query failed; using the earliest membership', prefsError);",
     );
-    expect(source).toContain("memberships.find((m) => m.familyId === prefs?.active_family_id) ?? memberships[0]");
+    expect(source).toContain("chooseActiveMembership(memberships.map((m) => m.member), prefs?.active_family_id)");
     expect(source).not.toContain("throwContextUnavailable('user preference'");
   });
 
