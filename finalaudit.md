@@ -2,7 +2,7 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-25T18:30:00.000Z
+- Last Updated: 2026-09-25T19:15:00.000Z
 - Total Audit Items: 14101
 - Not Started: 13842
 - In Progress: 194
@@ -23086,7 +23086,9 @@ Executed twice in sequence against the local Supabase stack.
 These results describe their stated historical sources. The current integration regression is tracked at the bottom of this file and has not passed.
 
 ## Build
-Status: ✅ PASS — `npm run build` on Node 24.15.0 (the engine package.json declares) exits 0 against branch head 92340315. Middleware bundle 92.6 kB. Run 2026-09-13.
+Status: ✅ PASS — `npm run build` on Node 24.21.0 exits 0 on the current head after this session's changes (SEC-019…024, DATA-016…018, SEC-023's 61-site error-message sweep across 22 route/action files, the migrations, the i18n and scanner changes): 252/252 static pages generated, middleware 93.1 kB, `next lint` (which the build runs) clean. This is the gate for the many route handlers the error sweep touched. Run 2026-09-25.
+
+Previous: `npm run build` on Node 24.15.0 (the engine package.json declares) exits 0 against branch head 92340315. Middleware bundle 92.6 kB. Run 2026-09-13.
 
 ## Type Check
 Status: ✅ PASS — `tsc --noEmit` exits 0 with no diagnostics, Node 24.15.0, head 92340315. Run 2026-09-13.
