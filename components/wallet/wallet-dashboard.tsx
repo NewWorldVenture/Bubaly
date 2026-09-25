@@ -550,7 +550,7 @@ function AddFundsModal({ child, onClose }: { child: ChildWalletView; onClose: ()
     const res = await addFundsAction({ childWalletId: child.id, amountCents: Math.round(dollars * 100), description: 'Parent top-up' });
     setLoading(false);
     if (!res.ok) return toastError(res.error ?? 'Could not add funds');
-    success(`Added ${formatCents(Math.round(dollars * 100))} to ${child.name}`);
+    success(tr('walletDashboard.addedAmountToName', { amount: formatCents(Math.round(dollars * 100)), name: child.name }));
     onClose();
     router.refresh();
   }

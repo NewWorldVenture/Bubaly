@@ -40,7 +40,11 @@ import { scanPaths } from '../scripts/i18n-scan.mjs';
 // failed: ${msg}\`)` — which NOT_COPY's backtick rule had hidden. Measured with
 // the tree held fixed: 2,810 before, 2,835 with action errors, 2,899 with toasts
 // too; every one of the 89 is a message that already shipped in English.
-const CEILING = 2899;
+//
+// Then lowered to 2,888 as eleven of them were translated: the Family Wallet's
+// toasts and its "Only … available in Spend." refusal, which children see. A
+// ceiling that is not lowered when strings are fixed lets them come back free.
+const CEILING = 2888;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);

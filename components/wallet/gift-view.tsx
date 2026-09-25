@@ -34,7 +34,9 @@ export function GiftView({ links, pending, childOptions, canManage }: {
   async function approve(g: PendingGift) {
     const res = await approveGiftAction({ giftPaymentId: g.id });
     if (!res.ok) return toastError(res.error ?? 'Could not approve');
-    success(`Added ${formatCents(g.amountCents)} to ${g.childName ?? 'the wallet'}`);
+    success(g.childName
+      ? t('gift.addedAmountToName', { amount: formatCents(g.amountCents), name: g.childName })
+      : t('gift.addedAmountToTheWallet', { amount: formatCents(g.amountCents) }));
     router.refresh();
   }
   async function dismiss(g: PendingGift) {

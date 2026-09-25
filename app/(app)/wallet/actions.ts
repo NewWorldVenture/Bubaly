@@ -744,7 +744,7 @@ export async function requestSpendAction(input: {
   // Can't request more than is available in Spend.
   const { available, error: balanceError } = await bucketBalanceCents(supabase, { familyId, childWalletId: cw.id, kind: 'spend' });
   if (balanceError) return { ok: false, error: balanceError };
-  if (amount > available) return { ok: false, error: `Only ${(available / 100).toFixed(2)} available in Spend.` };
+  if (amount > available) return { ok: false, error: t('actions.onlyAmountAvailableInSpend', { amount: (available / 100).toFixed(2) }) };
 
   const threshold = rule?.require_approval_over_cents ?? 5000;
   const manager = isManager(ctx.active.role);

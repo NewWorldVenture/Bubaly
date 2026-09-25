@@ -95,7 +95,9 @@ export function MoneyCardsView({
       await issueCardAction({ childWalletId: child.id, type: 'virtual', spendLimitCents: null, spendWindow: 'per_authorization' });
     }
     setBusy(null);
-    success(`Issued ${childrenWithoutCards.length} virtual card${childrenWithoutCards.length !== 1 ? 's' : ''}!`);
+    success(childrenWithoutCards.length === 1
+        ? tr('moneyCards.issuedOneVirtualCard')
+        : tr('moneyCards.issuedVirtualCards', { count: childrenWithoutCards.length }));
     router.refresh();
   }
 
@@ -405,7 +407,7 @@ function PhysicalCardModal({ child, onClose, onIssued }: {
     });
     setLoading(false);
     if (!res.ok) return toastError(res.error ?? 'Could not order card');
-    success(`Physical card ordered for ${child.name}!`);
+    success(tr('moneyCards.physicalCardOrderedFor', { name: child.name }));
     onIssued();
   }
 

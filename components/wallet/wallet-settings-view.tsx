@@ -71,7 +71,7 @@ function ChildRuleCard({ row, canManage }: { row: ChildRuleRow; canManage: boole
 
   async function save() {
     if (saving) return;
-    if (sum !== 100) return toastError(`Split must total 100% (currently ${sum}%).`);
+    if (sum !== 100) return toastError(t('walletSettings.splitMustTotal100Currently', { sum }));
     const requireApprovalOverCents = Math.round(parseFloat(threshold || '0') * 100);
     if (!Number.isFinite(requireApprovalOverCents) || requireApprovalOverCents < 0) return toastError(t('walletSettingsView.enterAValidApprovalThreshold'));
     setSaving(true);
@@ -80,7 +80,7 @@ function ChildRuleCard({ row, canManage }: { row: ChildRuleRow; canManage: boole
     });
     setSaving(false);
     if (!res.ok) return toastError(res.error ?? 'Could not save settings');
-    success(`${row.name}'s wallet settings saved`);
+    success(t('walletSettings.walletSettingsSavedFor', { name: row.name }));
     router.refresh();
   }
 
