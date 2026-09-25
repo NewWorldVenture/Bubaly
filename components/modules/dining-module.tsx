@@ -66,7 +66,7 @@ export function DiningModule({ restaurants, visits }: { restaurants: DiningRow[]
         rating: addForm.rating ? parseFloat(addForm.rating) : undefined,
       });
       if (!res.ok) { toastError(res.error); return; }
-      success(`${addForm.name.trim()} saved.`);
+      success(t('dining.nameSaved', { name: addForm.name.trim() }));
       setAddOpen(false);
       setAddForm({ name: '', cuisine: '', priceLevel: '2', rating: '' });
       router.refresh();

@@ -212,7 +212,7 @@ export function MarketplaceModule({
     const sb = createClient();
     const { error: err } = await sb.rpc('marketplace_accept_offer', { p_offer: offer.id });
     if (err) { toastError(describeDbError(err)); return; }
-    success(`Handed off to ${memberName(offer.member_id)}`);
+    success(t('marketplace.handedOffTo', { name: memberName(offer.member_id) }));
     setOffersFor(null);
   }
 

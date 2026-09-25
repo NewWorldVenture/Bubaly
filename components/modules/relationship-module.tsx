@@ -236,7 +236,7 @@ export function RelationshipModule() {
       price_cents: w.price != null ? Math.round(w.price * 100) : null, source: 'wishlist', wishlist_item_id: w.id, status: 'idea',
     });
     if (err) { toastError(describeDbError(err)); return; }
-    success(`Added “${w.title}” to gift ideas`);
+    success(t('relationship.addedToGiftIdeas', { title: w.title }));
   }
 
   // ── Profile ──

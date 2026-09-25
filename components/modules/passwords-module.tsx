@@ -86,9 +86,9 @@ export function PasswordsModule() {
     });
   }, [data, query, catFilter]);
 
-  async function copy(text: string, what: string) {
+  async function copy(text: string, message: string) {
     if (!text) return;
-    try { await navigator.clipboard.writeText(text); success(`${what} copied`); }
+    try { await navigator.clipboard.writeText(text); success(message); }
     catch { toastError(t('passwordsModule.couldNotCopy')); }
   }
 
@@ -234,7 +234,7 @@ export function PasswordsModule() {
 
                 <div className="mt-3 space-y-2">
                   {c.username && (
-                    <Row label={c.category === 'wifi' ? 'Network' : c.category === 'card' ? 'Number' : 'Username'} value={c.username} onCopy={() => copy(c.username!, 'Username')} />
+                    <Row label={c.category === 'wifi' ? 'Network' : c.category === 'card' ? 'Number' : 'Username'} value={c.username} onCopy={() => copy(c.username!, t('passwords.usernameCopied'))} />
                   )}
                   <div className="flex items-center gap-2">
                     <span className="w-16 shrink-0 text-[11px] uppercase tracking-wide text-muted">{c.category === 'wifi' ? 'Password' : c.category === 'pin' ? 'Code' : 'Secret'}</span>
@@ -242,7 +242,7 @@ export function PasswordsModule() {
                     <button onClick={() => toggleReveal(c.id)} aria-label={isRevealed ? 'Hide' : 'Reveal'} className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-muted hover:bg-elevated hover:text-fg">
                       {isRevealed ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
-                    <button onClick={() => copy(c.secret, 'Secret')} disabled={!c.secret} aria-label={t('passwords.copySecret')} className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-muted hover:bg-elevated hover:text-fg disabled:opacity-40">
+                    <button onClick={() => copy(c.secret, t('passwords.secretCopied'))} disabled={!c.secret} aria-label={t('passwords.copySecret')} className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-muted hover:bg-elevated hover:text-fg disabled:opacity-40">
                       <Copy className="h-4 w-4" />
                     </button>
                   </div>

@@ -111,7 +111,7 @@ export function DeclutterModule() {
   async function resetZone(z: Zone) {
     const { error } = await createClient().from('declutter_zones').update({ clutter_score: 1, last_reset_at: new Date().toISOString() }).eq('id', z.id);
     if (error) return toastError(describeDbError(error));
-    success(`${z.name} reset to tidy`);
+    success(tr('declutter.zoneResetToTidy', { name: z.name }));
   }
 
   async function bumpScore(z: Zone, delta: 1 | -1) {

@@ -170,7 +170,7 @@ export function ChoresModule() {
     }).eq('id', a.id);
     setBusy(null);
     if (error) return toastError(describeDbError(error));
-    success(`Approved! +${a.chore?.points ?? 0} pts`); void refresh();
+    success(tr('chores.approvedPlusPoints', { points: a.chore?.points ?? 0 })); void refresh();
   }
 
   async function payChore(a: Assignment) {

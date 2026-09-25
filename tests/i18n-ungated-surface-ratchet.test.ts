@@ -44,7 +44,10 @@ import { scanPaths } from '../scripts/i18n-scan.mjs';
 // Then lowered to 2,888 as eleven of them were translated: the Family Wallet's
 // toasts and its "Only … available in Spend." refusal, which children see. A
 // ceiling that is not lowered when strings are fixed lets them come back free.
-const CEILING = 2888;
+//
+// Lowered again to 2,872 as sixteen module toasts were translated: copied,
+// snoozed, approved, saved, disconnected, a file too large, a pin limit.
+const CEILING = 2872;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);
