@@ -2564,3 +2564,58 @@ member rows whose `user_id` has no matching accepted invitation, is not the
 family's `created_by`, and is not a child login the server created. The row
 records no writer, so the database alone cannot tell a planted link from a
 real one; the check narrows the list for a person to review.
+
+## 0336 — a removed member's profile stayed visible to the family
+
+`supabase/migrations/0336_removing_a_member_ends_profile_visibility.sql`
+
+**Severity: medium (privacy). Safe in either order**: no app path reads another
+user's profile through RLS.
+
+`profiles_select_self` lets co-members read each other's profiles and did not
+check `is_active`. Removing a member keeps their row (inactive), and the family
+can still see that row, so the family kept reading the removed person's email,
+full name, date of birth and phone, including a phone number they changed
+after leaving. Measured locally: a parent read a removed adult's current phone.
+The removed person was already shut out in the other direction.
+
+0336 re-creates the policy requiring both memberships to be active, as
+`is_family_member` and `can_manage_family` already do. Verified locally:
+`docs/audit/profile-visibility-ends-with-membership-check.sql` shows one breach
+before 0336 and none after. Its controls also pass: active co-members, a family
+the two still share, and a user reading their own profile with or without a
+family. 59/59 probes on the local stack and on the exact CI image.
+
+## 0337 — an invited adult could make themselves the family's parent
+
+`supabase/migrations/0337_only_a_parent_makes_or_changes_a_parent.sql`
+
+**Severity: high. Safe in either order**: the only UI that offered these writes
+to an adult is the family module, and this branch stops offering them. The old
+UI would get a permission error for the refused cases.
+
+The role model gives a parent "full control: members, billing, and all
+household data". Parent is not an invitable role, and 0298 stopped an
+invitation being rewritten into one. But `fm_insert`, `fm_update` and
+`fm_delete` gate on `can_manage_family`, which is true for adults, and none
+limits `role`. Measured on the local database as an invited adult: promoting
+themselves to parent, adding a new parent, and demoting, deactivating, deleting
+or editing the family's parent all succeeded. After the self-promotion the
+adult passed `is_family_admin`, which is the whole of `families_delete`.
+
+0337 adds a SECURITY INVOKER trigger. For a write through the API, only a
+parent of the family may change or remove a parent's row or make a row a
+parent's, unless the family has no active parent, so a family whose only
+parent stepped down can make one again. The service role and the database's
+definer functions are unaffected. Adults still add, edit and remove everyone
+else. `docs/audit/parent-role-is-the-parents-check.sql`: 7 breaches before, none
+after, all controls passing. A parent deleting their family still cascades
+through every member row. 60/60 probes on the local stack and on the exact CI
+image, and the migration re-applies onto an existing schema.
+
+**After applying, consider reviewing production for escalations that already
+happened:** families whose current parents include a member invited as
+`adult` (compare `family_invites.role` for accepted invites against the member's
+current role), and families whose creator (`families.created_by`) is no longer
+an active parent. Neither is proof on its own: a parent may have promoted
+someone legitimately.

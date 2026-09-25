@@ -182,6 +182,13 @@ export function FamilyModule() {
   const managerCount = activeMembers.filter((m) => MANAGER_ROLES.includes(m.role)).length;
   const isLastManager = (m: typeof activeMembers[number]) =>
     managerCount <= 1 && MANAGER_ROLES.includes(m.role);
+  // Migration 0337: only a parent changes or removes a parent, or makes one —
+  // unless the family has no active parent, so it can make one again. An adult
+  // manages everyone else. (SEC-026)
+  const isParent = role === 'parent';
+  const canMakeParent = isParent || !activeMembers.some((m) => m.role === 'parent');
+  const canManageMember = (m: typeof activeMembers[number]) =>
+    canManage && !isLastManager(m) && (isParent || m.role !== 'parent');
 
   if (loading) return <SkeletonList />;
   if (loadError) return <ErrorState message={loadError} onRetry={() => { setLoading(true); void load(); }} />;
@@ -263,7 +270,7 @@ export function FamilyModule() {
                 const age = memberAge(m.birthday);
                 return (
                   <div key={m.id} className="group relative flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-surface/20 p-4 text-center">
-                    {canManage && !isLastManager(m) && (
+                    {canManageMember(m) && (
                       <div className="absolute right-1.5 top-1.5">
                         <button onClick={() => setMenuId(menuId === m.id ? null : m.id)} aria-label={`Manage ${m.display_name}`} className="grid h-6 w-6 place-items-center rounded-lg text-muted/60 opacity-0 transition hover:bg-elevated group-hover:opacity-100">
                           <MoreHorizontal className="h-4 w-4" />
@@ -447,7 +454,7 @@ export function FamilyModule() {
 
       {addOpen && (
         <MemberModal
-          familyId={familyId} createdBy={userId} member={editMember}
+          familyId={familyId} createdBy={userId} member={editMember} canMakeParent={canMakeParent}
           onClose={() => { setAddOpen(false); setEditMember(null); }}
           onSaved={() => { setAddOpen(false); setEditMember(null); void refreshMembers(); }}
         />
@@ -508,8 +515,8 @@ function QuickLink({ href, icon: Icon, label }: { href: string; icon: typeof Use
 }
 
 // ── Add / Edit member modal ─────────────────────────────────────────────────
-function MemberModal({ familyId, createdBy, member, onClose, onSaved }: {
-  familyId: string; createdBy: string; member: Member | null; onClose: () => void; onSaved: () => void;
+function MemberModal({ familyId, createdBy, member, canMakeParent, onClose, onSaved }: {
+  familyId: string; createdBy: string; member: Member | null; canMakeParent: boolean; onClose: () => void; onSaved: () => void;
 }) {
   const t = useTranslations();
   const { success, error: toastError } = useToast();
@@ -547,7 +554,7 @@ function MemberModal({ familyId, createdBy, member, onClose, onSaved }: {
         <Field label={t('family.name')} required>{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder={t('family.eGEllaParker')} required />}</Field>
         <Field label={t('family.role')}>{(id) => (
           <Select id={id} value={mrole} onChange={(e) => setMrole(e.target.value as MemberRole)}>
-            {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+            {ROLE_OPTIONS.filter((r) => r !== 'parent' || canMakeParent).map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
           </Select>
         )}</Field>
         <Field label={t('family.birthday')}>{(id) => <Input id={id} type="date" value={birthday} onChange={(e) => setBirthday(e.target.value)} />}</Field>

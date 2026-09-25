@@ -60,7 +60,10 @@ describe('a family always keeps someone who can manage it', () => {
   it('stops the screen offering an action the database will reject', () => {
     expect(familyModule).toMatch(/const managerCount = activeMembers\.filter/);
     expect(familyModule).toMatch(/const isLastManager =/);
-    expect(familyModule).toMatch(/\{canManage && !isLastManager\(m\) && \(/);
+    // The card's menu renders on canManageMember, which still starts with the
+    // last-manager check (0337 added the parent rule after it — SEC-026).
+    expect(familyModule).toMatch(/const canManageMember = \(m: [^)]*\) =>\s*canManage && !isLastManager\(m\)/);
+    expect(familyModule).toMatch(/\{canManageMember\(m\) && \(/);
   });
 
   it('has a behavioural probe that CI runs', () => {

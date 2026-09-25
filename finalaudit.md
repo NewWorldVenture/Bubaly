@@ -2,12 +2,12 @@
 
 ## Audit Status
 - Started: 2026-09-12T12:41:52.12Z
-- Last Updated: 2026-09-26T01:45:00.000Z
-- Total Audit Items: 14101
+- Last Updated: 2026-09-26T02:40:00.000Z
+- Total Audit Items: 14105
 - Not Started: 13842
 - In Progress: 194
 - Passed: 12
-- Fixed + Passed: 50
+- Fixed + Passed: 54
 - Blocked: 2
 - Failed: 1
 - Overall Completion: 0.04%
@@ -86,9 +86,11 @@ PRODUCTION READY: NO
 - EMAIL-001: Suppression retry, receipt claims and documented tags shape repaired locally. Real database/provider workflow still unverified; metric atomicity tracked EMAIL-002.
 - MOBILE-001: Late service-worker registration and teardown defects repaired and component-tested. Actual authenticated install/update/offline and physical device flows remain unverified.
 - SEC-024 (HIGH until 0333 is applied): with only the public anon key, anyone who knows the ids can place card holds that freeze a child's spendable balance, and bid in another family's name. Reproduced locally; fixed in migration 0333 (pending production). Forged rows may already exist in production and cannot be told apart from genuine ones by the database.
+- SEC-026 (HIGH until 0337 is applied): an invited adult can make themselves the family's parent, demote or remove the real parent, and then delete the family. The family module offers it in its UI. Reproduced locally; fixed in migration 0337 (pending production) and in the family module.
+- SEC-025 (HIGH until 0335 is applied): any signed-in account can write another user's id onto a member row in its own family and then read that user's email, full name, date of birth and phone; the ids are visible on the feedback board. Reproduced locally; fixed in migration 0335 (pending production).
 - TEST-012: the CI database gate was red on this branch (0326 could not replay; 13/57 probes failed on the CI image) and could not see function-grant traps. The harness is repaired and 57/57 on the exact CI image, but CI itself has never run on this branch: no PR exists.
 - SEC-018 (CRITICAL until deployed): a stranger who knew a family's id could onboard into it as a PARENT and read its password vault — reproduced with real sessions. Fixed on this branch in the onboarding action (effective on deploy) and in migration 0331 (pending). Production is exposed until this code ships; 0331 additionally closes the removed-creator variant the code check alone does not.
-- DEPLOY-002: Migrations 0318–0334 are PENDING PRODUCTION and must be applied by a human (docs/PENDING_PROD_MIGRATIONS.md). 0328 (SEC-016) is deploy-coupled in both directions: this branch's marketplace code reads `has_reserve`/`reserve_met`, which exist only after 0328, and older code reads `reserve_cents`, which 0328 refuses. Apply it with the deploy that carries this code; either order alone breaks the auction board and item page. 0332 (DATA-018) is data only; apply it with or after the deploy so runs the old code decides in between are also moved. 0333 (SEC-024) closes two functions callable with the anon key; 0334 (DB-FN-003) makes auctions closable, and its first settlement run closes the whole backlog at once.
+- DEPLOY-002: Migrations 0318–0337 are PENDING PRODUCTION and must be applied by a human (docs/PENDING_PROD_MIGRATIONS.md). 0328 (SEC-016) is deploy-coupled in both directions: this branch's marketplace code reads `has_reserve`/`reserve_met`, which exist only after 0328, and older code reads `reserve_cents`, which 0328 refuses. Apply it with the deploy that carries this code; either order alone breaks the auction board and item page. 0332 (DATA-018) is data only; apply it with or after the deploy so runs the old code decides in between are also moved. 0333 (SEC-024) closes two functions callable with the anon key; 0334 (DB-FN-003) makes auctions closable, and its first settlement run closes the whole backlog at once. 0335 (SEC-025) stops a client linking a login to a member row; safe in either order. 0336 (PRIV-002) ends a removed member's profile visibility; safe in either order. 0337 (SEC-026) lets only a parent make, change or remove a parent; safe in either order.
 - SEC-001: Family media bucket explicitly public while family photo/message/reminder consumers publish public URLs; authorization privacy cannot pass.
 - SOCIAL-001: Live authorized X configuration/provider acceptance and deployed role enforcement remain unverified. AUTHZ-003 remains a database release failure. New one-off scheduling implementation and local proof are recorded underSOCIAL-003. Automatic refresh, interrupted-state recovery, other platforms/media and feed/analytics remain open.
 - JOB-001: Missing-config false-success defect repaired and CLI-tested. Deployed scheduler configuration, execution and durable missed-tick catch-up remain unverified.
@@ -14221,6 +14223,10 @@ PRODUCTION READY: NO
 | SEC-024 | Security | Two server-only money and bidding functions were callable with the public anon key | 🛠 FIXED + PASS (0333 pending production) | High | 4/4 + live | 0333 revokes EXECUTE on `wallet_reserve_card_auth` and `marketplace_place_bid_unchecked` from public, anon and authenticated; a new probe scans EVERY definer function anon can call for a caller check, instead of listing five | With only the anon key and no session: a forged card hold took a child's spendable balance 2000 → 0, and a leading $50,000-ceiling bid was placed in the name of a family that never bid. After: 42501 for anon and for a signed-in member; the Issuing webhook's service-role hold (2000 → 1500) and a member bidding as themselves through the checked wrapper still work. On the CI image the probe fails without 0333 and passes with it; five restored defects (incl. a brand-new unchecked function) each fail it | Supabase grants EXECUTE on new functions DIRECTLY to anon and authenticated; `revoke ... from public` leaves both. 0221 found this for authenticated and missed anon. Production may hold forged rows the database cannot tell apart — see docs/PENDING_PROD_MIGRATIONS.md. |
 | DB-FN-003 | Database | No auction could ever close | 🛠 FIXED + PASS (0334 pending production) | High | 4/4 + live | `marketplace_close_auction` tested `current_user <> 'service_role'`; inside a SECURITY DEFINER function current_user is the OWNER, so it refused every caller. 0334 re-creates it from its live definition with only that test changed, to `auth.role()` | Called exactly as the settlement cron calls it, through the service client: `P0001 forbidden`. After: the cron's call claims the listing for the winner and creates a confirmed order; anon gets 42501. The probe's third rule (no definer function tests current_user for its caller) fails on the restored 0185 body | The third feature in this audit that never worked in production (after DB-FN-001/002). The cron logged "settlement failed; leaving it retryable" daily. The first run after 0334 will settle the whole backlog at once. |
 | TEST-012 | Test infrastructure | The CI database was red on this branch, and could not see the grant trap anyway | 🛠 FIXED + PASS | High | 4/4 | The CI bootstrap now matches Supabase: function default privileges, `auth.uid()/role()/email()/jwt()` as Supabase defines them (reading `request.jwt.claims` too; role NULL, not 'authenticated'), and `auth.mfa_factors`. The SEC-018 probe now calls the claim function as service_role, as the action does | On the exact CI image (`pgvector/pgvector:pg16`) with the old bootstrap: 0326 failed to replay (no `auth.mfa_factors`), so the bootstrap stopped before the anchor account, and 13 of 57 probes failed. After: 345/345 migrations, 56/57 without 0333/0334 (the one failure is the real SEC-024 breach), 57/57 with them, 0 skipped. Three new unit assertions fail on the old bootstrap | This corrects my own records: every "56/56 boundary probes" written this cycle was measured on the local Supabase stack only. No PR exists for this branch, so CI never ran on it. The SEC-018 probe only passed locally because an old probe's blanket grant had poisoned that database. |
+| SEC-025 | Security | Any account could write a stranger's login into its own family and read their profile | 🛠 FIXED + PASS (0335 pending production) | High | 4/4 + live | 0335 adds a SECURITY INVOKER trigger on `family_members` that refuses a change to `user_id` when the statement runs as `authenticated` or `anon`; the service role and the database's own definer functions (`accept_invite`, `handle_new_family`, `ensure_family_for_user`) link logins as before. New probe `docs/audit/member-login-link-check.sql`; a static test pins the trigger as invoker, since a definer version would exempt every caller | As a signed-in parent on the local database: inserting a member row carrying another user's id succeeded, relinking an existing row succeeded, and each time the other user's profile (email, full name, date of birth, phone) then read back through `profiles_select_self`; unlinking a co-parent's login also succeeded. After 0335 all four are refused with 42501, and adding, editing and removing members, a new family's creator becoming its parent, and the service role linking a child login still work. 58/58 probes on the local stack and on the exact CI image; the migration re-applies cleanly onto an existing schema | `fm_insert`/`fm_update` gate on `can_manage_family` and every account manages the family it made, so the policy never limited whose login a row carried. User ids are not secrets: the feedback board shows every idea's `author_id` and vote's `user_id` to any signed-in account. A planted link also put the attacker's family into the victim's switcher. Production may hold planted links; see docs/PENDING_PROD_MIGRATIONS.md. |
+| DATA-019 | Data integrity | A user's active family changed when a member row was edited | 🛠 FIXED + PASS (app; no migration) | Low | 4/4 | One chooser, `lib/auth/active-membership.ts`: a stored preference that names a current family wins, otherwise the earliest membership, ties broken on family id. The cookie context, the bearer context, the billing gate and the document-link check all use it; the two that select columns now read `created_at` | On the local database, a user in Home and Second with no preference: the unordered membership read returned Home,Second, and after a display-name edit on the Home row, Second,Home, so the fallback moved to Second. Postgres writes an updated row's new version at the end of the heap. The chooser gives Home for both orders; a static test holds all four resolvers to it; 261 resolver and auth tests pass, with the contract test updated to pin the new choice | It only bites a user in two or more families whose preference is missing or names a family they left. The billing gate chose separately from the page, so the two could judge different families, and the document-link check refuses on disagreement. `change-plan` already requires an explicit preference and is unchanged. |
+| PRIV-002 | Privacy | A removed member's profile stayed readable by the family they left | 🛠 FIXED + PASS (0336 pending production) | Medium | 4/4 + live | 0336 re-creates `profiles_select_self` requiring both memberships to be active, as `is_family_member` and `can_manage_family` already do. New probe `docs/audit/profile-visibility-ends-with-membership-check.sql`; a static test holds the last definition in the migration history to it | On the local database a parent read a removed adult's profile, including the phone number the adult changed to after removal. The reverse direction was already closed (`fm_select` hides the family's rows from a removed member). After 0336: refused. Controls pass: active co-members, a family the two still share, and a user reading their own profile with or without a family. 59/59 probes on both databases | Found from SEC-025: `profiles_select_self` is the only policy that exposes a person rather than family data through a co-membership join, and it was the only one that ignored `is_active`. No app path reads another user's profile through RLS; the few that need one use the service role. |
+| SEC-026 | Security | An invited adult could make themselves the family's parent and remove the real one | 🛠 FIXED + PASS (0337 pending production) | High | 4/4 + live | 0337 adds a SECURITY INVOKER trigger on `family_members`. For a write through the API, only a parent of the family may change or remove a parent's row or make a row a parent's, unless the family has no active parent. The family module hides Edit/Remove on parent cards from non-parents and leaves Parent out of its role picker unless the viewer may make one. New probe `docs/audit/parent-role-is-the-parents-check.sql`; a static test pins the trigger as invoker and the UI gating | As an invited adult on the local database: self-promotion to parent, adding a new parent, and demoting, deactivating, deleting or editing the parent all succeeded (7 breaches), and the promoted adult passed `is_family_admin`, the whole of `families_delete`. After 0337: 0 breaches. Controls pass: an adult adds, edits and removes a child, changes another adult, and steps down; a parent promotes and demotes; a family with no parent makes one; the service role writes a parent; a parent's family deletion still cascades. 60/60 probes on both databases; the ledger rehearsal re-applies it | Parent is not invitable, and invite-role-escalation-check already proved an invitation cannot be rewritten into one, so this was the same escalation through the member table. The settings page already limited member editing to parents; the family module offered it to any manager. The existing `family-keeps-a-manager` test was updated to pin the helper that now carries its check. |
 | AUTHZ-011 | Authorization | The audit-log insert policy does not bind the recorded actor to the caller | 🔄 IN PROGRESS | Medium | 1/4 | Not fixed. Read from the live policy, not reproduced: `audit_insert` is `with check ((family_id is null) or is_family_member(family_id))` for PUBLIC, and anon and authenticated both hold INSERT on a clean replay. Nothing ties `actor_id` to `auth.uid()` | Every app writer was traced: all user-client writes (17 `logAudit` callers, the activity trail) set `actor_id` to the signed-in user and `family_id` to their own family; every family-less or actor-less write (admin console, crons, AI run controls) uses the service client, which bypasses RLS. So a policy of `actor_id = auth.uid() and family_id is not null and is_family_member(family_id)`, with INSERT revoked from anon, would change nothing the app does | Parents read these rows on the family activity page as the household's record of who did what, and admins read the family-less ones. Needs a migration and a probe that checks the policy's shape; recorded here so it is not lost. |
 | PERF-004 | Performance | The parent approval queue signed one photo per round trip (closes F-F03) | 🛠 FIXED + PASS | High | 4/4 (5 sanity cases inside them) | Paths collected, deduplicated and signed in chunks of 100 through createSignedUrls; the per-entry error is read so an unsignable object is left out rather than rendering an empty src; a signing outage costs the photos, not the queue | Restoring the loop turns the guard red at app/(app)/missions/page.tsx:106; the existing missions read-boundary test still passes | A loop inside a loop around `await createSignedUrl` — up to four photos per submission across the whole queue, in series. The batch form was already in the codebase and already used correctly one directory away. |
 | A11Y-001 | Accessibility | The photo lightbox stranded keyboard users (closes F-D01) | 🛠 FIXED + PASS | High | 7/7 | role=dialog + aria-modal + the shared useDialogBehavior hook on the viewer; tiles made focusable with Enter/Space; Arrow Left/Right between photos | Three mutations red (the hook removed; the tiles returned to mouse-only; a new overlay declaring aria-modal without the hook); 13 declare it and 13 implement it, and the sets are identical | The tiles were div onClick, so a keyboard could not reach the viewer at all — a trap you cannot enter. The existing a11y guard named four overlays by hand, so this one was never looked at: enumerated with no scan, the third shape of this repo's signature defect. |
@@ -23099,7 +23105,7 @@ Status: ✅ PASS — `npm run lint` reports the four known baseline warnings and
 ## Automated Tests
 Status: ✅ PASS — 15,287 tests across 1,215 files pass, zero failures and zero skips, on Node 24.15.0 at head 92340315 (160s).
 
-Later in this cycle, on Node 24.21.0: **16,965 tests across 1,338 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **57/57 boundary probes with 0 skipped on BOTH the local Supabase stack and a fresh replica on the exact CI image** (`pgvector/pgvector:pg16`, `plpgsql_check` installed). Earlier "56/56" figures in this cycle were the local stack only; the CI-shaped database was red from 0326 until TEST-012.
+Later in this cycle, on Node 24.21.0, after SEC-025/PRIV-002/SEC-026 and DATA-019: **16,984 tests across 1,341 files, zero failures and zero skips — under `TZ=UTC` and again under `TZ=America/Los_Angeles`** — and **60/60 boundary probes with 0 skipped on BOTH the local Supabase stack and a fresh replica on the exact CI image** (`pgvector/pgvector:pg16`, `plpgsql_check` installed; 350/350 migrations, 183 ON CONFLICT targets, and the ledger-repair rehearsal re-applying every migration onto the existing schema). Earlier "57/57" and "56/56" figures in this cycle were fewer probes and, for 56, the local stack only; the CI-shaped database was red from 0326 until TEST-012.
 
 One type error was committed and is worth recording rather than quietly fixed: `tests/a-fan-out-has-a-width-somebody-chose.test.ts` used `source: 'test'` where `DriveTimeEstimate.source` is a three-value union. `vitest` does not typecheck, so it passed there; `tsc --noEmit` was run before the test file was written and not after, and the commit went out red. The next `tsc` caught it. The lesson is the ordering: the typecheck belongs after the last file is written, not after the last file one happened to be thinking about. The new cases are `tests/admin-actions-reach-a-gate.test.ts` (ADMIN-001, 4), `tests/twilio-ingress-verifies-everywhere.test.ts` (SEC-010, 14), `tests/shared-secrets-compare-in-constant-time.test.ts` (SEC-011, 10), `tests/marketing-refusal-is-not-an-outage.test.ts` (API-MKT-002, 7) and `docs/audit/social-token-is-service-only-check.sql` (AUTHZ-007), `tests/a-capped-read-is-not-a-silent-one.test.ts` (DATA-011, 5), `tests/a-family-day-starts-where-the-family-is.test.ts` and `tests/a-server-day-is-the-familys-day.test.ts` (DATA-012, 11), `docs/audit/vaults-require-second-factor-check.sql` (AUTHZ-008), and `tests/feedback-attachment-is-resolved-not-guessed.test.ts` with `docs/audit/feedback-attachment-is-not-world-readable-check.sql` (SEC-012). `npx tsc --noEmit` exits 0 and the new files lint clean.
 
@@ -29752,6 +29758,160 @@ the remaining anon-executable definer functions, found these sound:
   ~1.1 trillion), looked up under an `is_family_member` gate. Unthrottled, but
   40 bits is not brute-forceable at request rates, so the standing "recorded,
   not fixed" posture holds.
+
+# Pass AH — any account could write a stranger's login into its own family (SEC-025)
+
+## The question
+
+A member row is somebody's membership because of one column, `user_id`. Who
+can write that column? The policies say a family's parent or adult can insert
+and update member rows (`fm_insert`, `fm_update`, both
+`can_manage_family(family_id)`). They constrain *which family* a row is in,
+and nothing else about it. Every account is the parent of the family it made,
+so "a manager of this family" is not a limit on whose login a row may carry.
+
+## Measured
+
+On the local database, as a signed-in parent of their own family, with a
+second user who had never interacted with them:
+
+```
+insert into family_members (family_id, user_id, …) values (<own family>, <other user>, …)  -> INSERT 0 1
+select email, full_name, date_of_birth, phone from profiles where id = <other user>       -> 1 row
+update family_members set user_id = <other user> where id = <own kid row>                 -> UPDATE 1, profile readable
+update family_members set user_id = null where id = <co-parent's row>                     -> UPDATE 1
+```
+
+`profiles_select_self` lets co-members read each other's profiles, which is
+right for a real family and is exactly what a planted link exploits. The other
+user's id was not hard to get: `feedback_ideas.author_id` and
+`feedback_votes.user_id` are readable to any signed-in account. (`admin_users`
+is service-role-only, checked on the clean CI replay.) The planted family also
+appears in the victim's family switcher.
+
+## The fix
+
+Nothing in the app writes `user_id` from the browser; the family module's add
+and edit forms never send it. Logins are linked by the server with the service
+role (child logins, admin tools, onboarding) and by three SECURITY DEFINER
+functions. So 0335 refuses a change to `user_id` when the statement runs as
+`authenticated` or `anon`: an INSERT carrying a login, or an UPDATE that
+changes one. It is a SECURITY INVOKER trigger keyed on `current_user`. Inside a
+definer function `current_user` is the owner, so `accept_invite` and
+`handle_new_family` pass. Written as a definer trigger, the same test would
+exempt everyone. That is the 0334 mistake inverted, so the static test pins
+the function as invoker, and fails when `security definer` is added.
+
+## Verification
+
+- `docs/audit/member-login-link-check.sql`: four breach attempts, each undoing
+  its own write so one success cannot mask the next, and each checking the
+  profile read while the link is in place. The controls are a manager adding,
+  editing (name, role, birthday), removing and re-saving a member with its own
+  login unchanged; creating a family making its creator its parent; and the
+  service role linking a child login. Before 0335: **5 breaches**, all
+  controls pass. After: 0 breaches.
+- **Local Supabase stack: 58/58 probes. Exact CI image (`pgvector/pgvector:pg16`
+  with `plpgsql_check`), fresh replay: 58/58, 0 skipped**, ON CONFLICT targets
+  183/183. The ledger-repair rehearsal re-applies every migration, 0335
+  included, onto the existing schema.
+- `tests/member-login-link.test.ts` (4) pins the trigger's timing, invoker
+  rights and both refusals. The version guard moves to 0336.
+- The two SEED_ALL "requires two existing members" errors in the bootstrap log
+  predate this change (they appear in the previous pass's log). The harness's
+  anchor family has one member.
+
+# Pass AI — a user's active family changed when a member row was edited (DATA-019)
+
+Found while tracing SEC-025's switcher consequence: `getUserContext` falls
+back to `memberships[0]` when no stored preference names one of the user's
+families, and `memberships` comes from a read with no `ORDER BY`. Three other
+resolvers do the same, each with its own read: the bearer context, the
+billing gate in the app layout (`resolveEntitlement`), and the document-link
+check, which refuses when its choice disagrees with the page's.
+
+Measured on the local database, a user in Home and Second with no preference:
+
+```
+select family_id from family_members where user_id = <u> and is_active   -> Home, Second
+update family_members set display_name = 'U2' where <u's Home row>
+select family_id from family_members where user_id = <u> and is_active   -> Second, Home
+```
+
+A seq scan returns heap order, and an UPDATE writes the row's new version at
+the end of the heap, so the fallback moved with an unrelated edit. The fix is
+one chooser, used by all four: a valid preference wins, otherwise the earliest
+membership (`created_at`, instants compared rather than strings, ties broken
+on family id, an unknown age last). `tests/active-membership.test.ts` gives the
+same answer for both orders, holds each resolver to the chooser, and checks
+that the column-selecting two read `created_at`.
+
+# Pass AJ — a removed member's profile stayed readable by the family (PRIV-002)
+
+Found from SEC-025, by asking which policy a planted link had opened. Only one
+policy joins `family_members` to expose a *person* rather than family data:
+`profiles_select_self` (0118). Unlike every family-data helper
+(`is_family_member`, `can_manage_family`), it did not check `is_active`.
+
+Removing a member sets `is_active = false` and keeps the row, and `fm_select`
+still shows that row to the family. Measured locally: after an adult was
+removed and then changed their phone number, a parent of the family they left
+read the new number. The other direction was already closed, because
+`fm_select` hides the family's rows from the removed person and the policy's
+subquery runs under that RLS.
+
+0336 requires both memberships to be active. The probe checks the family
+reading the removed member's profile, and the removed member reading the
+family's. Its controls cover active co-members, a second family the two still
+share (the removed adult stays visible there), and a user reading their own
+profile with or without a family. One breach before, none after. **59/59 probes
+on the local stack and on a fresh replay on the exact CI image**, where 349/349
+migrations apply, 183 ON CONFLICT targets infer, and the ledger rehearsal
+re-applies every migration onto the existing schema.
+
+# Pass AK — an invited adult could make themselves the family's parent (SEC-026)
+
+The same question as SEC-025, asked of `role`: who can write it? The answer
+was the same, too. `fm_insert`, `fm_update` and `fm_delete` gate on
+`can_manage_family`, which is true for an **adult**, and none of them limits
+`role`. The role model (`lib/constants/roles.ts`) gives a parent "full control:
+members, billing, and all household data", and parent is deliberately not
+invitable. `invite-role-escalation-check.sql` already proved an invitation
+cannot be rewritten into a parent. The member table was a second door to the
+same escalation.
+
+Measured on the local database as an invited adult: self-promotion to parent,
+adding a new parent, and demoting, deactivating, deleting or editing the
+family's parent all succeeded. After the self-promotion the adult passed
+`is_family_admin`, which is all `families_delete` checks. The family module
+offered every one of these: its member cards show Edit and Remove to any
+manager (the settings page limits them to parents), and its role picker lists
+Parent.
+
+0337 adds a SECURITY INVOKER trigger on `family_members`, keyed on
+`current_user` like 0335. For a write through the API, only a parent of the
+family may change or remove a parent's row or make a row a parent's. One
+exception keeps a family from getting stuck: a family with no active parent may
+make one. Adults keep managing everyone else. The family module now hides Edit
+and Remove on parent cards from non-parents, and shows Parent in the role
+picker only to someone who may make one.
+
+The trap worth recording: deleting a family cascades through its parent's
+member row, and this trigger fires on deletes. The cascade still works, checked
+directly: a parent signed in as `authenticated` deleted their family and no
+member row remained. The family-delete-cascade and family-erasure probes pass
+too.
+
+- `docs/audit/parent-role-is-the-parents-check.sql`: 7 breaches before 0337,
+  none after. Controls: an adult adds, edits and removes a child, re-roles
+  another adult and steps down; a parent promotes and demotes; a family with
+  no parent makes one; the service role writes a parent.
+- **60/60 probes on the local stack and on a fresh replay on the exact CI
+  image** (350/350 migrations, 183 ON CONFLICT targets). The ledger rehearsal
+  re-applies every migration onto the existing schema.
+- `tests/parent-role-is-the-parents.test.ts` pins the trigger (invoker, three
+  refusals, the no-parent exception) and the UI gating. The last-manager test
+  now pins the helper that carries its check.
 
 # Final Regression
 
