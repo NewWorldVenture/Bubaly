@@ -40,7 +40,10 @@ describe('Supabase migration filename safety', () => {
   // generation (00100 and 00101 both live in 0010). nextVersion reads the first
   // four digits, so those do not drag the next free number up to 1422.
   it('points new migrations at the next unused version', () => {
-    // Bumped whenever a migration lands — 0331 lets onboarding resume only
+    // Bumped whenever a migration lands — 0335 lets only the server link a
+    // login to a family member; 0334 lets an auction close; 0333 makes the
+    // service-only functions service-only; 0332 moves decided concierge runs
+    // off "Needs you"; 0331 lets onboarding resume only
     // your own family; 0330 makes Guardian's screening
     // tables parent-written; 0329 makes the rows a parent's money
     // decision trusts parent-written; 0328 withholds a proxy bid's ceiling,
@@ -53,7 +56,7 @@ describe('Supabase migration filename safety', () => {
     // it rather than deriving it is the point: the number is how a new
     // migration announces itself, so a file that quietly reuses one, or a
     // rebase that drops one, fails here.
-    expect(audit.nextVersion).toBe('0335');
+    expect(audit.nextVersion).toBe('0336');
   });
 
   it('flags a newly introduced collision instead of silently accepting it', () => {

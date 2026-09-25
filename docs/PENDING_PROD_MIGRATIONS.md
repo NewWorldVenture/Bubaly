@@ -2525,3 +2525,42 @@ long ago. Review the backlog before applying if that would surprise families:
 status = 'available' and auction_ends_at < now();`. Also check whether any of
 those auctions' leading bids came through the SEC-024 hole (0333) before
 letting the backlog settle.
+
+## 0335 — any account could link a stranger's login into its own family
+
+`supabase/migrations/0335_only_the_server_links_a_login_to_a_member.sql`
+
+**Severity: high. Safe in either order** relative to a deploy: nothing in the app
+writes `family_members.user_id` from the browser.
+
+`fm_insert` and `fm_update` let a family's parent or adult write every column
+of their own family's member rows, `user_id` included, and every account is the
+parent of the family it made. Writing another user's id onto a member row made
+that user a co-member, and `profiles_select_self` shows co-members' profiles to
+each other. The feedback board shows every idea's `author_id` and every vote's
+`user_id` to any signed-in account, so the ids were there to take.
+
+Measured on the local database as a signed-in parent, before 0335:
+
+```
+insert a member row carrying another user's id         -> succeeded
+update an existing member row to another user's id     -> succeeded
+select from profiles where id = <that user>            -> email, full name, date of birth, phone
+update a co-parent's row to user_id = null             -> succeeded
+```
+
+0335 adds a SECURITY INVOKER trigger that refuses a change to `user_id` when
+the statement runs as `authenticated` or `anon`. The server (service role) and
+the database's own definer functions (`accept_invite`, `handle_new_family`,
+`ensure_family_for_user`) run as other roles and are unaffected. After 0335
+all four are refused with `42501`. Adding, editing and removing members, a new
+family's creator becoming its parent, and the service role linking a child
+login all still work. `docs/audit/member-login-link-check.sql` proves both
+halves (58/58 on the local stack and on the exact CI image, and the migration
+re-applies cleanly onto an existing schema).
+
+**After applying, consider checking production for links planted before it:**
+member rows whose `user_id` has no matching accepted invitation, is not the
+family's `created_by`, and is not a child login the server created. The row
+records no writer, so the database alone cannot tell a planted link from a
+real one; the check narrows the list for a person to review.
