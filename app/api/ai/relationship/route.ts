@@ -44,7 +44,7 @@ export async function POST() {
       .gte('created_at', startOfDay.toISOString());
     if ((usedToday ?? 0) >= RELATIONSHIP_AI_DAILY_LIMIT) {
       return NextResponse.json(
-        { error: `You've reached today's suggestion limit (${RELATIONSHIP_AI_DAILY_LIMIT}/day). Try again tomorrow.` },
+        { error: t('relationship.suggestionDailyLimitReached', { limit: RELATIONSHIP_AI_DAILY_LIMIT }) },
         { status: 429 },
       );
     }

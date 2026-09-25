@@ -115,7 +115,7 @@ export function LanguageModule() {
   async function addStarterDeck() {
     if (!goal) return;
     const deckCards = starterDeck(goal.language_code);
-    if (!deckCards.length) return toastError(`No starter deck for ${goal.language_label} yet — add cards by hand.`);
+    if (!deckCards.length) return toastError(tr('language.noStarterDeckYet', { language: goal.language_label }));
     const have = new Set(myCards.map((c) => c.term.toLowerCase()));
     const fresh = deckCards.filter((c) => !have.has(c.term.toLowerCase()));
     if (!fresh.length) return toastError(tr('languageModule.theStarterDeckIsAlready'));

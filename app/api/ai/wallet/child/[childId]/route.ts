@@ -58,7 +58,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ childI
         .gte('created_at', startOfDay.toISOString());
       if ((usedToday ?? 0) >= dailyLimit) {
         return NextResponse.json(
-          { error: `You've reached today's AI Money Coach limit (${dailyLimit}/day on your plan). Upgrade to Plus for unlimited coaching.` },
+          { error: tr('wallet.coachDailyLimitReached', { limit: dailyLimit }) },
           { status: 429 },
         );
       }

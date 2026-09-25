@@ -51,7 +51,11 @@ import { scanPaths } from '../scripts/i18n-scan.mjs';
 // Then to 2,848 as 24 more module/vacation toasts were translated: declutter,
 // graph, language, moving, planning, projects, routines, scan, shopping,
 // weather, workload, calendar, fridge-chef, moments and the trip screens.
-const CEILING = 2848;
+//
+// Then to 2,835 as the AI daily-limit, sync, weather, social-feed, language,
+// medical and feedback-upload messages were translated (the feedback one is
+// now a generic message that no longer leaks the storage error).
+const CEILING = 2835;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);

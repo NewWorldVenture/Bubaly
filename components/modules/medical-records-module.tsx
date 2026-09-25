@@ -139,9 +139,9 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
       ? await sb.from('health_providers').update(fields).eq('id', providerForm.id).select('id')
       : await sb.from('health_providers').insert({ ...fields, family_id: familyId, kind, created_by: userId }).select('id');
     setSaving(false);
-    if (err) { toastError(`Could not save ${providerWord.toLowerCase()}`); return; }
+    if (err) { toastError(kind === 'medical' ? t('medical.couldNotSaveDoctor') : t('medical.couldNotSaveDentist')); return; }
     if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
-    success(`${providerWord} saved`);
+    success(kind === 'medical' ? t('medical.doctorSaved') : t('medical.dentistSaved'));
     setProviderForm(null);
   }
 
@@ -159,9 +159,9 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
     const sb = createClient();
     const { path, error: err } = await uploadFamilyDocument(sb, { familyId, folder: 'insurance', file });
     setUploading(null);
-    if (err || !path) { toastError(err ?? 'Upload failed'); return; }
+    if (err || !path) { toastError(err ?? t('medical.uploadFailed')); return; }
     setPolicyForm((f) => (f ? { ...f, [side === 'front' ? 'front_image_path' : 'back_image_path']: path } : f));
-    success(`${side === 'front' ? 'Front' : 'Back'} of card uploaded`);
+    success(side === 'front' ? t('medical.frontOfCardUploaded') : t('medical.backOfCardUploaded'));
   }
 
   async function savePolicy() {

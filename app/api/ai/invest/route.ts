@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
         .from('wallet_audit_logs').select('id', { count: 'exact', head: true })
         .eq('family_id', familyId).eq('action', 'ai_invest_call').gte('created_at', startOfDay.toISOString());
       if ((count ?? 0) >= dailyLimit) {
-        return NextResponse.json({ error: `You've reached today's Money Mentor limit (${dailyLimit}/day). Upgrade to Plus for unlimited.` }, { status: 429 });
+        return NextResponse.json({ error: t('invest.mentorDailyLimitReached', { limit: dailyLimit }) }, { status: 429 });
       }
     }
 

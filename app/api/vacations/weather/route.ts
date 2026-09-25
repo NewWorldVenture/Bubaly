@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
   let geo, days;
   try {
     geo = await geocode(location.trim());
-    if (!geo) return NextResponse.json({ error: `Could not find “${location}”.` }, { status: 404 });
+    if (!geo) return NextResponse.json({ error: t('vacationsWeather.couldNotFindLocation', { location }) }, { status: 404 });
     days = await fetchForecast(geo.latitude, geo.longitude, trip.start_date, trip.end_date);
   } catch (err) {
     console.error('Weather fetch error:', err);

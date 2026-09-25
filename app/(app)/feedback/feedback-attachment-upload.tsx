@@ -50,7 +50,7 @@ export function FeedbackAttachmentUpload({
       // crypto.randomUUID (122 bits) and was already right there.
       const path = `${userId}/${unguessableObjectName(file.name.toLowerCase())}`;
       const { data, error } = await sb.storage.from(FEEDBACK_ATTACHMENTS_BUCKET).upload(path, file, { upsert: false, cacheControl: '31536000' });
-      if (error) { toastError(`Upload failed: ${error.message}`); return; }
+      if (error) { toastError(t('feedbackAttachment.uploadFailedTryAgain')); return; }
       const previousPath = ownedPath ?? feedbackAttachmentPath(value, process.env.NEXT_PUBLIC_SUPABASE_URL);
       if (previousPath && previousPath !== data.path) await removeFeedbackAttachmentPath(sb, previousPath);
       // The PATH, not a public URL. The bucket is private as of 0325, so

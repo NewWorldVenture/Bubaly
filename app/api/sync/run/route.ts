@@ -44,7 +44,7 @@ export async function POST(req: Request) {
   const adapter = getAdapter(provider);
   if (!adapter) return NextResponse.json({ error: t('run.unsupportedSyncProvider') }, { status: 400 });
   if (!adapter.isConfigured()) {
-    return NextResponse.json({ error: `${adapter.label} sync isn’t configured yet.` }, { status: 503 });
+    return NextResponse.json({ error: t('sync.providerNotConfiguredYet', { provider: adapter.label }) }, { status: 503 });
   }
 
   const { data: account, error: accountError } = await admin
@@ -59,7 +59,7 @@ export async function POST(req: Request) {
     console.error('[sync] account read failed', accountError);
     return NextResponse.json({ error: t('sync.syncFailed') }, { status: 503 });
   }
-  if (!account) return NextResponse.json({ error: `${adapter.label} is not connected for this account.` }, { status: 400 });
+  if (!account) return NextResponse.json({ error: t('sync.providerNotConnectedForAccount', { provider: adapter.label }) }, { status: 400 });
 
   const limited = await enforceRequestRateLimit(admin, `sync:${ctx.active.familyId}:${ctx.user.id}:${provider}`, { limit: 10 });
   if (!limited.ok) return NextResponse.json(
