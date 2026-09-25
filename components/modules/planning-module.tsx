@@ -68,7 +68,7 @@ export function PlanningModule() {
     setGenerating(false);
     if (!res.ok) { toastError(res.error ?? 'Could not generate plans'); return; }
     if (res.plans === 0) { toastError(t('planningModule.nothingOnTheHorizonYet')); return; }
-    success(`${res.plans} prep ${res.plans === 1 ? 'plan' : 'plans'} ready`);
+    success(res.plans === 1 ? t('planning.prepPlanReadyOne', { count: res.plans ?? 0 }) : t('planning.prepPlansReadyMany', { count: res.plans ?? 0 }));
   }
 
   async function toggleStep(step: Step) {

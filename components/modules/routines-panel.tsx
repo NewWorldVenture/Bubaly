@@ -151,7 +151,7 @@ export function RoutinesPanel({ events, weekStartMonday, onApplied }: {
       if (!result.ok) { toastError(result.error); return; }
 
       const ids = result.eventIds;
-      success(`Added ${ids.length} events for this week`, {
+      success(tr('routines.addedEventsForWeek', { count: ids.length }), {
         label: 'Undo',
         onClick: () => {
           void undoCalendarEventsAction(ids).then((undone) => {

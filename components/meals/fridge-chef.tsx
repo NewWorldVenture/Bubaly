@@ -82,7 +82,7 @@ export function FridgeChef() {
       const json = await res.json();
       if (!res.ok) { toastError(json.error ?? t('fridgeChef.couldNotUpdateYourGrocery')); return; }
       setAdded((prev) => new Set(prev).add(index));
-      success(`Added ${json.added ?? recipe.need.length} item${(json.added ?? 0) === 1 ? '' : 's'} to your grocery list.`);
+      success((json.added ?? recipe.need.length) === 1 ? t('fridgeChef.addedItemToGroceryOne', { count: json.added ?? recipe.need.length }) : t('fridgeChef.addedItemsToGroceryMany', { count: json.added ?? recipe.need.length }));
     } catch {
       toastError(t('fridgeChef.couldNotUpdateYourGrocery'));
     } finally {
@@ -102,7 +102,7 @@ export function FridgeChef() {
       const json = await res.json();
       if (!res.ok) { toastError(json.error ?? t('fridgeChef.couldNotAddThatTo')); return; }
       setPlanned((prev) => new Set(prev).add(index));
-      success(`“${recipe.title}” planned for tonight's dinner.`);
+      success(t('fridgeChef.plannedForTonightDinner', { name: recipe.title }));
     } catch {
       toastError(t('fridgeChef.couldNotAddThatTo'));
     } finally {

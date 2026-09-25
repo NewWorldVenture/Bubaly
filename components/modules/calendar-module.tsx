@@ -371,7 +371,7 @@ export function CalendarModule() {
         return;
       }
       if (json.error) throw new Error(json.error);
-      success(`Synced ${json.synced} events`); void refresh();
+      success(tr('calendar.syncedEventsCount', { count: json.synced ?? 0 })); void refresh();
     } catch (err) { toastError(describeDbError(err, tr('calendarModule.syncFailed'))); }
     finally { setSyncing(false); }
   }

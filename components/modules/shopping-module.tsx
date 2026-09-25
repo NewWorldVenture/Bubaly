@@ -178,7 +178,7 @@ export function ShoppingModule() {
       const result = await clearCheckedGroceriesAction(activeListId);
       if (!result.ok) throw new Error(result.error);
       if (result.removed === 0) return;
-      success(`Cleared ${result.removed} completed item${result.removed === 1 ? '' : 's'}`);
+      success(result.removed === 1 ? t('shopping.clearedCompletedItemOne', { count: result.removed }) : t('shopping.clearedCompletedItemsMany', { count: result.removed }));
       void refreshItems();
     });
   }

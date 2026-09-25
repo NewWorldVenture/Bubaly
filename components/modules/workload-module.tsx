@@ -84,7 +84,7 @@ export function WorkloadModule({
       setApplying(null);
       if (!res.ok) { toastError(res.error); return; }
       setApplied(prev => new Set(prev).add(s.assignmentId));
-      success(`“${s.choreTitle}” moved to ${s.toName}.`);
+      success(tr('workload.choreMovedToName', { title: s.choreTitle, name: s.toName }));
       router.refresh();
     });
   }

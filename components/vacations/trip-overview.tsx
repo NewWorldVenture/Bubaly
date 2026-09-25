@@ -122,7 +122,7 @@ export function TripOverview({ vacationId }: { vacationId: string }) {
     try {
       const res = await fetch('/api/vacations/ai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'recommendations', vacationId }) });
       const data = await res.json();
-      if (!res.ok) toastError(data.error || 'Failed'); else success(`${data.count} recommendations`);
+      if (!res.ok) toastError(data.error || 'Failed'); else success(tr('tripOverview.recommendationsCount', { count: data.count }));
     } catch { toastError(tr('tripOverview.networkError')); }
     setRefreshing(false);
   }

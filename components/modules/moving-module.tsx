@@ -100,7 +100,7 @@ export function MovingWorkspace() {
     })));
     setPlanning(false);
     if (error) return toastError(describeDbError(error));
-    success(`${plan.length} task${plan.length === 1 ? '' : 's'} added to the timeline`);
+    success(plan.length === 1 ? tr('moving.taskAddedToTimelineOne', { count: plan.length }) : tr('moving.tasksAddedToTimelineMany', { count: plan.length }));
   }
 
   async function setTaskStatus(t: Task, status: Task['status']) {

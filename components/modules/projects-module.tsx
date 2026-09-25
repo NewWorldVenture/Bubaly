@@ -326,7 +326,7 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
     const { error } = await createClient().from('project_materials').insert(fresh.map((m) => ({ family_id: familyId, project_id: project.id, name: m.name, quantity: m.quantity, unit: m.unit ?? null, est_cost_cents: m.estCents, created_by: userId })));
     setSuggesting(false);
     if (error) return toastError(describeDbError(error));
-    success(`${fresh.length} material${fresh.length === 1 ? '' : 's'} added`);
+    success(fresh.length === 1 ? tr('projects.materialAddedOne', { count: fresh.length }) : tr('projects.materialsAddedMany', { count: fresh.length }));
   }
 
   async function setQuoteStatus(q: Quote, status: ProjectQuoteStatus) {
@@ -344,7 +344,7 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
     if (status === 'accepted') {
       const { error: linkError } = await supabase.from('home_projects').update({ contractor_id: q.contractor_id ?? project.contractor_id, status: project.status === 'quoting' || project.status === 'planning' || project.status === 'idea' ? 'scheduled' : project.status }).eq('id', project.id);
       if (linkError) toastError(describeDbError(linkError));
-      success(`Accepted ${q.contractor_name} at ${money(q.amount_cents)}`);
+      success(tr('projects.acceptedNameAtAmount', { name: q.contractor_name, amount: money(q.amount_cents) }));
     }
   }
 

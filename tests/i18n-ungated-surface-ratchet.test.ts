@@ -47,7 +47,11 @@ import { scanPaths } from '../scripts/i18n-scan.mjs';
 //
 // Lowered again to 2,872 as sixteen module toasts were translated: copied,
 // snoozed, approved, saved, disconnected, a file too large, a pin limit.
-const CEILING = 2872;
+//
+// Then to 2,848 as 24 more module/vacation toasts were translated: declutter,
+// graph, language, moving, planning, projects, routines, scan, shopping,
+// weather, workload, calendar, fridge-chef, moments and the trip screens.
+const CEILING = 2848;
 
 describe('the ungated i18n surface does not get worse', () => {
   const findings = scanPaths(['app', 'components']);

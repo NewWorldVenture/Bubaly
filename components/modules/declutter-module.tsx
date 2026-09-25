@@ -86,7 +86,7 @@ export function DeclutterModule() {
     })));
     setPlanning(false);
     if (error) return toastError(describeDbError(error));
-    success(`${plan.length} mission${plan.length === 1 ? '' : 's'} planned for the week`);
+    success(plan.length === 1 ? tr('declutter.missionPlannedForWeekOne', { count: plan.length }) : tr('declutter.missionsPlannedForWeekMany', { count: plan.length }));
   }
 
   async function skipMission(m: Mission) {
@@ -321,7 +321,7 @@ export function DeclutterModule() {
           onClose={() => setMissionForm({ open: false, mission: null })} onSaved={() => { setMissionForm({ open: false, mission: null }); success(tr('declutterModule.missionSaved')); }} />
       )}
       {completing && (
-        <CompleteForm familyId={familyId} userId={userId} mission={completing} memberId={completing.assignee_id ?? selfMember?.id ?? null} onClose={() => setCompleting(null)} onSaved={(pts) => { setCompleting(null); success(`Mission done · +${pts} pts`); }} />
+        <CompleteForm familyId={familyId} userId={userId} mission={completing} memberId={completing.assignee_id ?? selfMember?.id ?? null} onClose={() => setCompleting(null)} onSaved={(pts) => { setCompleting(null); success(tr('declutter.missionDonePlusPoints', { points: pts })); }} />
       )}
       {sessionOpen && (
         <SessionForm familyId={familyId} userId={userId} zones={activeZones} members={members} defaultMember={selfMember?.id ?? null} onClose={() => setSessionOpen(false)} onSaved={() => { setSessionOpen(false); success(tr('declutterModule.sessionLogged')); }} />
