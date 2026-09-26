@@ -49,9 +49,15 @@ function matches(row: PushFixtureRow, expression: string): boolean {
 /** Stateful execution fixture: filters, multi-column ordering, limits, keysets and writes all apply. */
 export function pushDispatchDb(tables: Record<string, PushFixtureRow[]>, options: { maxRows?: number } = {}) {
   tables.app_settings ??= [];
+  // Per-device receipts (0336). Present by default because every dispatch reads
+  // them; a test that needs the pre-0336 database deletes the key.
+  tables.push_deliveries ??= [];
   const faults = new Set<string>();
   const thrownFaults = new Set<string>();
   const emptyWrites = new Set<string>();
+  // Tables the database does not have yet — answered the way PostgREST does
+  // (PGRST205), not with a thrown fixture error.
+  const missingTables = new Set<string>();
   const stamps: string[] = [];
   const attempts = new Map<string, number>();
   const calls: { table: string; operation: string; count: number; limit: number; filter?: string }[] = [];
@@ -66,10 +72,19 @@ export function pushDispatchDb(tables: Record<string, PushFixtureRow[]>, options
       const operationKey = `${table}:${operation}`;
       const attempt = (attempts.get(operationKey) ?? 0) + 1;
       attempts.set(operationKey, attempt);
+      if (missingTables.has(table)) return { data: null, error: { code: 'PGRST205', message: `Could not find the table 'public.${table}' in the schema cache` } };
       if (!(table in tables)) throw new Error(`Unexpected table ${table}`);
       if (thrownFaults.has(operationKey) || thrownFaults.has(`${operationKey}:${attempt}`)) throw new Error('Fixture connection failed');
       if (faults.has(operationKey) || faults.has(`${operationKey}:${attempt}`)) return { data: null, error: { message: 'Fixture database unavailable' } };
       if (emptyWrites.has(`${table}:${operation}`)) return { data: [], error: null };
+      if (operation === 'upsert' && table === 'push_deliveries') {
+        // Keyed on (notification_id, device_id) with ignoreDuplicates, as the
+        // primary key and the dispatcher's upsert are.
+        const existing = tables[table].find(row => row.notification_id === patch.notification_id && row.device_id === patch.device_id);
+        if (!existing) tables[table].push({ ...patch, delivered_at: new Date().toISOString() });
+        calls.push({ table, operation, count: existing ? 0 : 1, limit });
+        return { data: existing ? [] : [{ ...patch }], error: null };
+      }
       if (operation === 'upsert') {
         const existing = tables[table].find(row => row.key === patch.key);
         if (existing) Object.assign(existing, patch);
@@ -118,5 +133,5 @@ export function pushDispatchDb(tables: Record<string, PushFixtureRow[]>, options
     };
     return query;
   };
-  return { db: { from } as unknown as SupabaseClient<Database>, tables, faults, thrownFaults, emptyWrites, stamps, calls };
+  return { db: { from } as unknown as SupabaseClient<Database>, tables, faults, thrownFaults, emptyWrites, missingTables, stamps, calls };
 }

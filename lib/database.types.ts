@@ -2195,6 +2195,12 @@ export interface Database {
         { id?: string; user_id: string; family_id?: string | null; platform?: string; provider?: string; endpoint?: string | null; p256dh?: string | null; auth?: string | null; token?: string | null; device_key: string; user_agent?: string | null; enabled?: boolean; last_seen_at?: string; created_by?: string | null; updated_by?: string | null; metadata?: Json },
         Partial<{ family_id: string | null; platform: string; provider: string; endpoint: string | null; p256dh: string | null; auth: string | null; token: string | null; user_agent: string | null; enabled: boolean; last_seen_at: string; updated_by: string | null; metadata: Json }>
       >;
+      // Per-device push receipts (migration 0336): service role only.
+      push_deliveries: T<
+        { notification_id: string; device_id: string; delivered_at: string },
+        { notification_id: string; device_id: string; delivered_at?: string },
+        Partial<{ delivered_at: string }>
+      >;
 
       // ---- Home & Maintenance command center (migration 0036) ----
       homes: T<
