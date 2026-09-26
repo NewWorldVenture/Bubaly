@@ -15,7 +15,7 @@
     "dev": "next dev",
     "build": "node --max-old-space-size=4096 node_modules/next/dist/bin/next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "next lint --max-warnings 0",
     "i18n:scan": "node scripts/i18n-scan.mjs --list app components",
     "i18n:gate": "node scripts/i18n-gate.mjs",
     "typecheck": "tsc --noEmit",

@@ -103,3 +103,61 @@ export function detachedLabels(file: string, text?: string): Site[] {
   visit(sf);
   return out;
 }
+
+/**
+ * Which `Field` a file uses. The ui kit's (`@/components/ui/input`) renders
+ * `<label htmlFor={id}>` and hands that id to a render-prop child, so its
+ * control is named only if it takes the id. The home and invest ones wrap the
+ * child in a `<label>`, so anything inside is named.
+ */
+function fieldKindOf(sf: ts.SourceFile): 'render-prop' | 'wrapping' | null {
+  let kind: 'render-prop' | 'wrapping' | null = null;
+  for (const st of sf.statements) {
+    if (ts.isImportDeclaration(st) && /\bField\b/.test(st.importClause?.getText() ?? '')) {
+      kind = (st.moduleSpecifier as ts.StringLiteral).text === '@/components/ui/input' ? 'render-prop' : 'wrapping';
+    }
+    if (ts.isFunctionDeclaration(st) && st.name?.text === 'Field' && /<label\b/.test(st.getText())) kind = /htmlFor/.test(st.getText()) ? 'render-prop' : 'wrapping';
+  }
+  return kind;
+}
+
+function namedByField(node: ts.Node, idText: string | undefined, kind: 'render-prop' | 'wrapping' | null): boolean {
+  if (!kind) return false;
+  for (let p = node.parent; p; p = p.parent) {
+    if (ts.isJsxElement(p) && p.openingElement.tagName.getText() === 'Field') return kind === 'wrapping' || idText !== undefined;
+  }
+  return false;
+}
+
+/**
+ * `<select>` (or the ui `Select`, which spreads its props onto one) with no
+ * accessible name: no aria-label/labelledby/title, no wrapping `<label>`, and
+ * no `<label htmlFor>` in the same file pointing at its id. An id alone names
+ * nothing; the old ratchet counted one as a name.
+ */
+export function unnamedSelects(file: string, text?: string): Site[] {
+  const sf = parse(file, text);
+  const out: Site[] = [];
+  const fieldKind = fieldKindOf(sf);
+  const htmlFors = new Set<string>();
+  const collect = (n: ts.Node) => {
+    if (ts.isJsxAttribute(n) && n.name.getText() === 'htmlFor' && n.initializer) htmlFors.add(n.initializer.getText().replace(/^\{|\}$/g, ''));
+    ts.forEachChild(n, collect);
+  };
+  collect(sf);
+  const visit = (node: ts.Node) => {
+    const open = ts.isJsxElement(node) ? node.openingElement : ts.isJsxSelfClosingElement(node) ? node : null;
+    if (open && /^(select|Select)$/.test(open.tagName.getText())) {
+      const attrs = open.attributes.properties;
+      const names = attrNames(open.attributes);
+      const id = attrs.find((p) => !ts.isJsxSpreadAttribute(p) && p.name.getText() === 'id') as ts.JsxAttribute | undefined;
+      const idText = id?.initializer?.getText().replace(/^\{|\}$/g, '');
+      const named = names.some((n) => n === 'aria-label' || n === 'aria-labelledby' || n === 'title' || n === '...')
+        || insideLabel(node) || (idText !== undefined && htmlFors.has(idText)) || namedByField(node, idText, fieldKind);
+      if (!named) out.push({ file, line: sf.getLineAndCharacterOfPosition(node.getStart()).line + 1, what: open.getText().replace(/\s+/g, ' ').slice(0, 80) });
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return out;
+}

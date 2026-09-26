@@ -102,7 +102,7 @@ export default async function PersonalizationPage() {
             <textarea name="body" rows={2} placeholder={t('adminMarketingPersonalization.bodyOptional')} className={`${inputCls} h-auto py-2 sm:col-span-2`} />
           </div>
           <div className="flex items-center gap-3">
-            <select name="status" defaultValue="active" className={`${inputCls} w-40`}>
+            <select aria-label={t('fieldName.status')} name="status" defaultValue="active" className={`${inputCls} w-40`}>
               <option value="active">{t('adminMarketingPersonalization.active')}</option>
               <option value="paused">{t('adminMarketingPersonalization.paused')}</option>
             </select>

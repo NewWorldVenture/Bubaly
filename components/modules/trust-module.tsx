@@ -733,7 +733,7 @@ function EmergencyTab({ active, canManage }: { active: Emergency | null; canMana
           <>
             <div className="mt-4">
               <p className="mb-1.5 text-xs font-semibold">{tr('trust.type')}</p>
-              <Select value={kind} onChange={e => setKind(e.target.value)}>
+              <Select aria-label={tr('fieldName.type')} value={kind} onChange={e => setKind(e.target.value)}>
                 {[['medical', 'Medical emergency'], ['missing_person', 'Missing person'], ['severe_weather', 'Severe weather'], ['natural_disaster', 'Natural disaster'], ['vehicle_accident', 'Vehicle accident'], ['general', 'General']].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </Select>
             </div>

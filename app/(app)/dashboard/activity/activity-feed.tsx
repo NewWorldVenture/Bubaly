@@ -134,7 +134,7 @@ export function ActivityFeed({
           })}
         </div>
         {members.length > 1 && (
-          <select
+          <select aria-label={t('fieldName.filterByMember')}
             value={filterMember}
             onChange={(e) => setFilterMember(e.target.value)}
             className="ml-auto rounded-lg border border-border bg-surface px-2 py-1 text-xs text-fg"

@@ -76,7 +76,7 @@ export default async function EmailPage() {
             <input name="subject" required placeholder={t('adminMarketingEmail.subjectLine')} className={inputCls} />
             <input name="preview_text" placeholder={t('adminMarketingEmail.previewText')} className={inputCls} />
             <input name="from_name" placeholder={t('adminMarketingEmail.fromNameOptional')} className={inputCls} />
-            <select name="segment_id" className={inputCls}>
+            <select aria-label={t('fieldName.audienceSegment')} name="segment_id" className={inputCls}>
               <option value="">{t('adminMarketingEmail.allCustomers')}</option>
               {(segments ?? []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>

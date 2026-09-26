@@ -128,7 +128,7 @@ export default async function AssetsPage() {
                           <input name="name" defaultValue={a.name} placeholder={tr('assets.name')} className={inputCls} />
                           <input name="alt_text" defaultValue={a.alt_text ?? ''} placeholder={tr('assets.altText')} className={inputCls} />
                           <input name="tags" defaultValue={a.tags.join(', ')} placeholder={tr('assets.tags')} className={inputCls} />
-                          <select name="license" defaultValue={a.license ?? 'original'} className={inputCls}><option value="original">{tr('assets.originalOwned')}</option><option value="cc0">{tr('assets.cc0PublicDomain')}</option><option value="cc_by">{tr('assets.creativeCommonsBy')}</option><option value="licensed">{tr('assets.licensedWithProof')}</option></select>
+                          <select aria-label={tr('fieldName.license')} name="license" defaultValue={a.license ?? 'original'} className={inputCls}><option value="original">{tr('assets.originalOwned')}</option><option value="cc0">{tr('assets.cc0PublicDomain')}</option><option value="cc_by">{tr('assets.creativeCommonsBy')}</option><option value="licensed">{tr('assets.licensedWithProof')}</option></select>
                           <input name="source_url" defaultValue={a.source_url ?? ''} placeholder={tr('assets.sourceUrl')} className={inputCls} />
                           <input name="attribution" defaultValue={a.attribution ?? ''} placeholder={tr('assets.attribution')} className={inputCls} />
                           <button type="submit" className={`${btnCls} w-full`}>{tr('assets.save')}</button>

@@ -99,7 +99,7 @@ export default async function SocialSettingsPage() {
                 <input type="hidden" name="user_id" value={m.user_id} />
                 <span className="min-w-0 flex-1 truncate text-sm">{m.display_name ?? 'Member'}</span>
                 {!explicit && <Badge tone="neutral" title={t('settings.defaultByHouseholdRole')}>default</Badge>}
-                <select name="social_role" defaultValue={effective} disabled={!canManage} className="rounded-lg border border-border bg-elevated px-2 py-1 text-xs">
+                <select aria-label={t('fieldName.socialRole')} name="social_role" defaultValue={effective} disabled={!canManage} className="rounded-lg border border-border bg-elevated px-2 py-1 text-xs">
                   {SOCIAL_ROLES.map((r) => <option key={r} value={r}>{SOCIAL_ROLE_LABELS[r]}</option>)}
                 </select>
                 <button disabled={!canManage} className="rounded-lg bg-elevated px-2 py-1 text-xs font-medium disabled:opacity-50">Set</button>

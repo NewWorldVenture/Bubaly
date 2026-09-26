@@ -370,7 +370,7 @@ export function ChoresModule() {
           <div className="mb-2 flex items-center justify-between">
             <p className="text-sm font-semibold">{tr('chores.familyChorePoints')}</p>
             <div className="relative">
-              <select value={pointsWindow} onChange={(e) => setPointsWindow(e.target.value as typeof pointsWindow)}
+              <select aria-label={tr('fieldName.timePeriod')} value={pointsWindow} onChange={(e) => setPointsWindow(e.target.value as typeof pointsWindow)}
                 className="appearance-none rounded-lg border border-border bg-surface/60 py-1 pl-2 pr-6 text-[11px] text-muted focus-ring">
                 <option value="week">{tr('chores.thisWeek')}</option>
                 <option value="month">{tr('chores.thisMonth')}</option>

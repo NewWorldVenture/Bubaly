@@ -61,7 +61,7 @@ export function ExperimentControls({ id, status, variants }: {
     <div className="flex flex-wrap items-center gap-2">
       {status !== 'running' && <button disabled={pending} onClick={() => go(() => setExperimentStatus(id, 'running'))} className="rounded-lg border border-border px-2.5 py-1 text-xs hover:bg-elevated">{t('adminMarketingExperimentsExperimentsClient.start')}</button>}
       {status === 'running' && <button disabled={pending} onClick={() => go(() => setExperimentStatus(id, 'paused'))} className="rounded-lg border border-border px-2.5 py-1 text-xs hover:bg-elevated">{t('adminMarketingExperimentsExperimentsClient.pause')}</button>}
-      <select
+      <select aria-label={t('fieldName.declareWinner')}
         disabled={pending}
         defaultValue=""
         onChange={(e) => { if (e.target.value) go(() => setExperimentWinner(id, e.target.value)); }}

@@ -85,7 +85,7 @@ export default async function ExitIntentPage() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <input name="name" required placeholder={t('adminMarketingExitIntent.internalName')} className={`${inputCls} lg:col-span-2`} />
             <input name="priority" type="number" defaultValue={0} placeholder={t('adminMarketingExitIntent.priority')} className={inputCls} />
-            <select name="status" defaultValue="active" className={inputCls}>
+            <select aria-label={t('fieldName.status')} name="status" defaultValue="active" className={inputCls}>
               <option value="active">{t('adminMarketingExitIntent.active')}</option>
               <option value="paused">{t('adminMarketingExitIntent.paused')}</option>
             </select>
@@ -96,7 +96,7 @@ export default async function ExitIntentPage() {
           </div>
           <p className="text-xs font-medium text-muted">{t('adminMarketingExitIntent.trigger')}</p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <select name="mode" defaultValue="mouseleave" className={inputCls}>
+            <select aria-label={t('fieldName.trigger')} name="mode" defaultValue="mouseleave" className={inputCls}>
               <option value="mouseleave">{t('adminMarketingExitIntent.onExitMouseleave')}</option>
               <option value="scroll">{t('adminMarketingExitIntent.onScrollDepth')}</option>
             </select>
@@ -109,7 +109,7 @@ export default async function ExitIntentPage() {
             <input name="campaign" placeholder={t('adminMarketingExitIntent.utmCampaignS')} className={inputCls} />
             <input name="paths" placeholder={t('adminMarketingExitIntent.pathPrefixEs')} className={inputCls} />
             <input name="countries" placeholder={t('adminMarketingExitIntent.countryCodeS')} className={inputCls} />
-            <select name="returning" defaultValue="" className={inputCls}>
+            <select aria-label={t('fieldName.returningVisitors')} name="returning" defaultValue="" className={inputCls}>
               <option value="">{t('adminMarketingExitIntent.newOrReturning')}</option>
               <option value="true">{t('adminMarketingExitIntent.returningOnly')}</option>
               <option value="false">{t('adminMarketingExitIntent.newVisitorsOnly')}</option>

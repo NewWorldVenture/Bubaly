@@ -138,7 +138,7 @@ export default async function CompetitivePage() {
           <input name="source_domain" required placeholder="techcrunch.com" className={`${inputCls} lg:col-span-2`} />
           <input name="target_url" placeholder="/blog/post" className={inputCls} />
           <input name="authority" type="number" min="0" max="100" placeholder={t('adminMarketingCompetitive.authority')} className={inputCls} />
-          <select name="status" defaultValue="active" className={inputCls}><option value="active">{t('adminMarketingCompetitive.active')}</option><option value="lost">{t('adminMarketingCompetitive.lost')}</option><option value="toxic">{t('adminMarketingCompetitive.toxic')}</option></select>
+          <select aria-label={t('fieldName.status')} name="status" defaultValue="active" className={inputCls}><option value="active">{t('adminMarketingCompetitive.active')}</option><option value="lost">{t('adminMarketingCompetitive.lost')}</option><option value="toxic">{t('adminMarketingCompetitive.toxic')}</option></select>
           <button type="submit" className={`${btnCls} lg:col-span-5`}>{t('adminMarketingCompetitive.addBacklink')}</button>
         </form>
         {links.length === 0 ? <p className="py-3 text-center text-sm text-muted">{t('adminMarketingCompetitive.noBacklinksTracked')}</p> : (

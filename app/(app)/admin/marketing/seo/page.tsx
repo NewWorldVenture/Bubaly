@@ -120,7 +120,7 @@ export default async function SeoPage() {
                           <input name="title" defaultValue={page.title ?? ''} placeholder={t('seo.seoTitle')} className={inputCls} />
                           <input name="meta_description" defaultValue={page.meta_description ?? ''} placeholder={t('seo.metaDescription')} className={`${inputCls} sm:col-span-2`} />
                           <input name="score" type="number" min="0" max="100" defaultValue={page.score ?? ''} placeholder={t('seo.score0100')} className={inputCls} />
-                          <select name="status" defaultValue={page.status} className={inputCls}>{PAGE_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select>
+                          <select aria-label={t('fieldName.status')} name="status" defaultValue={page.status} className={inputCls}>{PAGE_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select>
                           <button type="submit" className="rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand/90 sm:col-span-2">{t('seo.savePageAudit')}</button>
                         </form>
                         <form action={archiveSeoPage} className="mt-2">
@@ -138,7 +138,7 @@ export default async function SeoPage() {
                     <input name="title" placeholder={t('adminMarketingSeo.seoTitle')} className={inputCls} />
                     <input name="meta_description" placeholder={t('adminMarketingSeo.metaDescription')} className={`${inputCls} sm:col-span-2`} />
                     <input name="score" type="number" min="0" max="100" placeholder={t('adminMarketingSeo.score0100')} className={inputCls} />
-                    <select name="status" defaultValue="active" className={inputCls}>{PAGE_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select>
+                    <select aria-label={t('fieldName.status')} name="status" defaultValue="active" className={inputCls}>{PAGE_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select>
                     <button type="submit" className="rounded-lg border border-border px-3 py-2 text-sm font-semibold hover:bg-elevated sm:col-span-2">{t('adminMarketingSeo.addPageAudit')}</button>
                   </form>
                 </details>
@@ -179,9 +179,9 @@ export default async function SeoPage() {
                                   <form action={updateSeoKeyword} className="mt-2 min-w-64 space-y-2">
                                     <input type="hidden" name="id" value={k.id} />
                                     <input name="keyword" required defaultValue={k.keyword} className={inputCls} />
-                                    <select name="intent" defaultValue={k.intent ?? ''} className={inputCls}><option value="">{t('seo.intent')}</option>{INTENTS.map((intent) => <option key={intent} value={intent}>{intent}</option>)}</select>
-                                    <select name="target_path" defaultValue={k.target_path ?? ''} className={inputCls}><option value="">{t('seo.targetPage')}</option>{SITE_PAGES.map((path) => <option key={path} value={path}>{path}</option>)}</select>
-                                    <select name="status" defaultValue={k.status} className={inputCls}>{KEYWORD_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select>
+                                    <select aria-label={t('fieldName.searchIntent')} name="intent" defaultValue={k.intent ?? ''} className={inputCls}><option value="">{t('seo.intent')}</option>{INTENTS.map((intent) => <option key={intent} value={intent}>{intent}</option>)}</select>
+                                    <select aria-label={t('fieldName.targetPage')} name="target_path" defaultValue={k.target_path ?? ''} className={inputCls}><option value="">{t('seo.targetPage')}</option>{SITE_PAGES.map((path) => <option key={path} value={path}>{path}</option>)}</select>
+                                    <select aria-label={t('fieldName.status')} name="status" defaultValue={k.status} className={inputCls}>{KEYWORD_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select>
                                     <button type="submit" className="w-full rounded-lg bg-brand px-3 py-2 text-xs font-semibold text-white hover:bg-brand/90">{t('seo.saveKeyword')}</button>
                                   </form>
                                   <form action={archiveSeoKeyword} className="mt-2">
@@ -202,8 +202,8 @@ export default async function SeoPage() {
                   <h2 className="mb-3 font-semibold">{t('adminMarketingSeo.trackAKeyword')}</h2>
                   <form action={addKeyword} className="space-y-3 text-sm">
                     <input name="keyword" required placeholder={t('adminMarketingSeo.familyOrganizationApp')} className={inputCls} />
-                    <select name="intent" className={inputCls}><option value="">{t('adminMarketingSeo.intentOptional')}</option>{INTENTS.map((i) => <option key={i} value={i}>{i}</option>)}</select>
-                    <select name="target_path" className={inputCls}><option value="">{t('adminMarketingSeo.targetPageOptional')}</option>{SITE_PAGES.map((p) => <option key={p} value={p}>{p}</option>)}</select>
+                    <select aria-label={t('fieldName.searchIntent')} name="intent" className={inputCls}><option value="">{t('adminMarketingSeo.intentOptional')}</option>{INTENTS.map((i) => <option key={i} value={i}>{i}</option>)}</select>
+                    <select aria-label={t('fieldName.targetPage')} name="target_path" className={inputCls}><option value="">{t('adminMarketingSeo.targetPageOptional')}</option>{SITE_PAGES.map((p) => <option key={p} value={p}>{p}</option>)}</select>
                     <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingSeo.addKeyword')}</button>
                   </form>
                 </Card>

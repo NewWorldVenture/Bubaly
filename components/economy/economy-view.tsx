@@ -174,6 +174,7 @@ function RewardCard({ reward, emoji, kids, balanceOf, busy, onRequest }: {
   reward: Reward; emoji: string; kids: Member[];
   balanceOf: (c: string, m: string) => number; busy: string | null; onRequest: (memberId: string) => void;
 }) {
+  const tr = useTranslations();
   const [who, setWho] = useState<string>(kids[0]?.id ?? '');
   const affordable = who ? canAfford(balanceOf(reward.currencyId, who), reward.cost) : false;
   return (
@@ -187,7 +188,7 @@ function RewardCard({ reward, emoji, kids, balanceOf, busy, onRequest }: {
       </div>
       {kids.length > 0 && (
         <div className="mt-3 flex items-center gap-2">
-          <select value={who} onChange={(e) => setWho(e.target.value)}
+          <select aria-label={tr('fieldName.familyMember')} value={who} onChange={(e) => setWho(e.target.value)}
             className="h-9 flex-1 rounded-lg border border-border bg-bg px-2 text-sm focus-ring">
             {kids.map((k) => <option key={k.id} value={k.id}>{k.name} ({balanceOf(reward.currencyId, k.id)} {emoji})</option>)}
           </select>
@@ -229,11 +230,11 @@ function ManagePanel({ currencies, kids, busy, onCreateCurrency, onAward, onCrea
         <section className="rounded-2xl border border-border bg-surface/40 p-4">
           <h3 className="mb-3 font-semibold">{tr('economy.awardTokens')}</h3>
           <div className="flex flex-wrap gap-2">
-            <select value={aMem} onChange={(e) => setAMem(e.target.value)} className="h-10 rounded-lg border border-border bg-bg px-2 text-sm focus-ring">
+            <select aria-label={tr('fieldName.familyMember')} value={aMem} onChange={(e) => setAMem(e.target.value)} className="h-10 rounded-lg border border-border bg-bg px-2 text-sm focus-ring">
               {kids.map((k) => <option key={k.id} value={k.id}>{k.name}</option>)}
             </select>
             <input type="number" min="1" value={aAmt} onChange={(e) => setAAmt(e.target.value)} placeholder={tr('economy.amount')} className="h-10 w-24 rounded-lg border border-border bg-bg px-3 text-sm focus-ring" />
-            <select value={aCur} onChange={(e) => setACur(e.target.value)} className="h-10 rounded-lg border border-border bg-bg px-2 text-sm focus-ring">
+            <select aria-label={tr('fieldName.currency')} value={aCur} onChange={(e) => setACur(e.target.value)} className="h-10 rounded-lg border border-border bg-bg px-2 text-sm focus-ring">
               {currencies.map((c) => <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>)}
             </select>
             <input value={aReason} onChange={(e) => setAReason(e.target.value)} placeholder={tr('economy.reasonOptional')} className="h-10 min-w-[120px] flex-1 rounded-lg border border-border bg-bg px-3 text-sm focus-ring" />
@@ -249,7 +250,7 @@ function ManagePanel({ currencies, kids, busy, onCreateCurrency, onAward, onCrea
             <input value={rEmoji} onChange={(e) => setREmoji(e.target.value)} className="h-10 w-14 rounded-lg border border-border bg-bg px-2 text-center text-lg focus-ring" />
             <input value={rTitle} onChange={(e) => setRTitle(e.target.value)} placeholder={tr('economy.rewardEGMovieNightPick')} className="h-10 min-w-[160px] flex-1 rounded-lg border border-border bg-bg px-3 text-sm focus-ring" />
             <input type="number" min="1" value={rCost} onChange={(e) => setRCost(e.target.value)} placeholder={tr('economy.cost')} className="h-10 w-24 rounded-lg border border-border bg-bg px-3 text-sm focus-ring" />
-            <select value={rCur} onChange={(e) => setRCur(e.target.value)} className="h-10 rounded-lg border border-border bg-bg px-2 text-sm focus-ring">
+            <select aria-label={tr('fieldName.currency')} value={rCur} onChange={(e) => setRCur(e.target.value)} className="h-10 rounded-lg border border-border bg-bg px-2 text-sm focus-ring">
               {currencies.map((c) => <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>)}
             </select>
             <Button onClick={() => onCreateReward(rCur, rTitle, rEmoji, Number(rCost))} loading={busy === 'new-reward'} disabled={!rCur || !rTitle.trim() || !rCost}><Plus className="mr-1 h-4 w-4" /> Add</Button>

@@ -410,7 +410,7 @@ export function ShoppingModule() {
 
             {/* Quick add */}
             <form onSubmit={addItem} className="flex items-center gap-2">
-              <select value={addingCategory} onChange={(e) => setAddingCategory(e.target.value)}
+              <select aria-label={t('fieldName.category')} value={addingCategory} onChange={(e) => setAddingCategory(e.target.value)}
                 className="rounded-xl border border-border bg-surface/60 px-2 py-2 text-xs text-muted focus:outline-none">
                 {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>

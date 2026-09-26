@@ -90,7 +90,7 @@ export function ImmunizationsModule({ title = 'Immunizations' }: { title?: strin
         <h3 className="flex items-center gap-2 text-base font-semibold"><Syringe className="h-4 w-4 text-brand-text" /> {title}</h3>
         <div className="flex items-center gap-2">
           {members.length > 0 && (
-            <select value={memberFilter} onChange={(e) => setMemberFilter(e.target.value)} className="h-9 rounded-lg border border-border bg-surface px-2 text-sm">
+            <select aria-label={t('fieldName.filterByMember')} value={memberFilter} onChange={(e) => setMemberFilter(e.target.value)} className="h-9 rounded-lg border border-border bg-surface px-2 text-sm">
               <option value="all">{t('immunizations.everyone')}</option>
               {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
             </select>

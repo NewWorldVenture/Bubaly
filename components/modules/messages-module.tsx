@@ -209,7 +209,7 @@ export function MessagesModule() {
         if (error) { console.error('[messages] read-receipt fallback failed', { message: error.message }); break; }
       }
     })();
-  }, [userId]);
+  }, [userId, toastError]);
 
   useEffect(() => {
     if (!activeConv) return;
@@ -279,7 +279,7 @@ export function MessagesModule() {
       return;
     }
     setSummaries(summarizeConversations(data ?? [], userId));
-  }, [familyId, userId]);
+  }, [familyId, userId, toastError]);
 
   useEffect(() => { void loadSummaries(); }, [conversations, loadSummaries]);
 

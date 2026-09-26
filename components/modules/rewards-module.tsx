@@ -383,7 +383,7 @@ function RedeemForMember({ reward, onRedeem, members, balanceByMember, busy }: {
   const affordable = !!bal && bal.available >= reward.cost_points;
   return (
     <div className="flex gap-2">
-      <select value={memberId} onChange={(e) => setMemberId(e.target.value)}
+      <select aria-label={t('fieldName.familyMember')} value={memberId} onChange={(e) => setMemberId(e.target.value)}
         className="h-9 flex-1 min-w-0 rounded-lg bg-surface/60 border border-border px-2 text-sm text-fg focus-ring">
         {kids.map((k) => <option key={k.id} value={k.id}>{k.display_name}</option>)}
       </select>

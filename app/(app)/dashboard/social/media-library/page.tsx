@@ -55,7 +55,7 @@ export default async function MediaLibraryPage() {
         <h3 className="mb-2 text-sm font-semibold">{t('dashboardSocialMediaLibrary.addAsset')}</h3>
         <form action={createMediaAction} className="space-y-2">
           <input name="title" placeholder={t('dashboardSocialMediaLibrary.title')} className="w-full rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm" />
-          <select name="kind" className="w-full rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm">
+          <select aria-label={t('fieldName.type')} name="kind" className="w-full rounded-lg border border-border bg-elevated px-2 py-1.5 text-sm">
             <option value="image">{t('dashboardSocialMediaLibrary.image')}</option>
             <option value="video">{t('dashboardSocialMediaLibrary.video')}</option>
             <option value="audio">{t('dashboardSocialMediaLibrary.audio')}</option>

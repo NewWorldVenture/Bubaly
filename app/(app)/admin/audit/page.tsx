@@ -92,9 +92,9 @@ export default async function AdminAuditPage({ searchParams }: Params) {
       <Card>
         <FilterForm action="/admin/audit">
           <FilterSearchInput name="q" defaultValue={sp.q} placeholder={t('adminAudit.searchByActorFamilyActionOr')} />
-          <FilterSelect name="action" defaultValue={actionFilter} options={[{ value: '', label: 'All Actions' }, ...actionOptions.map((a) => ({ value: a, label: a }))]} />
-          <FilterSelect name="resource" defaultValue={resourceFilter} options={[{ value: '', label: 'All Resources' }, ...resourceOptions.map((r) => ({ value: r, label: r }))]} />
-          <FilterSelect name="scope" defaultValue={scopeFilter} options={[{ value: '', label: 'All Sources' }, { value: 'admin', label: 'Site admin only' }, { value: 'family', label: 'In-family only' }]} />
+          <FilterSelect label={t('fieldName.action')} name="action" defaultValue={actionFilter} options={[{ value: '', label: 'All Actions' }, ...actionOptions.map((a) => ({ value: a, label: a }))]} />
+          <FilterSelect label={t('fieldName.resource')} name="resource" defaultValue={resourceFilter} options={[{ value: '', label: 'All Resources' }, ...resourceOptions.map((r) => ({ value: r, label: r }))]} />
+          <FilterSelect label={t('fieldName.source')} name="scope" defaultValue={scopeFilter} options={[{ value: '', label: 'All Sources' }, { value: 'admin', label: 'Site admin only' }, { value: 'family', label: 'In-family only' }]} />
         </FilterForm>
 
         {pageRows.length === 0 ? (

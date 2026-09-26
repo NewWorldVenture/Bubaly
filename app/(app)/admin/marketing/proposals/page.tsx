@@ -74,10 +74,10 @@ export default async function ProposalsPage() {
         <form action={saveQuoteAction} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <input name="title" required placeholder={t('adminMarketingProposals.proposalTitle')} className={`${inputCls} lg:col-span-2`} />
           <input name="amount" type="number" inputMode="decimal" min="0" step="0.01" placeholder={t('adminMarketingProposals.amount')} className={inputCls} />
-          <select name="status" defaultValue="draft" className={inputCls}>
+          <select aria-label={t('fieldName.status')} name="status" defaultValue="draft" className={inputCls}>
             {QUOTE_STATUSES.filter((s) => s !== 'expired').map((s) => <option key={s} value={s}>{QUOTE_STATUS_LABELS[s]}</option>)}
           </select>
-          <select name="contact_id" defaultValue="" className={`${inputCls} lg:col-span-2`}>
+          <select aria-label={t('fieldName.contact')} name="contact_id" defaultValue="" className={`${inputCls} lg:col-span-2`}>
             <option value="">{t('adminMarketingProposals.noContact')}</option>
             {contactList.map((c) => <option key={c.id} value={c.id}>{contactDisplayName(c)}</option>)}
           </select>

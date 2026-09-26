@@ -140,11 +140,11 @@ export default async function AdminContentPage({ searchParams }: Params) {
             <Card>
               <FilterForm action="/admin/content" hidden={{ tab }}>
                 <FilterSearchInput name="q" defaultValue={sp.q} placeholder={tr('adminContent.searchContentByTitleOrFamily')} />
-                <FilterSelect name="category" defaultValue={categoryFilter} options={[
+                <FilterSelect label={tr('fieldName.category')} name="category" defaultValue={categoryFilter} options={[
                   { value: '', label: 'All Categories' },
                   ...categories.map((c) => ({ value: c, label: c })),
                 ]} />
-                <FilterSelect name="family" defaultValue={familyFilter} options={[
+                <FilterSelect label={tr('fieldName.family')} name="family" defaultValue={familyFilter} options={[
                   { value: '', label: 'All Families' },
                   ...(families ?? []).map((f) => ({ value: f.id, label: f.name })),
                 ]} />

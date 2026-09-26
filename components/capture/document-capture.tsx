@@ -19,9 +19,13 @@ export function DocumentCapture({ photo = false, onSaved }: { photo?: boolean; o
   const ownSelection = selection?.familyId === familyId && selection.userId === userId ? selection : null;
   const ownResult = ownSelection ? result : null;
   useEffect(() => {
-    generation.current++;
+    // `generation` is a counter, not a DOM node: bumping it in cleanup is what
+    // retires in-flight work when the family or user changes. The ref OBJECT is
+    // taken here so cleanup bumps the same counter the effect did.
+    const gen = generation;
+    gen.current++;
     setSelection(null); setResult(null); setSender(''); setBusy(false); setCamera(false);
-    return () => { generation.current++; };
+    return () => { gen.current++; };
   }, [familyId, userId]);
 
   function choose(file: File | undefined) {

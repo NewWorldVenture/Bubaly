@@ -62,7 +62,7 @@ export default async function AdsPage() {
           <h2 className="mb-3 font-semibold">{t('adminMarketingAds.newAdCampaign')}</h2>
           <form action={createAdCampaign} className="space-y-3 text-sm">
             <input name="name" required placeholder={t('adminMarketingAds.campaignName')} className={inputCls} />
-            <select name="platform" className={inputCls}>{PLATFORMS.map((p) => <option key={p} value={p} className="capitalize">{p}</option>)}</select>
+            <select aria-label={t('fieldName.platform')} name="platform" className={inputCls}>{PLATFORMS.map((p) => <option key={p} value={p} className="capitalize">{p}</option>)}</select>
             <input name="objective" placeholder={t('adminMarketingAds.objectiveEGSignups')} className={inputCls} />
             <input name="budgetDollars" type="number" min="0" placeholder={t('adminMarketingAds.budget')} className={inputCls} />
             <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingAds.create')}</button>

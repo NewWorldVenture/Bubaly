@@ -238,6 +238,7 @@ function StatusControl({ idea, onChanged }: { idea: IdeaRow; onChanged: (status:
   const [pending, start] = useTransition();
   return (
     <select
+      aria-label={t('feedbackFeedbackBoard.setIdeaStatus')}
       value={isFeedbackStatus(idea.status) ? idea.status : 'under_review'}
       disabled={pending}
       onChange={(e) => {
@@ -249,7 +250,6 @@ function StatusControl({ idea, onChanged }: { idea: IdeaRow; onChanged: (status:
         });
       }}
       className="rounded-lg border border-border bg-bg px-2 py-1 text-[11px] font-semibold outline-none focus:border-brand"
-      aria-label={t('feedbackFeedbackBoard.setIdeaStatus')}
     >
       {FILTERABLE_STATUSES.map((s) => <option key={s} value={s}>{STATUS_META[s].label}</option>)}
     </select>

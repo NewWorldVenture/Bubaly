@@ -447,7 +447,7 @@ function PlanDetail({ plan, onClose, onDelete, onRefresh }: {
       <div className="space-y-3">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-wide text-muted mb-1">{t('concierge.status')}</p>
-          <select value={editStatus} onChange={e => void updateStatus(e.target.value)}
+          <select aria-label={t('fieldName.status')} value={editStatus} onChange={e => void updateStatus(e.target.value)}
             className="w-full rounded-lg border border-border bg-surface/60 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand/30">
             {['idea', 'planning', 'booked', 'confirmed', 'completed', 'cancelled'].map(s => (
               <option key={s} value={s} className="capitalize">{s}</option>

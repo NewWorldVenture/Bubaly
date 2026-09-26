@@ -133,7 +133,7 @@ export function TimetableModule() {
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-3 mb-5">
         {/* Member filter */}
-        <Select value={memberFilter} onChange={(e) => setMemberFilter(e.target.value)} className="h-9 w-auto">
+        <Select aria-label={t('fieldName.filterByMember')} value={memberFilter} onChange={(e) => setMemberFilter(e.target.value)} className="h-9 w-auto">
           <option value="all">{t('timetable.allStudents')}</option>
           {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
         </Select>

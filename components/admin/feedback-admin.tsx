@@ -157,7 +157,7 @@ export function FeedbackAdmin({ ideas, comments, notifications = [], githubConfi
           ))}
         </div>
         <div className="flex items-center gap-2">
-          <select
+          <select aria-label={t('fieldName.filterByCategory')}
             value={filter.category}
             onChange={(e) => setFilter((f) => ({ ...f, category: e.target.value }))}
             className="h-9 rounded-lg border border-border bg-bg px-2 text-sm outline-none focus:border-brand"

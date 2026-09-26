@@ -69,7 +69,7 @@ export default async function ContentPage() {
                         {isBlog && (
                           <div className="grid grid-cols-2 gap-2">
                             <input name="slug" defaultValue={blog.slug ?? ''} placeholder="Slug (auto from title)" className={smCls} />
-                            <select name="category" defaultValue={blog.category ?? ''} className={smCls}>
+                            <select aria-label={t('fieldName.category')} name="category" defaultValue={blog.category ?? ''} className={smCls}>
                               <option value="">Category…</option>
                               {BLOG_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
                             </select>
@@ -80,7 +80,7 @@ export default async function ContentPage() {
                           </div>
                         )}
                         <div className="flex items-center gap-2">
-                          <select name="status" defaultValue={it.status} className={`${smCls} flex-1`}>
+                          <select aria-label={t('fieldName.status')} name="status" defaultValue={it.status} className={`${smCls} flex-1`}>
                             {STATUSES.map((st) => <option key={st} value={st}>{st}</option>)}
                           </select>
                           <button type="submit" className="h-9 shrink-0 rounded-lg bg-elevated px-4 text-sm font-semibold hover:bg-elevated/80">{t('content.save')}</button>
@@ -137,7 +137,7 @@ export default async function ContentPage() {
         <h2 className="mb-3 font-semibold">{t('adminMarketingContent.newContentIdea')}</h2>
         <form action={createContentItem} className="space-y-3 text-sm">
           <input name="title" required placeholder={t('adminMarketingContent.titleOrTopic')} className={inputCls} />
-          <select name="kind" className={inputCls}>{KINDS.map((k) => <option key={k} value={k}>{k.replace('_', ' ')}</option>)}</select>
+          <select aria-label={t('fieldName.type')} name="kind" className={inputCls}>{KINDS.map((k) => <option key={k} value={k}>{k.replace('_', ' ')}</option>)}</select>
           <input name="publish_at" type="date" className={inputCls} />
           <textarea name="brief" rows={4} placeholder={t('adminMarketingContent.briefNotes')} className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
           <button className="w-full rounded-xl bg-brand px-4 py-2.5 font-semibold text-white hover:bg-brand/90">{t('adminMarketingContent.addToPipeline')}</button>

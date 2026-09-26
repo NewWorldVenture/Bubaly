@@ -37,3 +37,17 @@ describe('CI runs the suite on a DST-observing host (MAIN-F-F04)', () => {
     expect(readFileSync('tests/assistant-capture-fidelity.test.ts', 'utf8')).toContain('first minute that exists');
   });
 });
+
+describe('lint fails on a warning (MAIN-F-D14)', () => {
+  // The three exhaustive-deps warnings lived for weeks as "the documented
+  // baseline" because `next lint` exits 0 on warnings, so CI could not see a
+  // fourth. The baseline is now zero, and a warning fails the Lint step.
+  it('the lint script refuses any warning', () => {
+    const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as { scripts: Record<string, string> };
+    expect(pkg.scripts.lint).toMatch(/--max-warnings 0\b/);
+  });
+
+  it('and CI runs that script', () => {
+    expect(ci).toMatch(/- name: Lint\s+run: npm run lint\b/);
+  });
+});

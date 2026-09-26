@@ -26,14 +26,17 @@ export function FilterForm({
   );
 }
 
-export function FilterSelect({ name, defaultValue, options }: {
+export function FilterSelect({ name, label, defaultValue, options }: {
   name: string;
+  /** What the filter is about. Required: an unnamed select is announced as just "combo box" (MAIN-F-D03). */
+  label: string;
   defaultValue?: string;
   options: { value: string; label: string }[];
 }) {
   return (
     <select
       name={name}
+      aria-label={label}
       defaultValue={defaultValue ?? ''}
       onChange={(e) => e.currentTarget.form?.requestSubmit()}
       className="h-9 rounded-lg border border-border bg-surface/60 px-2.5 text-sm text-fg focus-ring"

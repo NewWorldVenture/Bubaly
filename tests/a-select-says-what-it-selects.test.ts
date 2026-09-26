@@ -18,7 +18,14 @@ import { describe, expect, it } from 'vitest';
 //
 // which is correctly labelled and three levels down. At depth 2 the rule
 // reported exactly three of those and nothing else, so raising it removes false
-// positives rather than findings. At depth 4 the tree is clean.
+// positives rather than findings.
+//
+// "At depth 4 the tree is clean" used to close this paragraph, and it was not
+// evidence: the rule treats any `{expression}` child as a possible nested
+// control, so it never reports `<label>{t('…')}</label>`, which is how nearly
+// every label here is written. 50 detached labels were found by parsing the JSX
+// instead (A11Y-002's correction); tests/a-control-has-a-name.test.ts holds
+// them, and the icon buttons and selects, at zero.
 //
 // `jsx-a11y/control-has-associated-label` is deliberately NOT enabled. It
 // reports 561 violations here, and the first one sampled is
@@ -30,13 +37,14 @@ import { describe, expect, it } from 'vitest';
 // So the genuinely unnamed controls it was reaching for are counted here
 // instead, by a check that cannot be satisfied by nesting depth.
 //
-// ── a ratchet, not a gate ──────────────────────────────────────────────────
+// ── a gate, now ────────────────────────────────────────────────────────────
 //
-// 71 of 144. Naming them is 71 pieces of product copy in seven languages, which
-// is a writing task for whoever owns the product voice rather than something to
-// invent in an audit. What this does is stop the number growing, and make each
-// reduction deliberate. Lower CEILING as they are named; never raise it.
-const CEILING = 71;
+// This was a ratchet at 71 of 144. Every select is now named, through a shared
+// `fieldName.*` namespace in all seven catalogues and a required `label` on
+// FilterSelect (MAIN-F-D03), so the ceiling is zero. The stricter AST check in
+// tests/a-control-has-a-name.test.ts, where an id counts only if a label points
+// at it, holds the same line.
+const CEILING = 0;
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
@@ -64,8 +72,12 @@ export function unnamedSelects(source: string): number[] {
   lines.forEach((line, i) => {
     if (!/<select\b/.test(line)) return;
     let el = '';
-    for (let k = i; k < Math.min(lines.length, i + 10); k++) { el += `${lines[k]} `; if (/>/.test(lines[k])) break; }
-    if (/aria-label|aria-labelledby|\bid=/.test(el)) return;
+    // The tag ends at a `>` that is not the arrow of `(e) => …`: stopping at the
+    // arrow is how this used to miss an aria-label three lines further down, and
+    // count a named select as unnamed.
+    for (let k = i; k < Math.min(lines.length, i + 10); k++) { el += `${lines[k]} `; if (/(^|[^=])>/.test(lines[k])) break; }
+    // `{...props}`: the ui Select primitive passes its caller's name through.
+    if (/aria-label|aria-labelledby|\bid=|\{\.\.\.\w+\}/.test(el)) return;
     const indent = line.length - line.trimStart().length;
     for (let k = i - 1; k >= Math.max(0, i - 8); k--) {
       const prev = lines[k];
@@ -100,6 +112,9 @@ describe('a select says what it selects', () => {
     expect(unnamedSelects('<label>\n  <span>Role</span>\n</label>\n<select value={x}>')).toEqual([4]);
     // Prose about aria-label is not an aria-label.
     expect(unnamedSelects('{/* needs aria-label */}\n<select value={x}>')).toEqual([2]);
+    // An arrow in an earlier attribute does not end the tag.
+    expect(unnamedSelects('<select\n  onChange={(e) => f(e)}\n  aria-label={t(\'k\')}\n>')).toEqual([]);
+    expect(unnamedSelects('<select ref={ref} className={c} {...props} />')).toEqual([]);
   });
 
   it(`has no more than ${CEILING} unnamed selects`, () => {

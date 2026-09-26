@@ -182,7 +182,7 @@ function ChildInvest({ child, assets, assetById, prices, holdings, busy, onTrade
             </button>
           ))}
         </div>
-        <select value={assetId} onChange={(e) => setAssetId(e.target.value)} className="h-9 rounded-lg border border-border bg-bg px-2 text-sm focus-ring">
+        <select aria-label={tr('fieldName.investment')} value={assetId} onChange={(e) => setAssetId(e.target.value)} className="h-9 rounded-lg border border-border bg-bg px-2 text-sm focus-ring">
           {assets.map((a) => <option key={a.id} value={a.id}>{a.emoji} {a.name} — {formatCents(a.priceCents)}</option>)}
         </select>
         <input type="number" inputMode="decimal" min="0" step="0.01" value={sharesStr} onChange={(e) => setSharesStr(e.target.value)} placeholder={tr('invest.shares')} className="h-9 w-24 rounded-lg border border-border bg-bg px-2 text-sm focus-ring" />

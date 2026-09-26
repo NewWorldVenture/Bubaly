@@ -153,10 +153,10 @@ export function WeekendModule() {
               onKeyDown={(e) => e.key === 'Enter' && discover()}
               className="h-11 border-0 bg-transparent px-1" />
           </div>
-          <Select value={String(radius)} onChange={(e) => { setTouched(true); setRadius(Number(e.target.value)); }} className="h-11 sm:w-36">
+          <Select aria-label={t('fieldName.distance')} value={String(radius)} onChange={(e) => { setTouched(true); setRadius(Number(e.target.value)); }} className="h-11 sm:w-36">
             {RADIUS_OPTIONS.map((r) => <option key={r} value={r}>{t('weekend.within')} {r} mi</option>)}
           </Select>
-          <Select value={String(days)} onChange={(e) => { setTouched(true); setDays(Number(e.target.value)); }} className="h-11 sm:w-36">
+          <Select aria-label={t('fieldName.timeRange')} value={String(days)} onChange={(e) => { setTouched(true); setDays(Number(e.target.value)); }} className="h-11 sm:w-36">
             {[3, 6, 10, 14].map((d) => <option key={d} value={d}>{t('weekend.next')} {d} days</option>)}
           </Select>
           <Button onClick={discover} loading={busy} className="h-11"><Search className="h-4 w-4" /> {t('weekend.findEvents')}</Button>
@@ -185,7 +185,7 @@ export function WeekendModule() {
             <form onSubmit={addFeed} className="grid gap-2 sm:grid-cols-[1fr_2fr_auto_auto]">
               <Input value={feedForm.label} onChange={(e) => setFeedForm({ ...feedForm, label: e.target.value })} placeholder={t('weekend.nameEGCityCalendar')} className="h-9" />
               <Input value={feedForm.url} onChange={(e) => setFeedForm({ ...feedForm, url: e.target.value })} placeholder="https://…/events.ics" className="h-9" />
-              <Select value={feedForm.kind} onChange={(e) => setFeedForm({ ...feedForm, kind: e.target.value as WeekendFeedKind })} className="h-9 sm:w-24"><option value="ics">ICS</option><option value="rss">RSS</option></Select>
+              <Select aria-label={t('fieldName.type')} value={feedForm.kind} onChange={(e) => setFeedForm({ ...feedForm, kind: e.target.value as WeekendFeedKind })} className="h-9 sm:w-24"><option value="ics">ICS</option><option value="rss">RSS</option></Select>
               <Button type="submit" size="sm" className="h-9"><Plus className="h-4 w-4" /> Add</Button>
             </form>
           </div>
@@ -206,7 +206,7 @@ export function WeekendModule() {
                     <p className="text-xs text-muted">{event.starts_at ? `${fmtDay(dayKey(event.starts_at))} · ${fmtTime(event.starts_at)}` : 'Date TBA'}{event.venue_name ? ` · ${event.venue_name}` : ''}</p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <select value={plan.status} onChange={(e) => setStatus(event, e.target.value as WeekendPlanStatus)} className="h-8 rounded-lg border border-border bg-surface px-2 text-xs">
+                    <select aria-label={t('fieldName.status')} value={plan.status} onChange={(e) => setStatus(event, e.target.value as WeekendPlanStatus)} className="h-8 rounded-lg border border-border bg-surface px-2 text-xs">
                       {PLAN_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                     </select>
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${st.tone}`}>{st.label}</span>

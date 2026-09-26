@@ -90,8 +90,8 @@ export default async function AeoPage() {
                       <input name="question" required defaultValue={q.question} className={inputCls} />
                       <input name="entity" defaultValue={q.entity ?? ''} placeholder={t('aeo.entity')} className={inputCls} />
                       <textarea name="answer" rows={4} defaultValue={q.answer ?? ''} placeholder={t('aeo.structuredAnswer')} className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring sm:col-span-2" />
-                      <select name="pattern" defaultValue={q.pattern ?? ''} className={inputCls}><option value="">{t('aeo.pattern')}</option>{PATTERNS.map((pattern) => <option key={pattern} value={pattern}>{pattern.replace(/_/g, ' ')}</option>)}</select>
-                      <select name="status" defaultValue={q.status} className={inputCls}>{STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select>
+                      <select aria-label={t('fieldName.questionPattern')} name="pattern" defaultValue={q.pattern ?? ''} className={inputCls}><option value="">{t('aeo.pattern')}</option>{PATTERNS.map((pattern) => <option key={pattern} value={pattern}>{pattern.replace(/_/g, ' ')}</option>)}</select>
+                      <select aria-label={t('fieldName.status')} name="status" defaultValue={q.status} className={inputCls}>{STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select>
                       <input name="clarity_score" type="number" min="0" max="100" defaultValue={q.clarity_score ?? ''} placeholder={t('aeo.clarityScore0100')} className={inputCls} />
                       <input name="source_path" defaultValue={q.source_path ?? ''} placeholder="Source path (/faq)" className={inputCls} />
                       <button type="submit" className="rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-brand/90 sm:col-span-2">{t('aeo.saveQuestion')}</button>
@@ -112,7 +112,7 @@ export default async function AeoPage() {
           <h2 className="mb-3 font-semibold">{t('adminMarketingAeo.addAQuestion')}</h2>
           <form action={addAeoQuestion} className="space-y-3 text-sm">
             <input name="question" required placeholder={t('adminMarketingAeo.whatIsTheBestFamilyOrganizer')} className={inputCls} />
-            <select name="pattern" className={inputCls}><option value="">{t('adminMarketingAeo.patternOptional')}</option>{PATTERNS.map((p) => <option key={p} value={p}>{p.replace(/_/g, ' ')}</option>)}</select>
+            <select aria-label={t('fieldName.questionPattern')} name="pattern" className={inputCls}><option value="">{t('adminMarketingAeo.patternOptional')}</option>{PATTERNS.map((p) => <option key={p} value={p}>{p.replace(/_/g, ' ')}</option>)}</select>
             <input name="entity" placeholder={t('adminMarketingAeo.entityEGBubaly')} className={inputCls} />
             <input name="source_path" placeholder={t('adminMarketingAeo.sourcePathFeatures')} className={inputCls} />
             <textarea name="answer" rows={4} placeholder={t('adminMarketingAeo.structuredAnswerDraft')} className="w-full rounded-xl border border-border bg-surface/60 px-3 py-2 text-sm focus-ring" />
