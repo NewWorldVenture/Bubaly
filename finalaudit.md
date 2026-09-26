@@ -26183,6 +26183,55 @@ Recorded as a fragility, not a defect: gating a signature check on
 `NODE_ENV` rather than on the presence of the secret means a staging box run
 with `next dev` would accept unsigned webhooks.
 
+## C1-K-11 · HIGH · A sign-in could end on a page the attacker chose
+
+A post-authentication **open redirect**, found by measuring where each
+destination actually lands rather than by reading the guard.
+
+`lib/auth/redirect.ts` `safeInternalRedirect` checked the **raw** input for a
+`//` prefix, backslashes and encoded slashes, then parsed it and returned the
+parser's **normalized** path. Dot-segment removal is part of normalization, and
+it rebuilds exactly what the raw check had just refused:
+
+```
+new URL('/.//evil.com', base).pathname   ===  '//evil.com'
+```
+
+The origin check passed — the value was parsed as a *path* on our base, not as a
+host — so `//evil.com` was returned as a safe internal path. A browser resolves
+it against the page to `https://evil.com`.
+
+`login-form` and `phone-auth` take that value from a **single** pass and call
+`router.push(destination)` after a **successful** sign-in. So
+
+```
+https://www.bubaly.com/login?redirect=/.//evil.com
+```
+
+let someone sign in on the real site and then delivered them to a lookalike
+"session expired, sign in again" page — the textbook credential-phishing use of
+an open redirect. The auth-callback path was safe only by accident:
+`callback-completion` happened to validate the value a *second* time, and
+`//evil.com` fails the raw check on the second pass.
+
+Fixed at the source, so every consumer is covered: the **normalized output** is
+checked as well. That also closes encodings the raw check never listed —
+`%2e` is a dot segment to the URL parser, so `/%2e//evil.com` escaped too.
+
+`tests/a-sign-in-redirect-stays-on-bubaly.test.ts` asserts, for twelve payloads,
+the **origin a browser would actually navigate to**. Calibrated by removing the
+output check: all seven dot-segment and encoded payloads land on `evil.com`,
+plus the finding case and the login-selection case (9 failures). The five
+payloads the raw checks already caught, and the legitimate-path controls
+(query and hash preserved, benign `/a/./b/../c` → `/a/c`), pass in both
+directions.
+
+**Method note.** The first fuzz flagged nine "leaks" by string-matching `evil`
+in the output, and seven were false: `/%20/evil.com` is a same-origin path that
+happens to contain the word. The finding only became precise once the test
+asked *where the browser goes* — `new URL(out, page).origin` — instead of *what
+the string contains*.
+
 ## The master ledger's open list, worked to the end
 
 The master ledger marks 109 rows "🔄 IN PROGRESS", but defines that label as
