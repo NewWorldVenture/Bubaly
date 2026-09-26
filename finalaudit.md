@@ -26760,6 +26760,21 @@ pages) or an `isManager`-gated action, and approval is the RPC.
 after, with a control that the parent's approval of the untouched gift credits
 the intended child; 48/48 probes.
 
+## C1-K-26 · MEDIUM · A child could switch off their own screen-time limit, from the app
+
+Same sweep. `screen_time_limits` holds each member's daily allowance; the table
+was member FOR ALL and the screen-time module showed "set daily limit" to every
+member, so a child could raise their own limit to 24 hours from the app itself
+— no API trick needed. Measured on the replayed schema: a child raised,
+deleted and re-created their own limit.
+
+`0325_a_screen_time_limit_is_set_by_a_manager.sql`: members read, managers
+write; the module renders the control for managers only. Self-logged usage
+(`screen_time_entries`) is unchanged — logging your own time is the feature.
+`docs/audit/screen-time-limit-check.sql` fails before and passes after (child
+reads; parent sets); 49/49 probes. `a-child-cannot-set-their-own-screen-time-limit`
+pins the UI gate (fails with the module reverted).
+
 ## Swept clean · the API routes this file never named
 
 The C1 brief listed routes the audit had never named; 13 remained on this
