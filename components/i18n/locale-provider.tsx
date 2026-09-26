@@ -10,7 +10,7 @@
 import { createContext, useContext, useMemo } from 'react';
 
 import { DEFAULT_LOCALE, localeOrDefault, type Locale } from '@/lib/i18n/locales';
-import { translate, type Messages } from '@/lib/i18n/translate';
+import { pluralize, translate, type Messages } from '@/lib/i18n/translate';
 import type { LocaleSource } from '@/lib/i18n/resolve';
 
 type LocaleContextValue = {
@@ -19,6 +19,8 @@ type LocaleContextValue = {
    *  detected default from a choice the visitor actually made. */
   source: LocaleSource;
   t: (key: string, params?: Record<string, string | number>) => string;
+  /** A counted phrase, resolved through the locale's own CLDR plural rules. */
+  plural: (key: string, count: number, params?: Record<string, string | number>) => string;
 };
 
 const LocaleContext = createContext<LocaleContextValue | null>(null);
@@ -39,6 +41,7 @@ export function LocaleProvider({
       locale,
       source,
       t: (key, params) => translate(messages, key, params),
+      plural: (key, count, params) => pluralize(messages, locale.code, key, count, params),
     }),
     [locale, source, messages],
   );
@@ -83,6 +86,23 @@ export function useTranslations() {
   if (ctx) return ctx.t;
   return (key: string, params?: Record<string, string | number>) =>
     translate(OUT_OF_CONTEXT_MESSAGES, key, params);
+}
+
+/**
+ * Pluralise inside a client component.
+ *
+ *   const plural = usePlural();
+ *   plural('declutter.missionsDone', s.missions_done)
+ *
+ * Outside the provider this falls back the same way `useTranslations` does, and
+ * for the same reason — except that the four inlined messages hold no counted
+ * phrase, so the honest answer there is the key.
+ */
+export function usePlural() {
+  const ctx = useContext(LocaleContext);
+  if (ctx) return ctx.plural;
+  return (key: string, count: number, params?: Record<string, string | number>) =>
+    pluralize(OUT_OF_CONTEXT_MESSAGES, DEFAULT_LOCALE, key, count, params);
 }
 
 /** The active locale, for formatting dates, numbers and currency. */

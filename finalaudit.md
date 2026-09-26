@@ -28898,3 +28898,132 @@ internal controller error when a client cancellation and a late SSR write
 interleave. CI resolves its Node from `node-version-file: .nvmrc`, so all three
 run on 24 there. They are reported rather than skipped, because a test that is
 red for a known reason is worth more than one quietly excluded.
+
+---
+
+## Q49 — CI ran, and failed on the check I had measured with the wrong command
+
+The merge restored CI. `Database (migration replay · RLS boundary probes)`,
+`Mobile (Expo)` and `finance-operation-sql` came back green on the first run.
+`Typecheck · Lint · Test · Build` failed in 40 seconds, at the **Lint** step,
+having printed nothing but warnings.
+
+**The gate is a warning budget, not an error gate:**
+`"lint": "next lint --max-warnings=12"`. I had checked it with
+`npm run lint | grep -c 'Error:'`, read the `0`, and called it clean. The exit
+code was 1 the whole time, and the merged tree carried 14 warnings against a
+budget of 12. Counting the output of a command is not the same as running it —
+and the cost was a red CI run on the merge I had just declared verified.
+
+Raising the budget is what a budget forbids, so two went away, and both were
+real rather than cosmetic:
+
+**`components/modules/documents-module.tsx` — a keyboard user could not upload a
+document at all.** The drop zone is a `<div onClick={() => input.click()}>` and
+the real `<input type="file">` beside it is `className="hidden"`. There is no
+other path: no visible control, nothing focusable, so the upload simply does not
+exist without a mouse. `role="button"` + `tabIndex={0}` + `openOnKey` is the
+fallback `lib/ui/a11y.ts` already documents for a div that has to stay a div,
+with `aria-label` taken from copy the zone already renders and a visible
+focus ring.
+
+**`components/modules/meals-module.tsx` — a dismissal with no keyboard path.**
+The "More" menu's click-away backdrop is a full-screen div, and the sibling
+pattern in `components/admin/user-security-actions.tsx` explains exactly how to
+treat one: `aria-hidden="true"`, the rule disabled with its reason, **and Escape
+bound** — because the comment claiming "the keyboard path is Escape" is only
+true if something binds it. `useDismissOnEscape(moreOpen, …)` is that something.
+Silencing the rule without it would have been the failure this audit keeps
+finding: a promise the markup does not keep.
+
+10 warnings now, and `npm run lint` exits 0 — the gate as CI runs it, not as I
+grepped it. Every other step the failed job never reached was then run locally in
+CI's own order: `npm audit --omit=dev --audit-level=moderate` 0
+vulnerabilities, migration filename audit 345 files, Supabase query audit
+(491 tables, 91 functions, 146 routes, everything resolves), marketing asset
+audit, `i18n:gate` clean across all eight declared surfaces, `npm run build`
+exit 0, `npm run typecheck` exit 0.
+
+## Q50 — A plural is not a suffix
+
+227 places in `app/`, `components/` and `lib/` spelled a plural as
+
+```ts
+`${n} mission${n === 1 ? '' : 's'}`
+```
+
+That is not English being interpolated into a template. It is English **grammar
+compiled into the source**, and no translation can undo it. Three distinct ways
+it is wrong once the string leaves English, each measured against
+`Intl.PluralRules` at run time rather than asserted from memory:
+
+- **The boundary moves.** French puts 0 in the singular (`0 mission`); English
+  does not (`0 missions`). Even a two-form language is not the *same* two forms,
+  and `n === 1` encodes English's boundary specifically.
+- **The number of forms changes.** Polish takes three (`1 plik` / `2 pliki` /
+  `5 plików`); Arabic takes six. A two-branch ternary cannot reach a third form
+  whatever the translation says.
+- **The word inflects rather than gaining a letter.** German `1 Aufgabe` /
+  `2 Aufgaben`, Italian `1 missione` / `2 missioni`. A translator handed
+  `mission` plus `s` has nowhere to put the answer.
+
+So: `pluralCategory()` and `pluralize()` in `lib/i18n/translate.ts`, built on
+`Intl.PluralRules` — the CLDR table, already in the runtime, zero bytes shipped.
+The catalogue holds one key per category (`security.openAlerts.one`,
+`security.openAlerts.other`, and `zero`/`two`/`few`/`many` for a language that
+needs them), `usePlural()` exposes it to client components and `getPlurals()` to
+server ones, and the count is interpolated **formatted for the locale** because
+a phrase that translates its words while leaving `1,234` in American digit
+order is only half translated.
+
+**The English fallback split is preserved exactly.** `pluralize` takes an
+optional `fallback` catalogue; `lib/i18n/messages.ts` passes the English one so a
+lagging translation reads as English on the server, and client code passes
+nothing — holding that catalogue in the browser is the 244 KB gzip that
+`lib/i18n/translate.ts` exists to have removed. The whole chain is tried in the
+active locale **before** any of it is tried in English, because a language that
+has `other` but not `many` should use its own `other`, not English's `many`.
+
+**The first draft of the primitive's own doc comment was wrong, and the test
+caught it.** It claimed an unsupported locale falls back to `other`. It does
+not: a *well-formed* tag the runtime has no data for (`zz`, `xx-YY`) does not
+throw at all — `Intl` resolves it to the default and
+`resolvedOptions().locale` reports `en-US`, so an unknown language silently gets
+**English** plural boundaries. Only a *malformed* tag (`''`, `'en_US'` with an
+underscore) throws, which is what the catch is for. The guard against the first
+case is `LOCALES`, not this function, and the test now asserts every locale this
+product ships really has plural data rather than resolving to a single category.
+
+**First batch converted, with translations in all seven populated locales:** ten
+new plural keys (twenty values each round of forms) across `inventory`,
+`security` and `declutter`. Translated with each language's own morphology
+rather than by substitution — `{count} Gegenstand` / `{count} Gegenstände`,
+`{count} oggetto` / `{count} oggetti`, `{count} objeto perderá su ubicación.` /
+`{count} objetos perderán su ubicación.` — and the singular reworded where
+English's plural hid a grammatical error of its own: *"1 item will lose **their**
+location"* is now *"its"*.
+
+**213 remain, behind a ratchet at 227 that only comes down.** Not zero, and the
+reason is that the remainder is not the same work. The clean cases are one phrase
+with one count. The rest assemble a **sentence** from two or three counted
+fragments —
+
+```
+`“Plan this week” turns your ${n} zone${…} into ${m} short mission${…}, …`
+```
+
+— and a sentence assembled from translated fragments is its own translation
+defect, because word order is not a property a language lets the caller choose.
+Those need one key for the whole sentence with `{zones}` and `{missions}` holes
+fed by `plural()`: a rewrite of the copy, not a mechanical substitution. Filed
+as that rather than papered over with a key that is only correct in English.
+
+The ratchet is calibrated in both directions — it fails when a suffix ternary is
+added, and separately when one of the converted modules regresses, so the two
+cannot cancel out in an aggregate.
+
+**Verified:** 17,111 tests green (four shards), the two changed shards re-run
+under `TZ=America/Los_Angeles`, `npm run lint` exit 0 at 10 warnings against a
+budget of 12, `npm run typecheck` exit 0, `npm run build` exit 0, `i18n:gate`
+clean across eight surfaces, catalogue integrity green across all seven
+populated locales.

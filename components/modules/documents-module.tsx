@@ -24,6 +24,7 @@ import { cn } from '@/lib/utils/cn';
 import type { Tables } from '@/lib/database.types';
 import { preOpenWindow } from '@/lib/utils/open-url';
 import { useTranslations } from '@/components/i18n/locale-provider';
+import { openOnKey } from '@/lib/ui/a11y';
 
 type Document = Tables<'documents'>;
 
@@ -630,11 +631,20 @@ export function DocumentsModule() {
       <Modal open={open} title={form.category === '' ? 'New Folder' : 'Upload File'} onClose={() => { setOpen(false); setFile(null); }}>
         <div className="space-y-4">
           <input ref={fileInputRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0] ?? null; setFile(f); if (f && !form.title) setForm((prev) => ({ ...prev, title: f.name })); }} />
+          {/* The only way to choose a file: the real <input> is `hidden`, so without
+              a keyboard path this drop zone is a dead end rather than an untidy
+              one — a keyboard user cannot upload a document at all. `role=button`
+              + tabIndex + openOnKey is the documented fallback for a div that must
+              stay a div, and the name is copy already rendered inside it. */}
           <div
+            role="button"
+            tabIndex={0}
+            aria-label={tr('documents.browseFiles')}
             onClick={() => fileInputRef.current?.click()}
+            onKeyDown={(e) => openOnKey(e, () => fileInputRef.current?.click())}
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0] ?? null; setFile(f); if (f && !form.title) setForm((prev) => ({ ...prev, title: f.name })); }}
-            className="cursor-pointer rounded-xl border-2 border-dashed border-border p-8 text-center transition hover:border-brand/50"
+            className="cursor-pointer rounded-xl border-2 border-dashed border-border p-8 text-center transition hover:border-brand/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
           >
             <Upload className="mx-auto mb-3 h-8 w-8 text-muted/60" />
             {file ? (

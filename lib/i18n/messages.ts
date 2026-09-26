@@ -7,7 +7,7 @@
 // untranslated product, not a broken one.
 
 import type { LocaleCode } from '@/lib/i18n/locales';
-import { interpolate, type Messages } from '@/lib/i18n/translate';
+import { interpolate, pluralize as basePluralize, type Messages } from '@/lib/i18n/translate';
 
 import deDE from '@/lib/i18n/messages/de-DE.json';
 import enGB from '@/lib/i18n/messages/en-GB.json';
@@ -131,4 +131,19 @@ export function translate(
   params?: Record<string, string | number>,
 ): string {
   return interpolate(messages[key] ?? SOURCE_MESSAGES[key] ?? key, params);
+}
+
+/**
+ * The server-side pluraliser, with the same English fallback as `translate`
+ * above and for the same reason: a counted phrase a translation has not reached
+ * yet should read as English, not as `inventory.overdueLoans`.
+ */
+export function pluralize(
+  messages: Messages,
+  locale: string,
+  key: string,
+  count: number,
+  params?: Record<string, string | number>,
+): string {
+  return basePluralize(messages, locale, key, count, params, SOURCE_MESSAGES);
 }

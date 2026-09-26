@@ -21,7 +21,7 @@ import {
   LOCATION_KINDS, ITEM_CATEGORIES, ITEM_STATUSES, CONFIRM_REASON, categoryMeta, statusMeta, locationKindMeta, locationLabel, locationTree,
   searchItems, lentOut, warrantyAlerts, valueSummary, inventorySummary, lastConfirmed,
 } from '@/lib/inventory/finder';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { usePlural, useTranslations } from '@/components/i18n/locale-provider';
 import { familyMediaPath } from '@/lib/storage/family-media';
 
 type Item = Tables<'inventory_items'>;
@@ -40,6 +40,7 @@ function photoUrl(path: string | null): string | null {
 
 export function InventoryModule() {
   const tr = useTranslations();
+  const plural = usePlural();
   const { familyId, userId, members, selfMember } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -116,7 +117,7 @@ export function InventoryModule() {
 
   async function deleteLocation(location: Location) {
     const count = itemsIn(location.id);
-    if (!confirm(`Delete “${location.name}”?${count ? ` ${count} item${count === 1 ? '' : 's'} will lose their location.` : ''}`)) return;
+    if (!confirm(`${tr('inventory.deleteLocationNamed', { name: location.name })}${count ? ` ${plural('inventory.itemsWillLoseLocation', count)}` : ''}`)) return;
     const { error } = await createClient().from('home_locations').delete().eq('id', location.id);
     if (error) return toastError(describeDbError(error));
     success(tr('inventoryModule.locationDeleted'));
@@ -178,12 +179,12 @@ export function InventoryModule() {
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="flex items-center gap-2 text-sm font-semibold"><Boxes className="h-4 w-4 text-brand-text" /> {tr('inventory.catalog')}</div>
           <p className="mt-2 text-xl font-bold">{summary.text}</p>
-          <p className="mt-1 text-xs text-muted">{summary.rooms} {tr('inventory.rooms')} {summary.unlocated} {tr('inventory.withoutALocation')}{summary.overdueLoans ? ` · ${summary.overdueLoans} loan${summary.overdueLoans === 1 ? '' : 's'} overdue` : ''}</p>
+          <p className="mt-1 text-xs text-muted">{summary.rooms} {tr('inventory.rooms')} {summary.unlocated} {tr('inventory.withoutALocation')}{summary.overdueLoans ? ` · ${plural('inventory.loansOverdue', summary.overdueLoans)}` : ''}</p>
         </div>
         <div className="rounded-2xl border border-border bg-surface/40 p-5">
           <div className="flex items-center gap-2 text-sm font-semibold"><ShieldCheck className="h-4 w-4 text-brand-text" /> {tr('inventory.replacementValue')}</div>
           <p className="mt-2 text-xl font-bold">{value.valuedItems ? money(value.totalCents) : '—'}</p>
-          <p className="mt-1 text-xs text-muted">{value.valuedItems ? `${value.valuedItems} valued item${value.valuedItems === 1 ? '' : 's'} · top: ${value.byCategory.slice(0, 2).map((c) => `${categoryMeta(c.category).label} ${money(c.cents)}`).join(', ')}` : 'Add values to build an insurance record'}</p>
+          <p className="mt-1 text-xs text-muted">{value.valuedItems ? `${plural('inventory.valuedItems', value.valuedItems)} · top: ${value.byCategory.slice(0, 2).map((c) => `${categoryMeta(c.category).label} ${money(c.cents)}`).join(', ')}` : 'Add values to build an insurance record'}</p>
         </div>
         <div className={cn('rounded-2xl border p-5', loans.some((l) => l.overdue) || warranties.length ? 'border-amber-500/30 bg-amber-500/10' : 'border-border bg-surface/40')}>
           <div className="flex items-center gap-2 text-sm font-semibold"><AlertTriangle className="h-4 w-4 text-amber-300" /> {tr('inventory.needsAttention')}</div>
@@ -245,7 +246,7 @@ export function InventoryModule() {
               <option value="all">{tr('inventory.owned')}</option>
               {ITEM_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.emoji} {s.label}</option>)}
             </Select>
-            <span className="text-xs text-muted">{filtered.length} item{filtered.length === 1 ? '' : 's'}</span>
+            <span className="text-xs text-muted">{plural('inventory.itemCount', filtered.length)}</span>
           </div>
           {items.data.length === 0 ? (
             <EmptyState icon={PackageSearch} title={tr('inventory.nothingCataloguedYet')} description={tr('inventoryModule.startWithTheThingsYou')} action={<Button onClick={() => setItemForm({ open: true, item: null })}><Plus className="h-4 w-4" /> {tr('inventory.addTheFirstItem')}</Button>} />

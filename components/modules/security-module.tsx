@@ -14,13 +14,14 @@ import { ErrorState, SkeletonList, EmptyState } from '@/components/ui/states';
 import { fmtDate } from '@/lib/utils/format';
 import { SECURITY_KINDS, SECURITY_SEVERITIES, severityMeta, sortEvents, summarizeSecurity, type EventLike } from '@/lib/home/security';
 import type { Tables } from '@/lib/database.types';
-import { useTranslations } from '@/components/i18n/locale-provider';
+import { usePlural, useTranslations } from '@/components/i18n/locale-provider';
 
 type Event = Tables<'home_security_events'>;
 const blank = () => ({ kind: 'alert', severity: 'info', title: '', detail: '', occurred_at: new Date().toISOString().slice(0, 16) });
 
 export function SecurityModule() {
   const tr = useTranslations();
+  const plural = usePlural();
   const { familyId, userId } = useApp();
   const { success, error: toastError } = useToast();
 
@@ -114,7 +115,7 @@ export function SecurityModule() {
       <div className={`flex items-center gap-3 rounded-2xl border p-4 ${stats.allClear ? 'border-success/30 bg-success/5' : 'border-amber-500/30 bg-amber-500/5'}`}>
         {stats.allClear ? <ShieldCheck className="h-6 w-6 text-success" /> : <ShieldAlert className="h-6 w-6 text-amber-500" />}
         <div className="min-w-0 flex-1">
-          <p className="font-semibold">{stats.allClear ? 'All clear' : `${stats.open} open alert${stats.open === 1 ? '' : 's'}`}</p>
+          <p className="font-semibold">{stats.allClear ? 'All clear' : plural('security.openAlerts', stats.open)}</p>
           <p className="text-xs text-muted">{stats.openCritical} {tr('security.critical')} {stats.openWarning} {tr('security.warning')} {stats.total} {tr('security.totalLogged')}</p>
         </div>
         {/* 14-day activity strip */}
