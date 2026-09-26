@@ -1,4 +1,4 @@
--- ── 0321: an UPDATE policy checks the row you end with, not just the one you
+-- ── 0364: an UPDATE policy checks the row you end with, not just the one you
 --          started from ───────────────────────────────────────────────────────
 --
 -- 0154 closed the marketplace's object-level authorization gap and said so in
@@ -8,7 +8,7 @@
 -- `with check (is_family_member(family_id))`. So the ownership test governed
 -- the row you started from and said nothing about the row you produced.
 --
--- Measured before 0321, as the BUYER on a completed order:
+-- Measured before 0364, as the BUYER on a completed order:
 --   NOTICE: orders: buyer rewrote seller_member on 1 row(s)
 --   NOTICE: reputation read: C now shows 1 completed sale(s)
 -- which is the number marketplace/item/[id]/page.tsx:87 and
@@ -27,7 +27,7 @@ declare
   ma uuid; mc uuid; lst uuid; ord uuid; off uuid;
   n int; refused boolean;
 begin
-  insert into public.families (id, name) values (fam, '0321 marketplace ownership') on conflict do nothing;
+  insert into public.families (id, name) values (fam, '0364 marketplace ownership') on conflict do nothing;
   insert into auth.users (id, email) values
     (ua, 'a0321@example.test'), (uc, 'c0321@example.test') on conflict do nothing;
   delete from public.marketplace_orders   where family_id = fam;
@@ -50,7 +50,7 @@ begin
   set local role authenticated;
   perform set_config('request.jwt.claim.sub', uc::text, true);
   if auth.uid() is distinct from uc then
-    raise exception '0321: impersonation failed — auth.uid() is %, expected the buyer; this probe is not testing what it claims', auth.uid();
+    raise exception '0364: impersonation failed — auth.uid() is %, expected the buyer; this probe is not testing what it claims', auth.uid();
   end if;
 
   -- ── The forged sale ───────────────────────────────────────────────────────
@@ -62,14 +62,14 @@ begin
   exception when insufficient_privilege then refused := true;
   end;
   if not refused then
-    raise exception '0321: a BUYER made themselves the seller of record on their own completed order';
+    raise exception '0364: a BUYER made themselves the seller of record on their own completed order';
   end if;
 
   -- Belt and braces: the reputation figure those two pages render.
   select count(*) into n from public.marketplace_orders
    where family_id = fam and seller_member = mc and status = 'completed';
   if n <> 0 then
-    raise exception '0321: the buyer shows % completed sale(s) they never made', n;
+    raise exception '0364: the buyer shows % completed sale(s) they never made', n;
   end if;
 
   -- ── The spoofed member id, via update instead of insert ───────────────────
@@ -79,7 +79,7 @@ begin
   exception when insufficient_privilege then refused := true;
   end;
   if not refused then
-    raise exception '0321: an offer was reassigned to a member who did not make it';
+    raise exception '0364: an offer was reassigned to a member who did not make it';
   end if;
 
   -- ── The marketplace must still BE a marketplace ───────────────────────────
@@ -88,17 +88,17 @@ begin
   update public.marketplace_orders set status = 'returned' where id = ord;
   get diagnostics n = row_count;
   if n <> 1 then
-    raise exception '0321: a party could not advance their own order (% row(s)) — the fix went too far', n;
+    raise exception '0364: a party could not advance their own order (% row(s)) — the fix went too far', n;
   end if;
   -- And the offer's own author may still withdraw it.
   update public.marketplace_offers set status = 'withdrawn' where id = off;
   get diagnostics n = row_count;
   if n <> 1 then
-    raise exception '0321: the offer author could not withdraw their own offer (% row(s)) — the fix went too far', n;
+    raise exception '0364: the offer author could not withdraw their own offer (% row(s)) — the fix went too far', n;
   end if;
 
   reset role;
-  raise notice '0321 OK: a party may advance their own deal and may not rewrite who the deal was with';
+  raise notice '0364 OK: a party may advance their own deal and may not rewrite who the deal was with';
 end $$;
 
 -- ── The twenty policies that omit `with check` entirely are NOT this bug ─────
@@ -130,14 +130,14 @@ declare
   lst uuid; n int; refused boolean; offenders text; owner_after text;
 begin
   insert into public.families (id, name) values
-    (fam_a, '0321 using-as-check A'), (fam_b, '0321 using-as-check B') on conflict do nothing;
+    (fam_a, '0364 using-as-check A'), (fam_b, '0364 using-as-check B') on conflict do nothing;
   insert into auth.users (id, email) values (usr, 'u0321b@example.test') on conflict do nothing;
   delete from public.todo_lists     where family_id in (fam_a, fam_b);
   delete from public.family_members where family_id in (fam_a, fam_b);
   -- A member of A only. B is a family they have no business writing into.
   insert into public.family_members (family_id, user_id, display_name, role, is_active)
     values (fam_a, usr, 'Member', 'parent', true);
-  insert into public.todo_lists (family_id, name) values (fam_a, '0321 list') returning id into lst;
+  insert into public.todo_lists (family_id, name) values (fam_a, '0364 list') returning id into lst;
 
   set local role authenticated;
   perform set_config('request.jwt.claim.sub', usr::text, true);
@@ -153,7 +153,7 @@ begin
   exception when insufficient_privilege then refused := true;
   end;
   if not refused then
-    raise exception '0321: a `using`-only UPDATE policy let a row be moved into another family';
+    raise exception '0364: a `using`-only UPDATE policy let a row be moved into another family';
   end if;
   reset role;
 
@@ -177,7 +177,7 @@ begin
   end;
   reset role;
   if not refused then
-    raise exception '0321: the isolated `using`-only policy did not check the new row — (a) proved nothing about the class';
+    raise exception '0364: the isolated `using`-only policy did not check the new row — (a) proved nothing about the class';
   end if;
 
   alter policy upd on public.zz_0321_using_as_check with check (true);
@@ -189,7 +189,7 @@ begin
   reset role;
   select owner into owner_after from public.zz_0321_using_as_check where id = 1;
   if owner_after is distinct from 'someone_else' then
-    raise exception '0321: `with check (true)` did NOT switch the implicit check off — the ratchet below is guarding a hazard that does not exist, and says something false about PostgreSQL';
+    raise exception '0364: `with check (true)` did NOT switch the implicit check off — the ratchet below is guarding a hazard that does not exist, and says something false about PostgreSQL';
   end if;
   drop table public.zz_0321_using_as_check;
 
@@ -203,8 +203,8 @@ begin
      and btrim(coalesce(with_check, '')) in ('true', '(true)')
      and 'service_role' <> all(coalesce(roles, '{}'));
   if offenders is not null then
-    raise exception '0321: permissive UPDATE/ALL policies write `with check (true)`, which switches the implicit `using` check off: %', offenders;
+    raise exception '0364: permissive UPDATE/ALL policies write `with check (true)`, which switches the implicit `using` check off: %', offenders;
   end if;
 
-  raise notice '0321 OK: an omitted `with check` is the `using` clause, measured both ways — and no policy overrides it with `true`';
+  raise notice '0364 OK: an omitted `with check` is the `using` clause, measured both ways — and no policy overrides it with `true`';
 end $$;

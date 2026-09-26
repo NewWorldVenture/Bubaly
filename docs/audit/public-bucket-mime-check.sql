@@ -1,4 +1,4 @@
--- ── 0330: a public bucket serves what you put in it ────────────────────────
+-- ── 0370: a public bucket serves what you put in it ────────────────────────
 --
 -- Four buckets in this project are `public = true`, so their objects are served
 -- from /storage/v1/object/public/… with no session. Three pinned
@@ -6,7 +6,7 @@
 -- that takes the widest range of uploads — did not, and 0216's header reasons
 -- carefully about read visibility without ever mentioning content type.
 --
--- Measured before 0330:
+-- Measured before 0370:
 --   NOTICE: public bucket family-media has NO allowed_mime_types
 --
 -- This asserts the general rule rather than the one bucket, so the next public
@@ -28,7 +28,7 @@ declare
 begin
   select count(*) into n from storage.buckets where public;
   if n < 4 then
-    raise exception '0330: only % public bucket(s) found — this probe is not looking at what it claims', n;
+    raise exception '0370: only % public bucket(s) found — this probe is not looking at what it claims', n;
   end if;
 
   for r in select id, allowed_mime_types from storage.buckets where public loop
@@ -49,7 +49,7 @@ begin
      and allowed_mime_types @> array['image/jpeg', 'image/heic', 'video/mp4',
                                      'application/pdf', 'text/plain'];
   if n <> 1 then
-    raise exception '0330: family-media no longer accepts a type the UI offers';
+    raise exception '0370: family-media no longer accepts a type the UI offers';
   end if;
 
   -- A PRIVATE bucket is a different question: `documents` and `chore-proof` are
@@ -57,11 +57,11 @@ begin
   -- not this rule's business. Asserted so the rule is not quietly widened.
   select count(*) into n from storage.buckets where not public and allowed_mime_types is null;
   if n = 0 then
-    raise notice '0330 note: every private bucket now pins types too — harmless, but this rule never required it';
+    raise notice '0370 note: every private bucket now pins types too — harmless, but this rule never required it';
   end if;
 
   if array_length(holes, 1) is not null then
-    raise exception '0330: %', array_to_string(holes, '; ');
+    raise exception '0370: %', array_to_string(holes, '; ');
   end if;
-  raise notice '0330 OK — every public bucket pins its types, and none of them serves an executable one';
+  raise notice '0370 OK — every public bucket pins its types, and none of them serves an executable one';
 end $$;

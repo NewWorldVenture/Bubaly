@@ -39795,6 +39795,17 @@ and the manager-gated pin gained `money_timeline_insights` (0352).
 `npx vitest run`: **19,023 / 19,026 across 1,476 files**, the three Node-24
 cases as before; `tsc` clean.
 
+**Measured on a real Postgres, not only in CI.** A local PostgreSQL 16 replay
+of every migration (`docs/audit/pg-bootstrap.sh`) followed by
+`docs/audit/run-probes.sh` found one more collision the unit suite cannot see:
+this branch's `health-record-boundary-check.sql` positive control inserted a
+`medication_doses` tick with no `logged_by`, which main's `0338` (a care entry
+names who logged it) now refuses. The rule is right and the control was stale;
+it now names its logger as the app does. Nine of this branch's probes also
+still cited their migrations' pre-renumber numbers and were corrected. Result:
+**83 / 83 probes pass** on the full replay (three of them dblink race probes,
+which need the server's socket reachable by its own user).
+
 **Status:** FIXED (merge); items (1)–(5) OPEN.
 
 ---

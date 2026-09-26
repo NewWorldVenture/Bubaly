@@ -1,4 +1,4 @@
--- ── 0326: the last two health tables 0309 did not reach ─────────────────────
+-- ── 0367: the last two health tables 0309 did not reach ─────────────────────
 --
 -- 0309 gated `medications` and `medication_schedules` behind restrictive
 -- manager guards, and named the class in its own header:
@@ -17,7 +17,7 @@
 -- medications-module.tsx has, so unlike medications this was not even a hidden
 -- button: the Edit and Delete controls render for a child and work.
 --
--- Measured before 0326, as a signed-in child:
+-- Measured before 0367, as a signed-in child:
 --   NOTICE: child rewrote a SIBLING's mental-health visit outcome
 --   NOTICE: child deleted a SIBLING's visit record
 --   NOTICE: child back-dated a SIBLING's vaccination and cleared the next-due
@@ -37,7 +37,7 @@ declare
   mp uuid; mk uuid; ms uuid; vis uuid; imm uuid; med uuid;
   n int; txt text; dt date; holes text[] := '{}';
 begin
-  insert into public.families (id, name) values (fam, '0326 health records') on conflict do nothing;
+  insert into public.families (id, name) values (fam, '0367 health records') on conflict do nothing;
   insert into auth.users (id, email) values
     (up, 'p0326@example.test'), (uk, 'k0326@example.test'), (us, 's0326@example.test')
     on conflict do nothing;
@@ -72,7 +72,7 @@ begin
   set local role authenticated;
   perform set_config('request.jwt.claim.sub', uk::text, true);
   if auth.uid() is distinct from uk then
-    raise exception '0326: impersonation failed — auth.uid() is %, expected the child; this probe is not testing what it claims', auth.uid();
+    raise exception '0367: impersonation failed — auth.uid() is %, expected the child; this probe is not testing what it claims', auth.uid();
   end if;
 
   -- ── 1. Rewriting a sibling's visit notes ──────────────────────────────────
@@ -124,15 +124,18 @@ begin
   -- ── Positive controls: what must NOT change ───────────────────────────────
   -- Reading is the product. Every family member sees the family's health hub.
   select count(*) into n from public.health_visits where family_id = fam;
-  if n < 1 then raise exception '0326: the child can no longer READ the family visit history'; end if;
+  if n < 1 then raise exception '0367: the child can no longer READ the family visit history'; end if;
   select count(*) into n from public.immunizations where family_id = fam;
-  if n < 1 then raise exception '0326: the child can no longer READ the family vaccination ledger'; end if;
+  if n < 1 then raise exception '0367: the child can no longer READ the family vaccination ledger'; end if;
 
   -- 0309 left `medication_doses` — the "I took it" tick — open on purpose and
   -- asserts it as a positive control. Re-asserted here so this migration cannot
   -- quietly take it away.
-  insert into public.medication_doses (family_id, medication_id, member_id, scheduled_for, status)
-    values (fam, med, mk, now(), 'taken');
+  -- `logged_by` is who ticked it, as the app sends it: main's 0338 makes the
+  -- tick name its logger (logged_by = auth.uid()), and this control predated
+  -- that rule (merge with main, Audit C1-S9-89).
+  insert into public.medication_doses (family_id, medication_id, member_id, scheduled_for, status, logged_by)
+    values (fam, med, mk, now(), 'taken', uk);
   -- And 0309's own boundary must still hold, so a regression there is not
   -- mistaken for this migration working.
   begin
@@ -141,7 +144,7 @@ begin
   exception when insufficient_privilege then n := 0;
   end;
   if n > 0 then
-    raise exception '0326: 0309 has regressed — a child changed a prescribed dosage';
+    raise exception '0367: 0309 has regressed — a child changed a prescribed dosage';
   end if;
 
   reset role;
@@ -154,7 +157,7 @@ begin
   update public.health_visits set outcome = 'One filling' where id = vis;
   select outcome into txt from public.health_visits where id = vis;
   if txt is distinct from 'One filling' then
-    raise exception '0326: a parent can no longer edit a visit record (outcome is %)', txt;
+    raise exception '0367: a parent can no longer edit a visit record (outcome is %)', txt;
   end if;
   delete from public.health_visits where id = vis;
 
@@ -163,13 +166,13 @@ begin
   update public.immunizations set next_due_date = current_date + 365 where id = imm;
   select next_due_date into dt from public.immunizations where id = imm;
   if dt is distinct from current_date + 365 then
-    raise exception '0326: a parent can no longer edit a vaccination record';
+    raise exception '0367: a parent can no longer edit a vaccination record';
   end if;
   delete from public.immunizations where id = imm;
   reset role;
 
   if array_length(holes, 1) is not null then
-    raise exception '0326: a child may rewrite the family health record: %', array_to_string(holes, '; ');
+    raise exception '0367: a child may rewrite the family health record: %', array_to_string(holes, '; ');
   end if;
-  raise notice '0326 OK — children read the health hub and log their own doses; parents keep the pen';
+  raise notice '0367 OK — children read the health hub and log their own doses; parents keep the pen';
 end $$;
