@@ -96,6 +96,9 @@ function fakeDb(calls: Call[]) {
   const from = (table: string) => {
     const chain: Record<string, unknown> = {
       eq: () => chain,
+      // The feed metadata update asks for its row (C1-S9-69); a real builder
+      // takes `.select()` after `.eq()`, and a matched update answers with it.
+      select: () => Promise.resolve({ data: [{ id: 'feed-row' }], error: null }),
       then: (resolve: (v: unknown) => unknown) => Promise.resolve({ error: null }).then(resolve),
       update: (payload: unknown) => { calls.push({ table, op: 'update', payload }); return chain; },
       upsert: (payload: unknown, options: unknown) => {

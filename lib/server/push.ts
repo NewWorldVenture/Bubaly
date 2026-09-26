@@ -123,6 +123,7 @@ async function sendPushDevicesToUser(supabase: DB, userId: string, payload: Push
             // already gone, which is what `pruned` promises. A caller passing a
             // user's client would break that — `push_devices_delete` is
             // owner-only — and the dead endpoint would be "pruned" forever.
+            // Audit C1-S9-68.
             const { error: pruneError } = await supabase.from('push_devices').delete().eq('id', d.id);
             if (pruneError) {
               console.error('[push] dead device could not be pruned', { deviceId: d.id, status }, pruneError);
@@ -140,7 +141,8 @@ async function sendPushDevicesToUser(supabase: DB, userId: string, payload: Push
         if (outcome === 'sent') result.sent++;
         else if (outcome === 'unconfigured') result.skipped++;
         else if (outcome === 'unregistered') {
-          // As above: service role, so zero rows means already gone. C1-S9-68.
+          // As above: service role, so zero rows means already gone.
+          // Audit C1-S9-68.
           const { error: pruneError } = await supabase.from('push_devices').delete().eq('id', d.id);
           if (pruneError) result.failed++;
           else result.pruned++;

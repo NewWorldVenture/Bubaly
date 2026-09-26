@@ -96,6 +96,7 @@ export async function stitchVisitorIdentity(
   //    only the anon's not-yet-attributed rows). Never on a fork.
   if (shouldCarryConsent(decision)) {
     try {
+      // Rows deliberately not checked — reason below. Audit C1-S9-67.
       const { error: carryError } = await admin.from('mkt_consent_events')
         .update({ contact_id: contactId } as never)
         .eq('anonymous_id', anonymousId).is('contact_id', null);

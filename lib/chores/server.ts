@@ -7,6 +7,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { createServiceClient } from '@/lib/supabase/server';
 import { DIFFICULTY_XP, levelForXp, nextStreak, type Difficulty } from '@/lib/chores/logic';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 type DB = SupabaseClient<Database>;
 type Progress = Database['public']['Tables']['kid_progress']['Row'];
@@ -31,14 +32,17 @@ export async function ensureProgress(supabase: DB, familyId: string, memberId: s
 }
 
 async function restoreProgress(supabase: DB, progress: Progress): Promise<void> {
-  const { error } = await supabase.from('kid_progress').update({
+  const { data: restored, error } = await supabase.from('kid_progress').update({
     xp: progress.xp,
     level: progress.level,
     current_streak: progress.current_streak,
     longest_streak: progress.longest_streak,
     last_activity: progress.last_activity,
-  }).eq('id', progress.id).eq('family_id', progress.family_id);
-  if (error) console.error('[chore rewards] progress rollback failed', error);
+  }).eq('id', progress.id).eq('family_id', progress.family_id).select('id');
+  // Restoring a row read moments ago, so zero rows is a failed restore: the
+  // child keeps XP from an approval that did not complete. Logged, as the
+  // error is. Audit C1-S9-69.
+  if (error || wroteNoRows(restored)) console.error('[chore rewards] progress rollback failed', error ?? { progressId: progress.id, error: 'no rows updated' });
 }
 
 export type CompletionResult = { xp: number; level: number; leveledUp: boolean; streak: number; newBadges: string[] };

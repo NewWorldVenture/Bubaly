@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { NON_ACTION_FILES, perFile, unconfirmedWritesIn } from './helpers/unconfirmed-writes';
 
@@ -23,6 +24,10 @@ import { NON_ACTION_FILES, perFile, unconfirmedWritesIn } from './helpers/unconf
  */
 // Known unconfirmed writes. ONLY REMOVE or DECREASE entries.
 //
+// **Every entry left is deliberate or locked** (C1-S9-69): the fifth case below
+// enforces a stated reason beside each, except the three writes in files the
+// parallel session holds IN PROGRESS, which are named with their locks.
+//
 // Burn-down: 137 across 74 files (C1-S9-61 baseline) → 131/68 (C1-S9-62: six
 // route writes confirmed; eight more documented as deliberate or log-only
 // and left counted, each with its reason beside the code) → 119/66 (C1-S9-63:
@@ -31,7 +36,7 @@ import { NON_ACTION_FILES, perFile, unconfirmedWritesIn } from './helpers/unconf
 // the Stripe mirrors, a wallet hold, a referral rollback) → 98/55 (C1-S9-65:
 // lib/services) → 89/50 (C1-S9-66: lib/ai) → 83/49 (C1-S9-67:
 // lib/marketing) → 68/44 (C1-S9-68: sync, life events, lib/server,
-// lib/social).
+// lib/social) → 50/35 (C1-S9-69: the last of lib/).
 const BASELINE = new Map<string, number>([
   ['app/api/ai/briefing/route.ts', 1],
   ['app/api/blog/like/route.ts', 1],
@@ -50,17 +55,8 @@ const BASELINE = new Map<string, number>([
   ['app/api/vacations/ai/route.ts', 1],
   ['app/api/weekend/discover/route.ts', 1],
   ['lib/ai/runs/store.ts', 2],
-  ['lib/assistant/service.ts', 1],
-  ['lib/assistant/tools.ts', 4],
-  ['lib/autopilot/policy-scan.ts', 1],
-  ['lib/autopilot/scan.ts', 3],
-  ['lib/chores/server.ts', 1],
   ['lib/contact-center/provision.ts', 1],
-  ['lib/contact-center/server.ts', 4],
-  ['lib/feedback/github-sync.ts', 1],
-  ['lib/feedback/notify.ts', 1],
   ['lib/guardian/callbacks.ts', 2],
-  ['lib/library/ingest.ts', 2],
   ['lib/marketing/automation-events.ts', 1],
   ['lib/marketing/automation-runner.ts', 1],
   ['lib/marketing/identity.ts', 2],
@@ -115,8 +111,39 @@ describe('the unconfirmed-write class outside server actions only shrinks (C1-S9
     expect(stale, 'BASELINE lists files with no unconfirmed writes left — remove them').toEqual([]);
   });
 
+  it('every remaining member states its reason beside the code (C1-S9-69)', () => {
+    // Burned down to its deliberate members, as the server-action ratchet was,
+    // and held to the same rule: each counted write carries a comment naming its
+    // audit entry within the twelve lines above it — so a surviving write whose
+    // reason is deleted fails here, and the list cannot grow a member that is
+    // merely unfixed.
+    //
+    // Except writes in files another session holds IN PROGRESS (charter rule 9:
+    // audit, do not modify). Each is keyed to its lock in finalaudit.md, and the
+    // exemption FAILS the day that row stops saying IN PROGRESS — so it cannot
+    // outlive the lock and quietly become permanent.
+    const LOCKED: Record<string, string> = {
+      'app/api/guardian/inbound/whatsapp/route.ts': 'API-90346B8397DA',
+      'lib/guardian/callbacks.ts': 'LIBRARY-10D7AA8F3175',
+    };
+    const register = readFileSync('finalaudit.md', 'utf8').split('\n');
+    for (const [file, lock] of Object.entries(LOCKED)) {
+      const row = register.find((l) => l.includes(`| ${lock} |`));
+      expect(row, `${file}: lock ${lock} is gone from finalaudit.md — annotate or fix its writes`).toBeTruthy();
+      expect(row, `${file}: lock ${lock} is no longer IN PROGRESS — annotate or fix its writes`).toContain('IN PROGRESS');
+    }
+    const missing: string[] = [];
+    for (const { file, line } of NON_ACTION_FILES().flatMap(unconfirmedWritesIn)) {
+      if (file in LOCKED) continue;
+      const lines = readFileSync(file, 'utf8').split('\n');
+      const above = lines.slice(Math.max(0, line - 13), line).join('\n');
+      if (!/\/\/.*Audit C1-S9-\d+/.test(above)) missing.push(`${file}:${line}`);
+    }
+    expect(missing, 'an unconfirmed write with no stated reason beside it').toEqual([]);
+  });
+
   it('the baseline total matches what finalaudit.md records', () => {
     const total = [...BASELINE.values()].reduce((a, b) => a + b, 0);
-    expect(total).toBe(68);
+    expect(total).toBe(50);
   });
 });

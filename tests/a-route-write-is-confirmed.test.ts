@@ -502,3 +502,58 @@ describe('sync, server and social writes (C1-S9-68)', () => {
     }
   });
 });
+
+/**
+ * Audit C1-S9-69 — the last of lib/. Behavioural proof lives in
+ * assistant-complete-reminder and a-bought-number-is-saved-or-reported.
+ */
+describe('the last lib/ groups (C1-S9-69)', () => {
+  const tools = read('lib/assistant/tools.ts');
+  const policyScan = read('lib/autopilot/policy-scan.ts');
+  const scan = read('lib/autopilot/scan.ts');
+  const githubSync = read('lib/feedback/github-sync.ts');
+  const notify = read('lib/feedback/notify.ts');
+  const ingest = read('lib/library/ingest.ts');
+  const chores = read('lib/chores/server.ts');
+  const cc = read('lib/contact-center/server.ts');
+
+  it('only one reminder completion can win, so only one next occurrence is scheduled', () => {
+    expect(tools).toContain(".eq('id', r.id).eq('status', 'active').select('id');");
+  });
+
+  it('counters count only rows that moved', () => {
+    expect(policyScan).toContain('if (!wroteNoRows(refreshedRow)) refreshed++;');
+    expect(code(policyScan)).not.toMatch(/^\s*refreshed\+\+;/m);
+    expect(githubSync).toContain('if (error) errors++; else if (!wroteNoRows(reconciledRow)) reconciled++;');
+  });
+
+  it('autopilot cleanup reports side effects it could not remove', () => {
+    expect(scan).toContain("else if (wroteNoRows(removedReminder)) cleanupErrors.push(");
+    expect(scan).toContain('else if ((removedGroceries?.length ?? 0) !== createdGroceryIds.length) {');
+  });
+
+  it('a GitHub issue whose link matched no idea is reported, as a failed link is', () => {
+    expect(notify).toContain('if (error || wroteNoRows(linked)) {');
+  });
+
+  it('log-only writes never raise', () => {
+    for (const [src, needle] of [
+      [ingest, 'if (describeError || wroteNoRows(described)) {'],
+      [chores, "if (error || wroteNoRows(restored)) console.error("],
+      [cc, "if (statusError || wroteNoRows(failedRow)) console.error("],
+      [cc, "if (error || wroteNoRows(stamped)) console.error("],
+    ] as const) {
+      // A block needle is brace-matched; a one-line `if (…) console.error(…);`
+      // is exactly its own line. (The first version sliced 200 characters past
+      // the needle and ran into the `return` on the catch block's NEXT line.)
+      const scope = needle.endsWith('{') ? block(src, needle) : src.slice(at(src, needle)).split('\n')[0];
+      expect(code(scope), needle).not.toMatch(/\breturn\b|\bthrow\b/);
+    }
+  });
+
+  it('deliberate ones carry their reasons', () => {
+    expect(read('lib/contact-center/provision.ts')).toContain('Confirmed by READBACK below');
+    expect(read('lib/network/aggregate-server.ts')).toContain('zero rows means nobody opted out');
+    expect(read('lib/twin/project-server.ts')).toContain('the prune\'s goal either way');
+  });
+});

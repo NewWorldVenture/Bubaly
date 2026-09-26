@@ -217,6 +217,9 @@ export async function runTwinProjection(sb: DB, familyId: string, createdBy: str
 
   const stale = stalePrunableEntityIds(idRows ?? [], projection, coveredRefTables);
   if (stale.length) {
+    // Rows deliberately not checked: these ids were read just above, so fewer
+    // matching means some were already deleted — the prune's goal either way.
+    // Audit C1-S9-69.
     const { error: pruneErr } = await sb.from('graph_entities').delete().eq('family_id', familyId).in('id', stale);
     if (pruneErr) {
       console.error('[twin] graph_entities prune failed', pruneErr);

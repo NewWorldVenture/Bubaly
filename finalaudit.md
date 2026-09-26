@@ -2,7 +2,7 @@
 
 *This control document was added 2026-09-19 to the top of an audit that already
 existed. Everything below Part 0 is the accumulated evidence of thirty passes and
-209 finding IDs from four workers and two parallel sessions; none of it was
+210 finding IDs from four workers and two parallel sessions; none of it was
 removed to make room for this. The register below is the DISCOVERY inventory the
 brief asks for — every page, API route, feature module, server-action file,
 scheduled job, workflow and bucket in the repository, each with a permanent ID.*
@@ -32,7 +32,7 @@ scheduled job, workflow and bucket in the repository, each with a permanent ID.*
 - Not Started: 448
 - In Progress: 378
 - Passed: 15
-- Fixed + Passed: see Part 0 — 219 finding IDs, the large majority fixed and re-tested
+- Fixed + Passed: see Part 0 — 220 finding IDs, the large majority fixed and re-tested
 - Blocked: see Critical Blockers
 - Failed: 0
 - Overall Completion: **24%** (items fully verified, plus half credit for items with recorded audit evidence but no end-to-end workflow run)
@@ -34907,6 +34907,78 @@ over-tightening, including a sync helper that throws), all killed.
 
 ---
 
+### `[CLAUDE-1][MEDIUM][LIB]` C1-S9-69 — the last of lib/: a voice assistant that could schedule a reminder twice, a bought phone number reported saved when it was not, and a slip the schema linter caught
+
+**Twenty-five writes** across `lib/assistant`, `lib/autopilot`,
+`lib/contact-center`, `lib/feedback`, `lib/library`, `lib/chores`,
+`lib/network` and `lib/twin`. **This completes the outside-actions inventory**:
+the ratchet now stands at **50 across 35 files, every one deliberate or
+locked**, and a new fifth case enforces that.
+
+**A reminder scheduled twice (fixed, proved behaviourally).** The assistant's
+`complete_reminder` tool completes a reminder and then, for a recurring one,
+inserts the next occurrence, and it *speaks* the answer. A completion that
+matched nothing said "Completed" over a reminder still active. Worse, two
+concurrent completions (a voice assistant and the app, say) **each scheduled a
+next occurrence**. The completion is now predicated on `status = 'active'`, so
+exactly one can win, and `.select()` is what tells the loser it lost. New cases:
+a completion that matched nothing fails *and schedules nothing*. `snooze` is
+fixed the same way.
+
+**A purchased phone number reported saved when it was not (fixed, proved
+behaviourally).** `provisionFamilyNumber` buys a Twilio number and then saves it
+to the family's channel. A save that matched nothing answered
+`{ ok: true, phoneNumber }` while the channel held no number, so calls to it
+could not be routed to the family, and it went on billing. It now takes the
+existing *"provisioned but could not be saved. Please contact support"* path. A
+new suite mocks Twilio and proves both directions.
+
+**And a slip of mine that would have broken it every time.** The first version
+asked `family_contact_channels` for `.select('id')`. **That table has no `id`
+column**; its key is `family_id`. At runtime that is a PostgREST column error on
+every call, so the number save would have reported "could not be saved" on
+*every* provisioning. **The behavioural test passed anyway**, because its fake,
+like every fake in this sweep, does not know the schema. What caught it was the
+repository's own query linter, `supabase-query-audit` ("missing-column
+family_contact_channels.id"), on the full gate. That linter has passed on every
+full gate in this session, which is the evidence that each earlier
+`.select('id')` in `C1-S9-59` through `-68` named a real column. **It is the one
+instrument in this sweep that knows the schema**, and it is why the rule "run the
+whole suite before committing" is not a formality.
+
+**Two more counters that counted what had not happened** (`refreshed` in the
+autopilot policy scan, `reconciled` in the GitHub feedback sync), the sixth and
+seventh of that shape. A GitHub issue whose link matched no idea (deleted
+mid-sync) now takes the existing "created but could not be recorded" failure: it
+is an orphaned issue someone has to close. Autopilot's side-effect cleanup
+reports shortfalls against what it created. Six writes confirmed for the log.
+
+**Deliberate, with reasons (6):** the network right-to-be-forgotten and
+aggregate prunes (errors fail the run; zero rows means nothing to remove), the
+twin's stale-entity prune (ids read just above), and the contact-center email
+claim, which is confirmed by an explicit **readback**.
+
+**The outside ratchet now enforces its accounting.** A fifth case requires a
+comment naming an audit entry within twelve lines above every remaining write,
+**except three writes in files the parallel session holds IN PROGRESS**
+(`guardian/inbound/whatsapp`, and two in `lib/guardian/callbacks.ts`), which
+charter rule 9 says to audit and not modify. Those are named with their lock IDs
+(`API-90346B8397DA`, `LIBRARY-10D7AA8F3175`), and **the exemption fails the day
+either row stops saying IN PROGRESS**, so it cannot outlive the lock. Proved
+both ways: deleting a reason, and releasing a lock, each turn it red. Adding the
+case exposed five writes whose reasons I had placed *below* the write, or
+written without the word "Audit". All five were corrected.
+
+**Three more fakes that could not fail** (`assistant-complete-reminder`,
+`assistant-persistence-boundaries`, `library-keeps-up`): updates answered with
+no `data`, or no `.select()` on the chain. **Thirteen across the sweep.**
+
+**Status:** FIXED. Guard: 4 behavioural + 7 source cases + the ratchet's fifth
+case, 10 mutations (two over-tightening), all killed. **Ratchet: 68 → 50 across
+35 files — complete.**
+
+---
+
 ## What this pass did NOT establish
 
 - No deployed or hosted verification. Every claim here is from local `tsc`,
@@ -34976,8 +35048,8 @@ warning is `document-capture.tsx`, which `C1-S9-11` REFUTED — the rule's
 standard remedy would introduce the bug it describes, and a guard now pins that.
 
 ## Automated Tests
-Status: ✅ PASS — `npx vitest run`: **17,319 passing / 17,322 across 1,358
-files.** (Re-run after `C1-S9-68`; 17,306 / 17,309 after `C1-S9-67`; 17,298 / 17,301 after `C1-S9-66`; 17,282 / 17,285 after `C1-S9-65`; 17,266 / 17,269 after `C1-S9-64`; 17,258 / 17,261 after `C1-S9-63`; 17,241 / 17,244 after `C1-S9-62`; 17,227 / 17,230 after `C1-S9-61`, which added
+Status: ✅ PASS — `npx vitest run`: **17,330 passing / 17,333 across 1,359
+files.** (Re-run after `C1-S9-69`; 17,319 / 17,322 after `C1-S9-68`; 17,306 / 17,309 after `C1-S9-67`; 17,298 / 17,301 after `C1-S9-66`; 17,282 / 17,285 after `C1-S9-65`; 17,266 / 17,269 after `C1-S9-64`; 17,258 / 17,261 after `C1-S9-63`; 17,241 / 17,244 after `C1-S9-62`; 17,227 / 17,230 after `C1-S9-61`, which added
 the scanner's fixture suite and the second write ratchet; before that 17,190 / 17,193 after `C1-S9-60`, 17,164 / 17,167
 after `C1-S9-59`, and 17,142 / 17,145 after `C1-S9-58`.) The first run after `C1-S9-60` had a FOURTH
 failure — the upstream dispute-rollback guard recorded there — which was fixed

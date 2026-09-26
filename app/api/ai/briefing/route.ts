@@ -480,6 +480,7 @@ ${UNTRUSTED_CONTENT_RULE}
     // response shows — marking the whole unread queue read here would silently
     // swallow notices the family never saw.
     if (brief.alsoToday.length > 0) {
+      // Rows deliberately not checked — reason below. Audit C1-S9-62.
       const { error: markError } = await supabase
         .from('notifications')
         .update({ is_read: true })

@@ -6,6 +6,7 @@ import {
 import { GH_MARKER_LABEL, feedbackIdFromBody, statusFromIssue } from '@/lib/feedback/github-map';
 import { syncIdeaToGithub } from '@/lib/feedback/notify';
 import { readAll } from '@/lib/supabase/read-all';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 type Admin = ReturnType<typeof createServiceClient>;
 
@@ -92,8 +93,10 @@ export async function runGithubFeedbackSync(admin: Admin, opts?: { backfillLimit
       changes.push({ ideaId: idea.id, title: idea.title, from: idea.status, to: nextStatus, issue: issue.number, url: issue.html_url });
     }
 
-    const { error } = await admin.from('feedback_ideas').update(patch as never).eq('id', idea.id);
-    if (error) errors++; else reconciled++;
+    // `reconciled` is reported back, and it counted ideas that matched nothing
+    // (deleted since the read). Counted only when one changed. Audit C1-S9-69.
+    const { data: reconciledRow, error } = await admin.from('feedback_ideas').update(patch as never).eq('id', idea.id).select('id');
+    if (error) errors++; else if (!wroteNoRows(reconciledRow)) reconciled++;
   }
 
   return { configured: true, created, reconciled, changes, errors };
