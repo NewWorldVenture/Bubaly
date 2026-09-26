@@ -12,6 +12,11 @@ const reactDom = fs.readFileSync(path.join(path.dirname(require.resolve('react-d
 const source = ts.transpileModule(fs.readFileSync('components/admin/user-security-actions.tsx', 'utf8'), {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React },
 }).outputText;
+// The control's own Escape handling (Q49) comes from this hook; it is loaded as
+// real source rather than mocked, so the menu here behaves as it does in the app.
+const escapeHook = ts.transpileModule(fs.readFileSync('lib/hooks/use-dismiss-on-escape.ts', 'utf8'), {
+  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+}).outputText;
 type Probe = {
   calls: string[]; toasts: string[]; errors: string[]; held: boolean; reject: boolean; result: Record<string, unknown>;
   mount: (id?: string, email?: string | null) => void; unmount: () => void; release: () => void;
@@ -36,13 +41,16 @@ async function fixture(page: Page, locale = 'en-US') {
       react: React, 'next/navigation': { useRouter: () => ({ refresh() {} }) },
       'lucide-react': new Proxy({}, { get: () => () => null }),
       '@/components/ui/toast': { useToast: () => ({ success: message => p.toasts.push(message), error: message => p.toasts.push(message) }) },
-      '@/components/i18n/locale-provider': { useTranslations: () => key => catalogue[key] || key },
+      '@/components/i18n/locale-provider': { useTranslations: () => key => catalogue[key] || key, usePlural: () => (key, count, params) => Object.entries({ ...(params || {}), count }).reduce((s, [k, v]) => s.split('{' + k + '}').join(String(v)), catalogue[key + '.' + new Intl.PluralRules('${locale}').select(count)] ?? catalogue[key + '.other'] ?? key) },
       '@/app/(app)/admin/actions': {
         adminSendPasswordResetAction: async email => { p.calls.push(email); if (p.held) await new Promise(resolve => waiters.push(resolve));
           if (p.reject) throw new Error('Synthetic reset action response lost'); return p.result; },
         adminSetUserBanAction: async () => { p.bans++; return { ok: true }; },
       },
     };
+    const hook = { exports: {} };
+    new Function('require','module','exports', ${JSON.stringify(escapeHook)})(id => mocks[id], hook, hook.exports);
+    mocks['@/lib/hooks/use-dismiss-on-escape'] = hook.exports;
     const module = { exports: {} };
     new Function('require','module','exports', ${JSON.stringify(source)})(id => { if (!(id in mocks)) throw new Error('Unexpected import '+id); return mocks[id]; }, module, module.exports);
     const Control = module.exports.UserSecurityActions;

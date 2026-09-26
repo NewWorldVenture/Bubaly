@@ -29993,6 +29993,32 @@ Guard calibrated: undoing the insight fix fails it. Full suite 17,156 / 17,159 a
 these two updates, the 3 being the container's Node 22. Status 🔄 — none of the six has
 been driven through a failing read in a browser.
 
+## Q63 — E2E had been timing out on this branch, and the cause was this branch
+
+Found by reading why CI on `c8711138` ended **cancelled** with no newer push to cancel
+it: the E2E step ran 32 minutes and hit the job limit. It was not a flake. Seven
+self-contained browser harnesses — specs that compile real components into a page and
+supply every import themselves — were failing at mount, and each failing case then
+spent 30 s timing out, twice with the retry, until the job ran out of time. The earlier
+note in *Automated Tests* that E2E was "cancelled by a newer push" was true of one run
+and hid this pattern in the others.
+
+All three causes are changes this branch made, not changes in `main`:
+
+| Specs | Cause | Fix |
+|---|---|---|
+| display-clock, social-scheduling-ui, social-publish-consumers | Q-series "the catalogue leaves the browser" moved the provider's import to `lib/i18n/translate.ts`; these harnesses list allowed modules by hand, and did not list it (`Unexpected browser module: @/lib/i18n/translate`) | list it |
+| admin-password-reset-control | Q49 gave the account menu an Escape path through `lib/hooks/use-dismiss-on-escape`; the harness did not provide it, so the control never mounted | load the **real** hook source rather than a stand-in, so the menu behaves as in the app |
+| rewards-ledger, rewards-readback-review | the required-field `*` is `aria-hidden` (45d951df, correct: the input carries `required`), so the accessible name is "Reward", not "Reward\*" | select by the accessible name |
+| quick-capture-task (French) | the browser provider no longer falls back to English on its own — `getMessages()` merges English under the locale on the server — but the harness handed it raw `fr-FR.json`, so the 34 keys French has not reached rendered as raw keys | merge English under French, as `getMessages()` does |
+
+The three rewards/admin mocks also gained a `usePlural` that resolves CLDR categories
+from the same catalogue, since the provider now exports one.
+
+**Retest, local Chromium:** the seven specs went from failing at mount to **124 / 124**.
+No assertion was weakened: the only selector change is the accessible name, and the
+admin harness now runs more real code than before, not less.
+
 # Final Regression
 
 Last updated 2026-09-26 against branch head 7aa8dcdd (+ this commit). Each status leads with the evidence verified at that head; the text after "Earlier:" is the previous cycle's evidence, kept because it records things this session did not re-run. **New audit passes go ABOVE this heading** so that it stays at the bottom of the file, as the brief requires.
@@ -30013,7 +30039,7 @@ Status: ✅ PASS — `npm run lint` exit 0 with 10 warnings against its `--max-w
 Earlier: ✅ PASS — lint passes with three existing warnings: document-capture generation ref and two messages-module toastError dependencies. Log: Temp/bubaly-admission-lint-20260919.log. Localization and query audit pass (491 tables / 86 functions / 146 routes).
 
 ## Automated Tests
-Status: 🔄 IN PROGRESS — the `concierge-run-write-boundary` batch timeout made robust (Q62); 17,150 of 17,153 pass locally (Q59/Q60); earlier 17,123 of 17,126 under both TZ=UTC and TZ=America/Los_Angeles; the 3 failures are this container's Node 22.22.2 against the declared 24.21.0 (`node-version-is-pinned`, two `stream-cancellation-runtime` cases), and the same suite passed in CI on Node 24. E2E: not re-run to completion on the current head (the in-flight run on 6e0d8477 was cancelled by a newer push).
+Status: 🔄 IN PROGRESS — E2E had been timing out, not flaking: seven browser harnesses failed at mount on changes this branch made; fixed, 124/124 locally (Q63). The `concierge-run-write-boundary` batch timeout made robust (Q62); 17,150 of 17,153 pass locally (Q59/Q60); earlier 17,123 of 17,126 under both TZ=UTC and TZ=America/Los_Angeles; the 3 failures are this container's Node 22.22.2 against the declared 24.21.0 (`node-version-is-pinned`, two `stream-cancellation-runtime` cases), and the same suite passed in CI on Node 24. E2E: not re-run to completion on the current head (the in-flight run on 6e0d8477 was cancelled by a newer push).
 
 Earlier: 🔄 IN PROGRESS — final full UTC and DST runs each pass 16,543/16,543 checks across 1,303 files, zero failed/skipped. Reports: Temp/bubaly-admission-full-{utc,dst}-20260919.json. Browser ownership passes 81 cases, completion/recovery UI 82, server/routing 147 and shared/server/page 77 in overlapping focused runs. The actual HTTP fixture is discovery/type/lint checked, not locally executed; successful Mailpit/PKCE provider completion must still run in hosted CI. Published dc99dc83 passes Web (both 16,495-check full suites, 252-page build and strict types), Database, Mobile and Finance; its E2E run35464679043 passes 1,150/1,150 with authenticated/durable flags enabled. That baseline does not include the new witness source. Current discovery lists 1,183 cases across 49 files. New-source hosted acceptance remains required.
 
