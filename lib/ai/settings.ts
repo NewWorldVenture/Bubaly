@@ -70,7 +70,16 @@ export async function setAIConfig(
   input: { provider: AIEngine; model: string | null; anthropicKey?: string; openaiKey?: string },
   actorId: string | null,
 ): Promise<void> {
-  const { data } = await supabase.from('app_settings').select('value').eq('key', KEY).maybeSingle();
+  // Both results used to be discarded, and the caller's try/catch cannot see a
+  // resolved PostgREST error:
+  //  - a refused READ made `stored` empty, so a save that left a key field
+  //    blank ("keep the stored one", as the docstring promises) wrote that key
+  //    as NULL — wiping the platform's AI key from a model change;
+  //  - a refused WRITE was reported to the admin as saved.
+  // Both throw now, which the admin action already turns into a message.
+  // Audit C1-S9-76.
+  const { data, error: readError } = await supabase.from('app_settings').select('value').eq('key', KEY).maybeSingle();
+  if (readError) throw readError;
   const stored = (data?.value ?? {}) as StoredConfig;
   const next: StoredConfig = {
     provider: 'openai',   // OpenAI-only deployment
@@ -78,8 +87,9 @@ export async function setAIConfig(
     anthropicKey: input.anthropicKey?.trim() ? input.anthropicKey.trim() : stored.anthropicKey ?? null,
     openaiKey: input.openaiKey?.trim() ? input.openaiKey.trim() : stored.openaiKey ?? null,
   };
-  await supabase.from('app_settings').upsert(
+  const { error: writeError } = await supabase.from('app_settings').upsert(
     { key: KEY, value: next as unknown as Database['public']['Tables']['app_settings']['Insert']['value'], updated_by: actorId },
     { onConflict: 'key' },
   );
+  if (writeError) throw writeError;
 }

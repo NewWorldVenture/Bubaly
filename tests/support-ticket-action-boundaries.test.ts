@@ -7,7 +7,7 @@ const client = readFileSync('components/admin/ticket-row-actions.tsx', 'utf8');
 
 describe('Support Ticket action boundaries', () => {
   it('checks privileged transitions, targets, and ticket creation writes', () => {
-    expect(actions).toContain('describeActionError');
+    expect(actions).toContain('describeActionError(');
     expect(actions).toContain("if (!('supabase' in guarded)) return guarded;");
     expect(actions).toContain(".select('id')");
     expect(actions).toContain("if (!data) return { ok: false, error: t('actions.ticketNotFound') }");
@@ -19,8 +19,8 @@ describe('Support Ticket action boundaries', () => {
     expect(actions).toContain('emailSchema.safeParse');
     expect(actions).toContain('CATEGORIES.has(category)');
     expect(actions).toContain('PRIORITIES.has(priority)');
-    expect(client).toContain('toastError');
-    expect(client).toContain('success');
+    expect(client).toContain('toastError(');
+    expect(client).toContain('success(');
     expect(client).toContain('if (!result.ok)');
     expectSays(client, 'ticketRowActions.couldNotUpdateThatTicket', "Could not update that ticket. Please try again.");
   });

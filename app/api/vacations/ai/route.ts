@@ -15,6 +15,7 @@ import { tripWeatherAdvice, type WeatherDayLike } from '@/lib/vacations/weather'
 import { suggestPacking } from '@/lib/vacations/packing';
 import { tripNights, dateRange } from '@/lib/vacations/dates';
 import { parseVacationAIOutput, type VacationAIPlan } from '@/lib/vacations/ai-output';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 export const runtime = 'nodejs';
 
@@ -103,7 +104,9 @@ export async function POST(req: NextRequest) {
 
     for (const w of tripWeatherAdvice((weather.data ?? []) as WeatherDayLike[])) recos.push({ kind: 'weather_warning', title: 'Weather advisory', detail: w.text, severity: w.severity });
 
-    // Replace prior rule-sourced open recommendations.
+    // Replace prior rule-sourced open recommendations. The ERROR gates the
+    // insert below; zero rows deliberately does not — on a first run there is
+    // no prior set, and that is the ordinary case. Audit C1-S9-63.
     const { error: deleteError } = await supabase.from('vacation_ai_recommendations').delete().eq('vacation_id', vacationId).eq('source', 'rules').eq('status', 'open');
     if (deleteError) {
       logDatabaseFailure('recommendation cleanup', deleteError);
@@ -170,8 +173,16 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
       ids: string[],
     ) => {
       if (!ids.length) return;
-      const { error } = await supabase.from(table).delete().eq('vacation_id', vacationId).in('id', ids);
+      // Every id here was minted by THIS request moments ago, so unlike an undo
+      // a person started, an exact count is right: removing fewer than were
+      // created leaves part of a failed build in the family's trip. Logged, not
+      // raised — the caller is already answering with the build's failure.
+      // Audit C1-S9-63.
+      const { data: removed, error } = await supabase.from(table).delete().eq('vacation_id', vacationId).in('id', ids).select('id');
       if (error) logDatabaseFailure(`build rollback ${table}`, error);
+      else if ((removed?.length ?? 0) !== ids.length) {
+        logDatabaseFailure(`build rollback ${table}`, new Error(`removed ${removed?.length ?? 0} of ${ids.length}`));
+      }
     };
 
     const rollbackBuild = async () => {
@@ -184,8 +195,16 @@ Costs/planned are whole US dollars. Keep itinerary day numbers between 1 and ${r
       for (const category of changedBudgetCategories) {
         const previous = originalBudgets.get(category);
         if (!previous) continue;
-        const { error } = await supabase.from('vacation_budgets').update({ planned_cents: previous.planned_cents, notes: previous.notes }).eq('id', previous.id).eq('vacation_id', vacationId);
+        // Restoring a row read before the build; zero rows is a failed restore,
+        // leaving the build's planned amount in a budget the family never
+        // accepted. Logged, as above. Audit C1-S9-63.
+        const { data: restoredBudget, error } = await supabase.from('vacation_budgets')
+          .update({ planned_cents: previous.planned_cents, notes: previous.notes })
+          .eq('id', previous.id).eq('vacation_id', vacationId).select('id');
         if (error) logDatabaseFailure('build rollback vacation_budgets restore', error);
+        else if (wroteNoRows(restoredBudget)) {
+          logDatabaseFailure('build rollback vacation_budgets restore', new Error('no rows updated'));
+        }
       }
     };
 

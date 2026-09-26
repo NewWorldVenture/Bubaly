@@ -13,7 +13,7 @@ import { settleAll } from '@/lib/supabase/settle';
 import { createMealAction, planMealAction, removeMealPlanAction } from '@/app/(app)/dashboard/meals/actions';
 import { addMealPlanToGroceryListAction, setGroceryItemCheckedAction } from '@/app/(app)/dashboard/grocery/actions';
 import type { Substitution } from '@/lib/meals/substitutions';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select, Textarea } from '@/components/ui/input';
@@ -277,8 +277,10 @@ export function MealsModule() {
   }
 
   async function toggleFavorite(r: Recipe) {
-    const { error } = await createClient().from('family_recipes').update({ is_favorite: !r.is_favorite }).eq('id', r.id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-83.
+    const { data: updated, error } = await createClient().from('family_recipes').update({ is_favorite: !r.is_favorite }).eq('id', r.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated)) return toastError(tr('errors.thatChangeWasNotSaved'));
     void refreshRecipes();
   }
 
@@ -304,6 +306,10 @@ export function MealsModule() {
     // the toast said "Vote recorded", and the tally below counts each ballot
     // once and divides by `ballots.length` — so that member votes twice, for
     // two different meals, and inflates the denominator too.
+    //
+    // The clear's ERROR is checked; its row count is left unconfirmed on
+    // purpose: a member's first vote has no prior ballot, so zero rows is the
+    // ordinary answer. Audit C1-S9-83.
     const { error: clearError } = await sb.from('meal_vote_ballots')
       .delete().eq('vote_id', voteData.vote.id).eq('member_id', selfId);
     if (clearError) return toastError(describeDbError(clearError));

@@ -6,6 +6,7 @@ import { ErrorState } from '@/components/ui/states';
 import { IndependenceModule } from '@/components/modules/independence-module';
 import type { Tables } from '@/lib/database.types';
 import { getTranslations } from '@/lib/i18n/server';
+import { isMissingRelationError } from '@/lib/supabase/errors';
 
 export const metadata: Metadata = { title: 'Independence' };
 export const dynamic = 'force-dynamic';
@@ -34,13 +35,40 @@ export default async function IndependencePage() {
     );
   }
 
-  // Degrades safely before migration 0175 is applied.
+  // Degrades safely before migration 0175 is applied — but ONLY for that.
+  //
+  // The `try/catch` here described a guard that was not there. A supabase-js
+  // query RESOLVES with `{ data, error }` for anything the database answers,
+  // including a refused read; it rejects only when the request never completed
+  // (DNS, TCP, TLS, an aborted fetch — see lib/supabase/settle.ts). So the catch
+  // never saw an RLS refusal or a query error, and `data ?? []` turned one into
+  // an empty ladder.
+  //
+  // That is worse here than on a plain list page, for two reasons. First, the
+  // `members` read immediately above IS guarded, with a comment describing this
+  // exact hazard — so the roster renders correctly beside a ladder that has
+  // silently emptied, which reads as "this child has achieved nothing" rather
+  // than as a failure. Second, it is DESTRUCTIVE: the parent's natural response
+  // is to tap Start on a rung, and `startMilestoneAction` upserts
+  // `status: 'in_progress'` on `(family_id, member_id, domain, title)` with no
+  // read of its own — so a milestone the child had already ACHIEVED is silently
+  // reverted to in-progress, one tap at a time.
+  //
+  // A genuinely missing relation still degrades, because that is what the
+  // original comment was for. Anything else fails closed, matching the sibling
+  // read's own convention on this page. Audit C1-S9-27.
   let rows: Tables<'independence_milestones'>[] = [];
-  try {
-    const { data } = await supabase.from('independence_milestones').select('*')
-      .eq('family_id', ctx.active.familyId).order('created_at', { ascending: false }).limit(1000);
-    rows = (data ?? []) as Tables<'independence_milestones'>[];
-  } catch { /* table not applied yet */ }
+  const milestones = await supabase.from('independence_milestones').select('*')
+    .eq('family_id', ctx.active.familyId).order('created_at', { ascending: false }).limit(1000);
+  if (milestones.error && !isMissingRelationError(milestones.error)) {
+    return (
+      <div className="module-page">
+        <PageHeader title={t('independence.independence')} description={t('independenceModule.responsibilitiesThatGrowAsYour')} />
+        <ErrorState message={t('independence.couldNotLoadYourFamily')} />
+      </div>
+    );
+  }
+  rows = (milestones.data ?? []) as Tables<'independence_milestones'>[];
 
   return (
     <IndependenceModule

@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
@@ -9,7 +10,7 @@ describe('admin document deletion boundary', () => {
     expect(action).toContain("select('family_id, title, storage_path')");
     expect(action).toContain("remove([doc.storage_path])");
     expect(action).toContain('if (storageError) return actionFailure');
-    expect(action.indexOf('if (storageError)')).toBeLessThan(action.indexOf(".from('documents').delete()"));
+    expect(at(action, 'if (storageError)')).toBeLessThan(at(action, ".from('documents').delete()"));
   });
 
   it('fails closed for missing rows and confirms the database delete returned a row', () => {

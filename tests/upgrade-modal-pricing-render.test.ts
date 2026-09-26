@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 import { createElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -65,7 +66,7 @@ describe.each(locales)('upgrade pricing disclosure in %s', (locale) => {
     expect(annualButton).toBeDefined();
     expect(annualButton).toContain(`${equivalent}<span`);
     expect(annualButton).toContain(disclosure);
-    expect(annualButton!.indexOf(disclosure)).toBeLessThan(annualButton!.indexOf(escaped(messages['upgradeModal.chooseAnnual'])));
+    expect(at(annualButton!, disclosure)).toBeLessThan(at(annualButton!, escaped(messages['upgradeModal.chooseAnnual'])));
     expect(monthlyButton).toContain(`${monthly}<span`);
     expect(monthlyButton).not.toContain(disclosure);
     expect(html).not.toContain('upgradeModal.billedAnnually');

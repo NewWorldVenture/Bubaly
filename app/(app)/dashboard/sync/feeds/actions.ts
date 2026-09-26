@@ -5,6 +5,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { syncFeed } from '@/lib/server/calendar-feeds';
+import { wroteNoRows } from '@/lib/supabase/errors';
 import { normalizeFeedUrl, FEED_COLORS, type FeedColor } from '@/lib/calendar/feeds';
 import { recordActivationServer } from '@/lib/analytics/activation-server';
 
@@ -60,15 +61,23 @@ export async function syncCalendarFeed(feedId: string): Promise<ActionResult> {
 
 /** Removes a feed; its imported events cascade-delete via the FK. */
 export async function removeCalendarFeed(feedId: string): Promise<ActionResult> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
 
-  const { error } = await supabase
+  // The imported events cascade with the row, so a delete that matched nothing
+  // removed nothing at all — and the caller answers `{ ok: true }`, which the
+  // settings page reads as "feed removed". The family would keep seeing a
+  // stranger's calendar in theirs with no row left in the UI to unsubscribe
+  // from. Audit C1-S9-59.
+  const { data: removed, error } = await supabase
     .from('calendar_feeds')
     .delete()
     .eq('id', feedId)
-    .eq('family_id', ctx.active.familyId);
+    .eq('family_id', ctx.active.familyId)
+    .select('id');
   if (error) return { ok: false, error: error.message };
+  if (wroteNoRows(removed)) return { ok: false, error: t('actions.feedNotFound') };
 
   revalidatePath('/dashboard/settings');
   revalidatePath('/dashboard/calendar');

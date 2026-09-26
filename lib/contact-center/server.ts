@@ -11,6 +11,7 @@ import { systemScopeForFamily } from '@/lib/services/scope';
 import { enrichPaperworkEntities, PaperworkEnrichmentError } from '@/lib/services/paperwork';
 import { classifyIntent, summarizeInbound, shouldNotifyFamily, shouldPlanInbound, type InboundChannel } from './routing';
 import { escapeLike } from '@/lib/supabase/escape-like';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 type Admin = ReturnType<typeof createServiceClient>;
 export type ContactChannel = Tables<'family_contact_channels'>;
@@ -123,8 +124,9 @@ export async function provisionFamilyNumber(
   const channel = await getOrCreateChannelResult(admin, familyId);
   if (channel.error) return { ok: false, skipped: false, error: 'Could not load the family contact channel.' };
   if (!isTwilioConfigured()) {
-    const { error } = await admin.from('family_contact_channels').update({ provisioning_status: 'pending' }).eq('family_id', familyId);
-    if (error) return { ok: false, skipped: false, error: 'Could not save the phone request.' };
+    const { data: requested, error } = await admin.from('family_contact_channels').update({ provisioning_status: 'pending' }).eq('family_id', familyId).select('family_id');
+    // Zero rows is the same unsaved request as an error. Audit C1-S9-69.
+    if (error || wroteNoRows(requested)) return { ok: false, skipped: false, error: 'Could not save the phone request.' };
     return { ok: false, skipped: true };
   }
   try {
@@ -136,16 +138,27 @@ export async function provisionFamilyNumber(
       smsUrl: `${appUrl()}/api/contact-center/sms`,
       friendlyName: `Bubaly Family ${familyId.slice(0, 8)}`,
     });
-    const { error } = await admin.from('family_contact_channels').update({
+    // The number is BOUGHT by here. A save that matched nothing answered
+    // `ok: true` with it while the family's channel held no number — so inbound
+    // calls to it could not be routed to them, and it went on billing. That is
+    // exactly the situation this message already names. Audit C1-S9-69.
+    const { data: saved, error } = await admin.from('family_contact_channels').update({
       phone_number: provisioned.phoneNumber,
       phone_number_sid: provisioned.sid,
       provisioning_status: 'active',
-    }).eq('family_id', familyId);
-    if (error) return { ok: false, skipped: false, error: 'The number was provisioned but could not be saved. Please contact support.' };
+      // `family_id` is this table's key — it has no `id` column, and asking for
+      // one fails every call. Caught by supabase-query-audit (C1-S9-69).
+    }).eq('family_id', familyId).select('family_id');
+    if (error || wroteNoRows(saved)) {
+      console.error('[contact-center] provisioned number could not be saved to the channel', { familyId, sid: provisioned.sid, error: error ?? 'no rows updated' });
+      return { ok: false, skipped: false, error: 'The number was provisioned but could not be saved. Please contact support.' };
+    }
     return { ok: true, phoneNumber: provisioned.phoneNumber };
   } catch (e) {
-    const { error: statusError } = await admin.from('family_contact_channels').update({ provisioning_status: 'failed' }).eq('family_id', familyId);
-    if (statusError) console.error('[contact-center] failed to save provisioning failure status', statusError);
+    // Logged on zero rows too; the failure itself is already being returned.
+    // Audit C1-S9-69.
+    const { data: failedRow, error: statusError } = await admin.from('family_contact_channels').update({ provisioning_status: 'failed' }).eq('family_id', familyId).select('family_id');
+    if (statusError || wroteNoRows(failedRow)) console.error('[contact-center] failed to save provisioning failure status', statusError ?? 'no rows updated');
     console.error('[contact-center] number provisioning failed', e);
     return { ok: false, skipped: false, error: 'Could not provision a number. Please try again.' };
   }
@@ -342,14 +355,16 @@ export async function routeInboundToPlanner(admin: Admin, input: {
   }
 
   if (input.messageId) {
-    const { error } = await admin
+    const { data: stamped, error } = await admin
       .from('family_inbox_messages')
       .update({ ai_handled: true })
       .eq('id', input.messageId)
-      .eq('family_id', input.familyId);
+      .eq('family_id', input.familyId)
+      .select('id');
     // The request exists either way; a failed stamp is a display gap, not a
-    // lost message, so it is logged rather than thrown.
-    if (error) console.error('[contact-center] handled stamp failed', error);
+    // lost message, so it is logged rather than thrown — on zero rows as well
+    // as on an error. Audit C1-S9-69.
+    if (error || wroteNoRows(stamped)) console.error('[contact-center] handled stamp failed', error ?? { messageId: input.messageId, error: 'no rows updated' });
   }
 
   return {

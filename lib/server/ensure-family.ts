@@ -174,8 +174,12 @@ export async function ensureActiveFamily(
   // nudge them to finish and marketing can segment them. Best-effort, never blocks
   // — and never DOWNGRADES a completed record (only creates when absent).
   try {
-    const { data: prior } = await admin
+    // A refused read falls through to the insert, which `unique (user_id)` (0159)
+    // refuses if a row exists — so nothing is downgraded; it is logged so the
+    // insert's failure is not mistaken for the cause. Audit C1-S9-75.
+    const { data: prior, error: priorReadError } = await admin
       .from('onboarding_progress').select('user_id').eq('user_id', user.id).maybeSingle();
+    if (priorReadError) console.error('[ensure-family] onboarding_progress read failed', { userId: user.id, error: priorReadError });
     if (!prior) {
       // Read, because the bare catch below cannot see a resolved PostgREST
       // error. Degrading silently is right for a pre-migration table; it is not

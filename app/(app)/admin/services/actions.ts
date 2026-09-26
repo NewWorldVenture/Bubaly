@@ -30,6 +30,11 @@ export async function saveServiceDescriptionAction({ key, description }: { key: 
   try {
     // Empty or same-as-default → remove the override (fall back to the code default).
     if (!trimmed || trimmed === SERVICE_DESCRIPTIONS[key]) {
+      // Deliberately NOT gated on rows. "Reset to default" on a service nobody
+      // ever overrode matches nothing, and that IS the outcome asked for — the
+      // description is the code default either way. Confirming it would fail the
+      // button for every service in its shipped state, which is most of them.
+      // Audit C1-S9-60.
       const { error } = await supabase.from('service_descriptions').delete().eq('service_key', key);
       if (error) return { ok: false, error: describeActionError(error, t('actions.couldNotResetThatDescription')) };
       revalidatePath('/admin/services');

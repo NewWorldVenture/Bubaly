@@ -10,14 +10,28 @@ vi.mock('@/lib/supabase/auth', () => ({ requireUserContext: () => requireUserCon
 vi.mock('@/lib/supabase/server', () => ({ createServer: () => createServer() }));
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
 
-function client(runData: unknown, updateError: unknown) {
+// `updateRows` models what PostgREST actually returns once the write asks for
+// `.select()`: the affected rows. The previous version hardcoded `data: null`
+// for every outcome, which is a shape the real client cannot produce for a
+// write that matched something — so a confirmed write looked like a no-op and
+// this fake, not the code, is what broke when C1-S9-48 added the confirmation.
+// Same class as C1-S9-26 and the writeClient repair in C1-S9-46. Pass
+// `updateRows: []` to model the case the confirmation exists for.
+function client(
+  runData: unknown,
+  updateError: unknown,
+  updateRows: unknown[] = [{ id: 'r1' }],
+) {
   const selectChain: Record<string, unknown> = {
     eq: () => selectChain,
     maybeSingle: () => Promise.resolve({ data: runData, error: null }),
   };
+  const settle = (onF: (v: { data: unknown; error: unknown }) => unknown) =>
+    Promise.resolve({ data: updateError ? null : updateRows, error: updateError }).then(onF);
   const updateChain: Record<string, unknown> = {
     eq: () => updateChain,
-    then: (onF: (v: { data: null; error: unknown }) => unknown) => Promise.resolve({ data: null, error: updateError }).then(onF),
+    select: () => updateChain,
+    then: settle,
   };
   return { from: () => ({ select: () => selectChain, update: () => updateChain }) };
 }
@@ -41,5 +55,15 @@ describe('dismissQueuedRunAction write boundary', () => {
     const { dismissQueuedRunAction } = await import('@/app/(app)/dashboard/concierge/actions');
     const res = await dismissQueuedRunAction('r1');
     expect(res.ok).toBe(true);
+  });
+
+  it('returns ok:false when the dismiss matched no rows (C1-S9-48)', async () => {
+    // No error, and nothing changed — the case a `.select()` exists to detect.
+    // Before C1-S9-48 this returned ok, so the run stayed queued while the
+    // manager was told it was dismissed, and the next tick offered it again.
+    createServer.mockResolvedValue(client({ id: 'r1', status: 'pending', metadata: {} }, null, []));
+    const { dismissQueuedRunAction } = await import('@/app/(app)/dashboard/concierge/actions');
+    const res = await dismissQueuedRunAction('r1');
+    expect(res.ok).toBe(false);
   });
 });

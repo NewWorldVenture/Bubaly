@@ -6,7 +6,7 @@ import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { getAIConfig } from '@/lib/ai/settings';
 import { MAX_FLYER_JSON_BYTES, readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
-import { fetchExternal } from '@/lib/server/external-fetch';
+import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
 import {
   annotateAllergens, buildPantryChefPrompt, normalizeAllergies, normalizePlanDate, parsePantryRecipes,
 } from '@/lib/meals/pantry-chef';
@@ -136,10 +136,22 @@ export async function POST(req: NextRequest) {
     // raw profiles are never returned — only the normalised terms drive the
     // prompt + the allergenConflict flag.
     const service = createServiceClient();
-    const { data: profiles } = await service
+    const { data: profiles, error: profilesError } = await service
       .from('medical_profiles')
       .select('allergies')
       .eq('family_id', familyId);
+    // `?? []` on THIS read is not a degradation, it is the safety filter
+    // switching itself off. `allergies` is both what `buildPantryChefPrompt`
+    // tells the model to avoid and what `annotateAllergens` flags the returned
+    // recipes against, so an empty list means the photo is answered with no
+    // allergy constraint and no allergen warning — and the response says
+    // `allergiesConsidered: 0`, which is exactly what a family with none on
+    // file sees. A household whose child has a peanut allergy would have been
+    // shown peanut recipes, unflagged, and told nothing had gone wrong.
+    if (profilesError) {
+      console.error('[ai/pantry-chef] allergy read failed', profilesError);
+      return NextResponse.json({ error: t('pantryChef.fridgeChefIsUnavailableRight') }, { status: 503 });
+    }
     const allergies = normalizeAllergies(...(profiles ?? []).map((p) => p.allergies as string | null));
 
     const aiConfig = await getAIConfig(service);
@@ -150,7 +162,7 @@ export async function POST(req: NextRequest) {
     const model = aiConfig.model && /^(gpt-|o\d|chatgpt-)/i.test(aiConfig.model) ? aiConfig.model : 'gpt-4o';
 
     const prompt = buildPantryChefPrompt(allergies, new Date());
-    const aiRes = await fetchExternal('https://api.openai.com/v1/chat/completions', {
+    const aiRes = await fetchWithDeadline('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({

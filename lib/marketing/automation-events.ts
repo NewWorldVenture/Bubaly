@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { runSteps, type Step } from '@/lib/marketing/automation-steps';
 import { EVENT_DEFAULT_COPY, type EventTrigger } from '@/lib/marketing/automation-triggers';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 type DB = SupabaseClient<Database>;
 
@@ -78,14 +79,20 @@ export async function fireAutomationEvent(supabase: DB, params: FireEventParams)
     }
 
     const failed = actions.some((action) => action.includes(':failed') || action.includes(':skipped') || action.includes(':unsupported'));
-    const { error: runError } = await supabase
+    // The run row was reserved or claimed by this path above, so zero rows is a
+    // result that was not recorded — the same situation the error already
+    // throws for, and it takes the same path. Audit C1-S9-67.
+    const { data: recorded, error: runError } = await supabase
       .from('marketing_automation_runs')
       .update({
         status: failed ? 'failed' : 'completed',
         metadata: { trigger: params.trigger, actions, ...(params.context ?? {}) } as unknown as Database['public']['Tables']['marketing_automation_runs']['Update']['metadata'],
       })
-      .eq('id', runId);
-    if (runError) throw new Error('Could not record the event-driven automation result.');
+      .eq('id', runId)
+      .select('id');
+    if (runError || wroteNoRows(recorded)) throw new Error('Could not record the event-driven automation result.');
+    // Rows deliberately not checked: zero rows is a workflow deleted mid-run,
+    // with no count left to keep. Audit C1-S9-67.
     const { error: workflowError } = await supabase
       .from('marketing_automation_workflows')
       .update({ run_count: (flow.run_count ?? 0) + 1 })

@@ -70,7 +70,7 @@ import { makeKey } from '@/lib/services/idempotency';
 import { notify } from '@/lib/services/notifications';
 import { scopeForSystem, scopeNow } from '@/lib/services/scope';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { settleAll } from '@/lib/supabase/settle';
 import { readInChunks } from '@/lib/supabase/chunked-in';
 
@@ -281,14 +281,19 @@ async function flipStatus(
 }
 
 async function stampExecution(scope: ServiceScope, approvalId: string, result: string): Promise<void> {
-  const { error } = await scope.db
+  const { data: stamped, error } = await scope.db
     .from('approval_requests')
     .update({ executed_at: new Date(scopeNow(scope).getTime()).toISOString(), execution_result: result.slice(0, 2000) })
     .eq('id', approvalId)
-    .eq('family_id', scope.familyId);
+    .eq('family_id', scope.familyId)
+    .select('id');
   // The action already ran; if this stamp is lost the request looks
-  // un-executed, so make the failure observable rather than silent.
-  if (error) console.error('[service:approvals] execution-result stamp failed', { approvalId, error });
+  // un-executed, so make the failure observable rather than silent — and a
+  // stamp that matched no row is lost just as surely as one that errored.
+  // Audit C1-S9-65.
+  if (error || wroteNoRows(stamped)) {
+    console.error('[service:approvals] execution-result stamp failed', { approvalId, error: error ?? 'no rows updated' });
+  }
 }
 
 // ─── Run linkage ────────────────────────────────────────────────────────────
@@ -470,9 +475,23 @@ export type ConciergePlanRow = {
  * insert logic exists once and a plan can never double-materialise because two
  * surfaces disagreed about what "already applied" means.
  */
+/**
+ * What a materialization did. `failed` holds every kind that was asked for and
+ * is NOT known to exist: a refused insert, or every target when the ledger
+ * could not be read.
+ *
+ * This used to be a bare `WriteBackKind[]`, which gave three outcomes one
+ * shape: an empty list meant "already in place", "the ledger was unreadable"
+ * and "every insert was refused" alike. Every caller read it as the first. The
+ * manual button showed a green "done" tick and disabled itself; an approved
+ * run was stamped executed with the summary "everything was already in place"
+ * over a plan that never reached the calendar. Audit C1-S9-72.
+ */
+export type MaterializeResult = { applied: WriteBackKind[]; failed: WriteBackKind[] };
+
 export async function materializeConciergePlan(
   db: DB, familyId: string, userId: string, plan: ConciergePlanRow, kinds: WriteBackKind[],
-): Promise<WriteBackKind[]> {
+): Promise<MaterializeResult> {
   const doable = new Set(availableWriteBackKinds(plan));
   const targets = kinds.filter((k) => doable.has(k));
 
@@ -485,11 +504,12 @@ export async function materializeConciergePlan(
     // Without the ledger there is no way to know what was already applied, and
     // guessing "nothing" is how a plan lands on the calendar twice.
     console.error('[concierge] could not read the write-back ledger', { planId: plan.id, familyId, error: existingError });
-    return [];
+    return { applied: [], failed: targets };
   }
   const already = new Set((existing ?? []).map((r) => r.action_kind));
 
   const applied: WriteBackKind[] = [];
+  const failed: WriteBackKind[] = [];
   for (const kind of targets) {
     if (already.has(kind)) continue;
     let targetTable = '';
@@ -504,7 +524,7 @@ export async function materializeConciergePlan(
         starts_at: new Date(`${plan.planned_for}T00:00:00.000Z`).toISOString(), all_day: true,
       }).select('id').single();
       // A failed insert is not "applied": claiming it would also skip it on the idempotent re-run.
-      if (evErr) { console.error('[concierge] calendar write-back failed', { planId: plan.id, familyId, error: evErr }); continue; }
+      if (evErr) { console.error('[concierge] calendar write-back failed', { planId: plan.id, familyId, error: evErr }); failed.push(kind); continue; }
       targetTable = 'calendar_events'; targetId = ev?.id ?? null;
     } else if (kind === 'reminder' || kind === 'task') {
       const { data: rem, error: remErr } = await db.from('family_reminders').insert({
@@ -515,7 +535,7 @@ export async function materializeConciergePlan(
         remind_at: reminderLeadAt(plan.planned_for),
         ai_suggested: true,
       }).select('id').single();
-      if (remErr) { console.error('[concierge] reminder write-back failed', { planId: plan.id, familyId, kind, error: remErr }); continue; }
+      if (remErr) { console.error('[concierge] reminder write-back failed', { planId: plan.id, familyId, kind, error: remErr }); failed.push(kind); continue; }
       targetTable = 'family_reminders'; targetId = rem?.id ?? null;
     } else {
       continue;
@@ -531,7 +551,7 @@ export async function materializeConciergePlan(
     if (logErr) console.error('[concierge] concierge_plan_actions log failed', { planId: plan.id, familyId, kind, error: logErr });
     applied.push(kind);
   }
-  return applied;
+  return { applied, failed };
 }
 
 async function runConciergePlan(
@@ -553,12 +573,21 @@ async function runConciergePlan(
   }
   if (!plan) return fail('That plan no longer exists.', { code: SERVICE_CODES.notFound });
 
-  const applied = await materializeConciergePlan(scope.db, scope.familyId, scope.userId, plan, kinds);
+  const { applied, failed } = await materializeConciergePlan(scope.db, scope.familyId, scope.userId, plan, kinds);
+  if (failed.length) {
+    // Not "everything was already in place". The legacy run below is left
+    // `pending` on purpose, so the Autopilot panel still offers the retry —
+    // and the retry is safe, because the ledger skips what did land.
+    // Audit C1-S9-72.
+    return fail('Bubaly could not finish applying that plan. Try again.', { code: SERVICE_CODES.db, retryable: true });
+  }
   const summary = runSummary(plan.title, applied);
 
   // The concierge loop queued a legacy `pending` automation row beside this
   // approval; closing it here is what stops the Autopilot panel showing the
-  // plan as waiting after a parent has already said yes.
+  // plan as waiting after a parent has already said yes. Rows deliberately not
+  // checked: not every approval has such a row, and zero is the ordinary case
+  // for those. Audit C1-S9-65.
   const { error: runError } = await scope.db
     .from('family_automation_runs')
     .update({
@@ -574,6 +603,8 @@ async function runConciergePlan(
 }
 
 async function dismissConciergeRun(scope: ServiceScope, row: ApprovalRow): Promise<void> {
+  // As above: zero rows is an approval with no legacy run beside it.
+  // Audit C1-S9-65.
   const { error } = await scope.db
     .from('family_automation_runs')
     .update({ status: 'dismissed' })

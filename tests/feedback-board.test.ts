@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 import { describe, it, expect } from 'vitest';
 import {
   statusMeta, isFeedbackStatus, categoryMeta, impactMeta, LEGEND_STATUSES,
@@ -80,7 +81,7 @@ describe('sortIdeas', () => {
   });
   it('trending → recent-with-votes beats old-with-more-votes', () => {
     const order = sortIdeas([a, b, c], 'trending', now).map((i) => i.id);
-    expect(order.indexOf('a')).toBeLessThan(order.indexOf('b'));
+    expect(at(order, 'a')).toBeLessThan(at(order, 'b'));
   });
   it('pinned always floats to the top regardless of sort', () => {
     const pinned = idea({ id: 'p', vote_count: 0, pinned: true, created_at: '2020-01-01T00:00:00Z' });

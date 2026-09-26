@@ -9,7 +9,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select, Textarea } from '@/components/ui/input';
@@ -419,8 +419,13 @@ function PlanDetail({ plan, onClose, onDelete, onRefresh }: {
     const prev = editStatus;
     setEditStatus(status);
     const supabase = createClient();
-    const { error } = await supabase.from('concierge_plans').update({ status }).eq('id', plan.id);
-    if (error) { toastError(describeDbError(error)); return; }
+    // A status move that matched nothing (refused under RLS, or the plan gone)
+    // used to fall through to the loop below — which then materialised a plan
+    // whose acceptance never persisted onto the family's calendar. Confirmed,
+    // and reverted on screen when it did not land. Audit C1-S9-77.
+    const { data: moved, error } = await supabase.from('concierge_plans').update({ status }).eq('id', plan.id).select('id');
+    if (error) { setEditStatus(prev); toastError(describeDbError(error)); return; }
+    if (wroteNoRows(moved)) { setEditStatus(prev); toastError(t('errors.thatChangeWasNotSaved')); return; }
     onRefresh();
     // The autonomous execution loop: accepting a plan (→ booked/confirmed) lets
     // Bubaly execute its write-backs per the family's autopilot dial — done
@@ -428,7 +433,12 @@ function PlanDetail({ plan, onClose, onDelete, onRefresh }: {
     try {
       const res = await planAcceptedAction(plan.id, prev, status);
       if (res.ok && res.summary) {
-        success(res.mode === 'auto' ? res.summary : `Queued for approval — check the Autopilot panel`);
+        success(res.mode === 'auto' ? res.summary : t('conciergeModule.queuedForApprovalCheckThe'));
+      } else if (!res.ok) {
+        // The status change saved; what did not happen is Bubaly's follow-
+        // through, and that was the one outcome this screen never mentioned.
+        // Audit C1-S9-72.
+        toastError(res.error);
       }
     } catch { /* the loop is best-effort; the status change already saved */ }
   }

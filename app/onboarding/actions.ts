@@ -28,7 +28,7 @@ import type { DinnerIdea, DinnerEffort } from '@/lib/onboarding/dinner-ideas';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import type { MemberRole } from '@/lib/constants/roles';
-import { describeActionError } from '@/lib/supabase/errors';
+import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { onboardingItemKey, onboardingRunKey } from '@/lib/onboarding/idempotency';
 import { captureSignupReferral } from '@/lib/referrals/signup';
 import type { OnboardingAnswers } from '@/lib/onboarding/facts';
@@ -418,9 +418,18 @@ export async function finalizeOnboardingAction(input: {
     });
     familyId = existingMembership.family_id;
     if (connectedReceipt && connectedReceipt.familyId !== familyId) return { ok: false, error: t('connectedCalendar.unavailable') };
-    const { error: adoptErr } = await admin.from('families')
-      .update({ name: family.name, timezone: family.timezone }).eq('id', familyId);
+    // Adopting the auto-provisioned family: this is where the name and the
+    // TIMEZONE the person just typed land. Matching no rows finished onboarding
+    // against a family still carrying the provisioning defaults, and the timezone
+    // is not cosmetic — every reminder, digest and cron slot afterwards is
+    // computed in it, so the household would be woken by a morning brief at the
+    // wrong hour with nothing in the wizard to re-run. Audit C1-S9-59.
+    const { data: adopted, error: adoptErr } = await admin.from('families')
+      .update({ name: family.name, timezone: family.timezone }).eq('id', familyId).select('id');
     if (adoptErr) return onboardingFailure('auto-provisioned family update', adoptErr, t('actions.couldNotFinishSettingUp2'));
+    if (wroteNoRows(adopted)) {
+      return onboardingFailure('auto-provisioned family update', new Error('no rows updated'), t('actions.couldNotFinishSettingUp2'));
+    }
   } else {
     // Claim first-family creation under a per-user database lock. This keeps
     // double-submit/retry requests on one family even before the membership
@@ -460,16 +469,28 @@ export async function finalizeOnboardingAction(input: {
     return onboardingFailure('parent membership upsert', ownerErr, t('actions.couldNotFinishSettingUp2'));
   }
 
-  // 2c. Ensure a trial subscription exists (the trigger may have created one;
-  //     only insert when missing so we never duplicate). Non-fatal.
-  const { data: existingSub } = await admin
+  // 2c. Ensure a trial subscription exists (provisioning normally made one;
+  //     only insert when missing so we never duplicate). Fatal when it cannot
+  //     be ensured — this comment used to say "Non-fatal" above a
+  //     `return onboardingFailure`.
+  //
+  //     A refused read used to fall through to the insert as if no row
+  //     existed. The unique index on family_id (0285) then refused the insert,
+  //     and onboarding failed AFTER the family and membership were created —
+  //     exactly as a double submit racing itself did. A unique violation here
+  //     means the row this step ensures is present, so it counts as success.
+  //     Deliberately NOT an upsert on family_id: 0285 skips that index where
+  //     duplicate rows already exist, and ON CONFLICT (family_id) would then
+  //     fail every onboarding. Audit C1-S9-75.
+  const { data: existingSub, error: existingSubError } = await admin
     .from('subscriptions').select('id').eq('family_id', familyId).limit(1);
-  if (!existingSub || existingSub.length === 0) {
+  if (existingSubError) console.error('[onboarding] subscription check failed; ensuring by insert', { familyId, error: existingSubError });
+  if (existingSubError || !existingSub || existingSub.length === 0) {
     const { error: subErr } = await admin.from('subscriptions').insert({
       family_id: familyId, plan: 'free', status: 'trialing',
       current_period_end: new Date(Date.now() + 14 * 86400000).toISOString(),
     });
-    if (subErr) return onboardingFailure('trial subscription creation', subErr, t('actions.couldNotFinishSettingUp2'));
+    if (subErr && subErr.code !== '23505') return onboardingFailure('trial subscription creation', subErr, t('actions.couldNotFinishSettingUp2'));
   }
 
   // 3. Set this as the active family (service-role + logged: if this silently

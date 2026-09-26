@@ -6,7 +6,7 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { settle } from '@/lib/supabase/settle';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Input, Select } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -106,14 +106,17 @@ export function WeekendModule() {
   async function setStatus(event: Event, status: WeekendPlanStatus) {
     const existing = planByEvent.get(event.id);
     const sb = createClient();
-    const { error } = existing
-      ? await sb.from('weekend_plans').update({ status }).eq('id', existing.id)
-      : await sb.from('weekend_plans').insert({ family_id: familyId, event_id: event.id, status, created_by: userId });
-    if (error) toastError(describeDbError(error)); else success(existing ? 'Updated' : 'Saved to plans');
+    const { data: planned, error } = existing
+      ? await sb.from('weekend_plans').update({ status }).eq('id', existing.id).select('id')
+      : await sb.from('weekend_plans').insert({ family_id: familyId, event_id: event.id, status, created_by: userId }).select('id');
+    if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(planned)) toastError(t('errors.thatChangeWasNotSaved'));
+    else success(existing ? 'Updated' : 'Saved to plans');
   }
   async function removePlan(id: string) {
-    const { error } = await createClient().from('weekend_plans').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success(t('weekendModule.removed'));
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-81.
+    const { data: removed2, error } = await createClient().from('weekend_plans').delete().eq('id', id).select('id');
+    if (error) toastError(describeDbError(error)); else if (wroteNoRows(removed2)) toastError(t('errors.thatChangeWasNotSaved')); else success(t('weekendModule.removed'));
   }
 
   async function addFeed(e: React.FormEvent) {
@@ -124,15 +127,18 @@ export function WeekendModule() {
     if (error) toastError(describeDbError(error)); else { success(t('weekendModule.sourceAdded')); setFeedForm({ label: '', url: '', kind: 'ics' }); }
   }
   async function toggleFeed(f: Feed) {
-    const { error } = await settle(
-      createClient().from('weekend_feeds').update({ is_active: !f.is_active }).eq('id', f.id));
+    // Under RLS a refused row comes back with no error and zero rows. Audit C1-S9-81.
+    const { data: toggled, error } = await settle(
+      createClient().from('weekend_feeds').update({ is_active: !f.is_active }).eq('id', f.id).select('id'));
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(toggled)) return toastError(t('errors.thatChangeWasNotSaved'));
     void refreshFeeds();
   }
   async function removeFeed(id: string) {
     if (!confirm(t('weekendModule.removeThisSource'))) return;
-    const { error } = await settle(createClient().from('weekend_feeds').delete().eq('id', id));
+    const { data: removedFeed, error } = await settle(createClient().from('weekend_feeds').delete().eq('id', id).select('id'));
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(removedFeed)) return toastError(t('errors.thatChangeWasNotSaved'));
     void refreshFeeds();
   }
 

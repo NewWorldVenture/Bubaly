@@ -14,7 +14,7 @@
 // "the family"; a chore with nobody to do it is a chore nobody does.
 import 'server-only';
 import type { Priority, RecurrenceFreq, TaskStatus, Tables, Updatable } from '@/lib/database.types';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { recordActivitySafely } from '../activity';
 import { keyedProbe, withIdempotency, type IdempotencyProbe } from '../idempotency';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
@@ -469,8 +469,13 @@ export async function createChore(
         if (!assigned.ok) {
           // Covers the lost race as well as a genuine failure: either way this
           // chore has no assignment, and `withIdempotency` re-probes next.
-          const { error: rollbackError } = await scope.db.from('chores').delete().eq('id', chore.id).eq('family_id', scope.familyId);
-          if (rollbackError) console.error('[service:tasks] chore rollback failed', rollbackError);
+          // A chore this call just created, so zero rows removed is a failed
+          // rollback — an unassigned chore left in the family's list — not an
+          // absence. Logged, not raised. Audit C1-S9-65.
+          const { data: rolledBack, error: rollbackError } = await scope.db.from('chores').delete().eq('id', chore.id).eq('family_id', scope.familyId).select('id');
+          if (rollbackError || wroteNoRows(rolledBack)) {
+            console.error('[service:tasks] chore rollback failed', rollbackError ?? { choreId: chore.id, error: 'no rows deleted' });
+          }
           return assigned;
         }
         assignment = assigned.data;

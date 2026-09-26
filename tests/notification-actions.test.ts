@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 // A notification that cannot be acted on is a notice, not a notification.
 //
 // The rows have carried `related_type` / `related_id` since 0002 and every
@@ -241,7 +242,7 @@ describe('the notifications list renders the mapping', () => {
     // The failure branches return before `markRead`, so a chore that could not
     // be signed off stays unread and visible.
     const inline = source.slice(source.indexOf('async function runInline'));
-    expect(inline.indexOf('if (!result.ok)')).toBeLessThan(inline.indexOf('await markRead(notificationId)'));
+    expect(at(inline, 'if (!result.ok)')).toBeLessThan(at(inline, 'await markRead(notificationId)'));
   });
 
   it('splits the list the same way the bell does', () => {

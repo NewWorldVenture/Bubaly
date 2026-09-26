@@ -7,6 +7,7 @@ import { settleAll } from '@/lib/supabase/settle';
 import { createServer } from '@/lib/supabase/server';
 import { tallyVotes, winningOption } from '@/lib/recipes/voting';
 import type { Database } from '@/lib/database.types';
+import { wroteNoRows, describeActionError } from '@/lib/supabase/errors';
 
 type Json = Database['public']['Tables']['grocery_items']['Insert'];
 type Result = { ok: true; id?: string } | { ok: false; error: string };
@@ -61,28 +62,44 @@ export async function castBallot(input: { voteId: string; optionId: string; choi
 
 /** Close a vote and stamp the winning option (highest score). */
 export async function closeMealVote(voteId: string): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const [{ data: options }, { data: ballots }] = await settleAll([
+  const [{ data: options, error: optionsError }, { data: ballots, error: ballotsError }] = await settleAll([
     supabase.from('meal_vote_options').select('id').eq('vote_id', voteId).eq('family_id', ctx.active.familyId),
     supabase.from('meal_vote_ballots').select('option_id, choice').eq('vote_id', voteId).eq('family_id', ctx.active.familyId),
   ]);
+  // These two reads DECIDE the winner, and `?? []` turned a failed read into
+  // "nobody voted". `settleAll` hands a transport failure back in the same
+  // { data: null, error } shape, so a database blip closed the vote with
+  // `winner_option_id: null` — the family's dinner picked by an outage, stamped
+  // as final, and reported to them as a success. A vote that could not be
+  // counted must stay open.
+  if (optionsError || ballotsError) {
+    console.error('[meal-vote] could not read the ballots to close the vote', { voteId, optionsError, ballotsError });
+    return { ok: false, error: t('vote.couldNotLoadMealVoting') };
+  }
   const ids = (options ?? []).map((o) => o.id);
   const winner = winningOption(tallyVotes(ids, (ballots ?? []) as { option_id: string; choice: string }[]));
-  const { error } = await supabase.from('meal_votes')
+  // The winner is computed here and stored nowhere else. A close that matched
+  // no rows leaves the vote open and discards the tally. Audit C1-S9-58.
+  const { data: closed, error } = await supabase.from('meal_votes')
     .update({ status: 'closed', winner_option_id: winner })
-    .eq('id', voteId).eq('family_id', ctx.active.familyId);
+    .eq('id', voteId).eq('family_id', ctx.active.familyId).select('id');
   if (error) return { ok: false, error: error.message };
+  if (wroteNoRows(closed)) return { ok: false, error: t('actions.couldNotCloseThatVote') };
   revalidatePath('/dashboard/recipes/vote');
   return { ok: true };
 }
 
 /** Reopen a closed vote. */
 export async function reopenMealVote(voteId: string): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const { error } = await supabase.from('meal_votes').update({ status: 'open', winner_option_id: null }).eq('id', voteId).eq('family_id', ctx.active.familyId);
+  const { data: reopenedVote, error } = await supabase.from('meal_votes').update({ status: 'open', winner_option_id: null }).eq('id', voteId).eq('family_id', ctx.active.familyId).select('id');
   if (error) return { ok: false, error: error.message };
+  if (wroteNoRows(reopenedVote)) return { ok: false, error: t('actions.couldNotReopenThatVote') };
   revalidatePath('/dashboard/recipes/vote');
   return { ok: true };
 }
@@ -94,11 +111,15 @@ export async function addWinnerToGrocery(voteId: string): Promise<Result> {
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
 
-  const { data: vote } = await supabase.from('meal_votes').select('winner_option_id').eq('id', voteId).eq('family_id', familyId).maybeSingle();
+  const { data: vote, error: voteReadError } = await supabase.from('meal_votes').select('winner_option_id').eq('id', voteId).eq('family_id', familyId).maybeSingle();
+  // A refused read is not an absence: it used to return the "not found" answer below. Audit C1-S9-75.
+  if (voteReadError) return { ok: false, error: describeActionError(voteReadError, t('actions.couldNotCheckThatRefresh')) };
   if (!vote?.winner_option_id) return { ok: false, error: t('actions.noWinnerYetCloseThe') };
-  const { data: option } = await supabase.from('meal_vote_options').select('recipe_id, label').eq('id', vote.winner_option_id).maybeSingle();
+  const { data: option, error: optionReadError } = await supabase.from('meal_vote_options').select('recipe_id, label').eq('id', vote.winner_option_id).maybeSingle();
+  if (optionReadError) return { ok: false, error: describeActionError(optionReadError, t('actions.couldNotCheckThatRefresh')) };
   if (!option?.recipe_id) return { ok: false, error: t('actions.theWinningOptionIsNot') };
-  const { data: recipe } = await supabase.from('family_recipes').select('ingredients').eq('id', option.recipe_id).eq('family_id', familyId).maybeSingle();
+  const { data: recipe, error: recipeReadError } = await supabase.from('family_recipes').select('ingredients').eq('id', option.recipe_id).eq('family_id', familyId).maybeSingle();
+  if (recipeReadError) return { ok: false, error: describeActionError(recipeReadError, t('actions.couldNotCheckThatRefresh')) };
   const ingredients = (recipe?.ingredients as unknown as { name: string; quantity?: string; unit?: string }[]) ?? [];
   if (ingredients.length === 0) return { ok: false, error: t('actions.thatRecipeHasNoIngredients') };
 
@@ -106,8 +127,12 @@ export async function addWinnerToGrocery(voteId: string): Promise<Result> {
   // Both archive columns, as lib/services/groceries explains: only `archived_at`
   // is ever written, so an `is_archived`-only reader hands the shopping list a
   // list the family already put away.
-  const { data: list } = await supabase.from('grocery_lists').select('id').eq('family_id', familyId)
+  //
+  // A refused read left `list` null, and "get or create" then CREATED: a second
+  // "Groceries" list beside the one the family shops from. Audit C1-S9-75.
+  const { data: list, error: listReadError } = await supabase.from('grocery_lists').select('id').eq('family_id', familyId)
     .eq('is_archived', false).is('archived_at', null).order('created_at').limit(1).maybeSingle();
+  if (listReadError) return { ok: false, error: describeActionError(listReadError, t('actions.couldNotCheckThatRefresh')) };
   let listId = list?.id;
   if (!listId) {
     const { data: created, error } = await supabase.from('grocery_lists').insert({ family_id: familyId, name: 'Groceries', created_by: ctx.user.id }).select('id').single();

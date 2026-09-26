@@ -12,7 +12,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { FAMILY_MEDIA_MAX_LABEL, partitionBySize, familyMediaPath } from '@/lib/storage/family-media';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
@@ -163,8 +163,10 @@ export function PhotosModule() {
 
   async function toggleFavorite(photo: Photo) {
     const supabase = createClient();
-    const { error } = await supabase.from('family_photos').update({ is_favorite: !photo.is_favorite }).eq('id', photo.id);
+    // Under RLS a refused row comes back with no error and zero rows. Audit C1-S9-82.
+    const { data: favorited, error } = await supabase.from('family_photos').update({ is_favorite: !photo.is_favorite }).eq('id', photo.id).select('id');
     if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(favorited)) toastError(tr('errors.thatChangeWasNotSaved'));
     void refreshPhotos();
   }
 
@@ -174,9 +176,27 @@ export function PhotosModule() {
     // dropping this error showed a false "Photo deleted" while the photo remained.
     // Only remove the storage object after the row is gone, so a failed delete can
     // never orphan a library row that points at an already-removed image.
-    const { error } = await supabase.from('family_photos').delete().eq('id', photo.id);
+    // "Only after the row is gone" needs the row to be gone: under RLS a refused
+    // delete comes back with no error and zero rows, and this went on to remove
+    // the file and say "Photo deleted" about a photo still in the library.
+    // Zero rows now stops before storage is touched. Audit C1-S9-82.
+    const { data: removedRow, error } = await supabase.from('family_photos').delete().eq('id', photo.id).select('id');
     if (error) { toastError(describeDbError(error)); return; }
-    await supabase.storage.from('family-media').remove([photo.storage_path]);
+    if (wroteNoRows(removedRow)) { toastError(tr('errors.thatChangeWasNotSaved')); void refreshPhotos(); return; }
+    // This module deletes the ROW first, deliberately — the comment above says
+    // why, and that reasoning is left intact. What it did not do was read this
+    // result: a file that survives after its row is gone is invisible, and
+    // "Photo deleted" was said either way. The row really is gone, so this
+    // cannot refuse; it can stop claiming, and say what is actually true.
+    // Audit C1-S6-01.
+    const { error: storageError } = await supabase.storage.from('family-media').remove([photo.storage_path]);
+    if (storageError) {
+      console.error('[photos] storage object survived its deleted row', { path: photo.storage_path }, storageError);
+      toastError(tr('photosModule.theFileCouldNotBe'));
+      void refreshPhotos();
+      if (lightboxIdx !== null) setLightboxIdx(null);
+      return;
+    }
     success(tr('photosModule.photoDeleted'));
     void refreshPhotos();
     if (lightboxIdx !== null) setLightboxIdx(null);
@@ -184,8 +204,9 @@ export function PhotosModule() {
 
   async function updateCaption(photo: Photo, caption: string) {
     const supabase = createClient();
-    const { error } = await supabase.from('family_photos').update({ caption }).eq('id', photo.id);
+    const { data: captioned, error } = await supabase.from('family_photos').update({ caption }).eq('id', photo.id).select('id');
     if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(captioned)) toastError(tr('errors.thatChangeWasNotSaved'));
     void refreshPhotos();
     setEditPhoto(null);
   }

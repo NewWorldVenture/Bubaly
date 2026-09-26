@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 import { expectTranslates } from './helpers/translated';
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -35,8 +36,8 @@ describe('Stripe webhook replay contract', () => {
   });
 
   it('claims before subscription and money side effects', () => {
-    expect(stripeRoute.indexOf('await recordEvent')).toBeLessThan(stripeRoute.indexOf('await persistSubscription'));
-    expect(moneyRoute.indexOf('await recordEvent')).toBeLessThan(moneyRoute.indexOf('await handleTransactionCreated'));
+    expect(at(stripeRoute, 'await recordEvent')).toBeLessThan(at(stripeRoute, 'await persistSubscription'));
+    expect(at(moneyRoute, 'await recordEvent')).toBeLessThan(at(moneyRoute, 'await handleTransactionCreated'));
   });
 
   it('does not acknowledge failed card money effects or unknown billing prices', () => {

@@ -23,6 +23,7 @@ import { instantForLocalTime } from '@/lib/time/zoned';
 import { expandEventsInZone } from '@/lib/calendar/recurrence';
 import { readAISettings } from '@/lib/services/ai-settings';
 import { settleAll } from '@/lib/supabase/settle';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 type Client = SupabaseClient<Database>;
 
@@ -264,11 +265,14 @@ export async function recordAssistantEvent(
     outcome,
   });
   if (error) console.error('[assistant] event insert failed', error);
-  const { error: touchError } = await supabase
+  // Logged on zero rows too — "last used" is what a parent reads to decide
+  // whether a key is live. Never raised. Audit C1-S9-69.
+  const { data: touched, error: touchError } = await supabase
     .from('assistant_links')
     .update({ last_used_at: new Date().toISOString() })
-    .eq('id', link.id);
-  if (touchError) console.error('[assistant] last-used update failed', touchError);
+    .eq('id', link.id)
+    .select('id');
+  if (touchError || wroteNoRows(touched)) console.error('[assistant] last-used update failed', touchError ?? { linkId: link.id, error: 'no rows updated' });
 }
 
 /**

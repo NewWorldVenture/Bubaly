@@ -19,7 +19,7 @@
 // notes whose checklist no screen can show.
 import 'server-only';
 import type { Tables } from '@/lib/database.types';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { recordActivitySafely } from '../activity';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '../types';
 
@@ -211,12 +211,20 @@ export async function deleteNote(scope: ServiceScope, noteId: string): Promise<S
   const existing = await noteForWrite(scope, noteId);
   if (!existing.ok) return existing;
 
-  const { error } = await scope.db
+  // `noteForWrite` above proved the note was there; zero rows here means it
+  // was not deleted after all — a policy refusal answers with no error and no
+  // rows — and `ok` told the family it was gone. Audit C1-S9-65.
+  const { data: deleted, error } = await scope.db
     .from('notes')
     .delete()
     .eq('id', noteId)
-    .eq('family_id', scope.familyId);
+    .eq('family_id', scope.familyId)
+    .select('id');
 
+  if (!error && wroteNoRows(deleted)) {
+    console.error('[service:notes] delete matched no row', { familyId: scope.familyId, noteId });
+    return fail('Could not delete that note.', { code: SERVICE_CODES.db });
+  }
   if (error) {
     console.error('[service:notes] delete failed', error);
     return fail(describeDbError(error, 'Could not delete that note.'), { code: SERVICE_CODES.db });

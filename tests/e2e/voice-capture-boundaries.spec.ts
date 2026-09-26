@@ -25,6 +25,12 @@ const sdk = fs.readFileSync(path.join(path.dirname(require.resolve('@supabase/su
 const SOURCE_FILES = [
   'components/modules/voice-module.tsx', 'lib/capture/save.ts', 'lib/capture/parse.ts',
   'lib/voice/command-router.ts', 'lib/voice/transcript.ts', 'lib/supabase/errors.ts',
+  // The voice-history write was extracted out of the module into its own file
+  // (C1-S8-06). The loader throws 'Unexpected module' for anything neither
+  // mocked nor listed here, so the module threw at mount and every test in this
+  // file failed on a missing textbox — which is precisely what the first test
+  // below is named to catch. Its only runtime import is settle, already listed.
+  'lib/voice/history.ts',
   'lib/time/zoned.ts', 'lib/supabase/settle.ts',
 ];
 const MOCKED = [

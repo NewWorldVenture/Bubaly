@@ -7,7 +7,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { KIND_ORDER, CATEGORY_LABELS, type ListingKind, type ListingCategory } from '@/lib/marketplace/listings';
-import { describeActionError } from '@/lib/supabase/errors';
+import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -62,12 +62,14 @@ export async function deleteSavedSearchAction(id: string): Promise<Result> {
   if (!id) return { ok: false, error: t('actions.invalidAlert') };
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const { error } = await supabase
+  const { data: deletedSearch, error } = await supabase
     .from('marketplace_saved_searches')
     .delete()
     .eq('id', id)
-    .eq('family_id', ctx.active.familyId);
+    .eq('family_id', ctx.active.familyId)
+    .select('id');
   if (error) return actionFailure('delete the saved search', t('alerts.couldNotDeleteTheSavedSearch'), error);
+  if (wroteNoRows(deletedSearch)) return { ok: false, error: t('alerts.couldNotDeleteTheSavedSearch') };
   revalidatePath(ALERTS);
   return { ok: true };
 }
@@ -78,12 +80,14 @@ export async function markSearchSeenAction(id: string): Promise<Result> {
   if (!id) return { ok: false, error: t('actions.invalidAlert') };
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const { error } = await supabase
+  const { data: seen, error } = await supabase
     .from('marketplace_saved_searches')
     .update({ last_seen_at: new Date().toISOString() })
     .eq('id', id)
-    .eq('family_id', ctx.active.familyId);
+    .eq('family_id', ctx.active.familyId)
+    .select('id');
   if (error) return actionFailure('mark the saved search as seen', t('alerts.couldNotMarkTheSavedSearch'), error);
+  if (wroteNoRows(seen)) return { ok: false, error: t('alerts.couldNotMarkTheSavedSearch') };
   revalidatePath(ALERTS);
   return { ok: true };
 }

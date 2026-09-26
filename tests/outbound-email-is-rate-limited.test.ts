@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
@@ -55,7 +56,7 @@ describe('an endpoint that mails a caller-chosen address is bounded', () => {
   it('the invite route answers 429 with Retry-After rather than sending', () => {
     const src = readFileSync('app/api/email/invite/route.ts', 'utf8');
     // The limit has to come BEFORE the send, or it bounds nothing.
-    expect(src.indexOf('enforceRequestRateLimit')).toBeLessThan(src.indexOf('sendReactEmail('));
+    expect(at(src, 'enforceRequestRateLimit(')).toBeLessThan(at(src, 'sendReactEmail('));
     expect(src).toContain("status: 429");
     expect(src).toMatch(/'Retry-After': String\(limited\.retryAfter\)/);
   });

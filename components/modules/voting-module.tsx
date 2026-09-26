@@ -5,7 +5,7 @@ import { Vote, Plus, Trash2, Check, Trophy, Lock, Plane, Sparkles, DollarSign, M
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -127,6 +127,10 @@ export function VotingModule() {
     const supabase = createClient();
     const pollVotes = votesByPoll.get(poll.id) ?? [];
     const mine = memberSelections(pollVotes as VoteLike[], meId);
+    // These two are keyed by member and option, not by id, and are left
+    // unconfirmed on purpose: un-voting a vote that is already gone, or
+    // clearing a prior single-choice vote that is not there, is the ordinary
+    // case, and the insert below is what the member sees. Audit C1-S9-81.
     if (mine.has(optionId)) {
       const { error: unErr } = await supabase.from('family_poll_votes').delete().eq('option_id', optionId).eq('member_id', meId);
       if (unErr) toastError(describeDbError(unErr));
@@ -143,13 +147,15 @@ export function VotingModule() {
   }
 
   async function setStatus(id: string, status: string) {
-    const { error } = await createClient().from('family_polls').update({ status }).eq('id', id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-81.
+    const { data: updated, error } = await createClient().from('family_polls').update({ status }).eq('id', id).select('id');
     if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(updated)) toastError(tr('errors.thatChangeWasNotSaved'));
   }
   async function remove(id: string) {
     if (!confirm(tr('votingModule.deleteThisPoll'))) return;
-    const { error } = await createClient().from('family_polls').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success(tr('votingModule.deleted'));
+    const { data: removed, error } = await createClient().from('family_polls').delete().eq('id', id).select('id');
+    if (error) toastError(describeDbError(error)); else if (wroteNoRows(removed)) toastError(tr('errors.thatChangeWasNotSaved')); else success(tr('votingModule.deleted'));
   }
 
   if (loading) return <SkeletonList />;

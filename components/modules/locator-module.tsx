@@ -457,7 +457,7 @@ export function LocatorModule() {
                     <span className="text-xs font-semibold">{day.label}</span>
                     <span className="text-[11px] text-muted">{day.count} {day.count === 1 ? 'place' : 'places'}</span>
                   </div>
-                  {day.label === 'Today' && (
+                  {day.isToday && (
                     <div className="space-y-2.5 border-l border-border/60 pl-3">
                       {day.events.filter((e) => e.event_type === 'arrived').slice(0, 4).map((e, i) => (
                         <div key={e.id} className="relative">

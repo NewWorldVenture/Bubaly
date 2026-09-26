@@ -5,6 +5,7 @@ import { Plus, Pencil, Trash2, type LucideIcon } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -126,18 +127,22 @@ export function TripCrudSection<T extends Row>({
     const supabase = createClient() as any;
     const row = toRow(form, fields);
     const id = form.id as string;
-    const { error } = id
-      ? await supabase.from(table).update(row).eq('id', id)
-      : await supabase.from(table).insert({ ...row, family_id: familyId, vacation_id: vacationId, created_by: userId });
-    if (error) return toastError(error.message);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-84.
+    const { data: saved, error } = id
+      ? await supabase.from(table).update(row).eq('id', id).select('id')
+      : await supabase.from(table).insert({ ...row, family_id: familyId, vacation_id: vacationId, created_by: userId }).select('id');
+    if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(saved)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(id ? 'Saved' : 'Added');
     setForm(null);
   }
 
   async function remove(id: string) {
     if (!confirm(t('shared.deleteThisItem'))) return;
-    const { error } = await (createClient() as any).from(table).delete().eq('id', id);
-    if (error) toastError(error.message); else success(t('shared.deleted'));
+    const { data: removed, error } = await (createClient() as any).from(table).delete().eq('id', id).select('id');
+    if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(removed)) toastError(tr('errors.thatChangeWasNotSaved'));
+    else success(t('shared.deleted'));
   }
 
   return (

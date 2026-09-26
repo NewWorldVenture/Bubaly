@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
+import { wroteNoRows } from '@/lib/supabase/errors';
 import { getStripe } from '@/lib/stripe';
 import { isAdmin } from '@/lib/constants/roles';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
@@ -58,12 +59,18 @@ export async function POST(req: NextRequest) {
     );
     await getStripe().subscriptions.update(sub.provider_ref, { cancel_at_period_end: cancelAtPeriodEnd });
 
-    const { error: syncError } = await createServiceClient()
+    // Stripe has already changed by here. A sync matching no rows left the local
+    // row saying the opposite of what the family just chose — "cancels at period
+    // end" against a subscription that now renews, or the reverse — and answered
+    // `ok`. It is the same situation the 503 below already describes, so it takes
+    // the same path; the webhook reconciles either way. Audit C1-S9-62.
+    const { data: synced, error: syncError } = await createServiceClient()
       .from('subscriptions')
       .update({ cancel_at_period_end: cancelAtPeriodEnd })
-      .eq('family_id', familyId);
-    if (syncError) {
-      console.error('[billing-cancel] Subscription sync write failed', syncError);
+      .eq('family_id', familyId)
+      .select('id');
+    if (syncError || wroteNoRows(synced)) {
+      console.error('[billing-cancel] Subscription sync write failed', syncError ?? 'no rows updated');
       return NextResponse.json({ error: t('cancel.stripeUpdatedTheSubscriptionBut'), providerUpdated: true }, { status: 503 });
     }
 

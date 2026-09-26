@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 
@@ -13,18 +14,20 @@ function body(fn: string): string {
   return src.slice(start, after === -1 ? undefined : after);
 }
 
+// Re-pointed under C1-S9-81 from the exact `const { error } =`: writes now
+// also bind the rows they changed and read them. The property is unchanged.
 describe('closet-module writes fail visibly', () => {
   for (const fn of ['logWear', 'saveSuggestionAsOutfit', 'setItemStatus', 'deleteItem', 'toggleFavorite', 'deleteOutfit', 'onSubmit', 'uploadPhoto']) {
     it(`${fn} guards its Supabase result`, () => {
       const b = body(fn);
-      expect(b, `${fn} must destructure an error`).toMatch(/(const \{ error \} =|const \{ data: stored, error: upErr \} =|results\.find\(\(r\) => r\.error\))/);
+      expect(b, `${fn} must destructure an error`).toMatch(/(const \{ (?:data(?:: \w+)?, )?error \} =|const \{ data: stored, error: upErr \} =|results\.find\(\(r\) => r\.error\))/);
       expect(b, `${fn} must toast the failure`).toMatch(/toastError\(describeDbError\((error|upErr|failed\.error)\)\)/);
     });
   }
 
   it('logs a wear before bumping wear counts, and reports a failed bump', () => {
     const b = body('logWear');
-    expect(b.indexOf("from('outfit_logs').insert(")).toBeLessThan(b.indexOf("from('wardrobe_items').update("));
+    expect(at(b, "from('outfit_logs').insert(")).toBeLessThan(at(b, "from('wardrobe_items').update("));
     expect(b).toContain('const failed = results.find((r) => r.error);');
   });
 

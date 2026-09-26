@@ -43,7 +43,7 @@ import { recordActivity } from '@/lib/services/activity';
 import { makeKey, scopeKey } from '@/lib/services/idempotency';
 import type { ServiceScope } from '@/lib/services/types';
 import { createServiceClient } from '@/lib/supabase/server';
-import { describeActionError, describeDbError } from '@/lib/supabase/errors';
+import { describeActionError, describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import {
   HIGH_STAKES_AI_DOMAINS, riskToDecision, toolTags,
   type Capability, type Decision, type TrustRole,
@@ -274,7 +274,13 @@ async function finalizeCall(
   toolCallId: string,
   patch: { state: 'succeeded' | 'failed'; outputs?: Json | null; error?: string | null; durationMs: number; resource?: { table: string; id: string | null } | null },
 ): Promise<void> {
-  const { error } = await ledger
+  // Never throws — the household write already happened — but a finalize that
+  // is LOST is worse than its old log line said: the row stays `reserved`, and
+  // once stale a retry with the same key takes it over and RE-EXECUTES a write
+  // that already landed (a second calendar event). Zero rows is lost as surely
+  // as an error, so it reaches the same log, which now names that consequence.
+  // Audit C1-S9-66.
+  const { data: finalized, error } = await ledger
     .from('ai_tool_calls')
     .update({
       state: patch.state,
@@ -285,8 +291,13 @@ async function finalizeCall(
       resource_table: patch.resource?.table ?? null,
       resource_id: patch.resource?.id ?? null,
     })
-    .eq('id', toolCallId);
-  if (error) console.error('[tool-exec] could not finalize the tool call ledger row', error);
+    .eq('id', toolCallId)
+    .select('id');
+  if (error || wroteNoRows(finalized)) {
+    console.error('[tool-exec] could not finalize the tool call ledger row; a stale retry may re-execute it', {
+      toolCallId, state: patch.state, error: error ?? 'no rows updated',
+    });
+  }
 }
 
 type Gate =
@@ -395,8 +406,14 @@ async function gate(
   } else if (approvalId && consequences.length > 0) {
     // The trust bridge opens approvals without knowing what the tool would do;
     // the card (§31) needs the consequences, so they are attached here.
-    const { error } = await (await trustWriter(scope)).from('approval_requests').update({ consequences: consequences as unknown as Json }).eq('id', approvalId).eq('family_id', scope.familyId);
-    if (error) console.error('[tool-exec] could not attach consequences to the approval', error);
+    // Logged on zero rows too: without them the approval card asks a parent to
+    // decide with no statement of what the tool would do. Never raised — the
+    // approval itself exists. Audit C1-S9-66.
+    const { data: attached, error } = await (await trustWriter(scope)).from('approval_requests')
+      .update({ consequences: consequences as unknown as Json }).eq('id', approvalId).eq('family_id', scope.familyId).select('id');
+    if (error || wroteNoRows(attached)) {
+      console.error('[tool-exec] could not attach consequences to the approval', error ?? { approvalId, error: 'no rows updated' });
+    }
   }
 
   if (decision.effect === 'deny') return { kind: 'denied', reason: decision.reason };

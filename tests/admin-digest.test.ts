@@ -83,6 +83,47 @@ describe('summarizeDigestDelivery', () => {
   });
 });
 
+describe('the digest counts the whole day, not the first page of it (C1-S9-12)', () => {
+  it('pages the notification feed instead of capping it', () => {
+    // `digest.total` is `rows.length` and the order is created_at DESC, so a
+    // `.limit(500)` here did not shorten a list — it UNDER-REPORTED the day and
+    // dropped its earliest twenty-odd hours, while the email presented the
+    // remainder as the total. Only eight rows are ever rendered (`recent` is
+    // sliced to 8), so this read exists for the counts alone.
+    expect(routeSource).not.toMatch(/from\('admin_notifications'\)[\s\S]{0,240}?\.limit\(/);
+    expect(routeSource).toContain('readAll<DigestRow>(');
+    expect(routeSource).toContain(".from('admin_notifications')");
+    expect(routeSource).toContain('.range(from, to)');
+    // A REAL ceiling. `.limit(n)` is not one: PostgREST caps at db-max-rows
+    // whatever the client asks for, whereas readAll's `max` is honoured by
+    // paging to it and reads one row past to detect truncation.
+    expect(routeSource).toMatch(/\{ max: 20_000 \}/);
+  });
+
+  it('treats a truncated read as a failed read, not a short digest', () => {
+    // readAll returns the prefix AND an error when more rows remain, so the
+    // single `feedError` branch covers both a transport failure and a day that
+    // overflowed the ceiling. Either way the scheduler sees 502 and retries,
+    // rather than a confident undercount landing in a super admin's inbox.
+    const read = routeSource.slice(routeSource.indexOf('const { rows: feed, error: feedError }'));
+    const bail = read.indexOf('if (feedError)');
+    const use = read.indexOf('buildAdminDigest(');
+    expect(bail, 'the read must be bailed on').toBeGreaterThan(-1);
+    expect(use, 'the digest must be built from it').toBeGreaterThan(-1);
+    expect(bail).toBeLessThan(use);
+    expect(read.slice(bail, use)).toContain('{ status: 502 }');
+  });
+
+  it('total reflects every row it was given', () => {
+    // The property the route's read has to preserve, asserted on the pure
+    // function so it cannot drift: 1,200 rows is 1,200, not 500.
+    const many = Array.from({ length: 1200 }, (_, i) => row(i % 3 === 0 ? 'family_signup' : 'info'));
+    const d = buildAdminDigest(many);
+    expect(d.total).toBe(1200);
+    expect(d.byKind.find((k) => k.kind === 'family_signup')!.count).toBe(400);
+  });
+});
+
 describe('admin digest route failure boundary', () => {
   it('fails closed when the Supabase notification feed read fails', () => {
     expect(routeSource).toContain('feedError');
@@ -91,7 +132,7 @@ describe('admin digest route failure boundary', () => {
   });
 
   it('uses the delivery summary instead of counting boolean success blindly', () => {
-    expect(routeSource).toContain('summarizeDigestDelivery');
+    expect(routeSource).toContain('summarizeDigestDelivery(');
     expect(routeSource).toContain('summary.ok ? 200 : 502');
   });
 });

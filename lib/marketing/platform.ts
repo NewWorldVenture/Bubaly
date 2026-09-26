@@ -7,7 +7,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json, Tables } from '@/lib/database.types';
 import { isAIConfigured, resolveProvider } from '@/lib/ai/provider';
 import { getAIConfig } from '@/lib/ai/settings';
-import { fetchExternal } from '@/lib/server/external-fetch';
+import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
 import { readBoundedResponseJson } from '@/lib/server/bounded-response-body';
 import { syncMarketingProviders } from './provider-sync';
 
@@ -17,6 +17,7 @@ export type MarketingPage = Tables<'marketing_pages'>;
 // — this file is server-only. Imported for local use AND re-exported, so every
 // existing `from '@/lib/marketing/platform'` import keeps working unchanged.
 import { PAGE_TYPES, type MarketingPageType } from './page-types';
+import { wroteNoRows } from '@/lib/supabase/errors';
 export { PAGE_TYPES, type MarketingPageType };
 
 const PAGE_TYPE_SET = new Set<string>(PAGE_TYPES.map((item) => item.value));
@@ -258,7 +259,10 @@ async function runRegeneration(supabase: MarketingPlatformDb, job: Tables<'marke
   } catch (error) {
     console.error('[marketing-platform] AI generation degraded to deterministic content', error);
   }
-  const { error: updateError } = await supabase.from('marketing_pages').update({
+  // A page deleted since it was read matched nothing here, and the version
+  // upsert below then failed on its foreign key — still a throw, but blamed on
+  // the wrong write. Reported where it happened. Audit C1-S9-67.
+  const { data: saved, error: updateError } = await supabase.from('marketing_pages').update({
     title: generated.title,
     summary: generated.summary,
     body: generated.body,
@@ -266,8 +270,9 @@ async function runRegeneration(supabase: MarketingPlatformDb, job: Tables<'marke
     seo: safeJson(generated.seo),
     aeo: safeJson(generated.aeo),
     updated_by: null,
-  }).eq('id', page.id);
+  }).eq('id', page.id).select('id');
   if (updateError) throw updateError;
+  if (wroteNoRows(saved)) throw new Error(`Marketing page ${page.id} was not found when saving its regeneration.`);
   const { error: versionError } = await supabase.from('marketing_page_versions').upsert({
     page_id: page.id,
     version: page.version,
@@ -307,6 +312,8 @@ async function runQuestions(supabase: MarketingPlatformDb, job: Tables<'marketin
     pattern: 'faq', status: page.status === 'published' ? 'published' : 'answered',
     clarity_score: 85, last_reviewed: new Date().toISOString(), metadata: safeJson({ source: 'marketing_platform', page_id: page.id }),
   }));
+  // The ERROR gates the insert; zero rows does not — a first generation has no
+  // prior set. Rows deliberately not checked. Audit C1-S9-67.
   const { error: deleteError } = await supabase.from('marketing_aeo_questions').delete().eq('source_path', page.path).contains('metadata', { source: 'marketing_platform' });
   if (deleteError) throw deleteError;
   if (rows.length) {
@@ -320,7 +327,7 @@ async function openAIEmbeddings(textInputs: string[], configuredKey?: string | n
   const apiKey = configuredKey ?? process.env.OPENAI_API_KEY ?? '';
   if (!apiKey) throw new Error('Embedding provider is not configured. Set OPENAI_API_KEY.');
   const model = process.env.OPENAI_EMBEDDING_MODEL ?? 'text-embedding-3-small';
-  const response = await fetchExternal('https://api.openai.com/v1/embeddings', {
+  const response = await fetchWithDeadline('https://api.openai.com/v1/embeddings', {
     method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({ model, input: textInputs.map((input) => input.slice(0, 6_000)) }),
   }, 60_000);
@@ -351,6 +358,9 @@ async function runEmbedding(supabase: MarketingPlatformDb, job: Tables<'marketin
   const missing = chunks.map((content, index) => ({ content, index, hash: hashes[index] })).filter((row) => !reusable.has(row.hash));
   const staleIds = (existingRows ?? []).filter((row) => !currentHashes.has(row.content_hash)).map((row) => row.id);
   if (staleIds.length) {
+    // Rows deliberately not checked: these ids were read just above, so fewer
+    // matching means some were deleted — which keeps them out of retrieval at
+    // least as surely as marking them stale. Audit C1-S9-67.
     const { error: staleError } = await supabase.from('marketing_embeddings').update({ status: 'stale' }).in('id', staleIds);
     if (staleError) throw staleError;
   }

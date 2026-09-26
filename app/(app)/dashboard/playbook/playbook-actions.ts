@@ -15,6 +15,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { learnPlaybook, type PlaybookSignal } from '@/lib/playbook/learn';
 import { readAll } from '@/lib/supabase/read-all';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 type Result = { ok: boolean; error?: string; added?: number };
 
@@ -141,10 +142,16 @@ export async function refreshPlaybookAction(): Promise<Result> {
   }));
 
   // ignoreDuplicates: never overwrite an existing suggestion (esp. accepted/dismissed).
-  const { error } = await sb.from('family_playbook_suggestions')
-    .upsert(rows, { onConflict: 'family_id,signature', ignoreDuplicates: true });
+  // And therefore `rows.length` is not how many were ADDED: every duplicate is
+  // ignored without an error, so a refresh that found nothing new still toasted
+  // "Found 5 things Bubaly noticed" instead of "No new patterns yet". With
+  // ignoreDuplicates, `.select()` returns only the rows actually inserted, which
+  // is exactly the count. Audit C1-S9-70.
+  const { data: inserted, error } = await sb.from('family_playbook_suggestions')
+    .upsert(rows, { onConflict: 'family_id,signature', ignoreDuplicates: true })
+    .select('id');
   if (error) return { ok: false, error: error.message };
-  return { ok: true, added: rows.length };
+  return { ok: true, added: inserted?.length ?? 0 };
 }
 
 /**
@@ -178,7 +185,11 @@ export async function dismissSuggestionAction(input: { id: string }): Promise<Re
   const id = String(input?.id || '').trim();
   if (!id) return { ok: false, error: tr('playbookActions.missingSuggestion') };
   const sb = await createServer();
-  const { error } = await sb.from('family_playbook_suggestions').update({ status: 'dismissed' }).eq('id', id);
+  // The whole point of storing the dismissal is that the suggestion is not
+  // offered again. A no-op puts it back on the next refresh. Audit C1-S9-60.
+  const { data: dismissed, error } = await sb.from('family_playbook_suggestions')
+    .update({ status: 'dismissed' }).eq('id', id).select('id');
   if (error) return { ok: false, error: error.message };
+  if (wroteNoRows(dismissed)) return { ok: false, error: tr('playbookActions.missingSuggestion') };
   return { ok: true };
 }

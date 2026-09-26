@@ -8,6 +8,7 @@ import { isManager } from '@/lib/constants/roles';
 import { placeForPoint, classifyTransition, type PlaceLike } from '@/lib/location/geo';
 import { notify } from '@/lib/services/notifications';
 import { systemScopeForFamily } from '@/lib/services/scope';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 export type LocationResult = { ok: boolean; error?: string; place?: string | null };
 
@@ -149,32 +150,56 @@ export async function savePlace(input: {
     name: input.name.trim(), icon: input.icon ?? null, address: input.address ?? null,
     latitude: input.latitude, longitude: input.longitude, radius_m: input.radius_m ?? 150,
   };
-  const { error } = input.id
-    ? await supabase.from('family_places').update(fields).eq('id', input.id).eq('family_id', c.active.familyId)
+  // The UPDATE branch can match zero rows — a place from another family, one
+  // already deleted, an RLS refusal — and PostgREST reports nothing about that
+  // unless asked. The INSERT branch cannot: an insert either inserts or errors.
+  // So only the update needs confirming, which is why the two are split rather
+  // than given one `.select()`. Audit C1-S9-46.
+  const { data: saved, error } = input.id
+    ? await supabase.from('family_places').update(fields).eq('id', input.id).eq('family_id', c.active.familyId).select('id')
     : await supabase.from('family_places').insert({ ...fields, family_id: c.active.familyId, created_by: c.user.id });
   if (error) return { ok: false, error: error.message };
+  if (input.id && wroteNoRows(saved)) return { ok: false, error: t('actions.couldNotSaveThatPlace') };
   revalidatePath('/dashboard/locator');
   return { ok: true };
 }
 
 export async function deletePlace(id: string): Promise<LocationResult> {
+  const t = await getTranslations();
   const c = await requireUserContext();
   if (!isManager(c.active.role)) return managerOnlyPlace();
   const supabase = await createServer();
-  const { error } = await supabase.from('family_places').delete().eq('id', id).eq('family_id', c.active.familyId);
+  // `locator-module.tsx` toasts "Place deleted" on ok and then re-fetches, so an
+  // unconfirmed delete put a success message and the still-present place on
+  // screen at the same time. Audit C1-S9-46.
+  const { data: removed, error } = await supabase.from('family_places').delete().eq('id', id).eq('family_id', c.active.familyId).select('id');
   if (error) return { ok: false, error: error.message };
+  if (wroteNoRows(removed)) return { ok: false, error: t('actions.couldNotDeleteThatPlace') };
   revalidatePath('/dashboard/locator');
   return { ok: true };
 }
 
 /** Toggle a place's geofence on/off (drives the Geofences rail switches). */
 export async function setGeofenceEnabled(id: string, enabled: boolean): Promise<LocationResult> {
+  const t = await getTranslations();
   const c = await requireUserContext();
   if (!isManager(c.active.role)) return managerOnlyPlace();
   const supabase = await createServer();
-  const { error } = await supabase.from('family_places')
-    .update({ geofence_enabled: enabled }).eq('id', id).eq('family_id', c.active.familyId);
+  // A geofence is what makes "arrived at school" and "left home" fire at all, so
+  // a toggle that reports success without applying is a safety control claiming
+  // a state it does not have.
+  //
+  // Stated honestly, it is MEDIUM rather than HIGH: `toggleGeofence` in
+  // `locator-module.tsx` calls `refreshPlaces()` afterwards — a real re-fetch,
+  // not stale `useState(initial)` like the App Store button in C1-S9-33 — so the
+  // switch snaps back on the next render. What the parent loses is not a
+  // permanent false belief but the reason: a switch that flips itself back with
+  // no error reads as a UI glitch, and the natural response is to try again.
+  // Confirming it turns that into a stated failure. Audit C1-S9-46.
+  const { data: toggled, error } = await supabase.from('family_places')
+    .update({ geofence_enabled: enabled }).eq('id', id).eq('family_id', c.active.familyId).select('id');
   if (error) return { ok: false, error: error.message };
+  if (wroteNoRows(toggled)) return { ok: false, error: t('actions.couldNotUpdateThatGeofence') };
   revalidatePath('/dashboard/locator');
   return { ok: true };
 }

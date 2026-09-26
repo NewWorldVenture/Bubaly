@@ -27,6 +27,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { getConnector } from '@/lib/social/connectors';
 import { PLATFORMS, type SocialPlatform } from '@/lib/social/capabilities';
+import { wroteNoRows } from '@/lib/supabase/errors';
 import {
   decideRun, nextRunAt, variantForOccurrence,
   type Cadence, type RecurringAdSchedule,
@@ -119,11 +120,14 @@ async function claimOccurrence(
 }
 
 async function recordFailureNote(supabase: Client, adId: string, message: string | null): Promise<void> {
-  const { error } = await supabase
+  // Logged on zero rows too; never raised — the note explains a failure the
+  // runner is already reporting. Audit C1-S9-67.
+  const { data: noted, error } = await supabase
     .from('marketing_recurring_ads')
     .update({ last_error: message } as never)
-    .eq('id', adId);
-  if (error) console.error('[recurring-ads] note update failed', adId, error);
+    .eq('id', adId)
+    .select('id');
+  if (error || wroteNoRows(noted)) console.error('[recurring-ads] note update failed', adId, error ?? 'no rows updated');
 }
 
 /**
@@ -232,6 +236,9 @@ export async function runDueRecurringAds(supabase: Client, now = new Date()): Pr
       // next_run_at takes it out of the due index instead of rescanning it on
       // every tick forever.
       if (decision.reason === 'occurrence_cap' || decision.reason === 'window_closed' || decision.reason === 'no_schedule') {
+        // Rows deliberately not checked: zero rows is a campaign deleted since
+        // the due scan, which the due index no longer holds anyway.
+        // Audit C1-S9-67.
         const { error: stopError } = await supabase
           .from('marketing_recurring_ads')
           .update({ next_run_at: null, status: 'paused' } as never)

@@ -3,6 +3,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { guardianSmsNotificationId } from '@/lib/guardian/sms-receipt';
+import { at } from './helpers/source-order';
 
 const seam = vi.hoisted(() => ({ client: undefined as unknown as SupabaseClient, factory: vi.fn(), pipeline: vi.fn(), scam: vi.fn(), notify: vi.fn(), scope: vi.fn() }));
 vi.mock('@/lib/supabase/server', () => ({ createServiceClient: seam.factory }));
@@ -410,7 +411,9 @@ describe('signed SMS retention with the actual decision pipeline and installed p
       || call.table === 'guardian_member_profiles' && call.url.searchParams.has('member_id')));
     expect(policyReads).toHaveLength(3);
     expect(policyReads.every(call => call.url.searchParams.get('family_id') === `eq.${FAMILY}` && call.signal instanceof AbortSignal)).toBe(true);
-    expect(calls.findIndex(call => call.table === 'guardian_communications' && call.method === 'POST')).toBeLessThan(calls.indexOf(policyReads[0]));
+    const commsPost = calls.findIndex(call => call.table === 'guardian_communications' && call.method === 'POST');
+    expect(commsPost, 'the guardian_communications write must have happened').toBeGreaterThan(-1);
+    expect(commsPost).toBeLessThan(at(calls, policyReads[0]));
 
     policyFailure = null;
     expect((await deliver()).status).toBe(200);

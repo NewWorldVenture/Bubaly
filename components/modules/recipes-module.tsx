@@ -11,7 +11,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { addGroceryItemsAction } from '@/app/(app)/dashboard/grocery/actions';
 import { describeGroceryAdd, groceryAddWasNoOp } from '@/lib/groceries/add-summary';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -131,8 +131,10 @@ export function RecipesModule() {
 
   async function toggleFavorite(r: Recipe) {
     const supabase = createClient();
-    const { error } = await supabase.from('family_recipes').update({ is_favorite: !r.is_favorite }).eq('id', r.id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-81.
+    const { data: updated, error } = await supabase.from('family_recipes').update({ is_favorite: !r.is_favorite }).eq('id', r.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated)) return toastError(tr('errors.thatChangeWasNotSaved'));
     void refresh();
   }
 
@@ -156,19 +158,21 @@ export function RecipesModule() {
 
   async function markMade(r: Recipe) {
     const supabase = createClient();
-    const { error } = await supabase.from('family_recipes').update({
+    const { data: updated2, error } = await supabase.from('family_recipes').update({
       times_made: (r.times_made ?? 0) + 1,
       last_made_at: new Date().toISOString(),
-    }).eq('id', r.id);
+    }).eq('id', r.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated2)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('recipesModule.markedAsMadeToday'));
     void refresh();
   }
 
   async function deleteRecipe(id: string) {
     const supabase = createClient();
-    const { error } = await supabase.from('family_recipes').delete().eq('id', id);
+    const { data: removed, error } = await supabase.from('family_recipes').delete().eq('id', id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(removed)) return toastError(tr('errors.thatChangeWasNotSaved'));
     void refresh();
     setViewing(null);
   }
@@ -615,11 +619,12 @@ function RecipeFormModal({ recipe, familyId, userId, onClose, onSaved }: {
     if (!payload.name) return toastError(tr('recipesModule.recipeNameIsRequired'));
     setLoading(true);
     const supabase = createClient();
-    const { error } = recipe
-      ? await supabase.from('family_recipes').update(payload as never).eq('id', recipe.id)
-      : await supabase.from('family_recipes').insert({ ...payload, family_id: familyId, created_by: userId } as never);
+    const { data: savedRecipe, error } = recipe
+      ? await supabase.from('family_recipes').update(payload as never).eq('id', recipe.id).select('id')
+      : await supabase.from('family_recipes').insert({ ...payload, family_id: familyId, created_by: userId } as never).select('id');
     setLoading(false);
     if (error) { toastError(describeDbError(error)); return; }
+    if (wroteNoRows(savedRecipe)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }
     success(recipe ? 'Recipe updated' : 'Recipe added');
     onSaved();
   }

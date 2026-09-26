@@ -164,18 +164,21 @@ export function HomeModule() {
 
   async function completeTask(id: string) {
     const supabase = createClient();
-    const { error } = await supabase.from('maintenance_tasks').update({
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-82.
+    const { data: updated, error } = await supabase.from('maintenance_tasks').update({
       status: 'done', completed_at: new Date().toISOString(),
-    }).eq('id', id);
+    }).eq('id', id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('homeModule.taskCompleted'));
     void refreshTasks();
   }
 
   async function removeAsset(id: string) {
     const supabase = createClient();
-    const { error } = await supabase.from('home_assets').delete().eq('id', id);
+    const { data: removed, error } = await supabase.from('home_assets').delete().eq('id', id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(removed)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('homeModule.assetRemoved'));
     void refreshAssets();
   }
@@ -392,10 +395,12 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
   async function saveDate() {
     setSavingDate(true);
     const supabase = createClient();
-    const { error } = await supabase.from('home_assets')
-      .update({ warranty_until: warrantyUntil || null }).eq('id', asset.id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as saved. Audit C1-S9-82.
+    const { data: dated, error } = await supabase.from('home_assets')
+      .update({ warranty_until: warrantyUntil || null }).eq('id', asset.id).select('id');
     setSavingDate(false);
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(dated)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('homeModule.warrantyDateSaved'));
     onChanged();
   }
@@ -422,7 +427,12 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
     });
     setUploading(false);
     if (insertError) {
-      await removeFamilyDocument(supabase, path);
+      // Rollback: the row never landed, so a surviving object is referenced by
+      // nothing. Lower stakes than removeFile's case — the user is already
+      // being told this failed — but a leaked object is still a leaked object,
+      // so it is named rather than swallowed. Audit C4-S4-09.
+      const { error: rollbackError } = await removeFamilyDocument(supabase, path);
+      if (rollbackError) console.error('[home-module] upload rollback left an object behind', { path }, rollbackError);
       return toastError(describeDbError(insertError));
     }
     success(manual ? tr('homeModule.manualSaved') : tr('homeModule.warrantyDocumentSaved'));
@@ -440,11 +450,22 @@ function WarrantyModal({ asset, files, familyId, userId, manager, onClose, onCha
   async function removeFile(doc: WarrantyDoc) {
     setRemovingId(doc.id);
     const supabase = createClient();
-    await removeFamilyDocument(supabase, doc.storage_path);
-    // NOTE the order: the storage object is removed FIRST, so a row delete the
-    // database refuses leaves a row pointing at a file that no longer exists.
-    // Verifying the delete at least makes that visible instead of reporting it
-    // as done; the ordering itself is recorded in audit/claude-1.md.
+    // Two halves of the same defect, both kept.
+    //
+    // The OBJECT goes first and its result is READ (C1-S6-01 / C4-S4-09):
+    // deleting the row first makes a surviving file INVISIBLE — nothing
+    // references it, so nobody can see it, open it or try again — while the
+    // screen says it is gone. A warranty or a manual is plausibly being deleted
+    // BECAUSE it carries a serial or a policy number.
+    //
+    // And the row delete is VERIFIED with `.select('id')` (main's F-K series):
+    // an UPDATE or DELETE that matches nothing succeeds with zero rows and no
+    // error, so a delete RLS refused would otherwise report success too.
+    const { error: storageError } = await removeFamilyDocument(supabase, doc.storage_path);
+    if (storageError) {
+      setRemovingId(null);
+      return toastError(storageError);
+    }
     const { data: rows, error } = await supabase.from('documents').delete().eq('id', doc.id).select('id');
     setRemovingId(null);
     if (error) return toastError(describeDbError(error));

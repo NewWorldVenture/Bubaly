@@ -8,7 +8,7 @@ const analytics = readFileSync('app/(app)/admin/marketing/analytics/page.tsx', '
 
 describe('admin marketing dashboard read boundaries', () => {
   it('preserves customer loader errors for diagnostic pages without breaking consumer fallback', () => {
-    expect(customers).toContain('getMarketingCustomersWithError');
+    expect(customers).toContain('getMarketingCustomersWithError(');
     expect(customers).toContain('familiesResult.error');
     expect(customers).toContain('const { data: families } = familiesResult;');
     expect(customers).toContain('return (await getMarketingCustomersWithError(supabase)).customers;');

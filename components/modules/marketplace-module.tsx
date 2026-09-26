@@ -162,12 +162,18 @@ export function MarketplaceModule({
   async function remove(l: Listing) {
     if (!confirm(`Remove "${l.title}"?`)) return;
     const sb = createClient();
-    const { error: err } = await sb.from('marketplace_listings').delete().eq('id', l.id);
-    if (err) { toastError(describeDbError(err)); return; }
+    // The OBJECT goes first and its result is READ — the same ordering
+    // documents-module keeps. Deleting the row first makes a surviving file
+    // INVISIBLE: nothing references its URL any more, so nobody can see it,
+    // open it or try again, while the screen says the listing is gone. Here
+    // that survivor is worse than invisible — `marketplace-photos` is a PUBLIC
+    // bucket, so the photo stays reachable by URL to anyone who has it.
     if (l.photo_url) {
       const { error: photoError } = await removeMarketplacePhotoUrl(sb, l.photo_url);
-      if (photoError) toastError(t('marketplaceModule.listingRemovedButItsUploaded'));
+      if (photoError) { toastError(t('marketplaceModule.theUploadedPhotoCouldNot')); return; }
     }
+    const { error: err } = await sb.from('marketplace_listings').delete().eq('id', l.id);
+    if (err) { toastError(describeDbError(err)); return; }
     success(t('marketplaceModule.removed'));
   }
 

@@ -36,7 +36,7 @@ export async function POST() {
     // `Promise.all` rather than `settleAll` only because `readAll` already
     // answers `{ rows, error }` for a transport failure instead of rejecting —
     // the same guarantee, in the shape this destructuring needs.
-    const [{ data: habits }, { rows: logs }] = await Promise.all([
+    const [habitsResult, logsResult] = await Promise.all([
       supabase
         .from('habits')
         .select('id, title, cadence, target_per_period, weekdays')
@@ -51,6 +51,28 @@ export async function POST() {
         .order('id')
         .range(from, to), { max: 5000 }),
     ]);
+    // The comment above explains the truncation hazard and the fix for it, and
+    // then both errors were destructured away — including the one `readAll`
+    // raises for exactly that hazard. It sets `error` BOTH for a failed page and
+    // for a read that exceeds `max`, and hands back the partial rows either way
+    // (see the `probe` reasoning in lib/supabase/read-all.ts). So a household
+    // past the ceiling, or one whose read simply failed, had its streaks,
+    // longest-streak and 30-day completion rate computed from a PREFIX and
+    // returned at HTTP 200 as fact — "current streak 0" to someone who has not
+    // missed a day.
+    //
+    // This repository has already fixed this exact shape twice with this exact
+    // helper — `api/ai/wallet/child/[childId]` (C4-S4-02, "refuse rather than
+    // invent a number") and `api/sync/feeds/[token]` (C4-S4-06, "refusing to
+    // publish a partial calendar"). Third time, same answer. Audit C1-S9-25.
+    const { data: habits, error: habitsError } = habitsResult;
+    const { rows: logs, error: logsError } = logsResult;
+    if (habitsError || logsError) {
+      console.error('[ai/habits] habit read failed or was truncated', {
+        familyId, habits: habitsError?.message, logs: logsError?.message,
+      });
+      return NextResponse.json({ error: t('habits.couldNotGenerateCoachingRight') }, { status: 503 });
+    }
 
     if (!habits || habits.length === 0) {
       return NextResponse.json({ error: t('habits.addAHabitFirstThen') }, { status: 400 });

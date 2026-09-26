@@ -13,7 +13,7 @@ describe('account and device-security action boundaries', () => {
     for (const path of sources) {
       const source = readFileSync(path, 'utf8');
       expect(source).not.toMatch(/return\s*\{[^\n]*error:\s*(?:error|memberError|prefsError)\??\.message/);
-      expect(source).toContain('describeActionError');
+      expect(source).toContain('describeActionError(');
     }
   });
 

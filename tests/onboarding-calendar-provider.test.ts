@@ -3,7 +3,7 @@ import { googleAuthUrl, googleCalendarReadAuthUrl, listCalendars } from '@/lib/s
 import { exchangeMicrosoftCalendarReadCode, microsoftAdapter, microsoftCalendarReadAuthUrl } from '@/lib/sync/providers/microsoft';
 
 const mocks = vi.hoisted(() => ({ fetch: vi.fn() }));
-vi.mock('@/lib/server/external-fetch', () => ({ fetchExternal: mocks.fetch }));
+vi.mock('@/lib/server/fetch-with-deadline', () => ({ fetchWithDeadline: mocks.fetch }));
 
 const CALLBACK = 'https://app.example/api/sync/provider/callback';
 const json = (value: unknown) => new Response(JSON.stringify(value), { status: 200, headers: { 'Content-Type': 'application/json' } });

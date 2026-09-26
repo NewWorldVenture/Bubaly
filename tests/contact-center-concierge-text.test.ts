@@ -111,9 +111,18 @@ describe('ordinary concierge text stays scalar-safe at its existing UTF-16 limit
     const prompt = sent.messages[0].content;
     expect(typeof prompt).toBe('string');
     expect(prompt).toContain('Replying on behalf of: ' + 'F'.repeat(199) + '\nMessage:\n');
-    expect(prompt).toContain('\nMessage:\n' + 'a'.repeat(1999));
     expect(validScalars(String(prompt))).toBe(true);
-    expect(String(prompt).split('\nMessage:\n')[1].length).toBeLessThanOrEqual(2000);
+    // The message body reaches the model inside an untrusted-content fence, so
+    // it no longer follows `Message:\n` directly. The bound this test exists to
+    // assert is unchanged — it is measured INSIDE the fence instead of by raw
+    // layout. Asserting the fence here too means the prompt-injection defence
+    // cannot be removed without failing a test.
+    const fenced = String(prompt).split('\nMessage:\n')[1];
+    const body = /^<<<UNTRUSTED_INBOUND_MESSAGE_([A-Za-z0-9]{6})>>>\n([\s\S]*)\n<<<END_INBOUND_MESSAGE_\1>>>$/.exec(fenced);
+    expect(body, 'the inbound message is fenced as untrusted content').not.toBeNull();
+    expect(body![2]).toBe('a'.repeat(1999));
+    expect(body![2].length).toBeLessThanOrEqual(2000);
+    expect(String(prompt)).toMatch(/From: <<<UNTRUSTED_INBOUND_FROM_[A-Za-z0-9]{6}>>>/);
   });
 
   it('keeps the deterministic failure fallback and school intent precedence', async () => {

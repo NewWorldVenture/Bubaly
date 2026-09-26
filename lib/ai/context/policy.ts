@@ -45,6 +45,13 @@ export const SENSITIVE_TABLES: ReadonlyArray<{ table: string; reason: string; ex
   { table: 'tax_documents', reason: 'tax filings' },
   { table: 'paperwork_items', reason: 'scanned paperwork bodies' },
   { table: 'household_info', reason: 'rows flagged is_sensitive (alarm codes, wifi keys)' },
+  // Dictated speech, verbatim. The voice module's own on-screen examples
+  // include "Note that the garage code is 1234" — the same class as
+  // household_info above, arriving by a different door. Nothing reads this
+  // table today, which is exactly when to name it: this header says an
+  // omission should be a reviewed change rather than an accident, and a
+  // transcript is the most literal record of what a family said aloud.
+  { table: 'voice_commands', reason: 'verbatim dictated speech' },
   { table: 'insurance_policies', reason: 'policy numbers' },
   { table: 'family_insurance_policies', reason: 'policy numbers' },
   { table: 'auto_insurance_policies', reason: 'policy numbers' },

@@ -53,7 +53,7 @@ export async function POST() {
       }
     }
 
-    const [{ data: childWallets }, { data: buckets }, { data: txns }, { data: members }, { data: goals }] = await settleAll([
+    const [{ data: childWallets }, { data: buckets }, { data: txns, error: txnsError }, { data: members }, { data: goals }] = await settleAll([
       supabase.from('child_wallets').select('id, member_id').eq('family_id', familyId).eq('is_active', true),
       supabase.from('wallet_buckets').select('id, kind').eq('family_id', familyId),
       // Money, so a quietly truncated read is a wrong balance, not a short
@@ -62,6 +62,17 @@ export async function POST() {
       supabase.from('family_members').select('id, display_name').eq('family_id', familyId),
       supabase.from('wallet_goals').select('child_wallet_id, title, saved_cents, target_cents').eq('family_id', familyId).eq('status', 'active').limit(50),
     ]);
+
+    // The comment above says it: a quietly truncated read is a WRONG BALANCE.
+    // readAllAsQuery signals that with `data: null` + an error, and this call
+    // site destructured only `data` — so `(txns ?? [])` computed every child's
+    // balance as $0.00 and handed those figures to the model, which then wrote
+    // confident coaching prose about them. Refuse instead: no number is better
+    // than a fabricated one, and this is a child's money. Audit C4-S4-02.
+    if (txnsError) {
+      console.error('[ai/wallet] transaction read failed or truncated', { familyId, error: txnsError });
+      return NextResponse.json({ error: tr('wallet.couldNotGenerateCoachingRight') }, { status: 502 });
+    }
 
     const bucketKindById = new Map((buckets ?? []).map((b) => [b.id, b.kind as BucketKind]));
     const nameByMember = new Map((members ?? []).map((m) => [m.id, m.display_name]));

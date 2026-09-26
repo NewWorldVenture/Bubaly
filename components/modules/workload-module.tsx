@@ -67,6 +67,10 @@ export function WorkloadModule({
       taskCount: l.taskCount, eventCount: l.eventCount, loadScore: l.loadScore, sharePct: l.sharePct,
     }))).then((res) => {
       if (!res.ok) toastError(res.error);
+    }).catch((error: unknown) => {
+      // Background persistence of the week's loads: a failed call is logged
+      // rather than raised over the chart it does not affect. Audit C1-S9-74.
+      console.error('[workload] snapshot save call failed', error);
     });
   }, [report, toastError]);
 

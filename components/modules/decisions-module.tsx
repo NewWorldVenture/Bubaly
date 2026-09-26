@@ -11,7 +11,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select } from '@/components/ui/input';
@@ -71,20 +71,25 @@ export function DecisionsModule() {
     if (!selected || !result) return;
     const sb = createClient();
     const updates = result.ranked.map((r) =>
-      sb.from('decision_options').update({ score: r.score, rationale: r.rationale, feasible: r.feasible }).eq('id', r.id),
+      sb.from('decision_options').update({ score: r.score, rationale: r.rationale, feasible: r.feasible }).eq('id', r.id).select('id'),
     );
     const results = await Promise.all(updates);
     const err = results.find((x) => x.error)?.error;
     if (err) { toastError(describeDbError(err)); return; }
+    // A score refused under RLS is no error and zero rows; "Scores saved" is
+    // withheld unless every option's row moved. Audit C1-S9-83.
+    if (results.some((x) => wroteNoRows(x.data))) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('decisionsModule.scoresSavedToTheDecision'));
   }
 
   async function choose(optionId: string) {
     if (!selected) return;
     const sb = createClient();
-    const { error } = await sb.from('family_decisions')
-      .update({ decided_option_id: optionId, status: 'decided' }).eq('id', selected.id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-83.
+    const { data: updated, error } = await sb.from('family_decisions')
+      .update({ decided_option_id: optionId, status: 'decided' }).eq('id', selected.id).select('id');
     if (error) { toastError(describeDbError(error)); return; }
+    if (wroteNoRows(updated)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('decisionsModule.decisionRecorded'));
   }
 

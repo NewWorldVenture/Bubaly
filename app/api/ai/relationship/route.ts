@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
-import { settleAll } from '@/lib/supabase/settle';
+import { settleAll, describeReadError } from '@/lib/supabase/settle';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { resolveProvider } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
@@ -49,7 +49,7 @@ export async function POST() {
       );
     }
 
-    const [{ data: profile }, { data: dateRows, error: datesErr }] = await settleAll([
+    const [{ data: profile, error: profileErr }, { data: dateRows, error: datesErr }] = await settleAll([
       supabase.from('relationship_profile')
         .select('partner_name, partner_member_id, interests, love_languages, gift_budget_cents')
         .eq('family_id', familyId).maybeSingle(),
@@ -60,6 +60,24 @@ export async function POST() {
 
     if (datesErr && isMissingRelationError(datesErr)) {
       return NextResponse.json({ error: t('relationship.theRelationshipHelperIsnT') }, { status: 503 });
+    }
+
+    // The dates guard above was INVERTED with respect to risk: it caught the one
+    // error that means "this feature is not installed yet" and let every real
+    // one through to `dateRows ?? []`. An empty list is not a neutral default
+    // here — `upcomingDates` then finds nothing, and a helper whose entire job
+    // is "do not forget the anniversary" tells someone their next ninety days
+    // are clear. The profile read had no guard at all, and it supplies the
+    // partner's name, interests, love languages and gift budget; losing it
+    // yields a confidently generic digest wearing the shape of a personal one.
+    // Audit C1-S9-37.
+    if (datesErr || profileErr) {
+      console.error('[ai/relationship] read failed', {
+        familyId,
+        dates: datesErr ? describeReadError(datesErr) : null,
+        profile: profileErr ? describeReadError(profileErr) : null,
+      });
+      return NextResponse.json({ error: t('ai.recommendationsAreTemporarilyUnavailable') }, { status: 503 });
     }
 
     const dates: RelDate[] = (dateRows ?? []).map((d) => ({
@@ -90,9 +108,18 @@ export async function POST() {
     // Partner's wishlist (if linked) → ranked gift candidates for grounding.
     let wishlist: { title: string; priceCents: number | null }[] = [];
     if (profile?.partner_member_id) {
-      const { data: items } = await supabase.from('wishlist_items')
+      // The wishlist IS the grounding for the gift suggestions below. A refused
+      // read used to produce an empty one, and the digest went out recommending
+      // gifts while silently ignoring everything the partner actually asked for
+      // — indistinguishable, to the reader, from a partner who has asked for
+      // nothing. Audit C1-S9-37.
+      const { data: items, error: itemsError } = await supabase.from('wishlist_items')
         .select('id, title, url, price, priority, is_purchased, claimed_by')
         .eq('family_id', familyId).eq('member_id', profile.partner_member_id).limit(50);
+      if (itemsError) {
+        console.error('[ai/relationship] wishlist read failed', { familyId, error: describeReadError(itemsError) });
+        return NextResponse.json({ error: t('ai.recommendationsAreTemporarilyUnavailable') }, { status: 503 });
+      }
       wishlist = suggestGiftsFromWishlist((items ?? []) as WishItemLite[], {
         maxBudgetCents: profile.gift_budget_cents ?? null, giftHistory,
       })

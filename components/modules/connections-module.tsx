@@ -12,7 +12,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { ErrorState, SkeletonList } from '@/components/ui/states';
 import { PageHeader } from '@/components/app/page-header';
@@ -54,8 +54,13 @@ export function ConnectionsModule() {
   async function disconnect(p: ProviderState) {
     if (!confirm(`Disconnect ${p.name}?`)) return;
     const sb = createClient();
-    const { error: err } = await sb.from('family_connections').delete().eq('family_id', familyId).eq('provider', p.id);
+    // Keyed by family and provider, not id, but the button exists only for a
+    // CONNECTED provider, so zero rows is never the ordinary answer here: it is
+    // a refusal (no error under RLS), and "disconnected" was said about a
+    // connection still in place. Audit C1-S9-83.
+    const { data: removed, error: err } = await sb.from('family_connections').delete().eq('family_id', familyId).eq('provider', p.id).select('id');
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(removed)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(`${p.name} disconnected`);
   }
 

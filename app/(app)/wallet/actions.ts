@@ -14,7 +14,7 @@ import { walletTierForPlanLevel, walletFeatureEnabled } from '@/lib/wallet/tiers
 import { resolveFamilyPlanLevel } from '@/lib/server/plan';
 import { normalizeHandle, handleError } from '@/lib/wallet/pay-handle';
 import { evaluateTrust, roleOf } from '@/lib/trust/server';
-import { describeActionError } from '@/lib/supabase/errors';
+import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { logWalletAudit } from '@/lib/server/audit';
 
 const WALLET_TERMS_VERSION = '2026-06-25';
@@ -268,13 +268,20 @@ export async function saveAllowanceRuleAction(input: {
   // Schedule from the family's calendar day: a parent setting up an allowance
   // on Sunday evening in California would otherwise have it dated from Monday.
   const next = nextRunDate(dayKeyInTz(new Date(), ctx.active.family.timezone || 'UTC'), input.cadence);
-  const { error } = input.id
+  // Same reasoning as the toggle: an edit that matches no row leaves the OLD
+  // amount and cadence live in the scheduler while the parent is shown the new
+  // ones. Only the update branch can match nothing — an insert either lands or
+  // errors — so only it is checked. Audit C1-S9-23.
+  const { data: saved, error } = input.id
     ? await supabase.from('allowance_rules')
         .update({ amount_cents: amount, cadence: input.cadence, is_active: true, next_run_on: next })
         .eq('id', input.id).eq('family_id', familyId)
+        .select('id')
     : await supabase.from('allowance_rules')
-        .insert({ family_id: familyId, child_wallet_id: input.childWalletId, amount_cents: amount, cadence: input.cadence, is_active: true, next_run_on: next, created_by: ctx.user.id });
+        .insert({ family_id: familyId, child_wallet_id: input.childWalletId, amount_cents: amount, cadence: input.cadence, is_active: true, next_run_on: next, created_by: ctx.user.id })
+        .select('id');
   if (error) return actionFailure(error, t('actions.couldNotSaveThatAllowance'));
+  if (input.id && wroteNoRows(saved)) return { ok: false, error: t('actions.couldNotSaveThatAllowance') };
 
   revalidatePath('/wallet');
   return { ok: true };
@@ -286,9 +293,18 @@ export async function toggleAllowanceRuleAction(input: { id: string; isActive: b
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentGuardianCan5') };
   const supabase = await createServer();
-  const { error } = await supabase.from('allowance_rules')
-    .update({ is_active: input.isActive }).eq('id', input.id).eq('family_id', ctx.active.familyId);
+  // `.select('id')` because this pause has a scheduler behind it. The cron at
+  // app/api/cron/wallet-allowance/route.ts selects rules with
+  // `.eq('is_active', true)`, so a pause that matches ZERO rows does not just
+  // fail to update a screen — the child keeps being paid, every week, while the
+  // parent has been told the allowance is paused. `allowance_rules` also
+  // carries a restrictive manager-only UPDATE guard (migration 0306), which is
+  // exactly the shape that yields zero rows with no error. Audit C1-S9-23.
+  const { data: toggled, error } = await supabase.from('allowance_rules')
+    .update({ is_active: input.isActive }).eq('id', input.id).eq('family_id', ctx.active.familyId)
+    .select('id');
   if (error) return actionFailure(error, t('actions.couldNotUpdateThatAllowance'));
+  if (wroteNoRows(toggled)) return { ok: false, error: t('actions.couldNotUpdateThatAllowance') };
   revalidatePath('/wallet/allowance');
   return { ok: true };
 }
@@ -362,9 +378,17 @@ export async function runDueAllowancesAction(): Promise<Result & { ranCount?: nu
         splitOverride: rule.split as Partial<Split> | null,
       });
       if (!res.ok) {
-        const { error: rollbackError } = await supabase.from('allowance_rules').update({ next_run_on: rule.next_run_on, last_run_on: rule.last_run_on })
-          .eq('id', rule.id).eq('family_id', familyId);
-        if (rollbackError) console.error('[wallet allowances] schedule rollback failed', rollbackError);
+        // Undoing the claim above after the credit failed. If this matched no
+        // rows the schedule stays advanced, so the child simply never receives
+        // that run — the money is not double-paid, it is not paid at all, and
+        // nothing says so. Audit C1-S9-53.
+        const { data: restored, error: rollbackError } = await supabase.from('allowance_rules').update({ next_run_on: rule.next_run_on, last_run_on: rule.last_run_on })
+          .eq('id', rule.id).eq('family_id', familyId).select('id');
+        if (rollbackError || wroteNoRows(restored)) {
+          console.error('[wallet allowances] schedule rollback failed — a run may be skipped', {
+            ruleId: rule.id, familyId, error: rollbackError?.message ?? 'no rows updated',
+          });
+        }
         return { ok: false, error: res.error, ranCount, paidCents };
       }
       ranCount++;
@@ -497,9 +521,10 @@ export async function dismissGiftAction(input: { giftPaymentId: string }): Promi
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentGuardianCan11') };
   const supabase = await createServer();
-  const { error } = await supabase.from('gift_payments')
-    .update({ status: 'cancelled' }).eq('id', input.giftPaymentId).eq('family_id', ctx.active.familyId);
+  const { data: dismissed, error } = await supabase.from('gift_payments')
+    .update({ status: 'cancelled' }).eq('id', input.giftPaymentId).eq('family_id', ctx.active.familyId).select('id');
   if (error) return actionFailure(error, t('actions.couldNotDismissThatGift'));
+  if (wroteNoRows(dismissed)) return { ok: false, error: t('actions.couldNotDismissThatGift') };
   revalidatePath('/wallet/gift');
   return { ok: true };
 }
@@ -523,11 +548,12 @@ export async function saveBabysitterAction(input: {
   const familyId = ctx.active.familyId;
 
   if (input.id) {
-    const { error } = await supabase.from('babysitter_profiles').update({
+    const { data: saved, error } = await supabase.from('babysitter_profiles').update({
       name, phone: input.phone?.trim() || null, email: input.email?.trim() || null,
       rate_cents: input.rateCents ?? null, notes: input.notes?.trim() || null,
-    }).eq('id', input.id).eq('family_id', familyId);
+    }).eq('id', input.id).eq('family_id', familyId).select('id');
     if (error) return actionFailure(error, t('actions.couldNotUpdateThatBabysitter'));
+    if (wroteNoRows(saved)) return { ok: false, error: t('actions.couldNotUpdateThatBabysitter') };
   } else {
     const { error } = await supabase.from('babysitter_profiles').insert({
       family_id: familyId, name, phone: input.phone?.trim() || null, email: input.email?.trim() || null,
@@ -545,9 +571,10 @@ export async function archiveBabysitterAction(input: { id: string }): Promise<Re
   const ctx = await requireUserContext();
   if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentGuardianCan12') };
   const supabase = await createServer();
-  const { error } = await supabase.from('babysitter_profiles')
-    .update({ is_active: false }).eq('id', input.id).eq('family_id', ctx.active.familyId);
+  const { data: archived, error } = await supabase.from('babysitter_profiles')
+    .update({ is_active: false }).eq('id', input.id).eq('family_id', ctx.active.familyId).select('id');
   if (error) return actionFailure(error, t('actions.couldNotArchiveThatBabysitter'));
+  if (wroteNoRows(archived)) return { ok: false, error: t('actions.couldNotArchiveThatBabysitter') };
   revalidatePath('/wallet/babysitters');
   return { ok: true };
 }
@@ -668,14 +695,17 @@ export async function claimPayHandleAction(input: { id?: string; childWalletId: 
   const row = {
     family_id: familyId, child_wallet_id: input.childWalletId, handle, is_active: true, created_by: ctx.user.id,
   };
-  const { error } = input.id
-    ? await supabase.from('pay_handles').update({ handle, child_wallet_id: input.childWalletId, is_active: true }).eq('id', input.id).eq('family_id', familyId)
+  const { data: savedHandle, error } = input.id
+    ? await supabase.from('pay_handles').update({ handle, child_wallet_id: input.childWalletId, is_active: true }).eq('id', input.id).eq('family_id', familyId).select('id')
     : await supabase.from('pay_handles').insert(row);
   if (error) {
     // Unique-violation fallback (race with the check above).
     if (error.code === '23505') return { ok: false, error: t('actions.thatPayIdIsAlready') };
     return actionFailure(error, t('actions.couldNotClaimThatPay'));
   }
+  // Update branch only — an insert either inserts or errors (and its unique
+  // violation is handled just above), so it cannot match zero rows.
+  if (input.id && wroteNoRows(savedHandle)) return { ok: false, error: t('actions.couldNotClaimThatPay') };
 
   await logWalletAudit(supabase, {
     family_id: familyId, actor_user_id: ctx.user.id, action: 'pay_handle_claimed',
@@ -692,8 +722,12 @@ export async function releasePayHandleAction(input: { id: string }): Promise<Res
   if (!isManager(ctx.active.role)) return { ok: false, error: t('actions.onlyAParentGuardianCan16') };
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
-  const { error } = await supabase.from('pay_handles').delete().eq('id', input.id).eq('family_id', familyId);
+  // Releasing a Pay-ID is a privacy action: the family is told the public
+  // handle no longer resolves to their child. /pay/<handle> keeps resolving it
+  // if the delete matched nothing. Audit C1-S9-53.
+  const { data: released, error } = await supabase.from('pay_handles').delete().eq('id', input.id).eq('family_id', familyId).select('id');
   if (error) return actionFailure(error, t('actions.couldNotReleaseThatPay'));
+  if (wroteNoRows(released)) return { ok: false, error: t('actions.couldNotReleaseThatPay') };
   revalidatePath('/wallet/gift');
   return { ok: true };
 }
@@ -770,10 +804,22 @@ export async function requestSpendAction(input: {
       // A held debit without its approval row can never be resolved. Cancel the
       // hold before returning the insert failure so it stays out of the ledger.
       if (debit.txnId) {
-        const { error: rollbackError } = await supabase.from('wallet_transactions')
+        // The comment above states the stakes exactly: a held debit without its
+        // approval row can never be resolved. A rollback that matched ZERO rows
+        // leaves precisely that — the child's money held indefinitely — and said
+        // nothing, because only `error` was checked. The `.eq('status', ...)`
+        // predicate means zero rows is also the benign "someone else already
+        // resolved it" case, so this logs rather than raises: it is on a path
+        // that is already returning a failure. Audit C1-S9-53.
+        const { data: rolledBack, error: rollbackError } = await supabase.from('wallet_transactions')
           .update({ status: 'cancelled' })
-          .eq('id', debit.txnId).eq('family_id', familyId).eq('status', 'requires_parent_approval');
-        if (rollbackError) console.error('[wallet spend] approval rollback failed', rollbackError);
+          .eq('id', debit.txnId).eq('family_id', familyId).eq('status', 'requires_parent_approval')
+          .select('id');
+        if (rollbackError || wroteNoRows(rolledBack)) {
+          console.error('[wallet spend] approval rollback failed — a hold may be stranded', {
+            txnId: debit.txnId, familyId, error: rollbackError?.message ?? 'no rows updated',
+          });
+        }
       }
       return actionFailure(approvalError, t('actions.couldNotCreateTheSpend'));
     }

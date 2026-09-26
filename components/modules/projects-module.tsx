@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -69,15 +69,18 @@ export function ProjectsModule() {
   const openProject = projects.data.find((p) => p.id === openId) ?? null;
 
   async function setStatus(p: Project, status: HomeProjectStatus) {
-    const { error } = await createClient().from('home_projects').update({ status, completed_at: status === 'done' ? new Date().toISOString() : null }).eq('id', p.id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-79.
+    const { data: moved, error } = await createClient().from('home_projects').update({ status, completed_at: status === 'done' ? new Date().toISOString() : null }).eq('id', p.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(moved)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(`${p.title}: ${statusLabel(status).toLowerCase()}`);
   }
 
   async function deleteProject(p: Project) {
     if (!confirm(`Delete “${p.title}” with its materials and quotes?`)) return;
-    const { error } = await createClient().from('home_projects').delete().eq('id', p.id);
+    const { data: deleted, error } = await createClient().from('home_projects').delete().eq('id', p.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(deleted)) return toastError(tr('errors.thatChangeWasNotSaved'));
     setOpenId(null);
     success(tr('projectsModule.projectDeleted'));
   }
@@ -306,13 +309,16 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
   const contractorOf = (id: string | null) => contractors.find((c) => c.id === id) ?? null;
 
   async function togglePurchased(m: Material) {
-    const { error } = await createClient().from('project_materials').update({ is_purchased: !m.is_purchased, actual_cost_cents: !m.is_purchased && m.actual_cost_cents === null ? m.est_cost_cents : m.actual_cost_cents }).eq('id', m.id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-79.
+    const { data: toggled, error } = await createClient().from('project_materials').update({ is_purchased: !m.is_purchased, actual_cost_cents: !m.is_purchased && m.actual_cost_cents === null ? m.est_cost_cents : m.actual_cost_cents }).eq('id', m.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(toggled)) return toastError(tr('errors.thatChangeWasNotSaved'));
   }
 
   async function deleteMaterial(m: Material) {
-    const { error } = await createClient().from('project_materials').delete().eq('id', m.id);
+    const { data: removed, error } = await createClient().from('project_materials').delete().eq('id', m.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(removed)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('projectsModule.materialRemoved'));
   }
 
@@ -331,26 +337,33 @@ function ProjectDetail({ project, familyId, userId, members, contractors, materi
 
   async function setQuoteStatus(q: Quote, status: ProjectQuoteStatus) {
     const supabase = createClient();
-    if (status === 'accepted') {
-      // One accepted quote per project: demote any other accepted quote first.
-      const others = quotes.filter((x) => x.id !== q.id && x.status === 'accepted');
-      if (others.length) {
-        const { error: demoteError } = await supabase.from('project_quotes').update({ status: 'declined' }).in('id', others.map((x) => x.id));
-        if (demoteError) return toastError(describeDbError(demoteError));
-      }
-    }
-    const { error } = await supabase.from('project_quotes').update({ status }).eq('id', q.id);
+    // The quote FIRST, confirmed. This used to demote the other accepted quote
+    // before setting this one, and read no rows anywhere: an acceptance that
+    // matched nothing left every quote declined, the project linked to this
+    // contractor, and "Accepted …" on screen — and a failed link toasted its
+    // error AND the success. Each step now stops the chain when it does not
+    // land. Audit C1-S9-79.
+    const { data: set, error } = await supabase.from('project_quotes').update({ status }).eq('id', q.id).select('id');
     if (error) return toastError(describeDbError(error));
-    if (status === 'accepted') {
-      const { error: linkError } = await supabase.from('home_projects').update({ contractor_id: q.contractor_id ?? project.contractor_id, status: project.status === 'quoting' || project.status === 'planning' || project.status === 'idea' ? 'scheduled' : project.status }).eq('id', project.id);
-      if (linkError) toastError(describeDbError(linkError));
-      success(`Accepted ${q.contractor_name} at ${money(q.amount_cents)}`);
+    if (wroteNoRows(set)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    if (status !== 'accepted') return;
+    // One accepted quote per project: demote any other accepted quote.
+    const others = quotes.filter((x) => x.id !== q.id && x.status === 'accepted');
+    if (others.length) {
+      const { data: demoted, error: demoteError } = await supabase.from('project_quotes').update({ status: 'declined' }).in('id', others.map((x) => x.id)).select('id');
+      if (demoteError) return toastError(describeDbError(demoteError));
+      if ((demoted?.length ?? 0) !== others.length) return toastError(tr('errors.thatChangeWasNotSaved'));
     }
+    const { data: linked, error: linkError } = await supabase.from('home_projects').update({ contractor_id: q.contractor_id ?? project.contractor_id, status: project.status === 'quoting' || project.status === 'planning' || project.status === 'idea' ? 'scheduled' : project.status }).eq('id', project.id).select('id');
+    if (linkError) return toastError(describeDbError(linkError));
+    if (wroteNoRows(linked)) return toastError(tr('errors.thatChangeWasNotSaved'));
+    success(`Accepted ${q.contractor_name} at ${money(q.amount_cents)}`);
   }
 
   async function deleteQuote(q: Quote) {
-    const { error } = await createClient().from('project_quotes').delete().eq('id', q.id);
+    const { data: removed, error } = await createClient().from('project_quotes').delete().eq('id', q.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(removed)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('projectsModule.quoteRemoved'));
   }
 
@@ -489,11 +502,13 @@ function MaterialForm({ familyId, userId, projectId, material, onClose, onSaved 
       is_purchased: purchased, store: String(f.get('store') ?? '').trim() || null, url: String(f.get('url') ?? '').trim() || null, notes: String(f.get('notes') ?? '').trim() || null,
     };
     const supabase = createClient();
-    const { error } = material
-      ? await supabase.from('project_materials').update(payload).eq('id', material.id)
-      : await supabase.from('project_materials').insert({ family_id: familyId, project_id: projectId, created_by: userId, ...payload });
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-79.
+    const { data: saved, error } = material
+      ? await supabase.from('project_materials').update(payload).eq('id', material.id).select('id')
+      : await supabase.from('project_materials').insert({ family_id: familyId, project_id: projectId, created_by: userId, ...payload }).select('id');
     setLoading(false);
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(saved)) return toastError(tr('errors.thatChangeWasNotSaved'));
     onSaved();
   }
 
@@ -545,11 +560,13 @@ function QuoteForm({ familyId, userId, projectId, contractors, quote, onClose, o
       status, received_on: status === 'requested' ? null : (String(f.get('received_on') ?? '') || isoDate(new Date())), notes: String(f.get('notes') ?? '').trim() || null,
     };
     const supabase = createClient();
-    const { error } = quote
-      ? await supabase.from('project_quotes').update(payload).eq('id', quote.id)
-      : await supabase.from('project_quotes').insert({ family_id: familyId, project_id: projectId, created_by: userId, ...payload });
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-79.
+    const { data: saved, error } = quote
+      ? await supabase.from('project_quotes').update(payload).eq('id', quote.id).select('id')
+      : await supabase.from('project_quotes').insert({ family_id: familyId, project_id: projectId, created_by: userId, ...payload }).select('id');
     setLoading(false);
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(saved)) return toastError(tr('errors.thatChangeWasNotSaved'));
     onSaved();
   }
 

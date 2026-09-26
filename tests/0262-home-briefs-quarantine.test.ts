@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
@@ -38,13 +39,13 @@ describe('0262 saved snapshot quarantine', () => {
   ])('rejects an incompatible existing policy when %s', (condition) => {
     const guard = sql.match(/if existing_policy\.polpermissive .*? then raise exception '[^']*'; end if;/)?.[0] ?? '';
     expect(guard).toContain(condition);
-    expect(sql.indexOf(guard)).toBeLessThan(sql.indexOf('else create policy'));
+    expect(at(sql, guard)).toBeLessThan(at(sql, 'else create policy'));
   });
 
   it('applies atomically without swallowing precondition failures', () => {
     expect(sql).toMatch(/^do \$quarantine\$ declare .* end; \$quarantine\$;$/);
     expect(sql).not.toMatch(/\bexception when\b|\bcommit\b|\breturn\b/);
-    expect(sql.indexOf('lock table only public.home_briefs')).toBeLessThan(sql.indexOf('alter table only public.home_briefs'));
+    expect(at(sql, 'lock table only public.home_briefs')).toBeLessThan(at(sql, 'alter table only public.home_briefs'));
   });
 
   it('preserves data, ownership, keys, types, other policies and privileges', () => {

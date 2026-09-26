@@ -276,6 +276,10 @@ describe('a failed pantry write leaves its own line on the list', () => {
       failing.delete = () => {
         const chain: Record<string, unknown> = {
           eq: () => chain,
+          // A real delete builder also takes `.select()` (C1-S9-65 asks it for
+          // the removed row); without it the fake threw a TypeError where the
+          // client resolves with the refusal below.
+          select: () => chain,
           then: (resolve: (r: unknown) => unknown) =>
             Promise.resolve({ data: null, error: { code: '42501', message: 'denied', details: null, hint: null } }).then(resolve),
         };

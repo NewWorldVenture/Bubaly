@@ -3,9 +3,10 @@
 import { useMemo, useState } from 'react';
 import { Stethoscope, Plus, Pencil, Trash2, CalendarClock, MapPin, AlertCircle } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
+import { isManager } from '@/lib/constants/roles';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -26,7 +27,11 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
   defaultKind?: VisitKind; title?: string; lockKind?: boolean;
 }) {
   const t = useTranslations();
-  const { familyId, userId, members, family } = useApp();
+  const { familyId, userId, members, family, role } = useApp();
+  // 0326 makes the database refuse a non-manager write on this table. The
+  // controls follow it, the way medications-module.tsx already does — a button
+  // that renders and then fails is worse than one that was never offered.
+  const canEdit = isManager(role);
   const { success, error: toastError } = useToast();
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
@@ -63,18 +68,22 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
       follow_up_date: form.follow_up_date || null,
       cost_cents: form.cost ? Math.round(parseFloat(form.cost) * 100) : null,
     };
-    const { error } = form.id
-      ? await supabase.from('health_visits').update(row).eq('id', form.id)
-      : await supabase.from('health_visits').insert({ ...row, family_id: familyId, created_by: userId });
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-77.
+    const { data: saved, error } = form.id
+      ? await supabase.from('health_visits').update(row).eq('id', form.id).select('id')
+      : await supabase.from('health_visits').insert({ ...row, family_id: familyId, created_by: userId }).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(saved)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(form.id ? 'Visit updated' : 'Visit added');
     setForm(null);
   }
 
   async function remove(id: string) {
     if (!confirm(t('healthVisitsModule.deleteThisVisitRecord'))) return;
-    const { error } = await createClient().from('health_visits').delete().eq('id', id);
-    if (error) toastError(describeDbError(error)); else success(t('healthVisitsModule.visitDeleted'));
+    const { data: deleted, error } = await createClient().from('health_visits').delete().eq('id', id).select('id');
+    if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(deleted)) toastError(t('errors.thatChangeWasNotSaved'));
+    else success(t('healthVisitsModule.visitDeleted'));
   }
 
   function edit(v: Visit) {
@@ -97,7 +106,7 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
               {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
             </select>
           )}
-          <Button size="sm" onClick={() => setForm(blank(defaultKind ?? 'medical', family?.timezone ?? 'UTC'))}><Plus className="h-4 w-4" /> {t('healthVisits.addVisit')}</Button>
+          {canEdit && <Button size="sm" onClick={() => setForm(blank(defaultKind ?? 'medical', family?.timezone ?? 'UTC'))}><Plus className="h-4 w-4" /> {t('healthVisits.addVisit')}</Button>}
         </div>
       </div>
 
@@ -143,10 +152,12 @@ export function HealthVisitsModule({ defaultKind, title = 'Visits & History', lo
                     </div>
                   </div>
                   {who && <Avatar name={who.display_name} color={who.color} size={28} />}
-                  <div className="flex shrink-0 gap-1">
-                    <button onClick={() => edit(v)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-4 w-4" /></button>
-                    <button onClick={() => remove(v.id)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Trash2 className="h-4 w-4" /></button>
-                  </div>
+                  {canEdit && (
+                    <div className="flex shrink-0 gap-1">
+                      <button onClick={() => edit(v)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-fg"><Pencil className="h-4 w-4" /></button>
+                      <button onClick={() => remove(v.id)} className="rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-danger"><Trash2 className="h-4 w-4" /></button>
+                    </div>
+                  )}
                 </div>
               </li>
             );

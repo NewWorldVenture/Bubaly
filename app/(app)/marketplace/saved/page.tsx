@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/app/page-header';
 import { SaveButton } from '@/components/marketplace/save-button';
 import { KIND_LABELS, priceLabel, type ListingKind, type RentPeriod } from '@/lib/marketplace/listings';
 import { getTranslations } from '@/lib/i18n/server';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'Saved · Marketplace | Bubaly' };
 export const dynamic = 'force-dynamic';
@@ -16,13 +17,23 @@ export default async function MarketplaceSavedPage() {
   const ctx = await requireUserContext();
   const sb = await createServer();
 
-  const { data: saves } = await sb
+  // A refused read renders the "nothing saved yet" state to someone whose saved
+  // list is not empty. Audit C1-S9-45.
+  const { data: saves, error: savesError } = await sb
     .from('marketplace_saves')
     .select('id, listing_id, created_at')
     .eq('family_id', ctx.active.familyId)
     .eq('member_id', ctx.active.member.id)
     .order('created_at', { ascending: false })
     .limit(200);
+
+  if (savesError) {
+    return (
+      <div className="space-y-5">
+        <ErrorState message={t('marketplaceSaved.couldNotLoadYourSavedItems')} />
+      </div>
+    );
+  }
 
   const ids = (saves ?? []).map((s) => s.listing_id);
   const { data: listings } = ids.length

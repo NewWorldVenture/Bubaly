@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServer } from '@/lib/supabase/server';
 import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
-import { settleAll } from '@/lib/supabase/settle';
+import { settleAll, describeReadError } from '@/lib/supabase/settle';
+import { readAllAsQuery } from '@/lib/supabase/read-all';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
@@ -37,12 +38,46 @@ export async function POST() {
   );
 
   const monthStart = new Date().toISOString().slice(0, 8) + '01';
-  const [{ data: txns }, { data: budgets }, { data: bills }, { data: subs }] = await settleAll([
-    supabase.from('transactions').select('amount, category, type, date').eq('family_id', familyId).eq('type', 'expense').gte('date', monthStart),
+  // All four errors were dropped here, and this route's own docstring above says
+  // it "never fabricates numbers". It did. `txns ?? []` empties the category
+  // map, so a refused `transactions` read produced no overspending, no stale
+  // subscriptions, and the deterministic fallback "On track — No overspending or
+  // unused subscriptions detected", at HTTP 200. A parent asking whether they
+  // are overspending was told they are fine BECAUSE the database was
+  // unavailable.
+  //
+  // It also reached the model: the `context` block below is built from the same
+  // empty collections and states "Over-budget categories this month: none" and
+  // "Unpaid bills: 0" as established fact, so the AI was asked to reason from
+  // fabricated inputs under a system prompt telling it to use ONLY the data
+  // given.
+  //
+  // The transactions read was additionally unbounded — PostgREST caps it at
+  // db-max-rows (1,000) in silence — so a family with a busy month had its
+  // over-budget amounts UNDERSTATED and stated as fact. `readAllAsQuery` with a
+  // real ceiling fixes that; exceeding the ceiling surfaces as an error here
+  // rather than as a quiet prefix, because a truncated read is a failed read.
+  // Audit C1-S9-25.
+  const [txnsResult, budgetsResult, billsResult, subsResult] = await settleAll([
+    readAllAsQuery<{ amount: number; category: string | null; type: string; date: string }>((from, to) =>
+      supabase.from('transactions').select('amount, category, type, date').eq('family_id', familyId)
+        .eq('type', 'expense').gte('date', monthStart).order('date').range(from, to), { max: 20_000 }),
     supabase.from('budgets').select('category, amount, period').eq('family_id', familyId),
     supabase.from('bills').select('name, amount, status').eq('family_id', familyId).neq('status', 'paid'),
     supabase.from('subscriptions_tracked').select('name, cost_cents, cadence, status, last_used').eq('family_id', familyId),
   ]);
+  const readFailures = ([
+    ['transactions', txnsResult], ['budgets', budgetsResult],
+    ['bills', billsResult], ['subscriptions', subsResult],
+  ] as const).filter(([, r]) => r.error).map(([label, r]) => `${label}: ${describeReadError(r.error)}`);
+  if (readFailures.length > 0) {
+    // 503, not a cheerful 200. There is no honest answer to "am I overspending?"
+    // built on a read that did not happen.
+    console.error('[ai/savings] finance read failed', { familyId, failures: readFailures });
+    return NextResponse.json({ error: tr('ai.recommendationsAreTemporarilyUnavailable') }, { status: 503 });
+  }
+  const { data: txns } = txnsResult, { data: budgets } = budgetsResult;
+  const { data: bills } = billsResult, { data: subs } = subsResult;
 
   // Spend by category this month.
   const byCat = new Map<string, number>();

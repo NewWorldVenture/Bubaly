@@ -11,7 +11,7 @@ import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { useAction } from '@/lib/hooks/use-action';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError, isMissingRelationError } from '@/lib/supabase/errors';
+import { describeDbError, isMissingRelationError, wroteNoRows } from '@/lib/supabase/errors';
 import { createReminderAction, deleteReminderAction, snoozeReminderAction } from '@/app/(app)/dashboard/reminders/actions';
 import { newSubmissionId } from '@/lib/utils/submission-id';
 import { useToast } from '@/components/ui/toast';
@@ -153,8 +153,10 @@ export function RemindersModule() {
 
   async function deleteList(id: string) {
     if (!confirm(tr('remindersModule.deleteThisListRemindersIn'))) return;
-    const { error: err } = await createClient().from('reminder_lists').delete().eq('id', id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-77.
+    const { data: deleted, error: err } = await createClient().from('reminder_lists').delete().eq('id', id).select('id');
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(deleted)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }
     setFilterList('all');
     success(tr('remindersModule.listDeleted'));
   }
@@ -165,9 +167,17 @@ export function RemindersModule() {
   function complete(reminder: Reminder) {
     return run(`complete:${reminder.id}`, async () => {
       const supabase = createClient();
-      const { error } = await supabase.from('family_reminders')
-        .update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', reminder.id);
+      // The completion is what licenses scheduling the next occurrence, so it
+      // must be known to have happened HERE: one that matched nothing (already
+      // completed on another device, or refused under RLS) used to fall through
+      // and schedule a second future reminder — the same double C1-S9-69 found
+      // in the assistant's tool. `neq('completed')`, not `eq('active')`: a
+      // snoozed reminder can be completed too. Audit C1-S9-77.
+      const { data: completedRows, error } = await supabase.from('family_reminders')
+        .update({ status: 'completed', completed_at: new Date().toISOString() })
+        .eq('id', reminder.id).neq('status', 'completed').select('id');
       if (error) throw error;
+      if (wroteNoRows(completedRows)) { toastError(tr('errors.thatChangeWasNotSaved')); void refresh(); return; }
 
       // Recurring reminder → spawn the next occurrence so it keeps recurring
       // (the completed one stays as history, like iOS).

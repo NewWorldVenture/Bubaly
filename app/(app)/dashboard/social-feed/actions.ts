@@ -11,6 +11,7 @@ import { createServer } from '@/lib/supabase/server';
 import { isPlatform, platformLabel, type Platform } from '@/lib/social/feed';
 import { buildItemFromHtml, isSafePublicUrl } from '@/lib/social/unfurl';
 import { fetchPublicText } from '@/lib/server/public-calendar-fetch';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 type Result = { ok: boolean; error?: string };
 type Category = 'family' | 'friends' | 'groups' | 'other';
@@ -44,33 +45,39 @@ export async function addSourceAction(input: {
 
 /** Disconnect a source (does not delete already-collected items). */
 export async function removeSourceAction(input: { id: string }): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const { error } = await supabase.from('social_reader_sources')
-    .delete().eq('id', input.id).eq('family_id', ctx.active.familyId);
+  const { data: removed, error } = await supabase.from('social_reader_sources')
+    .delete().eq('id', input.id).eq('family_id', ctx.active.familyId).select('id');
   if (error) return { ok: false, error: error.message };
+  if (wroteNoRows(removed)) return { ok: false, error: t('actions.couldNotRemoveThatSource') };
   revalidatePath(PATH);
   return { ok: true };
 }
 
 /** Bookmark / un-bookmark an item. */
 export async function toggleFavoriteAction(input: { id: string; favorite: boolean }): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const { error } = await supabase.from('social_reader_items')
-    .update({ is_favorite: input.favorite }).eq('id', input.id).eq('family_id', ctx.active.familyId);
+  const { data: favorited, error } = await supabase.from('social_reader_items')
+    .update({ is_favorite: input.favorite }).eq('id', input.id).eq('family_id', ctx.active.familyId).select('id');
   if (error) return { ok: false, error: error.message };
+  if (wroteNoRows(favorited)) return { ok: false, error: t('actions.couldNotUpdateThatItem') };
   revalidatePath(PATH);
   return { ok: true };
 }
 
 /** Mark a single item read/unread. */
 export async function markReadAction(input: { id: string; read: boolean }): Promise<Result> {
+  const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const { error } = await supabase.from('social_reader_items')
-    .update({ is_read: input.read }).eq('id', input.id).eq('family_id', ctx.active.familyId);
+  const { data: marked, error } = await supabase.from('social_reader_items')
+    .update({ is_read: input.read }).eq('id', input.id).eq('family_id', ctx.active.familyId).select('id');
   if (error) return { ok: false, error: error.message };
+  if (wroteNoRows(marked)) return { ok: false, error: t('actions.couldNotUpdateThatItem') };
   revalidatePath(PATH);
   return { ok: true };
 }
@@ -79,6 +86,10 @@ export async function markReadAction(input: { id: string; read: boolean }): Prom
 export async function markAllReadAction(): Promise<Result> {
   const ctx = await requireUserContext();
   const supabase = await createServer();
+  // Deliberately NOT gated on rows. The `.eq('is_read', false)` predicate means
+  // zero rows is the ordinary "everything is already read" case, and failing
+  // there would report an error for a button that had nothing to do.
+  // Audit C1-S9-56.
   const { error } = await supabase.from('social_reader_items')
     .update({ is_read: true }).eq('family_id', ctx.active.familyId).eq('is_read', false);
   if (error) return { ok: false, error: error.message };

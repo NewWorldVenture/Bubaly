@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthClient } from '@supabase/supabase-js';
 import { createDeviceSignOut, sessionStorageKey } from '@/mobile/src/lib/sign-out';
@@ -163,7 +164,7 @@ describe('explicit device sign-out', () => {
       expect(await f.store.getItem(key)).toBeNull(); expect(f.events).not.toContain('SIGNED_IN');
       expect((await f.auth.signInWithPassword({ email: 'fixture@example.test', password: 'synthetic-password' })).error).toBeNull();
       expect((await f.auth.getSession()).data.session?.user.id).toBe('new-user');
-      expect(f.events.indexOf('SIGNED_OUT')).toBeLessThan(f.events.indexOf('SIGNED_IN'));
+      expect(at(f.events, 'SIGNED_OUT')).toBeLessThan(at(f.events, 'SIGNED_IN'));
       expect(f.fetcher.mock.calls.every(([url]) => String(url).includes('grant_type=password'))).toBe(true);
     } finally { await f.close(); }
   });

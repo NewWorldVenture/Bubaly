@@ -13,6 +13,7 @@ import type { ParentApprovalRow, RenewalRow, DocumentRow } from '@/lib/home/need
 import { reminderAttention } from '@/lib/dashboard/reminder-attention';
 import { nextRemindAt } from '@/lib/reminders/details';
 import { escapeLike } from '@/lib/supabase/escape-like';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 type DB = SupabaseClient<Database>;
 
@@ -146,8 +147,11 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         if (memberId) {
           const { error: assignmentError } = await supabase.from('chore_assignments').insert({ family_id: ctx.familyId, chore_id: chore.id, member_id: memberId, due_at: optStr(a.due_at) });
           if (assignmentError) {
-            const { error: rollbackError } = await supabase.from('chores').delete().eq('id', chore.id);
-            if (rollbackError) console.error('[assistant] chore rollback failed:', rollbackError);
+            // A chore this call just created, so zero rows removed is a failed
+            // rollback, not an absence. Logged; the failure is already being
+            // returned. Audit C1-S9-69.
+            const { data: rolledBack, error: rollbackError } = await supabase.from('chores').delete().eq('id', chore.id).select('id');
+            if (rollbackError || wroteNoRows(rolledBack)) console.error('[assistant] chore rollback failed:', rollbackError ?? 'no rows deleted');
             return toolFailure('save the chore assignment', assignmentError);
           }
         }
@@ -255,9 +259,16 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         if (lookupError) return toolFailure('find the reminder', lookupError);
         const r = rows?.[0];
         if (!r) return { ok: false, error: `No active reminder matching “${q}”.` };
-        const { error } = await supabase.from('family_reminders')
-          .update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', r.id);
+        // The assistant SPEAKS the answer — "Completed …" — and a completion that
+        // matched nothing said it over a reminder still active. Worse, the next
+        // occurrence of a recurring reminder is inserted below, so two concurrent
+        // completions each scheduled one: two future reminders for one. The
+        // `status = 'active'` predicate lets exactly one completion win, and
+        // `.select()` is what tells the loser it lost. Audit C1-S9-69.
+        const { data: completed, error } = await supabase.from('family_reminders')
+          .update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', r.id).eq('status', 'active').select('id');
         if (error) return toolFailure('complete the reminder', error);
+        if (wroteNoRows(completed)) return toolFailure('complete the reminder', 'no rows updated');
         // Recurring → schedule the next occurrence (core columns only, so it's
         // safe regardless of the 0100 detail-columns migration state).
         const next = r.remind_at && r.recurrence !== 'none' ? nextRemindAt(r.remind_at, r.recurrence) : null;
@@ -268,9 +279,11 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
             member_id: r.member_id, remind_at: next, status: 'active',
           });
           if (nextError) {
-            const { error: rollbackError } = await supabase.from('family_reminders')
-              .update({ status: 'active', completed_at: null }).eq('id', r.id);
-            if (rollbackError) console.error('[assistant] reminder rollback failed:', rollbackError);
+            // Restoring the reminder this call just completed; zero rows is a
+            // failed restore. Logged. Audit C1-S9-69.
+            const { data: restored, error: rollbackError } = await supabase.from('family_reminders')
+              .update({ status: 'active', completed_at: null }).eq('id', r.id).select('id');
+            if (rollbackError || wroteNoRows(restored)) console.error('[assistant] reminder rollback failed:', rollbackError ?? 'no rows updated');
             return toolFailure('schedule the next reminder', nextError);
           }
         }
@@ -297,8 +310,11 @@ export function buildAssistantTools(supabase: DB, ctx: AssistantCtx): ToolSpec[]
         if (lookupError) return toolFailure('find the reminder', lookupError);
         const r = rows?.[0];
         if (!r) return { ok: false, error: `No active reminder matching “${q}”.` };
-        const { error } = await supabase.from('family_reminders').update({ remind_at }).eq('id', r.id);
+        // "Moved … to a new time" is spoken back; zero rows is the same failure.
+        // Audit C1-S9-69.
+        const { data: moved, error } = await supabase.from('family_reminders').update({ remind_at }).eq('id', r.id).select('id');
         if (error) return toolFailure('reschedule the reminder', error);
+        if (wroteNoRows(moved)) return toolFailure('reschedule the reminder', 'no rows updated');
         return { ok: true, summary: `Moved “${r.title}” to a new time.` };
       },
     },

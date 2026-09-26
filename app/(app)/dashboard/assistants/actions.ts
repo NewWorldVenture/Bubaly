@@ -12,6 +12,7 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { logAudit } from '@/lib/server/audit';
 import { issueAssistantToken } from '@/lib/assistant/link-token';
 import { isAdmin } from '@/lib/constants/roles';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 const PAGE = '/dashboard/assistants';
 
@@ -80,13 +81,18 @@ export async function revokeAssistantLinkAction(id: string): Promise<AssistantAc
   const admin = createServiceClient();
   // Scoped to this family as well as the id: an id from elsewhere must not
   // revoke another household's key.
-  const { error } = await admin
+  // "It stops working immediately" is what this action promises. A revoke
+  // matching no rows leaves a live assistant key against the family's data while
+  // the parent has been told it is dead — and a key believed revoked is one
+  // nobody goes back to check. Audit C1-S9-60.
+  const { data: revoked, error } = await admin
     .from('assistant_links')
     .update({ revoked_at: new Date().toISOString() })
     .eq('id', id)
-    .eq('family_id', ctx.active.familyId);
-  if (error) {
-    console.error('[assistants] revoke failed', error);
+    .eq('family_id', ctx.active.familyId)
+    .select('id');
+  if (error || wroteNoRows(revoked)) {
+    console.error('[assistants] revoke failed', error ?? 'no rows updated');
     return { ok: false, error: 'Could not revoke that key.' };
   }
   await logAudit(await createServer(), {

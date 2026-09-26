@@ -17,6 +17,7 @@ import type { MemberProfile } from '@/lib/guardian/pipeline';
 import { isNextScreeningTurn } from '@/lib/guardian/screening-turn';
 import { claimGuardianCallback, isValidGuardianEventId, markGuardianCallbackProcessed } from '@/lib/guardian/callbacks';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 export const runtime = 'nodejs';
 
@@ -65,11 +66,26 @@ export async function POST(req: NextRequest) {
   const db = withGuardianTables(supabase);
   const gFrom = (t: Parameters<typeof db.from>[0]) => (db.from(t) as ReturnType<typeof supabase.from>);
 
-  // Load session
-  const { data: session } = await gFrom('guardian_screening_sessions')
+  // Load session.
+  //
+  // The rule for this exact situation is already written eleven lines above,
+  // on the callback claim: *"Saying goodbye is right for a duplicate and wrong
+  // for an outage: it ends a live screening call and reports success. A 503
+  // lets Twilio fall back."* This read then dropped its error and did the
+  // forbidden thing — a refused or failed read left `session` null and hung up
+  // on a live screening call with a cheerful goodbye, which is indistinguishable
+  // to the caller from being screened out. Guardian screens for scams against
+  // the people least able to absorb one; the call it drops this way is as
+  // likely to be a real grandchild as a fraudster. Audit C1-S9-39.
+  const { data: session, error: sessionError } = await gFrom('guardian_screening_sessions')
     .select('*, communication_id')
     .eq('id', sessionId)
     .maybeSingle();
+
+  if (sessionError) {
+    console.error('[guardian/screen] session read failed; letting Twilio fall back', { sessionId, error: sessionError.message });
+    return new NextResponse('', { status: 503 });
+  }
 
   if (!session || (session as { status: string }).status !== 'active') {
     return finish(wrapTwiml(
@@ -145,11 +161,22 @@ export async function POST(req: NextRequest) {
     { role: 'assistant', content: responseText },
   ];
 
-  await gFrom('guardian_screening_sessions').update({
+  // Every write in this route runs inside a LIVE CALL: failing the webhook
+  // drops the caller, so none of them may bail. But their results were
+  // discarded whole, and this one matters most — it is the transcript the NEXT
+  // turn reasons from, so a silent failure leaves the screening AI deciding on
+  // a conversation that stops two turns ago. Confirmed and logged, never raised.
+  // Audit C1-S9-63.
+  const { data: historySaved, error: historyError } = await gFrom('guardian_screening_sessions').update({
     messages: newHistory,
     turn,
     caller_name_stated: decision?.callerName ?? (session as { caller_name_stated?: string }).caller_name_stated,
-  }).eq('id', sess.id);
+  }).eq('id', sess.id).select('id');
+  if (historyError || wroteNoRows(historySaved)) {
+    console.error('[guardian/screen] transcript save failed; the next turn reasons from stale history', {
+      sessionId: sess.id, turn, error: historyError?.message ?? 'no rows updated',
+    });
+  }
 
   // If AI reached a decision or max turns hit
   if (decision || turn >= 5) {
@@ -214,7 +241,14 @@ export async function POST(req: NextRequest) {
 
     const summary = await summarizeScreening(newHistory, decision?.callerName ?? null, memberName);
     if (sess.communication_id) {
-      await gFrom('guardian_communications').update({ summary, status: 'handled' }).eq('id', sess.communication_id);
+      // Logged, not raised, as above. Audit C1-S9-63.
+      const { data: summarised, error: summaryError } = await gFrom('guardian_communications')
+        .update({ summary, status: 'handled' }).eq('id', sess.communication_id).select('id');
+      if (summaryError || wroteNoRows(summarised)) {
+        console.error('[guardian/screen] voicemail summary save failed', {
+          commId: sess.communication_id, error: summaryError?.message ?? 'no rows updated',
+        });
+      }
       await notifyFamily(supabase, sess.family_id, memberProfile as { member_id: string } | null, {
         commId: sess.communication_id,
         callerName: decision?.callerName ?? formatPhone(sess.caller_number),
@@ -261,21 +295,31 @@ async function endScreening(
   const db = withGuardianTables(supabase);
   const gFrom = (t: Parameters<typeof db.from>[0]) => (db.from(t) as ReturnType<typeof supabase.from>);
 
-  await gFrom('guardian_screening_sessions').update({
+  // The session left unresolved stays "in progress" in the family's call log,
+  // and the communication left unhandled keeps its risk unrecorded — which is
+  // the one field a parent reviewing a scam call reads. Logged, never raised:
+  // the caller is still on the line. Audit C1-S9-63.
+  const { data: resolved, error: resolveError } = await gFrom('guardian_screening_sessions').update({
     status: 'resolved',
     final_action: finalAction,
     ai_risk: meta.ai_risk,
     ai_urgency: meta.ai_urgency,
     ai_intent: meta.ai_intent,
     resolution_summary: meta.resolution_summary,
-  }).eq('id', sessionId);
+  }).eq('id', sessionId).select('id');
+  if (resolveError || wroteNoRows(resolved)) {
+    console.error('[guardian/screen] session resolve failed', { sessionId, error: resolveError?.message ?? 'no rows updated' });
+  }
 
   if (commId) {
-    await gFrom('guardian_communications').update({
+    const { data: handled, error: handledError } = await gFrom('guardian_communications').update({
       status: 'handled',
       ai_decision_reason: meta.resolution_summary,
       sentiment: meta.ai_urgency === 'emergency' ? 'urgent' : meta.ai_risk.includes('scam') ? 'suspicious' : 'neutral',
-    }).eq('id', commId);
+    }).eq('id', commId).select('id');
+    if (handledError || wroteNoRows(handled)) {
+      console.error('[guardian/screen] communication handled-stamp failed', { commId, error: handledError?.message ?? 'no rows updated' });
+    }
   }
 }
 

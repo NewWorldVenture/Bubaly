@@ -5,7 +5,7 @@ import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext, isSuperAdmin } from '@/lib/supabase/auth';
 import { createServer, createServiceClient } from '@/lib/supabase/server';
 import { normalizeIdea, isFeedbackStatus, type IdeaDraft } from '@/lib/feedback/board';
-import { describeActionError } from '@/lib/supabase/errors';
+import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 
 type Result = { ok: boolean; error?: string };
 
@@ -71,6 +71,10 @@ export async function toggleVoteAction(ideaId: string): Promise<Result & { voted
   if (readErr) return actionFailure('check the vote', t('feedback.couldNotCheckTheVote'), readErr);
 
   if (existing) {
+    // Deliberately NOT confirmed. Zero rows means the vote is already gone — a
+    // double click, or a second tab — which is the state being asked for, and
+    // the count returned below is re-read from the database either way.
+    // Audit C1-S9-61.
     const { error } = await supabase.from('feedback_votes').delete().eq('id', existing.id);
     if (error) return actionFailure('remove the vote', t('feedback.couldNotRemoveTheVote'), error);
   } else {
@@ -116,10 +120,15 @@ export async function setIdeaStatusAction(input: { ideaId: string; status: strin
 
   const svc = createServiceClient();
   const note = (input.note ?? '').trim();
-  const { error } = await svc.from('feedback_ideas')
+  // Service role, so RLS is not what could make this match nothing — a stale id
+  // from a roadmap board left open while the idea was merged away is. The board
+  // is public: an idea reported as "Shipped" that never moved tells every family
+  // watching it that work landed which did not. Audit C1-S9-59.
+  const { data: moved, error } = await svc.from('feedback_ideas')
     .update({ status: input.status, admin_note: note || null })
-    .eq('id', input.ideaId);
+    .eq('id', input.ideaId).select('id');
   if (error) return actionFailure('update the idea status', t('feedback.couldNotUpdateTheIdeaStatus'), error);
+  if (wroteNoRows(moved)) return { ok: false, error: t('feedback.couldNotUpdateTheIdeaStatus') };
   revalidatePath('/feedback');
   return { ok: true };
 }

@@ -8,6 +8,7 @@ import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { buildSuggestPrompt, parseSuggestions, type VaultRecipeLite } from '@/lib/recipes/suggest';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
+import { describeReadError } from '@/lib/supabase/settle';
 
 export const runtime = 'nodejs';
 
@@ -28,13 +29,21 @@ export async function POST(req: NextRequest) {
   const boundedBody = await readBoundedRequestJsonOrEmpty(req, MAX_SMALL_JSON_BYTES);
   if (!boundedBody.ok) return NextResponse.json({ error: t('suggest.requestBodyIsTooLarge') }, { status: 400 });
   const { constraint } = (boundedBody.value ?? {}) as { constraint?: string };
-  const { data: recipes } = await supabase
+  // A refused read produced `{ picks: [], empty: true }` — the response that
+  // tells a family their recipe box is empty, to a family whose recipe box is
+  // not. The genuine empty answer is kept below. Audit C1-S9-41.
+  const { data: recipes, error: recipesError } = await supabase
     .from('family_recipes')
     .select('id, name, cuisine, category, tags, ingredients, photo_url')
     .eq('family_id', ctx.active.familyId)
     .order('is_favorite', { ascending: false })
     .order('updated_at', { ascending: false })
     .limit(80);
+
+  if (recipesError) {
+    console.error('[recipes/suggest] recipe read failed', { familyId: ctx.active.familyId, error: describeReadError(recipesError) });
+    return NextResponse.json({ error: t('suggest.recipeDataIsTemporarilyUnavailable') }, { status: 503 });
+  }
 
   if (!recipes || recipes.length === 0) {
     return NextResponse.json({ picks: [], empty: true });

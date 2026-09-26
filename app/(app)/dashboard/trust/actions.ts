@@ -7,10 +7,10 @@ import { createServer } from '@/lib/supabase/server';
 import { isManager } from '@/lib/constants/roles';
 import { CAPABILITIES, TRUST_DOMAINS, type Capability } from '@/lib/trust/engine';
 import { delegationFromPreset, findSharingPreset } from '@/lib/trust/sharing-presets';
-import { ledgerWriter } from '@/lib/trust/ledger';
+import { ledgerWriter, recordTrustChange } from '@/lib/trust/ledger';
 import { APPROVAL_MODELS, thresholdFor } from '@/lib/approvals/threshold';
 import type { Json } from '@/lib/database.types';
-import { describeActionError } from '@/lib/supabase/errors';
+import { describeActionError, wroteNoRows } from '@/lib/supabase/errors';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { decide } from '@/lib/services/approvals';
 import {
@@ -119,6 +119,15 @@ export async function savePolicyAction(input: {
     const { error: e } = await supabase.from('trust_policies').insert({ ...base, family_id: ctx.active.familyId, created_by: ctx.user.id });
     if (e) return actionFailure(e, t('actions.couldNotCreateThatPolicy'));
   }
+  // The rule itself changed. Recorded in English, deliberately: this row is
+  // evidence, read back long after the fact and possibly by someone who did not
+  // write it, so it is not translated per request the way the UI is.
+  await recordTrustChange(supabase, {
+    familyId: ctx.active.familyId, actorMemberId: ctx.active.member.id,
+    decision: 'policy_changed', domain: base.domain, capability: base.capability,
+    reason: `${input.id ? 'Updated' : 'Created'} policy "${name}" — ${base.effect} for ${base.subject_kind}`,
+    context: { policy: name, effect: base.effect, subjectKind: base.subject_kind, enabled: base.enabled },
+  });
   revalidatePath('/dashboard/trust');
   return { ok: true };
 }
@@ -132,6 +141,12 @@ export async function togglePolicyAction(input: { id: string; enabled: boolean }
     .eq('id', input.id).eq('family_id', ctx.active.familyId).select('id');
   if (e) return actionFailure(e, t('actions.couldNotUpdateThatPolicy'));
   if (changedNothing(rows)) return { ok: false, error: t('actions.couldNotUpdateThatPolicy') };
+  await recordTrustChange(supabase, {
+    familyId: ctx.active.familyId, actorMemberId: ctx.active.member.id,
+    decision: 'policy_changed',
+    reason: `Policy ${input.enabled ? 'enabled' : 'disabled'}`,
+    context: { policyId: input.id, enabled: input.enabled },
+  });
   revalidatePath('/dashboard/trust');
   return { ok: true };
 }
@@ -145,6 +160,13 @@ export async function deletePolicyAction(input: { id: string }): Promise<Result>
     .eq('id', input.id).eq('family_id', ctx.active.familyId).select('id');
   if (e) return actionFailure(e, t('actions.couldNotDeleteThatPolicy'));
   if (changedNothing(rows)) return { ok: false, error: t('actions.couldNotDeleteThatPolicy') };
+  // A deleted policy leaves no row behind, so without this the strongest kind
+  // of permission change is the one the ledger can say least about.
+  await recordTrustChange(supabase, {
+    familyId: ctx.active.familyId, actorMemberId: ctx.active.member.id,
+    decision: 'policy_changed', reason: 'Policy deleted',
+    context: { policyId: input.id, deleted: true },
+  });
   revalidatePath('/dashboard/trust');
   return { ok: true };
 }
@@ -219,10 +241,20 @@ export async function acceptPolicySuggestionAction(input: { suggestionId: string
     if (!saved.ok) return saved;
   }
 
-  const { error: resolveError } = await supabase.from('autopilot_suggestions')
+  // The policies are already saved by here. A resolve matching no rows leaves the
+  // suggestion sitting in the queue looking un-acted-on, and accepting it a second
+  // time writes the SAME policies again — a duplicate set at the same priority,
+  // which is how a permission nobody granted twice becomes hard to trace back to
+  // one decision. The existing message already says the halves came apart; it just
+  // never ran for the half that fails silently. Audit C1-S9-59.
+  const { data: resolved, error: resolveError } = await supabase.from('autopilot_suggestions')
     .update({ status: 'executed', resolved_at: new Date().toISOString(), resolved_by: ctx.user.id })
-    .eq('id', suggestion.id).eq('family_id', familyId);
+    .eq('id', suggestion.id).eq('family_id', familyId).select('id');
   if (resolveError) return actionFailure(resolveError, t('actions.thePolicyWasSavedButTheSuggestion'));
+  if (wroteNoRows(resolved)) {
+    console.error('[trust] suggestion resolve matched no rows', { suggestionId: suggestion.id, familyId });
+    return { ok: false, error: t('actions.thePolicyWasSavedButTheSuggestion') };
+  }
 
   revalidatePath('/dashboard/trust');
   revalidatePath('/dashboard/autopilot');
@@ -240,17 +272,46 @@ export async function setPermissionGrantAction(input: {
   if (!(CAPABILITIES as readonly string[]).includes(input.capability)) return { ok: false, error: t('actions.unknownCapability') };
 
   const supabase = await createServer();
+  // `.select('id')` on both branches, for the reason `deletePolicyAction` above
+  // already gives: this is the permission surface, and the ledger is the record
+  // of what changed on it. Without asking for the affected rows, PostgREST
+  // returns none either way and neither this action nor the ledger entry below
+  // could tell a real change from a no-op. Audit C1-S9-18.
+  //
+  // The two branches are NOT treated alike, because they do not mean alike.
+  let cleared = 0;
   if (input.effect === 'clear') {
-    const { error: e } = await supabase.from('permission_grants').delete()
-      .eq('family_id', ctx.active.familyId).eq('member_id', input.memberId).eq('domain', input.domain).eq('capability', input.capability);
+    const { data: rows, error: e } = await supabase.from('permission_grants').delete()
+      .eq('family_id', ctx.active.familyId).eq('member_id', input.memberId).eq('domain', input.domain).eq('capability', input.capability)
+      .select('id');
     if (e) return actionFailure(e, t('actions.couldNotClearThatPermission'));
+    // Clearing is IDEMPOTENT: no row means the grant is already absent, which is
+    // the end state the manager asked for. So zero rows is not a failure here —
+    // but the ledger must not claim a clearance that did not happen, which is
+    // what it said before, in the same words, either way.
+    cleared = rows?.length ?? 0;
   } else {
-    const { error: e } = await supabase.from('permission_grants').upsert({
+    const { data: rows, error: e } = await supabase.from('permission_grants').upsert({
       family_id: ctx.active.familyId, member_id: input.memberId,
       domain: input.domain, capability: input.capability as Capability, effect: input.effect, created_by: ctx.user.id,
-    }, { onConflict: 'family_id,member_id,domain,capability' });
+    }, { onConflict: 'family_id,member_id,domain,capability' }).select('id');
     if (e) return actionFailure(e, t('actions.couldNotSaveThatPermission'));
+    // An upsert is NOT idempotent in the same way: it either inserts or updates,
+    // so affecting no row means the grant was not stored. Telling a manager an
+    // allow or deny is in force when it is not is the failure this whole
+    // surface exists to prevent, so it is a hard failure like its five siblings.
+    if (changedNothing(rows)) return { ok: false, error: t('actions.couldNotSaveThatPermission') };
   }
+  await recordTrustChange(supabase, {
+    familyId: ctx.active.familyId, actorMemberId: ctx.active.member.id,
+    decision: 'grant_changed', domain: input.domain, capability: input.capability,
+    reason: input.effect === 'clear'
+      ? cleared > 0
+        ? `Cleared the ${input.capability} grant on ${input.domain}`
+        : `No ${input.capability} grant on ${input.domain} to clear`
+      : `Set ${input.capability} on ${input.domain} to ${input.effect}`,
+    context: { memberId: input.memberId, effect: input.effect, ...(input.effect === 'clear' ? { cleared } : {}) },
+  });
   revalidatePath('/dashboard/trust');
   return { ok: true };
 }
@@ -275,6 +336,18 @@ export async function createDelegationAction(input: {
     expires_at: expires.toISOString(), created_by: ctx.user.id,
   });
   if (e) return actionFailure(e, t('actions.couldNotCreateThatDelegation'));
+  // Handing someone else your authority is the change this surface exists to
+  // make, and it was the one it said nothing about.
+  await recordTrustChange(supabase, {
+    familyId: ctx.active.familyId, actorMemberId: ctx.active.member.id,
+    decision: 'delegation_changed',
+    domain: domains.length === 1 ? domains[0] : null,
+    reason: `Delegated ${domains.length ? domains.join(', ') : 'no domains'} until ${expires.toISOString()}`,
+    context: {
+      fromMemberId: input.fromMemberId, toMemberId: input.toMemberId,
+      domains, expiresAt: expires.toISOString(),
+    },
+  });
   revalidatePath('/dashboard/trust');
   return { ok: true };
 }
@@ -315,6 +388,11 @@ export async function revokeDelegationAction(input: { id: string }): Promise<Res
     .eq('id', input.id).eq('family_id', ctx.active.familyId).select('id');
   if (e) return actionFailure(e, t('actions.couldNotRevokeThatDelegation'));
   if (changedNothing(rows)) return { ok: false, error: t('actions.couldNotRevokeThatDelegation') };
+  await recordTrustChange(supabase, {
+    familyId: ctx.active.familyId, actorMemberId: ctx.active.member.id,
+    decision: 'delegation_changed', reason: 'Delegation revoked',
+    context: { delegationId: input.id, revoked: true },
+  });
   revalidatePath('/dashboard/trust');
   return { ok: true };
 }
@@ -362,11 +440,25 @@ export async function activateEmergencyAction(input: { kind: string; reason?: st
   if (e) return actionFailure(e, t('actions.couldNotActivateEmergencyMode'));
 
   // 0260: the ledger is written by the server, not by the session that acted.
-  await (await ledgerWriter(supabase)).from('trust_audit_logs').insert({
+  //
+  // The error used to be dropped on the floor — the ONLY one of the six
+  // trust_audit_logs writers that did, on the highest-privilege action in the
+  // product. `serverWriter` falls back to the CALLER'S client when service
+  // credentials are missing, and this table has no member INSERT policy, so in
+  // that configuration every emergency activation silently went unrecorded and
+  // a ledger that had stopped working looked exactly like a family that had
+  // never declared an emergency. The session is already open and must stay open
+  // — an emergency is not blocked because an audit row failed — so this is loud
+  // rather than fatal.
+  const { error: ledgerError } = await (await ledgerWriter(supabase)).from('trust_audit_logs').insert({
     family_id: ctx.active.familyId, actor_kind: 'member', actor_id: ctx.active.member.id,
     domain: 'emergency', capability: 'automate', decision: 'emergency_override',
     reason: `Emergency mode activated (${kind})${input.reason ? `: ${input.reason}` : ''}`,
   });
+  if (ledgerError) {
+    console.error('[trust] emergency mode was activated but not recorded',
+      { familyId: ctx.active.familyId, kind, domains }, ledgerError);
+  }
   revalidatePath('/dashboard/trust');
   return { ok: true };
 }
@@ -382,6 +474,15 @@ export async function endEmergencyAction(input: { id: string }): Promise<Result>
     .eq('id', input.id).eq('family_id', ctx.active.familyId).select('id');
   if (e) return actionFailure(e, t('actions.couldNotEndEmergencyMode'));
   if (changedNothing(rows)) return { ok: false, error: t('actions.couldNotEndEmergencyMode') };
+  // Activation was recorded and the end was not, so the ledger could show an
+  // override that outranks every deny with no sign of it ever stopping. The
+  // schema has reserved `emergency_ended` since the table shipped.
+  await recordTrustChange(supabase, {
+    familyId: ctx.active.familyId, actorMemberId: ctx.active.member.id,
+    decision: 'emergency_ended', domain: 'emergency', capability: 'automate',
+    reason: 'Emergency mode ended',
+    context: { sessionId: input.id },
+  });
   revalidatePath('/dashboard/trust');
   return { ok: true };
 }

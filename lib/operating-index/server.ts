@@ -287,7 +287,8 @@ export async function loadOperatingIndex(supabase: DB, familyId: string, now: Da
 
   // Idempotent upsert of today's snapshot.
   try {
-    await supabase.from('family_operating_index').upsert({
+    // Its result used to be discarded outright — not even the error bound. Best-effort, so logged rather than raised. Audit C1-S9-76.
+    const { error: familyOperatingIndexWriteError } = await supabase.from('family_operating_index').upsert({
       family_id: familyId,
       as_of_date: today,
       composite: index.composite,
@@ -295,6 +296,7 @@ export async function loadOperatingIndex(supabase: DB, familyId: string, now: Da
       dimensions: dimensionsToRecord(index.dimensions) as unknown as Json,
       suggestions: index.suggestions as unknown as Json,
     }, { onConflict: 'family_id,as_of_date' });
+    if (familyOperatingIndexWriteError) console.error('[operating-index] family_operating_index upsert failed', familyOperatingIndexWriteError);
   } catch {
     // Persisting is best-effort; the live index still renders.
   }

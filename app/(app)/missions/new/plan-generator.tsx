@@ -40,7 +40,12 @@ export function PlanGenerator({ members }: { members: { id: string; name: string
     fd.set('recurrence', item.recurrence);
     if (item.auto_approve_eligible) fd.set('auto_approve_score', '85');
     start(async () => {
-      await createChoreAction(fd);
+      // "Added ✓" was set whether or not the chore was created — including
+      // every time a non-manager's add was refused for carrying a reward, which
+      // every suggestion here does. Audit C1-S9-73.
+      setError(null);
+      const res = await createChoreAction(fd);
+      if (!res.ok) { setError(res.error); return; }
       setAdded((s) => new Set(s).add(idx));
     });
   }
@@ -59,7 +64,7 @@ export function PlanGenerator({ members }: { members: { id: string; name: string
           {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />} {t('missionsNewPlanGenerator.generate')}
         </button>
       </div>
-      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+      {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
 
       {items.length > 0 && (
         <div className="mt-4 space-y-2">

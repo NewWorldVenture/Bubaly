@@ -7,6 +7,7 @@ import { resolveProvider, isAIConfigured } from '@/lib/ai/provider';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
+import { describeReadError } from '@/lib/supabase/settle';
 import {
   summarizeUtilities, deterministicSavingsFindings, utilityLabel, usd,
   type BillLike,
@@ -38,12 +39,25 @@ export async function POST() {
     { error: t('utilitySavings.tooManyUtilitySavingsRequests') },
     { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
   );
-  const { data: rows } = await supabase
+  // A refused read fell into the same branch as a family with no bills, and
+  // that branch tells them to "add a few utility bills" — instructions to do
+  // work they have already done, phrased as though the app had looked. It fails
+  // closed rather than answering, so this is the mild end of the class, but the
+  // sentence is still a claim about their data that the route cannot support.
+  // Audit C1-S9-37.
+  const { data: rows, error: billsError } = await supabase
     .from('utility_bills')
     .select('kind, period_month, amount_cents')
     .eq('family_id', ctx.active.familyId)
     .order('period_month', { ascending: true })
     .limit(400);
+
+  if (billsError) {
+    console.error('[ai/home/utility-savings] bill read failed', {
+      familyId: ctx.active.familyId, error: describeReadError(billsError),
+    });
+    return NextResponse.json({ error: t('ai.recommendationsAreTemporarilyUnavailable') }, { status: 503 });
+  }
 
   const bills = (rows ?? []) as BillLike[];
   if (bills.length === 0) {
@@ -100,13 +114,15 @@ export async function POST() {
     }
   }
 
-  await supabase.from('home_ai_logs').insert({
+  // Its result used to be discarded outright — not even the error bound. Best-effort, so logged rather than raised. Audit C1-S9-76.
+  const { error: homeAiLogsWriteError } = await supabase.from('home_ai_logs').insert({
     family_id: ctx.active.familyId, user_id: ctx.user.id, kind: 'utility_savings',
     input: { bills: bills.length, monthly_cents: summary.monthlyTotalCents },
     output: { findings: findings.length, aiUsed },
     status: aiUsed ? 'succeeded' : 'fallback',
     created_by: ctx.user.id,
   });
+  if (homeAiLogsWriteError) console.error('[home-utility-savings] home_ai_logs insert failed', homeAiLogsWriteError);
 
   return NextResponse.json({
     findings,

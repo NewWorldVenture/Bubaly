@@ -8,7 +8,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -87,11 +87,13 @@ export function WishlistsModule() {
     setSaving(true);
     const sb = createClient();
     const fields = { title: form.title.trim(), url: form.url.trim() || null, price: form.price ? Number(form.price) : null, priority: form.priority, notes: form.notes.trim() || null };
-    const { error: err } = form.id
-      ? await sb.from('wishlist_items').update(fields).eq('id', form.id)
-      : await sb.from('wishlist_items').insert({ ...fields, family_id: familyId, member_id: selfId!, created_by: userId });
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-81.
+    const { data: saved, error: err } = form.id
+      ? await sb.from('wishlist_items').update(fields).eq('id', form.id).select('id')
+      : await sb.from('wishlist_items').insert({ ...fields, family_id: familyId, member_id: selfId!, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(saved)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(form.id ? 'Wish updated' : 'Added to your wish list');
     setModalOpen(false);
   }
@@ -99,8 +101,10 @@ export function WishlistsModule() {
   async function remove(w: Wish) {
     if (!confirm(`Remove "${w.title}"?`)) return;
     const sb = createClient();
-    const { error: err } = await sb.from('wishlist_items').delete().eq('id', w.id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-81.
+    const { data: removed, error: err } = await sb.from('wishlist_items').delete().eq('id', w.id).select('id');
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(removed)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('wishlistsModule.removed'));
   }
 
@@ -108,17 +112,19 @@ export function WishlistsModule() {
     if (!canToggleClaim(w as WishLike, selfId)) return;
     const sb = createClient();
     const mine = w.claimed_by === selfId;
-    const { error: err } = await sb.from('wishlist_items').update(
+    const { data: updated, error: err } = await sb.from('wishlist_items').update(
       mine ? { claimed_by: null, claimed_at: null, is_purchased: false } : { claimed_by: selfId, claimed_at: new Date().toISOString() },
-    ).eq('id', w.id);
+    ).eq('id', w.id).select('id');
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(updated)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(mine ? 'Released' : 'You claimed this gift 🎁');
   }
 
   async function togglePurchased(w: Wish) {
     const sb = createClient();
-    const { error: err } = await sb.from('wishlist_items').update({ is_purchased: !w.is_purchased }).eq('id', w.id);
+    const { data: updated2, error: err } = await sb.from('wishlist_items').update({ is_purchased: !w.is_purchased }).eq('id', w.id).select('id');
     if (err) toastError(describeDbError(err));
+    else if (wroteNoRows(updated2)) toastError(t('errors.thatChangeWasNotSaved'));
   }
 
   if (loading) return <SkeletonList count={5} />;

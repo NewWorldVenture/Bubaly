@@ -12,7 +12,7 @@ import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
 import { createChoreAction, deleteChoreAssignmentAction, setChoreStatusAction } from '@/app/(app)/dashboard/chores/actions';
 import { newSubmissionId } from '@/lib/utils/submission-id';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { isManager } from '@/lib/constants/roles';
 import { Avatar } from '@/components/ui/avatar';
@@ -164,12 +164,16 @@ export function ChoresModule() {
     if (busy) return;
     setBusy(a.id); setMenuFor(null);
     const supabase = createClient();
-    const { error } = await supabase.from('chore_assignments').update({
+    // A non-manager's approval is refused by the 0223 trigger WITH an error;
+    // a row RLS cannot see is refused with none, and zero rows here said
+    // "Approved! +N pts" about points nobody was given. Audit C1-S9-83.
+    const { data: approved, error } = await supabase.from('chore_assignments').update({
       // approved_by is a FK to family_members(id), not auth.users — use the member id.
       status: 'approved', approved_at: new Date().toISOString(), approved_by: selfMemberId, points_awarded: a.chore?.points ?? 0,
-    }).eq('id', a.id);
+    }).eq('id', a.id).select('id');
     setBusy(null);
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(approved)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(`Approved! +${a.chore?.points ?? 0} pts`); void refresh();
   }
 

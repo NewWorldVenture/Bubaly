@@ -202,7 +202,10 @@ export function buildFirstBrief(events: BriefEvent[], now: Date, dinnerCandidate
       id: `prep:${first.title}`,
       kind: 'prep',
       label: 'Get ready for today',
-      detail: `First up: ${first.title}${first.timeLabel !== 'All day' ? ` at ${first.timeLabel}` : ''}.`,
+      // `allDay` is on the same item; the old test compared against the words
+      // "All day" instead, so translating the label would have appended
+      // "at All day" to the sentence.
+      detail: `First up: ${first.title}${first.allDay ? '' : ` at ${first.timeLabel}`}.`,
       display: { kind: 'prep', timelineIndex: timeline.indexOf(first) },
     });
   }

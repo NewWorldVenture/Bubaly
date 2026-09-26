@@ -76,7 +76,7 @@ export async function HandledLedger() {
             )}
 
             <div className="mt-7 flex flex-col gap-3 xs:flex-row xs:flex-wrap">
-              <Link href="/security#ai-trust" className="focus-visible:focus-ring inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-blue-500 to-violet-600 px-5 text-sm font-semibold text-brand-fg shadow-glow transition hover:brightness-110">
+              <Link href="/security#ai-trust" className="focus-ring inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-blue-500 to-violet-600 px-5 text-sm font-semibold text-brand-fg shadow-glow transition hover:brightness-110">
                 <ShieldCheck className="h-4 w-4" aria-hidden />
                 {t('handledProof.readTrustCenter')}
               </Link>

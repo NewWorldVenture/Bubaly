@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { at } from './helpers/source-order';
 
 describe('social publishing persistence boundaries', () => {
   it('checks target account reads and target inserts before publishing', () => {
@@ -31,7 +32,7 @@ describe('social publishing persistence boundaries', () => {
     expect(source).toContain("const { data: calendarRows, error: calendarError } = await supabase.from('social_calendar_items').insert(calItems).select('id')");
     expect(source).toContain('if (postId && !publishStarted && !scheduleArmStarted) {');
     expect(source).toContain('reviewRequired = !(await cleanupPost(supabase, fid, postId))');
-    expect(source.indexOf('scheduleArmStarted = true;')).toBeLessThan(source.indexOf('await armScheduledPublishReceipt(receiptId)'));
+    expect(at(source, 'scheduleArmStarted = true;')).toBeLessThan(at(source, 'await armScheduledPublishReceipt(receiptId)'));
     expect(source).toContain('if (intent !== \'draft\' && accountIds.length === 0)');
   });
 

@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 // Which AI surfaces leave a record, and which are still silent.
 //
 // §33: "a failure in the chat assistant or the daily brief is invisible after
@@ -164,7 +165,7 @@ describe('§33 the surfaces a family would ask about are observed', () => {
     // And the fallback that drops the narrative sits after it, so the wrapper
     // has already recorded by the time the route decides to answer 200 anyway.
     expect(src.indexOf('recommendations = null; // fall back'))
-      .toBeGreaterThan(src.indexOf('obs.used('));
+      .toBeGreaterThan(at(src, 'obs.used('));
   });
 
   it('the assistant engine observes both transports, and the stream from inside', () => {

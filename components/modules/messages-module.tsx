@@ -10,7 +10,7 @@ import {
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
 import { settle } from '@/lib/supabase/settle';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -172,6 +172,11 @@ export function MessagesModule() {
   }, [familyId, userId, members, loadConversations]);
 
   // ── Load messages for active conv ──────────────────────────
+  // `toastError` is in the deps because it IS a dependency — this callback
+  // calls it. It is safe to list: `useToast`'s context value is memoised on
+  // `[push]` (see the comment in components/ui/toast.tsx, which says it exists
+  // for exactly this), so the identity is stable and adding it cannot make
+  // this callback — or the effects that depend on it — re-run per toast.
   const loadMessages = useCallback(async (convId: string) => {
     setLoadingMsgs(true);
     const supabase = createClient();
@@ -202,13 +207,15 @@ export function MessagesModule() {
       if (!rpcErr) return;
       const unread = (data ?? []).filter((m) => !(m.read_by ?? []).includes(userId)).slice(-100);
       for (const m of unread) {
+        // Best-effort fallback for read receipts when the RPC is unavailable;
+        // logged, and deliberately not confirmed row by row. Audit C1-S9-81.
         const { error } = await settle(supabase.from('family_messages')
           .update({ read_by: [...(m.read_by ?? []), userId] })
           .eq('id', m.id));
         if (error) { console.error('[messages] read-receipt fallback failed', { message: error.message }); break; }
       }
     })();
-  }, [userId]);
+  }, [userId, toastError]);
 
   useEffect(() => {
     if (!activeConv) return;
@@ -278,7 +285,7 @@ export function MessagesModule() {
       return;
     }
     setSummaries(summarizeConversations(data ?? [], userId));
-  }, [familyId, userId]);
+  }, [familyId, userId, toastError]);
 
   useEffect(() => { void loadSummaries(); }, [conversations, loadSummaries]);
 
@@ -407,7 +414,11 @@ export function MessagesModule() {
       });
       if (insErr) {
         // Roll back the orphaned upload if the message row failed to insert.
-        await supabase.storage.from('family-media').remove([stored.path]);
+        // Genuine rollback — the row never landed, so a surviving object is
+        // referenced by nothing and the user is already being told this failed.
+        // Named in a log rather than swallowed. Audit C1-S6-01.
+        const { error: rollbackError } = await supabase.storage.from('family-media').remove([stored.path]);
+        if (rollbackError) console.error('[messages] upload rollback left an object behind', { path: stored.path }, rollbackError);
         toastError(describeDbError(insErr));
       }
     } catch (err) {
@@ -477,22 +488,26 @@ export function MessagesModule() {
     // remove keys with empty arrays
     for (const k of Object.keys(updated)) { if (!updated[k].length) delete updated[k]; }
     setMsgMenu(null);
-    const { error } = await createClient().from('family_messages').update({ reactions: updated }).eq('id', msg.id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-81.
+    const { data: updated2, error } = await createClient().from('family_messages').update({ reactions: updated }).eq('id', msg.id).select('id');
     if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(updated2)) toastError(tr('errors.thatChangeWasNotSaved'));
   }
 
   // ── Delete message ──────────────────────────────────────────
   async function deleteMessage(id: string) {
     setMsgMenu(null);
-    const { error } = await createClient().from('family_messages').update({ deleted_at: new Date().toISOString() }).eq('id', id).eq('sender_id', userId);
+    const { data: updated3, error } = await createClient().from('family_messages').update({ deleted_at: new Date().toISOString() }).eq('id', id).eq('sender_id', userId).select('id');
     if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(updated3)) toastError(tr('errors.thatChangeWasNotSaved'));
   }
 
   // ── Pin message ─────────────────────────────────────────────
   async function pinMessage(msg: Message) {
     setMsgMenu(null);
-    const { error } = await createClient().from('family_messages').update({ is_pinned: !msg.is_pinned }).eq('id', msg.id);
+    const { data: updated4, error } = await createClient().from('family_messages').update({ is_pinned: !msg.is_pinned }).eq('id', msg.id).select('id');
     if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(updated4)) toastError(tr('errors.thatChangeWasNotSaved'));
   }
 
   function selectConversation(conv: Conversation) {

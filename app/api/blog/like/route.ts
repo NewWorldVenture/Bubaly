@@ -18,12 +18,19 @@ export const runtime = 'nodejs';
 const MAX_BODY_BYTES = 2_048;
 
 async function loadPostId(supabase: ReturnType<typeof createServiceClient>, slug: string): Promise<string | null> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('blog_posts')
     .select('id')
     .eq('slug', slug)
     .eq('published', true)
     .maybeSingle();
+  // A refused read returned null, and both callers answer that with a 404 for
+  // a post that is published and present. Nothing here can distinguish them
+  // afterwards, so the distinction is made where it exists. Audit C1-S9-43.
+  if (error) {
+    console.error('[blog] post lookup failed', { slug, error: error.message });
+    return null;
+  }
   return data?.id ?? null;
 }
 
@@ -85,7 +92,13 @@ export async function POST(req: NextRequest) {
     .insert({ post_id: postId, visitor_id: visitorId });
   if (insertError) {
     if (insertError.code === '23505') {
-      await supabase.from('blog_post_likes').delete().eq('post_id', postId).eq('visitor_id', visitorId);
+      // Rows deliberately not checked: the state returned below is RE-READ, so
+      // the visitor is never told anything the table does not say. But the
+      // result was discarded whole, error included, so a delete that kept
+      // failing showed only as a heart that would not un-fill. Logged now.
+      // Audit C1-S9-62.
+      const { error: unlikeError } = await supabase.from('blog_post_likes').delete().eq('post_id', postId).eq('visitor_id', visitorId);
+      if (unlikeError) console.error('[blog/like] unlike failed', { postId, error: unlikeError.message });
     } else {
       return NextResponse.json({ error: t('like.couldNotRecordTheLike') }, { status: 500 });
     }

@@ -5,7 +5,7 @@ import { MoonStar, Plus, Sparkles, Sunrise, BedDouble, Activity, ListChecks, Pen
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -75,15 +75,18 @@ export function SleepModule() {
   const maxMinutes = Math.max(summary.target.max * 60, ...fortnight.map((l) => l.duration_min), 1);
 
   async function deleteLog(log: Log) {
-    const { error } = await createClient().from('sleep_logs').delete().eq('id', log.id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-82.
+    const { data: removed, error } = await createClient().from('sleep_logs').delete().eq('id', log.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(removed)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(t('sleepModule.nightRemoved'));
   }
 
   async function archiveRoutine(r: Routine) {
     if (!confirm(`Retire “${r.name}”?`)) return;
-    const { error } = await createClient().from('bedtime_routines').update({ is_active: false }).eq('id', r.id);
+    const { data: updated, error } = await createClient().from('bedtime_routines').update({ is_active: false }).eq('id', r.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated)) return toastError(t('errors.thatChangeWasNotSaved'));
     success(t('sleepModule.routineRetired'));
   }
 
@@ -312,11 +315,12 @@ function RoutineForm({ familyId, userId, memberId, age, routine, onClose, onSave
       steps, days_of_week: days, is_active: true,
     };
     const supabase = createClient();
-    const { error } = routine
-      ? await supabase.from('bedtime_routines').update(payload).eq('id', routine.id)
-      : await supabase.from('bedtime_routines').insert({ family_id: familyId, member_id: memberId, created_by: userId, ...payload });
+    const { data: saved, error } = routine
+      ? await supabase.from('bedtime_routines').update(payload).eq('id', routine.id).select('id')
+      : await supabase.from('bedtime_routines').insert({ family_id: familyId, member_id: memberId, created_by: userId, ...payload }).select('id');
     setLoading(false);
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(saved)) return toastError(t('errors.thatChangeWasNotSaved'));
     onSaved();
   }
 

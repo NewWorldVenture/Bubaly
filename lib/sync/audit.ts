@@ -65,3 +65,53 @@ export async function logSyncProviderError(
     console.error(`[sync-error] ${row.provider} ${row.code} was not recorded`, e);
   }
 }
+
+/**
+ * Record that a sync failed: the run, the job, and the connection's health.
+ *
+ * Both engines (generic and Google) did this in their `catch` with three writes
+ * whose results were discarded whole. The one that matters is the connection:
+ * a health write that silently did nothing left /dashboard/sync showing a
+ * failing integration as HEALTHY — the wrong answer, on the screen a member
+ * checks to see whether it is working. The run left "running" is the other
+ * visible symptom, in the sync history.
+ *
+ * Same rule as the helpers above — loud, never fatal: this runs after the sync
+ * has already failed and `result.error` is already set, so there is nothing
+ * left to fail. Zero rows is reported as well as an error, because a stamp that
+ * matched nothing is lost as surely. Audit C1-S9-68.
+ */
+export async function recordSyncFailure(
+  supabase: SupabaseClient<Database>,
+  params: { runId: string | null; jobId: string | null; accountId: string; message: string; startedAt: number },
+): Promise<void> {
+  const report = (what: string, error: unknown, data: unknown) => {
+    if (error || !Array.isArray(data) || data.length === 0) {
+      console.error(`[sync] could not record the failure on the ${what}`, {
+        accountId: params.accountId, error: error ?? 'no rows updated',
+      });
+    }
+  };
+  // try/catch as the helpers above have: a REJECTED request (the network, not
+  // the database) must not escape into the engine's own catch block either.
+  try {
+    if (params.runId) {
+      const { data, error } = await supabase.from('sync_job_runs')
+        .update({ status: 'failed', sync_status: 'error', error: params.message, finished_at: new Date().toISOString(), duration_ms: Date.now() - params.startedAt })
+        .eq('id', params.runId).select('id');
+      report('run', error, data);
+    }
+    if (params.jobId) {
+      const { data, error } = await supabase.from('sync_jobs')
+        .update({ status: 'failed', last_error: params.message })
+        .eq('id', params.jobId).select('id');
+      report('job', error, data);
+    }
+    const { data, error } = await supabase.from('sync_connections')
+      .update({ health: 'error', sync_status: 'error', last_error: params.message })
+      .eq('account_id', params.accountId).select('id');
+    report('connection health', error, data);
+  } catch (e) {
+    console.error('[sync] could not record the failure', { accountId: params.accountId, error: e });
+  }
+}

@@ -7,6 +7,7 @@ import { getTool } from '@/lib/ai/tools/registry';
 import { asRecord, editableFieldsFor } from '@/lib/approvals/card-data';
 import { getTranslations } from '@/lib/i18n/server';
 import { fail, ok, SERVICE_CODES, type ServiceResult, type ServiceScope } from '@/lib/services/types';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 type Approval = Database['public']['Tables']['approval_requests']['Row'];
 const TOOL = 'finances.advisePurchase';
@@ -155,9 +156,14 @@ export async function retryPrivatePurchaseAnswer(scope: ServiceScope, approvalId
     if (!saved.ok) return saved;
     const t = await getTranslations();
     const writer = await ledgerWriter(scope.db);
+    // The answer is saved by here. Zero rows means the approval moved on (it was
+    // revoked) between the ownership check and this stamp: a smaller answer,
+    // since the stamp is the record and not the result, so it is logged rather
+    // than turned into a failure of a retry that did deliver. Audit C1-S9-65.
     const stamped = await writer.from('approval_requests').update({ execution_result: t('purchaseAdvice.checked'), executed_at: new Date().toISOString() })
-      .eq('id', row.id).eq('family_id', scope.familyId).in('status', ['approved', 'modified']);
+      .eq('id', row.id).eq('family_id', scope.familyId).in('status', ['approved', 'modified']).select('id');
     if (stamped.error) throw stamped.error;
+    if (wroteNoRows(stamped.data)) console.error('[purchase-result] retry delivered but the approval stamp matched no row', { approvalId: row.id });
     return ok(null);
   } catch (error) {
     console.error('[purchase-result] private retry failed', error);

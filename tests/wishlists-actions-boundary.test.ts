@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 // The "Before you buy" server action's read boundary (M17).
 //
 // The failure this guards against is the quiet one: six reads assembled with
@@ -280,7 +281,7 @@ describe('the Before you buy panel', () => {
     // lives inside the same `!isOwnList` gate as the badge and Mark bought.
     const gate = module_.indexOf('{!isOwnList && (');
     expect(gate).toBeGreaterThan(-1);
-    expect(module_.indexOf('<BeforeYouBuy')).toBeGreaterThan(gate);
+    expect(at(module_, '<BeforeYouBuy')).toBeGreaterThan(gate);
     expect(module_.match(/<BeforeYouBuy/g)).toHaveLength(1);
   });
 
@@ -295,7 +296,7 @@ describe('the Before you buy panel', () => {
     expect(panel).toContain('REASON_KEYS[advice.reason]');
     // The AI affordance lives inside the branch that already holds the verdict,
     // so an unconfigured provider costs the market ideas and nothing else.
-    expect(panel.indexOf('VERDICT_KEYS[advice.verdict]')).toBeLessThan(panel.indexOf('kind="purchase_advisor"'));
+    expect(at(panel, 'VERDICT_KEYS[advice.verdict]')).toBeLessThan(at(panel, 'kind="purchase_advisor"'));
     expect(panel).not.toContain('isAIConfigured');
     expect(panel).not.toContain('/api/ai/');
   });

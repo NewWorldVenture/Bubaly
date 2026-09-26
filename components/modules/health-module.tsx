@@ -5,6 +5,7 @@ import { Activity, ChevronRight, Dumbbell, Heart, Plus, Sparkles, Zap, Thermomet
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Field, Select, Textarea } from '@/components/ui/input';
@@ -442,15 +443,16 @@ export function HealthModule() {
 
   async function resolveSymptom(s: SymptomLog) {
     const sb = createClient();
-    const { error: err } = await sb.from('symptom_logs').update({ status: 'resolved', ended_at: new Date().toISOString() }).eq('id', s.id);
-    if (err) { toastError(tr('healthModule.failedToUpdateSymptom')); return; }
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-77.
+    const { data: resolved, error: err } = await sb.from('symptom_logs').update({ status: 'resolved', ended_at: new Date().toISOString() }).eq('id', s.id).select('id');
+    if (err || wroteNoRows(resolved)) { toastError(tr('healthModule.failedToUpdateSymptom')); return; }
     success(tr('healthModule.markedResolved'));
   }
 
   async function deleteSymptom(s: SymptomLog) {
     const sb = createClient();
-    const { error: err } = await sb.from('symptom_logs').delete().eq('id', s.id);
-    if (err) { toastError(tr('healthModule.failedToDeleteSymptom')); return; }
+    const { data: deleted, error: err } = await sb.from('symptom_logs').delete().eq('id', s.id).select('id');
+    if (err || wroteNoRows(deleted)) { toastError(tr('healthModule.failedToDeleteSymptom')); return; }
     success(tr('healthModule.symptomRemoved'));
   }
 

@@ -123,7 +123,7 @@ describe('contact center persistence boundaries', () => {
 
   it('bounds and fails email routing closed on database failure', () => {
     expect(contactCenterServer).toContain('resolveFamilyByEmailLocalResult');
-    expect(emailRoute).toContain('readBoundedRequestFormData');
+    expect(emailRoute).toContain('readBoundedRequestFormData(');
     expect(emailRoute).toContain('Routing temporarily unavailable');
     expect(emailRoute).toContain('channelResult.error || familyResult.error');
   });

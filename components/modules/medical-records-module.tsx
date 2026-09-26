@@ -145,9 +145,13 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
     setProviderForm(null);
   }
 
-  async function deleteProvider(id: string) {
+  async function deleteProvider(p: Provider) {
+    // One tap on a trash icon used to be the whole interaction. The same
+    // surface asks before deleting a medication; a doctor's number is the kind
+    // of thing a family looks up at a walk-in clinic, and there is no undo.
+    if (!confirm(`Delete ${p.name}?`)) return;
     const sb = createClient();
-    const { data: rows, error: err } = await sb.from('health_providers').delete().eq('id', id).select('id');
+    const { data: rows, error: err } = await sb.from('health_providers').delete().eq('id', p.id).select('id');
     if (err) { toastError(t('medicalRecordsModule.couldNotDelete')); return; }
     if (wroteNoRows(rows)) { toastError(t('errors.thatChangeWasNotSaved')); return; }
     success(t('medicalRecordsModule.deleted'));
@@ -350,7 +354,7 @@ export function MedicalRecordsModule({ kind }: { kind: RecordKind }) {
                       {canEdit && (
                         <div className="flex items-center gap-1.5">
                           <button onClick={() => setProviderForm({ id: p.id, member_id: p.member_id ?? '', name: p.name, specialty: p.specialty ?? '', practice_name: p.practice_name ?? '', phone: p.phone ?? '', fax: p.fax ?? '', email: p.email ?? '', address: p.address ?? '', is_primary: p.is_primary, notes: p.notes ?? '' })} className="text-muted hover:text-fg"><Pencil className="h-3.5 w-3.5" /></button>
-                          <button onClick={() => deleteProvider(p.id)} className="text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
+                          <button onClick={() => deleteProvider(p)} className="text-muted hover:text-danger"><Trash2 className="h-3.5 w-3.5" /></button>
                         </div>
                       )}
                     </div>

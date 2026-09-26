@@ -6,6 +6,7 @@ import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { geocode, fetchForecast } from '@/lib/vacations/weather-fetch';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
+import { describeReadError } from '@/lib/supabase/settle';
 
 export const runtime = 'nodejs';
 
@@ -33,7 +34,16 @@ export async function POST(req: NextRequest) {
   if (!vacationId || !location?.trim()) return NextResponse.json({ error: t('weather.missingVacationidOrLocation') }, { status: 400 });
 
   // Verify the trip belongs to the caller's family (RLS-enforced read).
-  const { data: trip } = await supabase.from('vacations').select('id, start_date, end_date').eq('id', vacationId).maybeSingle();
+  // A refused read left the binding null and took the same branch as a row
+  // that genuinely is not there, so the caller was told their own trip
+  // does not exist. "Not found" is a claim about their data; it has to come
+  // from an answer, not from the absence of one. Fails closed either way —
+  // this changes WHICH closed answer is given, not whether one is. C1-S9-38.
+  const { data: trip, error: tripError } = await supabase.from('vacations').select('id, start_date, end_date').eq('id', vacationId).maybeSingle();
+  if (tripError) {
+    console.error('[vacations/weather] trip read failed', { vacationId, error: describeReadError(tripError) });
+    return NextResponse.json({ error: t('weather.tripDataIsTemporarilyUnavailable') }, { status: 503 });
+  }
   if (!trip) return NextResponse.json({ error: t('weather.tripNotFound') }, { status: 404 });
 
   let geo, days;

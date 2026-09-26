@@ -48,6 +48,24 @@ export function fenceLabel(label: string): string {
 }
 
 /**
+ * Cut to `max` UTF-16 units WITHOUT splitting a scalar.
+ *
+ * Both fences bounded with a plain `.slice(max)`, which cuts between the two
+ * halves of a surrogate pair whenever the budget lands mid-emoji, leaving a
+ * lone surrogate in the prompt — the same defect `safeContactText` exists to
+ * prevent on the storage side, reached from the other end. Only the Contact
+ * Center caller happened to pre-bound scalar-safely; the other seven did not,
+ * so fixing it here fixes all of them at once. Audit C1-S9-10.
+ */
+function cutToScalar(value: string, max: number): string {
+  if (value.length <= max) return value;
+  const cut = value.slice(0, max);
+  const last = cut.charCodeAt(cut.length - 1);
+  // A trailing HIGH surrogate has lost its partner to the cut; drop it.
+  return last >= 0xd800 && last <= 0xdbff ? cut.slice(0, -1) : cut;
+}
+
+/**
  * Neutralise the content itself: strip control characters that could confuse a
  * tokenizer or a log, collapse whitespace so one value stays one line, and
  * break any marker-like sequence so content cannot even *look* like a fence.
@@ -60,7 +78,7 @@ export function sanitizeUntrusted(text: string, maxChars = MAX_FENCED_CHARS): st
     .replace(/>>>/g, '›››')
     .trim();
   if (flat.length <= maxChars) return flat;
-  return `${flat.slice(0, Math.max(0, maxChars - 1))}…`;
+  return `${cutToScalar(flat, Math.max(0, maxChars - 1))}…`;
 }
 
 /**
@@ -85,12 +103,12 @@ export function fenceUntrusted(label: string, text: string | null | undefined): 
  * characters, and any sequence that could pass for a marker.
  */
 export function fenceUntrustedBlock(label: string, text: string | null | undefined, maxChars = 8000): string {
-  const body = (text ?? '')
+  const raw = (text ?? '')
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
     .replace(/<<</g, '\u2039\u2039\u2039')
     .replace(/>>>/g, '\u203a\u203a\u203a')
-    .trim()
-    .slice(0, maxChars);
+    .trim();
+  const body = cutToScalar(raw, maxChars);
   if (!body) return '';
   const tag = fenceLabel(label);
   const n = nonce();

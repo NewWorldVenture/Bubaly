@@ -110,11 +110,21 @@ export function FilesHubModule({ view }: { view: FileView }) {
     if (typeof window !== 'undefined' && !window.confirm(t('filesHubModule.deleteConfirm', { name: d.title }))) return;
     setBusy(id);
     const sb = createClient();
-    // NOTE the order: the storage object is removed FIRST, so a row delete the
-    // database refuses leaves a row pointing at a file that no longer exists.
-    // Verifying the delete at least makes that visible instead of reporting it
-    // as done; the ordering itself is recorded in audit/claude-1.md.
-    if (d.storage_path) await removeFamilyDocument(sb, d.storage_path);
+    // Two halves of the same defect, both kept.
+    //
+    // The OBJECT goes first and its result is READ (C1-S6-01 / C4-S4-09):
+    // deleting the row first makes a surviving file INVISIBLE — nothing
+    // references it, so nobody can see it, open it or try again — while the
+    // screen says it is gone. A warranty or a manual is plausibly being deleted
+    // BECAUSE it carries a serial or a policy number.
+    //
+    // And the row delete is VERIFIED with `.select('id')` (main's F-K series):
+    // an UPDATE or DELETE that matches nothing succeeds with zero rows and no
+    // error, so a delete RLS refused would otherwise report success too.
+    if (d.storage_path) {
+      const { error: storageError } = await removeFamilyDocument(sb, d.storage_path);
+      if (storageError) { setBusy(null); return toastError(storageError); }
+    }
     const { data: rows, error: err } = await sb.from('documents').delete().eq('id', id).select('id');
     setBusy(null);
     if (err) return toastError(t('filesHubModule.deleteFailed'));

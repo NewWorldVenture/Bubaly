@@ -24,7 +24,9 @@ export async function GET(req: NextRequest) {
     const db = withGuardianTables(supabase);
     const gFrom = (t: Parameters<typeof db.from>[0]) => (db.from(t) as ReturnType<typeof supabase.from>);
 
-    // Auto-dismiss expired pending suggestions first (housekeeping).
+    // Auto-dismiss expired pending suggestions first (housekeeping). Rows
+    // deliberately not checked: zero is the ordinary "nothing expired" tick.
+    // Audit C1-S9-63.
     const { error: dismissError } = await gFrom('guardian_suggestions')
       .update({ status: 'auto_dismissed' })
       .eq('status', 'pending')

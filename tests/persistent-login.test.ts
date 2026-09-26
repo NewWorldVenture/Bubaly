@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 // Persistent login: once someone signs in they stay signed in until THEY sign
 // out. These are the seams where that promise is actually kept or broken — a
 // cookie that dies with the tab, a network blip read as a logout, a rotated
@@ -279,7 +280,7 @@ describe('the browser holds exactly one auth client', () => {
     for (const option of ['persistSession: true', 'autoRefreshToken: true', 'detectSessionInUrl: false']) {
       expect(client, option).toContain(option);
     }
-    expect(client).toContain('durableCookieOptions');
+    expect(client).toContain('durableCookieOptions(');
   });
 
   it('is the only regular browser client, apart from isolated recovery, initiation and password operations', () => {
@@ -315,7 +316,7 @@ describe('the app keeps the session and the server render in step', () => {
 
   it('keeps refreshing while the App Lock screen is up', () => {
     // Otherwise unlocking with the PIN after a long idle lands on /login.
-    expect(layout.indexOf('<SessionKeeper userId={user.id} />')).toBeLessThan(layout.indexOf('AppLockGate enabled'));
+    expect(at(layout, '<SessionKeeper userId={user.id} />')).toBeLessThan(at(layout, 'AppLockGate enabled'));
   });
 
   it('revives on the events that follow a long absence', () => {

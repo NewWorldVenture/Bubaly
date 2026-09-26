@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { isTwilioBodyTooLarge, isValidGuardianEventId } from '@/lib/guardian/callbacks';
+import { at } from './helpers/source-order';
 
 const root = process.cwd();
 const callbackRoutes = [
@@ -31,7 +32,7 @@ describe('Guardian callback replay and input boundaries', () => {
     const voicemail = relativePath.endsWith('/status/voicemail/route.ts');
     const claim = voicemail ? 'claimGuardianVoicemail' : 'claimGuardianCallback';
     expect(source).toContain(claim);
-    expect(source).toContain('readBoundedRequestFormData');
+    expect(source).toContain('readBoundedRequestFormData(');
     expect(source).toContain(voicemail ? 'finishGuardianVoicemail' : 'markGuardianCallbackProcessed');
 
     const claimIndex = source.indexOf(`await ${claim}`);
@@ -48,17 +49,16 @@ describe('Guardian callback replay and input boundaries', () => {
 
   it('keeps signed SMS parsing before the shared leased processor for both ingress and recovery', () => {
     const route = readFileSync(resolve(root, 'app/api/guardian/inbound/sms/route.ts'), 'utf8');
-    expect(route.indexOf('await readBoundedRequestFormData')).toBeLessThan(route.indexOf('validateTwilioSignature(sig'));
-    expect(route.indexOf('validateTwilioSignature(sig')).toBeLessThan(route.indexOf('await receiveGuardianSms('));
+    expect(at(route, 'await readBoundedRequestFormData')).toBeLessThan(at(route, 'validateTwilioSignature(sig'));
+    expect(at(route, 'validateTwilioSignature(sig')).toBeLessThan(at(route, 'await receiveGuardianSms('));
     expect(route).not.toMatch(/runDecisionPipeline\(|detectScamWithAI\(|from\('notifications'\)/);
     const processor = readFileSync(resolve(root, 'lib/guardian/sms-processing.ts'), 'utf8');
     for (const entry of ['receiveGuardianSms', 'resumeGuardianSms']) {
       const source = processor.slice(processor.indexOf(`export async function ${entry}`));
-      expect(source.indexOf('await claimGuardianSms(')).toBeGreaterThanOrEqual(0);
-      expect(source.indexOf('await claimGuardianSms(')).toBeLessThan(source.indexOf('await processOwned('));
+      expect(at(source, 'await claimGuardianSms(')).toBeLessThan(at(source, 'await processOwned('));
     }
     const recovery = processor.slice(processor.indexOf('export async function resumeGuardianSms'));
-    expect(recovery.indexOf('await readGuardianSmsReceiptById(')).toBeLessThan(recovery.indexOf('await claimGuardianSms('));
+    expect(at(recovery, 'await readGuardianSmsReceiptById(')).toBeLessThan(at(recovery, 'await claimGuardianSms('));
     expect(processor).toContain('await finishGuardianSms(');
     expect(processor).toContain('await markGuardianSmsCompleted(');
     // Real signed HTTP execution tests also assert no classifier/write precedes

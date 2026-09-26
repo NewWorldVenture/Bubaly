@@ -91,6 +91,11 @@ export async function saveMarketingTemplate(formData: FormData): Promise<void> {
     schema: { fields: ['title', 'summary', 'body', 'seo', 'aeo'] }, status: 'active', is_default: formData.get('is_default') === 'on', updated_by: actorId,
   };
   if (payload.is_default) {
+    // Deliberately NOT confirmed: this clears whichever template WAS the default
+    // for the page type, and when none was, zero rows is exactly right. The
+    // write that matters — the save below — is confirmed. Invisible to the
+    // write ratchet until C1-S9-61, as the first statement in its block.
+    // Audit C1-S9-61.
     const { error: clearDefaultError } = await supabase.from('marketing_content_templates')
       .update({ is_default: false, updated_by: actorId })
       .eq('page_type', pageType).eq('status', 'active');

@@ -5,7 +5,7 @@ import { Sparkle, Plus, Timer, Flame, Check, SkipForward, Trash2, Pencil, Rotate
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -90,40 +90,47 @@ export function DeclutterModule() {
   }
 
   async function skipMission(m: Mission) {
-    const { error } = await createClient().from('declutter_missions').update({ status: 'skipped' }).eq('id', m.id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-80.
+    const { data: updated, error } = await createClient().from('declutter_missions').update({ status: 'skipped' }).eq('id', m.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('declutterModule.missionSkipped'));
   }
 
   async function reopenMission(m: Mission) {
-    const { error } = await createClient().from('declutter_missions').update({ status: 'planned', completed_at: null }).eq('id', m.id);
+    const { data: updated2, error } = await createClient().from('declutter_missions').update({ status: 'planned', completed_at: null }).eq('id', m.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated2)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('declutterModule.missionBackOnTheList'));
   }
 
   async function deleteMission(m: Mission) {
     if (!confirm(`Delete “${m.title}”?`)) return;
-    const { error } = await createClient().from('declutter_missions').delete().eq('id', m.id);
+    const { data: removed, error } = await createClient().from('declutter_missions').delete().eq('id', m.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(removed)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('declutterModule.missionDeleted'));
   }
 
   async function resetZone(z: Zone) {
-    const { error } = await createClient().from('declutter_zones').update({ clutter_score: 1, last_reset_at: new Date().toISOString() }).eq('id', z.id);
+    const { data: updated3, error } = await createClient().from('declutter_zones').update({ clutter_score: 1, last_reset_at: new Date().toISOString() }).eq('id', z.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated3)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(`${z.name} reset to tidy`);
   }
 
   async function bumpScore(z: Zone, delta: 1 | -1) {
     const next = Math.min(5, Math.max(1, z.clutter_score + delta));
     if (next === z.clutter_score) return;
-    const { error } = await createClient().from('declutter_zones').update({ clutter_score: next }).eq('id', z.id);
+    const { data: updated4, error } = await createClient().from('declutter_zones').update({ clutter_score: next }).eq('id', z.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated4)) return toastError(tr('errors.thatChangeWasNotSaved'));
   }
 
   async function archiveZone(z: Zone, active: boolean) {
-    const { error } = await createClient().from('declutter_zones').update({ is_active: active }).eq('id', z.id);
+    const { data: updated5, error } = await createClient().from('declutter_zones').update({ is_active: active }).eq('id', z.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated5)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(active ? `${z.name} restored` : `${z.name} archived`);
   }
 
@@ -347,11 +354,12 @@ function ZoneForm({ familyId, userId, zone, onClose, onSaved }: { familyId: stri
       target_state: String(f.get('target_state') ?? '').trim() || null, notes: String(f.get('notes') ?? '').trim() || null,
     };
     const supabase = createClient();
-    const { error } = zone
-      ? await supabase.from('declutter_zones').update(payload).eq('id', zone.id)
-      : await supabase.from('declutter_zones').insert({ family_id: familyId, created_by: userId, is_active: true, ...payload });
+    const { data: saved, error } = zone
+      ? await supabase.from('declutter_zones').update(payload).eq('id', zone.id).select('id')
+      : await supabase.from('declutter_zones').insert({ family_id: familyId, created_by: userId, is_active: true, ...payload }).select('id');
     setLoading(false);
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(saved)) return toastError(tr('errors.thatChangeWasNotSaved'));
     onSaved();
   }
 
@@ -403,11 +411,12 @@ function MissionForm({ familyId, userId, zones, members, mission, zoneId, preset
       notes: String(f.get('notes') ?? '').trim() || null,
     };
     const supabase = createClient();
-    const { error } = mission
-      ? await supabase.from('declutter_missions').update(payload).eq('id', mission.id)
-      : await supabase.from('declutter_missions').insert({ family_id: familyId, created_by: userId, status: 'planned', ...payload });
+    const { data: saved2, error } = mission
+      ? await supabase.from('declutter_missions').update(payload).eq('id', mission.id).select('id')
+      : await supabase.from('declutter_missions').insert({ family_id: familyId, created_by: userId, status: 'planned', ...payload }).select('id');
     setLoading(false);
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(saved2)) return toastError(tr('errors.thatChangeWasNotSaved'));
     onSaved();
   }
 
@@ -447,8 +456,11 @@ function CompleteForm({ familyId, userId, mission, memberId, onClose, onSaved }:
     const notes = String(f.get('notes') ?? '').trim() || null;
     setLoading(true);
     const supabase = createClient();
-    const { error } = await supabase.from('declutter_missions').update({ status: 'done', completed_at: new Date().toISOString(), items_removed: items, notes: notes ?? mission.notes }).eq('id', mission.id);
+    // The completion licenses the session below (streaks, minutes). One that
+    // matched nothing used to log a session for a mission still open. Audit C1-S9-80.
+    const { data: completed, error } = await supabase.from('declutter_missions').update({ status: 'done', completed_at: new Date().toISOString(), items_removed: items, notes: notes ?? mission.notes }).eq('id', mission.id).select('id');
     if (error) { setLoading(false); return toastError(describeDbError(error)); }
+    if (wroteNoRows(completed)) { setLoading(false); return toastError(tr('errors.thatChangeWasNotSaved')); }
     // The mission counts as a timed session too, so streaks and minutes add up
     // without a second form. A failed session insert is reported but does not
     // undo the completion — the mission itself is what the family cares about.

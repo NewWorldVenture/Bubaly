@@ -67,12 +67,41 @@ export function MoneyTimelineModule({
 
   const visible = insights.filter((i) => statusOf(i.key) !== 'dismissed');
 
-  const act = (insight: KeyedInsight, status: 'acknowledged' | 'dismissed' | 'active') => {
-    setOverrides((o) => ({ ...o, [insight.key]: status }));
-    startTransition(() => { void setMoneyInsightStatusAction({ insight, status }); });
+  // Both calls were `void action()`: a refused dismissal left the insight
+  // hidden until the next visit brought it back, and a failed refresh looked
+  // like one that found nothing new. The optimistic change is now undone and
+  // the failure named. A rejected call (a thrown load) is logged and treated
+  // the same, not dropped. Audit C1-S9-73.
+  const [writeError, setWriteError] = useState<string | null>(null);
+  const failedWrite = (what: string) => (error: unknown) => {
+    console.error(`[money-timeline] ${what} failed`, error);
+    return { ok: false };
   };
 
-  const refresh = () => startTransition(() => { void syncMoneyInsightsAction(); });
+  const act = (insight: KeyedInsight, status: 'acknowledged' | 'dismissed' | 'active') => {
+    const previous = overrides[insight.key];
+    setOverrides((o) => ({ ...o, [insight.key]: status }));
+    setWriteError(null);
+    startTransition(async () => {
+      const res = await setMoneyInsightStatusAction({ insight, status }).catch(failedWrite('insight status save'));
+      if (res.ok) return;
+      setOverrides((o) => {
+        const next = { ...o };
+        if (previous === undefined) delete next[insight.key];
+        else next[insight.key] = previous;
+        return next;
+      });
+      setWriteError(t('moneyTimeline.couldNotSaveThatInsight'));
+    });
+  };
+
+  const refresh = () => {
+    setWriteError(null);
+    startTransition(async () => {
+      const res = await syncMoneyInsightsAction().catch(failedWrite('insight refresh'));
+      if (!res.ok) setWriteError(t('moneyTimeline.couldNotRefreshYourInsights'));
+    });
+  };
 
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6 sm:py-8">
@@ -94,6 +123,7 @@ export function MoneyTimelineModule({
           <RefreshCw className={cn('h-4 w-4', pending && 'animate-spin')} /> {t('moneyTimeline.refresh')}
         </button>
       </header>
+      {writeError && <p role="alert" className="mt-3 text-sm text-danger">{writeError}</p>}
 
       {/* Stat row */}
       <section className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">

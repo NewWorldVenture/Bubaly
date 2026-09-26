@@ -91,12 +91,25 @@ export function MoneyCardsView({
 
   async function issueAllVirtual() {
     setBusy('issue-all');
+    // Every result used to be discarded and the toast reported the number
+    // ATTEMPTED as the number issued. What was thrown away includes Trust-Engine
+    // denials and "Finish account setup first" — the product REFUSING, reported
+    // to a parent as success, on a payment instrument. The four other
+    // issueCardAction call sites in this file check res.ok; this one did not.
+    // Audit C4-S4-04.
+    const failures: string[] = [];
     for (const child of childrenWithoutCards) {
-      await issueCardAction({ childWalletId: child.id, type: 'virtual', spendLimitCents: null, spendWindow: 'per_authorization' });
+      const res = await issueCardAction({ childWalletId: child.id, type: 'virtual', spendLimitCents: null, spendWindow: 'per_authorization' });
+      if (!res.ok) failures.push(res.error);
     }
     setBusy(null);
-    success(`Issued ${childrenWithoutCards.length} virtual card${childrenWithoutCards.length !== 1 ? 's' : ''}!`);
+    // Refresh either way: the list is the honest record of what now exists, and
+    // a partial run must not leave the screen showing the pre-run state.
     router.refresh();
+    // Surface the actual reason rather than a count — the reason is what tells
+    // a parent what to do next, and it is the thing that was being discarded.
+    if (failures.length > 0) return toastError(failures[0]);
+    success(t('moneyCardsView.virtualCardCreated'));
   }
 
   async function toggleFreeze(card: IssuedCard) {

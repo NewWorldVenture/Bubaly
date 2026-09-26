@@ -91,7 +91,17 @@ export async function POST(req: NextRequest) {
   const scamResult = await detectScamWithAI(body, from, `Family ID: ${familyId}`);
 
   // Create communication record.
-  const { data: comm } = await gFrom('guardian_communications').insert({
+  //
+  // The voice twin of this (`inbound/voice/route.ts`) has the same defect and
+  // the same reasoning: a dropped error means the message is delivered but
+  // never recorded, so the family's guardian history — including the scam
+  // verdict just computed above — silently loses the entry. Here it also
+  // reaches the notification below as `relatedId: comm?.id ?? null`, so the
+  // family gets an alert that links back to nothing.
+  //
+  // Not fatal to the message, which must still be delivered, so it degrades
+  // loudly rather than failing. Audit C1-S9-39.
+  const { data: comm, error: commError } = await gFrom('guardian_communications').insert({
     family_id: familyId,
     member_id: memberId,
     contact_id: decision.contactId,
@@ -110,13 +120,26 @@ export async function POST(req: NextRequest) {
     scam_confidence: scamResult.confidence,
     twilio_sms_sid: smsSid,
     status: scamResult.isScam && scamResult.confidence >= 80 ? 'blocked' : 'received',
-  }).select('id').single();
+  }).select('id').maybeSingle();
+
+  if (commError) {
+    console.error('[guardian/inbound/whatsapp] could not record the communication; message continues unlogged', {
+      familyId, smsSid, error: commError.message,
+    });
+  }
 
   // Update contact last-contact timestamp.
   if (decision.contactId) {
-    await gFrom('guardian_contacts')
+    const { error: touchError } = await gFrom('guardian_contacts')
       .update({ last_contact_at: new Date().toISOString() })
       .eq('id', decision.contactId);
+    // Cosmetic on its own, but "last heard from" is one of the signals a parent
+    // uses to judge a contact, so a stale one is a quiet wrong answer.
+    if (touchError) {
+      console.error('[guardian/inbound/whatsapp] could not touch the contact', {
+        contactId: decision.contactId, error: touchError.message,
+      });
+    }
   }
 
   // Blocked / high-confidence spam — silently discard.

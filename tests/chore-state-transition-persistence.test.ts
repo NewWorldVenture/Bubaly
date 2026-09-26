@@ -20,7 +20,18 @@ describe('chore state transition persistence', () => {
   });
 
   it('rolls back dispute and parent-review follow-up writes', () => {
-    expect(source).toContain("await supabase.from('chore_disputes').delete().eq('id', dispute.id).eq('family_id', familyId);");
+    // Re-pointed under C1-S9-60, for the reason given below for the chore
+    // cleanup: the trailing semicolon made this an assertion about where the
+    // statement ENDS, and confirming the second dispute rollback moved it. What
+    // it was protecting is that the rollback happens, stays family-scoped, and
+    // (since C1-S9-55 and C1-S9-60) reports a delete that removed nothing — on
+    // BOTH paths that insert a dispute and then fail.
+    const disputeRollbacks = source.match(
+      /from\('chore_disputes'\)\s*\.delete\(\)\.eq\('id', dispute\.id\)\.eq\('family_id', familyId\)\.select\('id'\)/g,
+    ) ?? [];
+    expect(disputeRollbacks, 'both dispute rollbacks, family-scoped and confirmed').toHaveLength(2);
+    expect(source).toContain('wroteNoRows(cleanedDispute)');
+    expect(source).toContain('wroteNoRows(cleaned)');
     expect(source).toContain("await supabase.from('chore_disputes').update({ status: 'open'");
     expect(source).toContain("await setSubmissionStatus(supabase, familyId, submissionId, submission.status);");
   });
@@ -28,6 +39,12 @@ describe('chore state transition persistence', () => {
   it('cleans up a chore when assignment creation fails', () => {
     expect(source).toContain('const { data: chore, error: choreError }');
     expect(source).toContain('const { error: assignmentError }');
-    expect(source).toContain("await supabase.from('chores').delete().eq('id', chore.id).eq('family_id', familyId);");
+    // Same: the trailing semicolon was part of the assertion, and appending
+    // `.select('id')` moved the statement's end. The cleanup now also reports a
+    // delete that removed nothing, which would leave an unassigned chore in the
+    // family's list.
+    expect(source).toContain("from('chores').delete().eq('id', chore.id).eq('family_id', familyId)");
+    expect(source).toContain('wroteNoRows(cleanedChore)');
+    expect(source).toContain('an unassigned chore may remain');
   });
 });

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { settleAll } from '@/lib/supabase/settle';
 import { refuseUnlessEntitled } from '@/lib/server/route-feature-gate';
 import { withAiRequest } from '@/lib/ai/observability';
 import { scopeFromUserContext } from '@/lib/services/scope';
@@ -48,16 +49,43 @@ export async function POST(req: Request) {
   const familyId = ctx.active.familyId;
 
   // Ground the answer in this family's own health data.
-  const [{ data: member }, { data: profile }, { data: meds }, { data: symptoms }] = await Promise.all([
-    memberId ? supabase.from('family_members').select('display_name, birthday').eq('id', memberId).maybeSingle() : Promise.resolve({ data: null }),
-    memberId ? supabase.from('medical_profiles').select('blood_type, allergies, conditions, current_medications').eq('member_id', memberId).maybeSingle() : Promise.resolve({ data: null }),
+  //
+  // `settleAll`, not `Promise.all`: a Supabase query REJECTS rather than
+  // resolving when the request never completed (DNS, TLS, a timeout), and this
+  // batch sits OUTSIDE the try below — so an unreachable database threw out of
+  // the handler instead of reaching the 503 this route already knows how to
+  // send.
+  const [
+    { data: member },
+    { data: profile, error: profileError },
+    { data: meds, error: medsError },
+    { data: symptoms, error: symptomsError },
+  ] = await settleAll([
+    memberId ? supabase.from('family_members').select('display_name, birthday').eq('id', memberId).maybeSingle() : Promise.resolve({ data: null, error: null }),
+    memberId ? supabase.from('medical_profiles').select('blood_type, allergies, conditions, current_medications').eq('member_id', memberId).maybeSingle() : Promise.resolve({ data: null, error: null }),
     memberId
       ? supabase.from('medications').select('name, dosage, instructions').eq('family_id', familyId).eq('member_id', memberId).eq('is_active', true).limit(20)
       : supabase.from('medications').select('name, dosage').eq('family_id', familyId).eq('is_active', true).limit(20),
     memberId
       ? supabase.from('symptom_logs').select('symptom, severity, started_at, status, notes').eq('member_id', memberId).order('started_at', { ascending: false }).limit(10)
-      : Promise.resolve({ data: null }),
+      : Promise.resolve({ data: null, error: null }),
   ]);
+
+  // These three errors were discarded, and on this surface a discarded read
+  // error does not degrade the answer — it changes it. The system prompt below
+  // instructs the model to "Consider any allergies and current medications in
+  // your suggestions (flag possible interactions...)", and the context it reads
+  // that from is built from exactly these rows. A failed `medical_profiles`
+  // read renders as no allergies line at all and a failed `medications` read
+  // renders the literal sentence "Active medications: none on file", so a
+  // person on an anticoagulant with a penicillin allergy was given self-care
+  // advice written as though they had neither — with nothing in the response to
+  // say the safety context was missing. Refusing is the only honest answer:
+  // ungrounded health guidance is worse than none.
+  if (profileError || medsError || symptomsError) {
+    console.error('[ai-health-coach] health grounding read failed', profileError ?? medsError ?? symptomsError);
+    return NextResponse.json({ error: t('healthDashboard.loadError') }, { status: 503 });
+  }
 
   const personLine = member?.display_name ? `Person: ${member.display_name}${member.birthday ? ` (DOB ${member.birthday})` : ''}` : 'Person: (not specified)';
   const profileLines = profile ? [

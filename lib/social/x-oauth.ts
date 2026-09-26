@@ -1,7 +1,7 @@
 import 'server-only';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { encryptSecret, decryptSecret } from '@/lib/sync/crypto';
-import { fetchExternal } from '@/lib/server/external-fetch';
+import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
 import { readBoundedResponseJson } from '@/lib/server/bounded-response-body';
 import { claimXReceipt, createXReceipt, isXId, saveXConnection, X_SCOPES, xFailure, type XActor, type XFlow, type XGrant } from './account-tokens';
 
@@ -67,7 +67,7 @@ export function readXAuthorization(cookie: string | undefined, state: string | n
 /** Fixed endpoints, no credential-forwarding redirects, bounded response bodies and deadline. */
 export async function xJsonRequest(url: typeof TOKEN_URL | typeof IDENTITY_URL | 'https://api.x.com/2/tweets', init: RequestInit): Promise<{ status: number; body: unknown }> {
   const signal = init.signal ? AbortSignal.any([init.signal, AbortSignal.timeout(X_TIMEOUT_MS)]) : undefined;
-  const response = await fetchExternal(url, { ...init, signal, redirect: 'manual', cache: 'no-store' }, X_TIMEOUT_MS);
+  const response = await fetchWithDeadline(url, { ...init, signal, redirect: 'manual', cache: 'no-store' }, X_TIMEOUT_MS);
   try {
     if (response.status < 200 || response.status >= 300) return { status: response.status, body: null };
     return { status: response.status, body: await readBoundedResponseJson<unknown>(response, MAX_RESPONSE_BYTES) };

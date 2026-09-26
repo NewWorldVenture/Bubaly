@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
 import { createServiceClient } from '@/lib/supabase/server';
 import { getStripe } from '@/lib/stripe';
+import { wroteNoRows } from '@/lib/supabase/errors';
 import {
   DEFAULT_REFERRAL_CONFIG, resolveReferralConfig, generateReferralCode, normalizeCode,
   REFERRAL_EMAIL_SOURCE, evaluateReferralEmailThrottle, referralEmailSendTimes, withReferralEmailSent,
@@ -450,8 +451,14 @@ export async function recordReferralEmailInvite(service: DB, input: {
 /** Undo a recorded send whose email never left: drop a fresh row, or the timestamp on a reused one. */
 export async function rollbackReferralEmailInvite(service: DB, input: { rowId: string; created: boolean; sentAt: Date }): Promise<void> {
   if (input.created) {
-    const { error } = await service.from('referrals').delete().eq('id', input.rowId).eq('status', 'pending');
-    if (error) console.error('[referrals/email] invite rollback delete failed', { id: input.rowId, error });
+    // A rollback of a row this request inserted, so zero rows deleted is a
+    // failed rollback rather than an absence: the invite stays recorded as sent
+    // and counts against the family's limit for an email that never left.
+    // Logged, not raised, like the update below. Audit C1-S9-64.
+    const { data: dropped, error } = await service.from('referrals').delete().eq('id', input.rowId).eq('status', 'pending').select('id');
+    if (error || wroteNoRows(dropped)) {
+      console.error('[referrals/email] invite rollback delete failed', { id: input.rowId, error: error ?? 'no rows deleted' });
+    }
     return;
   }
   const { data, error } = await service.from('referrals').select('metadata').eq('id', input.rowId).maybeSingle();
@@ -462,9 +469,12 @@ export async function rollbackReferralEmailInvite(service: DB, input: { rowId: s
   const stamp = input.sentAt.toISOString();
   const kept = referralEmailSendTimes(data.metadata).filter((iso) => iso !== stamp);
   const base = data.metadata && typeof data.metadata === 'object' && !Array.isArray(data.metadata) ? { ...(data.metadata as Record<string, unknown>) } : {};
-  const { error: updateError } = await service
+  const { data: unstamped, error: updateError } = await service
     .from('referrals')
     .update({ metadata: { ...base, email_sent_at: kept } as ReferralMetadata })
-    .eq('id', input.rowId);
-  if (updateError) console.error('[referrals/email] invite rollback update failed', { id: input.rowId, error: updateError });
+    .eq('id', input.rowId)
+    .select('id');
+  if (updateError || wroteNoRows(unstamped)) {
+    console.error('[referrals/email] invite rollback update failed', { id: input.rowId, error: updateError ?? 'no rows updated' });
+  }
 }

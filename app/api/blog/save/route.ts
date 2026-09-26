@@ -18,7 +18,14 @@ export const runtime = 'nodejs';
 const MAX_BODY_BYTES = 2_048;
 
 async function loadPostId(svc: ReturnType<typeof createServiceClient>, slug: string): Promise<string | null> {
-  const { data } = await svc.from('blog_posts').select('id').eq('slug', slug).eq('published', true).maybeSingle();
+  const { data, error } = await svc.from('blog_posts').select('id').eq('slug', slug).eq('published', true).maybeSingle();
+  // A refused read returned null, and both callers answer that with a 404 for
+  // a post that is published and present. Nothing here can distinguish them
+  // afterwards, so the distinction is made where it exists. Audit C1-S9-43.
+  if (error) {
+    console.error('[blog] post lookup failed', { slug, error: error.message });
+    return null;
+  }
   return data?.id ?? null;
 }
 
@@ -87,7 +94,10 @@ export async function POST(req: NextRequest) {
   const { error: insertError } = await svc.from('blog_post_saves').insert({ post_id: postId, user_id: userId });
   if (insertError) {
     if (insertError.code === '23505') {
-      await svc.from('blog_post_saves').delete().eq('post_id', postId).eq('user_id', userId);
+      // As in the like route: the state returned below is re-read, so rows are
+      // deliberately not checked; the error no longer vanishes. Audit C1-S9-62.
+      const { error: unsaveError } = await svc.from('blog_post_saves').delete().eq('post_id', postId).eq('user_id', userId);
+      if (unsaveError) console.error('[blog/save] unsave failed', { postId, error: unsaveError.message });
     } else {
       return NextResponse.json({ error: t('save.couldNotRecordTheSave') }, { status: 500 });
     }

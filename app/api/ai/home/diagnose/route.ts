@@ -82,10 +82,12 @@ export async function POST(req: Request) {
   }
 
   // Persist for history/audit.
-  await supabase.from('home_ai_logs').insert({
+  // Its result used to be discarded outright — not even the error bound. Best-effort, so logged rather than raised. Audit C1-S9-76.
+  const { error: homeAiLogsWriteError } = await supabase.from('home_ai_logs').insert({
     family_id: ctx.active.familyId, user_id: ctx.user.id, asset_id: assetId, kind: 'diagnose',
     input: { assetName, category, brand, model, symptom }, output: { text, trade }, created_by: ctx.user.id,
   });
+  if (homeAiLogsWriteError) console.error('[home-diagnose] home_ai_logs insert failed', homeAiLogsWriteError);
 
   return NextResponse.json({ text, recommendedTrade: trade, recommendedTradeLabel: tradeLabel });
 }

@@ -7,6 +7,7 @@ import { InviteEmail } from '@/lib/emails/invite';
 import * as React from 'react';
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
+import { describeReadError } from '@/lib/supabase/settle';
 
 const MAX_EMAIL_REQUEST_BYTES = 4_096;
 
@@ -21,13 +22,22 @@ export async function POST(req: NextRequest) {
 
     const supabase = await createServer();
 
-    const { data: invite } = await supabase
+    // A refused read left the binding null and took the same branch as a row
+    // that genuinely is not there, so the caller was told their own invite
+    // does not exist. "Not found" is a claim about their data; it has to come
+    // from an answer, not from the absence of one. Fails closed either way —
+    // this changes WHICH closed answer is given, not whether one is. C1-S9-38.
+    const { data: invite, error: inviteError } = await supabase
       .from('invites')
       .select('*, families(name)')
       .eq('id', inviteId)
       .eq('family_id', ctx.active.familyId)
-      .single();
+      .maybeSingle();
 
+    if (inviteError) {
+      console.error('[email/invite] invite read failed', { familyId: ctx.active.familyId, error: describeReadError(inviteError) });
+      return NextResponse.json({ error: t('invite.inviteDataIsTemporarilyUnavailable') }, { status: 503 });
+    }
     if (!invite) return NextResponse.json({ error: t('invite.inviteNotFound') }, { status: 404 });
 
     // The recipient of this mail is a free-text address the inviter chose —

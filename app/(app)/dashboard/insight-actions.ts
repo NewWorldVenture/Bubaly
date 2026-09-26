@@ -9,6 +9,7 @@ import { revalidatePath } from 'next/cache';
 import { getTranslations } from '@/lib/i18n/server';
 import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 type Result = { ok: boolean; error?: string };
 
@@ -17,12 +18,17 @@ async function setInsightStatus(id: string, status: 'dismissed' | 'acted'): Prom
   if (!id || typeof id !== 'string') return { ok: false, error: t('insightActions.invalidInsight') };
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const { error } = await supabase
+  // A dismiss that changes nothing puts the SAME insight back on the dashboard
+  // tomorrow, which reads as the app not listening rather than as a failure.
+  // Audit C1-S9-60.
+  const { data: set, error } = await supabase
     .from('daily_insights')
     .update({ status })
     .eq('id', id)
-    .eq('family_id', ctx.active.familyId); // RLS also enforces this; explicit for clarity
+    .eq('family_id', ctx.active.familyId) // RLS also enforces this; explicit for clarity
+    .select('id');
   if (error) return { ok: false, error: error.message };
+  if (wroteNoRows(set)) return { ok: false, error: t('insightActions.invalidInsight') };
   revalidatePath('/dashboard');
   return { ok: true };
 }

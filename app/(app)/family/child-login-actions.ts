@@ -13,10 +13,70 @@ import { isValidPin } from '@/lib/onboarding/pin';
 import { normalizeUsername, isValidUsername, syntheticChildEmail } from '@/lib/onboarding/child-login';
 import { deriveChildPassword } from '@/lib/onboarding/child-password';
 import { logAudit } from '@/lib/server/audit';
+import { wroteNoRows, describeActionError } from '@/lib/supabase/errors';
 
 type Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
 const secret = () => process.env.CHILD_LOGIN_SECRET || null;
+
+/**
+ * Undo a partially-created child login, and report whether the undo was
+ * COMPLETE.
+ *
+ * Every step here used to be a bare `await` with its result discarded, which
+ * makes a compensating write the one place a silent failure hurts most: the
+ * caller is already returning an error, so a failed rollback is invisible, and
+ * the state it leaves behind is a dead end rather than a retry.
+ *
+ * Concretely, `createChildLoginAction` refuses a member that already has a
+ * `user_id` ("This member already has a login"). So a rollback that fails to
+ * null that column leaves the parent permanently unable to create the login,
+ * being told they already did — with no `child_logins` row anywhere to back the
+ * claim and nothing in the UI that can clear it. A failed `deleteUser` is the
+ * mirror image: the synthetic email survives, so the NEXT attempt fails inside
+ * `createUser` and reports the same generic message forever.
+ *
+ * Returns false if any step could not be confirmed, so the caller can say that
+ * rather than inviting a retry that is already known to fail. Audit C1-S9-35.
+ */
+async function rollbackChildLogin(
+  admin: ReturnType<typeof createServiceClient>,
+  opts: { memberId: string; childUserId: string; removeLoginRow: boolean },
+): Promise<boolean> {
+  let complete = true;
+
+  if (opts.removeLoginRow) {
+    const { data, error } = await admin.from('child_logins')
+      .delete().eq('user_id', opts.childUserId).select('id');
+    // The row was inserted moments ago on this path, so zero rows back is a
+    // failure to remove it, not an absence.
+    if (error || wroteNoRows(data)) {
+      complete = false;
+      console.error('[child-login] rollback could not remove the child_logins row', {
+        memberId: opts.memberId, error: error?.message ?? 'no rows affected',
+      });
+    }
+  }
+
+  const { data: unlinked, error: unlinkError } = await admin.from('family_members')
+    .update({ user_id: null }).eq('id', opts.memberId).select('id');
+  if (unlinkError || wroteNoRows(unlinked)) {
+    complete = false;
+    console.error('[child-login] rollback could not unlink the member — they are now stuck', {
+      memberId: opts.memberId, error: unlinkError?.message ?? 'no rows affected',
+    });
+  }
+
+  const { error: deleteError } = await admin.auth.admin.deleteUser(opts.childUserId);
+  if (deleteError) {
+    complete = false;
+    console.error('[child-login] rollback could not delete the orphaned auth user', {
+      memberId: opts.memberId, error: deleteError.message,
+    });
+  }
+
+  return complete;
+}
 
 /** Give a child member a username + 4-digit PIN login. Manager only. */
 export async function createChildLoginAction(input: {
@@ -34,9 +94,11 @@ export async function createChildLoginAction(input: {
 
   const admin = createServiceClient();
 
-  const { data: member } = await admin.from('family_members')
+  const { data: member, error: memberReadError } = await admin.from('family_members')
     .select('id, family_id, display_name, user_id')
     .eq('id', input.memberId).maybeSingle();
+  // A refused read is not an absence: it used to return the "not found" answer below. Audit C1-S9-75.
+  if (memberReadError) return { ok: false, error: describeActionError(memberReadError, t('actions.couldNotCheckThatRefresh')) };
   if (!member || member.family_id !== ctx.active.familyId) return { ok: false, error: t('childLoginActions.memberNotFoundInYour') };
   if (member.user_id) return { ok: false, error: t('childLoginActions.thisMemberAlreadyHasA') };
 
@@ -45,6 +107,28 @@ export async function createChildLoginAction(input: {
   // a DIFFERENT login than the one being created.
   const { data: taken } = await admin.from('child_logins').select('id').eq('username', username).limit(1);
   if (taken && taken.length > 0) return { ok: false, error: t('childLoginActions.thatUsernameIsTakenTry') };
+
+  // A username can be reused after an earlier child login was removed, so clear
+  // any stale throttle row: without this the brand-new child inherits whatever
+  // lockout the previous holder of this username left behind.
+  //
+  // Done HERE, before anything is created, and its error is no longer dropped.
+  // As the last step with a discarded result it failed silently and the parent
+  // was told the login was ready — while the child could not sign in at all,
+  // for a reason nothing on screen mentioned. It fails SAFE (more locked, never
+  // less), which is why this is a usability defect rather than a security one,
+  // but "your child's new login is ready" was simply untrue. Running it first
+  // means a failure costs nothing: no auth user, no rows, an honest error.
+  // Audit C1-S9-16.
+  // Deliberately NOT confirmed. The comment above says "clear ANY stale
+  // throttle row" — a brand-new username usually has none, so zero rows is the
+  // ordinary case, and gating it would refuse to create a login for every child
+  // whose username nobody has used before. Its ERROR is checked, which is the
+  // part that matters. Audit C1-S9-57.
+  const { error: staleThrottleErr } = await admin.from('child_login_throttle')
+    .update({ fails: 0, locked_until: null, window_start: new Date().toISOString() })
+    .eq('username', username);
+  if (staleThrottleErr) return { ok: false, error: t('childLoginActions.couldNotCreateTheLogin') };
 
   const email = syntheticChildEmail(username);
   const password = deriveChildPassword(sec, username, input.pin);
@@ -57,16 +141,32 @@ export async function createChildLoginAction(input: {
   const childUserId = created.user.id;
 
   // Link the member to the new auth user so they ARE this member on sign-in.
-  const { error: linkErr } = await admin.from('family_members')
-    .update({ user_id: childUserId, is_active: true }).eq('id', member.id);
-  if (linkErr) { await admin.auth.admin.deleteUser(childUserId); return { ok: false, error: t('childLoginActions.couldNotLinkTheLogin') }; }
+  //
+  // Zero rows is a real failure here, unlike the two throttle clears in this
+  // file: `member` was read moments ago, so the row exists. A link that matched
+  // nothing leaves the child holding an auth user that resolves to no member —
+  // they sign in successfully and have no identity, no family, nothing. It
+  // therefore takes the SAME rollback as a link error rather than falling
+  // through to the `child_logins` insert. Audit C1-S9-57.
+  const { data: linked, error: linkErr } = await admin.from('family_members')
+    .update({ user_id: childUserId, is_active: true }).eq('id', member.id).select('id');
+  if (linkErr || wroteNoRows(linked)) {
+    const { error: deleteError } = await admin.auth.admin.deleteUser(childUserId);
+    if (deleteError) {
+      console.error('[child-login] could not delete the orphaned auth user after a failed link', {
+        memberId: member.id, error: deleteError.message,
+      });
+      return { ok: false, error: t('childLoginActions.couldNotFinishAndCouldNotUndo') };
+    }
+    return { ok: false, error: t('childLoginActions.couldNotLinkTheLogin') };
+  }
 
   const { error: rowErr } = await admin.from('child_logins').insert({
     family_id: member.family_id, member_id: member.id, user_id: childUserId, username, created_by: ctx.user.id,
   });
   if (rowErr) {
-    await admin.from('family_members').update({ user_id: null }).eq('id', member.id);
-    await admin.auth.admin.deleteUser(childUserId);
+    const undone = await rollbackChildLogin(admin, { memberId: member.id, childUserId, removeLoginRow: false });
+    if (!undone) return { ok: false, error: t('childLoginActions.couldNotFinishAndCouldNotUndo') };
     return { ok: false, error: t('childLoginActions.couldNotSaveTheLogin') };
   }
 
@@ -74,18 +174,10 @@ export async function createChildLoginAction(input: {
   const { error: prefErr } = await admin.from('user_preferences').upsert(
     { user_id: childUserId, active_family_id: member.family_id }, { onConflict: 'user_id' });
   if (prefErr) {
-    await admin.from('child_logins').delete().eq('user_id', childUserId);
-    await admin.from('family_members').update({ user_id: null }).eq('id', member.id);
-    await admin.auth.admin.deleteUser(childUserId);
+    const undone = await rollbackChildLogin(admin, { memberId: member.id, childUserId, removeLoginRow: true });
+    if (!undone) return { ok: false, error: t('childLoginActions.couldNotFinishAndCouldNotUndo') };
     return { ok: false, error: t('childLoginActions.couldNotFinishSettingUp') };
   }
-
-  // A username can be reused after an earlier child login was removed. Clear any
-  // stale throttle row so the brand-new child doesn't inherit a leftover lockout
-  // from whoever held this username before.
-  await admin.from('child_login_throttle')
-    .update({ fails: 0, locked_until: null, window_start: new Date().toISOString() })
-    .eq('username', username);
 
   await logAudit(admin, {
     familyId: member.family_id, actorId: ctx.user.id, action: 'create',
@@ -104,19 +196,35 @@ export async function resetChildPinAction(input: { memberId: string; pin: string
   if (!isValidPin(input.pin)) return { ok: false, error: t('childLoginActions.pinMustBe4Digits') };
 
   const admin = createServiceClient();
-  const { data: row } = await admin.from('child_logins')
+  const { data: row, error: rowReadError } = await admin.from('child_logins')
     .select('user_id, username, family_id').eq('member_id', input.memberId).maybeSingle();
+  if (rowReadError) return { ok: false, error: describeActionError(rowReadError, t('actions.couldNotCheckThatRefresh')) };
   if (!row || row.family_id !== ctx.active.familyId) return { ok: false, error: t('childLoginActions.loginNotFound') };
+
+  // A parent reset must also lift any brute-force lockout on that username, so
+  // the child can sign in immediately with the new PIN — that is the POINT of
+  // the reset, not a tidy-up after it.
+  //
+  // So it runs BEFORE the password change and its error is no longer dropped.
+  // Afterwards, with the result discarded, a failed clear left the child locked
+  // out with a PIN that was genuinely changed, and the parent was told the reset
+  // worked; the only visible symptom was a child who still could not sign in.
+  // Reporting a hard failure at that point would have been its own lie, because
+  // the PIN really had changed. Ordering it first makes the outcome
+  // all-or-nothing: nothing has happened yet, so an error here is truthful, and
+  // a lockout cleared just before a password change that then fails is harmless
+  // — it lifts a lockout slightly early on credentials that still work.
+  // Audit C1-S9-16.
+  // Same as the create path: a child who has never failed a sign-in has no
+  // throttle row, so zero rows is the common case, not a failure.
+  const { error: throttleErr } = await admin.from('child_login_throttle')
+    .update({ fails: 0, locked_until: null, window_start: new Date().toISOString() })
+    .eq('username', normalizeUsername(row.username));
+  if (throttleErr) return { ok: false, error: t('childLoginActions.couldNotResetThePin') };
 
   const password = deriveChildPassword(sec, row.username, input.pin);
   const { error } = await admin.auth.admin.updateUserById(row.user_id, { password });
   if (error) return { ok: false, error: t('childLoginActions.couldNotResetThePin') };
-
-  // A parent reset should also lift any brute-force lockout on that username, so
-  // the child can sign in immediately with the new PIN.
-  await admin.from('child_login_throttle')
-    .update({ fails: 0, locked_until: null, window_start: new Date().toISOString() })
-    .eq('username', normalizeUsername(row.username));
 
   await logAudit(admin, {
     familyId: row.family_id, actorId: ctx.user.id, action: 'update',

@@ -57,7 +57,7 @@ export async function GET(
   // `.limit(2000)` is not a bound — PostgREST caps a response at db-max-rows
   // whatever the client asked for, so a busy calendar published 1,000 events and
   // called that the feed. `id` breaks ties so two pages cannot overlap or skip.
-  const { rows } = await readAll((from, to) => supabase
+  const { rows, error: rowsError } = await readAll((from, to) => supabase
     .from('sync_calendar_events')
     .select('id, uid, title, description, location, starts_at, ends_at, all_day, recurrence_rule, status, updated_at')
     .eq('calendar_id', calendar.id)
@@ -66,6 +66,29 @@ export async function GET(
     .order('starts_at', { ascending: true })
     .order('id')
     .range(from, to), { max: 2000 });
+
+  // An iCalendar feed is not a list — it is the subscriber's COPY. Apple
+  // Calendar, Outlook and Google reconcile their local store against this body,
+  // so an event missing from it is an event DELETED from the person's device.
+  //
+  // readAll reports a truncated or failed read as an error while `rows` still
+  // holds the partial set, and this route destructured only `rows` — so a
+  // transient database failure, or a calendar busier than the 2,000 ceiling,
+  // published a short feed at HTTP 200 and quietly removed the remainder from
+  // every device subscribed to it.
+  //
+  // 5xx is the correct answer and is strictly better than a partial 200: every
+  // calendar client treats a failed fetch by KEEPING what it already has and
+  // retrying later. Audit C4-S4-06.
+  if (rowsError) {
+    console.error('[sync-feed] event read failed or truncated; refusing to publish a partial calendar', {
+      calendarId: calendar.id, error: rowsError,
+    });
+    return new NextResponse('Calendar temporarily unavailable', {
+      status: 503,
+      headers: { 'Retry-After': '300', 'Cache-Control': 'no-store' },
+    });
+  }
 
   const events: IcsEvent[] = (rows ?? []).map((e) => ({
     uid: e.uid ?? `${e.id}@bubaly.com`,

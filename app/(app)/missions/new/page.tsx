@@ -5,9 +5,10 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { REWARD_MODE_LABELS } from '@/lib/chores/logic';
-import { createChoreAction } from '../actions';
+import { CreateChoreForm } from './create-chore-form';
 import { PlanGenerator } from './plan-generator';
 import { getTranslations } from '@/lib/i18n/server';
+import { ErrorState } from '@/components/ui/states';
 
 export const metadata: Metadata = { title: 'New mission' };
 export const dynamic = 'force-dynamic';
@@ -20,8 +21,18 @@ export default async function NewMissionPage() {
   const t = await getTranslations();
   const ctx = await requireUserContext();
   const supabase = await createServer();
-  const { data: members } = await supabase
+  // The list a mission is ASSIGNED to. A refused read emptied it, so a parent
+  // with three children was shown a creation form with nobody to assign to —
+  // the same screen a family with no children sees. Audit C1-S9-45.
+  const { data: members, error: membersError } = await supabase
     .from('family_members').select('id, display_name, birthday').eq('family_id', ctx.active.familyId).eq('is_active', true).order('display_name');
+  if (membersError) {
+    return (
+      <div className="space-y-5">
+        <ErrorState message={t('missionsNew.couldNotLoadYourFamily')} />
+      </div>
+    );
+  }
   const kids = members ?? [];
 
   return (
@@ -32,7 +43,7 @@ export default async function NewMissionPage() {
 
       <Card>
         <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Plus className="h-4 w-4 text-brand-text" /> {t('missionsNew.createAMission')}</h2>
-        <form action={createChoreAction} className="grid gap-3 sm:grid-cols-2">
+        <CreateChoreForm className="grid gap-3 sm:grid-cols-2">
           <label className={`${labelCls} sm:col-span-2`}><span className={spanCls}>{t('missionsNew.title')}</span><input name="title" required className={inputCls} placeholder={t('missionsNew.eGMakeYourBed')} /></label>
           <label className={`${labelCls} sm:col-span-2`}><span className={spanCls}>{t('missionsNew.instructions')}</span><input name="instructions" className={inputCls} placeholder={t('missionsNew.howToDoItWell')} /></label>
 
@@ -79,7 +90,7 @@ export default async function NewMissionPage() {
           <label className={labelCls}><span className={spanCls}>{t('missionsNew.iconEmoji')}</span><input name="icon" maxLength={4} className={inputCls} placeholder="🧹" /></label>
 
           <div className="sm:col-span-2"><button className="inline-flex h-10 items-center gap-1 rounded-xl bg-brand px-4 text-sm font-medium text-brand-fg"><Sparkles className="h-4 w-4" /> {t('missionsNew.createMission')}</button></div>
-        </form>
+        </CreateChoreForm>
       </Card>
     </div>
   );

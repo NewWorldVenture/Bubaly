@@ -6,9 +6,10 @@ import {
   UtensilsCrossed, Pill, Stethoscope, AlertTriangle, StickyNote, Clock, Heart,
 } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
+import { isManager } from '@/lib/constants/roles';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea, Field, Select } from '@/components/ui/input';
@@ -52,7 +53,12 @@ const blank = { id: '', log_type: 'check_in' as CareLogType, occurred_at: '', we
 
 export function CareModule() {
   const tr = useTranslations();
-  const { familyId, userId, members, selfMember } = useApp();
+  const { familyId, userId, members, selfMember, role } = useApp();
+  // 0329: an entry belongs to whoever recorded it. Anyone may ADD one — 0032
+  // exists so the whole family can log a check-in — but editing and deleting
+  // are the author's, or a manager's for moderation. The card already shows
+  // "by <name>"; these controls now agree with it.
+  const mayEdit = (e: CareEntry) => e.logged_by === selfMember?.id || isManager(role);
   const { success, error: toastError } = useToast();
 
   const [recipientId, setRecipientId] = useState<string>(members[0]?.id ?? '');
@@ -110,11 +116,13 @@ export function CareModule() {
       wellbeing: form.wellbeing ? Number(form.wellbeing) : null,
       note: form.note.trim() || null,
     };
-    const { error: err } = form.id
-      ? await sb.from('care_log').update(fields).eq('id', form.id)
-      : await sb.from('care_log').insert({ ...fields, family_id: familyId, logged_by: selfMember?.id ?? null, created_by: userId });
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-77.
+    const { data: saved, error: err } = form.id
+      ? await sb.from('care_log').update(fields).eq('id', form.id).select('id')
+      : await sb.from('care_log').insert({ ...fields, family_id: familyId, logged_by: selfMember?.id ?? null, created_by: userId }).select('id');
     setSaving(false);
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(saved)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }
     success(form.id ? 'Entry updated' : 'Care logged');
     setModalOpen(false);
   }
@@ -133,8 +141,9 @@ export function CareModule() {
   async function remove(e: CareEntry) {
     if (!confirm(tr('careModule.deleteThisCareEntry'))) return;
     const sb = createClient();
-    const { error: err } = await sb.from('care_log').delete().eq('id', e.id);
+    const { data: deleted, error: err } = await sb.from('care_log').delete().eq('id', e.id).select('id');
     if (err) { toastError(describeDbError(err)); return; }
+    if (wroteNoRows(deleted)) { toastError(tr('errors.thatChangeWasNotSaved')); return; }
     success(tr('careModule.entryDeleted'));
   }
 
@@ -244,10 +253,12 @@ export function CareModule() {
                                 {e.note && <div className="text-sm text-fg/80 mt-0.5">{e.note}</div>}
                                 {e.logged_by && <div className="text-xs text-muted mt-0.5">by {memberName(e.logged_by)}</div>}
                               </div>
-                              <div className="flex items-center gap-1 flex-shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 transition">
-                                <button onClick={() => openEdit(e)} aria-label={tr('care.edit')} className="p-1.5 rounded-lg text-muted hover:text-fg hover:bg-elevated"><Pencil className="h-4 w-4" /></button>
-                                <button onClick={() => remove(e)} aria-label={tr('care.delete')} className="p-1.5 rounded-lg text-muted hover:text-rose-400 hover:bg-elevated"><Trash2 className="h-4 w-4" /></button>
-                              </div>
+                              {mayEdit(e) && (
+                                <div className="flex items-center gap-1 flex-shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 transition">
+                                  <button onClick={() => openEdit(e)} aria-label={tr('care.edit')} className="p-1.5 rounded-lg text-muted hover:text-fg hover:bg-elevated"><Pencil className="h-4 w-4" /></button>
+                                  <button onClick={() => remove(e)} aria-label={tr('care.delete')} className="p-1.5 rounded-lg text-muted hover:text-rose-400 hover:bg-elevated"><Trash2 className="h-4 w-4" /></button>
+                                </div>
+                              )}
                             </div>
                           </div>
                         );

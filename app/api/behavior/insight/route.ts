@@ -9,6 +9,7 @@ import { scopeFromUserContext } from '@/lib/services/scope';
 import { summarizeMember, type BehaviorLogLike } from '@/lib/behavior/insights';
 import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_SMALL_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
+import { describeReadError } from '@/lib/supabase/settle';
 
 export const runtime = 'nodejs';
 
@@ -47,7 +48,19 @@ export async function POST(req: NextRequest) {
     .order('occurred_at', { ascending: false })
     .limit(200);
   if (body.memberId) q = q.eq('member_id', body.memberId);
-  const { data: logs } = await q;
+  // A refused read used to land in the branch below, which tells a parent
+  // "No behavior has been logged yet" — at HTTP 200, as a statement of fact
+  // about their family. The rows behind it are the positive moments and the
+  // CONCERNS they have been recording, often over months, and the sentence
+  // invites them to start doing what they have already been doing. This is a
+  // parenting-insight feature; being told your record is empty is the most
+  // discouraging wrong answer it can give. Audit C1-S9-40.
+  const { data: logs, error: logsError } = await q;
+
+  if (logsError) {
+    console.error('[behavior/insight] log read failed', { error: describeReadError(logsError) });
+    return NextResponse.json({ error: t('insight.behaviorDataIsTemporarilyUnavailable') }, { status: 503 });
+  }
 
   if (!logs || logs.length === 0) {
     return NextResponse.json({ insight: 'No behavior has been logged yet. Start logging positive moments and concerns to unlock AI parenting insights.', tips: [] });

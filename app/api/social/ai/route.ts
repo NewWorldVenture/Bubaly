@@ -8,6 +8,7 @@ import { getSocialAccess } from '@/lib/social/access';
 import { generate, AI_GENERATION_KINDS, type AiGenerationKind } from '@/lib/social/ai';
 import { isPlatform } from '@/lib/social/capabilities';
 import { describeAIError } from '@/lib/ai/provider';
+import { enforceAIRateLimit } from '@/lib/server/ai-rate-limit';
 import { MAX_PROVIDER_JSON_BYTES, readBoundedRequestJsonOrEmpty } from '@/lib/server/bounded-request-body';
 
 export const dynamic = 'force-dynamic';
@@ -48,6 +49,20 @@ export async function POST(req: Request) {
   const refused = await refuseUnlessEntitled(supabase, ctx.active.familyId, ['/dashboard/social']);
   if (refused) return refused;
 
+  // `generate` calls the configured model, so this endpoint costs money per
+  // request — and it was the one AI route on this surface with no limiter at
+  // all. Every neighbour that reaches a provider (`/api/ai/assist`,
+  // `/api/ai/chef`, `/api/ai/flyer`, `/api/ai/import`…) draws from
+  // `enforceAIRateLimit` first; a signed-in member with social access could
+  // hold this one open in a loop and spend the family's whole allowance. Same
+  // helper, same shape, placed after the entitlement refusal so an unentitled
+  // family never consumes a bucket it cannot use.
+  const limited = await enforceAIRateLimit(supabase, `social-ai:${ctx.user.id}`, { limit: 20 });
+  if (!limited.ok) return NextResponse.json(
+    { error: t('ai.tooManyAiRequestsPlease') },
+    { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+  );
+
   let result;
   try {
     result = await generate(scopeFromUserContext(ctx, supabase), { kind, topic, platform, tone, source });
@@ -55,15 +70,17 @@ export async function POST(req: Request) {
     console.error('Social AI generation error:', err);
     const message = describeAIError(err).message;
     // Persist the failed attempt for auditability.
-    await supabase.from('social_ai_generations').insert({
+    // Its result used to be discarded outright — not even the error bound. Best-effort, so logged rather than raised. Audit C1-S9-76.
+    const { error: socialAiGenerationsWriteError } = await supabase.from('social_ai_generations').insert({
       family_id: familyId, user_id: ctx.user.id, kind, platform, prompt: topic,
       input: { tone: tone ?? null, hasSource: Boolean(source) }, status: 'failed',
       output: { error: message }, created_by: ctx.user.id,
     });
+    if (socialAiGenerationsWriteError) console.error('[social-ai] social_ai_generations insert failed', socialAiGenerationsWriteError);
     return NextResponse.json({ error: message }, { status: 503 });
   }
 
-  await supabase.from('social_ai_generations').insert({
+  const { error: socialAiGenerationsWriteError } = await supabase.from('social_ai_generations').insert({
     family_id: familyId,
     user_id: ctx.user.id,
     kind,
@@ -75,9 +92,11 @@ export async function POST(req: Request) {
     status: 'succeeded',
     created_by: ctx.user.id,
   });
-  await supabase.from('social_usage_events').insert({
+  if (socialAiGenerationsWriteError) console.error('[social-ai] social_ai_generations insert failed', socialAiGenerationsWriteError);
+  const { error: socialUsageEventsWriteError } = await supabase.from('social_usage_events').insert({
     family_id: familyId, user_id: ctx.user.id, kind: 'ai_generation', quantity: 1,
   });
+  if (socialUsageEventsWriteError) console.error('[social-ai] social_usage_events insert failed', socialUsageEventsWriteError);
 
   return NextResponse.json({ text: result.text, model: result.model, kind });
 }

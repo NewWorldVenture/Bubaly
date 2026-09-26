@@ -5,7 +5,7 @@ import { MapPin, Plus, Search, Star, Trash2, LocateFixed, Wind, Droplets, X } fr
 import { useApp } from '@/components/app/app-context';
 import { createClient } from '@/lib/supabase/client';
 import { settle } from '@/lib/supabase/settle';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -58,6 +58,9 @@ export function WeatherModule() {
   const supabase = useMemo(() => createClient(), []);
 
   const [saved, setSaved] = useState<SavedLocation[]>([]);
+  /** Set when the saved-cities read itself failed, so an unreadable list is
+   *  never rendered as an empty one. */
+  const [savedError, setSavedError] = useState<string | null>(null);
   const [geo, setGeo] = useState<Place | null>(null);
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [view, setView] = useState<ViewKey>('5');
@@ -89,7 +92,14 @@ export function WeatherModule() {
     const { data, error } = await supabase.from('weather_locations').select('*').eq('family_id', familyId).order('sort_order').order('created_at');
     // A transient read failure must not wipe the family's saved cities — keep the
     // prior list (don't clobber to []) rather than flashing a false "no cities".
-    if (error) return [];
+    //
+    // And it must not read as "no cities" either. Swallowing the error left a
+    // dead channel and a quiet table indistinguishable: on a first load the
+    // screen said "No location yet — allow location access or add a city" for
+    // a family whose cities were simply unreadable, and the Add button was the
+    // only thing offered. Say which one it is.
+    if (error) { setSavedError(describeDbError(error)); return []; }
+    setSavedError(null);
     setSaved(data ?? []);
     return data ?? [];
   }, [supabase, familyId]);
@@ -172,20 +182,30 @@ export function WeatherModule() {
     // succeeded while the set failed they ended up with none. Same shape as the
     // meal-vote ballot: an invariant a comment states and only an unchecked
     // write keeps.
-    const { error: clearErr } = await settle(
-      supabase.from('weather_locations').update({ is_default: false }).eq('family_id', familyId));
-    if (clearErr) return toastError(describeDbError(clearErr));
+    //
+    // Order (Audit C1-S9-83, the career primary's fix in C1-S9-80): it cleared
+    // EVERY city first, so a set that then matched nothing (the city deleted a
+    // moment ago by someone else) left the family with no default at all. The
+    // set goes first and is confirmed; only then are the OTHERS cleared. A
+    // failed clear leaves two defaults, which is visible and fixable; the old
+    // order lost the family's choice. The clear is left unconfirmed on purpose:
+    // with one city there are no others, and zero rows is the ordinary answer.
     const { data: rows, error: err } = await supabase.from('weather_locations')
       .update({ is_default: true }).eq('id', id).select('id');
     if (err) return toastError(describeDbError(err));
     if (!rows?.length) return toastError(t('errors.thatChangeWasNotSaved'));
+    const { error: clearErr } = await settle(
+      supabase.from('weather_locations').update({ is_default: false }).eq('family_id', familyId).neq('id', id));
+    if (clearErr) { toastError(describeDbError(clearErr)); await loadSaved(); return; }
     success(t('weatherModule.defaultCitySet'));
     await loadSaved();
   }
 
   async function removeCity(id: string) {
-    const { error: err } = await supabase.from('weather_locations').delete().eq('id', id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-83.
+    const { data: removed, error: err } = await supabase.from('weather_locations').delete().eq('id', id).select('id');
     if (err) return toastError(describeDbError(err));
+    if (wroteNoRows(removed)) return toastError(t('errors.thatChangeWasNotSaved'));
     if (activeKey === `db:${id}`) setActiveKey(geo ? 'geo' : null);
     await loadSaved();
   }
@@ -196,6 +216,16 @@ export function WeatherModule() {
   return (
     <div className="module-page space-y-5">
       <PageHeader title={t('weather.weather')} description={t('weatherModule.liveConditionsAndForecastsFor')} action={<AiInsight kind="weather" />} />
+
+      {/* An unreadable saved-city list is not an empty one. Without this the
+          picker below simply omitted every saved city and the "No location yet"
+          card invited the family to add one they already had. */}
+      {savedError && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger" role="alert">
+          <span>{savedError}</span>
+          <button onClick={() => { void loadSaved(); }} className="shrink-0 font-semibold underline">{t('states.tryAgain')}</button>
+        </div>
+      )}
 
       {/* Location selector */}
       <div className="flex flex-wrap items-center gap-2">

@@ -16,6 +16,7 @@ import { formatPhone } from '@/lib/guardian/phone';
 import { detectScamFromText } from '@/lib/guardian/scam';
 import { claimGuardianCallback, isValidGuardianEventId, markGuardianCallbackProcessed } from '@/lib/guardian/callbacks';
 import { readBoundedRequestFormData } from '@/lib/server/bounded-request-body';
+import { wroteNoRows } from '@/lib/supabase/errors';
 
 export const runtime = 'nodejs';
 
@@ -102,8 +103,20 @@ export async function POST(req: NextRequest) {
     return new NextResponse('Guardian routing unavailable', { status: 503 });
   }
 
-  // Create communication record
-  const { data: comm } = await gFrom('guardian_communications').insert({
+  // Create communication record.
+  //
+  // The error was dropped, and the consequence is not "the call fails" — it is
+  // that the call proceeds normally with NO record of it. `commId` goes
+  // undefined, `updateCommStatus` returns early on it without a word, and the
+  // family's guardian history simply has no entry: no caller, no trust level,
+  // no scam verdict. The log silently under-reports exactly when something is
+  // already wrong, and this is a safety log.
+  //
+  // It still must not drop the call — hanging up on a real caller is worse than
+  // an incomplete log, and the routing decision above has already been made. So
+  // it degrades LOUDLY instead: logged with the call SID, then continued.
+  // Audit C1-S9-39.
+  const { data: comm, error: commError } = await gFrom('guardian_communications').insert({
     family_id: familyId,
     member_id: memberId,
     contact_id: decision.contactId,
@@ -121,8 +134,13 @@ export async function POST(req: NextRequest) {
     scam_confidence: decision.spamScore,
     twilio_call_sid: callSid,
     status: 'received',
-  }).select('id').single();
+  }).select('id').maybeSingle();
 
+  if (commError) {
+    console.error('[guardian/inbound/voice] could not record the communication; call continues unlogged', {
+      familyId, callSid, error: commError.message,
+    });
+  }
   const commId = comm?.id as string | undefined;
 
   // Route based on pipeline decision
@@ -145,7 +163,20 @@ export async function POST(req: NextRequest) {
 
   if (routingMode === 'immediate_ring' || routingMode === 'immediate_ai_summary') {
     // Ring through to the family member's actual number
-    const { data: member } = await supabase.from('family_members').select('phone').eq('id', memberId).maybeSingle();
+    // This read does not degrade into a smaller answer — it changes the
+    // routing. `immediate_ring` means the pipeline decided this caller should
+    // be PUT THROUGH. A refused read left `memberPhone` undefined and fell
+    // through to AI screening, so a caller the family had explicitly trusted
+    // got interrogated by a bot instead of connected. The fall-through exists
+    // for a member with no number on file, which is a different situation, and
+    // it is preserved. Logged rather than failed, because a screened call still
+    // reaches the family and a 503 would drop it. Audit C1-S9-43.
+    const { data: member, error: memberError } = await supabase.from('family_members').select('phone').eq('id', memberId).maybeSingle();
+    if (memberError) {
+      console.error('[guardian/inbound/voice] member phone read failed; trusted caller will be screened instead of connected', {
+        familyId, memberId, callSid, error: memberError.message,
+      });
+    }
     const memberPhone = (member as { phone?: string } | null)?.phone;
 
     await updateCommStatus(supabase, commId, 'handled');
@@ -173,15 +204,32 @@ export async function POST(req: NextRequest) {
   }
 
   if (routingMode === 'silent_handling' || routingMode === 'ai_handle_first') {
-    // Create screening session
-    const { data: session } = await gFrom('guardian_screening_sessions').insert({
+    // Create screening session.
+    //
+    // Unlike the record above, this one cannot degrade quietly. The session id
+    // goes straight into the TwiML gather action, so a failed insert produced
+    // `?sessionId=&turn=1` — the AI greets the caller, the caller answers, and
+    // their reply is posted to an endpoint that rejects an empty id with a 400.
+    // The caller is left talking to nothing, mid-screening.
+    //
+    // 503 instead, which is the convention this feature already states in
+    // `app/api/guardian/screen/route.ts`: *"A 503 lets Twilio fall back."*
+    // Falling back is a real outcome; a dead gather action is not.
+    const { data: session, error: sessionError } = await gFrom('guardian_screening_sessions').insert({
       family_id: familyId,
       communication_id: commId,
       twilio_call_sid: callSid,
       caller_number: from,
       status: 'active',
       messages: [],
-    }).select('id').single();
+    }).select('id').maybeSingle();
+
+    if (sessionError || !session?.id) {
+      console.error('[guardian/inbound/voice] could not open a screening session; letting Twilio fall back', {
+        familyId, callSid, error: sessionError?.message ?? 'no row returned',
+      });
+      return new NextResponse('', { status: 503 });
+    }
 
     const sessionId = session?.id as string | undefined;
     const greeting = buildInitialGreeting(profile, memberName, familyName);
@@ -211,7 +259,18 @@ export async function POST(req: NextRequest) {
 async function updateCommStatus(supabase: ReturnType<typeof createServiceClient>, commId: string | undefined, status: string) {
   if (!commId) return;
   const db = withGuardianTables(supabase);
-  await (db.from('guardian_communications') as ReturnType<typeof supabase.from>).update({ status }).eq('id', commId);
+  // Discarded entirely before. A call shown as `received` forever, when it was
+  // actually blocked or handled, is a guardian history that disagrees with what
+  // happened — and the status is what the family reads to decide whether the
+  // screening is working. Nothing here can be surfaced to the caller mid-call,
+  // so it is logged rather than raised. Audit C1-S9-39.
+  const { data: updated, error } = await (db.from('guardian_communications') as ReturnType<typeof supabase.from>)
+    .update({ status }).eq('id', commId).select('id');
+  if (error || wroteNoRows(updated)) {
+    console.error('[guardian/inbound/voice] could not update the communication status', {
+      commId, status, error: error?.message ?? 'no rows affected',
+    });
+  }
 }
 
 function twimlResponse(xml: string): NextResponse {

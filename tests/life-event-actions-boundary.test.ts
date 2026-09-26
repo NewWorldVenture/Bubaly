@@ -56,14 +56,16 @@ function breakInsert(table: string) {
 }
 
 /** Fail a compensating delete without changing the stored rows. */
-function breakDelete(table: string, mode: 'result' | 'reject' = 'result') {
+// `none` (C1-S9-68): the delete RESOLVES with no error and no rows — a policy
+// refusal — which the undo stack used to count as removed.
+function breakDelete(table: string, mode: 'result' | 'reject' | 'none' = 'result') {
   // Capture the existing implementation, not the spy wrapper that spyOn will
   // replace, so insert and delete failures can be combined in the same launch.
   const original = vi.isMockFunction(db.from) ? vi.mocked(db.from).getMockImplementation()! : db.from.bind(db);
   vi.spyOn(db, 'from').mockImplementation((name: string) => {
     const builder = original(name);
     if (name !== table) return builder;
-    const failure = { data: null, error: { message: `${table} delete rejected` } };
+    const failure = mode === 'none' ? { data: [], error: null } : { data: null, error: { message: `${table} delete rejected` } };
     const failing = {
       eq: () => failing, in: () => failing, select: () => failing,
       maybeSingle: async () => {
@@ -286,6 +288,17 @@ describe('a launch that fails rolls all the way back', () => {
     for (const other of ['todo_items', 'family_reminders', 'life_event_plans', 'moves', 'move_tasks'].filter((name) => name !== table)) {
       expect(db.table(other), other).toEqual([]);
     }
+  });
+
+  it.each(['life_event_plans', 'moves'])('reports an incomplete rollback when the %s undo removes NOTHING without an error (C1-S9-68)', async (table) => {
+    // Before, only an error counted as a failed undo; a delete that matched no
+    // row reported the rollback complete while the row stayed.
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    breakInsert('life_event_plan_items');
+    breakDelete(table, 'none');
+    const result = await launchLifeEvent(scope(), { templateKey: 'moving', eventDate: '2026-04-01' });
+    expect(result).toMatchObject({ ok: false, code: LIFE_EVENT_ROLLBACK_INCOMPLETE });
+    expect(db.table(table).length).toBeGreaterThan(0);
   });
 
   it('reports a rejected cleanup request and still removes the plan and new move tasks', async () => {

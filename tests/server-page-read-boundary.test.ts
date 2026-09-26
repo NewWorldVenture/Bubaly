@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 // The server half of "a failed read is not an empty one".
 //
 // Two pages read Supabase in a Server Component and let a failed read fall into
@@ -42,7 +43,7 @@ describe('the offer inbox cannot be emptied by a read it did not guard', () => {
     // The guard has to come before the loop that drops rows missing a listing,
     // or it is decoration: by then the inbox already reads as empty.
     expect(negotiations.indexOf('if (listingsError) {'))
-      .toBeLessThan(negotiations.indexOf('if (!l) continue;'));
+      .toBeLessThan(at(negotiations, 'if (!l) continue;'));
   });
 
   it('still returns an empty branch for a genuinely empty id list', () => {
@@ -64,13 +65,24 @@ describe('the independence ladder does not report a family with no children', ()
     expect(independence).toContain('<ErrorState message=');
     // The notice must short-circuit the module, not render alongside it.
     expect(independence.indexOf('if (membersError) {'))
-      .toBeLessThan(independence.indexOf('<IndependenceModule'));
+      .toBeLessThan(at(independence, '<IndependenceModule'));
   });
 
   it('keeps the milestone read degrading on its own terms', () => {
-    // That one is wrapped in try/catch on purpose: the table may not exist yet
-    // on an environment where migration 0175 has not been applied, and an
-    // unapplied table is not a read failure to report at a parent.
-    expect(independence).toContain('/* table not applied yet */');
+    // An unapplied table is not a read failure to report at a parent: migration
+    // 0175 may not have run in a given environment, and the ladder should still
+    // render empty there.
+    //
+    // This used to assert the literal comment `/* table not applied yet */`,
+    // which pinned the WORDING of a try/catch rather than the tolerance it was
+    // there for — and that try/catch protected nothing, because supabase-js
+    // RESOLVES with `{ data, error }` for a refused read and rejects only on a
+    // transport failure. C1-S9-27 replaced it with a real check, which kept the
+    // tolerance and dropped the comment, so this went red on an improvement.
+    // It now asserts the tolerance itself.
+    expect(independence).toContain('isMissingRelationError(milestones.error)');
+    // And the tolerance must be exactly that — a missing relation, not any
+    // error — or it would be the silent-empty defect wearing a new spelling.
+    expect(independence).toMatch(/milestones\.error && !isMissingRelationError\(/);
   });
 });

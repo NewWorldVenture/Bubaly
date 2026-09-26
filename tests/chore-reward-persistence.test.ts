@@ -100,7 +100,14 @@ describe('chore reward persistence boundaries', () => {
 
     expect(source).toContain(".eq('family_id', args.familyId).select('id').single()");
     expect(source).toContain("throw new Error('Could not save chore approval')");
-    expect(source).toContain("const { error: rollbackError } = await supabase.from('chore_assignments').update");
+    // Was the exact destructure. C1-S9-55 bound the rollback's ROWS too — a
+    // rollback matching nothing leaves the assignment marked approved, with
+    // points and cash recorded as awarded, when the code that awards them
+    // failed. The literal went; the behaviour got stronger.
+    expect(source).toContain("from('chore_assignments').update");
+    expect(source).toContain('error: rollbackError');
+    expect(source).toContain('wroteNoRows(rolledBackAssignment)');
+    expect(source).toContain('an approval may be stranded');
     expect(source).toContain('args.assignment.points_awarded');
   });
 });

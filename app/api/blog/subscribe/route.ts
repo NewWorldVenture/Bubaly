@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTranslations } from '@/lib/i18n/server';
 import { createServiceClient } from '@/lib/supabase/server';
+import { wroteNoRows } from '@/lib/supabase/errors';
 import { clientIp } from '@/lib/server/rate-limit';
 import { enforceRequestRateLimit } from '@/lib/server/request-rate-limit';
 import { readBoundedRequestJson } from '@/lib/server/bounded-request-body';
 import { normalizeEmail, normalizeSource, normalizeVisitorId } from '@/lib/blog/engagement';
+import { describeReadError } from '@/lib/supabase/settle';
 
 export const runtime = 'nodejs';
 
@@ -51,21 +53,36 @@ export async function POST(req: NextRequest) {
   const source = normalizeSource(body.source);
   const visitorId = normalizeVisitorId(body.visitorId);
 
-  const { data: existing } = await supabase
+  // `blog_subscribers.email` is UNIQUE (0201_blog_engagement.sql:35), so a
+  // refused read here did not create a duplicate — it fell through to the
+  // insert and hit the constraint. The person affected is someone who already
+  // subscribed and, more pointedly, someone previously unsubscribed who is
+  // trying to come back: instead of being reactivated they get an error.
+  // Audit C1-S9-41.
+  const { data: existing, error: existingError } = await supabase
     .from('blog_subscribers')
     .select('id, status')
     .eq('email', email)
     .maybeSingle();
 
+  if (existingError) {
+    console.error('[blog/subscribe] subscriber lookup failed', { error: describeReadError(existingError) });
+    return NextResponse.json({ error: t('subscribe.subscriptionIsTemporarilyUnavailable') }, { status: 503 });
+  }
+
   if (existing) {
-    if (existing.status !== 'active') {
-      const { error } = await supabase
-        .from('blog_subscribers')
-        .update({ status: 'active', source, unsubscribed_at: null, ...(visitorId ? { visitor_id: visitorId } : {}) })
-        .eq('id', existing.id);
-      if (error) return NextResponse.json({ error: t('subscribe.couldNotSubscribeRightNow') }, { status: 500 });
-    }
-    return NextResponse.json({ ok: true, already: existing.status === 'active' });
+    if (existing.status === 'active') return NextResponse.json({ ok: true, already: true });
+    // Service role, so zero rows means the row was deleted between the read and
+    // this write — and answering `ok` told the person they were subscribed with
+    // no row to send to. Fall through and subscribe them afresh instead.
+    // Audit C1-S9-62.
+    const { data: reactivated, error } = await supabase
+      .from('blog_subscribers')
+      .update({ status: 'active', source, unsubscribed_at: null, ...(visitorId ? { visitor_id: visitorId } : {}) })
+      .eq('id', existing.id)
+      .select('id');
+    if (error) return NextResponse.json({ error: t('subscribe.couldNotSubscribeRightNow') }, { status: 500 });
+    if (!wroteNoRows(reactivated)) return NextResponse.json({ ok: true, already: false });
   }
 
   const { error } = await supabase

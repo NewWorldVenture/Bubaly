@@ -4,6 +4,15 @@ import { notificationId, pushDispatchDb, type PushFixtureRow } from './helpers/p
 
 const provider = vi.hoisted(() => ({ send: vi.fn() }));
 vi.mock('web-push', () => ({ default: { setVapidDetails: vi.fn(), sendNotification: provider.send } }));
+
+// The web-push send re-resolves the endpoint host before each delivery and
+// fails closed (audit C3-S5-03), and the fixture's endpoints do not resolve.
+// Stubbed open so the subject of this file stays what it says it is; the
+// control itself is asserted in tests/push-endpoint-ssrf-guard.test.ts.
+vi.mock('@/lib/server/push-endpoint', () => ({
+  isDeliverablePushEndpoint: async () => true,
+  __resetPushEndpointCache: () => {},
+}));
 const NOW = new Date('2026-09-12T12:00:00Z');
 const GLOBAL = 'push_dispatch_cursor:v1:global';
 const row = (id: number, fields: PushFixtureRow = {}): PushFixtureRow => ({

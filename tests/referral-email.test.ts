@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 // M39 — the "Email an invite" path: a friend gets the referrer's code through
 // the same transport as the member InviteEmail, every send is a timestamp on
 // the invited family's referrals row, and that is what the 10-a-day limit is
@@ -223,7 +224,7 @@ describe('in-product referral prompts (source)', () => {
     expect(block).toContain("console.error('[home] referral card read failed'");
     // Fail closed: the card is only ever assigned inside the else branch of the
     // error check, so an unreadable count can never render a prompt.
-    expect(block.indexOf('referralCard = {')).toBeGreaterThan(block.indexOf('} else {'));
+    expect(at(block, 'referralCard = {')).toBeGreaterThan(at(block, '} else {'));
     expect(block).toContain('(invitesRes.count ?? 0) >= 1');
     expect(block).toContain('config.enabled');
     expect(home).toContain('{referralCard && <ReferralHomeCard give={referralCard.give} get={referralCard.get} />}');

@@ -5,7 +5,7 @@ import { Clapperboard, Plus, Sparkles, Heart, ThumbsUp, ThumbsDown, Trash2, Penc
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
-import { describeDbError } from '@/lib/supabase/errors';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { AiInsight } from '@/components/ai/ai-insight';
@@ -80,30 +80,35 @@ export function WatchlistModule() {
     if (!myMemberId) return toastError(tr('watchlistModule.joinTheFamilyToVote'));
     const supabase = createClient();
     const existing = votes.data.find((v) => v.title_id === title.id && v.member_id === myMemberId);
-    const { error } = existing
+    const { data: voted, error } = existing
       ? existing.vote === vote
-        ? await supabase.from('watchlist_votes').delete().eq('id', existing.id)
-        : await supabase.from('watchlist_votes').update({ vote }).eq('id', existing.id)
-      : await supabase.from('watchlist_votes').insert({ family_id: familyId, title_id: title.id, member_id: myMemberId, vote, created_by: userId });
+        ? await supabase.from('watchlist_votes').delete().eq('id', existing.id).select('id')
+        : await supabase.from('watchlist_votes').update({ vote }).eq('id', existing.id).select('id')
+      : await supabase.from('watchlist_votes').insert({ family_id: familyId, title_id: title.id, member_id: myMemberId, vote, created_by: userId }).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(voted)) return toastError(tr('errors.thatChangeWasNotSaved'));
   }
 
   async function setStatus(title: Title, status: WatchStatus) {
-    const { error } = await createClient().from('watchlist_titles').update({ status }).eq('id', title.id);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-80.
+    const { data: updated, error } = await createClient().from('watchlist_titles').update({ status }).eq('id', title.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(updated)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(`${title.title}: ${WATCH_STATUSES.find((s) => s.value === status)?.label}`);
   }
 
   async function deleteTitle(title: Title) {
     if (!confirm(`Remove “${title.title}” from the watchlist?`)) return;
-    const { error } = await createClient().from('watchlist_titles').delete().eq('id', title.id);
+    const { data: removed, error } = await createClient().from('watchlist_titles').delete().eq('id', title.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(removed)) return toastError(tr('errors.thatChangeWasNotSaved'));
     success(tr('watchlistModule.titleRemoved'));
   }
 
   async function deleteSession(session: Session) {
-    const { error } = await createClient().from('watch_sessions').delete().eq('id', session.id);
+    const { data: removed2, error } = await createClient().from('watch_sessions').delete().eq('id', session.id).select('id');
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(removed2)) return toastError(tr('errors.thatChangeWasNotSaved'));
   }
 
   const loading = titles.loading || votes.loading || sessions.loading;
@@ -305,11 +310,12 @@ function TitleForm({ familyId, userId, memberId, title, onClose, onSaved }: {
       notes: String(f.get('notes') ?? '').trim() || null,
     };
     const supabase = createClient();
-    const { error } = title
-      ? await supabase.from('watchlist_titles').update(payload).eq('id', title.id)
-      : await supabase.from('watchlist_titles').insert({ family_id: familyId, created_by: userId, added_by: memberId, ...payload });
+    const { data: saved, error } = title
+      ? await supabase.from('watchlist_titles').update(payload).eq('id', title.id).select('id')
+      : await supabase.from('watchlist_titles').insert({ family_id: familyId, created_by: userId, added_by: memberId, ...payload }).select('id');
     setLoading(false);
     if (error) return toastError(describeDbError(error));
+    if (wroteNoRows(saved)) return toastError(tr('errors.thatChangeWasNotSaved'));
     onSaved(title ? 'Title updated' : 'Added to the watchlist');
   }
 
@@ -362,9 +368,11 @@ function WatchedForm({ familyId, userId, title, members, defaultAudience, onClos
       notes: String(f.get('notes') ?? '').trim() || null, created_by: userId,
     });
     if (error) { setLoading(false); return toastError(describeDbError(error)); }
-    const { error: statusError } = await supabase.from('watchlist_titles').update({ status: 'watched' }).eq('id', title.id);
+    // Under RLS a refused row comes back with no error and zero rows. Audit C1-S9-80.
+    const { data: marked, error: statusError } = await supabase.from('watchlist_titles').update({ status: 'watched' }).eq('id', title.id).select('id');
     setLoading(false);
     if (statusError) return toastError(describeDbError(statusError));
+    if (wroteNoRows(marked)) return toastError(tr('errors.thatChangeWasNotSaved'));
     onSaved();
   }
 

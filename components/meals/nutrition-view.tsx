@@ -5,6 +5,7 @@ import { Apple, Plus, Trash2, Flame, Droplet } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
@@ -40,8 +41,10 @@ export function NutritionView() {
   const byMeal = useMemo(() => groupByMeal(todayLogs), [todayLogs]);
 
   async function remove(id: string) {
-    const { error } = await createClient().from('nutrition_logs').delete().eq('id', id);
-    if (error) toastError(error.message);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-84.
+    const { data: removed, error } = await createClient().from('nutrition_logs').delete().eq('id', id).select('id');
+    if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(removed)) toastError(t('errors.thatChangeWasNotSaved'));
   }
 
   // A genuine read failure must surface + be retryable, not silently render as an
@@ -127,7 +130,7 @@ function LogModal({ members, defaultMember, familyId, userId, onClose }: { membe
       water_ml: Math.round(num(v.water_ml)), created_by: userId,
     });
     setSaving(false);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success(t('nutritionView.logged'));
     onClose();
   }

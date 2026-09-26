@@ -5,6 +5,7 @@ import { ShieldCheck, Trash2, MapPin } from 'lucide-react';
 import { useApp } from '@/components/app/app-context';
 import { useRealtimeQuery } from '@/lib/hooks/use-realtime-query';
 import { createClient } from '@/lib/supabase/client';
+import { describeDbError, wroteNoRows } from '@/lib/supabase/errors';
 import { useToast } from '@/components/ui/toast';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
@@ -54,14 +55,16 @@ export function CheckInView() {
       latitude: coords?.latitude ?? null, longitude: coords?.longitude ?? null, created_by: userId,
     });
     setBusy(null);
-    if (error) return toastError(error.message);
+    if (error) return toastError(describeDbError(error));
     success(t('checkInView.checkedIn'));
     setPlace(''); setNote('');
   }
 
   async function remove(id: string) {
-    const { error } = await createClient().from('safety_check_ins').delete().eq('id', id);
-    if (error) toastError(error.message);
+    // Under RLS a refused row comes back with no error and zero rows, which this used to report as done. Audit C1-S9-84.
+    const { data: removed, error } = await createClient().from('safety_check_ins').delete().eq('id', id).select('id');
+    if (error) toastError(describeDbError(error));
+    else if (wroteNoRows(removed)) toastError(t('errors.thatChangeWasNotSaved'));
   }
 
   return (

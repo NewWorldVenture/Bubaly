@@ -1,3 +1,4 @@
+import { at } from './helpers/source-order';
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -32,7 +33,7 @@ describe('Guardian emergency escalation boundary', () => {
     expect(source).toContain(".select('id, user_id, display_name, role')");
     expect(source).toContain(".in('id', userIds)");
     expect(source).toContain('phoneMap.get(m.user_id)');
-    expect(source.indexOf('await claimGuardianCallback')).toBeLessThan(source.indexOf('sendSms('));
-    expect(source.indexOf('await claimGuardianCallback')).toBeLessThan(source.indexOf('initiateCall('));
+    expect(at(source, 'await claimGuardianCallback')).toBeLessThan(at(source, 'sendSms('));
+    expect(at(source, 'await claimGuardianCallback')).toBeLessThan(at(source, 'initiateCall('));
   });
 });

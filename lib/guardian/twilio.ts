@@ -2,7 +2,7 @@
 // Covers: TwiML generation, call control, SMS, number provisioning.
 
 import { readBoundedResponseJson, readBoundedResponseText } from '@/lib/server/bounded-response-body';
-import { fetchExternal } from '@/lib/server/external-fetch';
+import { fetchWithDeadline } from '@/lib/server/fetch-with-deadline';
 
 const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID ?? '';
 const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN ?? '';
@@ -15,7 +15,7 @@ function authHeader(): string {
 
 async function twilioFetch(path: string, body?: Record<string, string>): Promise<unknown> {
   const url = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}${path}`;
-  const res = await fetchExternal(url, {
+  const res = await fetchWithDeadline(url, {
     method: body ? 'POST' : 'GET',
     headers: {
       authorization: authHeader(),
@@ -76,10 +76,22 @@ export function twimlRecord(opts: {
 <Record ${attrs} />`;
 }
 
-/** TwiML: transfer to a phone number. */
+/**
+ * TwiML: transfer to a phone number.
+ *
+ * Both values are escaped, which the other builders in this file already do and
+ * this one did not. `<Dial>` is the one verb where unescaped content is not a
+ * broken sentence but a different call: text carrying `</Dial><Dial>…` appends a
+ * second destination, and the family's Twilio account pays for wherever it goes.
+ * `phoneNumber` reaches here from `family_contact_channels.forward_to_phone`,
+ * which a manager sets — so this is defence in depth rather than the only
+ * boundary, and `toE164` in the action is the other half. Audit C1-S7-05.
+ */
 export function twimlDial(phoneNumber: string, callerId?: string): string {
-  const callerAttr = callerId ? ` callerId="${callerId}"` : '';
-  return `<Dial${callerAttr}>${phoneNumber}</Dial>`;
+  const esc = (v: string) => v
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const callerAttr = callerId ? ` callerId="${esc(callerId)}"` : '';
+  return `<Dial${callerAttr}>${esc(phoneNumber)}</Dial>`;
 }
 
 /** TwiML: hang up. */
@@ -118,7 +130,7 @@ export async function sendSmsWithReceipt(to: string, body: string, signal?: Abor
   if (!/^\+[1-9]\d{7,14}$/.test(to) || !body.trim() || body.length > 1600) return { kind: 'rejected', code: 'invalid_message' };
   let response: Response | undefined;
   try {
-    response = await fetchExternal(`https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`, {
+    response = await fetchWithDeadline(`https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`, {
       method: 'POST', redirect: 'manual', cache: 'no-store', headers: { authorization: authHeader(), 'content-type': 'application/x-www-form-urlencoded' },
       signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(15_000)]) : undefined,
       body: new URLSearchParams({ To: to, From: TWILIO_PHONE_NUMBER, Body: body }).toString(),
@@ -214,7 +226,7 @@ export async function lookupCallerName(phoneNumber: string): Promise<string | nu
   if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) return null;
   try {
     const url = `https://lookups.twilio.com/v1/PhoneNumbers/${encodeURIComponent(phoneNumber)}?Type=caller-name`;
-    const res = await fetchExternal(url, { headers: { authorization: authHeader() } }, 15_000);
+    const res = await fetchWithDeadline(url, { headers: { authorization: authHeader() } }, 15_000);
     if (!res.ok) return null;
     const data = await readBoundedResponseJson<{ caller_name?: { caller_name?: string } }>(res, 256 * 1024);
     return data.caller_name?.caller_name ?? null;

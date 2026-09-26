@@ -5,8 +5,9 @@ type Captured = { op: string; payload?: Record<string, unknown> }[];
 type DbArg = Parameters<typeof buildAssistantTools>[0];
 
 // Minimal chainable Supabase stub: select-chains resolve to `selectRows`;
-// update/insert resolve to { error: null } and record their payloads.
-function fakeDb(selectRows: Record<string, unknown>[], captured: Captured): DbArg {
+// update resolves with its matched row, insert with { error: null }; both
+// record their payloads.
+function fakeDb(selectRows: Record<string, unknown>[], captured: Captured, updateRows: unknown[] = [{ id: 'row' }]): DbArg {
   const make = () => {
     let op: 'select' | 'update' | 'insert' = 'select';
     const b: Record<string, unknown> = {};
@@ -16,7 +17,9 @@ function fakeDb(selectRows: Record<string, unknown>[], captured: Captured): DbAr
       update(p: Record<string, unknown>) { op = 'update'; captured.push({ op, payload: p }); return b; },
       insert(p: Record<string, unknown>) { op = 'insert'; captured.push({ op, payload: p }); return b; },
       then(resolve: (v: unknown) => void) {
-        resolve(op === 'select' ? { data: selectRows, error: null } : { error: null });
+        // A matched update answers `.select()` with its row (C1-S9-69); an
+        // update with no `data` is a shape the client cannot give once asked.
+        resolve(op === 'select' ? { data: selectRows, error: null } : op === 'update' ? { data: updateRows, error: null } : { error: null });
       },
     });
     return b;
@@ -26,8 +29,8 @@ function fakeDb(selectRows: Record<string, unknown>[], captured: Captured): DbAr
 
 const ctx: AssistantCtx = { familyId: 'fam-1', userId: 'user-1', memberId: 'mem-self', members: [], tz: 'America/New_York' };
 
-function tool(name: string, selectRows: Record<string, unknown>[], captured: Captured) {
-  const t = buildAssistantTools(fakeDb(selectRows, captured), ctx).find((x) => x.name === name);
+function tool(name: string, selectRows: Record<string, unknown>[], captured: Captured, updateRows?: unknown[]) {
+  const t = buildAssistantTools(fakeDb(selectRows, captured, updateRows), ctx).find((x) => x.name === name);
   if (!t) throw new Error(`${name} tool missing`);
   return t;
 }
@@ -65,5 +68,24 @@ describe('assistant complete_reminder tool', () => {
     const res = await tool('complete_reminder', [], captured).execute({ title: 'nope' });
     expect(res).toMatchObject({ ok: false });
     expect(captured).toHaveLength(0);
+  });
+
+  // C1-S9-69. The assistant speaks this answer, and the next occurrence of a
+  // recurring reminder is inserted after the completion — so a completion that
+  // matched nothing (a concurrent one already won) must fail AND schedule nothing.
+  it('does not claim a completion that matched nothing, and schedules no second occurrence', async () => {
+    const captured: Captured = [];
+    const res = await tool('complete_reminder', [
+      { id: 'r3', title: 'Water plants', recurrence: 'monthly', remind_at: '2026-07-01T09:00:00.000Z', kind: 'recurring', priority: 'medium', notes: null, member_id: null, location_name: null },
+    ], captured, []).execute({ title: 'plants' }) as { ok: boolean };
+    expect(res.ok).toBe(false);
+    expect(captured.filter((c) => c.op === 'insert'), 'a second future reminder').toHaveLength(0);
+  });
+
+  it('does not claim a reschedule that matched nothing', async () => {
+    const captured: Captured = [];
+    const res = await tool('snooze_reminder', [{ id: 'r4', title: 'Dentist' }], captured, [])
+      .execute({ title: 'dentist', remind_at: '2026-08-01T09:00:00.000Z' }) as { ok: boolean };
+    expect(res.ok).toBe(false);
   });
 });

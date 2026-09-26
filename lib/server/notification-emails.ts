@@ -116,6 +116,9 @@ export async function deliverNotificationEmails(supabase: DB): Promise<Notificat
   }
 
   if (resolvedIds.length) {
+    // Rows deliberately not checked. Every caller passes the service role, so a
+    // row that does not match was deleted — and a deleted notification is not
+    // emailed again anyway. Audit C1-S9-68.
     const { error: resolveError } = await supabase.from('notifications').update({ sent_at: nowIso }).in('id', resolvedIds);
     if (resolveError) {
       console.error('[notification-email] notification resolve update failed', resolveError);

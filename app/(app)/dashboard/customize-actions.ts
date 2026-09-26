@@ -28,7 +28,9 @@ async function userTier(supabase: Awaited<ReturnType<typeof createServer>>, fami
 }
 
 async function logEvent(supabase: Awaited<ReturnType<typeof createServer>>, familyId: string, userId: string, action: string, featureKey?: string | null, metadata: Record<string, unknown> = {}) {
-  await supabase.from('dashboard_layout_events').insert({ family_id: familyId, user_id: userId, action, feature_key: featureKey ?? null, metadata: metadata as never });
+  // Its result used to be discarded outright — not even the error bound. Best-effort, so logged rather than raised. Audit C1-S9-76.
+  const { error: dashboardLayoutEventsWriteError } = await supabase.from('dashboard_layout_events').insert({ family_id: familyId, user_id: userId, action, feature_key: featureKey ?? null, metadata: metadata as never });
+  if (dashboardLayoutEventsWriteError) console.error('[dashboard] dashboard_layout_events insert failed', dashboardLayoutEventsWriteError);
 }
 
 /**
@@ -68,6 +70,9 @@ export async function resetDashboardLayoutAction(input: { deviceContext?: string
   const supabase = await createServer();
   const device = asDevice(input.deviceContext);
 
+  // Deliberately NOT gated on rows. "Reset my layout" on a dashboard that was
+  // never customised matches nothing, and that IS the success case — the layout
+  // is now the default, which is what was asked for. Audit C1-S9-58.
   const { error } = await supabase.from('dashboard_layouts')
     .delete().eq('family_id', familyId).eq('user_id', userId).eq('scope', 'user').eq('device_context', device);
   if (error) return { ok: false, error: error.message };
@@ -143,6 +148,8 @@ export async function resetAllLayoutsAction(): Promise<Result> {
   if (!isManager(ctx.active.role)) return { ok: false, error: t('customizeActions.onlyAParentGuardianCan3') };
   const familyId = ctx.active.familyId;
   const supabase = await createServer();
+  // Same: resetting every member's layout in a family where nobody customised
+  // one matches nothing and has done exactly what it promised. Audit C1-S9-58.
   const { error } = await supabase.from('dashboard_layouts').delete().eq('family_id', familyId).eq('scope', 'user');
   if (error) return { ok: false, error: error.message };
   await logEvent(supabase, familyId, ctx.user.id, 'reset_all');
