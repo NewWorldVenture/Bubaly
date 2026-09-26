@@ -1,8 +1,10 @@
 'use server';
 // Commits a parsed competitor export into the signed-in user's family.
 // Family-scoped + RLS-bound (createServer), only inserts whitelisted fields,
-// de-duplicates calendar events and contacts, and records the import in
-// audit_logs.
+// de-duplicates calendar events, contacts and grocery items, and records the
+// import in audit_logs. Tasks and notes are NOT de-duplicated — see the list of
+// which kinds are and why in lib/migrate/resolve.ts — and the review step says
+// so rather than leaving the family to find out on the second import.
 //
 // M29: the import is now a THREE-step flow — parse in the browser, resolve
 // against the family's own rows on the server (`prepareImport`), then commit
@@ -16,13 +18,22 @@ import { requireUserContext } from '@/lib/supabase/auth';
 import { createServer } from '@/lib/supabase/server';
 import { getTranslations } from '@/lib/i18n/server';
 import type { EventCategory } from '@/lib/database.types';
+import { normalizeName } from '@/lib/groceries/normalize-name';
 import { normalizeEmail, normalizePhone } from '@/lib/migrate/parse';
 import { logAudit } from '@/lib/server/audit';
 import {
   eventKey, resolveImportedItems,
-  type ExistingContact, type ExistingMember, type ResolutionPlan,
+  type ExistingContact, type ExistingGroceryItem, type ExistingMember, type ResolutionPlan,
 } from '@/lib/migrate/resolve';
 import { readAll } from '@/lib/supabase/read-all';
+
+/**
+ * The list an import's grocery items land on. Named once because it is now TWO
+ * things: where the rows are written, and the scope the duplicate check is
+ * taken over. A second spelling of it here would mean reviewing against one
+ * list and writing to another.
+ */
+const IMPORT_GROCERY_LIST = 'Imported Groceries';
 
 export type ImportEventInput = {
   title: string; startsAt: string; endsAt: string | null; allDay: boolean;
@@ -82,6 +93,49 @@ async function loadMembers(
 }
 
 /**
+ * The import's grocery list and the items still to buy on it — the duplicate set
+ * for grocery.
+ *
+ * ONE helper for both halves of the flow, deliberately: the review step and the
+ * commit have to take this set over the same list under the same "unbought"
+ * filter, or the review badges a row as already here and the commit inserts it
+ * anyway (or the reverse, which is worse — a silent drop).
+ *
+ * `listId` null means the family has no live import list yet. That is the
+ * ordinary first import and an EMPTY duplicate set, not a failure. A read that
+ * ERRORS is a failure and says so: an empty set reads as "you have none of this
+ * yet", which is precisely how a second copy of the whole file gets imported.
+ */
+async function loadImportGrocery(
+  supabase: Awaited<ReturnType<typeof createServer>>,
+  familyId: string,
+): Promise<{ ok: true; listId: string | null; open: ExistingGroceryItem[] } | { ok: false }> {
+  // Reuse the import list only while it is live: adopting an archived one hides
+  // the whole import behind the archive the family put it in.
+  const { data: list, error: listError } = await supabase
+    .from('grocery_lists').select('id')
+    .eq('family_id', familyId).eq('name', IMPORT_GROCERY_LIST)
+    .eq('is_archived', false).is('archived_at', null).maybeSingle();
+  if (listError) {
+    console.error('[migrate] grocery list read failed', listError);
+    return { ok: false };
+  }
+  const listId = list?.id ?? null;
+  if (!listId) return { ok: true, listId: null, open: [] };
+  // Unbought only — the rule borrowed from `addItems`. Checked items are not
+  // part of the comparison, so last week's milk is addable again.
+  const { rows, error } = await readAll((from, to) => supabase
+    .from('grocery_items').select('name')
+    .eq('family_id', familyId).eq('list_id', listId).eq('is_checked', false)
+    .order('id').range(from, to), { max: 5000 });
+  if (error) {
+    console.error('[migrate] existing grocery read failed', error);
+    return { ok: false };
+  }
+  return { ok: true, listId, open: (rows ?? []).map((r) => ({ name: r.name })) };
+}
+
+/**
  * Resolve a parsed export against what the family already has: who each item
  * looks like it belongs to, and what is already here. Nothing is written.
  */
@@ -96,6 +150,7 @@ export async function prepareImport(payload: ImportPayload): Promise<PrepareResu
 
   const events = cap(payload.events);
   const contacts = cap(payload.contacts);
+  const grocery = cap(payload.grocery);
 
   let existingEvents: { title: string; startsAt: string }[] = [];
   if (events.length) {
@@ -127,10 +182,19 @@ export async function prepareImport(payload: ImportPayload): Promise<PrepareResu
     existingContacts = (data ?? []).map((c) => ({ name: c.name, email: c.email, phone: c.phone, phoneAlt: c.phone_alt }));
   }
 
+  let existingGrocery: ExistingGroceryItem[] = [];
+  if (grocery.length) {
+    // The de-dupe set again — a failed read here means duplicate groceries.
+    const res = await loadImportGrocery(supabase, familyId);
+    if (!res.ok) return { ok: false, error: t('migrateActions.couldNotCheckYourShoppingListForDuplicates'), retryable: true };
+    existingGrocery = res.open;
+  }
+
   const plan = resolveImportedItems({
     members: memberRes.members,
     events,
     tasks: cap(payload.tasks),
+    grocery,
     contacts: contacts.map((c) => ({
       name: c.name,
       emails: c.emails ?? [],
@@ -140,6 +204,7 @@ export async function prepareImport(payload: ImportPayload): Promise<PrepareResu
     })),
     existingEvents,
     existingContacts,
+    existingGrocery,
   });
   return { ok: true, plan, members: memberRes.members };
 }
@@ -159,8 +224,8 @@ export async function commitImport(payload: ImportPayload): Promise<ImportResult
   // text — "relation … does not exist", a constraint name — in English whatever
   // the family's locale, and it says nothing about the half of the import that
   // did land. The counts do, and they are what the family needs before deciding
-  // whether to run the file again: events and contacts are de-duplicated on a
-  // second pass, tasks, grocery items and notes are not. Not `retryable`: a
+  // whether to run the file again: events, contacts and grocery items are
+  // de-duplicated on a second pass, tasks and notes are not. Not `retryable`: a
   // retry button here would offer exactly that duplication.
   const partialFailure = (label: string, error: { message: string }): ImportResult => {
     console.error(`[migrate] ${label} write failed`, error);
@@ -229,25 +294,39 @@ export async function commitImport(payload: ImportPayload): Promise<ImportResult
     }
   }
 
-  // ── Grocery → grocery_items (into an "Imported" list) ──
+  // ── Grocery → grocery_items (into an "Imported" list, de-duped by name) ──
   const grocery = included(payload.grocery);
   if (grocery.length) {
-    const listName = 'Imported Groceries';
-    let listId: string | null = null;
-    // Reuse the import list only while it is live: adopting an archived one
-    // hides the whole import behind the archive the family put it in.
-    const { data: list } = await supabase.from('grocery_lists').select('id').eq('family_id', familyId).eq('name', listName)
-      .eq('is_archived', false).is('archived_at', null).maybeSingle();
-    listId = list?.id ?? null;
-    if (!listId) {
-      const { data: createdList, error } = await supabase.from('grocery_lists').insert({ family_id: familyId, name: listName, created_by: userId }).select('id').single();
-      if (error) return partialFailure('grocery list', error);
-      listId = createdList.id;
+    // The de-dupe set the IMPORT itself checks against — the review step's badge
+    // is a proposal, and re-deciding here is what stops a stale review, a second
+    // browser tab or a direct call to this action from writing the second copy.
+    // Same helper, so the two halves cannot scope it differently.
+    const res = await loadImportGrocery(supabase, familyId);
+    if (!res.ok) return { ok: false, error: t('migrateActions.couldNotCheckYourShoppingListForDuplicates'), retryable: true };
+    const seen = new Set(res.open.map((g) => normalizeName(g.name)));
+    const kept: { name: string; quantity: string | null }[] = [];
+    for (const g of grocery) {
+      const key = normalizeName(g.name);
+      if (seen.has(key)) { skipped++; continue; }
+      seen.add(key);
+      kept.push({ name: g.name.slice(0, 200), quantity: g.extra ?? null });
     }
-    const rows = grocery.map((g) => ({ family_id: familyId, list_id: listId!, name: g.name.slice(0, 200), quantity: g.extra ?? null, created_by: userId }));
-    const { error, count } = await supabase.from('grocery_items').insert(rows, { count: 'exact' });
-    if (error) return partialFailure('grocery items', error);
-    counts.grocery = count ?? rows.length;
+    // The list is created only once something survives the filter: a re-import of
+    // a file whose every item is already there leaves no empty list behind.
+    if (kept.length) {
+      let listId = res.listId;
+      if (!listId) {
+        const { data: createdList, error } = await supabase.from('grocery_lists')
+          .insert({ family_id: familyId, name: IMPORT_GROCERY_LIST, created_by: userId }).select('id').single();
+        if (error) return partialFailure('grocery list', error);
+        listId = createdList.id;
+      }
+      const targetList = listId;
+      const rows = kept.map((k) => ({ family_id: familyId, list_id: targetList, name: k.name, quantity: k.quantity, created_by: userId }));
+      const { error, count } = await supabase.from('grocery_items').insert(rows, { count: 'exact' });
+      if (error) return partialFailure('grocery items', error);
+      counts.grocery = count ?? rows.length;
+    }
   }
 
   // ── Notes → notes ──

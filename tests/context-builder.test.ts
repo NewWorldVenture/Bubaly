@@ -28,7 +28,15 @@ function makeDb(tables: Record<string, TableSpec>) {
     const call: Call = { table, filters: {} };
     calls.push(call);
     const spec = tables[table] ?? {};
-    const reply = () => ({ data: spec.error ? null : (spec.rows ?? []), error: spec.error ?? null });
+    // `.range()` is inclusive at both ends, and the page that starts past the
+    // last row comes back EMPTY — the only signal a paged read has to stop on.
+    // A fake that ignored the window would hand `readAll` the same page forever.
+    let window: { from: number; to: number } | null = null;
+    const rows = () => {
+      const all = spec.rows ?? [];
+      return window ? all.slice(window.from, window.to + 1) : all;
+    };
+    const reply = () => ({ data: spec.error ? null : rows(), error: spec.error ?? null });
     const one = () => ({ data: spec.error ? null : (spec.rows?.[0] ?? null), error: spec.error ?? null });
     const builder: Record<string, unknown> = {};
     const proxy: unknown = new Proxy(builder, {
@@ -38,6 +46,9 @@ function makeDb(tables: Record<string, TableSpec>) {
         return (...args: unknown[]) => {
           if (['eq', 'neq', 'gte', 'lte', 'gt', 'lt', 'in', 'is', 'ilike', 'not'].includes(prop) && typeof args[0] === 'string') {
             call.filters[`${prop}:${args[0]}`] = args[args.length - 1];
+          }
+          if (prop === 'range' && typeof args[0] === 'number' && typeof args[1] === 'number') {
+            window = { from: args[0], to: args[1] };
           }
           return proxy;
         };

@@ -302,6 +302,11 @@ describe('no delivery-contract read is left unbounded', () => {
     // the child's allowance is SKIPPED while the run reports itself clean.
     { file: 'app/api/cron/wallet-allowance/route.ts', table: 'subscriptions', why: 'a plan that does not come back skips a child\'s allowance' },
     { file: 'app/api/cron/chore-reminders/route.ts', table: 'families', why: 'every family with an open chore, in one request line' },
+    // Not a delivery contract but a safety one, which is the same argument with
+    // more at stake: the row that falls past the cap is the allergy, and a
+    // missing allergy row is not read as unknown — it is read as "no allergy".
+    { file: 'lib/services/groceries/index.ts', table: 'family_facts', why: 'a missing allergy row puts the allergen on the shopping list' },
+    { file: 'lib/services/meals/index.ts', table: 'family_facts', why: 'feeds the "ALLERGIES (never serve)" line the planner is given' },
   ];
 
   it.each(WATCHED)('$file reads $table whole ($why)', async ({ file, table }) => {
